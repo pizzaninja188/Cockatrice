@@ -284,6 +284,8 @@ mod issue_261_generated_attachments;
 mod issue_262_generated_combat_tricks;
 #[path = "scenario/issue_263_generated_creature_triggers.rs"]
 mod issue_263_generated_creature_triggers;
+#[path = "scenario/issue_264_generated_activated_abilities.rs"]
+mod issue_264_generated_activated_abilities;
 #[path = "scenario/issue_265_generated_modal_spells.rs"]
 mod issue_265_generated_modal_spells;
 #[path = "scenario/issue_57_targeting_costs.rs"]

@@ -287,6 +287,8 @@ bump_in_the_night	0	cast	exercised
 burglar_rat	0	cast	exercised
 burn,_burn,_tree_and_fern	0	cast	exercised
 burning_curiosity	0	cast	exercised
+burrog_banemaker	0	ability:0	exercised
+burrog_banemaker	0	cast	exercised
 burst_lightning	0	cast	exercised
 bushwhack	0	cast	exercised
 buzz_bots	0	cast	exercised
@@ -478,6 +480,8 @@ dawn_gryff	0	cast	exercised
 dawning_angel	0	cast	exercised
 dawns_light_archer	0	cast	exercised
 dawnstrike_paladin	0	cast	exercised
+dawnwing_marshal	0	ability:0	exercised
+dawnwing_marshal	0	cast	exercised
 daybreak_chaplain	0	cast	exercised
 daybreak_charger	0	cast	exercised
 dazzling_angel	0	cast	exercised
@@ -562,6 +566,8 @@ druid_of_the_cowl	0	ability:0	exercised
 druid_of_the_cowl	0	cast	exercised
 druid_of_the_spade	0	cast	exercised
 dryad_arbor	0	land	exercised
+dual-sun_adepts	0	ability:0	exercised
+dual-sun_adepts	0	cast	exercised
 dual_shot	0	cast	exercised
 dub	0	cast	exercised
 due_diligence	0	cast	exercised
@@ -572,6 +578,8 @@ duskdale_wurm	0	cast	exercised
 dusyut_earthcarver	0	cast	exercised
 dutiful_servants	0	cast	exercised
 dwarven_priest	0	cast	exercised
+dwarven_provisioner	0	ability:0	exercised
+dwarven_provisioner	0	cast	exercised
 dwarven_trader	0	cast	exercised
 dwynens_elite	0	cast	exercised
 eager_cadet	0	cast	exercised
@@ -1142,6 +1150,8 @@ kraken_hatchling	0	cast	exercised
 kraul_raider	0	cast	exercised
 kraul_stinger	0	cast	exercised
 kraul_whipcracker	0	cast	exercised
+kravens_cats	0	ability:0	exercised
+kravens_cats	0	cast	exercised
 kree_commandos	0	cast	exercised
 krenkos_enforcer	0	cast	exercised
 krovikan_scoundrel	0	cast	exercised
@@ -1290,6 +1300,8 @@ mind_control	0	cast	exercised
 mind_rot	0	cast	exercised
 mind_sculpt	0	cast	exercised
 mind_transfer_protocol	0	cast	exercised
+mindful_biomancer	0	ability:0	exercised
+mindful_biomancer	0	cast	exercised
 mineshaft_spider	0	cast	exercised
 minotaur_abomination	0	cast	exercised
 minotaur_aggressor	0	cast	exercised
@@ -1571,6 +1583,8 @@ raucous_carnival	0	ability:0	exercised
 raucous_carnival	0	land	exercised
 raven_of_fell_omens	0	cast	exercised
 ravenous_lindwurm	0	cast	exercised
+ravine_raider	0	ability:0	exercised
+ravine_raider	0	cast	exercised
 ray_fillet,_man_ray	0	ability:0	unsupported: nonmana costs need additional fixture resources
 ray_fillet,_man_ray	0	cast	exercised
 ray_of_command	0	cast	exercised
@@ -1703,6 +1717,8 @@ sazhs_chocobo	0	cast	exercised
 scaled_behemoth	0	cast	exercised
 scaled_wurm	0	cast	exercised
 scarblade_scout	0	cast	exercised
+scarecrow_guide	0	ability:0	exercised
+scarecrow_guide	0	cast	exercised
 scarlet_witch,_wanda_maximoff	0	cast	exercised
 scarwood_goblins	0	cast	exercised
 scathe_zombies	0	cast	exercised
@@ -2045,6 +2061,8 @@ tend_the_sprigs	0	cast	exercised
 tenderize	0	cast	exercised
 tenement_crasher	0	cast	exercised
 terrain_elemental	0	cast	exercised
+terramorphic_expanse	0	ability:0	exercised
+terramorphic_expanse	0	land	exercised
 terrian,_world_tyrant	0	cast	exercised
 territorial_roc	0	cast	exercised
 terror_of_the_fairgrounds	0	cast	exercised
@@ -2069,6 +2087,8 @@ thraben_valiant	0	cast	exercised
 thrashing_brontodon	0	ability:0	exercised
 thrashing_brontodon	0	cast	exercised
 threaten	0	cast	exercised
+three_tree_mascot	0	ability:0	exercised
+three_tree_mascot	0	cast	exercised
 three_tree_rootweaver	0	ability:0	exercised
 three_tree_rootweaver	0	cast	exercised
 three_tree_scribe	0	cast	exercised
@@ -2080,6 +2100,8 @@ ticket_booth_tunnel_of_hate	0	cast	exercised
 ticket_booth_tunnel_of_hate	1	cast	exercised
 tidehollow_strix	0	cast	exercised
 tidings	0	cast	exercised
+timid_shieldbearer	0	ability:0	exercised
+timid_shieldbearer	0	cast	exercised
 tireless_missionaries	0	cast	exercised
 tishanas_tidebinder	0	cast	exercised
 titanic_growth	0	cast	exercised
@@ -2205,6 +2227,8 @@ viashino_spearhunter	0	cast	exercised
 viashino_warrior	0	cast	exercised
 vibranium_energy_daggers	0	ability:0	exercised
 vibranium_energy_daggers	0	cast	exercised
+vibrant_cityscape	0	ability:0	exercised
+vibrant_cityscape	0	land	exercised
 vicious_clown	0	cast	exercised
 vigilant_baloth	0	cast	exercised
 village_ironsmith_ironfang	0	cast	exercised
@@ -2273,6 +2297,8 @@ wardscale_crocodile	0	cast	exercised
 warehouse_tabby	0	ability:0	exercised
 warehouse_tabby	0	cast	exercised
 warpath_ghoul	0	cast	exercised
+warren_elder	0	ability:0	exercised
+warren_elder	0	cast	exercised
 warriors_of_wakanda	0	cast	exercised
 warship_scout	0	cast	exercised
 wary_farmer	0	cast	exercised
@@ -2285,6 +2311,8 @@ wastes	0	ability:0	exercised
 wastes	0	land	exercised
 watcher_of_the_wayside	0	cast	exercised
 watchwolf	0	cast	exercised
+water_tribe_captain	0	ability:0	exercised
+water_tribe_captain	0	cast	exercised
 waterbending_lesson	0	cast	exercised
 waterwind_scout	0	cast	exercised
 watery_grasp	0	ability:0	exercised

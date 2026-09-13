@@ -1,11 +1,12 @@
 use tricerules_cards::primitives::{
-    BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter, CreatureScopeController,
-    CreatureScopeFilter, DiscardQuantity, DrawDiscardOrder, EffectSubject, EntersTappedAffected,
-    EntryCost, GameCondition, LifeAmount, ObjectContributionKind, ObjectPaymentConstraint,
-    PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient,
-    RelativePlayerSet, ResolutionCost, SearchDestination, SearchZoneSelection, SpellCastFilter,
-    StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
-    TargetObjectExclusion, TargetingDef, TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
+    ActivationLimit, BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter,
+    CreatureScopeController, CreatureScopeFilter, DiscardQuantity, DrawDiscardOrder, EffectSubject,
+    EntersTappedAffected, EntryCost, GameCondition, LifeAmount, ObjectContributionKind,
+    ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate,
+    PlayerRecipient, RelativePlayerSet, ResolutionCost, SearchDestination, SearchZoneSelection,
+    SpellCastFilter, StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter,
+    TargetGroupDef, TargetKind, TargetObjectExclusion, TargetingDef, TargetingSourceFilter,
+    TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
@@ -1504,6 +1505,124 @@ fn match_pay_one_tap_for_any_color(text: &str, context: &RecipeContext) -> Optio
     })
 }
 
+fn match_pay_one_for_any_color_once_per_turn(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text == "{1}: Add one mana of any color. Activate only once each turn.")
+        .then(|| {
+            RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+                ability_id: context.activated_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                cost_modifiers: Vec::new(),
+                source_zone: AbilitySourceZone::Battlefield,
+                costs: vec![AbilityCost::Mana(
+                    ManaCost::parse("{1}").expect("static recipe mana cost"),
+                )],
+                effect: vec![SpellEffectKind::ProduceMana {
+                    options: ['W', 'U', 'B', 'R', 'G']
+                        .into_iter()
+                        .map(|symbol| {
+                            parse_mana_amount(symbol).expect("five-color recipe uses valid symbols")
+                        })
+                        .collect(),
+                    restriction: None,
+                    conditional: None,
+                }],
+                targeting: None,
+                timing: ActivationTiming::Normal,
+                conditions: Vec::new(),
+                activation_limit: Some(ActivationLimit::PerTurn { max_activations: 1 }),
+            })
+        })
+}
+
+fn match_creature_self_pump_one_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == "{1}{B}: This creature gets +1/+1 until end of turn.")
+        .then(|| {
+            RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+                ability_id: context.activated_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                cost_modifiers: Vec::new(),
+                source_zone: AbilitySourceZone::Battlefield,
+                costs: vec![AbilityCost::Mana(
+                    ManaCost::parse("{1}{B}").expect("static recipe mana cost"),
+                )],
+                effect: vec![SpellEffectKind::PumpTarget {
+                    power: 1,
+                    toughness: 1,
+                    scale: None,
+                    subject: EffectSubject::Source,
+                }],
+                targeting: None,
+                timing: ActivationTiming::Normal,
+                conditions: Vec::new(),
+                activation_limit: None,
+            })
+        })
+}
+
+fn match_creature_self_pump_two_two_once_per_turn(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == "{2}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.")
+        .then(|| {
+            RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+                ability_id: context.activated_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                cost_modifiers: Vec::new(),
+                source_zone: AbilitySourceZone::Battlefield,
+                costs: vec![AbilityCost::Mana(
+                    ManaCost::parse("{2}{G}").expect("static recipe mana cost"),
+                )],
+                effect: vec![SpellEffectKind::PumpTarget {
+                    power: 2,
+                    toughness: 2,
+                    scale: None,
+                    subject: EffectSubject::Source,
+                }],
+                targeting: None,
+                timing: ActivationTiming::Normal,
+                conditions: Vec::new(),
+                activation_limit: Some(ActivationLimit::PerTurn { max_activations: 1 }),
+            })
+        })
+}
+
+fn match_creature_team_pump_one_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    if !context.source_is_creature {
+        return None;
+    }
+    let cost = match text {
+        "{3}{W}: Creatures you control get +1/+1 until end of turn." => "{3}{W}",
+        "{4}{W}: Creatures you control get +1/+1 until end of turn." => "{4}{W}",
+        "{5}: Creatures you control get +1/+1 until end of turn." => "{5}",
+        _ => return None,
+    };
+    Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        ability_id: context.activated_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        cost_modifiers: Vec::new(),
+        source_zone: AbilitySourceZone::Battlefield,
+        costs: vec![AbilityCost::Mana(
+            ManaCost::parse(cost).expect("closed team-pump recipe uses valid mana costs"),
+        )],
+        effect: vec![SpellEffectKind::PumpAll {
+            filter: creatures_you_control(),
+            power: 1,
+            toughness: 1,
+        }],
+        targeting: None,
+        timing: ActivationTiming::Normal,
+        conditions: Vec::new(),
+        activation_limit: None,
+    }))
+}
+
 fn match_tap_for_multicolor_mana(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     if !context.source_is_land {
         return None;
@@ -1606,6 +1725,45 @@ fn match_land_tap_sacrifice_draw_one(
             activation_limit: None,
         })
     })
+}
+
+fn match_land_tap_sacrifice_search_basic_tapped(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_land
+        && text
+            == "{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.")
+        .then(|| {
+            RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+                ability_id: context.activated_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                cost_modifiers: Vec::new(),
+                source_zone: AbilitySourceZone::Battlefield,
+                costs: vec![AbilityCost::Tap, AbilityCost::SacrificeSelf],
+                effect: vec![SpellEffectKind::SearchLibrary {
+                    who: PlayerRecipient::Controller,
+                    optional: false,
+                    count: 1,
+                    count_by_cast_cost: None,
+                    filter: Some(ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::BasicLand),
+                        ..ZoneCardFilter::default()
+                    }),
+                    slots: Vec::new(),
+                    zones: SearchZoneSelection::default(),
+                    destination: SearchDestination::Battlefield { tapped: true },
+                    conditional_destination: None,
+                    shuffle: true,
+                    reveal: false,
+                    result_id: None,
+                }],
+                targeting: None,
+                timing: ActivationTiming::Normal,
+                conditions: Vec::new(),
+                activation_limit: None,
+            })
+        })
 }
 
 fn match_land_pay_four_tap_surveil_one(
@@ -2892,6 +3050,75 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("activated.mana.pay_one.any_color.per_turn_one"),
+        label: "pay one for any color once each turn",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_pay_one_for_any_color_once_per_turn,
+        calibration: calibrations!(
+            "Scarecrow Guide" => "{1}: Add one mana of any color. Activate only once each turn.",
+            "Three Tree Mascot" => "{1}: Add one mana of any color. Activate only once each turn.";
+            "{2}: Add one mana of any color. Activate only once each turn.",
+            "{1}: Add two mana of any one color. Activate only once each turn.",
+            "{1}: Add one mana of any type. Activate only once each turn.",
+            "{1}: Add one mana of any color.",
+            "{1}: Add one mana of any color. Activate only twice each turn.",
+            "{1}: Add one mana of any color. Activate only once each turn. You gain 1 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.pump.self.plus_1_plus_1.pay_1b"),
+        label: "pay 1B to pump this creature +1/+1",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_creature_self_pump_one_one,
+        calibration: calibrations!(
+            "Burrog Banemaker" => "{1}{B}: This creature gets +1/+1 until end of turn.",
+            "Ravine Raider" => "{1}{B}: This creature gets +1/+1 until end of turn.";
+            "{B}{1}: This creature gets +1/+1 until end of turn.",
+            "{1}{B}: This creature gets +2/+2 until end of turn.",
+            "{1}{B}: Target creature gets +1/+1 until end of turn.",
+            "{1}{B}: Creatures you control get +1/+1 until end of turn.",
+            "{1}{B}: This creature gets +1/+1 until end of turn. Activate only once each turn.",
+            "{1}{B}: This creature gets +1/+1 until end of turn if you control an artifact.",
+            "{1}{B}: This creature gets +1/+1 until end of turn. You gain 1 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.pump.self.plus_2_plus_2.pay_2g.per_turn_one"),
+        label: "pay 2G to pump this creature +2/+2 once each turn",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_creature_self_pump_two_two_once_per_turn,
+        calibration: calibrations!(
+            "Kraven's Cats" => "{2}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+            "Mindful Biomancer" => "{2}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.";
+            "{G}{2}: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+            "{2}{G}: This creature gets +1/+1 until end of turn. Activate only once each turn.",
+            "{2}{G}: Target creature gets +2/+2 until end of turn. Activate only once each turn.",
+            "{2}{G}: This creature gets +2/+2 until end of turn.",
+            "{2}{G}: This creature gets +2/+2 until end of turn. Activate only twice each turn.",
+            "{2}{G}: This creature gets +2/+2 until end of turn if you control an artifact. Activate only once each turn.",
+            "{2}{G}: This creature gets +2/+2 until end of turn and gains trample. Activate only once each turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.pump.creatures_you_control.plus_1_plus_1.fixed_cost"),
+        label: "fixed-cost team +1/+1 pump",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_creature_team_pump_one_one,
+        calibration: calibrations!(
+            "Dwarven Provisioner" => "{3}{W}: Creatures you control get +1/+1 until end of turn.",
+            "Dual-Sun Adepts" => "{5}: Creatures you control get +1/+1 until end of turn.";
+            "{W}{3}: Creatures you control get +1/+1 until end of turn.",
+            "{4}: Creatures you control get +1/+1 until end of turn.",
+            "{5}{W}: Creatures you control get +1/+1 until end of turn.",
+            "{3}{W}: Creatures you control get +2/+2 until end of turn.",
+            "{3}{W}: Target creature you control gets +1/+1 until end of turn.",
+            "{3}{W}: Other creatures you control get +1/+1 until end of turn.",
+            "{3}{W}: Creatures you control get +1/+1 until end of turn. Activate only once each turn.",
+            "{3}{W}: Creatures you control get +1/+1 until end of turn if you control an artifact.",
+            "{3}{W}: Creatures you control get +1/+1 and gain vigilance until end of turn."
+        ),
+    },
+    Recipe {
         id: RecipeId("activated.mana.tap_two_or_three_colors"),
         label: "tap for multicolor mana",
         surface: RecipeSurface::ActivatedAbility,
@@ -2947,6 +3174,27 @@ pub(super) static CATALOG: &[Recipe] = &[
             "{4}, {T}, Sacrifice this land: Draw two cards.",
             "{4}, {T}, Sacrifice this land: Draw a card. Activate only as a sorcery.",
             "{4}, {T}, Sacrifice this land: Draw a card, then discard a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.land.tap_sacrifice.search_basic_land.battlefield_tapped"),
+        label: "tap-sacrifice land basic search",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_land_tap_sacrifice_search_basic_tapped,
+        calibration: calibrations!(
+            "Terramorphic Expanse" => "{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            "Vibrant Cityscape" => "{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.";
+            "Sacrifice this land, {T}: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            "Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            "{T}: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            "{T}, Sacrifice this creature: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            "{T}, Sacrifice this land: Search your library for a land card, put it onto the battlefield tapped, then shuffle.",
+            "{T}, Sacrifice this land: Search your library for a basic land card, put it into your hand, then shuffle.",
+            "{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield, then shuffle.",
+            "{T}, Sacrifice this land: You may search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            "{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped.",
+            "{T}, Sacrifice this land: Search your library for a basic land card, reveal it, put it onto the battlefield tapped, then shuffle.",
+            "{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle. You gain 1 life."
         ),
     },
     Recipe {
@@ -4185,6 +4433,139 @@ mod tests {
                 who: PlayerRecipient::Controller,
             }]
         );
+    }
+
+    #[test]
+    fn issue_264_activated_templates_emit_exact_typed_abilities() {
+        let cases = [
+            (
+                "{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+                "activated.land.tap_sacrifice.search_basic_land.battlefield_tapped",
+            ),
+            (
+                "{1}: Add one mana of any color. Activate only once each turn.",
+                "activated.mana.pay_one.any_color.per_turn_one",
+            ),
+            (
+                "{1}{B}: This creature gets +1/+1 until end of turn.",
+                "activated.pump.self.plus_1_plus_1.pay_1b",
+            ),
+            (
+                "{2}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+                "activated.pump.self.plus_2_plus_2.pay_2g.per_turn_one",
+            ),
+            (
+                "{3}{W}: Creatures you control get +1/+1 until end of turn.",
+                "activated.pump.creatures_you_control.plus_1_plus_1.fixed_cost",
+            ),
+            (
+                "{4}{W}: Creatures you control get +1/+1 until end of turn.",
+                "activated.pump.creatures_you_control.plus_1_plus_1.fixed_cost",
+            ),
+            (
+                "{5}: Creatures you control get +1/+1 until end of turn.",
+                "activated.pump.creatures_you_control.plus_1_plus_1.fixed_cost",
+            ),
+        ];
+
+        let abilities = cases.map(|(clause, expected_id)| {
+            let matched = match_clause(clause, false, &context())
+                .expect("issue #264 clause must not be ambiguous")
+                .unwrap_or_else(|| panic!("issue #264 clause must be supported: {clause}"));
+            assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("issue #264 recipe must emit an activated ability: {clause}");
+            };
+            assert_eq!(ability.ability_id.as_str(), "activated_01");
+            assert_eq!(
+                ability.presentation,
+                AbilityPresentation::OracleLines(vec![1])
+            );
+            assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+            assert!(ability.targeting.is_none());
+            assert_eq!(ability.timing, ActivationTiming::Normal);
+            assert!(ability.conditions.is_empty());
+            ability
+        });
+
+        assert_eq!(
+            abilities[0].costs,
+            [AbilityCost::Tap, AbilityCost::SacrificeSelf]
+        );
+        assert!(matches!(
+            abilities[0].effect.as_slice(),
+            [SpellEffectKind::SearchLibrary {
+                who: PlayerRecipient::Controller,
+                optional: false,
+                count: 1,
+                filter: Some(ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::BasicLand),
+                    ..
+                }),
+                destination: SearchDestination::Battlefield { tapped: true },
+                shuffle: true,
+                reveal: false,
+                ..
+            }]
+        ));
+
+        assert_eq!(
+            abilities[1].costs,
+            [AbilityCost::Mana(ManaCost::parse("{1}").unwrap())]
+        );
+        assert_eq!(abilities[1].mana_options().unwrap().len(), 5);
+        assert_eq!(
+            abilities[1].activation_limit,
+            Some(tricerules_cards::primitives::ActivationLimit::PerTurn { max_activations: 1 })
+        );
+
+        assert_eq!(
+            abilities[2].effect,
+            [SpellEffectKind::PumpTarget {
+                power: 1,
+                toughness: 1,
+                scale: None,
+                subject: EffectSubject::Source,
+            }]
+        );
+        assert_eq!(abilities[2].activation_limit, None);
+        assert_eq!(
+            abilities[3].effect,
+            [SpellEffectKind::PumpTarget {
+                power: 2,
+                toughness: 2,
+                scale: None,
+                subject: EffectSubject::Source,
+            }]
+        );
+        assert_eq!(
+            abilities[3].activation_limit,
+            Some(tricerules_cards::primitives::ActivationLimit::PerTurn { max_activations: 1 })
+        );
+
+        for ability in &abilities[4..] {
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::PumpAll {
+                    filter: creatures_you_control(),
+                    power: 1,
+                    toughness: 1,
+                }]
+            );
+            assert_eq!(ability.activation_limit, None);
+        }
+
+        let mut nonland = context();
+        nonland.source_is_land = false;
+        assert!(match_clause(cases[0].0, false, &nonland).unwrap().is_none());
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        for (clause, _) in &cases[1..] {
+            assert!(
+                match_clause(clause, false, &noncreature).unwrap().is_none(),
+                "issue #264 creature recipe must reject a noncreature source: {clause}"
+            );
+        }
     }
 
     #[test]
