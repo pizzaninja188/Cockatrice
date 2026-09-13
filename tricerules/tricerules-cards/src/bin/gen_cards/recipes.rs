@@ -1,12 +1,12 @@
 use tricerules_cards::primitives::{
     ActivationLimit, BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter,
     CreatureScopeController, CreatureScopeFilter, DiscardQuantity, DrawDiscardOrder, EffectSubject,
-    EntersTappedAffected, EntryCost, GameCondition, HandCardAction, LifeAmount,
-    ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter,
-    PlayerLifeAggregate, PlayerRecipient, RelativePlayerSet, ResolutionCost, SearchDestination,
-    SearchZoneSelection, SpellCastFilter, StackSpellFilter, StaticAbilityDef, TargetController,
-    TargetFilter, TargetGroupDef, TargetKind, TargetObjectExclusion, TargetingDef,
-    TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
+    EntersTappedAffected, EntryCost, GameCondition, GraveyardDestination, GraveyardFilter,
+    HandCardAction, LifeAmount, ObjectContributionKind, ObjectPaymentConstraint,
+    PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient,
+    RelativePlayerSet, ResolutionCost, SearchDestination, SearchZoneSelection, SpellCastFilter,
+    StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
+    TargetObjectExclusion, TargetingDef, TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
@@ -92,6 +92,10 @@ pub(super) enum RecipeEmission {
     Keywords(Vec<Keyword>),
     SpellEffect(SpellEffectKind),
     SpellEffects(Vec<SpellEffectKind>),
+    SpellEffectsWithTargeting {
+        effects: Vec<SpellEffectKind>,
+        targeting: TargetingDef,
+    },
     TriggeredAbility(TriggeredAbilityDef),
     TriggeredAbilities(Vec<TriggeredAbilityDef>),
     ActivatedAbility(ActivatedAbilityDef),
@@ -359,11 +363,245 @@ fn match_spell_creature_deathtouch_indestructible(
     text: &str,
     _: &RecipeContext,
 ) -> Option<RecipeEmission> {
-    (text == "Target creature gains deathtouch and indestructible until end of turn.").then(|| {
-        RecipeEmission::SpellEffects(vec![SpellEffectKind::GrantKeywords {
-            subject: chosen_creature(TargetController::Any),
+    let controller =
+        if text == "Target creature gains deathtouch and indestructible until end of turn." {
+            TargetController::Any
+        } else if text
+            == "Target creature you control gains deathtouch and indestructible until end of turn."
+        {
+            TargetController::You
+        } else {
+            return None;
+        };
+    Some(RecipeEmission::SpellEffects(vec![
+        SpellEffectKind::GrantKeywords {
+            subject: chosen_creature(controller),
             keywords: vec![Keyword::Deathtouch, Keyword::Indestructible],
-        }])
+        },
+    ]))
+}
+
+fn match_spell_draw_three_then_discard_one(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Draw three cards, then discard a card.").then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::DrawDiscard {
+            who: PlayerRecipient::Controller,
+            draw_count: 3,
+            discard_count: 1,
+            order: DrawDiscardOrder::DrawThenDiscard,
+            optional: false,
+        })
+    })
+}
+
+fn match_spell_creature_plus_four_four_trample(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Target creature gets +4/+4 and gains trample until end of turn.")
+        .then(|| combat_trick(TargetController::Any, 4, 4, &[Keyword::Trample], false))
+}
+
+fn match_spell_controlled_creature_plus_one_then_power_damage(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    let optional_target = if text
+        == "Target creature you control gets +1/+0 until end of turn. It deals damage equal to its power to up to one target creature an opponent controls."
+    {
+        true
+    } else if text
+        == "Target creature you control gets +1/+0 until end of turn. It deals damage equal to its power to target creature an opponent controls."
+    {
+        false
+    } else {
+        return None;
+    };
+    Some({
+        let source = TargetFilter {
+            kind: TargetKind::Creature,
+            controller: TargetController::You,
+            ..TargetFilter::default()
+        };
+        let target = TargetFilter {
+            kind: TargetKind::Creature,
+            controller: TargetController::Opponent,
+            ..TargetFilter::default()
+        };
+        RecipeEmission::SpellEffectsWithTargeting {
+            effects: vec![
+                SpellEffectKind::PumpTarget {
+                    power: 1,
+                    toughness: 0,
+                    scale: None,
+                    subject: EffectSubject::Chosen(Box::new(source.clone())),
+                },
+                SpellEffectKind::CreatureDealsDamageEqualToPower { source, target },
+            ],
+            targeting: TargetingDef {
+                groups: vec![
+                    TargetGroupDef {
+                        min: 1,
+                        max: 1,
+                        prompt: "Choose target creature you control".into(),
+                        effect_indices: vec![0, 1],
+                        distinct_from: Vec::new(),
+                        same_graveyard: false,
+                        cast_cost_expansion: None,
+                    },
+                    TargetGroupDef {
+                        min: u32::from(!optional_target),
+                        max: 1,
+                        prompt: "Choose up to one target creature an opponent controls".into(),
+                        effect_indices: vec![1],
+                        distinct_from: Vec::new(),
+                        same_graveyard: false,
+                        cast_cost_expansion: None,
+                    },
+                ],
+            },
+        }
+    })
+}
+
+fn match_spell_return_graveyard_card_to_hand(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Return target card from your graveyard to your hand.").then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::MoveGraveyardCards {
+            filter: GraveyardFilter::default(),
+            destination: GraveyardDestination::Hand,
+            linked_exile_id: None,
+        })
+    })
+}
+
+fn match_spell_source_damage_each_opponent_three(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == format!("{} deals 3 damage to each opponent.", context.source_name)).then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::DamagePlayer {
+            amount: Amount::Fixed(3),
+            who: PlayerRecipient::EachOpponent,
+        })
+    })
+}
+
+fn match_spell_source_damage_creature_four(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == format!("{} deals 4 damage to target creature.", context.source_name)).then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::DamageTarget {
+            amount: Amount::Fixed(4),
+            target: TargetFilter::default_creature(),
+        })
+    })
+}
+
+fn match_spell_destroy_artifact_or_enchantment(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Destroy target artifact or enchantment.").then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::Destroy {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                permanent_types: vec![
+                    PermanentTypeFilter::Artifact,
+                    PermanentTypeFilter::Enchantment,
+                ],
+                ..TargetFilter::default()
+            })),
+        })
+    })
+}
+
+fn match_spell_destroy_creature_or_planeswalker(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Destroy target creature or planeswalker.").then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::Destroy {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                permanent_types: vec![
+                    PermanentTypeFilter::Creature,
+                    PermanentTypeFilter::Planeswalker,
+                ],
+                ..TargetFilter::default()
+            })),
+        })
+    })
+}
+
+fn match_spell_team_plus_three_trample(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Creatures you control get +3/+3 and gain trample until end of turn.").then(|| {
+        RecipeEmission::SpellEffects(vec![
+            SpellEffectKind::PumpAll {
+                filter: creatures_you_control(),
+                power: 3,
+                toughness: 3,
+            },
+            SpellEffectKind::GrantKeywordsAll {
+                filter: creatures_you_control(),
+                keywords: vec![Keyword::Trample],
+            },
+        ])
+    })
+}
+
+fn match_spell_destroy_creature_then_gain_two(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Destroy target creature. You gain 2 life.").then(|| {
+        RecipeEmission::SpellEffects(vec![
+            SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            },
+            SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2),
+            },
+        ])
+    })
+}
+
+fn match_spell_creature_minus_two_two(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Target creature gets -2/-2 until end of turn.").then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::PumpTarget {
+            power: -2,
+            toughness: -2,
+            scale: None,
+            subject: chosen_creature(TargetController::Any),
+        })
+    })
+}
+
+fn match_spell_destroy_attacking_or_blocking_creature(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Destroy target attacking or blocking creature.").then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::Destroy {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                kind: TargetKind::Creature,
+                combat_role: Some(tricerules_cards::primitives::CombatRole::AttackingOrBlocking),
+                ..TargetFilter::default()
+            })),
+        })
+    })
+}
+
+fn match_spell_exile_creature(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Exile target creature.").then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::Exile {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+        })
     })
 }
 
@@ -2570,7 +2808,7 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Murder" => "Destroy target creature.",
             "Impale" => "Destroy target creature.";
             "Destroy up to one target creature.",
-            "Destroy target creature or planeswalker."
+            "Destroy target creature or planeswalker. You gain 2 life."
         ),
     },
     Recipe {
@@ -2673,7 +2911,7 @@ pub(super) static CATALOG: &[Recipe] = &[
         calibration: calibrations!(
             "Last Gasp" => "Target creature gets -3/-3 until end of turn.",
             "Scorpion's Sting" => "Target creature gets -3/-3 until end of turn.";
-            "Target creature gets -2/-2 until end of turn.",
+            "Target creature gets -2/-2 until end of turn. You gain 2 life.",
             "Target creature you control gets -3/-3 until end of turn.",
             "Up to one target creature gets -3/-3 until end of turn.",
             "Target creature gets -3/-3 until end of turn. You gain 3 life."
@@ -2685,9 +2923,8 @@ pub(super) static CATALOG: &[Recipe] = &[
         surface: RecipeSurface::SpellClause,
         matcher: match_spell_creature_deathtouch_indestructible,
         calibration: calibrations!(
-            "Horrid Vigor" => "Target creature gains deathtouch and indestructible until end of turn.",
+            "Alesha's Legacy" => "Target creature you control gains deathtouch and indestructible until end of turn.",
             "Offer Immortality" => "Target creature gains deathtouch and indestructible until end of turn.";
-            "Target creature you control gains deathtouch and indestructible until end of turn.",
             "Target creature gains indestructible and deathtouch until end of turn.",
             "Target creature gains deathtouch and hexproof until end of turn.",
             "Target creature gains deathtouch and indestructible until end of turn. Untap it."
@@ -2705,6 +2942,188 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Target creature you control gets +3/+0 until end of turn.\nDraw a card.",
             "Target creature gets +2/+0 until end of turn.\nDraw a card.",
             "Draw a card.\nTarget creature gets +3/+0 until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.draw_discard.draw_three.discard_one"),
+        label: "draw three then discard one",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_draw_three_then_discard_one,
+        calibration: calibrations!(
+            "Enhanced Awareness" => "Draw three cards, then discard a card.",
+            "Sift" => "Draw three cards, then discard a card.";
+            "Draw three cards, then discard two cards.",
+            "Draw three cards, then you may discard a card.",
+            "Draw two cards, then discard a card.",
+            "Discard a card, then draw three cards."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump_grant.creature.plus_4_plus_4.trample"),
+        label: "creature +4/+4 and trample",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_creature_plus_four_four_trample,
+        calibration: calibrations!(
+            "Bestow Greatness" => "Target creature gets +4/+4 and gains trample until end of turn.",
+            "Larger Than Life" => "Target creature gets +4/+4 and gains trample until end of turn.";
+            "Target creature gets +3/+3 and gains trample until end of turn. Draw a card.",
+            "Target creature gets +4/+4 and gains trample until end of turn. Untap it.",
+            "Target creature you control gets +4/+4 and gains trample until end of turn.",
+            "Up to one target creature gets +4/+4 and gains trample until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.creature_power_damage.controlled_plus_one_to_opponent"),
+        label: "controlled creature +1/+0 then power damage to opposing creature",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_controlled_creature_plus_one_then_power_damage,
+        calibration: calibrations!(
+            "Assert Perfection" => "Target creature you control gets +1/+0 until end of turn. It deals damage equal to its power to up to one target creature an opponent controls.",
+            "Huatli's Final Strike" => "Target creature you control gets +1/+0 until end of turn. It deals damage equal to its power to target creature an opponent controls.";
+            "Target creature gets +1/+0 until end of turn. It deals damage equal to its power to up to one target creature an opponent controls.",
+            "Target creature you control gets +2/+0 until end of turn. It deals damage equal to its power to target creature an opponent controls.",
+            "Target creature you control gets +1/+0 until end of turn. It deals damage equal to its power to up to one target creature or planeswalker an opponent controls.",
+            "Target creature you control gets +1/+0 until end of turn if you've cast another instant or sorcery spell this turn. Then it deals damage equal to its power to up to one target creature an opponent controls."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.return_graveyard_card.hand"),
+        label: "return target graveyard card to hand",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_return_graveyard_card_to_hand,
+        calibration: calibrations!(
+            "Auroral Procession" => "Return target card from your graveyard to your hand.",
+            "Recollect" => "Return target card from your graveyard to your hand.";
+            "Return target creature card from your graveyard to your hand.",
+            "Return target card from an opponent's graveyard to your hand.",
+            "Return up to one target card from your graveyard to your hand.",
+            "Return target card from your graveyard to the battlefield."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.damage_player.each_opponent.fixed_three.source"),
+        label: "source deals three damage to each opponent",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_source_damage_each_opponent_three,
+        calibration: calibrations!(
+            "Boltwave" => "Boltwave deals 3 damage to each opponent.",
+            "Sizzle" => "Sizzle deals 3 damage to each opponent.";
+            "Boltwave deals 2 damage to each opponent.",
+            "It deals 3 damage to each opponent.",
+            "Boltwave deals 3 damage to each player.",
+            "Boltwave deals 3 damage to each opponent and you gain 3 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.damage.creature.fixed_four.source"),
+        label: "source deals four damage to target creature",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_source_damage_creature_four,
+        calibration: calibrations!(
+            "Bombard" => "Bombard deals 4 damage to target creature.",
+            "Bathe in Dragonfire" => "Bathe in Dragonfire deals 4 damage to target creature.";
+            "Bombard deals 3 damage to target creature.",
+            "Bombard deals 4 damage to any target.",
+            "It deals 4 damage to target creature.",
+            "Bombard deals 4 damage to target creature and 1 damage to its controller."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.destroy.artifact_or_enchantment"),
+        label: "destroy target artifact or enchantment",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_destroy_artifact_or_enchantment,
+        calibration: calibrations!(
+            "Disenchant" => "Destroy target artifact or enchantment.",
+            "Nature's Chant" => "Destroy target artifact or enchantment.";
+            "Destroy up to one target artifact or enchantment.",
+            "Destroy target artifact.",
+            "Destroy target artifact or enchantment. You gain 2 life.",
+            "Destroy target noncreature artifact or enchantment."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.destroy.creature_or_planeswalker"),
+        label: "destroy target creature or planeswalker",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_destroy_creature_or_planeswalker,
+        calibration: calibrations!(
+            "Hero's Downfall" => "Destroy target creature or planeswalker.",
+            "Finishing Blow" => "Destroy target creature or planeswalker.";
+            "Destroy up to one target creature or planeswalker.",
+            "Destroy target creature. You gain 1 life.",
+            "Destroy target creature or planeswalker. Its controller investigates.",
+            "Exile target creature or planeswalker."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump_all.creatures_you_control.plus_3_plus_3.trample"),
+        label: "creatures you control +3/+3 and trample",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_team_plus_three_trample,
+        calibration: calibrations!(
+            "Overrun" => "Creatures you control get +3/+3 and gain trample until end of turn.",
+            "Kamahl, Heart of Krosa" => "Creatures you control get +3/+3 and gain trample until end of turn.";
+            "Creatures you control get +2/+2 and gain trample until end of turn.",
+            "Other creatures you control get +3/+3 and gain trample until end of turn.",
+            "Creatures you control get +3/+3 and gain trample until end of turn. Untap those creatures.",
+            "Creatures you control get +X/+X and gain trample until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.destroy.creature_then_gain_life.two"),
+        label: "destroy target creature then gain two life",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_destroy_creature_then_gain_two,
+        calibration: calibrations!(
+            "Sephiroth's Intervention" => "Destroy target creature. You gain 2 life.",
+            "Venom's Hunger" => "Destroy target creature. You gain 2 life.";
+            "Destroy target creature. You gain 3 life.",
+            "Destroy target creature, then you gain 2 life.",
+            "You gain 2 life, then destroy target creature.",
+            "Destroy target creature. You may gain 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump.creature.minus_2_minus_2"),
+        label: "creature -2/-2",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_creature_minus_two_two,
+        calibration: calibrations!(
+            "Disfigure" => "Target creature gets -2/-2 until end of turn.",
+            "Stab" => "Target creature gets -2/-2 until end of turn.";
+            "Target creature gets -4/-4 until end of turn.",
+            "Target creature you control gets -2/-2 until end of turn.",
+            "Up to one target creature gets -2/-2 until end of turn.",
+            "Target creature gets -2/-2 until end of turn. You gain 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.destroy.attacking_or_blocking_creature"),
+        label: "destroy target attacking or blocking creature",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_destroy_attacking_or_blocking_creature,
+        calibration: calibrations!(
+            "Sudden Strike" => "Destroy target attacking or blocking creature.",
+            "Divine Verdict" => "Destroy target attacking or blocking creature.";
+            "Destroy target attacking creature.",
+            "Destroy target attacking or blocking creature with power 3 or less.",
+            "Destroy up to one target attacking or blocking creature.",
+            "Exile target attacking or blocking creature."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.exile.creature"),
+        label: "exile target creature",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_exile_creature,
+        calibration: calibrations!(
+            "Wander Off" => "Exile target creature.",
+            "Final Death" => "Exile target creature.";
+            "Exile target creature you control.",
+            "Exile up to one target creature.",
+            "Exile target creature. Its controller investigates.",
+            "Destroy target creature. You gain 1 life."
         ),
     },
     Recipe {
@@ -5632,6 +6051,81 @@ mod tests {
             let matched = match_clause(clause, true, &context())
                 .expect("issue #262 clause must not be ambiguous")
                 .unwrap_or_else(|| panic!("issue #262 clause must be supported: {clause}"));
+            assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+        }
+    }
+
+    #[test]
+    fn issue_268_one_shot_spell_templates_have_stable_exact_recipe_ids() {
+        let cases = [
+            (
+                "Target creature you control gains deathtouch and indestructible until end of turn.",
+                "spell.grant.creature.deathtouch_indestructible",
+            ),
+            (
+                "Draw three cards, then discard a card.",
+                "spell.draw_discard.draw_three.discard_one",
+            ),
+            (
+                "Target creature you control gets +1/+0 until end of turn. It deals damage equal to its power to up to one target creature an opponent controls.",
+                "spell.creature_power_damage.controlled_plus_one_to_opponent",
+            ),
+            (
+                "Return target card from your graveyard to your hand.",
+                "spell.return_graveyard_card.hand",
+            ),
+            (
+                "Target creature gets +4/+4 and gains trample until end of turn.",
+                "spell.pump_grant.creature.plus_4_plus_4.trample",
+            ),
+            (
+                "Boltwave deals 3 damage to each opponent.",
+                "spell.damage_player.each_opponent.fixed_three.source",
+            ),
+            (
+                "Bombard deals 4 damage to target creature.",
+                "spell.damage.creature.fixed_four.source",
+            ),
+            (
+                "Destroy target artifact or enchantment.",
+                "spell.destroy.artifact_or_enchantment",
+            ),
+            (
+                "Destroy target creature or planeswalker.",
+                "spell.destroy.creature_or_planeswalker",
+            ),
+            (
+                "Creatures you control get +3/+3 and gain trample until end of turn.",
+                "spell.pump_all.creatures_you_control.plus_3_plus_3.trample",
+            ),
+            (
+                "Destroy target creature. You gain 2 life.",
+                "spell.destroy.creature_then_gain_life.two",
+            ),
+            (
+                "Target creature gets -2/-2 until end of turn.",
+                "spell.pump.creature.minus_2_minus_2",
+            ),
+            (
+                "Destroy target attacking or blocking creature.",
+                "spell.destroy.attacking_or_blocking_creature",
+            ),
+            (
+                "Exile target creature.",
+                "spell.exile.creature",
+            ),
+        ];
+
+        for (clause, expected_id) in cases {
+            let mut test_context = context();
+            if clause.starts_with("Boltwave ") {
+                test_context.source_name = "Boltwave".into();
+            } else if clause.starts_with("Bombard ") {
+                test_context.source_name = "Bombard".into();
+            }
+            let matched = match_clause(clause, true, &test_context)
+                .expect("issue #268 clause must not be ambiguous")
+                .unwrap_or_else(|| panic!("issue #268 clause must be supported: {clause}"));
             assert_eq!(matched.id.as_str(), expected_id, "{clause}");
         }
     }

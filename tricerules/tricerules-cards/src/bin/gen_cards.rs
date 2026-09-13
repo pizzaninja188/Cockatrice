@@ -29,7 +29,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tricerules_cards::primitives::{
     EffectSubject, EntersTappedAffected, EntryCost, PlayerRecipient, StaticAbilityDef,
-    TargetController, TargetFilter,
+    TargetController, TargetFilter, TargetingDef,
 };
 use tricerules_cards::{
     external_oracle_lines, slugify, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
@@ -512,6 +512,7 @@ fn strip_reminder(text: &str) -> String {
 struct ParsedRules {
     keywords: Vec<Keyword>,
     spell_effect: Vec<SpellEffectKind>,
+    targeting: Option<TargetingDef>,
     modal_spell: Option<ModalDef>,
     activated_abilities: Vec<ActivatedAbilityDef>,
     triggered_abilities: Vec<TriggeredAbilityDef>,
@@ -687,6 +688,13 @@ fn parse_rules_text(
                 }
                 parsed.spell_effect = effects;
             }
+            RecipeEmission::SpellEffectsWithTargeting { effects, targeting } => {
+                if !parsed.spell_effect.is_empty() || parsed.targeting.is_some() {
+                    return Err(RulesParseError::Unsupported);
+                }
+                parsed.spell_effect = effects;
+                parsed.targeting = Some(targeting);
+            }
             RecipeEmission::ModalAssembly | RecipeEmission::ModalMode(_) => {
                 return Err(RulesParseError::Unsupported);
             }
@@ -836,6 +844,7 @@ struct GenFace {
     characteristic_defining_abilities: Vec<IdentifiedAbility<CharacteristicDefiningAbility>>,
     keywords: Vec<Keyword>,
     spell_effect: Vec<SpellEffectKind>,
+    targeting: Option<TargetingDef>,
     modal_spell: Option<ModalDef>,
     activated_abilities: Vec<ActivatedAbilityDef>,
     triggered_abilities: Vec<TriggeredAbilityDef>,
@@ -915,6 +924,12 @@ fn push_face_fields(s: &mut String, face: &GenFace, indent: &str, include_name: 
                 .map(render_generated_effect)
                 .collect::<Vec<_>>()
                 .join(", ")
+        ));
+    }
+    if let Some(targeting) = &face.targeting {
+        s.push_str(&format!(
+            "{indent}targeting: {},\n",
+            ron::ser::to_string(&Some(targeting)).expect("generated targeting should serialize")
         ));
     }
     if let Some(modal_spell) = &face.modal_spell {
@@ -1488,6 +1503,7 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, EvaluationError> {
         characteristic_defining_abilities: rules.characteristic_defining_abilities,
         keywords: rules.keywords,
         spell_effect: rules.spell_effect,
+        targeting: rules.targeting,
         modal_spell: rules.modal_spell,
         activated_abilities: rules.activated_abilities,
         triggered_abilities: rules.triggered_abilities,
@@ -1559,6 +1575,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
             characteristic_defining_abilities: rules.characteristic_defining_abilities,
             keywords: rules.keywords,
             spell_effect: rules.spell_effect,
+            targeting: rules.targeting,
             modal_spell: rules.modal_spell,
             activated_abilities: rules.activated_abilities,
             triggered_abilities: rules.triggered_abilities,

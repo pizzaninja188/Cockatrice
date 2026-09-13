@@ -45,6 +45,7 @@ alabaster_kirin	0	cast	exercised
 alaborn_grenadier	0	cast	exercised
 alanias_pathmaker	0	cast	exercised
 alert_shu_infantry	0	cast	exercised
+aleshas_legacy	0	cast	exercised
 alley_strangler	0	cast	exercised
 alpha_myr	0	cast	exercised
 alpha_tyrranax	0	cast	exercised
@@ -57,6 +58,7 @@ ambush_viper	0	cast	exercised
 ambush_wolf	0	cast	exercised
 amphin_cutthroat	0	cast	exercised
 anaba_bodyguard	0	cast	exercised
+ancestral_reminiscence	0	cast	exercised
 ancient_brontodon	0	cast	exercised
 ancient_carp	0	cast	exercised
 ancient_crab	0	cast	exercised
@@ -104,8 +106,10 @@ asgardian_citadel	0	land	exercised
 ashcoat_bear	0	cast	exercised
 assault_griffin	0	cast	exercised
 assault_zeppelid	0	cast	exercised
+assert_perfection	0	cast	exercised
 atlantean_cavalry	0	cast	exercised
 audacious_thief	0	cast	exercised
+auroral_procession	0	cast	exercised
 avacynian_priest	0	ability:0	exercised
 avacynian_priest	0	cast	exercised
 avacyns_pilgrim	0	ability:0	exercised
@@ -181,6 +185,7 @@ benders_waterskin	0	ability:0	exercised
 benders_waterskin	0	cast	exercised
 benthic_giant	0	cast	exercised
 bestial_menace	0	cast	exercised
+bestow_greatness	0	cast	exercised
 bifur,_melodic_rider	0	cast	exercised
 bigfin_bouncer	0	cast	exercised
 biosynthic_burst	0	cast	exercised
@@ -226,6 +231,8 @@ bogstomper	0	cast	exercised
 boiling_rock_prison	0	ability:0	exercised
 boiling_rock_prison	0	ability:1	exercised
 boiling_rock_prison	0	land	exercised
+boltwave	0	cast	exercised
+bombard	0	cast	exercised
 bombur,_gentle_dreamer	0	cast	exercised
 bone_splinters	0	cast	exercised
 bonebreaker_giant	0	cast	exercised
@@ -532,6 +539,7 @@ diregraf_ghoul	0	cast	exercised
 dirgur_island_dragon_skimming_strike	0	cast	exercised
 dirgur_island_dragon_skimming_strike	1	cast	exercised
 disdainful_stroke	0	cast	unsupported: target group 0 needs a richer fixture
+disenchant	0	cast	exercised
 disentomb	0	cast	exercised
 dismal_backwater	0	ability:0	exercised
 dismal_backwater	0	land	exercised
@@ -977,6 +985,7 @@ herald_of_secret_streams	0	cast	exercised
 hercules,_prince_of_power	0	ability:0	exercised
 hercules,_prince_of_power	0	cast	exercised
 hermetic_study	0	cast	exercised
+heros_downfall	0	cast	exercised
 hexplate_golem	0	cast	exercised
 hidden_grotto	0	ability:0	exercised
 hidden_grotto	0	ability:1	exercised
@@ -1788,6 +1797,7 @@ selesnya_guildgate	0	ability:0	exercised
 selesnya_guildgate	0	land	exercised
 sentinel_spider	0	cast	exercised
 sentinels_of_glen_elendra	0	cast	exercised
+sephiroths_intervention	0	cast	exercised
 seraph_of_dawn	0	cast	exercised
 seraph_of_the_suns	0	cast	exercised
 serpents_pass	0	ability:0	exercised
@@ -1949,6 +1959,7 @@ squire	0	cast	exercised
 squires_lightblade	0	ability:0	exercised
 squires_lightblade	0	cast	exercised
 squirrelanoids	0	cast	exercised
+stab	0	cast	exercised
 staggering_size	0	cast	exercised
 stampeding_rhino	0	cast	exercised
 standing_troops	0	cast	exercised
@@ -2004,6 +2015,7 @@ subterranean_cavern	0	land	exercised
 suburban_sanctuary	0	ability:0	exercised
 suburban_sanctuary	0	ability:1	exercised
 suburban_sanctuary	0	land	exercised
+sudden_strike	0	cast	unsupported: target group 0 needs a richer fixture
 sugar_rush	0	cast	exercised
 sulfuric_vortex	0	cast	exercised
 sultai_devotee	0	ability:0	exercised
@@ -2322,6 +2334,7 @@ wall_of_torches	0	cast	exercised
 wall_of_vines	0	cast	exercised
 wall_of_wood	0	cast	exercised
 wan_shi_tong,_librarian	0	cast	exercised
+wander_off	0	cast	exercised
 wanderbrine_preacher	0	cast	exercised
 wandering_musicians	0	cast	exercised
 wandering_ones	0	cast	exercised
