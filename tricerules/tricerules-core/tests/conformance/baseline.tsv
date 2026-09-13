@@ -169,6 +169,8 @@ bay_falcon	0	cast	exercised
 bayou	0	ability:0	exercised
 bayou	0	land	exercised
 bear_cub	0	cast	exercised
+bear_trap	0	ability:0	exercised
+bear_trap	0	cast	exercised
 beast-kin_ranger	0	cast	exercised
 bedhead_beastie	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 bedhead_beastie	0	cast	exercised
@@ -303,6 +305,8 @@ calamitous_cave-in	0	cast	exercised
 call_the_cavalry	0	cast	exercised
 canal_monitor	0	cast	exercised
 cancel	0	cast	unsupported: target group 0 needs a richer fixture
+candy_trail	0	ability:0	exercised
+candy_trail	0	cast	exercised
 canonized_in_blood	0	ability:0	exercised
 canonized_in_blood	0	cast	exercised
 canopy_gorger	0	cast	exercised
@@ -758,6 +762,8 @@ frost_ogre	0	cast	exercised
 fugitive_wizard	0	cast	exercised
 fungal_colossus	0	cast	exercised
 fusion_elemental	0	cast	exercised
+futurist_forge	0	ability:0	exercised
+futurist_forge	0	cast	exercised
 fyndhorn_elves	0	ability:0	exercised
 fyndhorn_elves	0	cast	exercised
 gaeas_skyfolk	0	cast	exercised
@@ -797,6 +803,9 @@ giant_scorpion	0	cast	exercised
 giant_solifuge	0	cast	exercised
 giant_spider	0	cast	exercised
 giant_warthog	0	cast	exercised
+giants_boulder	0	ability:0	exercised
+giants_boulder	0	ability:1	exercised
+giants_boulder	0	cast	exercised
 gift_of_paradise	0	cast	exercised
 gifted_aetherborn	0	cast	exercised
 gifts_ungiven	0	cast	exercised
@@ -838,6 +847,8 @@ goblin_brigand	0	cast	exercised
 goblin_chariot	0	cast	exercised
 goblin_chieftain	0	cast	exercised
 goblin_deathraiders	0	cast	exercised
+goblin_firebomb	0	ability:0	exercised
+goblin_firebomb	0	cast	exercised
 goblin_hero	0	cast	exercised
 goblin_piker	0	cast	exercised
 goblin_roughrider	0	cast	exercised
@@ -995,6 +1006,8 @@ honey_mammoth	0	cast	exercised
 hornet_cobra	0	cast	exercised
 horrid_vigor	0	cast	exercised
 hostile_minotaur	0	cast	exercised
+hot_dog_cart	0	ability:0	exercised
+hot_dog_cart	0	cast	exercised
 hover_barrier	0	cast	exercised
 hovermyr	0	cast	exercised
 howling_fury	0	cast	exercised
@@ -1027,6 +1040,8 @@ iguana_parrot	0	cast	exercised
 il_mheg_pixie	0	cast	exercised
 illegitimate_business	0	ability:0	exercised
 illegitimate_business	0	land	exercised
+illvoi_galeblade	0	ability:0	exercised
+illvoi_galeblade	0	cast	exercised
 illvoi_light_jammer	0	ability:0	exercised
 illvoi_light_jammer	0	cast	exercised
 impale	0	cast	exercised
@@ -1056,6 +1071,8 @@ inspiring_cleric	0	cast	exercised
 inspiring_paladin	0	cast	exercised
 inspiring_vantage	0	ability:0	exercised
 inspiring_vantage	0	land	exercised
+instant_ramen	0	ability:0	exercised
+instant_ramen	0	cast	exercised
 instill_infection	0	cast	exercised
 into_the_fae_court	0	cast	exercised
 invasion_of_ulgrotha_grandmother_ravi_sengir	0	cast	exercised
@@ -1431,6 +1448,9 @@ omega_myr	0	cast	exercised
 ominous_asylum	0	ability:0	exercised
 ominous_asylum	0	ability:1	exercised
 ominous_asylum	0	land	exercised
+omni-cheese_pizza	0	ability:0	exercised
+omni-cheese_pizza	0	ability:1	exercised
+omni-cheese_pizza	0	cast	exercised
 onakke_ogre	0	cast	exercised
 ooze_spill	0	cast	unsupported: target group 0 needs a richer fixture
 opt	0	cast	exercised
@@ -1529,6 +1549,8 @@ prodigal_sorcerer	0	cast	exercised
 promising_vein	0	ability:0	exercised
 promising_vein	0	ability:1	exercised
 promising_vein	0	land	exercised
+prophetic_prism	0	ability:0	exercised
+prophetic_prism	0	cast	exercised
 prosperity_tycoon	0	ability:0	unsupported: nonmana costs need additional fixture resources
 prosperity_tycoon	0	cast	exercised
 prowling_caracal	0	cast	exercised
@@ -1646,6 +1668,9 @@ riverwalk_technique	0	cast	exercised
 roc_hunter	0	cast	exercised
 rooftop_assassin	0	cast	exercised
 rooftop_percher	0	cast	exercised
+rootrider_faun	0	ability:0	exercised
+rootrider_faun	0	ability:1	exercised
+rootrider_faun	0	cast	exercised
 rorix_bladewing	0	cast	exercised
 rotted_hulk	0	cast	exercised
 rotted_hystrix	0	cast	exercised

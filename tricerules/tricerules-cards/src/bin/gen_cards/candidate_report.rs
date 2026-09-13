@@ -187,6 +187,7 @@ fn exact_recipe_matches_one_clause(
     source_name: &str,
     clause: &str,
     is_spell: bool,
+    source_is_artifact: bool,
     source_is_land: bool,
     source_is_creature: bool,
     source_is_vehicle: bool,
@@ -197,6 +198,7 @@ fn exact_recipe_matches_one_clause(
         source_name,
         clause,
         is_spell,
+        source_is_artifact,
         source_is_land,
         source_is_creature,
         source_is_vehicle,
@@ -246,6 +248,7 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
         let is_spell = card_types
             .iter()
             .any(|card_type| matches!(card_type.as_str(), "Instant" | "Sorcery"));
+        let source_is_artifact = card_types.iter().any(|card_type| card_type == "Artifact");
         let source_is_land = card_types.iter().any(|card_type| card_type == "Land");
         let source_is_creature = card_types.iter().any(|card_type| card_type == "Creature");
         let source_is_vehicle = subtypes.iter().any(|subtype| subtype == "Vehicle");
@@ -256,6 +259,7 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
             face.name,
             oracle_text,
             is_spell,
+            source_is_artifact,
             source_is_land,
             source_is_creature,
             source_is_vehicle,
@@ -278,6 +282,7 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
                     face.name,
                     clause,
                     is_spell,
+                    source_is_artifact,
                     source_is_land,
                     source_is_creature,
                     source_is_vehicle,

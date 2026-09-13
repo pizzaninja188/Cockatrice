@@ -1959,18 +1959,22 @@ pub struct ConditionalSearchDestination {
 /// nonzero types (`(g: 1)`, `(w: 1, u: 1)`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct ManaAmount {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
     pub w: u32,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
     pub u: u32,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
     pub b: u32,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
     pub r: u32,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
     pub g: u32,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
     pub c: u32,
+}
+
+fn is_zero_u32(value: &u32) -> bool {
+    *value == 0
 }
 
 /// The boundary at which resolving mana stops being retained. `EndOfStep` follows the ordinary

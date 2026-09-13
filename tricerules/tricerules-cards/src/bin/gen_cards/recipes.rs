@@ -79,6 +79,7 @@ pub(super) struct RecipeContext {
     pub(super) characteristic_ability_id: AbilityId,
     pub(super) presentation: AbilityPresentation,
     pub(super) source_name: String,
+    pub(super) source_is_artifact: bool,
     pub(super) source_is_land: bool,
     pub(super) source_is_creature: bool,
     pub(super) source_is_vehicle: bool,
@@ -751,6 +752,46 @@ fn etb_instruction(text: &str) -> Option<&str> {
 fn match_etb_draw(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     let effect = draw_effect(&capitalize(etb_instruction(text)?))?;
     Some(triggered_ability(context, effect))
+}
+
+fn match_artifact_etb_draw(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_artifact && text == "When this artifact enters, draw a card.").then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            },
+        )
+    })
+}
+
+fn match_artifact_etb_scry_two(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_artifact && text == "When this artifact enters, scry 2.").then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::Scry {
+                count: Amount::Fixed(2),
+            },
+        )
+    })
+}
+
+fn match_artifact_etb_create_food(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_artifact && text == "When this artifact enters, create a Food token.").then(
+        || {
+            triggered_ability(
+                context,
+                SpellEffectKind::CreateTokens {
+                    token: "food".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                },
+            )
+        },
+    )
 }
 
 fn match_etb_gain_life(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
@@ -1477,7 +1518,7 @@ fn match_tap_for_any_color(text: &str, context: &RecipeContext) -> Option<Recipe
 }
 
 fn match_pay_one_tap_for_any_color(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
-    (context.source_is_land && text == "{1}, {T}: Add one mana of any color.").then(|| {
+    (text == "{1}, {T}: Add one mana of any color.").then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
@@ -1503,6 +1544,210 @@ fn match_pay_one_tap_for_any_color(text: &str, context: &RecipeContext) -> Optio
             activation_limit: None,
         })
     })
+}
+
+fn utility_activated_ability(
+    context: &RecipeContext,
+    costs: Vec<AbilityCost>,
+    effect: Vec<SpellEffectKind>,
+    targeting: Option<TargetingDef>,
+) -> RecipeEmission {
+    RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        ability_id: context.activated_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        cost_modifiers: Vec::new(),
+        source_zone: AbilitySourceZone::Battlefield,
+        costs,
+        effect,
+        targeting,
+        timing: ActivationTiming::Normal,
+        conditions: Vec::new(),
+        activation_limit: None,
+    })
+}
+
+fn fixed_mana_cost(cost: &str) -> AbilityCost {
+    AbilityCost::Mana(ManaCost::parse(cost).expect("closed utility recipe uses valid mana cost"))
+}
+
+fn five_color_mana_effect() -> SpellEffectKind {
+    SpellEffectKind::ProduceMana {
+        options: ['W', 'U', 'B', 'R', 'G']
+            .into_iter()
+            .map(|symbol| parse_mana_amount(symbol).expect("five-color recipe uses valid symbols"))
+            .collect(),
+        restriction: None,
+        conditional: None,
+    }
+}
+
+fn single_targeting(prompt: &str) -> Option<TargetingDef> {
+    Some(TargetingDef {
+        groups: vec![TargetGroupDef {
+            min: 1,
+            max: 1,
+            prompt: prompt.into(),
+            effect_indices: vec![0],
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        }],
+    })
+}
+
+fn match_artifact_pay_one_tap_sacrifice_any_color(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_artifact
+        && text == "{1}, {T}, Sacrifice this artifact: Add one mana of any color.")
+        .then(|| {
+            utility_activated_ability(
+                context,
+                vec![
+                    fixed_mana_cost("{1}"),
+                    AbilityCost::Tap,
+                    AbilityCost::SacrificeSelf,
+                ],
+                vec![five_color_mana_effect()],
+                None,
+            )
+        })
+}
+
+fn match_artifact_pay_two_tap_sacrifice_gain_three(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_artifact && text == "{2}, {T}, Sacrifice this artifact: You gain 3 life.")
+        .then(|| {
+            utility_activated_ability(
+                context,
+                vec![
+                    fixed_mana_cost("{2}"),
+                    AbilityCost::Tap,
+                    AbilityCost::SacrificeSelf,
+                ],
+                vec![SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(3),
+                }],
+                None,
+            )
+        })
+}
+
+fn match_artifact_pay_two_tap_sacrifice_gain_three_draw_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_artifact
+        && text == "{2}, {T}, Sacrifice this artifact: You gain 3 life and draw a card.")
+        .then(|| {
+            utility_activated_ability(
+                context,
+                vec![
+                    fixed_mana_cost("{2}"),
+                    AbilityCost::Tap,
+                    AbilityCost::SacrificeSelf,
+                ],
+                vec![
+                    SpellEffectKind::GainLife {
+                        amount: Amount::Fixed(3),
+                    },
+                    SpellEffectKind::Draw {
+                        who: PlayerRecipient::Controller,
+                        count: Amount::Fixed(1),
+                    },
+                ],
+                None,
+            )
+        })
+}
+
+fn match_artifact_pay_three_u_sacrifice_draw_two(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_artifact && text == "{3}{U}, Sacrifice this artifact: Draw two cards.").then(
+        || {
+            utility_activated_ability(
+                context,
+                vec![fixed_mana_cost("{3}{U}"), AbilityCost::SacrificeSelf],
+                vec![SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(2),
+                }],
+                None,
+            )
+        },
+    )
+}
+
+fn match_creature_pay_two_sacrifice_draw_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == "{2}, Sacrifice this creature: Draw a card.").then(
+        || {
+            utility_activated_ability(
+                context,
+                vec![fixed_mana_cost("{2}"), AbilityCost::SacrificeSelf],
+                vec![SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                }],
+                None,
+            )
+        },
+    )
+}
+
+fn match_artifact_pay_three_tap_sacrifice_damage_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_artifact
+        && text == "{3}, {T}, Sacrifice this artifact: It deals 3 damage to target creature.")
+        .then(|| {
+            utility_activated_ability(
+                context,
+                vec![
+                    fixed_mana_cost("{3}"),
+                    AbilityCost::Tap,
+                    AbilityCost::SacrificeSelf,
+                ],
+                vec![SpellEffectKind::DamageTarget {
+                    amount: Amount::Fixed(3),
+                    target: TargetFilter::default_creature(),
+                }],
+                single_targeting("Choose target creature"),
+            )
+        })
+}
+
+fn match_artifact_pay_seven_tap_sacrifice_destroy_permanent(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_artifact
+        && text == "{7}, {T}, Sacrifice this artifact: Destroy target permanent.")
+        .then(|| {
+            utility_activated_ability(
+                context,
+                vec![
+                    fixed_mana_cost("{7}"),
+                    AbilityCost::Tap,
+                    AbilityCost::SacrificeSelf,
+                ],
+                vec![SpellEffectKind::Destroy {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        ..TargetFilter::default()
+                    })),
+                }],
+                single_targeting("Choose target permanent"),
+            )
+        })
 }
 
 fn match_pay_one_for_any_color_once_per_turn(
@@ -2420,6 +2665,51 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("etb.artifact.draw.one"),
+        label: "artifact ETB draw one",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_artifact_etb_draw,
+        calibration: calibrations!(
+            "Futurist Forge" => "When this artifact enters, draw a card.",
+            "Prophetic Prism" => "When this artifact enters, draw a card.";
+            "When this enchantment enters, draw a card.",
+            "When this artifact enters, you may draw a card.",
+            "When this artifact enters, draw two cards.",
+            "When this artifact enters, draw a card, then discard a card.",
+            "Whenever another artifact enters, draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.artifact.scry.two"),
+        label: "artifact ETB scry two",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_artifact_etb_scry_two,
+        calibration: calibrations!(
+            "Candy Trail" => "When this artifact enters, scry 2.",
+            "Giant's Boulder" => "When this artifact enters, scry 2.";
+            "When this enchantment enters, scry 2.",
+            "When this artifact enters, you may scry 2.",
+            "When this artifact enters, scry 1.",
+            "When this artifact enters, target player scries 2.",
+            "When this artifact enters, scry 2, then draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.artifact.create_food.one"),
+        label: "artifact ETB create Food",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_artifact_etb_create_food,
+        calibration: calibrations!(
+            "Bumbleflower's Sharepot" => "When this artifact enters, create a Food token.",
+            "Hot Dog Cart" => "When this artifact enters, create a Food token.";
+            "When this enchantment enters, create a Food token.",
+            "When this artifact enters, you may create a Food token.",
+            "When this artifact enters, create two Food tokens.",
+            "When this artifact enters, create a tapped Food token.",
+            "When this artifact enters, create a Food token, then draw a card."
+        ),
+    },
+    Recipe {
         id: RecipeId("etb.gain_life.fixed"),
         label: "ETB gain life",
         surface: RecipeSurface::EtbAbility,
@@ -3040,13 +3330,127 @@ pub(super) static CATALOG: &[Recipe] = &[
         matcher: match_pay_one_tap_for_any_color,
         calibration: calibrations!(
             "Crystal Grotto" => "{1}, {T}: Add one mana of any color.",
-            "Conduit Pylons" => "{1}, {T}: Add one mana of any color.";
+            "Prophetic Prism" => "{1}, {T}: Add one mana of any color.";
             "{1}: Add one mana of any color.",
             "{2}, {T}: Add one mana of any color.",
             "{1}, {T}: Add one mana of any type.",
             "{1}, {T}: Add two mana of any one color.",
             "{1}, {T}: Add one mana of any color. Spend this mana only to cast creature spells.",
             "{1}, {T}, Pay 1 life: Add one mana of any color."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.artifact.pay_one_tap_sacrifice.any_color"),
+        label: "artifact tap-sacrifice for any color",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_artifact_pay_one_tap_sacrifice_any_color,
+        calibration: calibrations!(
+            "Golden Egg" => "{1}, {T}, Sacrifice this artifact: Add one mana of any color.",
+            "Omni-Cheese Pizza" => "{1}, {T}, Sacrifice this artifact: Add one mana of any color.";
+            "{1}, Sacrifice this artifact: Add one mana of any color.",
+            "{1}, {T}, Sacrifice this artifact: Add {C}.",
+            "{1}, {T}, Sacrifice this creature: Add one mana of any color.",
+            "{2}, {T}, Sacrifice this artifact: Add one mana of any color.",
+            "{1}, {T}, Sacrifice this artifact: Add two mana of any one color.",
+            "{1}, {T}, Sacrifice this artifact: Add one mana of any color. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.artifact.pay_two_tap_sacrifice.gain_three"),
+        label: "artifact tap-sacrifice gain three",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_artifact_pay_two_tap_sacrifice_gain_three,
+        calibration: calibrations!(
+            "Instant Ramen" => "{2}, {T}, Sacrifice this artifact: You gain 3 life.",
+            "Omni-Cheese Pizza" => "{2}, {T}, Sacrifice this artifact: You gain 3 life.";
+            "{2}, Sacrifice this artifact: You gain 3 life.",
+            "{2}, {T}: You gain 3 life.",
+            "{2}, {T}, Sacrifice this creature: You gain 3 life.",
+            "{1}, {T}, Sacrifice this artifact: You gain 3 life.",
+            "{2}, {T}, Sacrifice this artifact: You gain 2 life.",
+            "{2}, {T}, Sacrifice this artifact: You gain 3 life and create a Food token."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.artifact.pay_two_tap_sacrifice.gain_three_draw_one"),
+        label: "artifact tap-sacrifice gain three then draw one",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_artifact_pay_two_tap_sacrifice_gain_three_draw_one,
+        calibration: calibrations!(
+            "Candy Trail" => "{2}, {T}, Sacrifice this artifact: You gain 3 life and draw a card.",
+            "Bagel and Schmear" => "{2}, {T}, Sacrifice this artifact: You gain 3 life and draw a card.";
+            "{2}, Sacrifice this artifact: You gain 3 life and draw a card.",
+            "{2}, {T}: You gain 3 life and draw a card.",
+            "{2}, {T}, Sacrifice this creature: You gain 3 life and draw a card.",
+            "{1}, {T}, Sacrifice this artifact: You gain 3 life and draw a card.",
+            "{2}, {T}, Sacrifice this artifact: You gain 2 life and draw a card.",
+            "{2}, {T}, Sacrifice this artifact: Draw a card and you gain 3 life.",
+            "{2}, {T}, Sacrifice this artifact: You gain 3 life and draw two cards."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.artifact.pay_three_u_sacrifice.draw_two"),
+        label: "artifact sacrifice draw two",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_artifact_pay_three_u_sacrifice_draw_two,
+        calibration: calibrations!(
+            "Futurist Forge" => "{3}{U}, Sacrifice this artifact: Draw two cards.",
+            "Sewer-veillance Cam" => "{3}{U}, Sacrifice this artifact: Draw two cards.";
+            "{3}{U}, {T}, Sacrifice this artifact: Draw two cards.",
+            "{3}{U}, Sacrifice this creature: Draw two cards.",
+            "{2}{U}, Sacrifice this artifact: Draw two cards.",
+            "{3}{U}, Sacrifice this artifact: Draw a card.",
+            "{3}{U}, Sacrifice this artifact: You may draw two cards.",
+            "{3}{U}, Sacrifice this artifact: Draw two cards, then discard a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.creature.pay_two_sacrifice.draw_one"),
+        label: "creature sacrifice draw one",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_creature_pay_two_sacrifice_draw_one,
+        calibration: calibrations!(
+            "Illvoi Galeblade" => "{2}, Sacrifice this creature: Draw a card.",
+            "Red Herring" => "{2}, Sacrifice this creature: Draw a card.";
+            "{2}, {T}, Sacrifice this creature: Draw a card.",
+            "{2}, Sacrifice this artifact: Draw a card.",
+            "{1}, Sacrifice this creature: Draw a card.",
+            "{2}, Sacrifice another creature: Draw a card.",
+            "{2}, Sacrifice this creature: Draw two cards.",
+            "{2}, Sacrifice this creature: You may draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.artifact.pay_three_tap_sacrifice.damage_creature_three"),
+        label: "artifact tap-sacrifice damage creature three",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_artifact_pay_three_tap_sacrifice_damage_creature,
+        calibration: calibrations!(
+            "Bear Trap" => "{3}, {T}, Sacrifice this artifact: It deals 3 damage to target creature.",
+            "Scrap Compactor" => "{3}, {T}, Sacrifice this artifact: It deals 3 damage to target creature.";
+            "{3}, Sacrifice this artifact: It deals 3 damage to target creature.",
+            "{3}, {T}, Sacrifice this creature: It deals 3 damage to target creature.",
+            "{2}, {T}, Sacrifice this artifact: It deals 3 damage to target creature.",
+            "{3}, {T}, Sacrifice this artifact: It deals 2 damage to target creature.",
+            "{3}, {T}, Sacrifice this artifact: It deals 3 damage to any target.",
+            "{3}, {T}, Sacrifice this artifact: It deals 3 damage to up to one target creature."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.artifact.pay_seven_tap_sacrifice.destroy_permanent"),
+        label: "artifact tap-sacrifice destroy permanent",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_artifact_pay_seven_tap_sacrifice_destroy_permanent,
+        calibration: calibrations!(
+            "Giant's Boulder" => "{7}, {T}, Sacrifice this artifact: Destroy target permanent.",
+            "Goblin Firebomb" => "{7}, {T}, Sacrifice this artifact: Destroy target permanent.";
+            "{7}, Sacrifice this artifact: Destroy target permanent.",
+            "{7}, {T}, Sacrifice this creature: Destroy target permanent.",
+            "{6}, {T}, Sacrifice this artifact: Destroy target permanent.",
+            "{7}, {T}, Sacrifice this artifact: Destroy target creature.",
+            "{7}, {T}, Sacrifice this artifact: Destroy up to one target permanent.",
+            "{7}, {T}, Sacrifice this artifact: Exile target permanent.",
+            "{7}, {T}, Sacrifice this artifact: Destroy target permanent. Activate only as a sorcery."
         ),
     },
     Recipe {
@@ -3472,6 +3876,7 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
             static_ability_id: AbilityId::new("static_01")?,
             characteristic_ability_id: AbilityId::new("characteristic_01")?,
             presentation: AbilityPresentation::OracleLines(vec![1]),
+            source_is_artifact: true,
             source_is_land: true,
             source_is_creature: true,
             source_is_vehicle: true,
@@ -3604,6 +4009,7 @@ mod tests {
             static_ability_id: AbilityId::new("static_01").unwrap(),
             characteristic_ability_id: AbilityId::new("characteristic_01").unwrap(),
             presentation: AbilityPresentation::OracleLines(vec![1]),
+            source_is_artifact: true,
             source_is_land: true,
             source_is_creature: true,
             source_is_vehicle: true,
@@ -3804,12 +4210,15 @@ mod tests {
 
         let mut nonland = context();
         nonland.source_is_land = false;
-        for (clause, _) in cases {
+        for (clause, _) in &cases[..4] {
             assert!(
                 match_clause(clause, false, &nonland).unwrap().is_none(),
                 "{clause}"
             );
         }
+        assert!(match_clause(cases[4].0, false, &nonland)
+            .expect("paid any-color recipe must remain unambiguous")
+            .is_some());
     }
 
     #[test]
@@ -4735,5 +5144,138 @@ mod tests {
                 "{clause} must require its source subtype"
             );
         }
+    }
+
+    #[test]
+    fn issue_270_utility_templates_emit_exact_typed_abilities() {
+        let cases = [
+            (
+                "When this artifact enters, draw a card.",
+                "etb.artifact.draw.one",
+            ),
+            (
+                "When this artifact enters, scry 2.",
+                "etb.artifact.scry.two",
+            ),
+            (
+                "When this artifact enters, create a Food token.",
+                "etb.artifact.create_food.one",
+            ),
+            (
+                "{1}, {T}, Sacrifice this artifact: Add one mana of any color.",
+                "activated.artifact.pay_one_tap_sacrifice.any_color",
+            ),
+            (
+                "{2}, {T}, Sacrifice this artifact: You gain 3 life.",
+                "activated.artifact.pay_two_tap_sacrifice.gain_three",
+            ),
+            (
+                "{2}, {T}, Sacrifice this artifact: You gain 3 life and draw a card.",
+                "activated.artifact.pay_two_tap_sacrifice.gain_three_draw_one",
+            ),
+            (
+                "{3}{U}, Sacrifice this artifact: Draw two cards.",
+                "activated.artifact.pay_three_u_sacrifice.draw_two",
+            ),
+            (
+                "{2}, Sacrifice this creature: Draw a card.",
+                "activated.creature.pay_two_sacrifice.draw_one",
+            ),
+            (
+                "{3}, {T}, Sacrifice this artifact: It deals 3 damage to target creature.",
+                "activated.artifact.pay_three_tap_sacrifice.damage_creature_three",
+            ),
+            (
+                "{7}, {T}, Sacrifice this artifact: Destroy target permanent.",
+                "activated.artifact.pay_seven_tap_sacrifice.destroy_permanent",
+            ),
+            (
+                "{1}, {T}: Add one mana of any color.",
+                "activated.mana.pay_one_tap_any_color",
+            ),
+        ];
+
+        let emissions = cases.map(|(clause, expected_id)| {
+            let matched = match_clause(clause, false, &context())
+                .expect("issue #270 clause must not be ambiguous")
+                .unwrap_or_else(|| panic!("issue #270 clause must be supported: {clause}"));
+            assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+            matched.emission
+        });
+
+        let RecipeEmission::ActivatedAbility(gain_then_draw) = &emissions[5] else {
+            panic!("Candy Trail recipe must emit an activated ability");
+        };
+        assert_eq!(
+            gain_then_draw.costs,
+            [
+                AbilityCost::Mana(ManaCost::parse("{2}").unwrap()),
+                AbilityCost::Tap,
+                AbilityCost::SacrificeSelf,
+            ]
+        );
+        assert_eq!(
+            gain_then_draw.effect,
+            [
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(3),
+                },
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                },
+            ]
+        );
+
+        let RecipeEmission::ActivatedAbility(damage) = &emissions[8] else {
+            panic!("Bear Trap recipe must emit an activated ability");
+        };
+        assert!(matches!(
+            damage.effect.as_slice(),
+            [SpellEffectKind::DamageTarget {
+                amount: Amount::Fixed(3),
+                target: TargetFilter {
+                    kind: TargetKind::Creature,
+                    ..
+                },
+            }]
+        ));
+        assert_eq!(
+            damage.targeting.as_ref().unwrap().groups[0].effect_indices,
+            [0]
+        );
+
+        let RecipeEmission::ActivatedAbility(sacrificed_mana) = &emissions[3] else {
+            panic!("Omni-Cheese Pizza recipe must emit an activated ability");
+        };
+        assert_eq!(sacrificed_mana.mana_options().unwrap().len(), 5);
+        assert!(sacrificed_mana.targeting.is_none());
+
+        let mut nonartifact = context();
+        nonartifact.source_is_artifact = false;
+        for (clause, _) in &cases[..7] {
+            assert_eq!(
+                match_clause(clause, false, &nonartifact),
+                Ok(None),
+                "{clause} must require an artifact source"
+            );
+        }
+        for (clause, _) in &cases[8..10] {
+            assert_eq!(
+                match_clause(clause, false, &nonartifact),
+                Ok(None),
+                "{clause} must require an artifact source"
+            );
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert_eq!(match_clause(cases[7].0, false, &noncreature), Ok(None));
+
+        let mut nonland = context();
+        nonland.source_is_land = false;
+        assert!(match_clause(cases[10].0, false, &nonland)
+            .expect("generic paid mana recipe must not be ambiguous")
+            .is_some());
     }
 }

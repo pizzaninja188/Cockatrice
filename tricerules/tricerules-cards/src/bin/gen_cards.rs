@@ -530,6 +530,7 @@ fn parse_rules_text(
     source_name: &str,
     oracle_text: &str,
     is_spell: bool,
+    source_is_artifact: bool,
     source_is_land: bool,
     source_is_creature: bool,
     source_is_vehicle: bool,
@@ -548,6 +549,7 @@ fn parse_rules_text(
         characteristic_ability_id: AbilityId::new("characteristic_01")
             .map_err(|_| RulesParseError::Unsupported)?,
         presentation: AbilityPresentation::OracleLines(vec![1]),
+        source_is_artifact,
         source_is_land,
         source_is_creature,
         source_is_vehicle,
@@ -654,6 +656,7 @@ fn parse_rules_text(
             static_ability_id: static_id,
             characteristic_ability_id: characteristic_id,
             presentation,
+            source_is_artifact,
             source_is_land,
             source_is_creature,
             source_is_vehicle,
@@ -1444,6 +1447,7 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, EvaluationError> {
         &name,
         oracle_text,
         is_spell,
+        types.iter().any(|card_type| card_type == "Artifact"),
         types.iter().any(|card_type| card_type == "Land"),
         is_creature,
         is_vehicle,
@@ -1517,6 +1521,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
         &name,
         oracle_text,
         is_spell,
+        card_types.iter().any(|card_type| card_type == "Artifact"),
         card_types.iter().any(|card_type| card_type == "Land"),
         is_creature,
         is_vehicle,
@@ -4729,6 +4734,95 @@ mod tests {
         assert!(report.contains("adventure              1"));
         assert!(report.contains("omen                   1"));
         assert!(report.contains("face rules text has no exact supported recipe"));
+    }
+
+    #[test]
+    fn issue_270_utility_permanent_cohort_has_complete_exact_recipes() {
+        let cards = [
+            normal_card(
+                "Bear Trap",
+                "{1}",
+                "Artifact",
+                "Flash\n{3}, {T}, Sacrifice this artifact: It deals 3 damage to target creature.",
+                None,
+            ),
+            normal_card(
+                "Candy Trail",
+                "{1}",
+                "Artifact — Food Clue",
+                "When this artifact enters, scry 2.\n{2}, {T}, Sacrifice this artifact: You gain 3 life and draw a card.",
+                None,
+            ),
+            normal_card(
+                "Futurist Forge",
+                "{1}{U}",
+                "Artifact",
+                "When this artifact enters, draw a card.\n{3}{U}, Sacrifice this artifact: Draw two cards.",
+                None,
+            ),
+            normal_card(
+                "Giant's Boulder",
+                "{1}",
+                "Artifact",
+                "When this artifact enters, scry 2. (Look at the top two cards of your library, then put any number of them on the bottom and the rest on top in any order.)\n{1}, {T}: Add one mana of any color.\n{7}, {T}, Sacrifice this artifact: Destroy target permanent.",
+                None,
+            ),
+            normal_card(
+                "Goblin Firebomb",
+                "{1}",
+                "Artifact",
+                "Flash\n{7}, {T}, Sacrifice this artifact: Destroy target permanent.",
+                None,
+            ),
+            normal_card(
+                "Hot Dog Cart",
+                "{3}",
+                "Artifact",
+                "When this artifact enters, create a Food token. (It's an artifact with \"{2}, {T}, Sacrifice this token: You gain 3 life.\")\n{T}: Add one mana of any color.",
+                None,
+            ),
+            normal_card(
+                "Illvoi Galeblade",
+                "{U}",
+                "Creature — Jellyfish Warrior",
+                "Flash\nFlying\n{2}, Sacrifice this creature: Draw a card.",
+                Some(("1", "1")),
+            ),
+            normal_card(
+                "Instant Ramen",
+                "{2}",
+                "Artifact — Food",
+                "Flash\nWhen this artifact enters, draw a card.\n{2}, {T}, Sacrifice this artifact: You gain 3 life.",
+                None,
+            ),
+            normal_card(
+                "Omni-Cheese Pizza",
+                "{2}",
+                "Artifact — Food",
+                "When this artifact enters, draw a card.\n{1}, {T}, Sacrifice this artifact: Add one mana of any color.\n{2}, {T}, Sacrifice this artifact: You gain 3 life.",
+                None,
+            ),
+            normal_card(
+                "Prophetic Prism",
+                "{2}",
+                "Artifact",
+                "When this artifact enters, draw a card.\n{1}, {T}: Add one mana of any color.",
+                None,
+            ),
+            normal_card(
+                "Rootrider Faun",
+                "{1}{G}",
+                "Creature — Satyr Scout",
+                "{T}: Add {G}.\n{1}, {T}: Add one mana of any color.",
+                Some(("1", "3")),
+            ),
+        ];
+
+        for card in cards {
+            let name = str_field(&card, "name").to_string();
+            evaluate_fresh(&card)
+                .unwrap_or_else(|error| panic!("{name} should generate completely: {error:?}"));
+        }
     }
 
     #[test]

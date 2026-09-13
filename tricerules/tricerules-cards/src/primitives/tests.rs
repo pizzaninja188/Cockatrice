@@ -1,4 +1,19 @@
 #[test]
+fn mana_amount_ron_omits_zero_fields_and_round_trips() {
+    let amount = super::ManaAmount {
+        w: 1,
+        ..Default::default()
+    };
+
+    let encoded = ron::ser::to_string(&amount).expect("mana amount should serialize");
+    assert_eq!(encoded, "(w:1)");
+    assert_eq!(
+        ron::from_str::<super::ManaAmount>(&encoded).expect("compact mana amount should parse"),
+        amount
+    );
+}
+
+#[test]
 fn storm_is_a_spell_keyword_and_static_emblems_require_typed_effects() {
     let face: crate::CardFace = ron::from_str(
         r#"(
