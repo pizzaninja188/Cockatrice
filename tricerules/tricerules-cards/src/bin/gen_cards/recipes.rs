@@ -18,6 +18,9 @@ use tricerules_cards::{
 pub(super) enum RecipeSurface {
     KeywordClause,
     SpellClause,
+    /// A clause that defines how an Aura permanent spell enters attached. Aura cards are
+    /// permanents, so this stays separate from instant/sorcery [`Self::SpellClause`] recipes.
+    AuraSpellClause,
     /// One complete bullet body inside an exact modal-spell assembly. Keeping this separate from
     /// ordinary spell clauses prevents a modal-only body from qualifying unrelated cards.
     ModalMode,
@@ -78,6 +81,8 @@ pub(super) struct RecipeContext {
     pub(super) source_is_land: bool,
     pub(super) source_is_creature: bool,
     pub(super) source_is_vehicle: bool,
+    pub(super) source_is_aura: bool,
+    pub(super) source_is_equipment: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -377,6 +382,155 @@ fn match_spell_creature_plus_three_zero_then_draw(
             },
         ])
     })
+}
+
+fn attached_modifier(
+    context: &RecipeContext,
+    delta_power: i32,
+    delta_toughness: i32,
+    keywords: Vec<Keyword>,
+    doesnt_untap_during_untap_step: bool,
+) -> RecipeEmission {
+    RecipeEmission::StaticAbility(IdentifiedAbility {
+        ability_id: context.static_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        definition: StaticAbilityDef::AttachedModifier {
+            condition: None,
+            add_types: TypeLineAddition::default(),
+            set_types: None,
+            set_name: None,
+            set_colors: None,
+            delta_power,
+            delta_toughness,
+            set_power: None,
+            set_toughness: None,
+            remove_all_abilities: false,
+            keywords,
+            triggered_abilities: Vec::new(),
+            activated_abilities: Vec::new(),
+            restriction: Default::default(),
+            doesnt_untap_during_untap_step,
+            cant_untap: false,
+        },
+    })
+}
+
+fn match_enchant_creature(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_aura && text == "Enchant creature").then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::AuraAttach {
+            target: TargetFilter::default_creature(),
+        })
+    })
+}
+
+fn match_fixed_generic_equip(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    if !context.source_is_equipment {
+        return None;
+    }
+    let value = text.strip_prefix("Equip {")?.strip_suffix('}')?;
+    let generic = value.parse::<u32>().ok()?;
+    if generic.to_string() != value {
+        return None;
+    }
+    let mana_cost = exact_mana_cost(&format!("{{{generic}}}"))?;
+    Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        ability_id: context.activated_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        cost_modifiers: Vec::new(),
+        source_zone: AbilitySourceZone::Battlefield,
+        costs: vec![AbilityCost::Mana(mana_cost)],
+        effect: vec![SpellEffectKind::Equip {
+            target: TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..TargetFilter::default()
+            },
+        }],
+        targeting: None,
+        timing: ActivationTiming::Normal,
+        conditions: Vec::new(),
+        activation_limit: None,
+    }))
+}
+
+fn parse_signed_delta(value: &str) -> Option<i32> {
+    let parsed = value.parse::<i32>().ok()?;
+    let canonical = if parsed >= 0 {
+        format!("+{parsed}")
+    } else {
+        parsed.to_string()
+    };
+    (canonical == value).then_some(parsed)
+}
+
+fn parse_attachment_keywords(value: &str) -> Option<Vec<Keyword>> {
+    let normalized = value.replace(", and ", ", ").replace(" and ", ", ");
+    let mut keywords = Vec::new();
+    for token in normalized.split(", ") {
+        let keyword = keyword_ident(token)?;
+        if token.is_empty() || keywords.contains(&keyword) {
+            return None;
+        }
+        keywords.push(keyword);
+    }
+    (!keywords.is_empty()).then_some(keywords)
+}
+
+fn match_attached_creature_modifier(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    let body = if let Some(body) = text.strip_prefix("Equipped creature ") {
+        context.source_is_equipment.then_some(body)
+    } else if let Some(body) = text.strip_prefix("Enchanted creature ") {
+        context.source_is_aura.then_some(body)
+    } else {
+        None
+    }?
+    .strip_suffix('.')?;
+
+    let (delta_power, delta_toughness, keywords) = if let Some(keywords) = body.strip_prefix("has ")
+    {
+        (0, 0, parse_attachment_keywords(keywords)?)
+    } else {
+        let stats_and_keywords = body.strip_prefix("gets ")?;
+        let (stats, keywords) = match stats_and_keywords.split_once(" and has ") {
+            Some((stats, keywords)) => (stats, parse_attachment_keywords(keywords)?),
+            None => (stats_and_keywords, Vec::new()),
+        };
+        let (power, toughness) = stats.split_once('/')?;
+        (
+            parse_signed_delta(power)?,
+            parse_signed_delta(toughness)?,
+            keywords,
+        )
+    };
+    Some(attached_modifier(
+        context,
+        delta_power,
+        delta_toughness,
+        keywords,
+        false,
+    ))
+}
+
+fn match_aura_etb_tap_attached(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_aura && text == "When this Aura enters, tap enchanted creature.").then(
+        || {
+            triggered_ability(
+                context,
+                SpellEffectKind::Tap {
+                    subject: EffectSubject::AttachedObject,
+                },
+            )
+        },
+    )
+}
+
+fn match_aura_untap_step_restriction(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_aura
+        && text == "Enchanted creature doesn't untap during its controller's untap step.")
+        .then(|| attached_modifier(context, 0, 0, Vec::new(), true))
 }
 
 fn modal_targeting(prompt: &str, effect_index: u32) -> Option<TargetingDef> {
@@ -1727,6 +1881,83 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("aura.enchant.creature"),
+        label: "enchant creature",
+        surface: RecipeSurface::AuraSpellClause,
+        matcher: match_enchant_creature,
+        calibration: calibrations!(
+            "Flight" => "Enchant creature",
+            "Holy Strength" => "Enchant creature";
+            "Enchant permanent",
+            "Enchant creature you control",
+            "Enchant tapped creature",
+            "Enchant creature or Vehicle",
+            "Enchant creature. When this Aura enters, draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.equip.generic_fixed"),
+        label: "fixed generic Equip",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_fixed_generic_equip,
+        calibration: calibrations!(
+            "Bonesplitter" => "Equip {1}",
+            "Vulshok Morningstar" => "Equip {2}";
+            "Equip {W}",
+            "Equip {X}",
+            "Equip {01}",
+            "Equip legendary creature {1}",
+            "Fortify {1}",
+            "Equip {1}. Activate only once each turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.attached_modifier.creature.fixed"),
+        label: "attached creature modifier",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_attached_creature_modifier,
+        calibration: calibrations!(
+            "Short Bow" => "Equipped creature gets +1/+1 and has reach and vigilance.",
+            "Unflinching Courage" => "Enchanted creature gets +2/+2 and has trample and lifelink.";
+            "Equipped creature gets +X/+X.",
+            "Enchanted creature gets +2/+2 until end of turn.",
+            "Enchanted creature gets +2/+2 and has ward {2}.",
+            "Enchanted creature gets +2/+2 and gains trample.",
+            "Equipped creature has protection from red.",
+            "Equipped creature has flying. It attacks each combat if able."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.aura.tap_attached_creature"),
+        label: "Aura ETB tap enchanted creature",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_aura_etb_tap_attached,
+        calibration: calibrations!(
+            "Charmed Sleep" => "When this Aura enters, tap enchanted creature.",
+            "Colossification" => "When this Aura enters, tap enchanted creature.";
+            "When this enchantment enters, tap enchanted creature.",
+            "When this Aura enters, you may tap enchanted creature.",
+            "When this Aura enters, tap target creature.",
+            "When this Aura enters, untap enchanted creature.",
+            "When this Aura enters, tap enchanted creature and draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.aura.attached_creature_untap_step"),
+        label: "enchanted creature untap-step restriction",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_aura_untap_step_restriction,
+        calibration: calibrations!(
+            "Charmed Sleep" => "Enchanted creature doesn't untap during its controller's untap step.",
+            "Starlight Snare" => "Enchanted creature doesn't untap during its controller's untap step.";
+            "Enchanted creature doesn't untap during your untap step.",
+            "Enchanted creature doesn't untap during its next untap step.",
+            "Enchanted creature can't untap.",
+            "Enchanted permanent doesn't untap during its controller's untap step.",
+            "Equipped creature doesn't untap during its controller's untap step."
+        ),
+    },
+    Recipe {
         id: RecipeId("modal.choose_one.two_modes"),
         label: "two-mode choose-one spell",
         surface: RecipeSurface::ModalAssembly,
@@ -2618,10 +2849,11 @@ pub(super) static CATALOG: &[Recipe] = &[
     },
 ];
 
-fn surface_applies(surface: RecipeSurface, is_spell: bool) -> bool {
+fn surface_applies(surface: RecipeSurface, is_spell: bool, context: &RecipeContext) -> bool {
     match surface {
         RecipeSurface::KeywordClause => true,
         RecipeSurface::SpellClause => is_spell,
+        RecipeSurface::AuraSpellClause => context.source_is_aura,
         RecipeSurface::ModalAssembly | RecipeSurface::ModalMode => false,
         RecipeSurface::ZoneActivatedAbility
         | RecipeSurface::SpellStaticAbility
@@ -2712,7 +2944,7 @@ pub(super) fn match_clause_in(
 ) -> Result<Option<RecipeMatch>, RecipeAmbiguity> {
     let mut matches = catalog
         .iter()
-        .filter(|recipe| surface_applies(recipe.surface, is_spell))
+        .filter(|recipe| surface_applies(recipe.surface, is_spell, context))
         .filter_map(|recipe| {
             (recipe.matcher)(clause, context).map(|emission| RecipeMatch {
                 id: recipe.id,
@@ -2746,6 +2978,8 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
             source_is_land: true,
             source_is_creature: true,
             source_is_vehicle: true,
+            source_is_aura: true,
+            source_is_equipment: true,
         })
     };
     let mut ids = std::collections::BTreeSet::new();
@@ -2876,6 +3110,8 @@ mod tests {
             source_is_land: true,
             source_is_creature: true,
             source_is_vehicle: true,
+            source_is_aura: true,
+            source_is_equipment: true,
         }
     }
 
@@ -3678,6 +3914,50 @@ mod tests {
                 .expect("issue #262 clause must not be ambiguous")
                 .unwrap_or_else(|| panic!("issue #262 clause must be supported: {clause}"));
             assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+        }
+    }
+
+    #[test]
+    fn issue_261_attachment_templates_have_stable_ids_and_subtype_gates() {
+        let cases = [
+            ("Enchant creature", "aura.enchant.creature"),
+            ("Equip {2}", "activated.equip.generic_fixed"),
+            (
+                "Equipped creature gets +1/+1 and has reach and vigilance.",
+                "static.attached_modifier.creature.fixed",
+            ),
+            (
+                "When this Aura enters, tap enchanted creature.",
+                "etb.aura.tap_attached_creature",
+            ),
+            (
+                "Enchanted creature doesn't untap during its controller's untap step.",
+                "static.aura.attached_creature_untap_step",
+            ),
+        ];
+        for (clause, expected_id) in cases {
+            let matched = match_clause(clause, false, &context())
+                .expect("issue #261 clause must not be ambiguous")
+                .unwrap_or_else(|| panic!("issue #261 clause must be supported: {clause}"));
+            assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+        }
+
+        let mut ordinary_enchantment = context();
+        ordinary_enchantment.source_is_aura = false;
+        ordinary_enchantment.source_is_equipment = false;
+        for clause in [
+            "Enchant creature",
+            "When this Aura enters, tap enchanted creature.",
+            "Enchanted creature gets +2/+2.",
+            "Enchanted creature doesn't untap during its controller's untap step.",
+            "Equip {2}",
+            "Equipped creature has double strike.",
+        ] {
+            assert_eq!(
+                match_clause(clause, false, &ordinary_enchantment),
+                Ok(None),
+                "{clause} must require its source subtype"
+            );
         }
     }
 }

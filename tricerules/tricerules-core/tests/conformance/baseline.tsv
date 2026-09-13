@@ -157,6 +157,8 @@ baron,_airship_kingdom	0	land	exercised
 barony_vampire	0	cast	exercised
 bartizan_bats	0	cast	exercised
 bashful_beastie	0	cast	exercised
+basilisk_collar	0	ability:0	exercised
+basilisk_collar	0	cast	exercised
 bassara_tower_archer	0	cast	exercised
 bastion_enforcer	0	cast	exercised
 battle_hurda	0	cast	exercised
@@ -344,6 +346,7 @@ chardalyn_dragon	0	cast	exercised
 charging_badger	0	cast	exercised
 charging_monstrosaur	0	cast	exercised
 charity_extractor	0	cast	exercised
+charmed_sleep	0	cast	exercised
 chase_inspiration	0	cast	exercised
 child_of_night	0	cast	exercised
 chitinous_graspling	0	cast	exercised
@@ -378,6 +381,7 @@ colorstorm_stallion	0	cast	exercised
 colossadactyl	0	cast	exercised
 colossal_dreadmaw	0	cast	exercised
 colossapede	0	cast	exercised
+colossification	0	cast	exercised
 colossodon_yearling	0	cast	exercised
 command_bridge	0	ability:0	exercised
 command_bridge	0	land	exercised
@@ -474,6 +478,7 @@ dawnstrike_paladin	0	cast	exercised
 daybreak_chaplain	0	cast	exercised
 daybreak_charger	0	cast	exercised
 dazzling_angel	0	cast	exercised
+dead_weight	0	cast	exercised
 deadly_insect	0	cast	exercised
 deadly_recluse	0	cast	exercised
 deathcap_glade	0	ability:0	exercised
@@ -672,6 +677,8 @@ fire_nation_cadets	0	cast	exercised
 fire_nation_soldier	0	cast	exercised
 fire_prophecy	0	cast	exercised
 fireball	0	cast	exercised
+fireshrieker	0	ability:0	exercised
+fireshrieker	0	cast	exercised
 fisk_tower	0	ability:0	exercised
 fisk_tower	0	land	exercised
 fists_of_the_anvil	0	cast	exercised
@@ -723,6 +730,7 @@ fortress_crab	0	cast	exercised
 forum_necroscribe	0	cast	exercised
 foul_orchard	0	ability:0	exercised
 foul_orchard	0	land	exercised
+frantic_strength	0	cast	exercised
 frenzied_raptor	0	cast	exercised
 fresh_volunteers	0	cast	exercised
 friendly_teddy	0	cast	exercised
@@ -899,6 +907,8 @@ hallowed_fountain	0	land	exercised
 hamato_guardian_stance	0	cast	exercised
 hand_of_silumgar	0	cast	exercised
 happy_hogan,_dauntless_driver	0	cast	exercised
+hard-won_jitte	0	ability:0	exercised
+hard-won_jitte	0	cast	exercised
 hardbristle_bandit	0	ability:0	exercised
 hardbristle_bandit	0	cast	exercised
 harmonize	0	cast	exercised
@@ -1620,6 +1630,9 @@ rotting_mastodon	0	cast	exercised
 rough_rhino_cavalry	0	ability:0	exercised
 rough_rhino_cavalry	0	cast	exercised
 rousing_read	0	cast	exercised
+rover_blades	0	ability:0	exercised
+rover_blades	0	ability:1	unsupported: payment preview rejected: illegal command: missing tap cost selection
+rover_blades	0	cast	exercised
 roving_harper	0	cast	exercised
 rowan_treefolk	0	cast	exercised
 rowdy_snowballers	0	cast	exercised
@@ -1745,6 +1758,8 @@ shoot_the_sheriff	0	cast	exercised
 shore_lurker	0	cast	exercised
 shore_up	0	cast	exercised
 shorecomber_crab	0	cast	exercised
+short_bow	0	ability:0	exercised
+short_bow	0	cast	exercised
 short_sword	0	ability:0	exercised
 short_sword	0	cast	exercised
 show_of_valor	0	cast	exercised
@@ -1875,6 +1890,7 @@ star_charter	0	cast	exercised
 starfighter_pilot	0	cast	exercised
 stark_industries	0	ability:0	exercised
 stark_industries	0	land	exercised
+starlight_snare	0	cast	exercised
 starlit_angel	0	cast	exercised
 starport_security	0	ability:0	exercised
 starport_security	0	cast	exercised
@@ -1956,6 +1972,8 @@ swiftfoot_boots	0	cast	exercised
 swiftwater_cliffs	0	ability:0	exercised
 swiftwater_cliffs	0	land	exercised
 swooping_lookout	0	cast	exercised
+sword_of_vengeance	0	ability:0	exercised
+sword_of_vengeance	0	cast	exercised
 swords_to_plowshares	0	cast	exercised
 swordwise_centaur	0	cast	exercised
 sworn_guardian	0	cast	exercised
@@ -2098,6 +2116,7 @@ turret_ogre	0	cast	exercised
 turtle-seals	0	cast	exercised
 tusked_colossodon	0	cast	exercised
 twinblade_assassins	0	cast	exercised
+twinblade_blessing	0	cast	exercised
 twincast	0	cast	unsupported: target group 0 needs a richer fixture
 twinscroll_shaman	0	cast	exercised
 twist_reality	0	cast	exercised
@@ -2126,6 +2145,7 @@ undergrowth_leopard	0	ability:0	exercised
 undergrowth_leopard	0	cast	exercised
 unending_whisper	0	cast	exercised
 unexpected_assistance	0	cast	exercised
+unflinching_courage	0	cast	exercised
 unholy_indenture	0	cast	exercised
 unholy_strength	0	cast	exercised
 university_campus	0	ability:0	exercised
@@ -2133,6 +2153,7 @@ university_campus	0	ability:1	exercised
 university_campus	0	land	exercised
 unravel_the_aether	0	cast	exercised
 unsummon	0	cast	exercised
+untamed_hunger	0	cast	exercised
 updraft_elemental	0	cast	exercised
 valiant_guard	0	cast	exercised
 valkyrior_skyrider	0	cast	exercised
@@ -2168,6 +2189,8 @@ viashino_pyromancer	0	cast	exercised
 viashino_runner	0	cast	exercised
 viashino_spearhunter	0	cast	exercised
 viashino_warrior	0	cast	exercised
+vibranium_energy_daggers	0	ability:0	exercised
+vibranium_energy_daggers	0	cast	exercised
 vicious_clown	0	cast	exercised
 vigilant_baloth	0	cast	exercised
 village_ironsmith_ironfang	0	cast	exercised

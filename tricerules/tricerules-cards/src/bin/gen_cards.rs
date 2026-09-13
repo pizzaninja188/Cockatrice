@@ -533,6 +533,8 @@ fn parse_rules_text(
     source_is_land: bool,
     source_is_creature: bool,
     source_is_vehicle: bool,
+    source_is_aura: bool,
+    source_is_equipment: bool,
 ) -> Result<ParsedRules, RulesParseError> {
     let mut parsed = ParsedRules::default();
     let external_lines = external_oracle_lines(oracle_text);
@@ -549,6 +551,8 @@ fn parse_rules_text(
         source_is_land,
         source_is_creature,
         source_is_vehicle,
+        source_is_aura,
+        source_is_equipment,
     };
     if is_spell {
         if let Some(assembly) =
@@ -653,6 +657,8 @@ fn parse_rules_text(
             source_is_land,
             source_is_creature,
             source_is_vehicle,
+            source_is_aura,
+            source_is_equipment,
         };
         let matched = match_clause(clause, is_spell, &context)
             .map_err(RulesParseError::Ambiguous)?
@@ -1417,6 +1423,8 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, EvaluationError> {
     let (supertypes, card_types, subtypes) = parse_type_line(type_line);
     let is_creature = card_types.iter().any(|card_type| card_type == "Creature");
     let is_vehicle = subtypes.iter().any(|subtype| subtype == "Vehicle");
+    let is_aura = subtypes.iter().any(|subtype| subtype == "Aura");
+    let is_equipment = subtypes.iter().any(|subtype| subtype == "Equipment");
     let mut types = card_types;
     types.extend(subtypes);
 
@@ -1439,6 +1447,8 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, EvaluationError> {
         types.iter().any(|card_type| card_type == "Land"),
         is_creature,
         is_vehicle,
+        is_aura,
+        is_equipment,
     )
     .map_err(|error| EvaluationError::rules_text(error, Skip::FaceText))?;
     add_intrinsic_land_mana_ability(&mut rules, &types, oracle_text)
@@ -1485,6 +1495,8 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     let (supertypes, card_types, subtypes) = parse_type_line(type_line);
     let is_creature = card_types.iter().any(|value| value == "Creature");
     let is_vehicle = subtypes.iter().any(|value| value == "Vehicle");
+    let is_aura = subtypes.iter().any(|value| value == "Aura");
+    let is_equipment = subtypes.iter().any(|value| value == "Equipment");
     let is_spell = card_types
         .iter()
         .any(|value| matches!(value.as_str(), "Instant" | "Sorcery"));
@@ -1508,6 +1520,8 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
         card_types.iter().any(|card_type| card_type == "Land"),
         is_creature,
         is_vehicle,
+        is_aura,
+        is_equipment,
     )
     .map_err(|error| EvaluationError::rules_text(error, Skip::NonKeywordText))?;
     if !is_creature && !is_spell && rules.recipe_labels.is_empty() {
@@ -3865,6 +3879,130 @@ mod tests {
                     ..
                 }] if filter == &expected_filter
             ));
+        }
+    }
+
+    #[test]
+    fn issue_261_attachment_recipes_emit_typed_aura_and_equipment_rules() {
+        let equipment = normal_card(
+            "Short Bow",
+            "{2}",
+            "Artifact — Equipment",
+            "Equipped creature gets +1/+1 and has reach and vigilance.\nEquip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)",
+            None,
+        );
+        let generated = evaluate_fresh(&equipment).expect("exact Equipment recipes should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["attached creature modifier", "fixed generic Equip"]
+        );
+        let [modifier] = raw.static_abilities.as_slice() else {
+            panic!("Equipment modifier emits one static ability");
+        };
+        assert_eq!(modifier.ability_id.as_str(), "static_01");
+        assert_eq!(
+            modifier.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert!(matches!(
+            &modifier.definition,
+            StaticAbilityDef::AttachedModifier {
+                delta_power: 1,
+                delta_toughness: 1,
+                keywords,
+                ..
+            } if keywords == &[Keyword::Reach, Keyword::Vigilance]
+        ));
+        let [equip] = raw.activated_abilities.as_slice() else {
+            panic!("Equip recipe emits one activated ability");
+        };
+        assert_eq!(equip.ability_id.as_str(), "activated_01");
+        assert_eq!(
+            equip.presentation,
+            AbilityPresentation::OracleLines(vec![2])
+        );
+        assert!(matches!(
+            equip.costs.as_slice(),
+            [AbilityCost::Mana(cost)] if cost.to_string() == "{1}"
+        ));
+        assert!(matches!(
+            equip.effect.as_slice(),
+            [SpellEffectKind::Equip { target }]
+                if target.kind == TargetKind::Creature
+                    && target.controller == TargetController::You
+        ));
+
+        let aura = normal_card(
+            "Charmed Sleep",
+            "{1}{U}{U}",
+            "Enchantment — Aura",
+            "Enchant creature\nWhen this Aura enters, tap enchanted creature.\nEnchanted creature doesn't untap during its controller's untap step.",
+            None,
+        );
+        let generated = evaluate_fresh(&aura).expect("exact Aura recipes should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            [
+                "enchant creature",
+                "Aura ETB tap enchanted creature",
+                "enchanted creature untap-step restriction",
+            ]
+        );
+        assert!(matches!(
+            raw.spell_effect.as_slice(),
+            [SpellEffectKind::AuraAttach { target }] if target.kind == TargetKind::Creature
+        ));
+        let [trigger] = raw.triggered_abilities.as_slice() else {
+            panic!("Aura ETB recipe emits one triggered ability");
+        };
+        assert_eq!(trigger.ability_id.as_str(), "triggered_01");
+        assert_eq!(trigger.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            trigger.effect,
+            [SpellEffectKind::Tap {
+                subject: EffectSubject::AttachedObject,
+            }]
+        );
+        let [restriction] = raw.static_abilities.as_slice() else {
+            panic!("Aura untap restriction emits one static ability");
+        };
+        assert!(matches!(
+            restriction.definition,
+            StaticAbilityDef::AttachedModifier {
+                doesnt_untap_during_untap_step: true,
+                cant_untap: false,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn issue_261_attachment_recipes_reject_wrong_subtypes_and_near_misses() {
+        for (type_line, text) in [
+            ("Artifact", "Equip {1}"),
+            ("Artifact — Equipment", "Equip {W}"),
+            ("Artifact — Equipment", "Equip {X}"),
+            ("Artifact — Equipment", "Equip legendary creature {1}"),
+            ("Enchantment", "Enchant creature"),
+            ("Enchantment — Aura", "Enchant permanent"),
+            ("Enchantment — Aura", "Enchanted creature gets +X/+X."),
+            (
+                "Enchantment — Aura",
+                "Enchanted creature gets +2/+2 and has ward {2}.",
+            ),
+            (
+                "Enchantment — Aura",
+                "Enchanted creature doesn't untap during its next untap step.",
+            ),
+        ] {
+            let card = normal_card("Near Miss Attachment", "{2}", type_line, text, None);
+            assert_eq!(
+                evaluate_fresh(&card),
+                Err(Skip::NonKeywordText.into()),
+                "{type_line}: {text}"
+            );
         }
     }
 

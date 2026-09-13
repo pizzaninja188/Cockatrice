@@ -190,6 +190,8 @@ fn exact_recipe_matches_one_clause(
     source_is_land: bool,
     source_is_creature: bool,
     source_is_vehicle: bool,
+    source_is_aura: bool,
+    source_is_equipment: bool,
 ) -> bool {
     let Ok(parsed) = parse_rules_text(
         source_name,
@@ -198,6 +200,8 @@ fn exact_recipe_matches_one_clause(
         source_is_land,
         source_is_creature,
         source_is_vehicle,
+        source_is_aura,
+        source_is_equipment,
     ) else {
         return false;
     };
@@ -245,6 +249,8 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
         let source_is_land = card_types.iter().any(|card_type| card_type == "Land");
         let source_is_creature = card_types.iter().any(|card_type| card_type == "Creature");
         let source_is_vehicle = subtypes.iter().any(|subtype| subtype == "Vehicle");
+        let source_is_aura = subtypes.iter().any(|subtype| subtype == "Aura");
+        let source_is_equipment = subtypes.iter().any(|subtype| subtype == "Equipment");
         let oracle_text = str_field(face.value, "oracle_text");
         let face_matches = parse_rules_text(
             face.name,
@@ -253,6 +259,8 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
             source_is_land,
             source_is_creature,
             source_is_vehicle,
+            source_is_aura,
+            source_is_equipment,
         )
         .is_ok_and(|parsed| {
             !is_spell || !parsed.spell_effect.is_empty() || parsed.modal_spell.is_some()
@@ -273,6 +281,8 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
                     source_is_land,
                     source_is_creature,
                     source_is_vehicle,
+                    source_is_aura,
+                    source_is_equipment,
                 ))
                 .then_some((index, clause))
             })
