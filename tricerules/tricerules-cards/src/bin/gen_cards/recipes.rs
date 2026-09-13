@@ -1,11 +1,11 @@
 use tricerules_cards::primitives::{
-    BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter, DiscardQuantity,
-    DrawDiscardOrder, EffectSubject, EntersTappedAffected, EntryCost, GameCondition, LifeAmount,
-    ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter,
-    PlayerLifeAggregate, PlayerRecipient, RelativePlayerSet, ResolutionCost, SearchDestination,
-    SearchZoneSelection, SpellCastFilter, StackSpellFilter, StaticAbilityDef, TargetController,
-    TargetFilter, TargetGroupDef, TargetKind, TargetingDef, TargetingSourceFilter,
-    TypeLineAddition, ZoneCardFilter,
+    BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter, CreatureScopeController,
+    CreatureScopeFilter, DiscardQuantity, DrawDiscardOrder, EffectSubject, EntersTappedAffected,
+    EntryCost, GameCondition, LifeAmount, ObjectContributionKind, ObjectPaymentConstraint,
+    PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient,
+    RelativePlayerSet, ResolutionCost, SearchDestination, SearchZoneSelection, SpellCastFilter,
+    StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
+    TargetingDef, TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
@@ -18,6 +18,12 @@ use tricerules_cards::{
 pub(super) enum RecipeSurface {
     KeywordClause,
     SpellClause,
+    /// One complete bullet body inside an exact modal-spell assembly. Keeping this separate from
+    /// ordinary spell clauses prevents a modal-only body from qualifying unrelated cards.
+    ModalMode,
+    /// A complete modal Oracle-text aggregate. The assembly owns the header and every bullet;
+    /// individual bullet mechanics are matched again on [`Self::ModalMode`].
+    ModalAssembly,
     EtbAbility,
     TriggeredAbility,
     ActivatedAbility,
@@ -61,12 +67,14 @@ pub(super) struct Recipe {
     pub(super) calibration: RecipeCalibration,
 }
 
+#[derive(Debug, Clone)]
 pub(super) struct RecipeContext {
     pub(super) triggered_ability_id: AbilityId,
     pub(super) activated_ability_id: AbilityId,
     pub(super) static_ability_id: AbilityId,
     pub(super) characteristic_ability_id: AbilityId,
     pub(super) presentation: AbilityPresentation,
+    pub(super) source_name: String,
     pub(super) source_is_land: bool,
     pub(super) source_is_creature: bool,
     pub(super) source_is_vehicle: bool,
@@ -80,6 +88,14 @@ pub(super) enum RecipeEmission {
     ActivatedAbility(ActivatedAbilityDef),
     StaticAbility(IdentifiedAbility<StaticAbilityDef>),
     CharacteristicAbility(IdentifiedAbility<CharacteristicDefiningAbility>),
+    ModalMode(ModalModeEmission),
+    ModalAssembly,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct ModalModeEmission {
+    pub(super) effects: Vec<SpellEffectKind>,
+    pub(super) targeting: Option<TargetingDef>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -254,6 +270,189 @@ fn match_spell_pump(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
         scale: None,
         subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
     }))
+}
+
+fn modal_targeting(prompt: &str, effect_index: u32) -> Option<TargetingDef> {
+    Some(TargetingDef {
+        groups: vec![TargetGroupDef {
+            min: 1,
+            max: 1,
+            prompt: prompt.into(),
+            effect_indices: vec![effect_index],
+            distinct_from: Vec::new(),
+            same_graveyard: false,
+            cast_cost_expansion: None,
+        }],
+    })
+}
+
+fn modal_mode(effects: Vec<SpellEffectKind>, targeting: Option<TargetingDef>) -> RecipeEmission {
+    RecipeEmission::ModalMode(ModalModeEmission { effects, targeting })
+}
+
+fn match_modal_choose_one_two_modes(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    let lines = text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+    (lines.len() == 3
+        && lines[0] == "Choose one —"
+        && lines[1].starts_with("• ")
+        && lines[2].starts_with("• "))
+    .then_some(RecipeEmission::ModalAssembly)
+}
+
+fn match_modal_damage_three_to_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == format!("{} deals 3 damage to target creature.", context.source_name)).then(|| {
+        modal_mode(
+            vec![SpellEffectKind::DamageTarget {
+                amount: Amount::Fixed(3),
+                target: TargetFilter::default_creature(),
+            }],
+            modal_targeting("Choose target creature", 0),
+        )
+    })
+}
+
+fn match_modal_destroy_artifact(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Destroy target artifact.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![PermanentTypeFilter::Artifact],
+                    ..TargetFilter::default()
+                })),
+            }],
+            modal_targeting("Choose target artifact", 0),
+        )
+    })
+}
+
+fn creatures_you_control() -> CreatureScopeFilter {
+    CreatureScopeFilter {
+        controller: Some(CreatureScopeController::YouControl),
+        ..CreatureScopeFilter::default()
+    }
+}
+
+fn match_modal_team_plus_one(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Creatures you control get +1/+1 until end of turn.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::PumpAll {
+                filter: creatures_you_control(),
+                power: 1,
+                toughness: 1,
+            }],
+            None,
+        )
+    })
+}
+
+fn match_modal_team_hexproof(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Creatures you control gain hexproof until end of turn.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::GrantKeywordsAll {
+                filter: creatures_you_control(),
+                keywords: vec![Keyword::Hexproof],
+            }],
+            None,
+        )
+    })
+}
+
+fn match_modal_team_plus_two_power(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Creatures you control get +2/+0 until end of turn.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::PumpAll {
+                filter: creatures_you_control(),
+                power: 2,
+                toughness: 0,
+            }],
+            None,
+        )
+    })
+}
+
+fn match_modal_create_two_goblins(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Create two 1/1 red Goblin creature tokens.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::CreateTokens {
+                token: "goblin_r_1_1".into(),
+                count: Amount::Fixed(2),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }],
+            None,
+        )
+    })
+}
+
+fn match_modal_pump_target_three(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Target creature gets +3/+3 until end of turn.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::PumpTarget {
+                power: 3,
+                toughness: 3,
+                scale: None,
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            }],
+            modal_targeting("Choose target creature", 0),
+        )
+    })
+}
+
+fn match_modal_destroy_flying_creature(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Destroy target creature with flying.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    required_keywords: vec![Keyword::Flying],
+                    ..TargetFilter::default()
+                })),
+            }],
+            modal_targeting("Choose target creature with flying", 0),
+        )
+    })
+}
+
+fn match_modal_counter_spell(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Counter target spell.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::CounterTargetSpell {
+                spell_filter: StackSpellFilter::default(),
+                unless_controller_pays: None,
+                unless_controller_pays_by_cast_cost: None,
+            }],
+            modal_targeting("Choose target spell", 0),
+        )
+    })
+}
+
+fn match_modal_surveil_two_draw_two(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Surveil 2, then draw two cards.").then(|| {
+        modal_mode(
+            vec![
+                SpellEffectKind::LibraryPartition {
+                    count: 2,
+                    top_min: 0,
+                    top_max: None,
+                    kind: LibraryPartitionKind::Surveil,
+                },
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(2),
+                },
+            ],
+            None,
+        )
+    })
 }
 
 fn triggered_ability(context: &RecipeContext, effect: SpellEffectKind) -> RecipeEmission {
@@ -1323,6 +1522,161 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("modal.choose_one.two_modes"),
+        label: "two-mode choose-one spell",
+        surface: RecipeSurface::ModalAssembly,
+        matcher: match_modal_choose_one_two_modes,
+        calibration: calibrations!(
+            "Abrade" => "Choose one —\n• Abrade deals 3 damage to target creature.\n• Destroy target artifact.",
+            "Family Reunion" => "Choose one —\n• Creatures you control get +1/+1 until end of turn.\n• Creatures you control gain hexproof until end of turn.";
+            "Choose one or both —\n• Draw a card.\n• You gain 2 life.",
+            "Choose two —\n• Draw a card.\n• You gain 2 life.",
+            "Choose one —\n• Draw a card.",
+            "Choose one —\n• Draw a card.\n• You gain 2 life.\n• Create a token.",
+            "Choose one —\nDraw a card.\n• You gain 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.damage.creature.three.source"),
+        label: "source deals 3 damage to target creature mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_damage_three_to_creature,
+        calibration: calibrations!(
+            "Abrade" => "Abrade deals 3 damage to target creature.",
+            "Thunderclap" => "Thunderclap deals 3 damage to target creature.";
+            "Abrade deals 2 damage to target creature.",
+            "Abrade deals 3 damage to any target.",
+            "It deals 3 damage to target creature.",
+            "Abrade deals 3 damage to target creature and 1 damage to you."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.destroy.artifact"),
+        label: "destroy target artifact mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_destroy_artifact,
+        calibration: calibrations!(
+            "Abrade" => "Destroy target artifact.",
+            "Ancient Grudge" => "Destroy target artifact.";
+            "Destroy up to one target artifact.",
+            "Destroy target artifact or enchantment.",
+            "Destroy target noncreature artifact.",
+            "Destroy target artifact. You gain 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.pump.team.plus_one_plus_one"),
+        label: "team +1/+1 mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_team_plus_one,
+        calibration: calibrations!(
+            "Family Reunion" => "Creatures you control get +1/+1 until end of turn.",
+            "Glorious Charge" => "Creatures you control get +1/+1 until end of turn.";
+            "Target creature you control gets +1/+1 until end of turn.",
+            "Creatures you control get +2/+2 until end of turn.",
+            "Other creatures you control get +1/+1 until end of turn.",
+            "Creatures you control get +1/+1 until end of turn and gain vigilance."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.grant.team.hexproof"),
+        label: "team hexproof mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_team_hexproof,
+        calibration: calibrations!(
+            "Family Reunion" => "Creatures you control gain hexproof until end of turn.",
+            "Blinding Fog" => "Creatures you control gain hexproof until end of turn.";
+            "Target creature you control gains hexproof until end of turn.",
+            "Creatures you control gain indestructible until end of turn.",
+            "Other creatures you control gain hexproof until end of turn.",
+            "Creatures you control gain hexproof and indestructible until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.pump.team.plus_two_power"),
+        label: "team +2/+0 mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_team_plus_two_power,
+        calibration: calibrations!(
+            "Goblin Surprise" => "Creatures you control get +2/+0 until end of turn.",
+            "Burn Bright" => "Creatures you control get +2/+0 until end of turn.";
+            "Target creature you control gets +2/+0 until end of turn.",
+            "Creatures you control get +2/+1 until end of turn.",
+            "Attacking creatures you control get +2/+0 until end of turn.",
+            "Creatures you control get +2/+0 and gain haste until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.create_tokens.goblin_red_one_one.two"),
+        label: "create two red Goblin tokens mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_create_two_goblins,
+        calibration: calibrations!(
+            "Goblin Surprise" => "Create two 1/1 red Goblin creature tokens.",
+            "Dragon Fodder" => "Create two 1/1 red Goblin creature tokens.";
+            "Create a 1/1 red Goblin creature token.",
+            "Create two 1/1 red Goblin creature tokens with haste.",
+            "Create two tapped 1/1 red Goblin creature tokens.",
+            "Create two 1/1 white Soldier creature tokens."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.pump.creature.plus_three_plus_three"),
+        label: "target creature +3/+3 mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_pump_target_three,
+        calibration: calibrations!(
+            "Sarkhan's Resolve" => "Target creature gets +3/+3 until end of turn.",
+            "Giant Growth" => "Target creature gets +3/+3 until end of turn.";
+            "Up to one target creature gets +3/+3 until end of turn.",
+            "Target creature you control gets +3/+3 until end of turn.",
+            "Target creature gets +4/+4 until end of turn.",
+            "Target creature gets +3/+3 and gains trample until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.destroy.creature.flying"),
+        label: "destroy target creature with flying mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_destroy_flying_creature,
+        calibration: calibrations!(
+            "Sarkhan's Resolve" => "Destroy target creature with flying.",
+            "Plummet" => "Destroy target creature with flying.";
+            "Destroy up to one target creature with flying.",
+            "Destroy target creature without flying.",
+            "Destroy target creature with flying or reach.",
+            "Destroy target creature with flying. You gain 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.counter.spell.unrestricted"),
+        label: "counter target spell mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_counter_spell,
+        calibration: calibrations!(
+            "Spellgyre" => "Counter target spell.",
+            "Counterspell" => "Counter target spell.";
+            "Counter up to one target spell.",
+            "Counter target spell unless its controller pays {3}.",
+            "Counter target noncreature spell.",
+            "Counter target spell. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.surveil_two.draw_two"),
+        label: "Surveil 2 then draw two mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_surveil_two_draw_two,
+        calibration: calibrations!(
+            "Spellgyre" => "Surveil 2, then draw two cards.",
+            "Diresight" => "Surveil 2, then draw two cards.";
+            "Surveil 1, then draw two cards.",
+            "Draw two cards, then surveil 2.",
+            "Surveil 2, then draw a card.",
+            "Surveil 2. Draw two cards."
+        ),
+    },
+    Recipe {
         id: RecipeId("etb.draw.fixed"),
         label: "ETB draw",
         surface: RecipeSurface::EtbAbility,
@@ -2063,6 +2417,7 @@ fn surface_applies(surface: RecipeSurface, is_spell: bool) -> bool {
     match surface {
         RecipeSurface::KeywordClause => true,
         RecipeSurface::SpellClause => is_spell,
+        RecipeSurface::ModalAssembly | RecipeSurface::ModalMode => false,
         RecipeSurface::ZoneActivatedAbility
         | RecipeSurface::SpellStaticAbility
         | RecipeSurface::CharacteristicAbility => true,
@@ -2071,6 +2426,69 @@ fn surface_applies(surface: RecipeSurface, is_spell: bool) -> bool {
         | RecipeSurface::ActivatedAbility
         | RecipeSurface::StaticAbility => !is_spell,
     }
+}
+
+fn match_surface_in(
+    catalog: &[Recipe],
+    input: &str,
+    surface: RecipeSurface,
+    context: &RecipeContext,
+) -> Result<Option<RecipeMatch>, RecipeAmbiguity> {
+    let mut matches = catalog
+        .iter()
+        .filter(|recipe| recipe.surface == surface)
+        .filter_map(|recipe| {
+            (recipe.matcher)(input, context).map(|emission| RecipeMatch {
+                id: recipe.id,
+                label: recipe.label,
+                emission,
+            })
+        })
+        .collect::<Vec<_>>();
+    match matches.len() {
+        0 => Ok(None),
+        1 => Ok(matches.pop()),
+        _ => Err(RecipeAmbiguity {
+            recipe_ids: matches.into_iter().map(|matched| matched.id).collect(),
+        }),
+    }
+}
+
+pub(super) fn match_modal_assembly(
+    oracle_text: &str,
+    context: &RecipeContext,
+) -> Result<Option<RecipeMatch>, RecipeAmbiguity> {
+    match_surface_in(CATALOG, oracle_text, RecipeSurface::ModalAssembly, context)
+}
+
+pub(super) fn match_modal_mode(
+    mode_text: &str,
+    context: &RecipeContext,
+) -> Result<Option<RecipeMatch>, RecipeAmbiguity> {
+    match_surface_in(CATALOG, mode_text, RecipeSurface::ModalMode, context)
+}
+
+pub(super) fn reviewed_modal_mode_pair(mode_ids: &[RecipeId]) -> bool {
+    let ids = mode_ids.iter().map(|id| id.as_str()).collect::<Vec<_>>();
+    matches!(
+        ids.as_slice(),
+        [
+            "modal_mode.damage.creature.three.source",
+            "modal_mode.destroy.artifact"
+        ] | [
+            "modal_mode.pump.team.plus_one_plus_one",
+            "modal_mode.grant.team.hexproof"
+        ] | [
+            "modal_mode.pump.team.plus_two_power",
+            "modal_mode.create_tokens.goblin_red_one_one.two"
+        ] | [
+            "modal_mode.pump.creature.plus_three_plus_three",
+            "modal_mode.destroy.creature.flying"
+        ] | [
+            "modal_mode.counter.spell.unrestricted",
+            "modal_mode.surveil_two.draw_two"
+        ]
+    )
 }
 
 pub(super) fn match_clause(
@@ -2112,15 +2530,18 @@ pub(super) fn validate_catalog() -> Result<(), String> {
 }
 
 fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
-    let context = RecipeContext {
-        triggered_ability_id: AbilityId::new("triggered_01")?,
-        activated_ability_id: AbilityId::new("activated_01")?,
-        static_ability_id: AbilityId::new("static_01")?,
-        characteristic_ability_id: AbilityId::new("characteristic_01")?,
-        presentation: AbilityPresentation::OracleLines(vec![1]),
-        source_is_land: true,
-        source_is_creature: true,
-        source_is_vehicle: true,
+    let context_for = |source_name: &str| -> Result<RecipeContext, String> {
+        Ok(RecipeContext {
+            source_name: source_name.into(),
+            triggered_ability_id: AbilityId::new("triggered_01")?,
+            activated_ability_id: AbilityId::new("activated_01")?,
+            static_ability_id: AbilityId::new("static_01")?,
+            characteristic_ability_id: AbilityId::new("characteristic_01")?,
+            presentation: AbilityPresentation::OracleLines(vec![1]),
+            source_is_land: true,
+            source_is_creature: true,
+            source_is_vehicle: true,
+        })
     };
     let mut ids = std::collections::BTreeSet::new();
     for recipe in catalog {
@@ -2152,8 +2573,8 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
             ));
         }
 
-        let is_spell = matches!(recipe.surface, RecipeSurface::SpellClause);
         for positive in recipe.calibration.positive_cards {
+            let context = context_for(positive.name)?;
             if (recipe.matcher)(positive.clause, &context).is_none() {
                 return Err(format!(
                     "{} positive calibration {} did not match its recipe",
@@ -2161,21 +2582,31 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
                     positive.name
                 ));
             }
-            let matched = match_clause_in(catalog, positive.clause, is_spell, &context)
-                .map_err(|ambiguity| {
-                    format!(
-                        "{} positive calibration {} is ambiguous: {ambiguity}",
-                        recipe.id.as_str(),
-                        positive.name
-                    )
-                })?
-                .ok_or_else(|| {
-                    format!(
-                        "{} positive calibration {} was not consumed by the catalog",
-                        recipe.id.as_str(),
-                        positive.name
-                    )
-                })?;
+            let matched = match recipe.surface {
+                RecipeSurface::ModalAssembly | RecipeSurface::ModalMode => {
+                    match_surface_in(catalog, positive.clause, recipe.surface, &context)
+                }
+                _ => match_clause_in(
+                    catalog,
+                    positive.clause,
+                    matches!(recipe.surface, RecipeSurface::SpellClause),
+                    &context,
+                ),
+            }
+            .map_err(|ambiguity| {
+                format!(
+                    "{} positive calibration {} is ambiguous: {ambiguity}",
+                    recipe.id.as_str(),
+                    positive.name
+                )
+            })?
+            .ok_or_else(|| {
+                format!(
+                    "{} positive calibration {} was not consumed by the catalog",
+                    recipe.id.as_str(),
+                    positive.name
+                )
+            })?;
             if matched.id != recipe.id {
                 return Err(format!(
                     "{} positive calibration {} matched {}",
@@ -2186,13 +2617,25 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
             }
         }
         for negative in recipe.calibration.negative_near_misses {
+            let context = context_for(recipe.calibration.positive_cards[0].name)?;
             if (recipe.matcher)(negative, &context).is_some() {
                 return Err(format!(
                     "{} accepted near-miss {negative:?}",
                     recipe.id.as_str()
                 ));
             }
-            match match_clause_in(catalog, negative, is_spell, &context) {
+            let matched = match recipe.surface {
+                RecipeSurface::ModalAssembly | RecipeSurface::ModalMode => {
+                    match_surface_in(catalog, negative, recipe.surface, &context)
+                }
+                _ => match_clause_in(
+                    catalog,
+                    negative,
+                    matches!(recipe.surface, RecipeSurface::SpellClause),
+                    &context,
+                ),
+            };
+            match matched {
                 Ok(None) => {}
                 Ok(Some(matched)) => {
                     return Err(format!(
@@ -2219,6 +2662,7 @@ mod tests {
 
     fn context() -> RecipeContext {
         RecipeContext {
+            source_name: "Test Card".into(),
             triggered_ability_id: AbilityId::new("triggered_01").unwrap(),
             activated_ability_id: AbilityId::new("activated_01").unwrap(),
             static_ability_id: AbilityId::new("static_01").unwrap(),

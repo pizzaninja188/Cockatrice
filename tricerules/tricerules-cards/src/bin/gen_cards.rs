@@ -34,7 +34,7 @@ use tricerules_cards::{
     external_oracle_lines, slugify, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
     ActivatedAbilityDef, ActivationTiming, Amount, BasicLandType, CardFaceId, CardRegistry,
     CharacteristicDefiningAbility, Color, IdentifiedAbility, Keyword, ManaAmount, ManaCost,
-    SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
+    ModalDef, ModeDef, ModeId, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
 };
 
 #[path = "gen_cards/candidate_report.rs"]
@@ -48,7 +48,10 @@ mod scaffold;
 
 #[cfg(test)]
 use recipes::{french_vanilla_keywords, keyword_ident};
-use recipes::{match_clause, validate_catalog, RecipeAmbiguity, RecipeContext, RecipeEmission};
+use recipes::{
+    match_clause, match_modal_assembly, match_modal_mode, reviewed_modal_mode_pair,
+    validate_catalog, RecipeAmbiguity, RecipeContext, RecipeEmission,
+};
 #[cfg(test)]
 use tricerules_cards::primitives::{LifeAmount, PermanentEventFilter};
 #[cfg(test)]
@@ -508,6 +511,7 @@ fn strip_reminder(text: &str) -> String {
 struct ParsedRules {
     keywords: Vec<Keyword>,
     spell_effect: Vec<SpellEffectKind>,
+    modal_spell: Option<ModalDef>,
     activated_abilities: Vec<ActivatedAbilityDef>,
     triggered_abilities: Vec<TriggeredAbilityDef>,
     static_abilities: Vec<IdentifiedAbility<StaticAbilityDef>>,
@@ -522,6 +526,7 @@ enum RulesParseError {
 }
 
 fn parse_rules_text(
+    source_name: &str,
     oracle_text: &str,
     is_spell: bool,
     source_is_land: bool,
@@ -530,6 +535,72 @@ fn parse_rules_text(
 ) -> Result<ParsedRules, RulesParseError> {
     let mut parsed = ParsedRules::default();
     let external_lines = external_oracle_lines(oracle_text);
+    let base_context = RecipeContext {
+        source_name: source_name.into(),
+        triggered_ability_id: AbilityId::new("triggered_01")
+            .map_err(|_| RulesParseError::Unsupported)?,
+        activated_ability_id: AbilityId::new("activated_01")
+            .map_err(|_| RulesParseError::Unsupported)?,
+        static_ability_id: AbilityId::new("static_01").map_err(|_| RulesParseError::Unsupported)?,
+        characteristic_ability_id: AbilityId::new("characteristic_01")
+            .map_err(|_| RulesParseError::Unsupported)?,
+        presentation: AbilityPresentation::OracleLines(vec![1]),
+        source_is_land,
+        source_is_creature,
+        source_is_vehicle,
+    };
+    if is_spell {
+        if let Some(assembly) =
+            match_modal_assembly(oracle_text, &base_context).map_err(RulesParseError::Ambiguous)?
+        {
+            if !matches!(assembly.emission, RecipeEmission::ModalAssembly) {
+                return Err(RulesParseError::Unsupported);
+            }
+            let mut modes = Vec::with_capacity(2);
+            let mut mode_recipe_ids = Vec::with_capacity(2);
+            parsed.recipe_labels.push(assembly.label);
+            for (mode_index, external_line) in external_lines.iter().skip(1).enumerate() {
+                let line_number =
+                    u16::try_from(mode_index + 2).map_err(|_| RulesParseError::Unsupported)?;
+                let cleaned_mode = strip_reminder(external_line);
+                let mode_text = cleaned_mode
+                    .trim()
+                    .strip_prefix("• ")
+                    .ok_or(RulesParseError::Unsupported)?;
+                let context = RecipeContext {
+                    presentation: AbilityPresentation::OracleLines(vec![line_number]),
+                    ..base_context.clone()
+                };
+                let matched = match_modal_mode(mode_text, &context)
+                    .map_err(RulesParseError::Ambiguous)?
+                    .ok_or(RulesParseError::Unsupported)?;
+                let RecipeEmission::ModalMode(emission) = matched.emission else {
+                    return Err(RulesParseError::Unsupported);
+                };
+                mode_recipe_ids.push(matched.id);
+                let mode_id = ModeId::new(format!("mode_{:02}", mode_index + 1))
+                    .map_err(|_| RulesParseError::Unsupported)?;
+                modes.push(ModeDef {
+                    mode_id,
+                    presentation: context.presentation,
+                    linked_cast_cost: None,
+                    effects: emission.effects,
+                    targeting: emission.targeting,
+                });
+                parsed.recipe_labels.push(matched.label);
+            }
+            if !reviewed_modal_mode_pair(&mode_recipe_ids) {
+                return Err(RulesParseError::Unsupported);
+            }
+            parsed.modal_spell = Some(ModalDef {
+                min_modes: 1,
+                max_modes: 1,
+                all_modes_cast_cost: None,
+                modes,
+            });
+            return Ok(parsed);
+        }
+    }
     for (line_index, external_line) in external_lines.iter().enumerate() {
         let cleaned = strip_reminder(external_line);
         let clause = cleaned.trim();
@@ -556,6 +627,7 @@ fn parse_rules_text(
         ))
         .map_err(|_| RulesParseError::Unsupported)?;
         let context = RecipeContext {
+            source_name: source_name.into(),
             triggered_ability_id: triggered_id,
             activated_ability_id: activated_id,
             static_ability_id: static_id,
@@ -582,6 +654,9 @@ fn parse_rules_text(
                     return Err(RulesParseError::Unsupported);
                 }
                 parsed.spell_effect.push(effect);
+            }
+            RecipeEmission::ModalAssembly | RecipeEmission::ModalMode(_) => {
+                return Err(RulesParseError::Unsupported);
             }
             RecipeEmission::TriggeredAbility(ability) => parsed.triggered_abilities.push(ability),
             RecipeEmission::ActivatedAbility(ability) => parsed.activated_abilities.push(ability),
@@ -726,6 +801,7 @@ struct GenFace {
     characteristic_defining_abilities: Vec<IdentifiedAbility<CharacteristicDefiningAbility>>,
     keywords: Vec<Keyword>,
     spell_effect: Vec<SpellEffectKind>,
+    modal_spell: Option<ModalDef>,
     activated_abilities: Vec<ActivatedAbilityDef>,
     triggered_abilities: Vec<TriggeredAbilityDef>,
     static_abilities: Vec<IdentifiedAbility<StaticAbilityDef>>,
@@ -804,6 +880,12 @@ fn push_face_fields(s: &mut String, face: &GenFace, indent: &str, include_name: 
                 .map(render_generated_effect)
                 .collect::<Vec<_>>()
                 .join(", ")
+        ));
+    }
+    if let Some(modal_spell) = &face.modal_spell {
+        s.push_str(&format!(
+            "{indent}modal_spell: {},\n",
+            ron::ser::to_string(modal_spell).expect("generated modal spell should serialize")
         ));
     }
     if !face.activated_abilities.is_empty() {
@@ -1284,6 +1366,7 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, EvaluationError> {
         .iter()
         .any(|card_type| matches!(card_type.as_str(), "Instant" | "Sorcery"));
     let mut rules = parse_rules_text(
+        &name,
         oracle_text,
         is_spell,
         types.iter().any(|card_type| card_type == "Land"),
@@ -1321,6 +1404,7 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, EvaluationError> {
         characteristic_defining_abilities: rules.characteristic_defining_abilities,
         keywords: rules.keywords,
         spell_effect: rules.spell_effect,
+        modal_spell: rules.modal_spell,
         activated_abilities: rules.activated_abilities,
         triggered_abilities: rules.triggered_abilities,
         static_abilities: rules.static_abilities,
@@ -1329,6 +1413,7 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, EvaluationError> {
 }
 
 fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
+    let name = str_field(card, "name").to_string();
     let type_line = str_field(card, "type_line");
     let (supertypes, card_types, subtypes) = parse_type_line(type_line);
     let is_creature = card_types.iter().any(|value| value == "Creature");
@@ -1350,6 +1435,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
 
     let oracle_text = str_field(card, "oracle_text");
     let mut rules = parse_rules_text(
+        &name,
         oracle_text,
         is_spell,
         card_types.iter().any(|card_type| card_type == "Land"),
@@ -1360,10 +1446,9 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     if !is_creature && !is_spell && rules.recipe_labels.is_empty() {
         return Err(Skip::NotCreature.into());
     }
-    if is_spell && rules.spell_effect.is_empty() {
+    if is_spell && rules.spell_effect.is_empty() && rules.modal_spell.is_none() {
         return Err(Skip::NonKeywordText.into());
     }
-    let name = str_field(card, "name").to_string();
     let mut types = card_types;
     types.extend(subtypes);
     add_intrinsic_land_mana_ability(&mut rules, &types, oracle_text)
@@ -1385,6 +1470,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
             characteristic_defining_abilities: rules.characteristic_defining_abilities,
             keywords: rules.keywords,
             spell_effect: rules.spell_effect,
+            modal_spell: rules.modal_spell,
             activated_abilities: rules.activated_abilities,
             triggered_abilities: rules.triggered_abilities,
             static_abilities: rules.static_abilities,
@@ -2576,6 +2662,98 @@ mod tests {
             let generated = evaluate_fresh(&card).expect("exact spell recipe should qualify");
             let raw = parse_generated(&generated.to_ron("fixture"));
             assert_eq!(raw.spell_effect, [expected]);
+        }
+    }
+
+    #[test]
+    fn issue_265_two_mode_spells_generate_as_modal_definitions() {
+        let cards = [
+            normal_card(
+                "Abrade",
+                "{1}{R}",
+                "Instant",
+                "Choose one —\n• Abrade deals 3 damage to target creature.\n• Destroy target artifact.",
+                None,
+            ),
+            normal_card(
+                "Family Reunion",
+                "{1}{W}",
+                "Instant",
+                "Choose one —\n• Creatures you control get +1/+1 until end of turn.\n• Creatures you control gain hexproof until end of turn. (They can't be the targets of spells or abilities your opponents control.)",
+                None,
+            ),
+            normal_card(
+                "Goblin Surprise",
+                "{2}{R}",
+                "Instant",
+                "Choose one —\n• Creatures you control get +2/+0 until end of turn.\n• Create two 1/1 red Goblin creature tokens.",
+                None,
+            ),
+            normal_card(
+                "Sarkhan's Resolve",
+                "{1}{G}",
+                "Instant",
+                "Choose one —\n• Target creature gets +3/+3 until end of turn.\n• Destroy target creature with flying.",
+                None,
+            ),
+            normal_card(
+                "Spellgyre",
+                "{2}{U}{U}",
+                "Instant",
+                "Choose one —\n• Counter target spell.\n• Surveil 2, then draw two cards. (To surveil 2, look at the top two cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)",
+                None,
+            ),
+        ];
+
+        for card in cards {
+            let name = str_field(&card, "name").to_string();
+            let generated = evaluate_fresh(&card)
+                .unwrap_or_else(|error| panic!("{name} should generate: {error:?}"));
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            let modal = raw
+                .modal_spell
+                .unwrap_or_else(|| panic!("{name} should emit modal_spell"));
+            assert_eq!((modal.min_modes, modal.max_modes), (1, 1));
+            assert_eq!(modal.modes.len(), 2);
+            assert_eq!(modal.modes[0].mode_id.as_str(), "mode_01");
+            assert_eq!(modal.modes[1].mode_id.as_str(), "mode_02");
+            assert_eq!(
+                modal.modes[0].presentation,
+                AbilityPresentation::OracleLines(vec![2])
+            );
+            assert_eq!(
+                modal.modes[1].presentation,
+                AbilityPresentation::OracleLines(vec![3])
+            );
+        }
+
+        for unsupported in [
+            normal_card(
+                "Crushing Vines",
+                "{2}{G}",
+                "Instant",
+                "Choose one —\n• Destroy target creature with flying.\n• Destroy target artifact.",
+                None,
+            ),
+            normal_card(
+                "Reordered Abrade",
+                "{1}{R}",
+                "Instant",
+                "Choose one —\n• Destroy target artifact.\n• Reordered Abrade deals 3 damage to target creature.",
+                None,
+            ),
+            normal_card(
+                "Partial Modal",
+                "{1}{U}",
+                "Instant",
+                "Choose one —\n• Counter target spell.\n• Scry 1.",
+                None,
+            ),
+        ] {
+            assert!(
+                evaluate_fresh(&unsupported).is_err(),
+                "unreviewed, reordered, and partial aggregates must fail closed"
+            );
         }
     }
 
