@@ -1152,6 +1152,10 @@ impl CardDefinition {
                 .iter()
                 .any(|subtype| self.has_subtype_outside_stack(subtype))
             && filter
+                .required_supertypes
+                .iter()
+                .all(|supertype| self.has_supertype_outside_stack(supertype))
+            && filter
                 .has_adventure
                 .is_none_or(|required| (self.layout == Layout::Adventure) == required)
             && filter.printed_power.is_none_or(|comparison| {
@@ -1244,6 +1248,20 @@ impl CardDefinition {
             self.faces_iter().any(|face| face.has_subtype(subtype))
         } else {
             self.primary_face().has_subtype(subtype)
+        }
+    }
+
+    /// Whether this physical card has `supertype` outside the battlefield and stack. Split and
+    /// Room cards combine both halves there; other multiface layouts use their normal face.
+    pub fn has_supertype_outside_stack(&self, supertype: &str) -> bool {
+        if matches!(self.layout, Layout::Split | Layout::Room) {
+            self.faces_iter()
+                .any(|face| face.supertypes.iter().any(|value| value == supertype))
+        } else {
+            self.primary_face()
+                .supertypes
+                .iter()
+                .any(|value| value == supertype)
         }
     }
 
@@ -1356,6 +1374,37 @@ mod tests {
         let omen_card = definition(Layout::Omen, vec![normal, omen]);
         assert!(omen_card.has_name_outside_stack("Sagu Wildling"));
         assert!(!omen_card.has_name_outside_stack("Roost Seek"));
+    }
+
+    #[test]
+    fn zone_card_filter_matches_required_supertypes_across_layouts() {
+        let mut legendary = face(&["Creature"]);
+        legendary.supertypes = vec!["Legendary".into()];
+        let mut ordinary = face(&["Creature"]);
+        ordinary.supertypes = Vec::new();
+
+        let filter = ZoneCardFilter {
+            card_type: Some(CardTypeFilter::Creature),
+            required_supertypes: vec!["Legendary".into()],
+            ..ZoneCardFilter::default()
+        };
+        assert!(
+            definition(Layout::Normal, vec![legendary.clone()]).matches_zone_card_filter(&filter)
+        );
+        assert!(
+            !definition(Layout::Normal, vec![ordinary.clone()]).matches_zone_card_filter(&filter)
+        );
+
+        let mut right = face(&["Instant"]);
+        right.supertypes = vec!["Legendary".into()];
+        assert!(
+            definition(Layout::Split, vec![ordinary, right]).matches_zone_card_filter(
+                &ZoneCardFilter {
+                    required_supertypes: vec!["Legendary".into()],
+                    ..ZoneCardFilter::default()
+                }
+            )
+        );
     }
 
     #[test]

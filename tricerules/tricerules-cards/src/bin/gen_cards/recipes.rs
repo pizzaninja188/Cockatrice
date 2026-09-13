@@ -61,6 +61,9 @@ pub(super) struct CalibrationCard {
 pub(super) struct RecipeCalibration {
     pub(super) positive_cards: &'static [CalibrationCard],
     pub(super) negative_near_misses: &'static [&'static str],
+    /// Some exact templates have only one real-card calibration in the pinned corpus. Such
+    /// recipes opt into a documented singleton rather than inventing a second card example.
+    pub(super) minimum_positive_cards: usize,
 }
 
 pub(super) struct Recipe {
@@ -85,6 +88,7 @@ pub(super) struct RecipeContext {
     pub(super) source_is_vehicle: bool,
     pub(super) source_is_aura: bool,
     pub(super) source_is_equipment: bool,
+    pub(super) source_is_enchantment: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -477,6 +481,61 @@ fn match_spell_return_graveyard_card_to_hand(
             linked_exile_id: None,
         })
     })
+}
+
+fn legendary_creature_search_effect() -> SpellEffectKind {
+    SpellEffectKind::SearchLibrary {
+        who: PlayerRecipient::Controller,
+        optional: false,
+        count: 1,
+        count_by_cast_cost: None,
+        filter: Some(ZoneCardFilter {
+            card_type: Some(CardTypeFilter::Creature),
+            required_supertypes: vec!["Legendary".into()],
+            ..ZoneCardFilter::default()
+        }),
+        slots: Vec::new(),
+        zones: SearchZoneSelection::default(),
+        destination: SearchDestination::Hand,
+        conditional_destination: None,
+        shuffle: true,
+        reveal: true,
+        result_id: None,
+    }
+}
+
+fn match_spell_search_legendary_creature(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Search your library for a legendary creature card, reveal it, put it into your hand, then shuffle.")
+        .then(|| RecipeEmission::SpellEffect(legendary_creature_search_effect()))
+}
+
+fn match_artifact_etb_search_legendary_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    let expected = format!(
+        "When {} enters, search your library for a legendary creature card, reveal it, put it into your hand, then shuffle.",
+        context.source_name
+    );
+    (context.source_is_artifact && text == expected)
+        .then(|| triggered_ability(context, legendary_creature_search_effect()))
+}
+
+fn match_spell_create_two_rat_tokens_cant_block(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Create two 1/1 black Rat creature tokens with \"This token can't block.\"").then(
+        || {
+            RecipeEmission::SpellEffect(SpellEffectKind::CreateTokens {
+                token: "rat_b_1_1_cant_block".into(),
+                count: Amount::Fixed(2),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            })
+        },
+    )
 }
 
 fn match_spell_source_damage_each_opponent_three(
@@ -1816,6 +1875,121 @@ fn match_self_attacks_mill_one(text: &str, context: &RecipeContext) -> Option<Re
     )
 }
 
+fn match_landfall_mill_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text == "Landfall — Whenever a land you control enters, mill a card.")
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverPermanentEntersBattlefield {
+                    controller: CastTriggerPlayer::Controller,
+                    filter: PermanentEventFilter {
+                        permanent_type: Some(PermanentTypeFilter::Land),
+                        ..PermanentEventFilter::default()
+                    },
+                    creature_filter: None,
+                },
+                vec![SpellEffectKind::Mill {
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                }],
+            )
+        })
+}
+
+fn match_self_attacks_optional_discard_then_draw(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == "Whenever this creature attacks, you may discard a card. If you do, draw a card.")
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                },
+                vec![SpellEffectKind::DrawDiscard {
+                    who: PlayerRecipient::Controller,
+                    draw_count: 1,
+                    discard_count: 1,
+                    order: DrawDiscardOrder::DiscardThenDraw,
+                    optional: true,
+                }],
+            )
+        })
+}
+
+fn match_controller_end_step_draw_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    ((context.source_is_artifact || context.source_is_enchantment)
+        && text == "At the beginning of your end step, draw a card.")
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::AtBeginningOfEndStep {
+                    player: CastTriggerPlayer::Controller,
+                },
+                vec![SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                }],
+            )
+        })
+}
+
+fn creature_graveyard_card_to_hand_effect() -> SpellEffectKind {
+    SpellEffectKind::MoveGraveyardCards {
+        filter: GraveyardFilter {
+            card: Some(ZoneCardFilter {
+                card_type: Some(CardTypeFilter::Creature),
+                ..ZoneCardFilter::default()
+            }),
+            ..GraveyardFilter::default()
+        },
+        destination: GraveyardDestination::Hand,
+        linked_exile_id: None,
+    }
+}
+
+fn match_etb_return_creature_card_to_hand(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text == "When this creature enters, return target creature card from your graveyard to your hand.")
+        .then(|| triggered_ability(context, creature_graveyard_card_to_hand_effect()))
+}
+
+fn match_controller_creature_enters_damage_each_opponent(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_enchantment
+        && text
+            == "Whenever a creature you control enters, this enchantment deals 1 damage to each opponent.")
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverPermanentEntersBattlefield {
+                    controller: CastTriggerPlayer::Controller,
+                    filter: PermanentEventFilter {
+                        permanent_type: Some(PermanentTypeFilter::Creature),
+                        ..PermanentEventFilter::default()
+                    },
+                    creature_filter: None,
+                },
+                vec![SpellEffectKind::DamagePlayer {
+                    amount: Amount::Fixed(1),
+                    who: PlayerRecipient::EachOpponent,
+                }],
+            )
+        })
+}
+
 fn match_self_dies_draw_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (text == "When this creature dies, draw a card.").then(|| {
         triggered_ability_with(
@@ -1965,6 +2139,125 @@ fn match_changeling(text: &str, context: &RecipeContext) -> Option<RecipeEmissio
             definition: CharacteristicDefiningAbility::Changeling,
         })
     })
+}
+
+fn controller_turn_condition() -> GameCondition {
+    GameCondition::ActivePlayer {
+        players: RelativePlayerSet::Controller,
+    }
+}
+
+fn match_controller_turn_self_first_strike(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == "During your turn, this creature has first strike.")
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: StaticAbilityDef::ConditionalSelfModifier {
+                    condition: controller_turn_condition(),
+                    set_types: None,
+                    add_types: TypeLineAddition::default(),
+                    base_power: None,
+                    base_toughness: None,
+                    delta_power: 0,
+                    delta_toughness: 0,
+                    keywords: vec![Keyword::FirstStrike],
+                    activated_abilities: Vec::new(),
+                    triggered_abilities: Vec::new(),
+                    can_attack_as_though_without_defender: false,
+                },
+            })
+        })
+}
+
+fn match_controller_turn_countered_creatures_first_strike(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == "During your turn, creatures you control with +1/+1 counters on them have first strike.")
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: StaticAbilityDef::AnthemKeyword {
+                    filter: CreatureScopeFilter {
+                        controller: Some(CreatureScopeController::YouControl),
+                        required_counter: Some(CounterKind::PlusOnePlusOne),
+                        ..CreatureScopeFilter::default()
+                    },
+                    condition: Some(controller_turn_condition()),
+                    keyword: Keyword::FirstStrike,
+                },
+            })
+        })
+}
+
+fn match_self_cannot_block(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == "This creature can't block.").then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::SelfCombatRestriction {
+                restriction: tricerules_cards::primitives::CombatRestriction {
+                    cant_block: true,
+                    ..tricerules_cards::primitives::CombatRestriction::default()
+                },
+                condition: None,
+            },
+        })
+    })
+}
+
+fn match_controller_creature_anthem_plus_one_plus_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    ((context.source_is_artifact || context.source_is_enchantment)
+        && text == "Creatures you control get +1/+1.")
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: StaticAbilityDef::AnthemPt {
+                    filter: creatures_you_control(),
+                    condition: None,
+                    delta_power: 1,
+                    delta_toughness: 1,
+                },
+            })
+        })
+}
+
+fn match_extra_land_play(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    ((context.source_is_creature || context.source_is_enchantment)
+        && text == "You may play an additional land on each of your turns.")
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: StaticAbilityDef::ExtraLandPlays { count: 1 },
+            })
+        })
+}
+
+fn match_play_lands_from_own_graveyard(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    ((context.source_is_creature || context.source_is_enchantment)
+        && text == "You may play lands from your graveyard.")
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: StaticAbilityDef::PlayLandsFromOwnGraveyard,
+            })
+        })
 }
 
 fn match_spell_cannot_be_countered(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
@@ -2689,6 +2982,23 @@ fn match_unconditional_enters_tapped(
     })
 }
 
+fn match_unconditional_creature_enters_tapped(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == "This creature enters tapped.").then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::EntersTapped {
+                affected: EntersTappedAffected::Self_,
+                condition: None,
+                unless_cost: None,
+            },
+        })
+    })
+}
+
 fn land_count_entry_condition(min: Option<u32>, max: Option<u32>) -> GameCondition {
     GameCondition::BattlefieldAggregate {
         filter: BattlefieldPermanentFilter {
@@ -2758,6 +3068,17 @@ macro_rules! calibrations {
                 CalibrationCard { name: $second_name, clause: $second_clause },
             ],
             negative_near_misses: &[$($negative),+],
+            minimum_positive_cards: 2,
+        }
+    };
+}
+
+macro_rules! singleton_calibrations {
+    ($name:literal => $clause:literal; $($negative:literal),+ $(,)?) => {
+        RecipeCalibration {
+            positive_cards: &[CalibrationCard { name: $name, clause: $clause }],
+            negative_near_misses: &[$($negative),+],
+            minimum_positive_cards: 1,
         }
     };
 }
@@ -4529,6 +4850,209 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("static.conditional_self.first_strike.controller_turn"),
+        label: "self first strike during controller turn",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_controller_turn_self_first_strike,
+        calibration: calibrations!(
+            "Bearer of Glory" => "During your turn, this creature has first strike.",
+            "Feisty Spikeling" => "During your turn, this creature has first strike.";
+            "During your turn, this creature has double strike.",
+            "During your opponent's turn, this creature has first strike.",
+            "This creature has first strike during your turn.",
+            "During your turn, this creature gets +1/+1."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.self_combat_restriction.cant_block"),
+        label: "self cannot block",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_self_cannot_block,
+        calibration: calibrations!(
+            "Vampire Interloper" => "This creature can't block.",
+            "Vampire Soulcaller" => "This creature can't block.";
+            "This creature can't attack.",
+            "This creature can't block or attack.",
+            "This creature can't block unless you control another creature.",
+            "Other creatures can't block."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.anthem_pt.creatures_you_control.plus_one_plus_one"),
+        label: "creatures you control plus one plus one anthem",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_controller_creature_anthem_plus_one_plus_one,
+        calibration: calibrations!(
+            "Anthem of Champions" => "Creatures you control get +1/+1.",
+            "Warleader's Call" => "Creatures you control get +1/+1.";
+            "Creatures you control get +1/+1 until end of turn.",
+            "Other creatures you control get +1/+1.",
+            "Creatures you control get +2/+2.",
+            "Creatures you control gain +1/+1."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.enters_tapped.creature.unconditional"),
+        label: "unconditional tapped creature entry",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_unconditional_creature_enters_tapped,
+        calibration: calibrations!(
+            "Daring Thunder-Thief" => "This creature enters tapped.",
+            "Diregraf Ghoul" => "This creature enters tapped.";
+            "This artifact enters tapped.",
+            "This creature enters the battlefield tapped.",
+            "This creature enters tapped unless you pay 2 life.",
+            "This creature enters tapped. When it enters, draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.extra_land_plays.one"),
+        label: "one additional land play each turn",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_extra_land_play,
+        calibration: calibrations!(
+            "Icetill Explorer" => "You may play an additional land on each of your turns.",
+            "Case of the Locked Hothouse" => "You may play an additional land on each of your turns.";
+            "You may play an additional land this turn.",
+            "You may play up to two additional lands on each of your turns.",
+            "You may play an additional land on each player's turn.",
+            "You may play an additional land on each of your turns if you control a creature."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.play_lands_from_own_graveyard"),
+        label: "play lands from own graveyard",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_play_lands_from_own_graveyard,
+        calibration: calibrations!(
+            "Icetill Explorer" => "You may play lands from your graveyard.",
+            "Mole Man, Moloid Master" => "You may play lands from your graveyard.";
+            "You may play land cards from any graveyard.",
+            "You may cast spells from your graveyard.",
+            "You may play lands from your hand.",
+            "You may play lands from your graveyard this turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.anthem_keyword.countered_creatures.first_strike.controller_turn"),
+        label: "countered creatures first strike during controller turn",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_controller_turn_countered_creatures_first_strike,
+        calibration: singleton_calibrations!(
+            "Inspiring Paladin" => "During your turn, creatures you control with +1/+1 counters on them have first strike.";
+            "During your turn, creatures you control with +1/+1 counters on them have double strike.",
+            "During your turn, creatures you control have first strike.",
+            "Creatures you control with +1/+1 counters on them have first strike.",
+            "During your turn, creatures you control with charge counters on them have first strike."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.landfall.mill.one"),
+        label: "landfall mill one",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_landfall_mill_one,
+        calibration: singleton_calibrations!(
+            "Icetill Explorer" => "Landfall — Whenever a land you control enters, mill a card.";
+            "Landfall — Whenever a land you control enters, mill two cards.",
+            "Landfall — Whenever a land enters, mill a card.",
+            "Landfall — Whenever a land you control enters, you may mill a card.",
+            "Landfall — Whenever a land you control enters, draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.self_attacks.optional_discard_then_draw"),
+        label: "self attacks optional discard then draw",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_attacks_optional_discard_then_draw,
+        calibration: singleton_calibrations!(
+            "Null Group Biological Assets" => "Whenever this creature attacks, you may discard a card. If you do, draw a card.";
+            "Whenever this creature attacks, discard a card, then draw a card.",
+            "Whenever this creature attacks, you may draw a card, then discard a card.",
+            "Whenever this creature attacks, you may discard two cards. If you do, draw a card.",
+            "Whenever this creature attacks, you may discard a card. If you do, draw two cards."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.controller_end_step.draw.one"),
+        label: "controller end step draw one",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_controller_end_step_draw_one,
+        calibration: calibrations!(
+            "The Arkenstone" => "At the beginning of your end step, draw a card.",
+            "Roaring Furnace" => "At the beginning of your end step, draw a card.";
+            "At the beginning of your end step, draw two cards.",
+            "At the beginning of each player's end step, draw a card.",
+            "At the beginning of your upkeep, draw a card.",
+            "At the beginning of your end step, you may draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.return_creature_card_from_graveyard.hand"),
+        label: "creature ETB return target creature card to hand",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_return_creature_card_to_hand,
+        calibration: singleton_calibrations!(
+            "Vampire Soulcaller" => "When this creature enters, return target creature card from your graveyard to your hand.";
+            "When this creature enters, return up to one target creature card from your graveyard to your hand.",
+            "When this creature enters, return target card from your graveyard to your hand.",
+            "When this creature enters, return target creature card from an opponent's graveyard to your hand.",
+            "When this creature dies, return target creature card from your graveyard to your hand."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.controller_creature_enters.damage.each_opponent.one"),
+        label: "controller creature enters damage each opponent one",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_controller_creature_enters_damage_each_opponent,
+        calibration: calibrations!(
+            "Warleader's Call" => "Whenever a creature you control enters, this enchantment deals 1 damage to each opponent.",
+            "Impact Tremors" => "Whenever a creature you control enters, this enchantment deals 1 damage to each opponent.";
+            "Whenever a creature you control enters, this enchantment deals 2 damage to each opponent.",
+            "Whenever a creature enters, this enchantment deals 1 damage to each opponent.",
+            "Whenever a creature you control enters, this enchantment deals 1 damage to each player.",
+            "Whenever another creature you control enters, this enchantment deals 1 damage to each opponent."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.search.legendary_creature.hand"),
+        label: "search library for legendary creature to hand",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_search_legendary_creature,
+        calibration: singleton_calibrations!(
+            "Seek the Heart" => "Search your library for a legendary creature card, reveal it, put it into your hand, then shuffle.";
+            "Search your library for a legendary creature card, reveal it, then shuffle.",
+            "Search your library for a legendary permanent card, reveal it, put it into your hand, then shuffle.",
+            "Search your library for a creature card, reveal it, put it into your hand, then shuffle.",
+            "Search your library for a legendary creature card, put it into your hand, then shuffle."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.artifact.search.legendary_creature.hand"),
+        label: "artifact ETB search legendary creature to hand",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_artifact_etb_search_legendary_creature,
+        calibration: singleton_calibrations!(
+            "The Seriema" => "When The Seriema enters, search your library for a legendary creature card, reveal it, put it into your hand, then shuffle.";
+            "When The Seriema enters, search your library for a legendary creature card, put it into your hand, then shuffle.",
+            "When The Seriema enters, search your library for a creature card, reveal it, put it into your hand, then shuffle.",
+            "When The Seriema enters, search your library for a legendary creature card, reveal it, then shuffle.",
+            "When another artifact enters, search your library for a legendary creature card, reveal it, put it into your hand, then shuffle."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.create_tokens.rat_black_one_one.cant_block.two"),
+        label: "create two black Rat tokens that cannot block",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_create_two_rat_tokens_cant_block,
+        calibration: singleton_calibrations!(
+            "Pest Problem" => "Create two 1/1 black Rat creature tokens with \"This token can't block.\"";
+            "Create two 1/1 black Rat creature tokens.",
+            "Create two tapped 1/1 black Rat creature tokens with \"This token can't block.\"",
+            "Create two 1/1 black Rat creature tokens with \"This creature can't block.\"",
+            "Create a 1/1 black Rat creature token with \"This token can't block.\""
+        ),
+    },
+    Recipe {
         id: RecipeId("static.enters_tapped.unconditional"),
         label: "unconditional tapped entry",
         surface: RecipeSurface::StaticAbility,
@@ -4742,6 +5266,7 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
             source_is_vehicle: true,
             source_is_aura: true,
             source_is_equipment: true,
+            source_is_enchantment: true,
         })
     };
     let mut ids = std::collections::BTreeSet::new();
@@ -4749,9 +5274,13 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
         if !ids.insert(recipe.id) {
             return Err(format!("duplicate recipe id {}", recipe.id.as_str()));
         }
-        if recipe.calibration.positive_cards.len() < 2 {
+        let minimum_positive_cards = recipe.calibration.minimum_positive_cards;
+        let positive_card_suffix = if minimum_positive_cards == 1 { "" } else { "s" };
+        if minimum_positive_cards == 0
+            || recipe.calibration.positive_cards.len() < minimum_positive_cards
+        {
             return Err(format!(
-                "{} needs at least two positive calibration cards",
+                "{} needs at least {minimum_positive_cards} positive calibration card{positive_card_suffix}",
                 recipe.id.as_str()
             ));
         }
@@ -4761,9 +5290,10 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
             .iter()
             .map(|card| card.name)
             .collect::<std::collections::BTreeSet<_>>();
-        if names.len() < 2 {
+        let distinct_card_suffix = if minimum_positive_cards == 1 { "" } else { "s" };
+        if names.len() < minimum_positive_cards {
             return Err(format!(
-                "{} needs at least two distinct named calibration cards",
+                "{} needs at least {minimum_positive_cards} distinct named calibration card{distinct_card_suffix}",
                 recipe.id.as_str()
             ));
         }
@@ -4875,6 +5405,7 @@ mod tests {
             source_is_vehicle: true,
             source_is_aura: true,
             source_is_equipment: true,
+            source_is_enchantment: true,
         }
     }
 
@@ -4896,11 +5427,31 @@ mod tests {
                     clause: "Synthetic",
                 }],
                 negative_near_misses: &["No"],
+                minimum_positive_cards: 2,
             },
         }];
         assert_eq!(
             validate_catalog_in(&incomplete),
-            Err("synthetic.incomplete needs at least two positive calibration cards".into())
+            Err("synthetic.incomplete needs at least 2 positive calibration cards".into())
+        );
+    }
+
+    #[test]
+    fn calibration_error_reports_configured_minimum() {
+        let incomplete = [Recipe {
+            id: RecipeId("synthetic.singleton"),
+            label: "synthetic singleton",
+            surface: RecipeSurface::KeywordClause,
+            matcher: duplicate_matcher,
+            calibration: RecipeCalibration {
+                positive_cards: &[],
+                negative_near_misses: &["No"],
+                minimum_positive_cards: 1,
+            },
+        }];
+        assert_eq!(
+            validate_catalog_in(&incomplete),
+            Err("synthetic.singleton needs at least 1 positive calibration card".into())
         );
     }
 
@@ -5589,6 +6140,7 @@ mod tests {
 
         let mut noncreature = context();
         noncreature.source_is_creature = false;
+        noncreature.source_is_enchantment = false;
         for (clause, _) in cases {
             assert!(
                 match_clause(clause, false, &noncreature).unwrap().is_none(),
@@ -6171,6 +6723,226 @@ mod tests {
                 Ok(None),
                 "{clause} must require its source subtype"
             );
+        }
+    }
+
+    #[test]
+    fn issue_267_static_templates_have_stable_exact_recipe_ids() {
+        let cases = [
+            (
+                "During your turn, this creature has first strike.",
+                "static.conditional_self.first_strike.controller_turn",
+            ),
+            (
+                "This creature can't block.",
+                "static.self_combat_restriction.cant_block",
+            ),
+            (
+                "Creatures you control get +1/+1.",
+                "static.anthem_pt.creatures_you_control.plus_one_plus_one",
+            ),
+            (
+                "This creature enters tapped.",
+                "static.enters_tapped.creature.unconditional",
+            ),
+            (
+                "You may play an additional land on each of your turns.",
+                "static.extra_land_plays.one",
+            ),
+            (
+                "You may play lands from your graveyard.",
+                "static.play_lands_from_own_graveyard",
+            ),
+            (
+                "During your turn, creatures you control with +1/+1 counters on them have first strike.",
+                "static.anthem_keyword.countered_creatures.first_strike.controller_turn",
+            ),
+            (
+                "At the beginning of your end step, draw a card.",
+                "triggered.controller_end_step.draw.one",
+            ),
+        ];
+
+        for (clause, expected_id) in cases {
+            let matched = match_clause(clause, false, &context())
+                .expect("issue #267 clause must not be ambiguous")
+                .unwrap_or_else(|| panic!("issue #267 clause must be supported: {clause}"));
+            assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+        }
+    }
+
+    #[test]
+    fn issue_267_companion_templates_emit_typed_effects_and_exact_targeting() {
+        let cases = [
+            (
+                "Landfall — Whenever a land you control enters, mill a card.",
+                false,
+                "triggered.landfall.mill.one",
+            ),
+            (
+                "Whenever this creature attacks, you may discard a card. If you do, draw a card.",
+                false,
+                "triggered.self_attacks.optional_discard_then_draw",
+            ),
+            (
+                "When this creature enters, return target creature card from your graveyard to your hand.",
+                false,
+                "triggered.etb.return_creature_card_from_graveyard.hand",
+            ),
+            (
+                "Whenever a creature you control enters, this enchantment deals 1 damage to each opponent.",
+                false,
+                "triggered.controller_creature_enters.damage.each_opponent.one",
+            ),
+            (
+                "At the beginning of your end step, draw a card.",
+                false,
+                "triggered.controller_end_step.draw.one",
+            ),
+            (
+                "Search your library for a legendary creature card, reveal it, put it into your hand, then shuffle.",
+                true,
+                "spell.search.legendary_creature.hand",
+            ),
+            (
+                "Create two 1/1 black Rat creature tokens with \"This token can't block.\"",
+                true,
+                "spell.create_tokens.rat_black_one_one.cant_block.two",
+            ),
+        ];
+
+        for (clause, is_spell, expected_id) in cases {
+            let matched = match_clause(clause, is_spell, &context())
+                .expect("issue #267 companion clause must not be ambiguous")
+                .unwrap_or_else(|| {
+                    panic!("issue #267 companion clause must be supported: {clause}")
+                });
+            assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+        }
+
+        let mut seriema = context();
+        seriema.source_name = "The Seriema".into();
+        let matched = match_clause(
+            "When The Seriema enters, search your library for a legendary creature card, reveal it, put it into your hand, then shuffle.",
+            false,
+            &seriema,
+        )
+        .expect("artifact ETB search must not be ambiguous")
+        .expect("artifact ETB search must be supported");
+        assert_eq!(
+            matched.id.as_str(),
+            "etb.artifact.search.legendary_creature.hand"
+        );
+
+        let RecipeEmission::TriggeredAbility(attack) = match_clause(
+            "Whenever this creature attacks, you may discard a card. If you do, draw a card.",
+            false,
+            &context(),
+        )
+        .unwrap()
+        .unwrap()
+        .emission
+        else {
+            panic!("optional attack recipe must emit a trigger");
+        };
+        assert_eq!(
+            attack.effect,
+            [SpellEffectKind::DrawDiscard {
+                who: PlayerRecipient::Controller,
+                draw_count: 1,
+                discard_count: 1,
+                order: DrawDiscardOrder::DiscardThenDraw,
+                optional: true,
+            }]
+        );
+
+        let matched = match_clause(
+            "Search your library for a legendary creature card, reveal it, put it into your hand, then shuffle.",
+            true,
+            &context(),
+        )
+        .unwrap()
+        .unwrap();
+        let RecipeEmission::SpellEffect(SpellEffectKind::SearchLibrary {
+            filter: Some(filter),
+            destination,
+            shuffle,
+            reveal,
+            optional,
+            ..
+        }) = matched.emission
+        else {
+            panic!("legendary search recipe must emit SearchLibrary");
+        };
+        assert_eq!(filter.card_type, Some(CardTypeFilter::Creature));
+        assert_eq!(filter.required_supertypes, ["Legendary"]);
+        assert_eq!(destination, SearchDestination::Hand);
+        assert!(shuffle && reveal && !optional);
+    }
+
+    #[test]
+    fn issue_267_templates_fail_closed_on_source_kinds_and_near_misses() {
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        noncreature.source_is_enchantment = false;
+        for clause in [
+            "During your turn, this creature has first strike.",
+            "This creature can't block.",
+            "This creature enters tapped.",
+            "You may play an additional land on each of your turns.",
+            "You may play lands from your graveyard.",
+            "Landfall — Whenever a land you control enters, mill a card.",
+            "Whenever this creature attacks, you may discard a card. If you do, draw a card.",
+            "When this creature enters, return target creature card from your graveyard to your hand.",
+        ] {
+            assert_eq!(match_clause(clause, false, &noncreature), Ok(None), "{clause}");
+        }
+
+        let mut nonartifact_or_enchantment = context();
+        nonartifact_or_enchantment.source_is_artifact = false;
+        nonartifact_or_enchantment.source_is_enchantment = false;
+        for clause in [
+            "Creatures you control get +1/+1.",
+            "At the beginning of your end step, draw a card.",
+        ] {
+            assert_eq!(
+                match_clause(clause, false, &nonartifact_or_enchantment),
+                Ok(None),
+                "{clause}"
+            );
+        }
+        nonartifact_or_enchantment.source_name = "The Seriema".into();
+        assert_eq!(
+            match_clause(
+                "When The Seriema enters, search your library for a legendary creature card, reveal it, put it into your hand, then shuffle.",
+                false,
+                &nonartifact_or_enchantment,
+            ),
+            Ok(None),
+            "artifact ETB search must reject a non-artifact source"
+        );
+
+        let mut nonenchantment = context();
+        nonenchantment.source_is_enchantment = false;
+        assert_eq!(
+            match_clause(
+                "Whenever a creature you control enters, this enchantment deals 1 damage to each opponent.",
+                false,
+                &nonenchantment,
+            ),
+            Ok(None)
+        );
+
+        for (clause, is_spell) in [
+            ("This creature has first strike.", false),
+            ("This creature can't block or attack.", false),
+            ("This creature enters the battlefield tapped.", false),
+            ("You may play two additional lands on each of your turns.", false),
+            ("Landfall — Whenever a land you control enters, mill two cards.", false),
+            ("Search your library for a creature card, reveal it, put it into your hand, then shuffle.", true),
+            ("Create two 1/1 black Rat creature tokens.", true),
+        ] {
+            assert_eq!(match_clause(clause, is_spell, &context()), Ok(None), "{clause}");
         }
     }
 

@@ -72,6 +72,7 @@ angels_mercy	0	cast	exercised
 ankle_biter	0	cast	exercised
 annul	0	cast	exercised
 antagonize	0	cast	exercised
+anthem_of_champions	0	cast	exercised
 anti-venom,_horrifying_healer	0	cast	exercised
 anvilwrought_raptor	0	cast	exercised
 apostles_blessing	0	cast	exercised
@@ -175,6 +176,8 @@ bayou	0	land	exercised
 bear_cub	0	cast	exercised
 bear_trap	0	ability:0	exercised
 bear_trap	0	cast	exercised
+bearer_of_glory	0	ability:0	exercised
+bearer_of_glory	0	cast	exercised
 beast-kin_ranger	0	cast	exercised
 bedhead_beastie	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 bedhead_beastie	0	cast	exercised
@@ -480,6 +483,7 @@ dai_li_indoctrination	0	cast	exercised
 dakmor_bat	0	cast	exercised
 dakmor_scorpion	0	cast	exercised
 dancing_scimitar	0	cast	exercised
+daring_thunder-thief	0	cast	exercised
 dark_endurance	0	cast	exercised
 dark_remedy	0	cast	exercised
 darkbore_pathway_slitherbore_pathway	0	ability:0	exercised
@@ -1524,6 +1528,7 @@ pigment_wrangler_striking_palette	1	cast	intentional: face unavailable from hand
 pilgrim_of_the_fires	0	cast	exercised
 pillarfield_ox	0	cast	exercised
 pincher_beetles	0	cast	exercised
+piranha_fly	0	cast	exercised
 pirate_peddlers	0	cast	exercised
 pitchburn_devils	0	cast	exercised
 pitiless_gorgon	0	cast	exercised
@@ -1618,6 +1623,8 @@ rampaging_ceratops	0	cast	exercised
 rampaging_ferocidon	0	cast	exercised
 rampaging_soulrager	0	cast	exercised
 raptor_companion	0	cast	exercised
+ratcatcher_trainee_pest_problem	0	cast	exercised
+ratcatcher_trainee_pest_problem	1	cast	exercised
 rattleback_apothecary	0	cast	exercised
 raucous_carnival	0	ability:0	exercised
 raucous_carnival	0	land	exercised
@@ -2120,6 +2127,8 @@ terror_of_the_fairgrounds	0	cast	exercised
 thaumaton_torpedo	0	ability:0	exercised
 thaumaton_torpedo	0	cast	exercised
 thawbringer	0	cast	exercised
+the_arkenstone_seek_the_heart	0	cast	exercised
+the_arkenstone_seek_the_heart	1	cast	exercised
 the_fabulous_frog-man	0	cast	exercised
 the_mountain-kings_return	0	cast	exercised
 the_terror_of_serpents_pass	0	cast	exercised
@@ -2245,6 +2254,7 @@ updraft_elemental	0	cast	exercised
 valiant_guard	0	cast	exercised
 valkyrior_skyrider	0	cast	exercised
 vampire_champion	0	cast	exercised
+vampire_interloper	0	cast	exercised
 vampire_nighthawk	0	cast	exercised
 vampire_noble	0	cast	exercised
 vampire_of_the_dire_moon	0	cast	exercised
@@ -2348,6 +2358,7 @@ warden_of_geometries	0	cast	exercised
 wardscale_crocodile	0	cast	exercised
 warehouse_tabby	0	ability:0	exercised
 warehouse_tabby	0	cast	exercised
+warleaders_call	0	cast	exercised
 warpath_ghoul	0	cast	exercised
 warren_elder	0	ability:0	exercised
 warren_elder	0	cast	exercised

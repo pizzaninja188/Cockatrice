@@ -199,6 +199,10 @@ impl AttachmentFilter {
 
 /// The quantity an affine [`SpellEffectKind::PumpTarget`] bonus scales from.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+// ZoneCardFilter is embedded in the existing public Amount/CountExpression shape.  The
+// legendary-search predicate adds one Vec-sized field to that already-established variant;
+// keep the representation stable rather than boxing an unrelated, widely-used amount type.
+#[allow(clippy::large_enum_variant)]
 pub enum PtScaleBasis {
     /// Resolve an ordinary nonnegative effect amount. Growth Cycle and Lavakin Brawler are the
     /// first spell and triggered-ability users.
@@ -1817,6 +1821,9 @@ pub struct ZoneCardFilter {
     pub required_subtypes: Vec<String>,
     #[serde(default)]
     pub excluded_subtypes: Vec<String>,
+    /// All required supertypes must match (for example, Legendary creature searches).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub required_supertypes: Vec<String>,
     /// Edgewall Inn and Seek Thrills inspect the presence of Adventure characteristics.
     #[serde(default)]
     pub has_adventure: Option<bool>,
@@ -1865,6 +1872,16 @@ impl ZoneCardFilter {
             &self.required_subtypes,
             &self.excluded_subtypes,
         )?;
+        if self
+            .required_supertypes
+            .iter()
+            .any(|supertype| supertype.trim().is_empty())
+        {
+            return Err("zone card filter supertype names must not be empty".into());
+        }
+        if super::targeting::has_duplicates(&self.required_supertypes) {
+            return Err("zone card filter cannot repeat a supertype predicate".into());
+        }
         if super::targeting::has_duplicates(&self.excluded_card_types) {
             return Err("zone card filter has a duplicate excluded card type".into());
         }

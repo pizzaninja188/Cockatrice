@@ -1161,6 +1161,29 @@ fn zone_card_filters_validate_leaf_and_recursive_or_shapes() {
 }
 
 #[test]
+fn zone_card_filter_required_supertypes_must_be_nonempty_and_unique() {
+    let empty = ZoneCardFilter {
+        card_type: Some(CardTypeFilter::Creature),
+        required_supertypes: vec![String::new()],
+        ..Default::default()
+    };
+    assert_eq!(
+        empty.validate(),
+        Err("zone card filter supertype names must not be empty".into())
+    );
+
+    let duplicate = ZoneCardFilter {
+        card_type: Some(CardTypeFilter::Creature),
+        required_supertypes: vec!["Legendary".into(), "Legendary".into()],
+        ..Default::default()
+    };
+    assert_eq!(
+        duplicate.validate(),
+        Err("zone card filter cannot repeat a supertype predicate".into())
+    );
+}
+
+#[test]
 fn graveyard_card_cost_requires_a_positive_bounded_filtered_cohort() {
     let namesake = ZoneCardFilter {
         exact_name: Some("Say Its Name".into()),

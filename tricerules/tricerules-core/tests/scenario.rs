@@ -290,6 +290,8 @@ mod issue_264_generated_activated_abilities;
 mod issue_265_generated_modal_spells;
 #[path = "scenario/issue_266_generated_permanent_triggers.rs"]
 mod issue_266_generated_permanent_triggers;
+#[path = "scenario/issue_267_generated_static_templates.rs"]
+mod issue_267_generated_static_templates;
 #[path = "scenario/issue_270_generated_utility_permanents.rs"]
 mod issue_270_generated_utility_permanents;
 #[path = "scenario/issue_57_targeting_costs.rs"]

@@ -537,6 +537,7 @@ fn parse_rules_text(
     source_is_vehicle: bool,
     source_is_aura: bool,
     source_is_equipment: bool,
+    source_is_enchantment: bool,
 ) -> Result<ParsedRules, RulesParseError> {
     let mut parsed = ParsedRules::default();
     let external_lines = external_oracle_lines(oracle_text);
@@ -556,6 +557,7 @@ fn parse_rules_text(
         source_is_vehicle,
         source_is_aura,
         source_is_equipment,
+        source_is_enchantment,
     };
     if is_spell {
         if let Some(assembly) =
@@ -663,6 +665,7 @@ fn parse_rules_text(
             source_is_vehicle,
             source_is_aura,
             source_is_equipment,
+            source_is_enchantment,
         };
         let matched = match_clause(clause, is_spell, &context)
             .map_err(RulesParseError::Ambiguous)?
@@ -1419,7 +1422,7 @@ fn parse_optional_power_toughness(face: &Value) -> Result<(Option<u32>, Option<u
     }
 }
 
-fn parse_multiface_face(face: &Value) -> Result<GenFace, EvaluationError> {
+fn parse_multiface_face(face: &Value, layout: GenLayout) -> Result<GenFace, EvaluationError> {
     let name = face
         .get("name")
         .and_then(Value::as_str)
@@ -1446,6 +1449,9 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, EvaluationError> {
     let is_vehicle = subtypes.iter().any(|subtype| subtype == "Vehicle");
     let is_aura = subtypes.iter().any(|subtype| subtype == "Aura");
     let is_equipment = subtypes.iter().any(|subtype| subtype == "Equipment");
+    let is_enchantment = card_types
+        .iter()
+        .any(|card_type| card_type == "Enchantment");
     let mut types = card_types;
     types.extend(subtypes);
 
@@ -1471,18 +1477,28 @@ fn parse_multiface_face(face: &Value) -> Result<GenFace, EvaluationError> {
         is_vehicle,
         is_aura,
         is_equipment,
+        is_enchantment,
     )
     .map_err(|error| EvaluationError::rules_text(error, Skip::FaceText))?;
     add_intrinsic_land_mana_ability(&mut rules, &types, oracle_text)
         .map_err(|error| EvaluationError::rules_text(error, Skip::FaceText))?;
 
-    let source_colors = face
-        .get("colors")
-        .ok_or(Skip::FaceColors)
-        .and_then(parse_color_array)?;
     let color_indicator = match face.get("color_indicator") {
         None | Some(Value::Null) => None,
         Some(value) => Some(parse_color_array(value)?),
+    };
+    // Scryfall omits the per-face `colors` field for Adventure faces (the card-level
+    // colors field is still present). In that layout, the face's derived colors are
+    // authoritative when no explicit indicator overrides them. Preserve strict
+    // validation for an explicitly supplied field and only fill this source-data
+    // omission from the parsed mana cost/indicator. Other multiface layouts must
+    // continue to fail closed when their face colors are absent.
+    let source_colors = match face.get("colors") {
+        Some(value) => parse_color_array(value)?,
+        None if layout == GenLayout::Adventure => color_indicator
+            .clone()
+            .unwrap_or_else(|| parsed_mana.colors()),
+        None => return Err(Skip::FaceColors.into()),
     };
     let derived_colors = color_indicator
         .clone()
@@ -1520,6 +1536,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     let is_vehicle = subtypes.iter().any(|value| value == "Vehicle");
     let is_aura = subtypes.iter().any(|value| value == "Aura");
     let is_equipment = subtypes.iter().any(|value| value == "Equipment");
+    let is_enchantment = card_types.iter().any(|value| value == "Enchantment");
     let is_spell = card_types
         .iter()
         .any(|value| matches!(value.as_str(), "Instant" | "Sorcery"));
@@ -1546,6 +1563,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
         is_vehicle,
         is_aura,
         is_equipment,
+        is_enchantment,
     )
     .map_err(|error| EvaluationError::rules_text(error, Skip::NonKeywordText))?;
     if !is_creature && !is_spell && rules.recipe_labels.is_empty() {
@@ -1592,7 +1610,7 @@ fn evaluate_multiface(card: &Value, layout: GenLayout) -> Result<GenCard, Evalua
         .filter(|faces| faces.len() == 2)
         .ok_or(Skip::MalformedFaces)?
         .iter()
-        .map(parse_multiface_face)
+        .map(|face| parse_multiface_face(face, layout))
         .collect::<Result<Vec<_>, _>>()?;
     let name = card
         .get("name")
@@ -4582,6 +4600,119 @@ mod tests {
         assert_eq!(raw.faces[0].colors(), vec![Color::Red, Color::White]);
         assert_eq!(raw.faces[1].color_indicator, Some(vec![Color::Red]));
         assert_eq!(raw.faces[1].colors(), vec![Color::Red]);
+    }
+
+    #[test]
+    fn issue_267_adventure_faces_compose_only_the_reviewed_templates() {
+        let ratcatcher = multiface(
+            "adventure",
+            "Ratcatcher Trainee // Pest Problem",
+            vec![
+                face(
+                    "Ratcatcher Trainee",
+                    "{1}{R}",
+                    "Creature — Human Peasant",
+                    "During your turn, this creature has first strike.",
+                    Some(("2", "2")),
+                    &["R"],
+                    None,
+                ),
+                face(
+                    "Pest Problem",
+                    "{2}{R}",
+                    "Instant — Adventure",
+                    "Create two 1/1 black Rat creature tokens with \"This token can't block.\"",
+                    None,
+                    &["R"],
+                    None,
+                ),
+            ],
+        );
+        // The pinned Scryfall oracle bulk omits `colors` on Adventure faces; the
+        // generator must derive those colors from the mana cost without relaxing
+        // explicit color validation for other multiface layouts.
+        let mut ratcatcher_without_face_colors = ratcatcher.clone();
+        for face in ratcatcher_without_face_colors["card_faces"]
+            .as_array_mut()
+            .expect("synthetic Adventure faces")
+        {
+            face.as_object_mut()
+                .expect("synthetic face object")
+                .remove("colors");
+        }
+        let generated = evaluate_fresh(&ratcatcher_without_face_colors)
+            .expect("Ratcatcher faces should qualify without redundant face colors");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.layout, Layout::Adventure);
+        assert!(raw.faces[0].static_abilities.iter().any(|ability| matches!(
+            ability.definition,
+            StaticAbilityDef::ConditionalSelfModifier { .. }
+        )));
+        assert!(matches!(
+            raw.faces[1].spell_effect.as_slice(),
+            [SpellEffectKind::CreateTokens {
+                token,
+                count: Amount::Fixed(2),
+                ..
+            }] if token == "rat_b_1_1_cant_block"
+        ));
+
+        let arkenstone = multiface(
+            "adventure",
+            "The Arkenstone // Seek the Heart",
+            vec![
+                face(
+                    "The Arkenstone",
+                    "{5}",
+                    "Legendary Artifact",
+                    "Creatures you control get +1/+1.\nAt the beginning of your end step, draw a card.",
+                    None,
+                    &[],
+                    None,
+                ),
+                face(
+                    "Seek the Heart",
+                    "{2}{W}",
+                    "Sorcery — Adventure",
+                    "Search your library for a legendary creature card, reveal it, put it into your hand, then shuffle.",
+                    None,
+                    &["W"],
+                    None,
+                ),
+            ],
+        );
+        let generated = evaluate_fresh(&arkenstone).expect("Arkenstone faces should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.layout, Layout::Adventure);
+        assert_eq!(raw.faces[0].static_abilities.len(), 1);
+        assert_eq!(raw.faces[0].triggered_abilities.len(), 1);
+        assert!(matches!(
+            raw.faces[1].spell_effect.as_slice(),
+            [SpellEffectKind::SearchLibrary {
+                filter: Some(filter),
+                destination: tricerules_cards::primitives::SearchDestination::Hand,
+                shuffle: true,
+                reveal: true,
+                ..
+            }] if filter.card_type == Some(CardTypeFilter::Creature)
+                && filter.required_supertypes == ["Legendary"]
+        ));
+
+        let mut non_adventure_without_face_colors = arkenstone.clone();
+        non_adventure_without_face_colors["layout"] = json!("modal_dfc");
+        for face in non_adventure_without_face_colors["card_faces"]
+            .as_array_mut()
+            .expect("synthetic non-Adventure faces")
+        {
+            face.as_object_mut()
+                .expect("synthetic face object")
+                .remove("colors");
+        }
+        assert_eq!(
+            evaluate_fresh(&non_adventure_without_face_colors),
+            Err(Skip::FaceColors.into()),
+            "missing colors must remain unsupported outside Adventure"
+        );
     }
 
     #[test]
