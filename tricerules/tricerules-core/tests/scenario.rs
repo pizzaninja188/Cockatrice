@@ -278,6 +278,8 @@ mod issue_256_generated_triggers;
 mod issue_259_generated_creature_etbs;
 #[path = "scenario/issue_260_generated_creature_triggers.rs"]
 mod issue_260_generated_creature_triggers;
+#[path = "scenario/issue_262_generated_combat_tricks.rs"]
+mod issue_262_generated_combat_tricks;
 #[path = "scenario/issue_265_generated_modal_spells.rs"]
 mod issue_265_generated_modal_spells;
 #[path = "scenario/issue_57_targeting_costs.rs"]

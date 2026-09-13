@@ -84,6 +84,7 @@ pub(super) struct RecipeContext {
 pub(super) enum RecipeEmission {
     Keywords(Vec<Keyword>),
     SpellEffect(SpellEffectKind),
+    SpellEffects(Vec<SpellEffectKind>),
     TriggeredAbility(TriggeredAbilityDef),
     ActivatedAbility(ActivatedAbilityDef),
     StaticAbility(IdentifiedAbility<StaticAbilityDef>),
@@ -270,6 +271,112 @@ fn match_spell_pump(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
         scale: None,
         subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
     }))
+}
+
+fn chosen_creature(controller: TargetController) -> EffectSubject {
+    EffectSubject::Chosen(Box::new(TargetFilter {
+        kind: TargetKind::Creature,
+        controller,
+        ..TargetFilter::default()
+    }))
+}
+
+fn combat_trick(
+    controller: TargetController,
+    power: i32,
+    toughness: i32,
+    keywords: &[Keyword],
+    untap: bool,
+) -> RecipeEmission {
+    let mut effects = vec![SpellEffectKind::PumpTarget {
+        power,
+        toughness,
+        scale: None,
+        subject: chosen_creature(controller),
+    }];
+    effects.push(SpellEffectKind::GrantKeywords {
+        subject: chosen_creature(controller),
+        keywords: keywords.to_vec(),
+    });
+    if untap {
+        effects.push(SpellEffectKind::Untap {
+            subject: chosen_creature(controller),
+        });
+    }
+    RecipeEmission::SpellEffects(effects)
+}
+
+fn match_spell_pump_three_grant_trample(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Target creature gets +3/+3 and gains trample until end of turn.")
+        .then(|| combat_trick(TargetController::Any, 3, 3, &[Keyword::Trample], false))
+}
+
+fn match_spell_controlled_creature_plus_zero_three_hexproof(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Target creature you control gets +0/+3 and gains hexproof until end of turn.")
+        .then(|| combat_trick(TargetController::You, 0, 3, &[Keyword::Hexproof], false))
+}
+
+fn match_spell_controlled_creature_plus_one_one_hexproof_untap(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text
+        == "Target creature you control gets +1/+1 and gains hexproof until end of turn. Untap it.")
+        .then(|| combat_trick(TargetController::You, 1, 1, &[Keyword::Hexproof], true))
+}
+
+fn match_spell_creature_plus_one_three_reach_untap(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Target creature gets +1/+3 and gains reach until end of turn. Untap it.")
+        .then(|| combat_trick(TargetController::Any, 1, 3, &[Keyword::Reach], true))
+}
+
+fn match_spell_creature_minus_three_three(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Target creature gets -3/-3 until end of turn.").then(|| {
+        RecipeEmission::SpellEffects(vec![SpellEffectKind::PumpTarget {
+            power: -3,
+            toughness: -3,
+            scale: None,
+            subject: chosen_creature(TargetController::Any),
+        }])
+    })
+}
+
+fn match_spell_creature_deathtouch_indestructible(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Target creature gains deathtouch and indestructible until end of turn.").then(|| {
+        RecipeEmission::SpellEffects(vec![SpellEffectKind::GrantKeywords {
+            subject: chosen_creature(TargetController::Any),
+            keywords: vec![Keyword::Deathtouch, Keyword::Indestructible],
+        }])
+    })
+}
+
+fn match_spell_creature_plus_three_zero_then_draw(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Target creature gets +3/+0 until end of turn.\nDraw a card.").then(|| {
+        RecipeEmission::SpellEffects(vec![
+            SpellEffectKind::PumpTarget {
+                power: 3,
+                toughness: 0,
+                scale: None,
+                subject: chosen_creature(TargetController::Any),
+            },
+            SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            },
+        ])
+    })
 }
 
 fn modal_targeting(prompt: &str, effect_index: u32) -> Option<TargetingDef> {
@@ -1519,6 +1626,104 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Titanic Growth" => "Target creature gets +4/+4 until end of turn.";
             "Target creature gets +X/+X until end of turn.",
             "Up to one target creature gets +3/+3 until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump_grant.creature.plus_3_plus_3.trample"),
+        label: "creature +3/+3 and trample",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_pump_three_grant_trample,
+        calibration: calibrations!(
+            "Blitzball Shot" => "Target creature gets +3/+3 and gains trample until end of turn.",
+            "Fanatical Strength" => "Target creature gets +3/+3 and gains trample until end of turn.";
+            "Target creature gets +2/+2 and gains trample until end of turn.",
+            "Target creature you control gets +3/+3 and gains trample until end of turn.",
+            "Up to one target creature gets +3/+3 and gains trample until end of turn.",
+            "Target creature gets +3/+3 and gains trample until end of turn. Untap it."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump_grant.creature_you_control.plus_0_plus_3.hexproof"),
+        label: "controlled creature +0/+3 and hexproof",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_controlled_creature_plus_zero_three_hexproof,
+        calibration: calibrations!(
+            "Chase Inspiration" => "Target creature you control gets +0/+3 and gains hexproof until end of turn.",
+            "Dive Down" => "Target creature you control gets +0/+3 and gains hexproof until end of turn.";
+            "Target creature gets +0/+3 and gains hexproof until end of turn.",
+            "Target creature you control gets +1/+3 and gains hexproof until end of turn.",
+            "Target creature you control gets +0/+3 and gains ward {2} until end of turn.",
+            "Target creature you control gets +0/+3 and gains hexproof until end of turn. Untap it."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump_grant_untap.creature_you_control.plus_1_plus_1.hexproof"),
+        label: "controlled creature +1/+1 hexproof and untap",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_controlled_creature_plus_one_one_hexproof_untap,
+        calibration: calibrations!(
+            "Magic Damper" => "Target creature you control gets +1/+1 and gains hexproof until end of turn. Untap it.",
+            "Shore Up" => "Target creature you control gets +1/+1 and gains hexproof until end of turn. Untap it.";
+            "Target creature gets +1/+1 and gains hexproof until end of turn. Untap it.",
+            "Target creature you control gets +1/+2 and gains hexproof until end of turn. Untap it.",
+            "Target creature you control gets +1/+1 and gains hexproof until end of turn.",
+            "Untap target creature you control. It gets +1/+1 and gains hexproof until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump_grant_untap.creature.plus_1_plus_3.reach"),
+        label: "creature +1/+3 reach and untap",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_creature_plus_one_three_reach_untap,
+        calibration: calibrations!(
+            "High Stride" => "Target creature gets +1/+3 and gains reach until end of turn. Untap it.",
+            "Leaping Ambush" => "Target creature gets +1/+3 and gains reach until end of turn. Untap it.";
+            "Target creature you control gets +1/+3 and gains reach until end of turn. Untap it.",
+            "Target creature gets +1/+2 and gains reach until end of turn. Untap it.",
+            "Target creature gets +1/+3 and gains flying until end of turn. Untap it.",
+            "Target creature gets +1/+3 and gains reach until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump.creature.minus_3_minus_3"),
+        label: "creature -3/-3",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_creature_minus_three_three,
+        calibration: calibrations!(
+            "Last Gasp" => "Target creature gets -3/-3 until end of turn.",
+            "Scorpion's Sting" => "Target creature gets -3/-3 until end of turn.";
+            "Target creature gets -2/-2 until end of turn.",
+            "Target creature you control gets -3/-3 until end of turn.",
+            "Up to one target creature gets -3/-3 until end of turn.",
+            "Target creature gets -3/-3 until end of turn. You gain 3 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.grant.creature.deathtouch_indestructible"),
+        label: "creature deathtouch and indestructible",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_creature_deathtouch_indestructible,
+        calibration: calibrations!(
+            "Horrid Vigor" => "Target creature gains deathtouch and indestructible until end of turn.",
+            "Offer Immortality" => "Target creature gains deathtouch and indestructible until end of turn.";
+            "Target creature you control gains deathtouch and indestructible until end of turn.",
+            "Target creature gains indestructible and deathtouch until end of turn.",
+            "Target creature gains deathtouch and hexproof until end of turn.",
+            "Target creature gains deathtouch and indestructible until end of turn. Untap it."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump_then_draw.creature.plus_3_plus_0"),
+        label: "creature +3/+0 then draw",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_creature_plus_three_zero_then_draw,
+        calibration: calibrations!(
+            "Rebellious Strike" => "Target creature gets +3/+0 until end of turn.\nDraw a card.",
+            "Sugar Rush" => "Target creature gets +3/+0 until end of turn.\nDraw a card.";
+            "Target creature gets +3/+0 until end of turn. Draw a card.",
+            "Target creature you control gets +3/+0 until end of turn.\nDraw a card.",
+            "Target creature gets +2/+0 until end of turn.\nDraw a card.",
+            "Draw a card.\nTarget creature gets +3/+0 until end of turn."
         ),
     },
     Recipe {
@@ -3433,5 +3638,46 @@ mod tests {
                 optional: false,
             }]
         );
+    }
+
+    #[test]
+    fn issue_262_combat_trick_templates_have_stable_exact_recipe_ids() {
+        let cases = [
+            (
+                "Target creature gets +3/+3 and gains trample until end of turn.",
+                "spell.pump_grant.creature.plus_3_plus_3.trample",
+            ),
+            (
+                "Target creature you control gets +0/+3 and gains hexproof until end of turn.",
+                "spell.pump_grant.creature_you_control.plus_0_plus_3.hexproof",
+            ),
+            (
+                "Target creature you control gets +1/+1 and gains hexproof until end of turn. Untap it.",
+                "spell.pump_grant_untap.creature_you_control.plus_1_plus_1.hexproof",
+            ),
+            (
+                "Target creature gets +1/+3 and gains reach until end of turn. Untap it.",
+                "spell.pump_grant_untap.creature.plus_1_plus_3.reach",
+            ),
+            (
+                "Target creature gets -3/-3 until end of turn.",
+                "spell.pump.creature.minus_3_minus_3",
+            ),
+            (
+                "Target creature gains deathtouch and indestructible until end of turn.",
+                "spell.grant.creature.deathtouch_indestructible",
+            ),
+            (
+                "Target creature gets +3/+0 until end of turn.\nDraw a card.",
+                "spell.pump_then_draw.creature.plus_3_plus_0",
+            ),
+        ];
+
+        for (clause, expected_id) in cases {
+            let matched = match_clause(clause, true, &context())
+                .expect("issue #262 clause must not be ambiguous")
+                .unwrap_or_else(|| panic!("issue #262 clause must be supported: {clause}"));
+            assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+        }
     }
 }

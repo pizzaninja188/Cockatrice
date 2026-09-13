@@ -28,7 +28,8 @@ use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tricerules_cards::primitives::{
-    EffectSubject, EntersTappedAffected, EntryCost, PlayerRecipient, StaticAbilityDef, TargetFilter,
+    EffectSubject, EntersTappedAffected, EntryCost, PlayerRecipient, StaticAbilityDef,
+    TargetController, TargetFilter,
 };
 use tricerules_cards::{
     external_oracle_lines, slugify, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
@@ -53,7 +54,7 @@ use recipes::{
     validate_catalog, RecipeAmbiguity, RecipeContext, RecipeEmission,
 };
 #[cfg(test)]
-use tricerules_cards::primitives::{LifeAmount, PermanentEventFilter};
+use tricerules_cards::primitives::{LifeAmount, PermanentEventFilter, TargetSchema};
 #[cfg(test)]
 use tricerules_cards::LibraryPartitionKind;
 
@@ -600,6 +601,22 @@ fn parse_rules_text(
             });
             return Ok(parsed);
         }
+        if external_lines.len() > 1 {
+            let aggregate = external_lines
+                .iter()
+                .map(|line| strip_reminder(line).trim().to_string())
+                .collect::<Vec<_>>()
+                .join("\n");
+            if let Some(matched) =
+                match_clause(&aggregate, true, &base_context).map_err(RulesParseError::Ambiguous)?
+            {
+                if let RecipeEmission::SpellEffects(effects) = matched.emission {
+                    parsed.spell_effect = effects;
+                    parsed.recipe_labels.push(matched.label);
+                    return Ok(parsed);
+                }
+            }
+        }
     }
     for (line_index, external_line) in external_lines.iter().enumerate() {
         let cleaned = strip_reminder(external_line);
@@ -654,6 +671,12 @@ fn parse_rules_text(
                     return Err(RulesParseError::Unsupported);
                 }
                 parsed.spell_effect.push(effect);
+            }
+            RecipeEmission::SpellEffects(effects) => {
+                if !parsed.spell_effect.is_empty() {
+                    return Err(RulesParseError::Unsupported);
+                }
+                parsed.spell_effect = effects;
             }
             RecipeEmission::ModalAssembly | RecipeEmission::ModalMode(_) => {
                 return Err(RulesParseError::Unsupported);
@@ -920,7 +943,59 @@ fn push_face_fields(s: &mut String, face: &GenFace, indent: &str, include_name: 
     }
 }
 
+fn render_chosen_creature_subject(subject: &EffectSubject) -> Option<&'static str> {
+    let EffectSubject::Chosen(filter) = subject else {
+        return None;
+    };
+    if **filter == TargetFilter::default_creature() {
+        return Some("Chosen((kind: Creature))");
+    }
+    (**filter
+        == TargetFilter {
+            kind: tricerules_cards::primitives::TargetKind::Creature,
+            controller: TargetController::You,
+            ..TargetFilter::default()
+        })
+    .then_some("Chosen((kind: Creature, controller: You))")
+}
+
 fn render_generated_effect(effect: &SpellEffectKind) -> String {
+    match effect {
+        SpellEffectKind::PumpTarget {
+            power,
+            toughness,
+            scale: None,
+            subject,
+        } => {
+            if let Some(rendered_subject) = render_chosen_creature_subject(subject) {
+                if rendered_subject == "Chosen((kind: Creature))" {
+                    return format!("PumpTarget(power: {power}, toughness: {toughness})");
+                }
+                return format!(
+                    "PumpTarget(power: {power}, toughness: {toughness}, subject: {rendered_subject})"
+                );
+            }
+        }
+        SpellEffectKind::GrantKeywords { subject, keywords } => {
+            if let Some(rendered_subject) = render_chosen_creature_subject(subject) {
+                let rendered_keywords = keywords
+                    .iter()
+                    .map(|keyword| format!("{keyword:?}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return format!(
+                    "GrantKeywords(subject: {rendered_subject}, keywords: [{rendered_keywords}])"
+                );
+            }
+        }
+        SpellEffectKind::Untap { subject } => {
+            if let Some(rendered_subject) = render_chosen_creature_subject(subject) {
+                return format!("Untap(subject: {rendered_subject})");
+            }
+        }
+        _ => {}
+    }
+
     match effect {
         SpellEffectKind::Draw {
             who: PlayerRecipient::Controller,
@@ -945,14 +1020,6 @@ fn render_generated_effect(effect: &SpellEffectKind) -> String {
             unless_controller_pays_by_cast_cost: None,
         } if spell_filter.is_unrestricted() => {
             "CounterTargetSpell(spell_filter: (), unless_controller_pays: None)".into()
-        }
-        SpellEffectKind::PumpTarget {
-            power,
-            toughness,
-            scale: None,
-            subject,
-        } if *subject == EffectSubject::Chosen(Box::new(TargetFilter::default_creature())) => {
-            format!("PumpTarget(power: {power}, toughness: {toughness})")
         }
         SpellEffectKind::Discard {
             who: PlayerRecipient::EachOpponent,
@@ -2662,6 +2729,181 @@ mod tests {
             let generated = evaluate_fresh(&card).expect("exact spell recipe should qualify");
             let raw = parse_generated(&generated.to_ron("fixture"));
             assert_eq!(raw.spell_effect, [expected]);
+        }
+    }
+
+    #[test]
+    fn issue_262_combat_tricks_generate_ordered_effects_with_one_shared_target() {
+        let target = |controller| {
+            EffectSubject::Chosen(Box::new(TargetFilter {
+                kind: TargetKind::Creature,
+                controller,
+                ..TargetFilter::default()
+            }))
+        };
+        let cases = [
+            (
+                normal_card(
+                    "Blitzball Shot",
+                    "{1}{G}",
+                    "Instant",
+                    "Target creature gets +3/+3 and gains trample until end of turn.",
+                    None,
+                ),
+                "creature +3/+3 and trample",
+                vec![
+                    SpellEffectKind::PumpTarget {
+                        power: 3,
+                        toughness: 3,
+                        scale: None,
+                        subject: target(TargetController::Any),
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: target(TargetController::Any),
+                        keywords: vec![Keyword::Trample],
+                    },
+                ],
+            ),
+            (
+                normal_card(
+                    "Chase Inspiration",
+                    "{U}",
+                    "Instant",
+                    "Target creature you control gets +0/+3 and gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)",
+                    None,
+                ),
+                "controlled creature +0/+3 and hexproof",
+                vec![
+                    SpellEffectKind::PumpTarget {
+                        power: 0,
+                        toughness: 3,
+                        scale: None,
+                        subject: target(TargetController::You),
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: target(TargetController::You),
+                        keywords: vec![Keyword::Hexproof],
+                    },
+                ],
+            ),
+            (
+                normal_card(
+                    "Magic Damper",
+                    "{U}",
+                    "Instant",
+                    "Target creature you control gets +1/+1 and gains hexproof until end of turn. Untap it.",
+                    None,
+                ),
+                "controlled creature +1/+1 hexproof and untap",
+                vec![
+                    SpellEffectKind::PumpTarget {
+                        power: 1,
+                        toughness: 1,
+                        scale: None,
+                        subject: target(TargetController::You),
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: target(TargetController::You),
+                        keywords: vec![Keyword::Hexproof],
+                    },
+                    SpellEffectKind::Untap {
+                        subject: target(TargetController::You),
+                    },
+                ],
+            ),
+            (
+                normal_card(
+                    "High Stride",
+                    "{G}",
+                    "Instant",
+                    "Target creature gets +1/+3 and gains reach until end of turn. Untap it.",
+                    None,
+                ),
+                "creature +1/+3 reach and untap",
+                vec![
+                    SpellEffectKind::PumpTarget {
+                        power: 1,
+                        toughness: 3,
+                        scale: None,
+                        subject: target(TargetController::Any),
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: target(TargetController::Any),
+                        keywords: vec![Keyword::Reach],
+                    },
+                    SpellEffectKind::Untap {
+                        subject: target(TargetController::Any),
+                    },
+                ],
+            ),
+            (
+                normal_card(
+                    "Last Gasp",
+                    "{1}{B}",
+                    "Instant",
+                    "Target creature gets -3/-3 until end of turn.",
+                    None,
+                ),
+                "creature -3/-3",
+                vec![SpellEffectKind::PumpTarget {
+                    power: -3,
+                    toughness: -3,
+                    scale: None,
+                    subject: target(TargetController::Any),
+                }],
+            ),
+            (
+                normal_card(
+                    "Offer Immortality",
+                    "{1}{B}",
+                    "Instant",
+                    "Target creature gains deathtouch and indestructible until end of turn. (Damage and effects that say \"destroy\" don't destroy it.)",
+                    None,
+                ),
+                "creature deathtouch and indestructible",
+                vec![SpellEffectKind::GrantKeywords {
+                    subject: target(TargetController::Any),
+                    keywords: vec![Keyword::Deathtouch, Keyword::Indestructible],
+                }],
+            ),
+            (
+                normal_card(
+                    "Rebellious Strike",
+                    "{1}{W}",
+                    "Instant",
+                    "Target creature gets +3/+0 until end of turn.\nDraw a card.",
+                    None,
+                ),
+                "creature +3/+0 then draw",
+                vec![
+                    SpellEffectKind::PumpTarget {
+                        power: 3,
+                        toughness: 0,
+                        scale: None,
+                        subject: target(TargetController::Any),
+                    },
+                    SpellEffectKind::Draw {
+                        who: PlayerRecipient::Controller,
+                        count: Amount::Fixed(1),
+                    },
+                ],
+            ),
+        ];
+
+        for (card, expected_label, expected_effects) in cases {
+            let name = str_field(&card, "name").to_string();
+            let generated = evaluate_fresh(&card)
+                .unwrap_or_else(|error| panic!("{name} should generate: {error:?}"));
+            assert_eq!(generated.faces[0].recipe_labels, [expected_label]);
+            let ron = generated.to_ron("fixture");
+            assert!(!ron.contains("any_of:None"), "{name}");
+            let raw = parse_generated(&ron);
+            assert_eq!(raw.spell_effect, expected_effects, "{name}");
+
+            let schema = TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref())
+                .unwrap_or_else(|error| panic!("{name} target schema: {error}"));
+            assert_eq!(schema.groups.len(), 1, "{name}");
+            assert_eq!((schema.groups[0].min, schema.groups[0].max), (1, 1));
         }
     }
 
