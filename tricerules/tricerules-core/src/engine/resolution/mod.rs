@@ -13,7 +13,10 @@ use super::targeting::{
     TargetSourceIdentity,
 };
 use super::*;
-use tricerules_cards::primitives::{ManaRetention, TargetRole, TargetingDef};
+use tricerules_cards::primitives::{
+    ManaRetention, ResolutionBranchRequirement, TargetRole, TargetingDef,
+};
+use tricerules_cards::{AbilityPresentation, ChoiceId};
 
 mod choices;
 pub(super) use choices::resolution_branch_is_live;
@@ -1281,7 +1284,31 @@ impl GameEngine {
                 top.triggered_ability
                     .as_ref()
                     .or_else(|| face.and_then(|f| f.triggered_abilities.get(ability_index)))
-                    .map(|a| a.effect.clone())
+                    .map(|ability| {
+                        if ability.may
+                            && !target_schema(&ability.effect, ability.targeting.as_ref())
+                                .has_targets()
+                            && ability.modal.is_none()
+                        {
+                            vec![SpellEffectKind::ChooseResolutionBranch {
+                                chooser: PlayerRecipient::Controller,
+                                optional: true,
+                                selection: Default::default(),
+                                branches: vec![ResolutionBranchDef {
+                                    branch_id: ChoiceId::new("apply_optional_effect")
+                                        .expect("static resolution branch id"),
+                                    presentation: AbilityPresentation::Fallback,
+                                    runtime_fallback: Some("Apply optional effect".into()),
+                                    cost: ResolutionCost::None,
+                                    requirement: ResolutionBranchRequirement::EffectsApplicable,
+                                    effects: ability.effect.clone(),
+                                }],
+                                otherwise: Vec::new(),
+                            }]
+                        } else {
+                            ability.effect.clone()
+                        }
+                    })
             } else {
                 top.activated_ability
                     .as_ref()

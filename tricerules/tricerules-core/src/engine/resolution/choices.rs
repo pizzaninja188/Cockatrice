@@ -10,9 +10,9 @@ use crate::state::{
     StagedTrigger, StagedTriggerGroup, TriggerContext, TriggerObjectRef,
 };
 use tricerules_cards::primitives::{
-    PermanentChoiceConstraint, PlayerRecipient, ResolutionBranchDef, ResolutionBranchRequirement,
-    ResolutionBranchSelection, ResolutionCost, SpellEffectKind, TargetController, TargetFilter,
-    TargetKind, TriggerCondition, TriggeredAbilityDef,
+    Amount, PermanentChoiceConstraint, PlayerRecipient, ResolutionBranchDef,
+    ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SpellEffectKind,
+    TargetController, TargetFilter, TargetKind, TriggerCondition, TriggeredAbilityDef,
 };
 
 fn permanent_choice_prompt(filter: &TargetFilter, min: u32, max: u32) -> String {
@@ -435,6 +435,15 @@ pub(in crate::engine) fn resolution_branch_is_live(
                 SpellEffectKind::PutCounters { subject, .. } => {
                     super::pump_counters::can_put_counters(engine, top, &[], subject)
                 }
+                SpellEffectKind::Mill {
+                    count: Amount::Fixed(count),
+                    who: PlayerRecipient::Controller,
+                } => engine
+                    .state
+                    .player_idx(top.controller)
+                    .is_some_and(|index| {
+                        engine.state.players[index].library.len() >= *count as usize
+                    }),
                 _ => true,
             })
         }

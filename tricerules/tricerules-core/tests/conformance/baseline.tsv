@@ -104,6 +104,7 @@ asgardian_citadel	0	land	exercised
 ashcoat_bear	0	cast	exercised
 assault_griffin	0	cast	exercised
 assault_zeppelid	0	cast	exercised
+atlantean_cavalry	0	cast	exercised
 audacious_thief	0	cast	exercised
 avacynian_priest	0	ability:0	exercised
 avacynian_priest	0	cast	exercised
@@ -215,6 +216,7 @@ blooming_marsh	0	land	exercised
 blossombind	0	cast	exercised
 blossoming_sands	0	ability:0	exercised
 blossoming_sands	0	land	exercised
+boar-q-pine	0	cast	exercised
 bog_imp	0	cast	exercised
 boggart_brute	0	cast	exercised
 boggart_prankster	0	cast	exercised
@@ -455,6 +457,7 @@ cyclops_of_one-eyed_pass	0	cast	exercised
 cylian_elf	0	cast	exercised
 daggerback_basilisk	0	cast	exercised
 daggerdrome_imp	0	cast	exercised
+daggerfang_duo	0	cast	exercised
 daggermaw_megalodon	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 daggermaw_megalodon	0	cast	exercised
 daggersail_aeronaut	0	cast	exercised
@@ -483,6 +486,7 @@ deadly_insect	0	cast	exercised
 deadly_recluse	0	cast	exercised
 deathcap_glade	0	ability:0	exercised
 deathcap_glade	0	land	exercised
+deathcap_marionette	0	cast	exercised
 deathgaze_cockatrice	0	cast	exercised
 decode_transmissions	0	cast	exercised
 deep_goblin_skulltaker	0	cast	exercised
@@ -622,6 +626,7 @@ eviscerate	0	cast	exercised
 evolving_wilds	0	ability:0	exercised
 evolving_wilds	0	land	exercised
 exclusion_mage	0	cast	exercised
+exosuit_savior	0	cast	exercised
 expedition_envoy	0	cast	exercised
 exploration	0	cast	exercised
 explosive_apparatus	0	ability:0	exercised
@@ -944,6 +949,7 @@ hengegate_pathway_mistgate_pathway	0	ability:0	exercised
 hengegate_pathway_mistgate_pathway	0	land	exercised
 hengegate_pathway_mistgate_pathway	1	ability:0	exercised
 hengegate_pathway_mistgate_pathway	1	land	exercised
+herald_of_faith	0	cast	exercised
 herald_of_secret_streams	0	cast	exercised
 hercules,_prince_of_power	0	ability:0	exercised
 hercules,_prince_of_power	0	cast	exercised
@@ -1147,6 +1153,7 @@ kyoshi_village	0	land	exercised
 kyoshi_warrior_guard	0	cast	exercised
 kyoshi_warriors	0	cast	exercised
 lagac_lizard	0	cast	exercised
+lakeshore_apothecary	0	cast	exercised
 lakeside_shack	0	ability:0	exercised
 lakeside_shack	0	land	exercised
 land_leeches	0	cast	exercised
@@ -1283,9 +1290,11 @@ mind_control	0	cast	exercised
 mind_rot	0	cast	exercised
 mind_sculpt	0	cast	exercised
 mind_transfer_protocol	0	cast	exercised
+mineshaft_spider	0	cast	exercised
 minotaur_abomination	0	cast	exercised
 minotaur_aggressor	0	cast	exercised
 minotaur_warrior	0	cast	exercised
+mischievous_pup	0	cast	exercised
 mischievous_sneakling	0	cast	exercised
 misshapen_fiend	0	cast	exercised
 mist_leopard	0	cast	exercised
@@ -1335,6 +1344,7 @@ mutagenic_growth	0	cast	exercised
 mutant_town	0	ability:0	exercised
 mutant_town	0	land	exercised
 mutant_town_musicians	0	cast	exercised
+mysterios_phantasm	0	cast	exercised
 mystic_monastery	0	ability:0	exercised
 mystic_monastery	0	land	exercised
 mystical_tutor	0	cast	exercised
@@ -1705,6 +1715,7 @@ scorpions_sting	0	cast	exercised
 scoured_barrens	0	ability:0	exercised
 scoured_barrens	0	land	exercised
 scream_puff	0	cast	exercised
+screaming_phantom	0	cast	exercised
 scroll_thief	0	cast	exercised
 scrounger_of_souls	0	cast	exercised
 scrubland	0	ability:0	exercised
@@ -1755,6 +1766,7 @@ shining_aerosaur	0	cast	exercised
 shock	0	cast	exercised
 shock_brigade	0	cast	exercised
 shoot_the_sheriff	0	cast	exercised
+shopkeepers_bane	0	cast	exercised
 shore_lurker	0	cast	exercised
 shore_up	0	cast	exercised
 shorecomber_crab	0	cast	exercised
@@ -1905,6 +1917,7 @@ steer_clear	0	cast	unsupported: target group 0 needs a richer fixture
 sterling_hound	0	cast	exercised
 steward_of_valeron	0	ability:0	exercised
 steward_of_valeron	0	cast	exercised
+stickytongue_sentinel	0	cast	exercised
 stir_up_trouble	0	cast	unsupported: required cast-cost group needs a specialized fixture
 stomped_by_the_foot	0	cast	exercised
 stomper_cub	0	cast	exercised
@@ -1999,6 +2012,7 @@ tcri_building	0	land	exercised
 teapot_slinger	0	cast	exercised
 teferis_protege	0	ability:0	exercised
 teferis_protege	0	cast	exercised
+tempest_angler	0	cast	exercised
 tempest_drake	0	cast	exercised
 tempest_hawk	0	cast	exercised
 temple_garden	0	ability:0	exercised

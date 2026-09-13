@@ -5,7 +5,7 @@ use tricerules_cards::primitives::{
     PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient,
     RelativePlayerSet, ResolutionCost, SearchDestination, SearchZoneSelection, SpellCastFilter,
     StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
-    TargetingDef, TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
+    TargetObjectExclusion, TargetingDef, TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
@@ -1109,6 +1109,143 @@ fn match_self_combat_damage_create_food(
         "Whenever this creature deals combat damage to a player, create a Food token.",
         TriggerCondition::WheneverSelfDealsCombatDamageToPlayer,
         "food",
+    )
+}
+
+fn match_etb_return_other_controlled_permanent_up_to_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == "When this creature enters, return up to one other target permanent you control to its owner's hand.")
+        .then(|| {
+            let target = TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                controller: TargetController::You,
+                excluded_objects: vec![TargetObjectExclusion::Source],
+                ..TargetFilter::default()
+            };
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability(
+                context,
+                SpellEffectKind::ReturnToOwnersHand {
+                    subject: EffectSubject::Chosen(Box::new(target)),
+                },
+            ) else {
+                unreachable!("triggered_ability always returns a triggered ability")
+            };
+            ability.targeting = Some(TargetingDef {
+                groups: vec![TargetGroupDef {
+                    min: 0,
+                    max: 1,
+                    prompt: "Choose up to one other target permanent you control".into(),
+                    effect_indices: vec![0],
+                    distinct_from: Vec::new(),
+                    same_graveyard: false,
+                    cast_cost_expansion: None,
+                }],
+            });
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
+fn match_etb_mill_two_may(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == "When this creature enters, you may mill two cards.")
+        .then(|| {
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability(
+                context,
+                SpellEffectKind::Mill {
+                    count: Amount::Fixed(2),
+                    who: PlayerRecipient::Controller,
+                },
+            ) else {
+                unreachable!("triggered_ability always returns a triggered ability")
+            };
+            ability.may = true;
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
+fn match_controller_casts_noncreature_put_counter(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text == "Whenever you cast a noncreature spell, put a +1/+1 counter on this creature.")
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverPlayerCastsSpell {
+                    caster: CastTriggerPlayer::Controller,
+                    filter: SpellCastFilter {
+                        card_type: Some(CardTypeFilter::Noncreature),
+                        ..SpellCastFilter::default()
+                    },
+                    ordinal: None,
+                    ordinal_scope: Default::default(),
+                },
+                vec![SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Source,
+                }],
+            )
+        })
+}
+
+fn match_controller_draws_second_put_counter(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == "Whenever you draw your second card each turn, put a +1/+1 counter on this creature.")
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverPlayerDrawsNthCard {
+                    drawer: CastTriggerPlayer::Controller,
+                    ordinal: 2,
+                },
+                vec![SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Source,
+                }],
+            )
+        })
+}
+
+fn match_self_attacks_gain_two(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == "Whenever this creature attacks, you gain 2 life.").then(
+        || {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                },
+                vec![SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(2),
+                }],
+            )
+        },
+    )
+}
+
+fn match_self_attacks_mill_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == "Whenever this creature attacks, mill a card.").then(
+        || {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                },
+                vec![SpellEffectKind::Mill {
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                }],
+            )
+        },
     )
 }
 
@@ -2428,7 +2565,7 @@ pub(super) static CATALOG: &[Recipe] = &[
         calibration: calibrations!(
             "Venomized Cat" => "When this creature enters, mill two cards.",
             "Scarblade Scout" => "When this creature enters, mill two cards.";
-            "When this creature enters, you may mill two cards.",
+            "When this creature enters, you may mill up to two cards.",
             "When this creature enters, mill three cards.",
             "When this creature enters, target player mills two cards.",
             "When this creature enters, each player mills two cards.",
@@ -2470,6 +2607,118 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Whenever this creature deals damage to a player, create a Food token.",
             "Whenever another creature deals combat damage to a player, create a Food token.",
             "Whenever this creature deals combat damage to a player, create a Food token, then draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.return_to_hand.other_permanent_you_control.up_to_one"),
+        label: "ETB return up to one other controlled permanent",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_return_other_controlled_permanent_up_to_one,
+        calibration: calibrations!(
+            "Exosuit Savior" => "When this creature enters, return up to one other target permanent you control to its owner's hand.",
+            "Mischievous Pup" => "When this creature enters, return up to one other target permanent you control to its owner's hand.";
+            "When this creature enters, you may return up to one other target permanent you control to its owner's hand.",
+            "When this creature enters, return one other target permanent you control to its owner's hand.",
+            "When this creature enters, return up to two other target permanents you control to their owners' hands.",
+            "When this creature enters, return up to one target permanent you control to its owner's hand.",
+            "When this creature enters, return up to one other target creature you control to its owner's hand.",
+            "When this creature enters, return up to one other target permanent to its owner's hand.",
+            "When this creature enters, return up to one other target permanent an opponent controls to its owner's hand.",
+            "Whenever another creature enters, return up to one other target permanent you control to its owner's hand.",
+            "When this creature enters, return up to one other target permanent you control to its owner's hand, then draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.mill.controller.two.may"),
+        label: "ETB may mill two",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_mill_two_may,
+        calibration: calibrations!(
+            "Daggerfang Duo" => "When this creature enters, you may mill two cards.",
+            "Deathcap Marionette" => "When this creature enters, you may mill two cards.";
+            "When this creature enters, you may mill up to two cards.",
+            "When this creature enters, you may mill a card.",
+            "When this creature enters, you may mill three cards.",
+            "When this creature enters, target player may mill two cards.",
+            "When this creature enters, each player may mill two cards.",
+            "Whenever another creature enters, you may mill two cards.",
+            "When this creature enters, you may mill two cards, then return a card from your graveyard to your hand."
+        ),
+    },
+    Recipe {
+        id: RecipeId(
+            "triggered.controller_casts.noncreature.put_counter.plus_one_plus_one.source.one",
+        ),
+        label: "controller casts noncreature put one counter on source",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_controller_casts_noncreature_put_counter,
+        calibration: calibrations!(
+            "Boar-q-pine" => "Whenever you cast a noncreature spell, put a +1/+1 counter on this creature.",
+            "Tempest Angler" => "Whenever you cast a noncreature spell, put a +1/+1 counter on this creature.";
+            "Whenever you cast a noncreature spell, you may put a +1/+1 counter on this creature.",
+            "Whenever you cast a creature spell, put a +1/+1 counter on this creature.",
+            "Whenever you cast an instant or sorcery spell, put a +1/+1 counter on this creature.",
+            "Whenever an opponent casts a noncreature spell, put a +1/+1 counter on this creature.",
+            "Whenever you cast your second noncreature spell each turn, put a +1/+1 counter on this creature.",
+            "Whenever you cast a noncreature spell, put two +1/+1 counters on this creature.",
+            "Whenever you cast a noncreature spell, put a +1/+1 counter on target creature.",
+            "Whenever you cast a noncreature spell, put a +1/+1 counter on this creature and scry 1."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.controller_draws.second.put_counter.plus_one_plus_one.source.one"),
+        label: "controller draws second card put one counter on source",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_controller_draws_second_put_counter,
+        calibration: calibrations!(
+            "Atlantean Cavalry" => "Whenever you draw your second card each turn, put a +1/+1 counter on this creature.",
+            "Lakeshore Apothecary" => "Whenever you draw your second card each turn, put a +1/+1 counter on this creature.";
+            "Whenever you draw your second card each turn, you may put a +1/+1 counter on this creature.",
+            "Whenever you draw your first card each turn, put a +1/+1 counter on this creature.",
+            "Whenever you draw your third card each turn, put a +1/+1 counter on this creature.",
+            "Whenever a player draws their second card each turn, put a +1/+1 counter on this creature.",
+            "Whenever an opponent draws their second card each turn, put a +1/+1 counter on this creature.",
+            "Whenever you draw your second card each turn, put two +1/+1 counters on this creature.",
+            "Whenever you draw your second card each turn, put a +1/+1 counter on target creature.",
+            "Whenever you draw your second card each turn, if this creature is tapped, put a +1/+1 counter on it.",
+            "Whenever you draw your second card each turn, put a +1/+1 counter on this creature, then scry 1."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.self_attacks.gain_life.controller.two"),
+        label: "self attacks gain two life",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_attacks_gain_two,
+        calibration: calibrations!(
+            "Herald of Faith" => "Whenever this creature attacks, you gain 2 life.",
+            "Shopkeeper's Bane" => "Whenever this creature attacks, you gain 2 life.";
+            "Whenever this creature attacks, you may gain 2 life.",
+            "Whenever this creature attacks, you gain 1 life.",
+            "Whenever this creature attacks, you gain 3 life.",
+            "Whenever another creature attacks, you gain 2 life.",
+            "Whenever one or more creatures you control attack, you gain 2 life.",
+            "Whenever this creature attacks with another creature, you gain 2 life.",
+            "Whenever this creature blocks, you gain 2 life.",
+            "Whenever this creature attacks, each player gains 2 life.",
+            "Whenever this creature attacks, you gain 2 life and draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.self_attacks.mill.controller.one"),
+        label: "self attacks mill one",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_attacks_mill_one,
+        calibration: calibrations!(
+            "Mysterio's Phantasm" => "Whenever this creature attacks, mill a card.",
+            "Screaming Phantom" => "Whenever this creature attacks, mill a card.";
+            "Whenever this creature attacks, you may mill a card.",
+            "Whenever this creature attacks, mill two cards.",
+            "Whenever this creature attacks, target player mills a card.",
+            "Whenever this creature attacks, each player mills a card.",
+            "Whenever another creature attacks, mill a card.",
+            "Whenever one or more creatures you control attack, mill a card.",
+            "Whenever this creature becomes blocked, mill a card.",
+            "Whenever this creature attacks, mill a card, then draw a card."
         ),
     },
     Recipe {
@@ -3790,6 +4039,152 @@ mod tests {
         assert_eq!(targeting.groups.len(), 1);
         assert_eq!((targeting.groups[0].min, targeting.groups[0].max), (1, 1));
         assert_eq!(targeting.groups[0].effect_indices, [0]);
+    }
+
+    #[test]
+    fn issue_263_creature_trigger_clauses_emit_exact_typed_abilities() {
+        let cases = [
+            (
+                "When this creature enters, return up to one other target permanent you control to its owner's hand.",
+                "etb.return_to_hand.other_permanent_you_control.up_to_one",
+            ),
+            (
+                "When this creature enters, you may mill two cards.",
+                "etb.mill.controller.two.may",
+            ),
+            (
+                "Whenever you cast a noncreature spell, put a +1/+1 counter on this creature.",
+                "triggered.controller_casts.noncreature.put_counter.plus_one_plus_one.source.one",
+            ),
+            (
+                "Whenever you draw your second card each turn, put a +1/+1 counter on this creature.",
+                "triggered.controller_draws.second.put_counter.plus_one_plus_one.source.one",
+            ),
+            (
+                "Whenever this creature attacks, you gain 2 life.",
+                "triggered.self_attacks.gain_life.controller.two",
+            ),
+            (
+                "Whenever this creature attacks, mill a card.",
+                "triggered.self_attacks.mill.controller.one",
+            ),
+        ];
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        for (clause, _) in cases {
+            assert!(
+                match_clause(clause, false, &noncreature).unwrap().is_none(),
+                "issue #263 creature recipe must reject a noncreature source: {clause}"
+            );
+        }
+
+        let abilities = cases.map(|(clause, expected_id)| {
+            let matched = match_clause(clause, false, &context())
+                .expect("issue #263 clause must not be ambiguous")
+                .unwrap_or_else(|| panic!("issue #263 clause must be supported: {clause}"));
+            assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("issue #263 recipe must emit a triggered ability: {clause}");
+            };
+            assert_eq!(ability.ability_id.as_str(), "triggered_01");
+            assert_eq!(
+                ability.presentation,
+                AbilityPresentation::OracleLines(vec![1])
+            );
+            ability
+        });
+
+        assert_eq!(
+            abilities[0].trigger,
+            TriggerCondition::WhenSelfEntersBattlefield
+        );
+        assert!(!abilities[0].may);
+        assert_eq!(
+            abilities[0].effect,
+            [SpellEffectKind::ReturnToOwnersHand {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    controller: TargetController::You,
+                    excluded_objects: vec![TargetObjectExclusion::Source],
+                    ..TargetFilter::default()
+                })),
+            }]
+        );
+        let target_group = &abilities[0]
+            .targeting
+            .as_ref()
+            .expect("optional bounce targeting")
+            .groups[0];
+        assert_eq!((target_group.min, target_group.max), (0, 1));
+        assert_eq!(target_group.effect_indices, [0]);
+
+        assert_eq!(
+            abilities[1].trigger,
+            TriggerCondition::WhenSelfEntersBattlefield
+        );
+        assert!(abilities[1].may);
+        assert_eq!(
+            abilities[1].effect,
+            [SpellEffectKind::Mill {
+                count: Amount::Fixed(2),
+                who: PlayerRecipient::Controller,
+            }]
+        );
+
+        assert_eq!(
+            abilities[2].trigger,
+            TriggerCondition::WheneverPlayerCastsSpell {
+                caster: CastTriggerPlayer::Controller,
+                filter: SpellCastFilter {
+                    card_type: Some(CardTypeFilter::Noncreature),
+                    ..SpellCastFilter::default()
+                },
+                ordinal: None,
+                ordinal_scope: Default::default(),
+            }
+        );
+        assert_eq!(
+            abilities[3].trigger,
+            TriggerCondition::WheneverPlayerDrawsNthCard {
+                drawer: CastTriggerPlayer::Controller,
+                ordinal: 2,
+            }
+        );
+        for ability in &abilities[2..=3] {
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Source,
+                }]
+            );
+            assert!(!ability.may);
+        }
+
+        for ability in &abilities[4..=5] {
+            assert_eq!(
+                ability.trigger,
+                TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                }
+            );
+            assert!(!ability.may);
+        }
+        assert_eq!(
+            abilities[4].effect,
+            [SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2),
+            }]
+        );
+        assert_eq!(
+            abilities[5].effect,
+            [SpellEffectKind::Mill {
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+            }]
+        );
     }
 
     #[test]
