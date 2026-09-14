@@ -302,6 +302,8 @@ mod issue_277_affinity_artifacts;
 mod issue_278_raid_etb_draw;
 #[path = "scenario/issue_279_landfall_damage.rs"]
 mod issue_279_landfall_damage;
+#[path = "scenario/issue_280_increment.rs"]
+mod issue_280_increment;
 #[path = "scenario/issue_282_self_tap_loot.rs"]
 mod issue_282_self_tap_loot;
 #[path = "scenario/issue_57_targeting_costs.rs"]

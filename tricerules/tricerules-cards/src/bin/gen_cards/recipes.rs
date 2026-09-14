@@ -5,9 +5,9 @@ use tricerules_cards::primitives::{
     HandCardAction, LifeAmount, ObjectContributionKind, ObjectPaymentConstraint,
     PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient,
     RelativePlayerSet, ResolutionCost, SearchDestination, SearchZoneSelection, SpellCastFilter,
-    SpellCostModifier, StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter,
-    TargetGroupDef, TargetKind, TargetMatchFilter, TargetObjectExclusion, TargetingDef,
-    TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
+    SpellCostModifier, SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef,
+    TargetController, TargetFilter, TargetGroupDef, TargetKind, TargetMatchFilter,
+    TargetObjectExclusion, TargetingDef, TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
@@ -2968,6 +2968,34 @@ fn match_prowess(text: &str, context: &RecipeContext) -> Option<RecipeEmission> 
     })
 }
 
+fn match_increment(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)")
+        .then(|| {
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+                context,
+                TriggerCondition::WheneverPlayerCastsSpell {
+                    caster: CastTriggerPlayer::Controller,
+                    filter: SpellCastFilter::default(),
+                    ordinal: None,
+                    ordinal_scope: Default::default(),
+                },
+                vec![SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Source,
+                }],
+            ) else {
+                unreachable!("triggered_ability_with always returns a triggered ability")
+            };
+            ability.intervening_if = Some(GameCondition::TriggeringSpellManaSpent {
+                comparison: SpellManaSpentComparison::GreaterThanSourcePowerOrToughness,
+            });
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
 fn match_crew(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     if !context.source_is_vehicle {
         return None;
@@ -5770,6 +5798,27 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("triggered.increment"),
+        label: "Increment",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_increment,
+        calibration: calibrations!(
+            "Cuboid Colony" => "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)",
+            "Textbook Tabulator" => "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)",
+            "Hungry Graffalon" => "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)";
+            "Increment (Whenever you cast a spell, if you spent more than four mana, put a +1/+1 counter on this creature.)",
+            "Increment (Whenever you cast a spell, if the spell's mana value is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)",
+            "Increment (Whenever you cast a spell, if the amount of mana you spent is at least this creature's power or toughness, put a +1/+1 counter on this creature.)",
+            "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power, put a +1/+1 counter on this creature.)",
+            "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's toughness, put a +1/+1 counter on this creature.)",
+            "Increment (Whenever an opponent casts a spell, if the amount of mana they spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)",
+            "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put two +1/+1 counters on this creature.)",
+            "Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.",
+            "Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature. Increment",
+            "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.) Whenever this creature attacks, draw a card."
+        ),
+    },
+    Recipe {
         id: RecipeId("activated.crew.aggregate_power"),
         label: "Crew",
         surface: RecipeSurface::ActivatedAbility,
@@ -7050,6 +7099,67 @@ mod tests {
                 "noncreature source matched {clause}"
             );
         }
+    }
+
+    #[test]
+    fn issue_280_increment_is_exact_and_source_scoped() {
+        let clause = "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)";
+        let matched = match_clause(clause, false, &context())
+            .expect("issue #280 recipe matching should not be ambiguous")
+            .expect("exact Increment clause should match");
+        assert_eq!(matched.id.as_str(), "triggered.increment");
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("issue #280 recipe must emit a triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverPlayerCastsSpell {
+                caster: CastTriggerPlayer::Controller,
+                filter: SpellCastFilter::default(),
+                ordinal: None,
+                ordinal_scope: Default::default(),
+            }
+        );
+        assert_eq!(
+            ability.intervening_if,
+            Some(GameCondition::TriggeringSpellManaSpent {
+                comparison: SpellManaSpentComparison::GreaterThanSourcePowerOrToughness,
+            })
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::PutCounters {
+                counter: CounterKind::PlusOnePlusOne,
+                count: Amount::Fixed(1),
+                subject: EffectSubject::Source,
+            }]
+        );
+
+        for near_miss in [
+            "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put two +1/+1 counters on this creature.)",
+            "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power, put a +1/+1 counter on this creature.)",
+            "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's toughness, put a +1/+1 counter on this creature.)",
+            "Increment (Whenever you cast a spell, if the amount of mana you spent is at least this creature's power or toughness, put a +1/+1 counter on this creature.)",
+            "Increment (Whenever you cast a spell, if the spell's mana value is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)",
+            "Increment (Whenever you cast a spell, if you spent more mana than this creature's power or toughness, put a +1/+1 counter on this creature.)",
+            "Increment (Whenever an opponent casts a spell, if the amount of mana they spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)",
+            "Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.",
+            "Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature. Increment",
+            "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.) Whenever this creature attacks, draw a card.",
+        ] {
+            assert!(
+                match_clause(near_miss, false, &context())
+                    .expect("near-miss matching should not be ambiguous")
+                    .is_none(),
+                "issue #280 recipe matched near-miss {near_miss}"
+            );
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(match_clause(clause, false, &noncreature)
+            .expect("source-kind matching should not be ambiguous")
+            .is_none());
     }
 
     #[test]

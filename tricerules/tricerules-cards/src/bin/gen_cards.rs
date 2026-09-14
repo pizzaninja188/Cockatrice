@@ -679,9 +679,17 @@ fn parse_rules_text(
             source_is_instant,
             source_is_sorcery,
         };
-        let matched = match_clause(clause, is_spell, &context)
+        // Most recipes operate on Oracle text with parenthetical reminder text removed. A
+        // reminder-text keyword whose definition is part of the matching contract (Increment)
+        // must be matched against the complete source line first, however; otherwise changing
+        // its reminder text would collapse a supported clause into the same bare keyword.
+        let matched = match match_clause(external_line.trim(), is_spell, &context)
             .map_err(RulesParseError::Ambiguous)?
-            .ok_or(RulesParseError::Unsupported)?;
+        {
+            Some(matched) => Some(matched),
+            None => match_clause(clause, is_spell, &context).map_err(RulesParseError::Ambiguous)?,
+        }
+        .ok_or(RulesParseError::Unsupported)?;
         let counts_as_reported_recipe = !matches!(matched.emission, RecipeEmission::Keywords(_));
         match matched.emission {
             RecipeEmission::Keywords(keywords) => {
@@ -2353,14 +2361,15 @@ mod tests {
     use std::io::{Cursor, Write};
     use tricerules_cards::card_def::RawCardDefinition;
     use tricerules_cards::primitives::{
-        CardTypeFilter, EffectSubject, EntersTappedAffected, EntryCost, ObjectContributionKind,
-        ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient, ResolutionCost,
-        SpellCastFilter, StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter,
-        TargetKind, TargetingSourceFilter, TypeLineAddition,
+        CardTypeFilter, EffectSubject, EntersTappedAffected, EntryCost, GameCondition,
+        ObjectContributionKind, ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient,
+        ResolutionCost, SpellCastFilter, SpellManaSpentComparison, StackSpellFilter,
+        StaticAbilityDef, TargetController, TargetFilter, TargetKind, TargetingSourceFilter,
+        TypeLineAddition,
     };
     use tricerules_cards::{
-        AbilityCost, Amount, CastTriggerPlayer, CharacteristicDefiningAbility, Color, Keyword,
-        Layout, SpellEffectKind, TriggerCondition,
+        AbilityCost, AbilityPresentation, Amount, CastTriggerPlayer, CharacteristicDefiningAbility,
+        Color, CounterKind, Keyword, Layout, SpellEffectKind, TriggerCondition,
     };
 
     fn face(
@@ -3674,6 +3683,169 @@ mod tests {
                 ))
                 .is_err(),
                 "{name} must remain unsupported"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_280_increment_cohort_qualifies_only_complete_cards() {
+        let increment = "Increment (Whenever you cast a spell, if the amount of mana you spent is greater than this creature's power or toughness, put a +1/+1 counter on this creature.)";
+        for (name, mana_cost, type_line, oracle_text, stats, expected_keywords, increment_line) in [
+            (
+                "Cuboid Colony",
+                "{G}{U}",
+                "Creature — Insect",
+                format!("Flash\nFlying, trample\n{increment}"),
+                Some(("1", "1")),
+                vec![Keyword::Flash, Keyword::Flying, Keyword::Trample],
+                3,
+            ),
+            (
+                "Textbook Tabulator",
+                "{2}{U}",
+                "Creature — Frog Wizard",
+                format!(
+                    "{increment}\nWhen this creature enters, surveil 2. (Look at the top two cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)"
+                ),
+                Some(("0", "3")),
+                Vec::new(),
+                1,
+            ),
+        ] {
+            let generated = evaluate_fresh(&normal_card(
+                name,
+                mana_cost,
+                type_line,
+                &oracle_text,
+                stats,
+            ))
+            .unwrap_or_else(|error| panic!("{name} should qualify: {error:?}"));
+            assert_eq!(generated.faces[0].recipe_labels[0], "Increment", "{name}");
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert_eq!(raw.mana_cost.to_string(), mana_cost, "{name}");
+            assert_eq!(raw.types, type_line.split(" — ").flat_map(|part| part.split(' ')).map(str::to_string).collect::<Vec<_>>(), "{name}");
+            assert_eq!(raw.power, stats.map(|(power, _)| power.parse().unwrap()), "{name}");
+            assert_eq!(raw.toughness, stats.map(|(_, toughness)| toughness.parse().unwrap()), "{name}");
+            assert_eq!(raw.keywords, expected_keywords, "{name}");
+
+            let increment_ability = raw
+                .triggered_abilities
+                .iter()
+                .find(|ability| ability.intervening_if.is_some())
+                .unwrap_or_else(|| panic!("{name} should emit Increment"));
+            assert_eq!(
+                increment_ability.presentation,
+                AbilityPresentation::OracleLines(vec![increment_line]),
+                "{name}"
+            );
+            assert_eq!(
+                increment_ability.trigger,
+                TriggerCondition::WheneverPlayerCastsSpell {
+                    caster: CastTriggerPlayer::Controller,
+                    filter: SpellCastFilter::default(),
+                    ordinal: None,
+                    ordinal_scope: Default::default(),
+                },
+                "{name}"
+            );
+            assert_eq!(
+                increment_ability.intervening_if,
+                Some(GameCondition::TriggeringSpellManaSpent {
+                    comparison: SpellManaSpentComparison::GreaterThanSourcePowerOrToughness,
+                }),
+                "{name}"
+            );
+            assert_eq!(
+                increment_ability.effect,
+                [SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Source,
+                }],
+                "{name}"
+            );
+
+            if name == "Textbook Tabulator" {
+                assert_eq!(generated.faces[0].recipe_labels, ["Increment", "ETB surveil 2"]);
+                let surveil = raw
+                    .triggered_abilities
+                    .iter()
+                    .find(|ability| ability.trigger == TriggerCondition::WhenSelfEntersBattlefield)
+                    .expect("Textbook Tabulator should emit its ETB ability");
+                assert_eq!(
+                    surveil.presentation,
+                    AbilityPresentation::OracleLines(vec![2])
+                );
+                assert_eq!(
+                    surveil.effect,
+                    [SpellEffectKind::LibraryPartition {
+                        count: 2,
+                        top_min: 0,
+                        top_max: None,
+                        kind: tricerules_cards::LibraryPartitionKind::Surveil,
+                    }]
+                );
+            }
+        }
+
+        for (name, mana_cost, type_line, oracle_text, stats) in [
+            (
+                "Pensive Professor",
+                "{1}{U}{U}",
+                "Creature — Human Wizard",
+                format!(
+                    "{increment}\nWhenever one or more +1/+1 counters are put on this creature, draw a card."
+                ),
+                Some(("0", "2")),
+            ),
+            (
+                "Topiary Lecturer",
+                "{2}{G}",
+                "Creature — Elf Druid",
+                format!("{increment}\n{{T}}: Add an amount of {{G}} equal to this creature's power."),
+                Some(("1", "2")),
+            ),
+            (
+                "Berta, Wise Extrapolator",
+                "{2}{G}{U}",
+                "Legendary Creature — Frog Druid",
+                format!(
+                    "{increment}\nWhenever one or more +1/+1 counters are put on Berta, add one mana of any color.\n{{X}}, {{T}}: Create a 0/0 green and blue Fractal creature token and put X +1/+1 counters on it."
+                ),
+                Some(("1", "4")),
+            ),
+            (
+                "Tester of the Tangential",
+                "{1}{U}",
+                "Creature — Djinn Wizard",
+                format!(
+                    "{increment}\nAt the beginning of combat on your turn, you may pay {{X}}. When you do, move X +1/+1 counters from this creature onto another target creature."
+                ),
+                Some(("1", "1")),
+            ),
+            (
+                "Fractal Tender",
+                "{3}{G}{U}",
+                "Creature — Elf Wizard",
+                format!(
+                    "Ward {{2}}\n{increment}\nAt the beginning of each end step, if you put a counter on this creature this turn, create a 0/0 green and blue Fractal creature token and put three +1/+1 counters on it."
+                ),
+                Some(("3", "3")),
+            ),
+            (
+                "Ambitious Augmenter",
+                "{G}",
+                "Creature — Turtle Wizard",
+                format!(
+                    "{increment}\nWhen this creature dies, if it had one or more counters on it, create a 0/0 green and blue Fractal creature token, then put this creature's counters on that token."
+                ),
+                Some(("1", "1")),
+            ),
+        ] {
+            let card = normal_card(name, mana_cost, type_line, &oracle_text, stats);
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "{name} must remain unsupported because its extra clause is not implemented"
             );
         }
     }
