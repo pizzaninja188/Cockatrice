@@ -296,6 +296,8 @@ mod issue_267_generated_static_templates;
 mod issue_269_generated_modal_spells;
 #[path = "scenario/issue_270_generated_utility_permanents.rs"]
 mod issue_270_generated_utility_permanents;
+#[path = "scenario/issue_277_affinity_artifacts.rs"]
+mod issue_277_affinity_artifacts;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]

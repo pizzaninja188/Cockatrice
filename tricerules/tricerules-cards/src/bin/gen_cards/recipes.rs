@@ -498,6 +498,25 @@ fn match_spell_tapped_creature_target_reduction_three(
         })
 }
 
+fn match_affinity_for_artifacts(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Affinity for artifacts").then(|| {
+        RecipeEmission::SpellCostModifier(SpellCostModifier::BattlefieldCountGenericReduction {
+            amount_per_match: 1,
+            filter: BattlefieldPermanentFilter {
+                token: None,
+                any_of: None,
+                controllers: RelativePlayerSet::Controller,
+                card_type: Some(CardTypeFilter::Artifact),
+                color: None,
+                name: None,
+                required_subtypes: Vec::new(),
+                exclude_source: false,
+            },
+            aggregate: BattlefieldAggregate::Count,
+        })
+    })
+}
+
 fn match_spell_surveil_two_draw_two_lose_two(
     text: &str,
     context: &RecipeContext,
@@ -3868,6 +3887,22 @@ macro_rules! singleton_calibrations {
 
 pub(super) static CATALOG: &[Recipe] = &[
     Recipe {
+        id: RecipeId("static.cost_reduction.affinity_artifacts"),
+        label: "affinity for artifacts",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_affinity_for_artifacts,
+        calibration: calibrations!(
+            "Valkyrie Aerial Unit" => "Affinity for artifacts",
+            "Memory Guardian" => "Affinity for artifacts";
+            "Affinity for creatures",
+            "Affinity for artifact",
+            "Affinity for artifacts.",
+            "Affinity for artifacts if you control an artifact",
+            "Affinity for artifacts. Draw a card.",
+            "Affinity for artifacts and flying"
+        ),
+    },
+    Recipe {
         id: RecipeId("spell.cost_reduction.target_tapped_creature.three"),
         label: "costs three less when targeting a tapped creature",
         surface: RecipeSurface::SpellClause,
@@ -6774,6 +6809,44 @@ mod tests {
         )
         .unwrap()
         .is_none());
+    }
+
+    #[test]
+    fn issue_277_affinity_for_artifacts_emits_counted_artifact_reduction() {
+        let matched = match_clause("Affinity for artifacts", false, &context())
+            .expect("affinity-for-artifacts matching should not be ambiguous")
+            .expect("issue 277 affinity-for-artifacts recipe should match");
+        assert_eq!(
+            matched.id.as_str(),
+            "static.cost_reduction.affinity_artifacts"
+        );
+        let RecipeEmission::SpellCostModifier(
+            SpellCostModifier::BattlefieldCountGenericReduction {
+                amount_per_match,
+                filter,
+                aggregate,
+            },
+        ) = matched.emission
+        else {
+            panic!("issue 277 recipe must emit a battlefield-count spell cost modifier");
+        };
+        assert_eq!(amount_per_match, 1);
+        assert_eq!(filter.controllers, RelativePlayerSet::Controller);
+        assert_eq!(filter.card_type, Some(CardTypeFilter::Artifact));
+        assert_eq!(aggregate, BattlefieldAggregate::Count);
+        for near_miss in [
+            "Affinity for creatures",
+            "Affinity for artifact",
+            "Affinity for artifacts if you control an artifact",
+            "Affinity for artifacts. Draw a card.",
+        ] {
+            assert!(
+                match_clause(near_miss, false, &context())
+                    .unwrap()
+                    .is_none(),
+                "matched near-miss: {near_miss}"
+            );
+        }
     }
 
     #[test]

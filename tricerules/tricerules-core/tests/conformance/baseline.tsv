@@ -1333,6 +1333,7 @@ melded_moxite	0	cast	exercised
 meltstriders_gear	0	ability:0	exercised
 meltstriders_gear	0	cast	exercised
 meltstriders_resolve	0	cast	exercised
+memory_guardian	0	cast	exercised
 mentor_of_the_meek	0	cast	exercised
 merchant_of_many_hats	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 merchant_of_many_hats	0	cast	exercised
@@ -2285,6 +2286,7 @@ unsummon	0	cast	exercised
 untamed_hunger	0	cast	exercised
 updraft_elemental	0	cast	exercised
 valiant_guard	0	cast	exercised
+valkyrie_aerial_unit	0	cast	exercised
 valkyrior_skyrider	0	cast	exercised
 valorous_stance	0	cast	exercised
 vampire_champion	0	cast	exercised
