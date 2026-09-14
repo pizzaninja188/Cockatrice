@@ -3466,6 +3466,55 @@ mod tests {
     }
 
     #[test]
+    fn issue_275_exact_creature_etb_rummage_cards_qualify_and_extra_text_rejects() {
+        for (name, type_line, oracle_text, pt) in [
+            (
+                "Yuyan Archers",
+                "Creature — Human Archer",
+                "Reach\nWhen this creature enters, you may discard a card. If you do, draw a card.",
+                ("3", "1"),
+            ),
+            (
+                "Discerning Peddler",
+                "Creature — Human Rogue",
+                "When this creature enters, you may discard a card. If you do, draw a card.",
+                ("2", "2"),
+            ),
+        ] {
+            evaluate_fresh(&normal_card(
+                name,
+                "{1}{R}",
+                type_line,
+                oracle_text,
+                Some(pt),
+            ))
+            .unwrap_or_else(|error| panic!("{name} should qualify: {error:?}"));
+        }
+        let rubble = normal_card(
+            "Rubble Rouser",
+            "{2}{R}",
+            "Creature — Dwarf Sorcerer",
+            "When this creature enters, you may discard a card. If you do, draw a card.\n{T}, Exile a card from your graveyard: Add {R}. When you do, this creature deals 1 damage to each opponent.",
+            Some(("1", "4")),
+        );
+        assert!(
+            evaluate_fresh(&rubble).is_err(),
+            "Rubble Rouser must remain unsupported"
+        );
+        let extra = normal_card(
+            "Nearby Variant",
+            "{1}{R}",
+            "Creature — Human Rogue",
+            "When this creature enters, you may discard a card. If you do, draw a card.\nWhen this creature enters, gain 1 life.",
+            Some(("2", "2")),
+        );
+        assert!(
+            evaluate_fresh(&extra).is_err(),
+            "unsupported extra text must reject the whole card"
+        );
+    }
+
+    #[test]
     fn issue_257_crew_rejects_nonvehicles_and_invalid_thresholds() {
         for (type_line, oracle_text) in [
             ("Artifact", "Crew 3"),

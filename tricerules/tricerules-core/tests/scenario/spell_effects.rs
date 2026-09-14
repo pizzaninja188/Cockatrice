@@ -2683,6 +2683,109 @@ fn issue_58_keldon_raider_discard_then_draws() {
 }
 
 #[test]
+fn issue_275_yuyan_archers_choice_is_controller_private_and_optional() {
+    let decks = Some(vec![
+        deck_with("mountain", &["yuyan_archers"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(30275, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    relocate_to_hand(&mut e, 0, "yuyan_archers");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 2,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "yuyan_archers");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast Yuyan Archers");
+    pass_both_players(&mut e);
+    e.apply_command(0, &pass()).expect("p0 pass on trigger");
+    let batch = e.apply_command(1, &pass()).expect("p1 pass on trigger");
+    let choice = find_resolution_choice(&batch).expect("optional discard choice");
+    assert_eq!(choice.deciding_player_id, 0);
+    assert_eq!(choice.choice_kind(), ChoiceKind::HandCards);
+    assert_eq!((choice.min, choice.max), (0, 1));
+    let hand_before = e.state.players[0].hand.clone();
+    let graveyard_before = e.state.players[0].graveyard.clone();
+    let library_before = e.state.players[0].library.len();
+    e.apply_command(0, &submit_resolution_choice(vec![]))
+        .expect("decline discard");
+    assert_eq!(e.state.players[0].library.len(), library_before);
+    assert_eq!(e.state.players[0].hand, hand_before);
+    assert_eq!(e.state.players[0].graveyard, graveyard_before);
+}
+
+#[test]
+fn issue_275_yuyan_archers_accept_discards_selected_then_draws() {
+    let decks = Some(vec![
+        deck_with("mountain", &["yuyan_archers"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(30276, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    relocate_to_hand(&mut e, 0, "yuyan_archers");
+    inject_card_into_hand(&mut e, 0, 1, "grizzly_bears");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 2,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "yuyan_archers");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast Yuyan Archers");
+    pass_both_players(&mut e);
+    e.apply_command(0, &pass()).expect("p0 pass on trigger");
+    let batch = e.apply_command(1, &pass()).expect("p1 pass on trigger");
+    let choice = find_resolution_choice(&batch).expect("optional discard choice");
+    let discarded = choice.candidate_object_ids[0];
+    let library_before = e.state.players[0].library.len();
+    e.apply_command(0, &submit_resolution_choice(vec![discarded]))
+        .expect("accept discard");
+    assert!(e.state.players[0].graveyard.contains(&discarded));
+    assert_eq!(e.state.players[0].library.len(), library_before - 1);
+}
+
+#[test]
+fn issue_275_yuyan_archers_empty_hand_cannot_pay_and_does_not_draw() {
+    let decks = Some(vec![
+        deck_with("mountain", &["yuyan_archers"]),
+        vec!["forest".into(); 20],
+    ]);
+    let mut e = GameEngine::new(30277, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    relocate_to_hand(&mut e, 0, "yuyan_archers");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            r: 2,
+            c: 2,
+            ..Default::default()
+        },
+    );
+    let idx = hand_index_for_card(&e, 0, "yuyan_archers");
+    e.apply_command(0, &cast_spell(idx, vec![]))
+        .expect("cast Yuyan Archers");
+    let emptied_hand: Vec<_> = e.state.players[0].hand.drain(..).collect();
+    e.state.players[0].library.extend(emptied_hand);
+    let library_before = e.state.players[0].library.len();
+    pass_both_players(&mut e);
+    e.apply_command(0, &pass()).expect("p0 pass on trigger");
+    let batch = e.apply_command(1, &pass()).expect("p1 pass on trigger");
+    assert!(find_resolution_choice(&batch).is_none());
+    assert_eq!(e.state.players[0].library.len(), library_before);
+}
+
+#[test]
 fn issue_58_lilianas_steward_sacrifices_and_affected_opponent_chooses() {
     let decks = Some(vec![
         deck_with("swamp", &["lilianas_steward"]),

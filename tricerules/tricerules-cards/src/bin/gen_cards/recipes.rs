@@ -2630,6 +2630,27 @@ fn match_self_attacks_optional_discard_then_draw(
         })
 }
 
+fn match_self_enters_optional_discard_then_draw(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text == "When this creature enters, you may discard a card. If you do, draw a card.")
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfEntersBattlefield,
+                vec![SpellEffectKind::DrawDiscard {
+                    who: PlayerRecipient::Controller,
+                    draw_count: 1,
+                    discard_count: 1,
+                    order: DrawDiscardOrder::DiscardThenDraw,
+                    optional: true,
+                }],
+            )
+        })
+}
+
 fn match_controller_end_step_draw_one(
     text: &str,
     context: &RecipeContext,
@@ -6103,6 +6124,24 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("triggered.self_enters.optional_discard_then_draw"),
+        label: "self enters optional discard then draw",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_enters_optional_discard_then_draw,
+        calibration: calibrations!(
+            "Yuyan Archers" => "When this creature enters, you may discard a card. If you do, draw a card.",
+            "Discerning Peddler" => "When this creature enters, you may discard a card. If you do, draw a card.",
+            "Rubble Rouser" => "When this creature enters, you may discard a card. If you do, draw a card.";
+            "Whenever this creature enters, you may discard a card. If you do, draw a card.",
+            "When this creature enters, discard a card. If you do, draw a card.",
+            "When this creature enters, you may draw a card, then discard a card.",
+            "When this creature enters, you may discard two cards. If you do, draw a card.",
+            "When this creature enters, you may discard a card. If you do, draw two cards.",
+            "When this creature enters or attacks, you may discard a card. If you do, draw a card.",
+            "When this artifact enters, you may discard a card. If you do, draw a card."
+        ),
+    },
+    Recipe {
         id: RecipeId("triggered.controller_end_step.draw.one"),
         label: "controller end step draw one",
         surface: RecipeSurface::TriggeredAbility,
@@ -6616,6 +6655,58 @@ mod tests {
         assert!(match_clause(clause, false, &non_equipment)
             .unwrap()
             .is_none());
+    }
+
+    #[test]
+    fn issue_275_self_enters_optional_discard_then_draw_is_exact() {
+        let matched = match_clause(
+            "When this creature enters, you may discard a card. If you do, draw a card.",
+            false,
+            &context(),
+        )
+        .expect("recipe matching should not be ambiguous")
+        .expect("issue 275 ETB recipe should match");
+        assert_eq!(
+            matched.id.as_str(),
+            "triggered.self_enters.optional_discard_then_draw"
+        );
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("issue 275 recipe must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::DrawDiscard {
+                who: PlayerRecipient::Controller,
+                draw_count: 1,
+                discard_count: 1,
+                order: DrawDiscardOrder::DiscardThenDraw,
+                optional: true,
+            }]
+        );
+        for near_miss in [
+            "When this creature enters, discard a card. If you do, draw a card.",
+            "When this creature enters, you may draw a card, then discard a card.",
+            "When this creature enters, you may discard two cards. If you do, draw a card.",
+            "When this creature enters, you may discard a card. If you do, draw two cards.",
+            "When this creature enters or attacks, you may discard a card. If you do, draw a card.",
+        ] {
+            assert!(
+                match_clause(near_miss, false, &context())
+                    .unwrap()
+                    .is_none(),
+                "matched {near_miss}"
+            );
+        }
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(match_clause(
+            "When this creature enters, you may discard a card. If you do, draw a card.",
+            false,
+            &noncreature,
+        )
+        .unwrap()
+        .is_none());
     }
 
     #[test]
