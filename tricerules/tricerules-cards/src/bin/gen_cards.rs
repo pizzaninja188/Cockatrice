@@ -19,7 +19,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{self, BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -1891,6 +1891,21 @@ fn generated_outputs(root: &Path) -> Result<HashMap<String, PathBuf>, String> {
     Ok(generated)
 }
 
+fn write_if_changed(path: &Path, contents: &str) -> io::Result<bool> {
+    match fs::read(path) {
+        Ok(existing) if existing == contents.as_bytes() => Ok(false),
+        Ok(_) => {
+            fs::write(path, contents)?;
+            Ok(true)
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            fs::write(path, contents)?;
+            Ok(true)
+        }
+        Err(error) => Err(error),
+    }
+}
+
 fn main() -> ExitCode {
     if let Err(error) = validate_catalog() {
         eprintln!("error: invalid exact-recipe catalog: {error}");
@@ -2271,11 +2286,14 @@ fn main() -> ExitCode {
             );
             return ExitCode::FAILURE;
         }
-        if let Err(e) = fs::write(&path, gen.to_ron(&provenance)) {
-            eprintln!("error: cannot write {}: {e}", path.display());
-            return ExitCode::FAILURE;
+        match write_if_changed(&path, &gen.to_ron(&provenance)) {
+            Ok(true) => written += 1,
+            Ok(false) => {}
+            Err(e) => {
+                eprintln!("error: cannot write {}: {e}", path.display());
+                return ExitCode::FAILURE;
+            }
         }
-        written += 1;
     }
     eprintln!(
         "Wrote {written} RON file(s) under {}.",
@@ -2288,12 +2306,15 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         }
-        if let Err(error) = fs::write(&args.presentation_registry, expected_presentation_registry) {
-            eprintln!(
-                "error: cannot write {}: {error}",
-                args.presentation_registry.display()
-            );
-            return ExitCode::FAILURE;
+        match write_if_changed(&args.presentation_registry, &expected_presentation_registry) {
+            Ok(_) => {}
+            Err(error) => {
+                eprintln!(
+                    "error: cannot write {}: {error}",
+                    args.presentation_registry.display()
+                );
+                return ExitCode::FAILURE;
+            }
         }
         eprintln!(
             "Wrote external Oracle fingerprint catalog to {}.",
@@ -2733,6 +2754,34 @@ mod tests {
             generated.to_ron("fixture"),
             "// fixture\n(\n  id: \"test_bear\",\n  name: \"Test Bear\",\n  face_id: \"test_bear\",\n  mana_cost: \"{1}{G}\",\n  types: [\"Creature\", \"Bear\"],\n  power: 2,\n  toughness: 2,\n  keywords: [Vigilance],\n)\n"
         );
+    }
+
+    #[test]
+    fn identical_generated_output_is_not_rewritten() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "tricerules-gen-cards-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("unchanged.ron");
+        fs::write(&path, "canonical\n").unwrap();
+
+        let mut permissions = fs::metadata(&path).unwrap().permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&path, permissions).unwrap();
+
+        let result = write_if_changed(&path, "canonical\n");
+
+        let mut permissions = fs::metadata(&path).unwrap().permissions();
+        permissions.set_readonly(false);
+        fs::set_permissions(&path, permissions).unwrap();
+        fs::remove_dir_all(&dir).unwrap();
+
+        assert_eq!(result.unwrap(), false);
     }
 
     #[test]
