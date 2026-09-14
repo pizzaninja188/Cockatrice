@@ -3934,6 +3934,114 @@ mod tests {
     }
 
     #[test]
+    fn issue_281_generator_preserves_shipwreck_prowess_and_exact_etb_recursion() {
+        let shipwreck = normal_card(
+            "Shipwreck Dowser",
+            "{3}{U}{U}",
+            "Creature — Merfolk Wizard",
+            "Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)\nWhen this creature enters, return target instant or sorcery card from your graveyard to your hand.",
+            Some(("3", "3")),
+        );
+        let generated = evaluate_fresh(&shipwreck).expect("Shipwreck Dowser should qualify");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            [
+                "prowess",
+                "creature ETB return target instant or sorcery card to hand"
+            ]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.triggered_abilities.len(), 2);
+        assert!(matches!(
+            raw.triggered_abilities[0].trigger,
+            TriggerCondition::WheneverPlayerCastsSpell { .. }
+        ));
+        assert_eq!(
+            raw.triggered_abilities[0].presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        let recursion = &raw.triggered_abilities[1];
+        assert_eq!(
+            recursion.presentation,
+            AbilityPresentation::OracleLines(vec![2])
+        );
+        assert_eq!(
+            recursion.trigger,
+            TriggerCondition::WhenSelfEntersBattlefield
+        );
+        assert!(!recursion.may);
+        assert!(recursion.targeting.is_none());
+        assert_eq!(
+            recursion.effect,
+            [SpellEffectKind::MoveGraveyardCards {
+                filter: tricerules_cards::primitives::GraveyardFilter {
+                    card: Some(tricerules_cards::primitives::ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::InstantOrSorcery),
+                        ..tricerules_cards::primitives::ZoneCardFilter::default()
+                    }),
+                    ..tricerules_cards::primitives::GraveyardFilter::default()
+                },
+                destination: tricerules_cards::primitives::GraveyardDestination::Hand,
+                linked_exile_id: None,
+            }]
+        );
+        let schema = TargetSchema::compile(&recursion.effect, recursion.targeting.as_ref())
+            .expect("graveyard effect should compile its implicit target schema");
+        assert_eq!(schema.groups.len(), 1);
+        assert_eq!(schema.groups[0].min, 1);
+        assert_eq!(schema.groups[0].max, 1);
+        assert_eq!(schema.groups[0].bindings.len(), 1);
+
+        let zealous = normal_card(
+            "Zealous Lorecaster",
+            "{5}{R}",
+            "Creature — Giant Sorcerer",
+            "When this creature enters, return target instant or sorcery card from your graveyard to your hand.",
+            Some(("4", "4")),
+        );
+        let generated = evaluate_fresh(&zealous).expect("Zealous Lorecaster should qualify");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["creature ETB return target instant or sorcery card to hand"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        let [recursion] = raw.triggered_abilities.as_slice() else {
+            panic!("Zealous Lorecaster should emit one triggered ability");
+        };
+        assert_eq!(
+            recursion.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(recursion.effect, raw.triggered_abilities[0].effect);
+
+        let unsupported_tail = normal_card(
+            "Issue 281 Unsupported Tail",
+            "{3}{U}{U}",
+            "Creature — Merfolk Wizard",
+            "When this creature enters, return target instant or sorcery card from your graveyard to your hand.\nWhen this creature enters, tap target creature.",
+            Some(("3", "3")),
+        );
+        assert_eq!(
+            evaluate_fresh(&unsupported_tail),
+            Err(Skip::NonKeywordText.into()),
+            "an unsupported additional ETB clause must reject the whole card"
+        );
+
+        let unsupported_same_line = normal_card(
+            "Issue 281 Unsupported Same-Line Tail",
+            "{3}{U}{U}",
+            "Creature — Merfolk Wizard",
+            "When this creature enters, return target instant or sorcery card from your graveyard to your hand, then draw a card.",
+            Some(("3", "3")),
+        );
+        assert_eq!(
+            evaluate_fresh(&unsupported_same_line),
+            Err(Skip::NonKeywordText.into()),
+            "an unsupported same-line additional instruction must reject the whole card"
+        );
+    }
+
+    #[test]
     fn etb_explore_recipe_emits_source_bound_trigger_without_targeting() {
         let card = normal_card(
             "River Herald Guide",

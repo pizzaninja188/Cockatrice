@@ -304,6 +304,8 @@ mod issue_278_raid_etb_draw;
 mod issue_279_landfall_damage;
 #[path = "scenario/issue_280_increment.rs"]
 mod issue_280_increment;
+#[path = "scenario/issue_281_generated_etb_recursion.rs"]
+mod issue_281_generated_etb_recursion;
 #[path = "scenario/issue_282_self_tap_loot.rs"]
 mod issue_282_self_tap_loot;
 #[path = "scenario/issue_57_targeting_costs.rs"]

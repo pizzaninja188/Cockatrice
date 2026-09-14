@@ -2856,6 +2856,32 @@ fn match_etb_return_creature_card_to_hand(
         .then(|| triggered_ability(context, creature_graveyard_card_to_hand_effect()))
 }
 
+fn instant_or_sorcery_graveyard_card_to_hand_effect() -> SpellEffectKind {
+    SpellEffectKind::MoveGraveyardCards {
+        filter: GraveyardFilter {
+            card: Some(ZoneCardFilter {
+                card_type: Some(CardTypeFilter::InstantOrSorcery),
+                ..ZoneCardFilter::default()
+            }),
+            ..GraveyardFilter::default()
+        },
+        destination: GraveyardDestination::Hand,
+        linked_exile_id: None,
+    }
+}
+
+fn match_etb_return_instant_or_sorcery_card_to_hand(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == "When this creature enters, return target instant or sorcery card from your graveyard to your hand.")
+        .then(|| {
+            triggered_ability(context, instant_or_sorcery_graveyard_card_to_hand_effect())
+        })
+}
+
 fn match_controller_creature_enters_damage_each_opponent(
     text: &str,
     context: &RecipeContext,
@@ -6479,6 +6505,31 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("triggered.etb.return_instant_or_sorcery_card_from_graveyard.hand"),
+        label: "creature ETB return target instant or sorcery card to hand",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_etb_return_instant_or_sorcery_card_to_hand,
+        calibration: calibrations!(
+            "Shipwreck Dowser" => "When this creature enters, return target instant or sorcery card from your graveyard to your hand.",
+            "Zealous Lorecaster" => "When this creature enters, return target instant or sorcery card from your graveyard to your hand.",
+            "Salvager of Secrets" => "When this creature enters, return target instant or sorcery card from your graveyard to your hand.";
+            "When this creature enters, return target creature card from a graveyard to your hand.",
+            "When this creature enters, return target permanent card from your graveyard to your hand.",
+            "When this creature enters, return target card from your graveyard to your hand.",
+            "When this creature enters, return target instant or sorcery card from a graveyard to your hand.",
+            "When this creature enters, return target instant or sorcery card from an opponent's graveyard to your hand.",
+            "When this creature enters, return target instant or sorcery card from your graveyard to the top of your library.",
+            "When this creature enters, return target instant or sorcery card from your graveyard to the battlefield.",
+            "When this creature enters, return target instant or sorcery card from your graveyard to exile.",
+            "When this creature enters, return up to one target instant or sorcery card from your graveyard to your hand.",
+            "When this creature enters, choose an instant or sorcery card in your graveyard, then return it to your hand.",
+            "When this creature enters, you may return target instant or sorcery card from your graveyard to your hand.",
+            "When this creature enters, return two target instant or sorcery cards from your graveyard to your hand.",
+            "When this creature enters, return target instant or sorcery card from your graveyard to your hand, then draw a card.",
+            "When this creature enters, return target instant or sorcery card from your graveyard to your hand. You gain 1 life."
+        ),
+    },
+    Recipe {
         id: RecipeId("triggered.controller_creature_enters.damage.each_opponent.one"),
         label: "controller creature enters damage each opponent one",
         surface: RecipeSurface::TriggeredAbility,
@@ -9093,6 +9144,93 @@ mod tests {
         assert!(match_clause(cases[10].0, false, &nonland)
             .expect("generic paid mana recipe must not be ambiguous")
             .is_some());
+    }
+
+    #[test]
+    fn issue_281_etb_instant_or_sorcery_return_is_exact_and_fail_closed() {
+        let clause =
+            "When this creature enters, return target instant or sorcery card from your graveyard to your hand.";
+        let matched = match_clause(clause, false, &context())
+            .expect("issue #281 clause must not be ambiguous")
+            .expect("issue #281 exact ETB recursion clause should match");
+        assert_eq!(
+            matched.id.as_str(),
+            "triggered.etb.return_instant_or_sorcery_card_from_graveyard.hand"
+        );
+        assert_eq!(
+            CATALOG
+                .iter()
+                .find(|recipe| recipe.id == matched.id)
+                .expect("issue #281 recipe is registered")
+                .surface,
+            RecipeSurface::TriggeredAbility
+        );
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("issue #281 recipe must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(!ability.may);
+        assert!(ability.targeting.is_none());
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    card: Some(ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::InstantOrSorcery),
+                        ..ZoneCardFilter::default()
+                    }),
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::Hand,
+                linked_exile_id: None,
+            }]
+        );
+
+        // The exact "your graveyard" creature filter belongs to the existing creature-card
+        // recipe, so assert this recipe rejects it directly. Catalog calibration uses the
+        // non-overlapping "a graveyard" variant below so validation remains exact-one globally.
+        let creature_near_miss =
+            "When this creature enters, return target creature card from your graveyard to your hand.";
+        assert!(
+            match_etb_return_instant_or_sorcery_card_to_hand(creature_near_miss, &context())
+                .is_none()
+        );
+        assert_eq!(
+            match_clause(creature_near_miss, false, &context())
+                .expect("existing creature recursion recipe should remain exact")
+                .expect("creature near-miss should be consumed by its existing recipe")
+                .id
+                .as_str(),
+            "triggered.etb.return_creature_card_from_graveyard.hand"
+        );
+
+        for near_miss in [
+            "When this creature enters, return target creature card from a graveyard to your hand.",
+            "When this creature enters, return target permanent card from your graveyard to your hand.",
+            "When this creature enters, return target card from your graveyard to your hand.",
+            "When this creature enters, return target instant or sorcery card from a graveyard to your hand.",
+            "When this creature enters, return target instant or sorcery card from an opponent's graveyard to your hand.",
+            "When this creature enters, return target instant or sorcery card from your graveyard to the top of your library.",
+            "When this creature enters, return target instant or sorcery card from your graveyard to the battlefield.",
+            "When this creature enters, return target instant or sorcery card from your graveyard to exile.",
+            "When this creature enters, return up to one target instant or sorcery card from your graveyard to your hand.",
+            "When this creature enters, choose an instant or sorcery card in your graveyard, then return it to your hand.",
+            "When this creature enters, you may return target instant or sorcery card from your graveyard to your hand.",
+            "When this creature enters, return two target instant or sorcery cards from your graveyard to your hand.",
+            "When this creature enters, return target instant or sorcery card from your graveyard to your hand, then draw a card.",
+            "When this creature enters, return target instant or sorcery card from your graveyard to your hand. You gain 1 life.",
+        ] {
+            assert_eq!(
+                match_clause(near_miss, false, &context()),
+                Ok(None),
+                "issue #281 recipe matched near-miss {near_miss}"
+            );
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert_eq!(match_clause(clause, false, &noncreature), Ok(None));
+        assert_eq!(match_clause(clause, true, &context()), Ok(None));
     }
 
     #[test]
