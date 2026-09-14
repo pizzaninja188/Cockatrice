@@ -413,3 +413,5 @@ mod issue_240_hand_bottom_cost;
 mod issue_241_koya;
 #[path = "scenario/issue_268_generated_one_shot_spells.rs"]
 mod issue_268_generated_one_shot_spells;
+#[path = "scenario/issue_271_generated_targeted_ordered.rs"]
+mod issue_271_generated_targeted_ordered;

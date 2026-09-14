@@ -35,7 +35,8 @@ use tricerules_cards::{
     external_oracle_lines, slugify, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
     ActivatedAbilityDef, ActivationTiming, Amount, BasicLandType, CardFaceId, CardRegistry,
     CharacteristicDefiningAbility, Color, IdentifiedAbility, Keyword, ManaAmount, ManaCost,
-    ModalDef, ModeDef, ModeId, SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
+    ModalDef, ModeDef, ModeId, SpellCostModifier, SpellEffectKind, TriggerCondition,
+    TriggeredAbilityDef,
 };
 
 #[path = "gen_cards/candidate_report.rs"]
@@ -511,6 +512,7 @@ fn strip_reminder(text: &str) -> String {
 #[derive(Debug, Default, PartialEq, Eq)]
 struct ParsedRules {
     keywords: Vec<Keyword>,
+    cost_modifiers: Vec<SpellCostModifier>,
     spell_effect: Vec<SpellEffectKind>,
     targeting: Option<TargetingDef>,
     modal_spell: Option<ModalDef>,
@@ -538,6 +540,8 @@ fn parse_rules_text(
     source_is_aura: bool,
     source_is_equipment: bool,
     source_is_enchantment: bool,
+    source_is_instant: bool,
+    source_is_sorcery: bool,
 ) -> Result<ParsedRules, RulesParseError> {
     let mut parsed = ParsedRules::default();
     let external_lines = external_oracle_lines(oracle_text);
@@ -558,6 +562,8 @@ fn parse_rules_text(
         source_is_aura,
         source_is_equipment,
         source_is_enchantment,
+        source_is_instant,
+        source_is_sorcery,
     };
     if is_spell {
         if let Some(assembly) =
@@ -670,6 +676,8 @@ fn parse_rules_text(
             source_is_aura,
             source_is_equipment,
             source_is_enchantment,
+            source_is_instant,
+            source_is_sorcery,
         };
         let matched = match_clause(clause, is_spell, &context)
             .map_err(RulesParseError::Ambiguous)?
@@ -701,6 +709,12 @@ fn parse_rules_text(
                 }
                 parsed.spell_effect = effects;
                 parsed.targeting = Some(targeting);
+            }
+            RecipeEmission::SpellCostModifier(modifier) => {
+                if !parsed.cost_modifiers.is_empty() {
+                    return Err(RulesParseError::Unsupported);
+                }
+                parsed.cost_modifiers.push(modifier);
             }
             RecipeEmission::ModalAssembly(_) | RecipeEmission::ModalMode(_) => {
                 return Err(RulesParseError::Unsupported);
@@ -850,6 +864,7 @@ struct GenFace {
     color_indicator: Option<Vec<Color>>,
     characteristic_defining_abilities: Vec<IdentifiedAbility<CharacteristicDefiningAbility>>,
     keywords: Vec<Keyword>,
+    cost_modifiers: Vec<SpellCostModifier>,
     spell_effect: Vec<SpellEffectKind>,
     targeting: Option<TargetingDef>,
     modal_spell: Option<ModalDef>,
@@ -922,6 +937,17 @@ fn push_face_fields(s: &mut String, face: &GenFace, indent: &str, include_name: 
             .collect::<Vec<_>>()
             .join(", ");
         s.push_str(&format!("{indent}keywords: [{}],\n", keywords));
+    }
+    if !face.cost_modifiers.is_empty() {
+        s.push_str(&format!(
+            "{indent}cost_modifiers: [{}],\n",
+            face.cost_modifiers
+                .iter()
+                .map(|modifier| ron::ser::to_string(modifier)
+                    .expect("generated spell cost modifier should serialize"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
     }
     if !face.spell_effect.is_empty() {
         s.push_str(&format!(
@@ -1482,6 +1508,8 @@ fn parse_multiface_face(face: &Value, layout: GenLayout) -> Result<GenFace, Eval
         is_aura,
         is_equipment,
         is_enchantment,
+        types.iter().any(|card_type| card_type == "Instant"),
+        types.iter().any(|card_type| card_type == "Sorcery"),
     )
     .map_err(|error| EvaluationError::rules_text(error, Skip::FaceText))?;
     add_intrinsic_land_mana_ability(&mut rules, &types, oracle_text)
@@ -1522,6 +1550,7 @@ fn parse_multiface_face(face: &Value, layout: GenLayout) -> Result<GenFace, Eval
         color_indicator,
         characteristic_defining_abilities: rules.characteristic_defining_abilities,
         keywords: rules.keywords,
+        cost_modifiers: rules.cost_modifiers,
         spell_effect: rules.spell_effect,
         targeting: rules.targeting,
         modal_spell: rules.modal_spell,
@@ -1568,6 +1597,8 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
         is_aura,
         is_equipment,
         is_enchantment,
+        card_types.iter().any(|card_type| card_type == "Instant"),
+        card_types.iter().any(|card_type| card_type == "Sorcery"),
     )
     .map_err(|error| EvaluationError::rules_text(error, Skip::NonKeywordText))?;
     if !is_creature && !is_spell && rules.recipe_labels.is_empty() {
@@ -1596,6 +1627,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
             color_indicator: None,
             characteristic_defining_abilities: rules.characteristic_defining_abilities,
             keywords: rules.keywords,
+            cost_modifiers: rules.cost_modifiers,
             spell_effect: rules.spell_effect,
             targeting: rules.targeting,
             modal_spell: rules.modal_spell,

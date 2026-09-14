@@ -37,6 +37,7 @@ airship_engine_room	0	ability:0	exercised
 airship_engine_room	0	ability:1	exercised
 airship_engine_room	0	land	exercised
 ajanis_pridemate	0	cast	exercised
+ajanis_response	0	cast	exercised
 ajanis_sunstriker	0	cast	exercised
 akki_lavarunner_tok-tok,_volcano_born	0	cast	exercised
 akki_lavarunner_tok-tok,_volcano_born	1	cast	intentional: face unavailable from hand
@@ -147,6 +148,7 @@ balduvian_bears	0	cast	exercised
 baleful_strix	0	cast	exercised
 bane_alley_blackguard	0	cast	exercised
 banehound	0	cast	exercised
+banishing_betrayal	0	cast	exercised
 banishing_light	0	cast	exercised
 barbarian_horde	0	cast	exercised
 barbary_apes	0	cast	exercised
@@ -541,6 +543,7 @@ dimension_x	0	land	exercised
 dimir_guildgate	0	ability:0	exercised
 dimir_guildgate	0	land	exercised
 diregraf_ghoul	0	cast	exercised
+diresight	0	cast	exercised
 dirgur_island_dragon_skimming_strike	0	cast	exercised
 dirgur_island_dragon_skimming_strike	1	cast	exercised
 disdainful_stroke	0	cast	unsupported: target group 0 needs a richer fixture
@@ -929,6 +932,7 @@ gristle_glutton	0	cast	exercised
 grizzled_leotau	0	cast	exercised
 grizzled_outrider	0	cast	exercised
 grizzly_bears	0	cast	exercised
+grounded_for_life	0	cast	exercised
 grow_from_the_ashes	0	cast	exercised
 growth_cycle	0	cast	exercised
 gruul_guildgate	0	ability:0	exercised
@@ -1238,6 +1242,7 @@ lightshield_parry	0	cast	exercised
 lilianas_specter	0	cast	exercised
 lilianas_steward	0	ability:0	exercised
 lilianas_steward	0	cast	exercised
+liminal_hold	0	cast	exercised
 liquimetal_coating	0	ability:0	exercised
 liquimetal_coating	0	cast	exercised
 living_phone	0	cast	exercised
@@ -1558,6 +1563,7 @@ portcullis_vine	0	ability:0	exercised
 portcullis_vine	0	cast	exercised
 pouncing_cheetah	0	cast	exercised
 prakhata_club_security	0	cast	exercised
+prayer_of_binding	0	cast	exercised
 preordain	0	cast	exercised
 pretending_poxbearers	0	cast	exercised
 prey_upon	0	cast	exercised
@@ -1596,10 +1602,12 @@ qilins_blessing	0	cast	exercised
 quakestrider_ceratops	0	cast	exercised
 quaketusk_boar	0	cast	exercised
 quandrix_charm	0	cast	exercised
+quarrel	0	cast	exercised
 queens_bay_soldier	0	cast	exercised
 quick-draw_katana	0	ability:0	exercised
 quick-draw_katana	0	cast	exercised
 quick_study	0	cast	exercised
+quicksand_whirlpool	0	cast	exercised
 quicksilver,_pietro_maximoff	0	cast	exercised
 quill-blade_laureate_twofold_intent	0	cast	exercised
 quill-blade_laureate_twofold_intent	1	cast	intentional: face unavailable from hand
@@ -1686,6 +1694,7 @@ rip-clan_crasher	0	cast	exercised
 ripscale_predator	0	cast	exercised
 riptide_turtle	0	cast	exercised
 risen_sanctuary	0	cast	exercised
+risky_research	0	cast	exercised
 river_boa	0	ability:0	exercised
 river_boa	0	cast	exercised
 river_herald_guide	0	cast	exercised
@@ -1700,6 +1709,7 @@ riverpyre_verge	0	ability:1	exercised
 riverpyre_verge	0	land	exercised
 riverwalk_technique	0	cast	exercised
 roc_hunter	0	cast	exercised
+rocky_rebuke	0	cast	exercised
 rooftop_assassin	0	cast	exercised
 rooftop_percher	0	cast	exercised
 rootrider_faun	0	ability:0	exercised
@@ -2233,6 +2243,7 @@ ukud_cobra	0	cast	exercised
 ultron_drone	0	ability:0	exercised
 ultron_drone	0	cast	exercised
 unable_to_scream	0	cast	exercised
+unauthorized_exit	0	cast	exercised
 unburied_earthcarver	0	ability:0	exercised
 unburied_earthcarver	0	cast	exercised
 uncharted_voyage	0	cast	exercised

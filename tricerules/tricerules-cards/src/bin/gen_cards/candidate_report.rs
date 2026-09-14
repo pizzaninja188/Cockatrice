@@ -194,6 +194,8 @@ fn exact_recipe_matches_one_clause(
     source_is_aura: bool,
     source_is_equipment: bool,
     source_is_enchantment: bool,
+    source_is_instant: bool,
+    source_is_sorcery: bool,
 ) -> bool {
     let Ok(parsed) = parse_rules_text(
         source_name,
@@ -206,10 +208,15 @@ fn exact_recipe_matches_one_clause(
         source_is_aura,
         source_is_equipment,
         source_is_enchantment,
+        source_is_instant,
+        source_is_sorcery,
     ) else {
         return false;
     };
-    !is_spell || !parsed.spell_effect.is_empty() || parsed.modal_spell.is_some()
+    !is_spell
+        || !parsed.spell_effect.is_empty()
+        || !parsed.cost_modifiers.is_empty()
+        || parsed.modal_spell.is_some()
 }
 
 fn optional_string(card: &Value, field: &str) -> Option<String> {
@@ -259,6 +266,8 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
         let source_is_enchantment = card_types
             .iter()
             .any(|card_type| card_type == "Enchantment");
+        let source_is_instant = card_types.iter().any(|card_type| card_type == "Instant");
+        let source_is_sorcery = card_types.iter().any(|card_type| card_type == "Sorcery");
         let oracle_text = str_field(face.value, "oracle_text");
         let face_matches = parse_rules_text(
             face.name,
@@ -271,9 +280,14 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
             source_is_aura,
             source_is_equipment,
             source_is_enchantment,
+            source_is_instant,
+            source_is_sorcery,
         )
         .is_ok_and(|parsed| {
-            !is_spell || !parsed.spell_effect.is_empty() || parsed.modal_spell.is_some()
+            !is_spell
+                || !parsed.spell_effect.is_empty()
+                || !parsed.cost_modifiers.is_empty()
+                || parsed.modal_spell.is_some()
         });
         if face_matches {
             continue;
@@ -295,6 +309,8 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
                     source_is_aura,
                     source_is_equipment,
                     source_is_enchantment,
+                    source_is_instant,
+                    source_is_sorcery,
                 ))
                 .then_some((index, clause))
             })

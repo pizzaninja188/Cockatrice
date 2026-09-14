@@ -5,8 +5,9 @@ use tricerules_cards::primitives::{
     HandCardAction, LifeAmount, ObjectContributionKind, ObjectPaymentConstraint,
     PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient,
     RelativePlayerSet, ResolutionCost, SearchDestination, SearchZoneSelection, SpellCastFilter,
-    StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
-    TargetObjectExclusion, TargetingDef, TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
+    SpellCostModifier, StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter,
+    TargetGroupDef, TargetKind, TargetMatchFilter, TargetObjectExclusion, TargetingDef,
+    TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
@@ -89,6 +90,8 @@ pub(super) struct RecipeContext {
     pub(super) source_is_aura: bool,
     pub(super) source_is_equipment: bool,
     pub(super) source_is_enchantment: bool,
+    pub(super) source_is_instant: bool,
+    pub(super) source_is_sorcery: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -100,6 +103,7 @@ pub(super) enum RecipeEmission {
         effects: Vec<SpellEffectKind>,
         targeting: TargetingDef,
     },
+    SpellCostModifier(SpellCostModifier),
     TriggeredAbility(TriggeredAbilityDef),
     TriggeredAbilities(Vec<TriggeredAbilityDef>),
     ActivatedAbility(ActivatedAbilityDef),
@@ -474,6 +478,138 @@ fn match_spell_controlled_creature_plus_one_then_power_damage(
             },
         }
     })
+}
+
+fn match_spell_tapped_creature_target_reduction_three(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_instant
+        && text == "This spell costs {3} less to cast if it targets a tapped creature.")
+        .then(|| {
+            RecipeEmission::SpellCostModifier(SpellCostModifier::TargetMatchGenericReduction {
+                amount: 3,
+                filter: TargetMatchFilter::Battlefield(TargetFilter {
+                    kind: TargetKind::Creature,
+                    tapped: Some(true),
+                    ..TargetFilter::default()
+                }),
+            })
+        })
+}
+
+fn match_spell_surveil_two_draw_two_lose_two(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_sorcery && text == "Surveil 2, then draw two cards. You lose 2 life.").then(
+        || {
+            RecipeEmission::SpellEffects(vec![
+                SpellEffectKind::LibraryPartition {
+                    count: 2,
+                    top_min: 0,
+                    top_max: None,
+                    kind: LibraryPartitionKind::Surveil,
+                },
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(2),
+                },
+                SpellEffectKind::LoseLife {
+                    amount: LifeAmount::Fixed(2),
+                    who: PlayerRecipient::Controller,
+                },
+            ])
+        },
+    )
+}
+
+fn match_spell_return_nonland_then_surveil_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_instant
+        && text == "Return target nonland permanent to its owner's hand. Surveil 1.")
+        .then(|| {
+            let target = TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                excluded_permanent_types: vec![PermanentTypeFilter::Land],
+                ..TargetFilter::default()
+            };
+            RecipeEmission::SpellEffectsWithTargeting {
+                effects: vec![
+                    SpellEffectKind::ReturnToOwnersHand {
+                        subject: EffectSubject::Chosen(Box::new(target)),
+                    },
+                    SpellEffectKind::LibraryPartition {
+                        count: 1,
+                        top_min: 0,
+                        top_max: None,
+                        kind: LibraryPartitionKind::Surveil,
+                    },
+                ],
+                targeting: TargetingDef {
+                    groups: vec![TargetGroupDef {
+                        min: 1,
+                        max: 1,
+                        prompt: "Choose target nonland permanent".into(),
+                        effect_indices: vec![0],
+                        distinct_from: Vec::new(),
+                        same_graveyard: false,
+                        cast_cost_expansion: None,
+                    }],
+                },
+            }
+        })
+}
+
+fn match_spell_controlled_creature_power_damage(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_instant
+        && text
+            == "Target creature you control deals damage equal to its power to target creature an opponent controls.")
+        .then(|| {
+            let source = TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..TargetFilter::default()
+            };
+            let target = TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::Opponent,
+                ..TargetFilter::default()
+            };
+            RecipeEmission::SpellEffectsWithTargeting {
+                effects: vec![SpellEffectKind::CreatureDealsDamageEqualToPower {
+                    source,
+                    target,
+                }],
+                targeting: TargetingDef {
+                    groups: vec![
+                        TargetGroupDef {
+                            min: 1,
+                            max: 1,
+                            prompt: "Choose target creature you control".into(),
+                            effect_indices: vec![0],
+                            distinct_from: Vec::new(),
+                            same_graveyard: false,
+                            cast_cost_expansion: None,
+                        },
+                        TargetGroupDef {
+                            min: 1,
+                            max: 1,
+                            prompt: "Choose target creature an opponent controls".into(),
+                            effect_indices: vec![0],
+                            distinct_from: Vec::new(),
+                            same_graveyard: false,
+                            cast_cost_expansion: None,
+                        },
+                    ],
+                },
+            }
+        })
 }
 
 fn match_spell_return_graveyard_card_to_hand(
@@ -1911,6 +2047,49 @@ fn match_etb_surveil_two(text: &str, context: &RecipeContext) -> Option<RecipeEm
             },
         )
     })
+}
+
+fn match_enchantment_etb_optional_linked_exile_gain_two(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_enchantment
+        && text
+            == "When this enchantment enters, exile up to one target nonland permanent an opponent controls until this enchantment leaves the battlefield. You gain 2 life.")
+        .then(|| {
+            let target = TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                controller: TargetController::Opponent,
+                excluded_permanent_types: vec![PermanentTypeFilter::Land],
+                ..TargetFilter::default()
+            };
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfEntersBattlefield,
+                vec![
+                    SpellEffectKind::ExileUntilSourceLeaves {
+                        target: target.clone(),
+                    },
+                    SpellEffectKind::GainLife {
+                        amount: Amount::Fixed(2),
+                    },
+                ],
+            ) else {
+                unreachable!("triggered_ability_with always returns a triggered ability")
+            };
+            ability.targeting = Some(TargetingDef {
+                groups: vec![TargetGroupDef {
+                    min: 0,
+                    max: 1,
+                    prompt: "Choose up to one target nonland permanent an opponent controls".into(),
+                    effect_indices: vec![0],
+                    distinct_from: Vec::new(),
+                    same_graveyard: false,
+                    cast_cost_expansion: None,
+                }],
+            });
+            RecipeEmission::TriggeredAbility(ability)
+        })
 }
 
 fn match_creature_trigger_create_token(
@@ -3505,6 +3684,83 @@ macro_rules! singleton_calibrations {
 }
 
 pub(super) static CATALOG: &[Recipe] = &[
+    Recipe {
+        id: RecipeId("spell.cost_reduction.target_tapped_creature.three"),
+        label: "costs three less when targeting a tapped creature",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_tapped_creature_target_reduction_three,
+        calibration: calibrations!(
+            "Quicksand Whirlpool" => "This spell costs {3} less to cast if it targets a tapped creature.",
+            "Grounded for Life" => "This spell costs {3} less to cast if it targets a tapped creature.";
+            "This spell costs {3} less to cast if it targets an untapped creature.",
+            "This spell costs {2} less to cast if it targets a tapped creature.",
+            "This spell costs {3} less to cast if it targets a tapped permanent.",
+            "This spell costs {3} less to cast if it targets a tapped creature. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId(
+            "etb.enchantment.exile_opponent_nonland_up_to_one_until_source_leaves.gain_life_two",
+        ),
+        label: "optional linked exile of opposing nonland then gain two life",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_enchantment_etb_optional_linked_exile_gain_two,
+        calibration: calibrations!(
+            "Liminal Hold" => "When this enchantment enters, exile up to one target nonland permanent an opponent controls until this enchantment leaves the battlefield. You gain 2 life.",
+            "Prayer of Binding" => "When this enchantment enters, exile up to one target nonland permanent an opponent controls until this enchantment leaves the battlefield. You gain 2 life.";
+            "When this enchantment enters, exile target nonland permanent an opponent controls until this enchantment leaves the battlefield. You gain 2 life.",
+            "When this enchantment enters, exile up to one target permanent an opponent controls until this enchantment leaves the battlefield. You gain 2 life.",
+            "When this enchantment enters, exile up to one target nonland permanent until this enchantment leaves the battlefield. You gain 2 life.",
+            "When this enchantment enters, exile up to one target nonland permanent an opponent controls until this enchantment leaves the battlefield. You gain 3 life.",
+            "When this enchantment enters, you gain 2 life. Exile up to one target nonland permanent an opponent controls until this enchantment leaves the battlefield."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.surveil_two.draw_two.lose_two"),
+        label: "Surveil two then draw two and lose two life",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_surveil_two_draw_two_lose_two,
+        calibration: calibrations!(
+            "Risky Research" => "Surveil 2, then draw two cards. You lose 2 life.",
+            "Diresight" => "Surveil 2, then draw two cards. You lose 2 life.";
+            "Scry 2, then draw two cards. You lose 2 life.",
+            "Surveil 1, then draw two cards. You lose 2 life.",
+            "Surveil 2, then draw a card. You lose 2 life.",
+            "Draw two cards, then surveil 2. You lose 2 life.",
+            "Surveil 2, then draw two cards.",
+            "Surveil 2, then draw two cards. You lose 1 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.return_nonland_permanent_then_surveil_one"),
+        label: "return target nonland permanent then Surveil one",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_return_nonland_then_surveil_one,
+        calibration: calibrations!(
+            "Unauthorized Exit" => "Return target nonland permanent to its owner's hand. Surveil 1.",
+            "Banishing Betrayal" => "Return target nonland permanent to its owner's hand. Surveil 1.";
+            "Return target creature to its owner's hand. Surveil 1.",
+            "Return target permanent to its owner's hand. Surveil 1.",
+            "Surveil 1. Return target nonland permanent to its owner's hand.",
+            "Return target nonland permanent to its owner's hand. Surveil 2.",
+            "Return up to one target nonland permanent to its owner's hand. Surveil 1."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.damage.creature.equal_power.controlled_to_opponent"),
+        label: "controlled creature power damage to opposing creature",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_controlled_creature_power_damage,
+        calibration: calibrations!(
+            "Quarrel" => "Target creature you control deals damage equal to its power to target creature an opponent controls.",
+            "Rocky Rebuke" => "Target creature you control deals damage equal to its power to target creature an opponent controls.";
+            "Target creature fights target creature an opponent controls.",
+            "Target creature you control deals damage equal to its toughness to target creature an opponent controls.",
+            "Target creature deals damage equal to its power to target creature an opponent controls.",
+            "Target creature you control deals damage equal to its power to target creature.",
+            "Target creature you control deals damage equal to its power to up to one target creature an opponent controls."
+        ),
+    },
     Recipe {
         id: RecipeId("keyword.supported_set"),
         label: "supported keyword clause",
@@ -6001,6 +6257,8 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
             source_is_aura: true,
             source_is_equipment: true,
             source_is_enchantment: true,
+            source_is_instant: true,
+            source_is_sorcery: true,
         })
     };
     let mut ids = std::collections::BTreeSet::new();
@@ -6140,6 +6398,8 @@ mod tests {
             source_is_aura: true,
             source_is_equipment: true,
             source_is_enchantment: true,
+            source_is_instant: true,
+            source_is_sorcery: true,
         }
     }
 
@@ -7414,6 +7674,91 @@ mod tests {
                 .unwrap_or_else(|| panic!("issue #268 clause must be supported: {clause}"));
             assert_eq!(matched.id.as_str(), expected_id, "{clause}");
         }
+    }
+
+    #[test]
+    fn issue_271_templates_have_stable_exact_recipe_ids() {
+        validate_catalog().expect("issue #271 calibrations and near-misses must remain exact");
+        let spell_cases = [
+            (
+                "This spell costs {3} less to cast if it targets a tapped creature.",
+                "spell.cost_reduction.target_tapped_creature.three",
+            ),
+            (
+                "Surveil 2, then draw two cards. You lose 2 life.",
+                "spell.surveil_two.draw_two.lose_two",
+            ),
+            (
+                "Return target nonland permanent to its owner's hand. Surveil 1.",
+                "spell.return_nonland_permanent_then_surveil_one",
+            ),
+            (
+                "Target creature you control deals damage equal to its power to target creature an opponent controls.",
+                "spell.damage.creature.equal_power.controlled_to_opponent",
+            ),
+        ];
+        for (clause, expected_id) in spell_cases {
+            let matched = match_clause(clause, true, &context())
+                .expect("issue #271 clause must not be ambiguous")
+                .unwrap_or_else(|| panic!("issue #271 clause must be supported: {clause}"));
+            assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+        }
+
+        let matched = match_clause(
+            "When this enchantment enters, exile up to one target nonland permanent an opponent controls until this enchantment leaves the battlefield. You gain 2 life.",
+            false,
+            &context(),
+        )
+        .expect("issue #271 ETB clause must not be ambiguous")
+        .expect("issue #271 ETB clause must be supported");
+        assert_eq!(
+            matched.id.as_str(),
+            "etb.enchantment.exile_opponent_nonland_up_to_one_until_source_leaves.gain_life_two"
+        );
+
+        let mut wrong_spell_type = context();
+        wrong_spell_type.source_is_instant = false;
+        assert!(match_clause(
+            "This spell costs {3} less to cast if it targets a tapped creature.",
+            true,
+            &wrong_spell_type,
+        )
+        .unwrap()
+        .is_none());
+        assert!(match_clause(
+            "Return target nonland permanent to its owner's hand. Surveil 1.",
+            true,
+            &wrong_spell_type,
+        )
+        .unwrap()
+        .is_none());
+        assert!(match_clause(
+            "Target creature you control deals damage equal to its power to target creature an opponent controls.",
+            true,
+            &wrong_spell_type,
+        )
+        .unwrap()
+        .is_none());
+
+        let mut instant_not_sorcery = context();
+        instant_not_sorcery.source_is_sorcery = false;
+        assert!(match_clause(
+            "Surveil 2, then draw two cards. You lose 2 life.",
+            true,
+            &instant_not_sorcery,
+        )
+        .unwrap()
+        .is_none());
+
+        let mut nonenchantment = context();
+        nonenchantment.source_is_enchantment = false;
+        assert!(match_clause(
+            "When this enchantment enters, exile up to one target nonland permanent an opponent controls until this enchantment leaves the battlefield. You gain 2 life.",
+            false,
+            &nonenchantment,
+        )
+        .unwrap()
+        .is_none());
     }
 
     #[test]
