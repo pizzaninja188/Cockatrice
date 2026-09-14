@@ -2039,6 +2039,26 @@ fn match_etb_draw(text: &str, context: &RecipeContext) -> Option<RecipeEmission>
     Some(triggered_ability(context, effect))
 }
 
+fn match_raid_etb_draw(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text == "Raid — When this creature enters, if you attacked this turn, draw a card.")
+        .then(|| {
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability(
+                context,
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                },
+            ) else {
+                unreachable!("triggered_ability always returns a triggered ability")
+            };
+            ability.intervening_if = Some(GameCondition::AttackedThisTurn {
+                players: RelativePlayerSet::Controller,
+            });
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
 fn match_artifact_etb_draw(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (context.source_is_artifact && text == "When this artifact enters, draw a card.").then(|| {
         triggered_ability(
@@ -5036,6 +5056,21 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("triggered.etb.raid.draw.one"),
+        label: "Raid ETB draw one",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_raid_etb_draw,
+        calibration: calibrations!(
+            "Storm Fleet Spy" => "Raid — When this creature enters, if you attacked this turn, draw a card.",
+            "Skyship Buccaneer" => "Raid — When this creature enters, if you attacked this turn, draw a card.";
+            "Raid — When this creature enters, draw a card.",
+            "Raid — When this creature enters, if you attacked this turn, draw two cards.",
+            "Raid — When another creature enters, if you attacked this turn, draw a card.",
+            "Raid — When this creature enters, if an opponent attacked this turn, draw a card.",
+            "Raid — When this creature enters, if you attacked this turn, you may draw a card."
+        ),
+    },
+    Recipe {
         id: RecipeId("etb.draw.fixed"),
         label: "ETB draw",
         surface: RecipeSurface::EtbAbility,
@@ -6839,6 +6874,49 @@ mod tests {
             "Affinity for artifact",
             "Affinity for artifacts if you control an artifact",
             "Affinity for artifacts. Draw a card.",
+        ] {
+            assert!(
+                match_clause(near_miss, false, &context())
+                    .unwrap()
+                    .is_none(),
+                "matched near-miss: {near_miss}"
+            );
+        }
+    }
+
+    #[test]
+    fn raid_etb_draw_is_exact_and_fail_closed() {
+        let matched = match_clause(
+            "Raid — When this creature enters, if you attacked this turn, draw a card.",
+            false,
+            &context(),
+        )
+        .expect("raid matcher should not error")
+        .expect("raid ETB draw recipe should match");
+        assert_eq!(matched.id.as_str(), "triggered.etb.raid.draw.one");
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("raid ETB draw must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.intervening_if,
+            Some(GameCondition::AttackedThisTurn {
+                players: RelativePlayerSet::Controller,
+            })
+        );
+        assert_eq!(
+            ability.effect,
+            vec![SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }]
+        );
+        for near_miss in [
+            "Raid — When this creature enters, draw a card.",
+            "Raid — When this creature enters, if you attacked this turn, draw two cards.",
+            "Raid — When another creature enters, if you attacked this turn, draw a card.",
+            "Raid — When this creature enters, if an opponent attacked this turn, draw a card.",
+            "Raid — When this creature enters, if you attacked this turn, you may draw a card.",
         ] {
             assert!(
                 match_clause(near_miss, false, &context())
