@@ -3163,6 +3163,16 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 ));
                 cx.events
                     .push(ev_log(format!("P{controller} manifests dread.")));
+                cx.effect_result.produced_objects.push(TriggerObjectRef {
+                    object_id,
+                    zone_change_generation: engine
+                        .state
+                        .zone_change_generation
+                        .get(&object_id)
+                        .copied()
+                        .unwrap_or(0),
+                    controller_at_event: controller,
+                });
                 return Ok(EffectOutcome::Continue);
             }
         }

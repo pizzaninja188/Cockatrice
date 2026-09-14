@@ -773,6 +773,11 @@ pub(super) fn object_display_name(
         .objects
         .get(&oid)
         .and_then(|object| {
+            // Face-down permanents have no public name (CR 708); never fall through to the
+            // registry's printed identity when their derived characteristics are nameless.
+            if object.zone == Zone::Battlefield && object.face_down {
+                return Some("Face-down creature".to_string());
+            }
             if object.zone == Zone::Battlefield {
                 if let Some(name) =
                     super::characteristics::characteristics_from(state, registry, oid)

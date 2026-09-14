@@ -1601,6 +1601,27 @@ fn triggered_ability_with(
     })
 }
 
+fn match_equipment_etb_manifest_dread_attach(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_equipment
+        && text == "When this Equipment enters, manifest dread, then attach this Equipment to that creature.")
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfEntersBattlefield,
+                vec![
+                    SpellEffectKind::ManifestDread,
+                    SpellEffectKind::AttachEquipment {
+                        equipment: EffectSubject::Source,
+                        creature: EffectSubject::PreviousEffectObject,
+                    },
+                ],
+            )
+        })
+}
+
 fn etb_instruction(text: &str) -> Option<&str> {
     text.strip_prefix("When this creature enters, ")
 }
@@ -5351,6 +5372,25 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("etb.equipment.manifest_dread_attach"),
+        label: "Equipment ETB manifest dread then attach",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_equipment_etb_manifest_dread_attach,
+        calibration: calibrations!(
+            "Conductive Machete" => "When this Equipment enters, manifest dread, then attach this Equipment to that creature.",
+            "Cursed Windbreaker" => "When this Equipment enters, manifest dread, then attach this Equipment to that creature.",
+            "Killer's Mask" => "When this Equipment enters, manifest dread, then attach this Equipment to that creature.";
+            "When this Equipment enters, manifest dread, then attach this Equipment to target creature.",
+            "When this Equipment enters, manifest dread, then attach this Equipment to a creature.",
+            "When this Equipment enters, manifest dread, then you may attach this Equipment to that creature.",
+            "When this Equipment enters, attach this Equipment to that creature, then manifest dread.",
+            "When this Equipment enters, manifest one of the top two cards, then attach this Equipment to that creature.",
+            "When this Equipment enters, manifest dread, then attach another Equipment to that creature.",
+            "When this Equipment enters, manifest dread, then attach this Equipment to that creature. You draw a card.",
+            "When this Equipment enters, manifest dread, then attach this Equipment to that creature. (It grants flying.)"
+        ),
+    },
+    Recipe {
         id: RecipeId("triggered.prowess"),
         label: "prowess",
         surface: RecipeSurface::TriggeredAbility,
@@ -6406,6 +6446,40 @@ mod tests {
     #[test]
     fn catalog_has_stable_unique_ids_and_complete_calibration_metadata() {
         validate_catalog().expect("built-in recipe catalog should be valid");
+    }
+
+    #[test]
+    fn equipment_manifest_dread_attach_is_exact_and_fail_closed() {
+        let clause = "When this Equipment enters, manifest dread, then attach this Equipment to that creature.";
+        let matched = match_clause(clause, false, &context()).expect("matcher should not error");
+        assert!(matches!(
+            matched,
+            Some(RecipeMatch {
+                emission: RecipeEmission::TriggeredAbility(TriggeredAbilityDef {
+                    effect,
+                    ..
+                }),
+                ..
+            }) if effect == vec![
+                SpellEffectKind::ManifestDread,
+                SpellEffectKind::AttachEquipment {
+                    equipment: EffectSubject::Source,
+                    creature: EffectSubject::PreviousEffectObject,
+                }
+            ]
+        ));
+        for near_miss in [
+            "When this Equipment enters, manifest dread, then attach this Equipment to a creature.",
+            "When this Equipment enters, manifest dread, then you may attach this Equipment to that creature.",
+            "When this Equipment enters, attach this Equipment to that creature, then manifest dread.",
+        ] {
+            assert!(match_clause(near_miss, false, &context()).unwrap().is_none());
+        }
+        let mut non_equipment = context();
+        non_equipment.source_is_equipment = false;
+        assert!(match_clause(clause, false, &non_equipment)
+            .unwrap()
+            .is_none());
     }
 
     #[test]

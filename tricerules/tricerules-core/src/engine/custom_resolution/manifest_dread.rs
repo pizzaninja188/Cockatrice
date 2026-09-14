@@ -106,7 +106,25 @@ impl GameEngine {
                     ));
                 }
                 events.push(ev_log(format!("P{controller} manifests dread.")));
-                self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+                let previous_result = EffectResult {
+                    produced_objects: vec![TriggerObjectRef {
+                        object_id: chosen,
+                        zone_change_generation: self
+                            .state
+                            .zone_change_generation
+                            .get(&chosen)
+                            .copied()
+                            .unwrap_or(0),
+                        controller_at_event: controller,
+                    }],
+                    ..EffectResult::default()
+                };
+                self.complete_parked_resolution_with_previous(
+                    stack.item,
+                    stack.resume_effect_index,
+                    previous_result,
+                    events,
+                )
             }
         }
     }

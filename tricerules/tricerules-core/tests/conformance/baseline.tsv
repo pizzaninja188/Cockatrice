@@ -414,6 +414,8 @@ concealed_courtyard	0	ability:0	exercised
 concealed_courtyard	0	land	exercised
 concentrate	0	cast	exercised
 concordia_pegasus	0	cast	exercised
+conductive_machete	0	ability:0	exercised
+conductive_machete	0	cast	exercised
 conduit_pylons	0	ability:0	exercised
 conduit_pylons	0	ability:1	exercised
 conduit_pylons	0	land	exercised
@@ -474,6 +476,8 @@ curio_vendor	0	cast	exercised
 curse_of_disturbance	0	cast	exercised
 curse_of_opulence	0	cast	exercised
 cursed_minotaur	0	cast	exercised
+cursed_windbreaker	0	ability:0	exercised
+cursed_windbreaker	0	cast	exercised
 cyclops_of_one-eyed_pass	0	cast	exercised
 cylian_elf	0	cast	exercised
 daggerback_basilisk	0	cast	exercised
@@ -1167,6 +1171,8 @@ keldon_raider	0	cast	exercised
 kelinore_bat	0	cast	exercised
 kembas_skyguard	0	cast	exercised
 kessig_recluse	0	cast	exercised
+killers_mask	0	ability:0	exercised
+killers_mask	0	cast	exercised
 kin-tree_nurturer	0	cast	exercised
 kindercatch	0	cast	exercised
 kindly_customer	0	cast	exercised

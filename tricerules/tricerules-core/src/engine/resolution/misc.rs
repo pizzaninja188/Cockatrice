@@ -570,9 +570,8 @@ fn attach_equipment_subject(
         }
         EffectSubject::PreviousEffectObject => cx.previous_battlefield_object(),
         EffectSubject::SearchedObject(_) => cx.resolve_battlefield_subject(subject),
-        EffectSubject::Source | EffectSubject::AttachedObject | EffectSubject::TriggerObject => {
-            None
-        }
+        EffectSubject::Source => resolve_effect_subject(cx.engine, cx.top, &[], subject),
+        EffectSubject::AttachedObject | EffectSubject::TriggerObject => None,
     }
 }
 

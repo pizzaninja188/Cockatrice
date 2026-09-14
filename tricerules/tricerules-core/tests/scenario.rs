@@ -415,3 +415,5 @@ mod issue_241_koya;
 mod issue_268_generated_one_shot_spells;
 #[path = "scenario/issue_271_generated_targeted_ordered.rs"]
 mod issue_271_generated_targeted_ordered;
+#[path = "scenario/issue_272_manifest_dread_equipment.rs"]
+mod issue_272_manifest_dread_equipment;

@@ -1967,7 +1967,25 @@ impl GameEngine {
                     ));
                 }
                 events.push(ev_log(format!("P{owner} manifests dread.")));
-                self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+                let previous_result = EffectResult {
+                    produced_objects: vec![TriggerObjectRef {
+                        object_id,
+                        zone_change_generation: self
+                            .state
+                            .zone_change_generation
+                            .get(&object_id)
+                            .copied()
+                            .unwrap_or(0),
+                        controller_at_event: owner,
+                    }],
+                    ..EffectResult::default()
+                };
+                self.complete_parked_resolution_with_previous(
+                    stack.item,
+                    stack.resume_effect_index,
+                    previous_result,
+                    events,
+                )
             }
             BattlefieldEntryCompletion::TokenBatch(batch) => {
                 let amass = batch.options.amass;

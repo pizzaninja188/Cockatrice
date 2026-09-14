@@ -4685,6 +4685,7 @@ impl SpellEffectKind {
                             );
                         }
                     }
+                    EffectSubject::Source if context != EffectContext::Spell => {}
                     EffectSubject::PreviousEffectObject => {}
                     _ => {
                         return Err(
@@ -4698,6 +4699,7 @@ impl SpellEffectKind {
                         if filter.all_terminal_filters_match(|leaf| {
                             leaf.kind == TargetKind::Creature
                         }) => {}
+                    EffectSubject::PreviousEffectObject => {}
                     _ => {
                         return Err(
                             "AttachEquipment creature must be a creature-only Chosen target".into(),
