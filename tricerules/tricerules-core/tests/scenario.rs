@@ -300,6 +300,8 @@ mod issue_270_generated_utility_permanents;
 mod issue_277_affinity_artifacts;
 #[path = "scenario/issue_278_raid_etb_draw.rs"]
 mod issue_278_raid_etb_draw;
+#[path = "scenario/issue_279_landfall_damage.rs"]
+mod issue_279_landfall_damage;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]

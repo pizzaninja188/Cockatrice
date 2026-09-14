@@ -2699,6 +2699,32 @@ fn match_landfall_mill_one(text: &str, context: &RecipeContext) -> Option<Recipe
         })
 }
 
+fn match_landfall_damage_each_opponent_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == "Landfall — Whenever a land you control enters, this creature deals 1 damage to each opponent.")
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverPermanentEntersBattlefield {
+                    controller: CastTriggerPlayer::Controller,
+                    filter: PermanentEventFilter {
+                        permanent_type: Some(PermanentTypeFilter::Land),
+                        ..PermanentEventFilter::default()
+                    },
+                    creature_filter: None,
+                },
+                vec![SpellEffectKind::DamagePlayer {
+                    amount: Amount::Fixed(1),
+                    who: PlayerRecipient::EachOpponent,
+                }],
+            )
+        })
+}
+
 fn match_self_attacks_optional_discard_then_draw(
     text: &str,
     context: &RecipeContext,
@@ -6248,6 +6274,21 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("triggered.landfall.damage.each_opponent.one"),
+        label: "landfall damage each opponent one",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_landfall_damage_each_opponent_one,
+        calibration: calibrations!(
+            "Sabotender" => "Landfall — Whenever a land you control enters, this creature deals 1 damage to each opponent.",
+            "Spitfire Lagac" => "Landfall — Whenever a land you control enters, this creature deals 1 damage to each opponent.";
+            "Whenever a land you control enters, this creature deals 1 damage to each opponent.",
+            "Landfall — Whenever a land enters, this creature deals 1 damage to each opponent.",
+            "Landfall — Whenever a land you control enters, this creature deals 2 damage to each opponent.",
+            "Landfall — Whenever a land you control enters, target opponent takes 1 damage.",
+            "Landfall — Whenever a land you control enters, each opponent loses 1 life."
+        ),
+    },
+    Recipe {
         id: RecipeId("triggered.self_attacks.optional_discard_then_draw"),
         label: "self attacks optional discard then draw",
         surface: RecipeSurface::TriggeredAbility,
@@ -8484,6 +8525,11 @@ mod tests {
                 "triggered.controller_creature_enters.damage.each_opponent.one",
             ),
             (
+                "Landfall — Whenever a land you control enters, this creature deals 1 damage to each opponent.",
+                false,
+                "triggered.landfall.damage.each_opponent.one",
+            ),
+            (
                 "At the beginning of your end step, draw a card.",
                 false,
                 "triggered.controller_end_step.draw.one",
@@ -8581,6 +8627,7 @@ mod tests {
             "You may play an additional land on each of your turns.",
             "You may play lands from your graveyard.",
             "Landfall — Whenever a land you control enters, mill a card.",
+            "Landfall — Whenever a land you control enters, this creature deals 1 damage to each opponent.",
             "Whenever this creature attacks, you may discard a card. If you do, draw a card.",
             "When this creature enters, return target creature card from your graveyard to your hand.",
         ] {
@@ -8628,6 +8675,11 @@ mod tests {
             ("This creature enters the battlefield tapped.", false),
             ("You may play two additional lands on each of your turns.", false),
             ("Landfall — Whenever a land you control enters, mill two cards.", false),
+            ("Whenever a land you control enters, this creature deals 1 damage to each opponent.", false),
+            ("Landfall — Whenever a land enters, this creature deals 1 damage to each opponent.", false),
+            ("Landfall — Whenever a land you control enters, this creature deals 2 damage to each opponent.", false),
+            ("Landfall — Whenever a land you control enters, target opponent takes 1 damage.", false),
+            ("Landfall — Whenever a land you control enters, each opponent loses 1 life.", false),
             ("Search your library for a creature card, reveal it, put it into your hand, then shuffle.", true),
             ("Create two 1/1 black Rat creature tokens.", true),
         ] {
