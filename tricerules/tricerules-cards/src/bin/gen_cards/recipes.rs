@@ -2749,6 +2749,49 @@ fn match_self_attacks_optional_discard_then_draw(
         })
 }
 
+fn match_self_becomes_tapped_draw_then_discard(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text == "Whenever this creature becomes tapped, draw a card, then discard a card.")
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverSelfBecomesTapped,
+                vec![SpellEffectKind::DrawDiscard {
+                    who: PlayerRecipient::Controller,
+                    draw_count: 1,
+                    discard_count: 1,
+                    order: DrawDiscardOrder::DrawThenDiscard,
+                    optional: false,
+                }],
+            )
+        })
+}
+
+fn match_self_becomes_tapped_optional_discard_then_draw(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == "Whenever this creature becomes tapped, you may discard a card. If you do, draw a card.")
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverSelfBecomesTapped,
+                vec![SpellEffectKind::DrawDiscard {
+                    who: PlayerRecipient::Controller,
+                    draw_count: 1,
+                    discard_count: 1,
+                    order: DrawDiscardOrder::DiscardThenDraw,
+                    optional: true,
+                }],
+            )
+        })
+}
+
 fn match_self_enters_optional_discard_then_draw(
     text: &str,
     context: &RecipeContext,
@@ -6302,6 +6345,46 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("triggered.self_becomes_tapped.draw_then_discard"),
+        label: "self becomes tapped draw then discard",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_becomes_tapped_draw_then_discard,
+        calibration: calibrations!(
+            "Silvergill Peddler" => "Whenever this creature becomes tapped, draw a card, then discard a card.",
+            "Mechan Navigator" => "Whenever this creature becomes tapped, draw a card, then discard a card.";
+            "Whenever this creature becomes tapped, you may draw a card, then discard a card.",
+            "Whenever this creature becomes tapped, discard a card, then draw a card.",
+            "Whenever this creature becomes tapped, draw two cards, then discard a card.",
+            "Whenever this creature becomes tapped, draw a card, then discard two cards.",
+            "Whenever this creature attacks, draw a card, then discard a card.",
+            "When this creature enters, draw two cards, then discard a card.",
+            "Whenever enchanted creature becomes tapped, draw a card, then discard a card.",
+            "Whenever you tap this creature for a cost, draw a card, then discard a card.",
+            "Whenever this creature becomes tapped, draw a card, then discard a card. You gain 1 life.",
+            "Whenever this creature becomes tapped, draw a card, then discard a card. This ability triggers only once each turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.self_becomes_tapped.optional_discard_then_draw"),
+        label: "self becomes tapped optional discard then draw",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_becomes_tapped_optional_discard_then_draw,
+        calibration: calibrations!(
+            "Rescue Leopard" => "Whenever this creature becomes tapped, you may discard a card. If you do, draw a card.",
+            "Volatile Wanderglyph" => "Whenever this creature becomes tapped, you may discard a card. If you do, draw a card.";
+            "Whenever this creature becomes tapped, discard a card. If you do, draw a card.",
+            "Whenever this creature becomes tapped, you may draw a card, then discard a card.",
+            "Whenever this creature becomes tapped, you may discard two cards. If you do, draw a card.",
+            "Whenever this creature becomes tapped, you may discard a card. If you do, draw two cards.",
+            "Whenever this creature attacks, you may discard two cards. If you do, draw a card.",
+            "When this creature enters, you may discard two cards. If you do, draw a card.",
+            "Whenever enchanted creature becomes tapped, you may discard a card. If you do, draw a card.",
+            "Whenever you tap this creature for a cost, you may discard a card. If you do, draw a card.",
+            "Whenever this creature becomes tapped, you may discard a card. If you do, draw a card. You gain 1 life.",
+            "Whenever this creature becomes tapped, you may discard a card. If you do, draw a card. This ability triggers only once each turn."
+        ),
+    },
+    Recipe {
         id: RecipeId("triggered.self_enters.optional_discard_then_draw"),
         label: "self enters optional discard then draw",
         surface: RecipeSurface::TriggeredAbility,
@@ -6885,6 +6968,88 @@ mod tests {
         )
         .unwrap()
         .is_none());
+    }
+
+    #[test]
+    fn issue_282_self_becomes_tapped_loot_templates_are_exact_and_fail_closed() {
+        let cases = [
+            (
+                "Whenever this creature becomes tapped, draw a card, then discard a card.",
+                "triggered.self_becomes_tapped.draw_then_discard",
+                TriggerCondition::WheneverSelfBecomesTapped,
+                DrawDiscardOrder::DrawThenDiscard,
+                false,
+            ),
+            (
+                "Whenever this creature becomes tapped, you may discard a card. If you do, draw a card.",
+                "triggered.self_becomes_tapped.optional_discard_then_draw",
+                TriggerCondition::WheneverSelfBecomesTapped,
+                DrawDiscardOrder::DiscardThenDraw,
+                true,
+            ),
+        ];
+        for (clause, expected_id, expected_trigger, expected_order, expected_optional) in
+            cases.iter()
+        {
+            let matched = match_clause(clause, false, &context())
+                .expect("issue #282 recipe matching should not be ambiguous")
+                .unwrap_or_else(|| panic!("issue #282 clause should match: {clause}"));
+            assert_eq!(matched.id.as_str(), *expected_id, "{clause}");
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("issue #282 recipe must emit a triggered ability: {clause}");
+            };
+            assert_eq!(ability.trigger, *expected_trigger, "{clause}");
+            assert!(
+                !ability.may,
+                "optional discard is an effect choice: {clause}"
+            );
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::DrawDiscard {
+                    who: PlayerRecipient::Controller,
+                    draw_count: 1,
+                    discard_count: 1,
+                    order: *expected_order,
+                    optional: *expected_optional,
+                }],
+                "{clause}"
+            );
+        }
+
+        for near_miss in [
+            "Whenever this creature becomes tapped, you may draw a card, then discard a card.",
+            "Whenever this creature becomes tapped, discard a card, then draw a card.",
+            "Whenever this creature becomes tapped, draw two cards, then discard a card.",
+            "Whenever this creature becomes tapped, draw a card, then discard two cards.",
+            "Whenever this creature attacks, draw a card, then discard a card.",
+            "When this creature enters, draw a card, then discard a card.",
+            "Whenever enchanted creature becomes tapped, draw a card, then discard a card.",
+            "Whenever you tap this creature for a cost, draw a card, then discard a card.",
+            "Whenever this creature becomes tapped, draw a card, then discard a card. You gain 1 life.",
+            "Whenever this creature becomes tapped, you may discard a card. If you do, draw two cards.",
+            "Whenever this creature becomes tapped, discard a card. If you do, draw a card.",
+        ] {
+            assert!(
+                match_self_becomes_tapped_draw_then_discard(near_miss, &context()).is_none()
+                    && match_self_becomes_tapped_optional_discard_then_draw(near_miss, &context())
+                        .is_none(),
+                "new issue #282 recipe matched near-miss {near_miss}"
+            );
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        for clause in [
+            "Whenever this creature becomes tapped, draw a card, then discard a card.",
+            "Whenever this creature becomes tapped, you may discard a card. If you do, draw a card.",
+        ] {
+            assert!(
+                match_clause(clause, false, &noncreature)
+                    .expect("source-kind matching should not be ambiguous")
+                    .is_none(),
+                "noncreature source matched {clause}"
+            );
+        }
     }
 
     #[test]

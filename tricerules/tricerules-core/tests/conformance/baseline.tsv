@@ -1323,6 +1323,7 @@ markov_patrician	0	cast	exercised
 mass_of_ghouls	0	cast	exercised
 meandering_river	0	ability:0	exercised
 meandering_river	0	land	exercised
+mechan_navigator	0	cast	exercised
 mechan_shieldmate	0	cast	exercised
 meditation_pools	0	ability:0	exercised
 meditation_pools	0	ability:1	exercised
@@ -1687,6 +1688,7 @@ renegade_troops	0	cast	exercised
 reputable_merchant	0	cast	exercised
 requiting_hex	0	cast	exercised
 reroute_systems	0	cast	exercised
+rescue_leopard	0	cast	exercised
 resistance_skywarden	0	cast	exercised
 resolute_reinforcements	0	cast	exercised
 restless_reef	0	ability:0	exercised
@@ -1897,6 +1899,7 @@ silverback_ape	0	cast	exercised
 silverbeak_griffin	0	cast	exercised
 silverclaw_griffin	0	cast	exercised
 silvercoat_lion	0	cast	exercised
+silvergill_peddler	0	cast	exercised
 simic_guildgate	0	ability:0	exercised
 simic_guildgate	0	land	exercised
 simic_sky_swallower	0	cast	exercised
@@ -2350,6 +2353,7 @@ vodalian_arcanist	0	ability:0	exercised
 vodalian_arcanist	0	cast	exercised
 vodalian_soldiers	0	cast	exercised
 voiceless_spirit	0	cast	exercised
+volatile_wanderglyph	0	cast	exercised
 volcanic_dragon	0	cast	exercised
 volcanic_island	0	ability:0	exercised
 volcanic_island	0	land	exercised

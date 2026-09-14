@@ -2329,6 +2329,7 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tricerules_cards::primitives::DrawDiscardOrder;
 
     #[test]
     fn convoke_keyword_is_exact_and_never_accepts_unimplemented_clauses() {
@@ -3561,6 +3562,120 @@ mod tests {
             evaluate_fresh(&extra).is_err(),
             "unsupported extra text must reject the whole card"
         );
+    }
+
+    #[test]
+    fn issue_282_exact_self_tap_loot_cards_qualify_and_extra_text_rejects() {
+        for (name, mana_cost, type_line, oracle_text, stats, recipe_label, order, optional) in [
+            (
+                "Silvergill Peddler",
+                "{2}{U}",
+                "Creature — Merfolk Citizen",
+                "Whenever this creature becomes tapped, draw a card, then discard a card.",
+                Some(("2", "3")),
+                "self becomes tapped draw then discard",
+                DrawDiscardOrder::DrawThenDiscard,
+                false,
+            ),
+            (
+                "Mechan Navigator",
+                "{1}{U}",
+                "Artifact Creature — Robot Pilot",
+                "Whenever this creature becomes tapped, draw a card, then discard a card.",
+                Some(("2", "1")),
+                "self becomes tapped draw then discard",
+                DrawDiscardOrder::DrawThenDiscard,
+                false,
+            ),
+            (
+                "Rescue Leopard",
+                "{2}{R}",
+                "Creature — Cat",
+                "Whenever this creature becomes tapped, you may discard a card. If you do, draw a card.",
+                Some(("4", "2")),
+                "self becomes tapped optional discard then draw",
+                DrawDiscardOrder::DiscardThenDraw,
+                true,
+            ),
+            (
+                "Volatile Wanderglyph",
+                "{1}{R}",
+                "Artifact Creature — Golem",
+                "Whenever this creature becomes tapped, you may discard a card. If you do, draw a card.",
+                Some(("2", "2")),
+                "self becomes tapped optional discard then draw",
+                DrawDiscardOrder::DiscardThenDraw,
+                true,
+            ),
+        ] {
+            let generated = evaluate_fresh(&normal_card(
+                name,
+                mana_cost,
+                type_line,
+                oracle_text,
+                stats,
+            ))
+            .unwrap_or_else(|error| panic!("{name} should qualify: {error:?}"));
+            assert_eq!(generated.faces[0].recipe_labels, [recipe_label], "{name}");
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            let [ability] = raw.triggered_abilities.as_slice() else {
+                panic!("{name} should emit exactly one triggered ability");
+            };
+            assert_eq!(ability.ability_id.as_str(), "triggered_01", "{name}");
+            assert_eq!(
+                ability.presentation,
+                AbilityPresentation::OracleLines(vec![1]),
+                "{name}"
+            );
+            assert_eq!(
+                ability.trigger,
+                TriggerCondition::WheneverSelfBecomesTapped,
+                "{name}"
+            );
+            assert!(!ability.may, "optional discard belongs to the effect: {name}");
+            assert!(ability.targeting.is_none(), "{name} has no targets");
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::DrawDiscard {
+                    who: PlayerRecipient::Controller,
+                    draw_count: 1,
+                    discard_count: 1,
+                    order,
+                    optional,
+                }],
+                "{name}"
+            );
+        }
+
+        for (name, type_line, oracle_text) in [
+            (
+                "Self Tap Loot Extra Text",
+                "Creature — Human",
+                "Whenever this creature becomes tapped, draw a card, then discard a card.\nYou gain 1 life.",
+            ),
+            (
+                "Self Tap Rummage Extra Text",
+                "Creature — Human",
+                "Whenever this creature becomes tapped, you may discard a card. If you do, draw a card.\nYou gain 1 life.",
+            ),
+            (
+                "Self Tap Loot Noncreature",
+                "Artifact",
+                "Whenever this creature becomes tapped, draw a card, then discard a card.",
+            ),
+        ] {
+            assert!(
+                evaluate_fresh(&normal_card(
+                    name,
+                    "{2}{U}",
+                    type_line,
+                    oracle_text,
+                    Some(("2", "2")),
+                ))
+                .is_err(),
+                "{name} must remain unsupported"
+            );
+        }
     }
 
     #[test]
