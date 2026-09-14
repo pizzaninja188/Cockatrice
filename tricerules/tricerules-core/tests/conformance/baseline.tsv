@@ -430,6 +430,8 @@ copper_myr	0	cast	exercised
 coral_commando	0	cast	exercised
 coral_eel	0	cast	exercised
 coral_merfolk	0	cast	exercised
+coral_sword	0	ability:0	exercised
+coral_sword	0	cast	exercised
 corrupt_court_official	0	cast	exercised
 council_of_advisors	0	cast	exercised
 counsel_of_the_soratami	0	cast	exercised
@@ -1293,6 +1295,8 @@ make_your_move	0	cast	exercised
 makeshift_battalion	0	cast	exercised
 makindi_aeronaut	0	cast	exercised
 makindi_griffin	0	cast	exercised
+malamet_scythe	0	ability:0	exercised
+malamet_scythe	0	cast	exercised
 malevolent_chandelier	0	ability:0	exercised
 malevolent_chandelier	0	cast	exercised
 mammoth_bellow	0	cast	exercised

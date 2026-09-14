@@ -29,6 +29,54 @@ fn issue_155_equipment_cards_share_the_one_shot_attach_primitive() {
 }
 
 #[test]
+fn issue_274_generated_equipment_etb_targets_are_mandatory_and_shared() {
+    let registry = CardRegistry::global();
+    let scythe = &registry
+        .get("malamet_scythe")
+        .expect("Malamet Scythe")
+        .primary_face()
+        .triggered_abilities[0];
+    assert_eq!(
+        scythe.presentation,
+        tricerules_cards::AbilityPresentation::OracleLines(vec![2])
+    );
+    assert_eq!(
+        scythe.targeting.as_ref().unwrap().groups[0].effect_indices,
+        vec![0]
+    );
+    assert_eq!(
+        (
+            scythe.targeting.as_ref().unwrap().groups[0].min,
+            scythe.targeting.as_ref().unwrap().groups[0].max
+        ),
+        (1, 1)
+    );
+    let coral = &registry
+        .get("coral_sword")
+        .expect("Coral Sword")
+        .primary_face()
+        .triggered_abilities[0];
+    assert_eq!(
+        coral.presentation,
+        tricerules_cards::AbilityPresentation::OracleLines(vec![2])
+    );
+    assert_eq!(
+        coral.targeting.as_ref().unwrap().groups[0].effect_indices,
+        vec![0, 1]
+    );
+    assert_eq!(
+        (
+            coral.targeting.as_ref().unwrap().groups[0].min,
+            coral.targeting.as_ref().unwrap().groups[0].max
+        ),
+        (1, 1)
+    );
+    assert!(
+        matches!(coral.effect.as_slice(), [SpellEffectKind::AttachSource { .. }, SpellEffectKind::GrantKeywords { subject: EffectSubject::Chosen(_), keywords }] if keywords == &[tricerules_cards::primitives::Keyword::FirstStrike])
+    );
+}
+
+#[test]
 fn issue_155_auras_use_untargeted_attached_object_zone_actions() {
     let registry = CardRegistry::global();
     for id in ["spiral_into_solitude", "path_to_redemption"] {

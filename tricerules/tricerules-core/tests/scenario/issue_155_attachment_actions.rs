@@ -73,6 +73,81 @@ fn issue_155_light_jammer_etb_attaches_and_grants_hexproof() {
 }
 
 #[test]
+fn issue_274_coral_sword_etb_revalidates_shared_target_and_expires_first_strike() {
+    fn setup(seed: u64) -> (GameEngine, u32) {
+        let decks = Some(vec![
+            deck_with("mountain", &["coral_sword", "coral_sword"]),
+            deck_with("forest", &[]),
+        ]);
+        let mut engine =
+            GameEngine::new(seed, &[0, 1], 20, decks, true).expect("Coral Sword validates");
+        advance_to_main1_from_game_start(&mut engine);
+        let creature = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+        ensure_in_hand(&mut engine, 0, "coral_sword");
+        give_mana(
+            &mut engine,
+            0,
+            ManaGift {
+                r: 1,
+                ..Default::default()
+            },
+        );
+        let slot = hand_index_for_card(&engine, 0, "coral_sword");
+        engine
+            .apply_command(0, &cast_spell(slot, Vec::new()))
+            .expect("cast Coral Sword");
+        pass_both_players(&mut engine);
+        engine
+            .apply_command(0, &choose_trigger_target(creature))
+            .expect("choose Coral Sword target");
+        (engine, creature)
+    }
+
+    let (mut stale, stale_target) = setup(274_001);
+    *stale
+        .state
+        .zone_change_generation
+        .entry(stale_target)
+        .or_default() += 1;
+    pass_both_players(&mut stale);
+    let stale_equipment = battlefield_object_for_card(&stale, 0, "coral_sword");
+    assert_eq!(stale.state.objects[&stale_equipment].attached_to, None);
+    assert!(!stale.effective_has_keyword(stale_target, tricerules_cards::Keyword::FirstStrike));
+
+    let (mut source_left, source_target) = setup(274_002);
+    let source_equipment = battlefield_object_for_card(&source_left, 0, "coral_sword");
+    source_left.state.players[0]
+        .battlefield
+        .retain(|oid| *oid != source_equipment);
+    source_left.state.players[0]
+        .graveyard
+        .push(source_equipment);
+    source_left
+        .state
+        .objects
+        .get_mut(&source_equipment)
+        .unwrap()
+        .zone = Zone::Graveyard;
+    *source_left
+        .state
+        .zone_change_generation
+        .entry(source_equipment)
+        .or_default() += 1;
+    pass_both_players(&mut source_left);
+    assert_eq!(
+        source_left.state.objects[&source_equipment].attached_to,
+        None
+    );
+    assert!(
+        source_left.effective_has_keyword(source_target, tricerules_cards::Keyword::FirstStrike)
+    );
+    end_active_turn(&mut source_left, 0);
+    assert!(
+        !source_left.effective_has_keyword(source_target, tricerules_cards::Keyword::FirstStrike)
+    );
+}
+
+#[test]
 fn issue_155_new_equipment_generation_does_not_receive_the_old_attach_effect() {
     let decks = Some(vec![
         deck_with("island", &["illvoi_light_jammer"]),

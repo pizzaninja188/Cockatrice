@@ -1622,6 +1622,55 @@ fn match_equipment_etb_manifest_dread_attach(
         })
 }
 
+fn match_equipment_etb_attach(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_equipment
+        && text == "When this Equipment enters, attach it to target creature you control.")
+        .then(|| {
+            targeted_trigger(
+                context,
+                vec![SpellEffectKind::AttachSource {
+                    target: TargetFilter {
+                        kind: TargetKind::Creature,
+                        controller: TargetController::You,
+                        ..TargetFilter::default()
+                    },
+                }],
+                1,
+                1,
+                "Choose target creature you control",
+            )
+        })
+}
+
+fn match_equipment_etb_attach_first_strike(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_equipment
+        && text == "When this Equipment enters, attach it to target creature you control. That creature gains first strike until end of turn.")
+        .then(|| {
+            targeted_trigger(
+                context,
+                vec![
+                    SpellEffectKind::AttachSource {
+                        target: TargetFilter {
+                            kind: TargetKind::Creature,
+                            controller: TargetController::You,
+                            ..TargetFilter::default()
+                        },
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: chosen_creature(TargetController::You),
+                        keywords: vec![Keyword::FirstStrike],
+                    },
+                ],
+                1,
+                1,
+                "Choose target creature you control",
+            )
+        })
+}
+
 fn etb_instruction(text: &str) -> Option<&str> {
     text.strip_prefix("When this creature enters, ")
 }
@@ -5427,6 +5476,38 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("etb.equipment.attach_target_controlled_creature"),
+        label: "Equipment ETB attach to target creature you control",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_equipment_etb_attach,
+        calibration: calibrations!(
+            "Meltstrider's Gear" => "When this Equipment enters, attach it to target creature you control.",
+            "Malamet Scythe" => "When this Equipment enters, attach it to target creature you control.";
+            "When this Equipment enters, attach it to a target creature you control.",
+            "When this Equipment enters, attach it to target creature.",
+            "When this Equipment enters, you may attach it to target creature you control.",
+            "When this Equipment enters, attach another Equipment to target creature you control.",
+            "When this Equipment enters, attach it to target artifact creature you control.",
+            "When this Equipment enters, attach it to target creature you control. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.equipment.attach_target_controlled_creature_first_strike"),
+        label: "Equipment ETB attach then grant first strike",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_equipment_etb_attach_first_strike,
+        calibration: calibrations!(
+            "Squire's Lightblade" => "When this Equipment enters, attach it to target creature you control. That creature gains first strike until end of turn.",
+            "Coral Sword" => "When this Equipment enters, attach it to target creature you control. That creature gains first strike until end of turn.";
+            "When this Equipment enters, attach it to target creature you control. That creature gains double strike until end of turn.",
+            "When this Equipment enters, attach it to target creature you control. That creature gains first strike permanently.",
+            "When this Equipment enters, attach it to target creature you control. You gain first strike until end of turn.",
+            "When this Equipment enters, attach it to target creature you control, then that creature gains first strike until end of turn.",
+            "When this Equipment enters, attach it to target creature you control. That creature gains first strike and vigilance until end of turn.",
+            "When this Equipment enters, attach it to target creature you control. That creature gains first strike until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
         id: RecipeId("etb.equipment.manifest_dread_attach"),
         label: "Equipment ETB manifest dread then attach",
         surface: RecipeSurface::EtbAbility,
@@ -6533,6 +6614,62 @@ mod tests {
         let mut non_equipment = context();
         non_equipment.source_is_equipment = false;
         assert!(match_clause(clause, false, &non_equipment)
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn equipment_target_attach_templates_are_exact_and_fail_closed() {
+        let attach = "When this Equipment enters, attach it to target creature you control.";
+        let first_strike = "When this Equipment enters, attach it to target creature you control. That creature gains first strike until end of turn.";
+        assert!(matches!(
+            match_clause(attach, false, &context()).unwrap(),
+            Some(RecipeMatch { emission: RecipeEmission::TriggeredAbility(TriggeredAbilityDef { effect, targeting: Some(_), .. }), .. })
+                if matches!(&effect[..], [SpellEffectKind::AttachSource { target: TargetFilter { kind: TargetKind::Creature, controller: TargetController::You, .. } }])
+        ));
+        let Some(RecipeMatch {
+            emission:
+                RecipeEmission::TriggeredAbility(TriggeredAbilityDef {
+                    effect,
+                    targeting: Some(_),
+                    ..
+                }),
+            ..
+        }) = match_clause(first_strike, false, &context()).unwrap()
+        else {
+            panic!("first-strike template did not match");
+        };
+        assert_eq!(effect.len(), 2);
+        assert!(matches!(
+            effect[0],
+            SpellEffectKind::AttachSource {
+                target: TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    ..
+                }
+            }
+        ));
+        assert!(matches!(
+            &effect[1],
+            SpellEffectKind::GrantKeywords { subject: EffectSubject::Chosen(filter), keywords }
+                if filter.kind == TargetKind::Creature && filter.controller == TargetController::You && keywords == &[Keyword::FirstStrike]
+        ));
+        for near_miss in [
+            "When this Equipment enters, attach it to target creature.",
+            "When this Equipment enters, you may attach it to target creature you control.",
+            "When this Equipment enters, attach another Equipment to target creature you control.",
+            "When this Equipment enters, attach it to target creature you control. Draw a card.",
+            "When this Equipment enters, attach it to target creature you control. That creature gains double strike until end of turn.",
+        ] {
+            assert!(match_clause(near_miss, false, &context()).unwrap().is_none(), "matched near-miss: {near_miss}");
+        }
+        let mut non_equipment = context();
+        non_equipment.source_is_equipment = false;
+        assert!(match_clause(attach, false, &non_equipment)
+            .unwrap()
+            .is_none());
+        assert!(match_clause(first_strike, false, &non_equipment)
             .unwrap()
             .is_none());
     }

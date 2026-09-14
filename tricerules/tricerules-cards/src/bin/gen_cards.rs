@@ -4324,6 +4324,54 @@ mod tests {
     }
 
     #[test]
+    fn issue_274_equipment_etb_recipes_reject_extra_whole_card_clauses() {
+        for (name, text) in [
+            ("Biorganic Carapace", "When this Equipment enters, attach it to target creature you control.\nEquipped creature gets +2/+2 and has \"Whenever this creature deals combat damage to a player, draw a card for each modified creature you control.\" (Equipment, Auras you control, and counters are modifications.)\nEquip {2}"),
+            ("Iron Man Armor", "When this Equipment enters, attach it to target creature you control.\nEquipped creature gets +2/+1 and has flying.\n{2}: If this Equipment isn't a creature, it becomes a 0/0 Construct Hero artifact creature with flying and \"This creature gets +1/+1 for each artifact you control\" until end of turn.\nEquip {2}"),
+            ("Baseball Bat", "When this Equipment enters, attach it to target creature you control.\nEquipped creature gets +1/+1.\nWhenever equipped creature attacks, tap up to one target creature.\nEquip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)"),
+            ("Shredder's Armor", "Equipped creature gets +2/+1.\nWhen this Equipment enters, attach it to target creature you control.\nEquip—Sacrifice another nonland permanent. Activate only once each turn."),
+            ("Thunder Lasso", "When this Equipment enters, attach it to target creature you control.\nEquipped creature gets +1/+1.\nWhenever equipped creature attacks, tap target creature defending player controls.\nEquip {2}"),
+            ("Falcon's Wing Harness", "When this Equipment enters, attach it to target creature you control.\nEquipped creature gets +1/+1 and has flying and ward {1}. (Whenever equipped creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {1}.)\nEquip {2}{U} ({2}{U}: Attach to target creature you control. Equip only as a sorcery.)"),
+        ] {
+            let card = normal_card(name, "{2}", "Artifact — Equipment", text, None);
+            assert_eq!(
+                evaluate_fresh(&card),
+                Err(Skip::NonKeywordText.into()),
+                "unsupported extra clause must reject whole card: {name}"
+            );
+        }
+        let transform = multiface(
+            "transform",
+            "Idol of the Deep King // Sovereign's Macuahuitl",
+            vec![
+                face(
+                    "Idol of the Deep King",
+                    "{1}{R}",
+                    "Artifact",
+                    "Flash\nWhen this artifact enters, it deals 2 damage to any target.\nCraft with artifact {2}{R} ({2}{R}, Exile this artifact, Exile another artifact you control or an artifact card from your graveyard: Return this card transformed under its owner's control. Craft only as a sorcery.)",
+                    None,
+                    &["R"],
+                    None,
+                ),
+                face(
+                    "Sovereign's Macuahuitl",
+                    "",
+                    "Artifact — Equipment",
+                    "When this Equipment enters, attach it to target creature you control.\nEquipped creature gets +2/+0.\nEquip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)",
+                    None,
+                    &[],
+                    None,
+                ),
+            ],
+        );
+        assert_eq!(
+            evaluate_fresh(&transform),
+            Err(Skip::FaceText.into()),
+            "unsupported front face must reject the whole transform identity"
+        );
+    }
+
+    #[test]
     fn recipes_fail_closed_on_near_misses_or_unconsumed_clauses() {
         for text in [
             "You may draw a card.",
