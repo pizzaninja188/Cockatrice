@@ -4067,6 +4067,69 @@ mod tests {
     }
 
     #[test]
+    fn issue_269_generated_modal_cohort_is_registered_with_exact_bounds_and_targets() {
+        use crate::AbilityPresentation;
+
+        let registry = CardRegistry::from_embedded().expect("embedded registry");
+        let cards = [
+            "confusticate_and_bebother",
+            "giantfall",
+            "irohs_demonstration",
+            "origin_of_metalbending",
+            "reroute_systems",
+            "reverent_howl",
+            "seekers_folly",
+            "shredders_revenge",
+            "valorous_stance",
+            "warg_tactics",
+            "azula_always_lies",
+            "overwhelming_surge",
+        ];
+        for card_id in cards {
+            let face = registry
+                .get(card_id)
+                .unwrap_or_else(|| panic!("{card_id} is registered"))
+                .primary_face();
+            let modal = face
+                .modal_spell
+                .as_ref()
+                .unwrap_or_else(|| panic!("{card_id} is modal"));
+            let expected_max = if matches!(card_id, "azula_always_lies" | "overwhelming_surge") {
+                2
+            } else {
+                1
+            };
+            assert_eq!(
+                (modal.min_modes, modal.max_modes),
+                (1, expected_max),
+                "{card_id}"
+            );
+            assert_eq!(modal.modes.len(), 2, "{card_id}");
+            for (index, mode) in modal.modes.iter().enumerate() {
+                assert_eq!(mode.mode_id.as_str(), format!("mode_{:02}", index + 1));
+                assert_eq!(
+                    mode.presentation,
+                    AbilityPresentation::OracleLines(vec![index as u16 + 2])
+                );
+                assert!(!mode.effects.is_empty(), "{card_id} mode {index}");
+            }
+        }
+
+        let azula = registry
+            .get("azula_always_lies")
+            .unwrap()
+            .primary_face()
+            .modal_spell
+            .as_ref()
+            .unwrap();
+        assert!(azula.modes.iter().all(|mode| mode.targeting.is_some()));
+        assert!(azula
+            .modes
+            .iter()
+            .all(|mode| mode.targeting.as_ref().unwrap().groups.len() == 1));
+    }
+
+    #[test]
     fn modal_modes_require_stable_identity_and_external_presentation() {
         let valid = r#"(
             id: "modal_identity", name: "Modal Identity", face_id: "modal_identity",

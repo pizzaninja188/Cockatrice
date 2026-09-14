@@ -106,13 +106,19 @@ pub(super) enum RecipeEmission {
     StaticAbility(IdentifiedAbility<StaticAbilityDef>),
     CharacteristicAbility(IdentifiedAbility<CharacteristicDefiningAbility>),
     ModalMode(ModalModeEmission),
-    ModalAssembly,
+    ModalAssembly(ModalAssemblyEmission),
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) struct ModalModeEmission {
     pub(super) effects: Vec<SpellEffectKind>,
     pub(super) targeting: Option<TargetingDef>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct ModalAssemblyEmission {
+    pub(super) min_modes: u32,
+    pub(super) max_modes: u32,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -834,16 +840,23 @@ fn match_aura_untap_step_restriction(
 }
 
 fn modal_targeting(prompt: &str, effect_index: u32) -> Option<TargetingDef> {
+    modal_targeting_groups(vec![(prompt, vec![effect_index])])
+}
+
+fn modal_targeting_groups(groups: Vec<(&str, Vec<u32>)>) -> Option<TargetingDef> {
     Some(TargetingDef {
-        groups: vec![TargetGroupDef {
-            min: 1,
-            max: 1,
-            prompt: prompt.into(),
-            effect_indices: vec![effect_index],
-            distinct_from: Vec::new(),
-            same_graveyard: false,
-            cast_cost_expansion: None,
-        }],
+        groups: groups
+            .into_iter()
+            .map(|(prompt, effect_indices)| TargetGroupDef {
+                min: 1,
+                max: 1,
+                prompt: prompt.into(),
+                effect_indices,
+                distinct_from: Vec::new(),
+                same_graveyard: false,
+                cast_cost_expansion: None,
+            })
+            .collect(),
     })
 }
 
@@ -851,17 +864,29 @@ fn modal_mode(effects: Vec<SpellEffectKind>, targeting: Option<TargetingDef>) ->
     RecipeEmission::ModalMode(ModalModeEmission { effects, targeting })
 }
 
-fn match_modal_choose_one_two_modes(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+fn match_modal_two_modes(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
     let lines = text
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>();
-    (lines.len() == 3
-        && lines[0] == "Choose one —"
-        && lines[1].starts_with("• ")
-        && lines[2].starts_with("• "))
-    .then_some(RecipeEmission::ModalAssembly)
+    if lines.len() != 3
+        || !lines[1].starts_with("• ")
+        || !lines[2].starts_with("• ")
+        || lines[1].trim_start_matches("• ").trim().is_empty()
+        || lines[2].trim_start_matches("• ").trim().is_empty()
+    {
+        return None;
+    }
+    let (min_modes, max_modes) = match lines[0] {
+        "Choose one —" => (1, 1),
+        "Choose one or both —" => (1, 2),
+        _ => return None,
+    };
+    Some(RecipeEmission::ModalAssembly(ModalAssemblyEmission {
+        min_modes,
+        max_modes,
+    }))
 }
 
 fn match_modal_damage_three_to_creature(
@@ -1012,6 +1037,403 @@ fn match_modal_surveil_two_draw_two(text: &str, _: &RecipeContext) -> Option<Rec
                 },
             ],
             None,
+        )
+    })
+}
+
+fn match_modal_counter_spell_unless_four(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Counter target spell unless its controller pays {4}.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::CounterTargetSpell {
+                spell_filter: StackSpellFilter::default(),
+                unless_controller_pays: Some(Amount::Fixed(4)),
+                unless_controller_pays_by_cast_cost: None,
+            }],
+            modal_targeting("Choose target spell", 0),
+        )
+    })
+}
+
+fn match_modal_draw_two_discard_one(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Draw two cards, then discard a card.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::DrawDiscard {
+                who: PlayerRecipient::Controller,
+                draw_count: 2,
+                discard_count: 1,
+                order: DrawDiscardOrder::DrawThenDiscard,
+                optional: false,
+            }],
+            None,
+        )
+    })
+}
+
+fn match_modal_creature_power_damage(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text
+        == "Target creature you control deals damage equal to its power to target creature an opponent controls.")
+        .then(|| {
+            modal_mode(
+                vec![SpellEffectKind::CreatureDealsDamageEqualToPower {
+                    source: TargetFilter {
+                        kind: TargetKind::Creature,
+                        controller: TargetController::You,
+                        ..TargetFilter::default()
+                    },
+                    target: TargetFilter {
+                        kind: TargetKind::Creature,
+                        controller: TargetController::Opponent,
+                        ..TargetFilter::default()
+                    },
+                }],
+                modal_targeting_groups(vec![
+                    ("Choose target creature you control", vec![0]),
+                    ("Choose target creature an opponent controls", vec![0]),
+                ]),
+            )
+        })
+}
+
+fn match_modal_destroy_artifact_or_enchantment(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Destroy target artifact or enchantment.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![
+                        PermanentTypeFilter::Artifact,
+                        PermanentTypeFilter::Enchantment,
+                    ],
+                    ..TargetFilter::default()
+                })),
+            }],
+            modal_targeting("Choose target artifact or enchantment", 0),
+        )
+    })
+}
+
+fn match_modal_source_damage_each_opponent_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text
+        == format!(
+            "{} deals 1 damage to each creature your opponents control.",
+            context.source_name
+        ))
+    .then(|| {
+        modal_mode(
+            vec![SpellEffectKind::DamageAll {
+                amount: Amount::Fixed(1),
+                players: RelativePlayerSet::Opponents,
+                kind: TargetFilter::default_creature(),
+            }],
+            None,
+        )
+    })
+}
+
+fn match_modal_source_damage_four_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == format!("{} deals 4 damage to target creature.", context.source_name)).then(|| {
+        modal_mode(
+            vec![SpellEffectKind::DamageTarget {
+                amount: Amount::Fixed(4),
+                target: TargetFilter::default_creature(),
+            }],
+            modal_targeting("Choose target creature", 0),
+        )
+    })
+}
+
+fn match_modal_indestructible_artifact_or_creature(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Target artifact or creature gains indestructible until end of turn.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![
+                        PermanentTypeFilter::Artifact,
+                        PermanentTypeFilter::Creature,
+                    ],
+                    ..TargetFilter::default()
+                })),
+                keywords: vec![Keyword::Indestructible],
+            }],
+            modal_targeting("Choose target artifact or creature", 0),
+        )
+    })
+}
+
+fn match_modal_source_damage_tapped_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text
+        == format!(
+            "{} deals 2 damage to target tapped creature.",
+            context.source_name
+        ))
+    .then(|| {
+        modal_mode(
+            vec![SpellEffectKind::DamageTarget {
+                amount: Amount::Fixed(2),
+                target: TargetFilter {
+                    kind: TargetKind::Creature,
+                    tapped: Some(true),
+                    ..TargetFilter::default()
+                },
+            }],
+            modal_targeting("Choose target tapped creature", 0),
+        )
+    })
+}
+
+fn match_modal_target_player_draw_two_lose_two(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Target player draws two cards and loses 2 life.").then(|| {
+        modal_mode(
+            vec![
+                SpellEffectKind::TargetPlayerDraws {
+                    count: 2,
+                    target: TargetFilter {
+                        kind: TargetKind::AnyPlayer,
+                        ..TargetFilter::default()
+                    },
+                },
+                SpellEffectKind::TargetPlayerLosesLife {
+                    amount: 2,
+                    target: TargetFilter {
+                        kind: TargetKind::AnyPlayer,
+                        ..TargetFilter::default()
+                    },
+                },
+            ],
+            modal_targeting_groups(vec![("Choose target player", vec![0, 1])]),
+        )
+    })
+}
+
+fn match_modal_creature_plus_two_lifelink(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Target creature gets +2/+2 and gains lifelink until end of turn.").then(|| {
+        modal_mode(
+            vec![
+                SpellEffectKind::PumpTarget {
+                    power: 2,
+                    toughness: 2,
+                    scale: None,
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                },
+                SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    keywords: vec![Keyword::Lifelink],
+                },
+            ],
+            modal_targeting_groups(vec![("Choose target creature", vec![0, 1])]),
+        )
+    })
+}
+
+fn match_modal_target_opponent_discard_two(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Target opponent discards two cards.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::ChooseHandCards {
+                action: HandCardAction::Discard,
+                count: 2,
+                target: TargetFilter {
+                    kind: TargetKind::OpponentPlayer,
+                    ..TargetFilter::default()
+                },
+                chooser: Default::default(),
+                card_filter: None,
+                optional: false,
+                visibility: Default::default(),
+            }],
+            modal_targeting("Choose target opponent", 0),
+        )
+    })
+}
+
+fn opponents_minus_one_minus_one() -> CreatureScopeFilter {
+    CreatureScopeFilter {
+        controller: Some(CreatureScopeController::Opponents),
+        ..CreatureScopeFilter::default()
+    }
+}
+
+fn match_modal_opponents_minus_one_minus_one(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Creatures your opponents control get -1/-1 until end of turn.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::PumpAll {
+                filter: opponents_minus_one_minus_one(),
+                power: -1,
+                toughness: -1,
+            }],
+            None,
+        )
+    })
+}
+
+fn match_modal_target_player_discard_two(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Target player discards two cards.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::ChooseHandCards {
+                action: HandCardAction::Discard,
+                count: 2,
+                target: TargetFilter {
+                    kind: TargetKind::AnyPlayer,
+                    ..TargetFilter::default()
+                },
+                chooser: Default::default(),
+                card_filter: None,
+                optional: false,
+                visibility: Default::default(),
+            }],
+            modal_targeting("Choose target player", 0),
+        )
+    })
+}
+
+fn match_modal_target_indestructible_creature(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Target creature gains indestructible until end of turn.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                keywords: vec![Keyword::Indestructible],
+            }],
+            modal_targeting("Choose target creature", 0),
+        )
+    })
+}
+
+fn match_modal_destroy_toughness_four(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Destroy target creature with toughness 4 or greater.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    toughness: Some(tricerules_cards::PowerComparison::AtLeast(4)),
+                    ..TargetFilter::default()
+                })),
+            }],
+            modal_targeting("Choose target creature with toughness 4 or greater", 0),
+        )
+    })
+}
+
+fn match_modal_counter_and_keywords(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text
+        == "Put a +1/+1 counter on target creature you control. It gains trample and hexproof until end of turn.")
+        .then(|| {
+            let target = TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..TargetFilter::default()
+            };
+            modal_mode(
+                vec![
+                    SpellEffectKind::PutCounters {
+                        counter: CounterKind::PlusOnePlusOne,
+                        count: Amount::Fixed(1),
+                        subject: EffectSubject::Chosen(Box::new(target.clone())),
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: EffectSubject::Chosen(Box::new(target)),
+                        keywords: vec![Keyword::Trample, Keyword::Hexproof],
+                    },
+                ],
+                modal_targeting_groups(vec![("Choose target creature you control", vec![0, 1])]),
+            )
+        })
+}
+
+fn match_modal_counter_and_indestructible(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text
+        == "Put a +1/+1 counter on target creature you control. It gains indestructible until end of turn.")
+        .then(|| {
+            let target = TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..TargetFilter::default()
+            };
+            modal_mode(
+                vec![
+                    SpellEffectKind::PutCounters {
+                        counter: CounterKind::PlusOnePlusOne,
+                        count: Amount::Fixed(1),
+                        subject: EffectSubject::Chosen(Box::new(target.clone())),
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: EffectSubject::Chosen(Box::new(target)),
+                        keywords: vec![Keyword::Indestructible],
+                    },
+                ],
+                modal_targeting_groups(vec![("Choose target creature you control", vec![0, 1])]),
+            )
+        })
+}
+
+fn match_modal_creature_minus_one(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Target creature gets -1/-1 until end of turn.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::PumpTarget {
+                power: -1,
+                toughness: -1,
+                scale: None,
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            }],
+            modal_targeting("Choose target creature", 0),
+        )
+    })
+}
+
+fn match_modal_put_counter_creature(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Put a +1/+1 counter on target creature.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::PutCounters {
+                counter: CounterKind::PlusOnePlusOne,
+                count: Amount::Fixed(1),
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            }],
+            modal_targeting("Choose target creature", 0),
+        )
+    })
+}
+
+fn match_modal_destroy_noncreature_artifact(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Destroy target noncreature artifact.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![PermanentTypeFilter::Artifact],
+                    excluded_permanent_types: vec![PermanentTypeFilter::Creature],
+                    ..TargetFilter::default()
+                })),
+            }],
+            modal_targeting("Choose target noncreature artifact", 0),
         )
     })
 }
@@ -3061,11 +3483,10 @@ fn match_player_life_threshold_entry(
 }
 
 macro_rules! calibrations {
-    ($first_name:literal => $first_clause:literal, $second_name:literal => $second_clause:literal; $($negative:literal),+ $(,)?) => {
+    ($($positive_name:literal => $positive_clause:literal),+; $($negative:literal),+ $(,)?) => {
         RecipeCalibration {
             positive_cards: &[
-                CalibrationCard { name: $first_name, clause: $first_clause },
-                CalibrationCard { name: $second_name, clause: $second_clause },
+                $(CalibrationCard { name: $positive_name, clause: $positive_clause }),+
             ],
             negative_near_misses: &[$($negative),+],
             minimum_positive_cards: 2,
@@ -3358,9 +3779,9 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Disenchant" => "Destroy target artifact or enchantment.",
             "Nature's Chant" => "Destroy target artifact or enchantment.";
             "Destroy up to one target artifact or enchantment.",
-            "Destroy target artifact.",
+            "Destroy target noncreature artifact or enchantment.",
             "Destroy target artifact or enchantment. You gain 2 life.",
-            "Destroy target noncreature artifact or enchantment."
+            "Destroy target artifact."
         ),
     },
     Recipe {
@@ -3526,17 +3947,20 @@ pub(super) static CATALOG: &[Recipe] = &[
     },
     Recipe {
         id: RecipeId("modal.choose_one.two_modes"),
-        label: "two-mode choose-one spell",
+        label: "two-bullet modal spell assembly",
         surface: RecipeSurface::ModalAssembly,
-        matcher: match_modal_choose_one_two_modes,
+        matcher: match_modal_two_modes,
         calibration: calibrations!(
             "Abrade" => "Choose one —\n• Abrade deals 3 damage to target creature.\n• Destroy target artifact.",
-            "Family Reunion" => "Choose one —\n• Creatures you control get +1/+1 until end of turn.\n• Creatures you control gain hexproof until end of turn.";
-            "Choose one or both —\n• Draw a card.\n• You gain 2 life.",
+            "Family Reunion" => "Choose one —\n• Creatures you control get +1/+1 until end of turn.\n• Creatures you control gain hexproof until end of turn.",
+            "Azula Always Lies" => "Choose one or both —\n• Target creature gets -1/-1 until end of turn.\n• Put a +1/+1 counter on target creature.",
+            "Overwhelming Surge" => "Choose one or both —\n• Overwhelming Surge deals 3 damage to target creature.\n• Destroy target noncreature artifact.";
             "Choose two —\n• Draw a card.\n• You gain 2 life.",
             "Choose one —\n• Draw a card.",
             "Choose one —\n• Draw a card.\n• You gain 2 life.\n• Create a token.",
-            "Choose one —\nDraw a card.\n• You gain 2 life."
+            "Choose one —\nDraw a card.\n• You gain 2 life.",
+            "Choose one or both —\n• Draw a card.",
+            "Choose one or both —\n• Draw a card.\n• You gain 2 life.\n• Create a token."
         ),
     },
     Recipe {
@@ -3562,8 +3986,8 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Abrade" => "Destroy target artifact.",
             "Ancient Grudge" => "Destroy target artifact.";
             "Destroy up to one target artifact.",
-            "Destroy target artifact or enchantment.",
-            "Destroy target noncreature artifact.",
+            "Destroy target artifact or planeswalker.",
+            "Destroy target artifact with mana value 3 or less.",
             "Destroy target artifact. You gain 2 life."
         ),
     },
@@ -3677,6 +4101,280 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Draw two cards, then surveil 2.",
             "Surveil 2, then draw a card.",
             "Surveil 2. Draw two cards."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.counter.spell.unless_four"),
+        label: "counter target spell unless four mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_counter_spell_unless_four,
+        calibration: calibrations!(
+            "Confusticate and Bebother" => "Counter target spell unless its controller pays {4}.",
+            "Offering to Asha" => "Counter target spell unless its controller pays {4}.";
+            "Counter target spell unless its controller pays {3}.",
+            "Counter up to one target spell unless its controller pays {4}.",
+            "Counter target noncreature spell unless its controller pays {4}.",
+            "Counter target spell unless its controller pays {4}. You gain 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.draw_two.discard_one"),
+        label: "draw two then discard one mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_draw_two_discard_one,
+        calibration: calibrations!(
+            "Confusticate and Bebother" => "Draw two cards, then discard a card.",
+            "Ghastly Discovery" => "Draw two cards, then discard a card.";
+            "Draw two cards, then discard two cards.",
+            "Draw two cards, then you may discard a card.",
+            "Discard a card, then draw two cards.",
+            "Draw two cards. Then discard a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.damage.creature.equal_power.controlled_to_opponent"),
+        label: "controlled creature power damage to opposing creature mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_creature_power_damage,
+        calibration: calibrations!(
+            "Giantfall" => "Target creature you control deals damage equal to its power to target creature an opponent controls.",
+            "Rabid Bite" => "Target creature you control deals damage equal to its power to target creature an opponent controls.";
+            "Target creature deals damage equal to its power to target creature an opponent controls.",
+            "Target creature you control deals damage equal to its power to up to one target creature an opponent controls.",
+            "Target creature you control deals damage equal to its toughness to target creature an opponent controls.",
+            "Target creature you control deals damage equal to its power to any target."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.destroy.artifact_or_enchantment"),
+        label: "destroy target artifact or enchantment mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_destroy_artifact_or_enchantment,
+        calibration: calibrations!(
+            "Origin of Metalbending" => "Destroy target artifact or enchantment.",
+            "Disenchant" => "Destroy target artifact or enchantment.";
+            "Destroy target artifact or planeswalker.",
+            "Destroy up to one target artifact or enchantment.",
+            "Destroy target noncreature artifact or enchantment.",
+            "Destroy target artifact or enchantment. You gain 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.put_counter.creature.plus_one_plus_one.indestructible"),
+        label: "target creature counter and indestructible mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_counter_and_indestructible,
+        calibration: singleton_calibrations!(
+            "Origin of Metalbending" => "Put a +1/+1 counter on target creature you control. It gains indestructible until end of turn.";
+            "Put a +1/+1 counter on target creature you control.",
+            "Put a +1/+1 counter on target creature you control. It gains hexproof until end of turn.",
+            "Put a +1/+1 counter on target creature you control. It gains indestructible until end of turn. Untap it."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.damage.each_opponent_creature.one.source"),
+        label: "source deals one damage to each opposing creature mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_source_damage_each_opponent_one,
+        calibration: calibrations!(
+            "Iroh's Demonstration" => "Iroh's Demonstration deals 1 damage to each creature your opponents control.",
+            "Blazing Volley" => "Blazing Volley deals 1 damage to each creature your opponents control.";
+            "Iroh's Demonstration deals 1 damage to each creature.",
+            "Iroh's Demonstration deals 2 damage to each creature your opponents control.",
+            "Iroh's Demonstration deals 1 damage to each opponent.",
+            "It deals 1 damage to each creature your opponents control."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.damage.creature.four.source"),
+        label: "source deals four damage to target creature mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_source_damage_four_creature,
+        calibration: calibrations!(
+            "Iroh's Demonstration" => "Iroh's Demonstration deals 4 damage to target creature.",
+            "Bombard" => "Bombard deals 4 damage to target creature.";
+            "Iroh's Demonstration deals 5 damage to target creature.",
+            "Iroh's Demonstration deals 4 damage to any target.",
+            "It deals 4 damage to target creature.",
+            "Iroh's Demonstration deals 4 damage to target creature and 1 damage to its controller."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.grant.indestructible.artifact_or_creature"),
+        label: "artifact or creature gains indestructible mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_indestructible_artifact_or_creature,
+        calibration: singleton_calibrations!(
+            "Reroute Systems" => "Target artifact or creature gains indestructible until end of turn.";
+            "Target artifact gains indestructible until end of turn.",
+            "Target artifact or creature gains hexproof until end of turn.",
+            "Target artifact or creature gains indestructible until end of turn. Untap it.",
+            "Target artifact or creature you control gains indestructible until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.damage.tapped_creature.two.source"),
+        label: "source deals two damage to tapped creature mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_source_damage_tapped_creature,
+        calibration: singleton_calibrations!(
+            "Reroute Systems" => "Reroute Systems deals 2 damage to target tapped creature.";
+            "Reroute Systems deals 3 damage to target tapped creature.",
+            "Reroute Systems deals 2 damage to target creature.",
+            "Reroute Systems deals 2 damage to target untapped creature.",
+            "It deals 2 damage to target tapped creature."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.target_player.draw_two.lose_two"),
+        label: "target player draws two and loses two mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_target_player_draw_two_lose_two,
+        calibration: calibrations!(
+            "Reverent Howl" => "Target player draws two cards and loses 2 life.",
+            "Shredder's Revenge" => "Target player draws two cards and loses 2 life.";
+            "Target player draws two cards and loses 3 life.",
+            "Target player draws two cards.",
+            "Target player draws two cards and you lose 2 life.",
+            "Each player draws two cards and loses 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.pump.creature.plus_two_plus_two.lifelink"),
+        label: "target creature plus two plus two and lifelink mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_creature_plus_two_lifelink,
+        calibration: calibrations!(
+            "Reverent Howl" => "Target creature gets +2/+2 and gains lifelink until end of turn.",
+            "Give In to Violence" => "Target creature gets +2/+2 and gains lifelink until end of turn.";
+            "Target creature gets +2/+2 and gains lifelink until end of turn. Untap it.",
+            "Target creature you control gets +2/+2 and gains lifelink until end of turn.",
+            "Target creature gets +3/+3 and gains lifelink until end of turn.",
+            "Target creature gets +2/+2 and gains trample until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.discard.target_opponent.two"),
+        label: "target opponent discards two mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_target_opponent_discard_two,
+        calibration: calibrations!(
+            "Seeker's Folly" => "Target opponent discards two cards.",
+            "Deception" => "Target opponent discards two cards.";
+            "Target opponent discards a card.",
+            "Target opponent discards two cards at random.",
+            "Each opponent discards two cards.",
+            "Target opponent discards two cards. You draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.pump.opponents.creatures.minus_one_minus_one"),
+        label: "opposing creatures minus one minus one mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_opponents_minus_one_minus_one,
+        calibration: calibrations!(
+            "Seeker's Folly" => "Creatures your opponents control get -1/-1 until end of turn.",
+            "Make Obsolete" => "Creatures your opponents control get -1/-1 until end of turn.";
+            "Creatures your opponents control get -2/-2 until end of turn.",
+            "Creatures you control get -1/-1 until end of turn.",
+            "Creatures your opponents control get -1/-1 until end of turn. Draw a card.",
+            "Creatures your opponents control get -1/-2 until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.discard.target_player.two"),
+        label: "target player discards two mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_target_player_discard_two,
+        calibration: calibrations!(
+            "Shredder's Revenge" => "Target player discards two cards.",
+            "Mind Rot" => "Target player discards two cards.";
+            "Target player discards a card.",
+            "Target player discards two cards at random.",
+            "Each player discards two cards.",
+            "Target player discards two cards. You draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.grant.indestructible.creature"),
+        label: "target creature gains indestructible mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_target_indestructible_creature,
+        calibration: singleton_calibrations!(
+            "Valorous Stance" => "Target creature gains indestructible until end of turn.";
+            "Target creature gains indestructible until end of turn. Untap it.",
+            "Target creature you control gains indestructible until end of turn.",
+            "Target creature gains hexproof until end of turn.",
+            "Creatures you control gain indestructible until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.destroy.creature.toughness_at_least_four"),
+        label: "destroy target creature with toughness four or greater mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_destroy_toughness_four,
+        calibration: calibrations!(
+            "Valorous Stance" => "Destroy target creature with toughness 4 or greater.",
+            "Collar the Culprit" => "Destroy target creature with toughness 4 or greater.";
+            "Destroy target creature with toughness 3 or greater.",
+            "Destroy target creature with power 4 or greater.",
+            "Destroy target creature with toughness 4 or greater. You gain 2 life.",
+            "Destroy up to one target creature with toughness 4 or greater."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.put_counter.creature.plus_one_plus_one.trample_hexproof"),
+        label: "target creature counter trample hexproof mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_counter_and_keywords,
+        calibration: singleton_calibrations!(
+            "Warg Tactics" => "Put a +1/+1 counter on target creature you control. It gains trample and hexproof until end of turn.";
+            "Put a +1/+1 counter on target creature. It gains trample and hexproof until end of turn.",
+            "Put a +1/+1 counter on target creature you control. It gains hexproof and trample until end of turn.",
+            "Put two +1/+1 counters on target creature you control. It gains trample and hexproof until end of turn.",
+            "Put a +1/+1 counter on target creature you control. It gains trample until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.pump.creature.minus_one_minus_one"),
+        label: "target creature minus one minus one mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_creature_minus_one,
+        calibration: calibrations!(
+            "Azula Always Lies" => "Target creature gets -1/-1 until end of turn.",
+            "Night // Day" => "Target creature gets -1/-1 until end of turn.";
+            "Target creature gets -2/-2 until end of turn.",
+            "Target creature you control gets -1/-1 until end of turn.",
+            "Up to one target creature gets -1/-1 until end of turn.",
+            "Target creature gets -1/-1 until end of turn. You gain 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.put_counter.creature.plus_one_plus_one"),
+        label: "target creature plus one plus one counter mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_put_counter_creature,
+        calibration: calibrations!(
+            "Azula Always Lies" => "Put a +1/+1 counter on target creature.",
+            "Vastwood Fortification" => "Put a +1/+1 counter on target creature.";
+            "Put two +1/+1 counters on target creature.",
+            "Put a +1/+1 counter on target creature you control.",
+            "Put a +1/+1 counter on up to one target creature.",
+            "Put a +1/+1 counter on target creature. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.destroy.noncreature_artifact"),
+        label: "destroy target noncreature artifact mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_destroy_noncreature_artifact,
+        calibration: calibrations!(
+            "Overwhelming Surge" => "Destroy target noncreature artifact.",
+            "Crush" => "Destroy target noncreature artifact.";
+            "Destroy target noncreature artifact or enchantment.",
+            "Destroy target noncreature permanent.",
+            "Destroy target noncreature artifact. You gain 2 life.",
+            "Destroy target artifact or planeswalker."
         ),
     },
     Recipe {
@@ -5190,27 +5888,63 @@ pub(super) fn match_modal_mode(
     match_surface_in(CATALOG, mode_text, RecipeSurface::ModalMode, context)
 }
 
-pub(super) fn reviewed_modal_mode_pair(mode_ids: &[RecipeId]) -> bool {
+pub(super) fn reviewed_modal_mode_pair(
+    mode_ids: &[RecipeId],
+    min_modes: u32,
+    max_modes: u32,
+) -> bool {
     let ids = mode_ids.iter().map(|id| id.as_str()).collect::<Vec<_>>();
-    matches!(
-        ids.as_slice(),
-        [
-            "modal_mode.damage.creature.three.source",
-            "modal_mode.destroy.artifact"
-        ] | [
-            "modal_mode.pump.team.plus_one_plus_one",
-            "modal_mode.grant.team.hexproof"
-        ] | [
-            "modal_mode.pump.team.plus_two_power",
-            "modal_mode.create_tokens.goblin_red_one_one.two"
-        ] | [
-            "modal_mode.pump.creature.plus_three_plus_three",
-            "modal_mode.destroy.creature.flying"
-        ] | [
-            "modal_mode.counter.spell.unrestricted",
-            "modal_mode.surveil_two.draw_two"
-        ]
-    )
+    let expected_bounds = match ids.as_slice() {
+        ["modal_mode.damage.creature.three.source", "modal_mode.destroy.artifact"] => Some((1, 1)),
+        ["modal_mode.pump.team.plus_one_plus_one", "modal_mode.grant.team.hexproof"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.pump.team.plus_two_power", "modal_mode.create_tokens.goblin_red_one_one.two"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.pump.creature.plus_three_plus_three", "modal_mode.destroy.creature.flying"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.counter.spell.unrestricted", "modal_mode.surveil_two.draw_two"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.counter.spell.unless_four", "modal_mode.draw_two.discard_one"] => Some((1, 1)),
+        ["modal_mode.damage.creature.equal_power.controlled_to_opponent", "modal_mode.destroy.artifact"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.damage.each_opponent_creature.one.source", "modal_mode.damage.creature.four.source"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.destroy.artifact_or_enchantment", "modal_mode.put_counter.creature.plus_one_plus_one.indestructible"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.grant.indestructible.artifact_or_creature", "modal_mode.damage.tapped_creature.two.source"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.target_player.draw_two.lose_two", "modal_mode.pump.creature.plus_two_plus_two.lifelink"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.discard.target_opponent.two", "modal_mode.pump.opponents.creatures.minus_one_minus_one"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.discard.target_player.two", "modal_mode.target_player.draw_two.lose_two"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.grant.indestructible.creature", "modal_mode.destroy.creature.toughness_at_least_four"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.destroy.creature.flying", "modal_mode.put_counter.creature.plus_one_plus_one.trample_hexproof"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.pump.creature.minus_one_minus_one", "modal_mode.put_counter.creature.plus_one_plus_one"] => {
+            Some((1, 2))
+        }
+        ["modal_mode.damage.creature.three.source", "modal_mode.destroy.noncreature_artifact"] => {
+            Some((1, 2))
+        }
+        _ => None,
+    };
+    expected_bounds == Some((min_modes, max_modes))
 }
 
 pub(super) fn match_clause(

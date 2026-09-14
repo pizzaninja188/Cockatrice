@@ -416,6 +416,7 @@ conduit_pylons	0	ability:0	exercised
 conduit_pylons	0	ability:1	exercised
 conduit_pylons	0	land	exercised
 confiscate	0	cast	exercised
+confusticate_and_bebother	0	cast	exercised
 conifer_strider	0	cast	exercised
 consulate_skygate	0	cast	exercised
 convolute	0	cast	unsupported: target group 0 needs a richer fixture
@@ -819,6 +820,7 @@ giant_scorpion	0	cast	exercised
 giant_solifuge	0	cast	exercised
 giant_spider	0	cast	exercised
 giant_warthog	0	cast	exercised
+giantfall	0	cast	exercised
 giants_boulder	0	ability:0	exercised
 giants_boulder	0	ability:1	exercised
 giants_boulder	0	cast	exercised
@@ -1096,6 +1098,7 @@ invasion_of_ulgrotha_grandmother_ravi_sengir	0	cast	exercised
 invasion_of_ulgrotha_grandmother_ravi_sengir	1	cast	intentional: face unavailable from hand
 invasion_reinforcements	0	cast	exercised
 iroass_champion	0	cast	exercised
+irohs_demonstration	0	cast	exercised
 iron_giant	0	cast	exercised
 iron_myr	0	ability:0	exercised
 iron_myr	0	cast	exercised
@@ -1482,6 +1485,7 @@ orazca_raptor	0	cast	exercised
 orb_of_dreams	0	cast	exercised
 order_of_the_sacred_bell	0	cast	exercised
 oreskos_swiftclaw	0	cast	exercised
+origin_of_metalbending	0	cast	exercised
 ornery_dilophosaur	0	cast	exercised
 ornithopter	0	cast	exercised
 orochi_sustainer	0	ability:0	exercised
@@ -1495,6 +1499,7 @@ outlaw_medic	0	cast	exercised
 overgrown_tomb	0	ability:0	exercised
 overgrown_tomb	0	land	exercised
 overrun	0	cast	exercised
+overwhelming_surge	0	cast	exercised
 pacifism	0	cast	exercised
 pack_mastiff	0	ability:0	exercised
 pack_mastiff	0	cast	exercised
@@ -1659,12 +1664,14 @@ renegade_demon	0	cast	exercised
 renegade_troops	0	cast	exercised
 reputable_merchant	0	cast	exercised
 requiting_hex	0	cast	exercised
+reroute_systems	0	cast	exercised
 resistance_skywarden	0	cast	exercised
 resolute_reinforcements	0	cast	exercised
 restless_reef	0	ability:0	exercised
 restless_reef	0	ability:1	exercised
 restless_reef	0	land	exercised
 return_to_the_sewers	0	cast	exercised
+reverent_howl	0	cast	exercised
 rhox_brute	0	cast	exercised
 rhox_oracle	0	cast	exercised
 rhox_war_monk	0	cast	exercised
@@ -1798,6 +1805,7 @@ seat_of_the_synod	0	land	exercised
 sedge_scorpion	0	cast	exercised
 seeker_of_skybreak	0	ability:0	exercised
 seeker_of_skybreak	0	cast	exercised
+seekers_folly	0	cast	exercised
 segovian_angel	0	cast	exercised
 seized_from_slumber	0	cast	exercised
 selesnya_guildgate	0	ability:0	exercised
@@ -1846,6 +1854,7 @@ short_sword	0	ability:0	exercised
 short_sword	0	cast	exercised
 show_of_valor	0	cast	exercised
 shredder,_unrelenting	0	cast	exercised
+shredders_revenge	0	cast	exercised
 shredders_technique	0	cast	exercised
 shrike_force	0	cast	exercised
 shu_elite_infantry	0	cast	exercised
@@ -2253,6 +2262,7 @@ untamed_hunger	0	cast	exercised
 updraft_elemental	0	cast	exercised
 valiant_guard	0	cast	exercised
 valkyrior_skyrider	0	cast	exercised
+valorous_stance	0	cast	exercised
 vampire_champion	0	cast	exercised
 vampire_interloper	0	cast	exercised
 vampire_nighthawk	0	cast	exercised
@@ -2358,6 +2368,7 @@ warden_of_geometries	0	cast	exercised
 wardscale_crocodile	0	cast	exercised
 warehouse_tabby	0	ability:0	exercised
 warehouse_tabby	0	cast	exercised
+warg_tactics	0	cast	exercised
 warleaders_call	0	cast	exercised
 warpath_ghoul	0	cast	exercised
 warren_elder	0	ability:0	exercised

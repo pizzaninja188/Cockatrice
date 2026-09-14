@@ -1210,6 +1210,18 @@ pub(super) fn permanent_matches_filter_characteristics(
             return false;
         }
     }
+    if let Some(comparison) = filter.toughness {
+        let Some(toughness) = characteristics.toughness else {
+            return false;
+        };
+        let matches = match comparison {
+            PowerComparison::AtLeast(minimum) => toughness >= minimum,
+            PowerComparison::AtMost(maximum) => toughness <= maximum,
+        };
+        if !matches {
+            return false;
+        }
+    }
     if filter
         .tapped
         .is_some_and(|required| object.tapped != required)

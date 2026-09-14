@@ -236,7 +236,12 @@ pub(super) fn damage_all(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::DamageAll { amount, kind } = effect else {
+    let SpellEffectKind::DamageAll {
+        amount,
+        players,
+        kind,
+    } = effect
+    else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let amount = cx.engine.resolve_amount(
@@ -254,7 +259,7 @@ pub(super) fn damage_all(
     // CR 119: deal damage to each matching permanent. Marking damage mirrors
     // DamageTarget; lethal-damage destruction is left to state-based actions
     // (CR 704.5g), which run immediately after this spell resolves.
-    let affected = battlefield_objects_matching(engine, &kind);
+    let affected = scoped_battlefield_objects(engine, cx.controller, players, &kind);
     let damage: Vec<_> = affected
         .into_iter()
         .map(|tid| crate::engine::damage::DamageSpec {

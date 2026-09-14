@@ -563,9 +563,9 @@ fn parse_rules_text(
         if let Some(assembly) =
             match_modal_assembly(oracle_text, &base_context).map_err(RulesParseError::Ambiguous)?
         {
-            if !matches!(assembly.emission, RecipeEmission::ModalAssembly) {
+            let RecipeEmission::ModalAssembly(assembly_emission) = assembly.emission else {
                 return Err(RulesParseError::Unsupported);
-            }
+            };
             let mut modes = Vec::with_capacity(2);
             let mut mode_recipe_ids = Vec::with_capacity(2);
             parsed.recipe_labels.push(assembly.label);
@@ -599,12 +599,16 @@ fn parse_rules_text(
                 });
                 parsed.recipe_labels.push(matched.label);
             }
-            if !reviewed_modal_mode_pair(&mode_recipe_ids) {
+            if !reviewed_modal_mode_pair(
+                &mode_recipe_ids,
+                assembly_emission.min_modes,
+                assembly_emission.max_modes,
+            ) {
                 return Err(RulesParseError::Unsupported);
             }
             parsed.modal_spell = Some(ModalDef {
-                min_modes: 1,
-                max_modes: 1,
+                min_modes: assembly_emission.min_modes,
+                max_modes: assembly_emission.max_modes,
                 all_modes_cast_cost: None,
                 modes,
             });
@@ -698,7 +702,7 @@ fn parse_rules_text(
                 parsed.spell_effect = effects;
                 parsed.targeting = Some(targeting);
             }
-            RecipeEmission::ModalAssembly | RecipeEmission::ModalMode(_) => {
+            RecipeEmission::ModalAssembly(_) | RecipeEmission::ModalMode(_) => {
                 return Err(RulesParseError::Unsupported);
             }
             RecipeEmission::TriggeredAbility(ability) => parsed.triggered_abilities.push(ability),
@@ -3052,6 +3056,191 @@ mod tests {
             assert!(
                 evaluate_fresh(&unsupported).is_err(),
                 "unreviewed, reordered, and partial aggregates must fail closed"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_269_choose_one_or_both_cohort_uses_exact_modal_bounds_and_order() {
+        let cards = [
+            normal_card(
+                "Confusticate and Bebother",
+                "{2}{U}",
+                "Instant",
+                "Choose one —\n• Counter target spell unless its controller pays {4}.\n• Draw two cards, then discard a card.",
+                None,
+            ),
+            normal_card(
+                "Giantfall",
+                "{1}{R}",
+                "Instant",
+                "Choose one —\n• Target creature you control deals damage equal to its power to target creature an opponent controls.\n• Destroy target artifact.",
+                None,
+            ),
+            normal_card(
+                "Iroh's Demonstration",
+                "{1}{R}",
+                "Sorcery — Lesson",
+                "Choose one —\n• Iroh's Demonstration deals 1 damage to each creature your opponents control.\n• Iroh's Demonstration deals 4 damage to target creature.",
+                None,
+            ),
+            normal_card(
+                "Origin of Metalbending",
+                "{1}{G}",
+                "Instant — Lesson",
+                "Choose one —\n• Destroy target artifact or enchantment.\n• Put a +1/+1 counter on target creature you control. It gains indestructible until end of turn.",
+                None,
+            ),
+            normal_card(
+                "Reroute Systems",
+                "{W}",
+                "Instant",
+                "Choose one —\n• Target artifact or creature gains indestructible until end of turn.\n• Reroute Systems deals 2 damage to target tapped creature.",
+                None,
+            ),
+            normal_card(
+                "Reverent Howl",
+                "{2}{B}",
+                "Instant",
+                "Choose one —\n• Target player draws two cards and loses 2 life.\n• Target creature gets +2/+2 and gains lifelink until end of turn.",
+                None,
+            ),
+            normal_card(
+                "Seeker's Folly",
+                "{2}{B}",
+                "Sorcery",
+                "Choose one —\n• Target opponent discards two cards.\n• Creatures your opponents control get -1/-1 until end of turn.",
+                None,
+            ),
+            normal_card(
+                "Shredder's Revenge",
+                "{2}{B}",
+                "Sorcery",
+                "Choose one —\n• Target player discards two cards.\n• Target player draws two cards and loses 2 life.",
+                None,
+            ),
+            normal_card(
+                "Valorous Stance",
+                "{1}{W}",
+                "Instant",
+                "Choose one —\n• Target creature gains indestructible until end of turn.\n• Destroy target creature with toughness 4 or greater.",
+                None,
+            ),
+            normal_card(
+                "Warg Tactics",
+                "{1}{G}",
+                "Instant",
+                "Choose one —\n• Destroy target creature with flying.\n• Put a +1/+1 counter on target creature you control. It gains trample and hexproof until end of turn.",
+                None,
+            ),
+            normal_card(
+                "Azula Always Lies",
+                "{1}{B}",
+                "Instant — Lesson",
+                "Choose one or both —\n• Target creature gets -1/-1 until end of turn.\n• Put a +1/+1 counter on target creature.",
+                None,
+            ),
+            normal_card(
+                "Overwhelming Surge",
+                "{2}{R}",
+                "Instant",
+                "Choose one or both —\n• Overwhelming Surge deals 3 damage to target creature.\n• Destroy target noncreature artifact.",
+                None,
+            ),
+        ];
+
+        for card in cards {
+            let name = str_field(&card, "name").to_string();
+            let generated = evaluate_fresh(&card)
+                .unwrap_or_else(|error| panic!("{name} should generate: {error:?}"));
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            let modal = raw
+                .modal_spell
+                .unwrap_or_else(|| panic!("{name} should emit modal_spell"));
+            let expected_max =
+                if matches!(name.as_str(), "Azula Always Lies" | "Overwhelming Surge") {
+                    2
+                } else {
+                    1
+                };
+            assert_eq!(
+                (modal.min_modes, modal.max_modes),
+                (1, expected_max),
+                "{name}"
+            );
+            assert_eq!(modal.modes.len(), 2, "{name}");
+            assert_eq!(
+                modal
+                    .modes
+                    .iter()
+                    .map(|mode| mode.mode_id.as_str())
+                    .collect::<Vec<_>>(),
+                ["mode_01", "mode_02"],
+                "{name}"
+            );
+            assert_eq!(
+                modal
+                    .modes
+                    .iter()
+                    .map(|mode| &mode.presentation)
+                    .collect::<Vec<_>>(),
+                [
+                    &AbilityPresentation::OracleLines(vec![2]),
+                    &AbilityPresentation::OracleLines(vec![3]),
+                ],
+                "{name}"
+            );
+            assert_eq!(
+                generated.faces[0].recipe_labels.first().copied(),
+                Some("two-bullet modal spell assembly"),
+                "{name}"
+            );
+            assert!(
+                modal.modes.iter().all(|mode| !mode.effects.is_empty()),
+                "{name}"
+            );
+        }
+
+        for unsupported in [
+            normal_card(
+                "Unreviewed Choose Both Pair",
+                "{1}{U}",
+                "Instant",
+                "Choose one or both —\n• Counter target spell.\n• Draw a card.",
+                None,
+            ),
+            normal_card(
+                "Missing Choose Both Bullet",
+                "{1}{U}",
+                "Instant",
+                "Choose one or both —\n• Counter target spell.",
+                None,
+            ),
+            normal_card(
+                "Extra Choose Both Text",
+                "{1}{U}",
+                "Instant",
+                "Choose one or both —\n• Counter target spell.\n• Draw a card.\nThen scry 1.",
+                None,
+            ),
+            normal_card(
+                "Abrade Rewritten as Choose Both",
+                "{1}{R}",
+                "Instant",
+                "Choose one or both —\n• Abrade Rewritten as Choose Both deals 3 damage to target creature.\n• Destroy target artifact.",
+                None,
+            ),
+            normal_card(
+                "Azula Rewritten as Choose One",
+                "{1}{B}",
+                "Instant",
+                "Choose one —\n• Target creature gets -1/-1 until end of turn.\n• Put a +1/+1 counter on target creature.",
+                None,
+            ),
+        ] {
+            assert!(
+                evaluate_fresh(&unsupported).is_err(),
+                "unreviewed or malformed Choose one or both aggregates must fail closed"
             );
         }
     }

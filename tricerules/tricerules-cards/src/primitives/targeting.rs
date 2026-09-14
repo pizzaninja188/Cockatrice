@@ -758,6 +758,12 @@ pub struct TargetFilter {
     /// match a power-constrained filter.
     #[serde(default)]
     pub power: Option<PowerComparison>,
+    /// Optional comparison against current derived toughness. A noncreature has no toughness and
+    /// cannot match a toughness-constrained filter. This is deliberately separate from `power`:
+    /// CR 608.2b rechecks the characteristic named by the spell, and effects such as Valorous
+    /// Stance must not accidentally use power when Oracle says toughness.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub toughness: Option<PowerComparison>,
     /// Keywords every matching permanent must currently have. Shared by targeted, untargeted,
     /// and cost-selection predicates (for example Defender on Portcullis Vine / Run Afoul).
     #[serde(default)]
@@ -987,6 +993,7 @@ impl TargetFilter {
             || !self.required_supertypes.is_empty()
             || !self.excluded_supertypes.is_empty()
             || self.power.is_some()
+            || self.toughness.is_some()
             || !self.required_keywords.is_empty()
             || !self.excluded_keywords.is_empty()
     }
@@ -1296,6 +1303,11 @@ mod tests {
             TargetFilter {
                 kind: TargetKind::AnyPlayer,
                 power: Some(PowerComparison::AtLeast(4)),
+                ..Default::default()
+            },
+            TargetFilter {
+                kind: TargetKind::AnyPlayer,
+                toughness: Some(PowerComparison::AtLeast(4)),
                 ..Default::default()
             },
         ];

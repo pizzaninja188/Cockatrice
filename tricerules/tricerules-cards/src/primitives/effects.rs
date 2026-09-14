@@ -1543,6 +1543,11 @@ pub enum SpellEffectKind {
     /// covers Calamitous Cave-In. Only object kinds are legal (validated at load).
     DamageAll {
         amount: Amount,
+        /// Relative controller scope for the affected permanents. The default `All` preserves
+        /// legacy unqualified sweeps; opponent- and controller-scoped variants share the same
+        /// mass-damage vocabulary without smuggling controller relationships into `kind`.
+        #[serde(default, skip_serializing_if = "relative_player_set_is_all")]
+        players: RelativePlayerSet,
         #[serde(default = "TargetFilter::default_creature")]
         kind: TargetFilter,
     },
@@ -2257,11 +2262,16 @@ pub struct ConditionalManaOutput {
 /// Which players' permanents a mass one-shot effect affects, relative to the effect controller.
 /// Kept separate from target selection because these effects do not target. Covers Cryptic
 /// Command (`Opponents`), Vitalize (`Controller`), and Blinding Light (`All`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum RelativePlayerSet {
     Controller,
     Opponents,
+    #[default]
     All,
+}
+
+fn relative_player_set_is_all(players: &RelativePlayerSet) -> bool {
+    *players == RelativePlayerSet::All
 }
 
 /// Which player an **untargeted** effect affects.
