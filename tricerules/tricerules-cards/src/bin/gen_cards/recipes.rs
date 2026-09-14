@@ -625,6 +625,60 @@ fn match_spell_return_graveyard_card_to_hand(
     })
 }
 
+fn match_spell_controlled_creature_power_damage_to_noncontroller_permanent(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    ((context.source_is_instant || context.source_is_sorcery)
+        && text
+            == "Target creature you control deals damage equal to its power to target creature or planeswalker you don't control.")
+        .then(|| {
+            let source = TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..TargetFilter::default()
+            };
+            let target = TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                controller: TargetController::NotYou,
+                permanent_types: vec![
+                    PermanentTypeFilter::Creature,
+                    PermanentTypeFilter::Planeswalker,
+                ],
+                ..TargetFilter::default()
+            };
+            RecipeEmission::SpellEffectsWithTargeting {
+                effects: vec![SpellEffectKind::CreatureDealsDamageEqualToPower {
+                    source,
+                    target,
+                }],
+                targeting: TargetingDef {
+                    groups: vec![
+                        TargetGroupDef {
+                            min: 1,
+                            max: 1,
+                            prompt: "Choose target creature you control".into(),
+                            effect_indices: vec![0],
+                            distinct_from: vec![1],
+                            same_graveyard: false,
+                            cast_cost_expansion: None,
+                        },
+                        TargetGroupDef {
+                            min: 1,
+                            max: 1,
+                            prompt: "Choose target creature or planeswalker you don't control"
+                                .into(),
+                            effect_indices: vec![0],
+                            distinct_from: vec![0],
+                            same_graveyard: false,
+                            cast_cost_expansion: None,
+                        },
+                    ],
+                },
+            }
+        })
+}
+
 fn legendary_creature_search_effect() -> SpellEffectKind {
     SpellEffectKind::SearchLibrary {
         who: PlayerRecipient::Controller,
@@ -3905,6 +3959,19 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Target creature deals damage equal to its power to target creature an opponent controls.",
             "Target creature you control deals damage equal to its power to target creature.",
             "Target creature you control deals damage equal to its power to up to one target creature an opponent controls."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.damage.creature.equal_power.controlled_to_noncontroller_permanent"),
+        label: "controlled creature power damage to noncontroller creature or planeswalker",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_controlled_creature_power_damage_to_noncontroller_permanent,
+        calibration: calibrations!(
+            "Hard-Hitting Question" => "Target creature you control deals damage equal to its power to target creature or planeswalker you don't control.",
+            "Bite Down" => "Target creature you control deals damage equal to its power to target creature or planeswalker you don't control.";
+            "Target creature you control gets +1/+0 until end of turn. Then it deals damage equal to its power to target creature you don't control.",
+            "Target creature you control deals damage equal to its power to target planeswalker you don't control.",
+            "Target creature you control deals damage equal to its power to each creature or planeswalker you don't control."
         ),
     },
     Recipe {
@@ -8548,5 +8615,69 @@ mod tests {
         assert!(match_clause(cases[10].0, false, &nonland)
             .expect("generic paid mana recipe must not be ambiguous")
             .is_some());
+    }
+
+    #[test]
+    fn issue_276_creature_or_planeswalker_power_damage_template_is_supported() {
+        let cases = [
+            "Target creature you control deals damage equal to its power to target creature or planeswalker you don't control.",
+        ];
+        for clause in cases {
+            let matched = match_clause(clause, true, &context())
+                .expect("issue #276 clause must not be ambiguous")
+                .expect("issue #276 clause must be supported");
+            assert_eq!(
+                matched.id.as_str(),
+                "spell.damage.creature.equal_power.controlled_to_noncontroller_permanent"
+            );
+            let RecipeEmission::SpellEffectsWithTargeting { effects, targeting } = matched.emission
+            else {
+                panic!("issue #276 recipe must publish grouped spell targeting")
+            };
+            let [SpellEffectKind::CreatureDealsDamageEqualToPower { source, target }] =
+                effects.as_slice()
+            else {
+                panic!("issue #276 recipe must publish one power-damage effect")
+            };
+            assert_eq!(source.kind, TargetKind::Creature);
+            assert_eq!(source.controller, TargetController::You);
+            assert_eq!(target.kind, TargetKind::AnyPermanent);
+            assert_eq!(target.controller, TargetController::NotYou);
+            assert_eq!(
+                target.permanent_types,
+                [
+                    PermanentTypeFilter::Creature,
+                    PermanentTypeFilter::Planeswalker
+                ]
+            );
+            assert_eq!(targeting.groups.len(), 2);
+            assert_eq!(targeting.groups[0].distinct_from, [1]);
+            assert_eq!(targeting.groups[1].distinct_from, [0]);
+        }
+
+        let mut instant_only = context();
+        instant_only.source_is_sorcery = false;
+        assert!(match_clause(cases[0], true, &instant_only)
+            .expect("issue #276 instant context must not be ambiguous")
+            .is_some());
+
+        let mut sorcery_only = context();
+        sorcery_only.source_is_instant = false;
+        assert!(match_clause(cases[0], true, &sorcery_only)
+            .expect("issue #276 sorcery context must not be ambiguous")
+            .is_some());
+
+        for near_miss in [
+            "Target creature you control gets +1/+0 until end of turn. Then it deals damage equal to its power to target creature you don't control.",
+            "This spell costs {1} less to cast if it targets a Mount or Vehicle you control. Target creature you control deals damage equal to its power to target creature an opponent controls.",
+            "Target creature you control deals damage equal to its power to target creature you don't control.",
+            "Target creature you control deals damage equal to its power to each of two other target creatures.",
+        ] {
+            assert_eq!(
+                match_clause(near_miss, true, &context()),
+                Ok(None),
+                "issue #276 near-miss must remain unsupported: {near_miss}"
+            );
+        }
     }
 }

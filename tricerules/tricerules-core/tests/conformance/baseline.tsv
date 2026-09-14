@@ -197,6 +197,7 @@ biosynthic_burst	0	cast	exercised
 birnin_zana_plaza	0	ability:0	exercised
 birnin_zana_plaza	0	land	exercised
 bishops_soldier	0	cast	exercised
+bite_down	0	cast	exercised
 bitter_triumph	0	cast	unsupported: required cast-cost group needs a specialized fixture
 bitterbow_sharpshooters	0	cast	exercised
 black_knight	0	cast	exercised
@@ -960,6 +961,7 @@ hallowed_fountain	0	land	exercised
 hamato_guardian_stance	0	cast	exercised
 hand_of_silumgar	0	cast	exercised
 happy_hogan,_dauntless_driver	0	cast	exercised
+hard-hitting_question	0	cast	exercised
 hard-won_jitte	0	ability:0	exercised
 hard-won_jitte	0	cast	exercised
 hardbristle_bandit	0	ability:0	exercised

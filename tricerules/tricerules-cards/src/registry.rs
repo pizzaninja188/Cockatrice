@@ -4130,6 +4130,44 @@ mod tests {
     }
 
     #[test]
+    fn issue_276_generated_power_damage_cohort_registers_union_targeting() {
+        let registry = CardRegistry::from_embedded().expect("embedded registry");
+        for card_id in ["bite_down", "hard-hitting_question"] {
+            let face = registry
+                .get(card_id)
+                .unwrap_or_else(|| panic!("{card_id} is registered"))
+                .primary_face();
+            let [SpellEffectKind::CreatureDealsDamageEqualToPower { source, target }] =
+                face.spell_effect.as_slice()
+            else {
+                panic!("{card_id} must have one power-damage effect");
+            };
+            assert_eq!(source.kind, TargetKind::Creature, "{card_id}");
+            assert_eq!(source.controller, crate::primitives::TargetController::You);
+            assert_eq!(target.kind, TargetKind::AnyPermanent, "{card_id}");
+            assert_eq!(
+                target.controller,
+                crate::primitives::TargetController::NotYou
+            );
+            assert_eq!(
+                target.permanent_types,
+                [
+                    PermanentTypeFilter::Creature,
+                    PermanentTypeFilter::Planeswalker
+                ],
+                "{card_id}"
+            );
+            let targeting = face
+                .targeting
+                .as_ref()
+                .unwrap_or_else(|| panic!("{card_id} must publish targeting"));
+            assert_eq!(targeting.groups.len(), 2, "{card_id}");
+            assert_eq!(targeting.groups[0].distinct_from, [1], "{card_id}");
+            assert_eq!(targeting.groups[1].distinct_from, [0], "{card_id}");
+        }
+    }
+
+    #[test]
     fn modal_modes_require_stable_identity_and_external_presentation() {
         let valid = r#"(
             id: "modal_identity", name: "Modal Identity", face_id: "modal_identity",

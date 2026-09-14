@@ -417,3 +417,5 @@ mod issue_268_generated_one_shot_spells;
 mod issue_271_generated_targeted_ordered;
 #[path = "scenario/issue_272_manifest_dread_equipment.rs"]
 mod issue_272_manifest_dread_equipment;
+#[path = "scenario/issue_276_generated_power_damage.rs"]
+mod issue_276_generated_power_damage;

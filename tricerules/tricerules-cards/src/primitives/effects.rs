@@ -3463,11 +3463,18 @@ impl SpellEffectKind {
             }
             SpellEffectKind::CreatureDealsDamageEqualToPower { source, target }
                 if !source.all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature)
-                    || !target
-                        .all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature) =>
+                    || !target.all_terminal_filters_match(|leaf| {
+                        leaf.kind == TargetKind::Creature
+                            || (leaf.kind == TargetKind::AnyPermanent
+                                && leaf.permanent_types
+                                    == [
+                                        PermanentTypeFilter::Creature,
+                                        PermanentTypeFilter::Planeswalker,
+                                    ])
+                    }) =>
             {
                 return Err(
-                    "CreatureDealsDamageEqualToPower requires two creature target filters".into(),
+                    "CreatureDealsDamageEqualToPower requires a creature source and a creature target or exact creature/planeswalker permanent target filter".into(),
                 );
             }
             SpellEffectKind::SetBasePowerToughness {
@@ -5041,6 +5048,70 @@ mod issue_187_base_pt_tests {
             effect.validate(EffectContext::Spell),
             Err("source-relative base P/T values require a permanent ability source".into())
         );
+    }
+}
+
+#[cfg(test)]
+mod issue_276_power_damage_tests {
+    use super::*;
+
+    fn power_damage_effect(target: TargetFilter) -> SpellEffectKind {
+        SpellEffectKind::CreatureDealsDamageEqualToPower {
+            source: TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..Default::default()
+            },
+            target,
+        }
+    }
+
+    #[test]
+    fn power_damage_allows_exact_creature_or_planeswalker_target_union() {
+        let target = TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            controller: TargetController::NotYou,
+            permanent_types: vec![
+                PermanentTypeFilter::Creature,
+                PermanentTypeFilter::Planeswalker,
+            ],
+            ..Default::default()
+        };
+        assert!(power_damage_effect(target)
+            .validate(EffectContext::Spell)
+            .is_ok());
+    }
+
+    #[test]
+    fn power_damage_rejects_non_exact_target_unions() {
+        for target in [
+            TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                permanent_types: vec![PermanentTypeFilter::Creature],
+                ..Default::default()
+            },
+            TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                permanent_types: vec![
+                    PermanentTypeFilter::Planeswalker,
+                    PermanentTypeFilter::Creature,
+                ],
+                ..Default::default()
+            },
+            TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                permanent_types: vec![
+                    PermanentTypeFilter::Creature,
+                    PermanentTypeFilter::Planeswalker,
+                    PermanentTypeFilter::Artifact,
+                ],
+                ..Default::default()
+            },
+        ] {
+            assert!(power_damage_effect(target)
+                .validate(EffectContext::Spell)
+                .is_err());
+        }
     }
 }
 
