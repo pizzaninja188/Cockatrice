@@ -2113,6 +2113,44 @@ fn match_enchantment_etb_optional_linked_exile_gain_two(
         })
 }
 
+fn match_enchantment_etb_linked_exile(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_enchantment
+        && text
+            == "When this enchantment enters, exile target nonland permanent an opponent controls until this enchantment leaves the battlefield.")
+        .then(|| {
+            let target = TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                controller: TargetController::Opponent,
+                excluded_permanent_types: vec![PermanentTypeFilter::Land],
+                ..TargetFilter::default()
+            };
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfEntersBattlefield,
+                vec![SpellEffectKind::ExileUntilSourceLeaves {
+                    target: target.clone(),
+                }],
+            ) else {
+                unreachable!("triggered_ability_with always returns a triggered ability")
+            };
+            ability.targeting = Some(TargetingDef {
+                groups: vec![TargetGroupDef {
+                    min: 1,
+                    max: 1,
+                    prompt: "Choose target nonland permanent an opponent controls".into(),
+                    effect_indices: vec![0],
+                    distinct_from: Vec::new(),
+                    same_graveyard: false,
+                    cast_cost_expansion: None,
+                }],
+            });
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
 fn match_creature_trigger_create_token(
     text: &str,
     context: &RecipeContext,
@@ -3734,6 +3772,23 @@ pub(super) static CATALOG: &[Recipe] = &[
             "When this enchantment enters, exile up to one target nonland permanent until this enchantment leaves the battlefield. You gain 2 life.",
             "When this enchantment enters, exile up to one target nonland permanent an opponent controls until this enchantment leaves the battlefield. You gain 3 life.",
             "When this enchantment enters, you gain 2 life. Exile up to one target nonland permanent an opponent controls until this enchantment leaves the battlefield."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.enchantment.exile_opponent_nonland_until_source_leaves"),
+        label: "mandatory linked exile of opposing nonland",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_enchantment_etb_linked_exile,
+        calibration: calibrations!(
+            "Banishing Light" => "When this enchantment enters, exile target nonland permanent an opponent controls until this enchantment leaves the battlefield.",
+            "Stormplain Detainment" => "When this enchantment enters, exile target nonland permanent an opponent controls until this enchantment leaves the battlefield.";
+            "When this enchantment enters, exile up to one target nonland permanent an opponent controls until this enchantment leaves the battlefield.",
+            "When this artifact enters, exile target nonland permanent an opponent controls until this artifact leaves the battlefield.",
+            "When this enchantment enters, exile target artifact or creature an opponent controls until this enchantment leaves the battlefield.",
+            "When this enchantment enters, exile target creature an opponent controls until this enchantment leaves the battlefield.",
+            "When this enchantment enters, exile target nonland permanent an opponent controls until this enchantment leaves the battlefield. You gain 2 life.",
+            "When this enchantment enters, you gain 2 life. Exile target nonland permanent an opponent controls until this enchantment leaves the battlefield.",
+            "When this enchantment enters, exile target nonland permanent an opponent controls until this enchantment leaves the battlefield.\nWhen this enchantment enters, create a 1/1 red Mercenary creature token."
         ),
     },
     Recipe {
@@ -7833,6 +7888,41 @@ mod tests {
         )
         .unwrap()
         .is_none());
+    }
+
+    #[test]
+    fn issue_273_enchantment_linked_exile_template_is_supported() {
+        let clause = "When this enchantment enters, exile target nonland permanent an opponent controls until this enchantment leaves the battlefield.";
+        let matched = match_clause(clause, false, &context())
+            .expect("issue #273 ETB clause must not be ambiguous")
+            .expect("issue #273 ETB clause must be supported");
+        assert_eq!(
+            matched.id.as_str(),
+            "etb.enchantment.exile_opponent_nonland_until_source_leaves"
+        );
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("issue #273 ETB clause must emit a triggered ability");
+        };
+        assert_eq!(ability.effect.len(), 1);
+        let [SpellEffectKind::ExileUntilSourceLeaves { target }] = ability.effect.as_slice() else {
+            panic!("issue #273 must emit linked exile");
+        };
+        assert_eq!(target.kind, TargetKind::AnyPermanent);
+        assert_eq!(target.controller, TargetController::Opponent);
+        assert_eq!(target.excluded_permanent_types, [PermanentTypeFilter::Land]);
+        let groups = &ability.targeting.as_ref().expect("mandatory target").groups;
+        assert_eq!((groups[0].min, groups[0].max), (1, 1));
+        assert_eq!(groups[0].effect_indices, [0]);
+
+        let mut nonenchantment = context();
+        nonenchantment.source_is_enchantment = false;
+        assert_eq!(match_clause(clause, false, &nonenchantment), Ok(None));
+        for near_miss in [
+            "When this enchantment enters, exile target tapped nonland permanent an opponent controls until this enchantment leaves the battlefield.",
+            "When this enchantment enters, exile target nonland permanent with mana value 4 or less an opponent controls until this enchantment leaves the battlefield.",
+        ] {
+            assert_eq!(match_clause(near_miss, false, &context()), Ok(None), "{near_miss}");
+        }
     }
 
     #[test]

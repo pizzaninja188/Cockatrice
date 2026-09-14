@@ -3413,6 +3413,59 @@ mod tests {
     }
 
     #[test]
+    fn issue_273_web_up_renders_mandatory_linked_exile_wiring() {
+        let card = normal_card(
+            "Web Up",
+            "{2}{W}",
+            "Enchantment",
+            "When this enchantment enters, exile target nonland permanent an opponent controls until this enchantment leaves the battlefield.",
+            None,
+        );
+        let generated = evaluate_fresh(&card).expect("Web Up exact ETB recipe should qualify");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["mandatory linked exile of opposing nonland"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("Web Up must have one ETB ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        let [SpellEffectKind::ExileUntilSourceLeaves { target }] = ability.effect.as_slice() else {
+            panic!("Web Up must use linked exile");
+        };
+        assert_eq!(target.kind, TargetKind::AnyPermanent);
+        assert_eq!(target.controller, TargetController::Opponent);
+        assert_eq!(target.excluded_permanent_types, [PermanentTypeFilter::Land]);
+        let groups = &ability
+            .targeting
+            .as_ref()
+            .expect("Web Up target group")
+            .groups;
+        assert_eq!((groups[0].min, groups[0].max), (1, 1));
+        assert_eq!(groups[0].effect_indices, [0]);
+    }
+
+    #[test]
+    fn issue_273_lassoed_extra_unsupported_clause_rejects_whole_card() {
+        let card = normal_card(
+            "Lassoed by the Law",
+            "{3}{W}",
+            "Enchantment",
+            "When this enchantment enters, exile target nonland permanent an opponent controls until this enchantment leaves the battlefield.\nWhen this enchantment enters, create a 1/1 red Mercenary creature token with \"{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.\"",
+            None,
+        );
+        assert!(
+            evaluate_fresh(&card).is_err(),
+            "unsupported extra clause must reject the whole card"
+        );
+    }
+
+    #[test]
     fn issue_257_crew_rejects_nonvehicles_and_invalid_thresholds() {
         for (type_line, oracle_text) in [
             ("Artifact", "Crew 3"),
