@@ -944,6 +944,21 @@ fn match_enchant_creature(text: &str, context: &RecipeContext) -> Option<RecipeE
     })
 }
 
+fn match_enchant_creature_you_control(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_aura && text == "Enchant creature you control").then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::AuraAttach {
+            target: TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..TargetFilter::default()
+            },
+        })
+    })
+}
+
 fn match_fixed_generic_equip(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     if !context.source_is_equipment {
         return None;
@@ -1043,6 +1058,115 @@ fn match_aura_etb_tap_attached(text: &str, context: &RecipeContext) -> Option<Re
             )
         },
     )
+}
+
+const ISSUE_298_FIRST_STRIKE_ORACLE_IDS: &[&str] = &[
+    "88923ca1-a793-42f0-b9f8-ed9ff9c1185d", // Super Speed
+    "89fb21dc-4cf2-4c9a-b0ae-cc6e10277fb6", // Fire-Rim Form
+];
+
+const ISSUE_298_HEXPROOF_ORACLE_IDS: &[&str] = &[
+    "b9dee727-8ad8-42e0-93c6-5ef91d3f7309", // Aquitect's Defenses
+    "d3912c82-37f8-456e-ba49-65c7f5b39d13", // Fae Flight
+];
+
+const ISSUE_298_AQUITECT_HEXPROOF_ETB_TEXT: &str = "When this Aura enters, enchanted creature gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)";
+
+const ISSUE_298_HEXPROOF_ETB_TEXT: &str =
+    "When this Aura enters, enchanted creature gains hexproof until end of turn.";
+
+/// The four reviewed cards have several independently supported Aura clauses. Keep their
+/// complete source surfaces bound together so a future exact-recipe match cannot combine one
+/// card's ETB keyword with another card's attachment or static modifier.
+pub(super) fn issue_298_card_surface_is_exact(
+    oracle_id: &str,
+    name: &str,
+    mana_cost: &str,
+    type_line: &str,
+    oracle_text: &str,
+) -> bool {
+    let expected = match oracle_id {
+        "88923ca1-a793-42f0-b9f8-ed9ff9c1185d" => (
+            "Super Speed",
+            "{R}",
+            "Enchantment — Aura",
+            "Flash\nEnchant creature\nWhen this Aura enters, enchanted creature gains first strike until end of turn.\nEnchanted creature gets +1/+0 and has haste.",
+        ),
+        "89fb21dc-4cf2-4c9a-b0ae-cc6e10277fb6" => (
+            "Fire-Rim Form",
+            "{1}{R}",
+            "Enchantment — Aura",
+            "Flash\nEnchant creature\nWhen this Aura enters, enchanted creature gains first strike until end of turn.\nEnchanted creature gets +2/+0.",
+        ),
+        "b9dee727-8ad8-42e0-93c6-5ef91d3f7309" => (
+            "Aquitect's Defenses",
+            "{1}{U}",
+            "Enchantment — Aura",
+            "Flash\nEnchant creature you control\nWhen this Aura enters, enchanted creature gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)\nEnchanted creature gets +1/+2.",
+        ),
+        "d3912c82-37f8-456e-ba49-65c7f5b39d13" => (
+            "Fae Flight",
+            "{1}{U}",
+            "Enchantment — Aura",
+            "Flash\nEnchant creature\nWhen this Aura enters, enchanted creature gains hexproof until end of turn.\nEnchanted creature gets +1/+0 and has flying.",
+        ),
+        _ => return true,
+    };
+    (name, mana_cost, type_line, oracle_text) == expected
+}
+
+fn issue_298_oracle_id_is_reviewed(context: &RecipeContext, reviewed_oracle_ids: &[&str]) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        .is_none_or(|oracle_id| reviewed_oracle_ids.contains(&oracle_id))
+}
+
+fn match_aura_etb_grant_first_strike(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_aura
+        && issue_298_oracle_id_is_reviewed(context, ISSUE_298_FIRST_STRIKE_ORACLE_IDS)
+        && text
+            == "When this Aura enters, enchanted creature gains first strike until end of turn.")
+        .then(|| {
+            triggered_ability(
+                context,
+                SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::AttachedObject,
+                    keywords: vec![Keyword::FirstStrike],
+                },
+            )
+        })
+}
+
+fn match_aura_etb_grant_hexproof(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    if !context.source_is_aura
+        || !issue_298_oracle_id_is_reviewed(context, ISSUE_298_HEXPROOF_ORACLE_IDS)
+    {
+        return None;
+    }
+    let exact_text = match context.oracle_id.as_deref() {
+        Some("b9dee727-8ad8-42e0-93c6-5ef91d3f7309") => {
+            text == ISSUE_298_AQUITECT_HEXPROOF_ETB_TEXT
+        }
+        Some("d3912c82-37f8-456e-ba49-65c7f5b39d13") => text == ISSUE_298_HEXPROOF_ETB_TEXT,
+        None => matches!(
+            text,
+            ISSUE_298_AQUITECT_HEXPROOF_ETB_TEXT | ISSUE_298_HEXPROOF_ETB_TEXT
+        ),
+        Some(_) => false,
+    };
+    exact_text.then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::AttachedObject,
+                keywords: vec![Keyword::Hexproof],
+            },
+        )
+    })
 }
 
 fn match_aura_untap_step_restriction(
@@ -4815,10 +4939,24 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Flight" => "Enchant creature",
             "Holy Strength" => "Enchant creature";
             "Enchant permanent",
-            "Enchant creature you control",
+            "Enchant creature an opponent controls",
             "Enchant tapped creature",
             "Enchant creature or Vehicle",
             "Enchant creature. When this Aura enters, draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("aura.enchant.creature_you_control"),
+        label: "enchant creature you control",
+        surface: RecipeSurface::AuraSpellClause,
+        matcher: match_enchant_creature_you_control,
+        calibration: calibrations!(
+            "Aquitect's Defenses" => "Enchant creature you control",
+            "Pitiless Fists" => "Enchant creature you control";
+            "Enchant creature an opponent controls",
+            "Enchant creature you don't control",
+            "Enchant permanent you control",
+            "Enchant creature you control. Draw a card."
         ),
     },
     Recipe {
@@ -4866,6 +5004,37 @@ pub(super) static CATALOG: &[Recipe] = &[
             "When this Aura enters, tap target creature.",
             "When this Aura enters, untap enchanted creature.",
             "When this Aura enters, tap enchanted creature and draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.aura.grant_first_strike.attached_until_end_of_turn"),
+        label: "Aura ETB grant first strike to enchanted creature until end of turn",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_aura_etb_grant_first_strike,
+        calibration: calibrations!(
+            "Super Speed" => "When this Aura enters, enchanted creature gains first strike until end of turn.",
+            "Fire-Rim Form" => "When this Aura enters, enchanted creature gains first strike until end of turn.";
+            "When this Aura enters, enchanted creature gains double strike until end of turn.",
+            "When this Aura enters, enchanted creature gains first strike permanently.",
+            "When this Aura enters, enchanted creature gains first strike until end of combat.",
+            "When this Aura enters, enchanted creature gains first strike until end of turn. Draw a card.",
+            "When this creature enters, enchanted creature gains first strike until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.aura.grant_hexproof.attached_until_end_of_turn"),
+        label: "Aura ETB grant hexproof to enchanted creature until end of turn",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_aura_etb_grant_hexproof,
+        calibration: calibrations!(
+            "Aquitect's Defenses" => "When this Aura enters, enchanted creature gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)",
+            "Fae Flight" => "When this Aura enters, enchanted creature gains hexproof until end of turn.";
+            "When this Aura enters, enchanted creature gains hexproof permanently.",
+            "When this Aura enters, enchanted creature gains shroud until end of turn.",
+            "When this Aura enters, enchanted creature gains hexproof until end of combat.",
+            "When this Aura enters, enchanted creature gains hexproof until end of turn. Draw a card.",
+            "When this Aura enters, target creature gains hexproof until end of turn.",
+            "When this enchantment enters, enchanted creature gains hexproof until end of turn."
         ),
     },
     Recipe {
@@ -10097,6 +10266,75 @@ mod tests {
                 "{clause} must require its source subtype"
             );
         }
+    }
+
+    #[test]
+    fn issue_298_aura_etb_keyword_grants_and_controller_enchant_are_exact() {
+        let cases = [
+            (
+                "88923ca1-a793-42f0-b9f8-ed9ff9c1185d",
+                "When this Aura enters, enchanted creature gains first strike until end of turn.",
+                "etb.aura.grant_first_strike.attached_until_end_of_turn",
+                Keyword::FirstStrike,
+            ),
+            (
+                "89fb21dc-4cf2-4c9a-b0ae-cc6e10277fb6",
+                "When this Aura enters, enchanted creature gains first strike until end of turn.",
+                "etb.aura.grant_first_strike.attached_until_end_of_turn",
+                Keyword::FirstStrike,
+            ),
+            (
+                "b9dee727-8ad8-42e0-93c6-5ef91d3f7309",
+                "When this Aura enters, enchanted creature gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)",
+                "etb.aura.grant_hexproof.attached_until_end_of_turn",
+                Keyword::Hexproof,
+            ),
+            (
+                "d3912c82-37f8-456e-ba49-65c7f5b39d13",
+                "When this Aura enters, enchanted creature gains hexproof until end of turn.",
+                "etb.aura.grant_hexproof.attached_until_end_of_turn",
+                Keyword::Hexproof,
+            ),
+        ];
+        for (oracle_id, clause, expected_id, keyword) in cases {
+            let mut aura = context();
+            aura.oracle_id = Some(oracle_id.into());
+            let matched = match_clause(clause, false, &aura)
+                .expect("issue #298 ETB recipe must not be ambiguous")
+                .unwrap_or_else(|| panic!("issue #298 ETB clause must be supported: {clause}"));
+            assert_eq!(matched.id.as_str(), expected_id);
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("issue #298 must emit a triggered ability");
+            };
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+            assert!(!ability.may);
+            assert!(ability.targeting.is_none());
+            assert!(ability.intervening_if.is_none());
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::AttachedObject,
+                    keywords: vec![keyword],
+                }]
+            );
+        }
+
+        let mut aquitect = context();
+        aquitect.oracle_id = Some("b9dee727-8ad8-42e0-93c6-5ef91d3f7309".into());
+        let matched = match_clause("Enchant creature you control", false, &aquitect)
+            .expect("issue #298 controller-only AuraAttach must not be ambiguous")
+            .expect("issue #298 controller-only AuraAttach must be supported");
+        assert_eq!(matched.id.as_str(), "aura.enchant.creature_you_control");
+        assert_eq!(
+            matched.emission,
+            RecipeEmission::SpellEffect(SpellEffectKind::AuraAttach {
+                target: TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    ..TargetFilter::default()
+                }
+            })
+        );
     }
 
     #[test]

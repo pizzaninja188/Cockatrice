@@ -51,8 +51,8 @@ mod scaffold;
 #[cfg(test)]
 use recipes::{french_vanilla_keywords, keyword_ident};
 use recipes::{
-    match_clause, match_modal_assembly, match_modal_mode, reviewed_modal_mode_pair,
-    validate_catalog, RecipeAmbiguity, RecipeContext, RecipeEmission,
+    issue_298_card_surface_is_exact, match_clause, match_modal_assembly, match_modal_mode,
+    reviewed_modal_mode_pair, validate_catalog, RecipeAmbiguity, RecipeContext, RecipeEmission,
 };
 #[cfg(test)]
 use tricerules_cards::primitives::{LifeAmount, PermanentEventFilter, TargetSchema};
@@ -1614,6 +1614,15 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     }
 
     let oracle_text = str_field(card, "oracle_text");
+    if !issue_298_card_surface_is_exact(
+        str_field(card, "oracle_id"),
+        &name,
+        &mana_cost,
+        type_line,
+        oracle_text,
+    ) {
+        return Err(Skip::NonKeywordText.into());
+    }
     let mut rules = parse_rules_text(
         &name,
         str_field(card, "oracle_id"),
@@ -3982,6 +3991,286 @@ mod tests {
         assert!(
             evaluate_fresh(&noncreature).is_err(),
             "the exact clause must remain bound to creature ETBs"
+        );
+    }
+
+    #[test]
+    fn issue_298_four_card_aura_cohort_generates_exact_keyword_and_static_shapes() {
+        let reviewed_cards = [
+            (
+                "88923ca1-a793-42f0-b9f8-ed9ff9c1185d",
+                "Super Speed",
+                "{R}",
+                "Flash\nEnchant creature\nWhen this Aura enters, enchanted creature gains first strike until end of turn.\nEnchanted creature gets +1/+0 and has haste.",
+                "Aura ETB grant first strike to enchanted creature until end of turn",
+                1,
+                0,
+                vec![Keyword::Haste],
+                TargetController::Any,
+            ),
+            (
+                "89fb21dc-4cf2-4c9a-b0ae-cc6e10277fb6",
+                "Fire-Rim Form",
+                "{1}{R}",
+                "Flash\nEnchant creature\nWhen this Aura enters, enchanted creature gains first strike until end of turn.\nEnchanted creature gets +2/+0.",
+                "Aura ETB grant first strike to enchanted creature until end of turn",
+                2,
+                0,
+                Vec::new(),
+                TargetController::Any,
+            ),
+            (
+                "b9dee727-8ad8-42e0-93c6-5ef91d3f7309",
+                "Aquitect's Defenses",
+                "{1}{U}",
+                "Flash\nEnchant creature you control\nWhen this Aura enters, enchanted creature gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)\nEnchanted creature gets +1/+2.",
+                "Aura ETB grant hexproof to enchanted creature until end of turn",
+                1,
+                2,
+                Vec::new(),
+                TargetController::You,
+            ),
+            (
+                "d3912c82-37f8-456e-ba49-65c7f5b39d13",
+                "Fae Flight",
+                "{1}{U}",
+                "Flash\nEnchant creature\nWhen this Aura enters, enchanted creature gains hexproof until end of turn.\nEnchanted creature gets +1/+0 and has flying.",
+                "Aura ETB grant hexproof to enchanted creature until end of turn",
+                1,
+                0,
+                vec![Keyword::Flying],
+                TargetController::Any,
+            ),
+        ];
+
+        for (
+            oracle_id,
+            name,
+            mana_cost,
+            oracle_text,
+            etb_recipe,
+            delta_power,
+            delta_toughness,
+            static_keywords,
+            enchant_controller,
+        ) in reviewed_cards
+        {
+            let generated = evaluate_fresh(&normal_card_with_oracle_id(
+                oracle_id,
+                name,
+                mana_cost,
+                "Enchantment — Aura",
+                oracle_text,
+                None,
+            ))
+            .unwrap_or_else(|error| panic!("{name} should generate: {error:?}"));
+            assert_eq!(
+                generated.faces[0].recipe_labels,
+                [
+                    if enchant_controller == TargetController::You {
+                        "enchant creature you control"
+                    } else {
+                        "enchant creature"
+                    },
+                    etb_recipe,
+                    "attached creature modifier"
+                ],
+                "{name} recipe composition"
+            );
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert_eq!(raw.name, name);
+            assert_eq!(raw.mana_cost.to_string(), mana_cost);
+            assert_eq!(raw.types, ["Enchantment", "Aura"]);
+            assert_eq!(raw.keywords, [Keyword::Flash]);
+            assert!(raw.activated_abilities.is_empty());
+            assert!(raw.characteristic_defining_abilities.is_empty());
+            let [SpellEffectKind::AuraAttach { target }] = raw.spell_effect.as_slice() else {
+                panic!("{name} should emit one AuraAttach effect");
+            };
+            assert_eq!(target.kind, TargetKind::Creature);
+            assert_eq!(target.controller, enchant_controller);
+
+            let [trigger] = raw.triggered_abilities.as_slice() else {
+                panic!("{name} should emit one ETB trigger");
+            };
+            assert_eq!(trigger.ability_id.as_str(), "triggered_01");
+            assert_eq!(
+                trigger.presentation,
+                AbilityPresentation::OracleLines(vec![3])
+            );
+            assert_eq!(trigger.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+            assert!(!trigger.may);
+            assert!(trigger.targeting.is_none());
+            assert!(trigger.intervening_if.is_none());
+            let expected_keyword = if etb_recipe.contains("first strike") {
+                Keyword::FirstStrike
+            } else {
+                Keyword::Hexproof
+            };
+            assert_eq!(
+                trigger.effect,
+                [SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::AttachedObject,
+                    keywords: vec![expected_keyword],
+                }]
+            );
+
+            let [modifier] = raw.static_abilities.as_slice() else {
+                panic!("{name} should emit one attached static modifier");
+            };
+            assert_eq!(modifier.ability_id.as_str(), "static_01");
+            assert_eq!(
+                modifier.presentation,
+                AbilityPresentation::OracleLines(vec![4])
+            );
+            assert!(matches!(
+                &modifier.definition,
+                StaticAbilityDef::AttachedModifier {
+                    delta_power: power,
+                    delta_toughness: toughness,
+                    keywords,
+                    ..
+                } if *power == delta_power && *toughness == delta_toughness && keywords == &static_keywords
+            ));
+        }
+    }
+
+    #[test]
+    fn issue_298_aura_cohort_rejects_unreviewed_and_near_miss_surfaces() {
+        let first_strike_id = "88923ca1-a793-42f0-b9f8-ed9ff9c1185d";
+        let first_strike_text =
+            "When this Aura enters, enchanted creature gains first strike until end of turn.";
+        for (name, oracle_id, oracle_text, type_line) in [
+            (
+                "Issue 298 Unreviewed",
+                "00000000-0000-0000-0000-000000000000",
+                first_strike_text,
+                "Enchantment — Aura",
+            ),
+            (
+                "Issue 298 Wrong Duration",
+                first_strike_id,
+                "When this Aura enters, enchanted creature gains first strike until end of combat.",
+                "Enchantment — Aura",
+            ),
+            (
+                "Issue 298 Permanent",
+                first_strike_id,
+                "When this Aura enters, enchanted creature gains first strike permanently.",
+                "Enchantment — Aura",
+            ),
+            (
+                "Issue 298 Target",
+                first_strike_id,
+                "When this Aura enters, target creature gains first strike until end of turn.",
+                "Enchantment — Aura",
+            ),
+            (
+                "Issue 298 Wrong Keyword",
+                first_strike_id,
+                "When this Aura enters, enchanted creature gains double strike until end of turn.",
+                "Enchantment — Aura",
+            ),
+            (
+                "Issue 298 Non-Aura",
+                first_strike_id,
+                first_strike_text,
+                "Enchantment",
+            ),
+        ] {
+            let card =
+                normal_card_with_oracle_id(oracle_id, name, "{1}{R}", type_line, oracle_text, None);
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "{name} must fail closed as an unsupported near-miss"
+            );
+        }
+
+        for (name, oracle_text) in [
+            (
+                "Issue 298 Missing Reminder",
+                "When this Aura enters, enchanted creature gains hexproof until end of turn.",
+            ),
+            (
+                "Issue 298 Changed Reminder",
+                "When this Aura enters, enchanted creature gains hexproof until end of turn. (It can't be the target of spells or abilities you control.)",
+            ),
+            (
+                "Issue 298 Extra Clause",
+                "When this Aura enters, enchanted creature gains hexproof until end of turn. Draw a card.",
+            ),
+        ] {
+            let card = normal_card_with_oracle_id(
+                "b9dee727-8ad8-42e0-93c6-5ef91d3f7309",
+                name,
+                "{1}{U}",
+                "Enchantment — Aura",
+                &format!("Enchant creature you control\n{oracle_text}\nEnchanted creature gets +1/+2."),
+                None,
+            );
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "{name} must fail closed as an unsupported near-miss"
+            );
+        }
+
+        for (name, oracle_id, oracle_text) in [
+            (
+                "Issue 298 First Strike Fae Static Mix",
+                first_strike_id,
+                "Flash\nEnchant creature\nWhen this Aura enters, enchanted creature gains first strike until end of turn.\nEnchanted creature gets +1/+0 and has flying.",
+            ),
+            (
+                "Issue 298 Missing Flash",
+                first_strike_id,
+                "Enchant creature\nWhen this Aura enters, enchanted creature gains first strike until end of turn.\nEnchanted creature gets +1/+0 and has haste.",
+            ),
+            (
+                "Issue 298 Controller Drift",
+                first_strike_id,
+                "Flash\nEnchant creature you control\nWhen this Aura enters, enchanted creature gains first strike until end of turn.\nEnchanted creature gets +1/+0 and has haste.",
+            ),
+            (
+                "Issue 298 Aquitect Any Creature",
+                "b9dee727-8ad8-42e0-93c6-5ef91d3f7309",
+                "Flash\nEnchant creature\nWhen this Aura enters, enchanted creature gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)\nEnchanted creature gets +1/+2.",
+            ),
+            (
+                "Issue 298 Fae Changed Reminder",
+                "d3912c82-37f8-456e-ba49-65c7f5b39d13",
+                "Flash\nEnchant creature\nWhen this Aura enters, enchanted creature gains hexproof until end of turn. (It can't be the target of spells or abilities you control.)\nEnchanted creature gets +1/+0 and has flying.",
+            ),
+        ] {
+            let card = normal_card_with_oracle_id(
+                oracle_id,
+                name,
+                "{1}{U}",
+                "Enchantment — Aura",
+                oracle_text,
+                None,
+            );
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "{name} must fail closed as a full-card near-miss"
+            );
+        }
+
+        let mut missing_oracle_id = normal_card(
+            "Issue 298 Missing Oracle ID",
+            "{R}",
+            "Enchantment — Aura",
+            &format!(
+                "Flash\nEnchant creature\n{first_strike_text}\nEnchanted creature gets +1/+0 and has haste."
+            ),
+            None,
+        );
+        missing_oracle_id
+            .as_object_mut()
+            .expect("synthetic card object")
+            .remove("oracle_id");
+        assert!(
+            evaluate_fresh(&missing_oracle_id).is_err(),
+            "missing Oracle ID must fail closed for the exact Aura cohort"
         );
     }
 

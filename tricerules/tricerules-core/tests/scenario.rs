@@ -324,6 +324,8 @@ mod issue_290_generated_library_partition;
 mod issue_291_generated_mutagen;
 #[path = "scenario/issue_297_city_pigeon.rs"]
 mod issue_297_city_pigeon;
+#[path = "scenario/issue_298_generated_aura_etb_keywords.rs"]
+mod issue_298_generated_aura_etb_keywords;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]

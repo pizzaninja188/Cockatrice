@@ -81,6 +81,7 @@ apothecary_stomper	0	cast	exercised
 appeal_to_eirdu	0	cast	exercised
 appendage_amalgam	0	cast	exercised
 april_oneil,_kunoichi_trainee	0	cast	exercised
+aquitects_defenses	0	cast	exercised
 arachnoid	0	cast	exercised
 arashin_cleric	0	cast	exercised
 arashin_sunshield	0	ability:0	exercised
@@ -681,6 +682,7 @@ exultant_skymarcher	0	cast	exercised
 eyeblights_ending	0	cast	exercised
 fabled_passage	0	ability:0	exercised
 fabled_passage	0	land	exercised
+fae_flight	0	cast	exercised
 faerie_fencing	0	cast	exercised
 faerie_invaders	0	cast	exercised
 faerie_miscreant	0	cast	exercised
@@ -720,6 +722,7 @@ final_showdown	0	cast	unsupported: modal fixture cannot satisfy required selecta
 finishing_blow	0	cast	exercised
 firdoch_core	0	ability:0	exercised
 firdoch_core	0	cast	exercised
+fire-rim_form	0	cast	exercised
 fire_elemental	0	cast	exercised
 fire_ice	0	cast	exercised
 fire_ice	1	cast	exercised
@@ -2099,6 +2102,7 @@ sundown_pass	0	land	exercised
 sungrace_pegasus	0	cast	exercised
 sunspire_griffin	0	cast	exercised
 suntail_hawk	0	cast	exercised
+super_speed	0	cast	exercised
 surly_farrier	0	ability:0	exercised
 surly_farrier	0	cast	exercised
 surrak,_elusive_hunter	0	cast	exercised
