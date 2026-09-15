@@ -328,6 +328,8 @@ mod issue_297_city_pigeon;
 mod issue_298_generated_aura_etb_keywords;
 #[path = "scenario/issue_299_generated_mercenary.rs"]
 mod issue_299_generated_mercenary;
+#[path = "scenario/issue_300_generated_land_sacrifice_draw.rs"]
+mod issue_300_generated_land_sacrifice_draw;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]

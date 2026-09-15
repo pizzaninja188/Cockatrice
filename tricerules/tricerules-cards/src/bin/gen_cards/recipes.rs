@@ -2573,6 +2573,48 @@ fn match_dies_create_mercenary(text: &str, context: &RecipeContext) -> Option<Re
         })
 }
 
+const ISSUE_300_REVIEWED_ORACLE_IDS: &[&str] = &[
+    "ce000c0b-db42-4569-855f-f4eae0431c09", // Ripchain Razorkin
+    "3b66d2c2-be7a-4296-9888-f0cfb2975e89", // Seismic Monstrosaur
+];
+
+fn issue_300_oracle_id_is_reviewed(context: &RecipeContext) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        // Catalog calibration contexts intentionally omit Oracle identity. Real
+        // card parsing supplies Some(oracle_id), including Some("") for malformed
+        // input, so unknown identities still fail closed during generation.
+        .is_none_or(|oracle_id| ISSUE_300_REVIEWED_ORACLE_IDS.contains(&oracle_id))
+}
+
+fn match_land_sacrifice_draw_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_300_oracle_id_is_reviewed(context)
+        && text == "{2}{R}, Sacrifice a land: Draw a card.")
+        .then(|| {
+            utility_activated_ability(
+                context,
+                vec![
+                    fixed_mana_cost("{2}{R}"),
+                    AbilityCost::SacrificePermanent {
+                        filter: TargetFilter {
+                            kind: TargetKind::AnyPermanent,
+                            controller: TargetController::You,
+                            permanent_types: vec![PermanentTypeFilter::Land],
+                            ..TargetFilter::default()
+                        },
+                    },
+                ],
+                vec![SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                }],
+                None,
+            )
+        })
+}
+
 fn match_etb_look_top_three_optional_top_one(
     text: &str,
     context: &RecipeContext,
@@ -6876,6 +6918,40 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("activated.land.sacrifice.draw_one"),
+        label: "land sacrifice draw",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_land_sacrifice_draw_one,
+        calibration: calibrations!(
+            "Ripchain Razorkin" => "{2}{R}, Sacrifice a land: Draw a card.",
+            "Seismic Monstrosaur" => "{2}{R}, Sacrifice a land: Draw a card.";
+            "{3}{R}, Sacrifice a land: Draw a card.",
+            "{2}{R}, {T}, Sacrifice a land: Draw a card.",
+            "{2}{R}, Discard a card, Sacrifice a land: Draw a card.",
+            "{2}{R}, Pay 1 life, Sacrifice a land: Draw a card.",
+            "{2}{R}, Exile a card from your graveyard, Sacrifice a land: Draw a card.",
+            "{2}{R}, Sacrifice a land, Put a +1/+1 counter on this creature: Draw a card.",
+            "{2}{R}, Sacrifice this creature: Draw a card.",
+            "{2}{R}, Sacrifice a creature: Draw a card.",
+            "{2}{R}, Sacrifice an artifact: Draw a card.",
+            "{2}{R}, Sacrifice a permanent: Draw a card.",
+            "{2}{R}, Sacrifice a Mountain: Draw a card.",
+            "{2}{R}, Sacrifice a basic land: Draw a card.",
+            "{2}{R}, Sacrifice two lands: Draw a card.",
+            "{2}{R}, Sacrifice a land an opponent controls: Draw a card.",
+            "{2}{R}, Sacrifice target land: Draw a card.",
+            "{2}{R}, You may sacrifice a land: Draw a card.",
+            "{2}{R}, Sacrifice a land: You may draw a card.",
+            "{2}{R}, Sacrifice a land: Draw zero cards.",
+            "{2}{R}, Sacrifice a land: Draw two cards.",
+            "{2}{R}, Sacrifice a land: Draw a card, then discard a card.",
+            "{2}{R}, Sacrifice a land: Draw a card. Activate only as a sorcery.",
+            "{2}{R}, Sacrifice a land: Draw a card. Activate only once each turn.",
+            "Sacrifice a land, {2}{R}: Draw a card.",
+            "{2}{R}, Sacrifice a land: Draw a card. You gain 1 life."
+        ),
+    },
+    Recipe {
         id: RecipeId("activated.land.tap_sacrifice.search_basic_land.battlefield_tapped"),
         label: "tap-sacrifice land basic search",
         surface: RecipeSurface::ActivatedAbility,
@@ -8180,6 +8256,114 @@ mod tests {
                 .expect("surface check should not be ambiguous")
                 .is_none(),
             "the exact clause must remain bound to triggered abilities"
+        );
+    }
+
+    #[test]
+    fn issue_300_land_sacrifice_draw_recipe_is_exact_and_allowlisted() {
+        let clause = "{2}{R}, Sacrifice a land: Draw a card.";
+        let reviewed_ids = [
+            "ce000c0b-db42-4569-855f-f4eae0431c09",
+            "3b66d2c2-be7a-4296-9888-f0cfb2975e89",
+        ];
+        for oracle_id in reviewed_ids {
+            let mut reviewed = context();
+            reviewed.oracle_id = Some(oracle_id.into());
+            let matched = match_clause(clause, false, &reviewed)
+                .expect("issue #300 recipe matching should not be ambiguous")
+                .expect("reviewed land-sacrifice draw card should match");
+            assert_eq!(matched.id, RecipeId("activated.land.sacrifice.draw_one"));
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("issue #300 must emit an activated ability");
+            };
+            assert_eq!(ability.ability_id.as_str(), "activated_01");
+            assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+            assert_eq!(ability.timing, ActivationTiming::Normal);
+            assert_eq!(
+                ability.costs,
+                [
+                    AbilityCost::Mana(ManaCost::parse("{2}{R}").unwrap()),
+                    AbilityCost::SacrificePermanent {
+                        filter: TargetFilter {
+                            kind: TargetKind::AnyPermanent,
+                            controller: TargetController::You,
+                            permanent_types: vec![PermanentTypeFilter::Land],
+                            ..TargetFilter::default()
+                        }
+                    }
+                ]
+            );
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                }]
+            );
+            assert!(ability.targeting.is_none());
+            assert!(ability.conditions.is_empty());
+            assert!(ability.activation_limit.is_none());
+        }
+
+        for oracle_id in [
+            "00000000-0000-0000-0000-000000000000",
+            "",
+            "unreviewed-identical-text",
+        ] {
+            let mut unreviewed = context();
+            unreviewed.oracle_id = Some(oracle_id.into());
+            assert!(
+                match_clause(clause, false, &unreviewed)
+                    .expect("unreviewed recipe matching should not be ambiguous")
+                    .is_none(),
+                "unreviewed Oracle ID must fail closed: {oracle_id:?}"
+            );
+        }
+
+        for near_miss in [
+            "{3}{R}, Sacrifice a land: Draw a card.",
+            "{2}{R}, {T}, Sacrifice a land: Draw a card.",
+            "{2}{R}, Discard a card, Sacrifice a land: Draw a card.",
+            "{2}{R}, Sacrifice this creature: Draw a card.",
+            "{2}{R}, Sacrifice a creature: Draw a card.",
+            "{2}{R}, Sacrifice an artifact: Draw a card.",
+            "{2}{R}, Sacrifice a permanent: Draw a card.",
+            "{2}{R}, Sacrifice a Mountain: Draw a card.",
+            "{2}{R}, Sacrifice two lands: Draw a card.",
+            "{2}{R}, Sacrifice a land an opponent controls: Draw a card.",
+            "{2}{R}, Sacrifice target land: Draw a card.",
+            "{2}{R}, You may sacrifice a land: Draw a card.",
+            "{2}{R}, Sacrifice a land: You may draw a card.",
+            "{2}{R}, Sacrifice a land: Draw two cards.",
+            "{2}{R}, Sacrifice a land: Draw a card, then discard a card.",
+            "{2}{R}, Sacrifice a land: Draw a card. Activate only as a sorcery.",
+            "Sacrifice a land, {2}{R}: Draw a card.",
+            "{2}{R}, Sacrifice a land: Draw a card. You gain 1 life.",
+        ] {
+            let mut reviewed = context();
+            reviewed.oracle_id = Some(reviewed_ids[0].into());
+            assert!(
+                match_clause(near_miss, false, &reviewed)
+                    .expect("issue #300 near-miss matching should not be ambiguous")
+                    .is_none(),
+                "near-miss unexpectedly matched: {near_miss}"
+            );
+        }
+
+        let mut noncreature = context();
+        noncreature.oracle_id = Some(reviewed_ids[0].into());
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(clause, false, &noncreature)
+                .expect("source-kind check should not be ambiguous")
+                .is_none(),
+            "the exact clause must remain bound to creature sources"
+        );
+        assert!(
+            match_clause(clause, true, &context())
+                .expect("spell surface check should not be ambiguous")
+                .is_none(),
+            "the exact clause must remain bound to activated abilities"
         );
     }
 

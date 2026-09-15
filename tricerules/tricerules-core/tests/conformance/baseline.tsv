@@ -1722,6 +1722,8 @@ riling_dawnbreaker_signaling_roar	1	cast	exercised
 rimekin_recluse	0	cast	exercised
 riot_devils	0	cast	exercised
 rip-clan_crasher	0	cast	exercised
+ripchain_razorkin	0	ability:0	exercised
+ripchain_razorkin	0	cast	exercised
 ripscale_predator	0	cast	exercised
 riptide_turtle	0	cast	exercised
 risen_sanctuary	0	cast	exercised
@@ -1850,6 +1852,9 @@ seeker_of_skybreak	0	ability:0	exercised
 seeker_of_skybreak	0	cast	exercised
 seekers_folly	0	cast	exercised
 segovian_angel	0	cast	exercised
+seismic_monstrosaur	0	ability:0	exercised
+seismic_monstrosaur	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+seismic_monstrosaur	0	cast	exercised
 seized_from_slumber	0	cast	exercised
 selesnya_guildgate	0	ability:0	exercised
 selesnya_guildgate	0	land	exercised

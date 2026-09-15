@@ -4099,6 +4099,226 @@ mod tests {
     }
 
     #[test]
+    fn issue_300_two_card_cohort_generates_exact_reviewed_land_sacrifice_draw_cards() {
+        let exact_clause = "{2}{R}, Sacrifice a land: Draw a card.";
+        let reviewed_cards = [
+            (
+                "ce000c0b-db42-4569-855f-f4eae0431c09",
+                "Ripchain Razorkin",
+                "{3}{R}",
+                "Creature — Human Berserker",
+                "Reach\n{2}{R}, Sacrifice a land: Draw a card.",
+                Some(("5", "3")),
+            ),
+            (
+                "3b66d2c2-be7a-4296-9888-f0cfb2975e89",
+                "Seismic Monstrosaur",
+                "{4}{R}{R}",
+                "Creature — Dinosaur",
+                "Trample\n{2}{R}, Sacrifice a land: Draw a card.\nMountaincycling {2}",
+                Some(("6", "5")),
+            ),
+        ];
+
+        for (oracle_id, name, mana_cost, type_line, oracle_text, stats) in reviewed_cards {
+            let card = normal_card_with_oracle_id(
+                oracle_id,
+                name,
+                mana_cost,
+                type_line,
+                oracle_text,
+                stats,
+            );
+            let generated = evaluate_fresh(&card)
+                .unwrap_or_else(|error| panic!("{name} should generate: {error:?}"));
+            assert!(
+                generated.faces[0]
+                    .recipe_labels
+                    .contains(&"land sacrifice draw"),
+                "{name} should record the exact land-sacrifice draw recipe"
+            );
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            let [ability, ..] = raw.activated_abilities.as_slice() else {
+                panic!("{name} should emit an activated ability");
+            };
+            assert_eq!(ability.ability_id.as_str(), "activated_01");
+            assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+            assert_eq!(ability.timing, ActivationTiming::Normal);
+            assert_eq!(ability.costs.len(), 2);
+            assert!(matches!(
+                ability.costs.as_slice(),
+                [AbilityCost::Mana(cost), AbilityCost::SacrificePermanent { filter }]
+                    if cost.to_string() == "{2}{R}"
+                        && filter.kind == TargetKind::AnyPermanent
+                        && filter.controller == TargetController::You
+                        && filter.permanent_types == [PermanentTypeFilter::Land]
+            ));
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                }]
+            );
+            assert!(ability.targeting.is_none());
+            assert_eq!(raw.power, stats.map(|(power, _)| power.parse().unwrap()));
+            assert_eq!(
+                raw.toughness,
+                stats.map(|(_, toughness)| toughness.parse().unwrap())
+            );
+        }
+
+        let unreviewed = normal_card_with_oracle_id(
+            "00000000-0000-0000-0000-000000000000",
+            "Unreviewed Land Sacrifice Draw",
+            "{3}{R}",
+            "Creature — Human Berserker",
+            exact_clause,
+            Some(("5", "3")),
+        );
+        assert!(
+            evaluate_fresh(&unreviewed).is_err(),
+            "an unreviewed Oracle ID must not join the exact land-sacrifice draw cohort"
+        );
+
+        for (name, oracle_text, type_line) in [
+            (
+                "Wrong mana",
+                "{3}{R}, Sacrifice a land: Draw a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Tap added",
+                "{2}{R}, {T}, Sacrifice a land: Draw a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Discard added",
+                "{2}{R}, Discard a card, Sacrifice a land: Draw a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Life cost",
+                "{2}{R}, Pay 1 life, Sacrifice a land: Draw a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Exile cost",
+                "{2}{R}, Exile a card from your graveyard, Sacrifice a land: Draw a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Additional nonlisted cost",
+                "{2}{R}, Sacrifice a land, Put a +1/+1 counter on this creature: Draw a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Sacrifice self",
+                "{2}{R}, Sacrifice this creature: Draw a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Sacrifice creature",
+                "{2}{R}, Sacrifice a creature: Draw a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Sacrifice artifact",
+                "{2}{R}, Sacrifice an artifact: Draw a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Sacrifice permanent",
+                "{2}{R}, Sacrifice a permanent: Draw a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Sacrifice Mountain",
+                "{2}{R}, Sacrifice a Mountain: Draw a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Sacrifice basic land",
+                "{2}{R}, Sacrifice a basic land: Draw a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Two lands",
+                "{2}{R}, Sacrifice two lands: Draw a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Opponent land",
+                "{2}{R}, Sacrifice a land an opponent controls: Draw a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Target land",
+                "{2}{R}, Sacrifice target land: Draw a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Optional sacrifice",
+                "{2}{R}, You may sacrifice a land: Draw a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Optional draw",
+                "{2}{R}, Sacrifice a land: You may draw a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Draw zero",
+                "{2}{R}, Sacrifice a land: Draw zero cards.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Draw two",
+                "{2}{R}, Sacrifice a land: Draw two cards.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Rummage",
+                "{2}{R}, Sacrifice a land: Draw a card, then discard a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Sorcery timing",
+                "{2}{R}, Sacrifice a land: Draw a card. Activate only as a sorcery.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Once per turn",
+                "{2}{R}, Sacrifice a land: Draw a card. Activate only once each turn.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Reordered costs",
+                "Sacrifice a land, {2}{R}: Draw a card.",
+                "Creature — Human Berserker",
+            ),
+            (
+                "Appended effect",
+                "{2}{R}, Sacrifice a land: Draw a card. You gain 1 life.",
+                "Creature — Human Berserker",
+            ),
+        ] {
+            let card = normal_card_with_oracle_id(
+                reviewed_cards[0].0,
+                name,
+                "{3}{R}",
+                type_line,
+                oracle_text,
+                Some(("5", "3")),
+            );
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "{name} must fail closed as a reviewed near-miss"
+            );
+        }
+    }
+
+    #[test]
     fn issue_298_four_card_aura_cohort_generates_exact_keyword_and_static_shapes() {
         let reviewed_cards = [
             (
