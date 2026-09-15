@@ -2853,6 +2853,269 @@ pub(super) fn issue_310_card_surface_is_exact(
     (name, mana_cost, type_line, power, toughness, oracle_text) == expected
 }
 
+const ISSUE_311_PINNACLE_ORACLE_ID: &str = "ad556aee-3dbf-4c8b-9f3a-31947e26c6f5";
+const ISSUE_311_WARMAKER_ORACLE_ID: &str = "c947171b-ed9e-4b83-af45-bd595a8d84ee";
+const ISSUE_311_REVIEWED_ORACLE_IDS: &[&str] =
+    &[ISSUE_311_PINNACLE_ORACLE_ID, ISSUE_311_WARMAKER_ORACLE_ID];
+const ISSUE_311_PINNACLE_STATION_HEADER: &str = r#"Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)"#;
+const ISSUE_311_PINNACLE_THRESHOLD_LINE: &str = "7+ | Flying";
+const ISSUE_311_WARMAKER_STATION_HEADER: &str = r#"Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 6+.)"#;
+const ISSUE_311_WARMAKER_THRESHOLD_LINE: &str = "6+ | Flying";
+const ISSUE_311_PINNACLE_ETB_TEXT: &str =
+    "When this Spacecraft enters, it deals 10 damage to up to one target creature.";
+const ISSUE_311_WARMAKER_ETB_TEXT: &str =
+    "When this Spacecraft enters, it deals damage equal to the number of artifacts you control to target creature an opponent controls.";
+
+#[derive(Debug, Clone, Copy)]
+struct Issue311StationVariant {
+    threshold: u32,
+    base_power: i64,
+    base_toughness: i64,
+    station_header: &'static str,
+    threshold_line: &'static str,
+}
+
+fn issue_311_context_is_reviewed(context: &RecipeContext) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        .is_none_or(|oracle_id| ISSUE_311_REVIEWED_ORACLE_IDS.contains(&oracle_id))
+}
+
+pub(super) fn issue_311_oracle_id_is_reviewed(oracle_id: &str) -> bool {
+    ISSUE_311_REVIEWED_ORACLE_IDS.contains(&oracle_id)
+}
+
+fn issue_311_variant(context: &RecipeContext) -> Option<Issue311StationVariant> {
+    match context.oracle_id.as_deref() {
+        Some(ISSUE_311_PINNACLE_ORACLE_ID) => Some(Issue311StationVariant {
+            threshold: 7,
+            base_power: 7,
+            base_toughness: 7,
+            station_header: ISSUE_311_PINNACLE_STATION_HEADER,
+            threshold_line: ISSUE_311_PINNACLE_THRESHOLD_LINE,
+        }),
+        Some(ISSUE_311_WARMAKER_ORACLE_ID) => Some(Issue311StationVariant {
+            threshold: 6,
+            base_power: 4,
+            base_toughness: 3,
+            station_header: ISSUE_311_WARMAKER_STATION_HEADER,
+            threshold_line: ISSUE_311_WARMAKER_THRESHOLD_LINE,
+        }),
+        Some(_) => None,
+        None => match context.source_name.as_str() {
+            "Pinnacle Kill-Ship" => Some(Issue311StationVariant {
+                threshold: 7,
+                base_power: 7,
+                base_toughness: 7,
+                station_header: ISSUE_311_PINNACLE_STATION_HEADER,
+                threshold_line: ISSUE_311_PINNACLE_THRESHOLD_LINE,
+            }),
+            "Warmaker Gunship" => Some(Issue311StationVariant {
+                threshold: 6,
+                base_power: 4,
+                base_toughness: 3,
+                station_header: ISSUE_311_WARMAKER_STATION_HEADER,
+                threshold_line: ISSUE_311_WARMAKER_THRESHOLD_LINE,
+            }),
+            _ => None,
+        },
+    }
+}
+
+pub(super) fn issue_311_card_surface_is_exact(
+    oracle_id: &str,
+    name: &str,
+    mana_cost: &str,
+    type_line: &str,
+    oracle_text: &str,
+    power: Option<&str>,
+    toughness: Option<&str>,
+) -> bool {
+    let expected = match oracle_id {
+        ISSUE_311_PINNACLE_ORACLE_ID => (
+            "Pinnacle Kill-Ship",
+            "{7}",
+            "Artifact — Spacecraft",
+            Some("7"),
+            Some("7"),
+            "When this Spacecraft enters, it deals 10 damage to up to one target creature.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying",
+        ),
+        ISSUE_311_WARMAKER_ORACLE_ID => (
+            "Warmaker Gunship",
+            "{2}{R}",
+            "Artifact — Spacecraft",
+            Some("4"),
+            Some("3"),
+            "When this Spacecraft enters, it deals damage equal to the number of artifacts you control to target creature an opponent controls.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 6+.)\n6+ | Flying",
+        ),
+        _ => return true,
+    };
+    (name, mana_cost, type_line, power, toughness, oracle_text) == expected
+}
+
+pub(super) fn match_station_6_7_flying_assembly(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_artifact
+        || !context.source_is_permanent
+        || !context.source_is_spacecraft_or_planet
+        || !issue_311_context_is_reviewed(context)
+    {
+        return None;
+    }
+    let variant = issue_311_variant(context)?;
+    let lines = external_oracle_lines(text);
+    if lines.len() != 2 || lines[0] != variant.station_header || lines[1] != variant.threshold_line
+    {
+        return None;
+    }
+    let station_line = match &context.presentation {
+        AbilityPresentation::OracleLines(lines) if lines.len() == 1 && lines[0] > 0 => lines[0],
+        _ => return None,
+    };
+    let threshold_line = station_line.checked_add(1)?;
+    Some(RecipeEmission::StationAssembly(StationAssemblyEmission {
+        activated_ability: ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![AbilityCost::TapPermanents {
+                constraint: ObjectPaymentConstraint::ExactCount(1),
+                filter: TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    ..TargetFilter::default()
+                },
+                exclude_source: true,
+            }],
+            cost_modifiers: Vec::new(),
+            effect: vec![SpellEffectKind::PutCounters {
+                counter: CounterKind::Charge,
+                count: Amount::Count(CountExpression::CardResultCharacteristicSum {
+                    filter: CardResultFilter {
+                        source: CardResultSource::Payment,
+                        action: CardResultAction::Tap,
+                        players: RelativePlayerSet::Controller,
+                        card_type: Some(CardTypeFilter::Creature),
+                    },
+                    characteristic: PowerToughnessCharacteristic::Power,
+                }),
+                subject: EffectSubject::Source,
+            }],
+            targeting: None,
+            timing: ActivationTiming::SorcerySpeed,
+            conditions: Vec::new(),
+            activation_limit: None,
+        },
+        static_ability: IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: AbilityPresentation::OracleLines(vec![threshold_line]),
+            definition: StaticAbilityDef::ConditionalSelfModifier {
+                condition: GameCondition::SourceCounterCount {
+                    counter: CounterKind::Charge,
+                    min: Some(variant.threshold),
+                    max: None,
+                },
+                set_types: None,
+                add_types: TypeLineAddition {
+                    card_types: vec![PermanentTypeFilter::Creature],
+                    creature_types: Vec::new(),
+                },
+                base_power: Some(variant.base_power),
+                base_toughness: Some(variant.base_toughness),
+                delta_power: 0,
+                delta_toughness: 0,
+                keywords: vec![Keyword::Flying],
+                activated_abilities: Vec::new(),
+                triggered_abilities: Vec::new(),
+                can_attack_as_though_without_defender: false,
+            },
+        },
+    }))
+}
+
+fn issue_311_is_pinnacle(context: &RecipeContext) -> bool {
+    match context.oracle_id.as_deref() {
+        Some(ISSUE_311_PINNACLE_ORACLE_ID) => true,
+        Some(_) => false,
+        None => context.source_name == "Pinnacle Kill-Ship",
+    }
+}
+
+fn issue_311_is_warmaker(context: &RecipeContext) -> bool {
+    match context.oracle_id.as_deref() {
+        Some(ISSUE_311_WARMAKER_ORACLE_ID) => true,
+        Some(_) => false,
+        None => context.source_name == "Warmaker Gunship",
+    }
+}
+
+fn issue_311_spacecraft_context(context: &RecipeContext) -> bool {
+    context.source_is_artifact
+        && context.source_is_permanent
+        && context.source_is_spacecraft_or_planet
+        && issue_311_context_is_reviewed(context)
+}
+
+fn match_pinnacle_etb_damage_ten_up_to_one_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_311_spacecraft_context(context)
+        && issue_311_is_pinnacle(context)
+        && text == ISSUE_311_PINNACLE_ETB_TEXT)
+        .then(|| {
+            targeted_trigger(
+                context,
+                vec![SpellEffectKind::DamageTarget {
+                    amount: Amount::Fixed(10),
+                    target: TargetFilter::default_creature(),
+                }],
+                0,
+                1,
+                "Choose up to one target creature",
+            )
+        })
+}
+
+fn match_warmaker_etb_damage_artifact_count_opponent_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_311_spacecraft_context(context)
+        && issue_311_is_warmaker(context)
+        && text == ISSUE_311_WARMAKER_ETB_TEXT)
+        .then(|| {
+            targeted_trigger(
+                context,
+                vec![SpellEffectKind::DamageTarget {
+                    amount: Amount::Count(CountExpression::BattlefieldPermanents {
+                        filter: BattlefieldPermanentFilter {
+                            token: None,
+                            any_of: None,
+                            controllers: RelativePlayerSet::Controller,
+                            card_type: Some(CardTypeFilter::Artifact),
+                            color: None,
+                            name: None,
+                            required_subtypes: Vec::new(),
+                            exclude_source: false,
+                        },
+                    }),
+                    target: TargetFilter {
+                        kind: TargetKind::Creature,
+                        controller: TargetController::Opponent,
+                        ..TargetFilter::default()
+                    },
+                }],
+                1,
+                1,
+                "Choose target creature an opponent controls",
+            )
+        })
+}
+
 pub(super) fn match_station_3_or_9_keyword_assembly(
     text: &str,
     context: &RecipeContext,
@@ -7996,6 +8259,64 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("station.spacecraft.threshold_6_7_flying"),
+        label: "Station 6+/7+ Flying Spacecraft",
+        surface: RecipeSurface::StationAssembly,
+        matcher: match_station_6_7_flying_assembly,
+        calibration: calibrations!(
+            "Pinnacle Kill-Ship" => "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying",
+            "Warmaker Gunship" => "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 6+.)\n6+ | Flying";
+            "Station",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 6+.)",
+            "6+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 11+.)\n11+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying, haste",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as an instant. It's an artifact creature at 7+.)\n7+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7.)\n7 | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying\n7+ | Flying",
+            "7+ | Flying\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n7+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact Vehicle at 7+.)\n7+ | Flying"
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.spacecraft.pinnacle.damage_ten_up_to_one_creature"),
+        label: "Pinnacle Kill-Ship ETB damage up to one creature",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_pinnacle_etb_damage_ten_up_to_one_creature,
+        calibration: singleton_calibrations!(
+            "Pinnacle Kill-Ship" => "When this Spacecraft enters, it deals 10 damage to up to one target creature.";
+            "When this Spacecraft enters, it deals 9 damage to up to one target creature.",
+            "When this Spacecraft enters, it deals 11 damage to up to one target creature.",
+            "When this Spacecraft enters, it deals 10 damage to one target creature.",
+            "When this Spacecraft enters, it deals 10 damage to up to two target creatures.",
+            "When this Spacecraft enters, it deals 10 damage to up to one target player.",
+            "When this Spacecraft enters, it deals 10 damage to target creature.",
+            "When this Spacecraft enters, you may deal 10 damage to up to one target creature.",
+            "When this Spacecraft enters, it deals 10 damage to up to one target creature. You gain 1 life.",
+            "Whenever this Spacecraft enters, it deals 10 damage to up to one target creature."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.spacecraft.warmaker.damage_artifact_count_opponent_creature"),
+        label: "Warmaker Gunship ETB artifact-count damage to opponent creature",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_warmaker_etb_damage_artifact_count_opponent_creature,
+        calibration: singleton_calibrations!(
+            "Warmaker Gunship" => "When this Spacecraft enters, it deals damage equal to the number of artifacts you control to target creature an opponent controls.";
+            "When this Spacecraft enters, it deals damage equal to the number of artifacts you control to target creature.",
+            "When this Spacecraft enters, it deals damage equal to the number of creatures you control to target creature an opponent controls.",
+            "When this Spacecraft enters, it deals damage equal to the number of artifacts an opponent controls to target creature an opponent controls.",
+            "When this Spacecraft enters, it deals damage equal to the number of artifacts you control to any target.",
+            "When this Spacecraft enters, it deals damage equal to the number of artifacts you control to up to one target creature an opponent controls.",
+            "When this Spacecraft enters, it deals 3 damage to target creature an opponent controls.",
+            "When this Spacecraft enters, you may deal damage equal to the number of artifacts you control to target creature an opponent controls.",
+            "When this Spacecraft enters, it deals damage equal to the number of artifacts you control to target creature an opponent controls. You gain 1 life.",
+            "Whenever this Spacecraft enters, it deals damage equal to the number of artifacts you control to target creature an opponent controls."
+        ),
+    },
+    Recipe {
         id: RecipeId("station.spacecraft.threshold_3_or_9_keywords"),
         label: "Station 3+ or 9+ keyword Spacecraft",
         surface: RecipeSurface::StationAssembly,
@@ -12473,6 +12794,424 @@ mod tests {
             "unreviewed",
             None,
             None,
+        ));
+    }
+
+    #[test]
+    fn issue_311_station_variants_emit_exact_threshold_characteristics() {
+        let cases = [
+            (
+                "Pinnacle Kill-Ship",
+                ISSUE_311_PINNACLE_ORACLE_ID,
+                "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying",
+                7,
+                7,
+                7,
+            ),
+            (
+                "Warmaker Gunship",
+                ISSUE_311_WARMAKER_ORACLE_ID,
+                "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 6+.)\n6+ | Flying",
+                6,
+                4,
+                3,
+            ),
+        ];
+        for (name, oracle_id, pair, threshold, power, toughness) in cases {
+            let mut reviewed = context();
+            reviewed.source_name = name.into();
+            reviewed.oracle_id = Some(oracle_id.into());
+            let matched = match_station_assembly(pair, &reviewed)
+                .expect("#311 Station pair must not be ambiguous")
+                .expect("#311 reviewed Station pair should match");
+            assert_eq!(
+                matched.id.as_str(),
+                "station.spacecraft.threshold_6_7_flying"
+            );
+            let RecipeEmission::StationAssembly(assembly) = matched.emission else {
+                panic!("#311 Station pair must emit an assembly")
+            };
+            assert_eq!(
+                assembly.activated_ability.timing,
+                ActivationTiming::SorcerySpeed
+            );
+            assert_eq!(
+                assembly.activated_ability.costs,
+                [AbilityCost::TapPermanents {
+                    constraint: ObjectPaymentConstraint::ExactCount(1),
+                    filter: TargetFilter {
+                        kind: TargetKind::Creature,
+                        controller: TargetController::You,
+                        ..TargetFilter::default()
+                    },
+                    exclude_source: true,
+                }]
+            );
+            assert_eq!(
+                assembly.static_ability.definition,
+                StaticAbilityDef::ConditionalSelfModifier {
+                    condition: GameCondition::SourceCounterCount {
+                        counter: CounterKind::Charge,
+                        min: Some(threshold),
+                        max: None,
+                    },
+                    set_types: None,
+                    add_types: TypeLineAddition {
+                        card_types: vec![PermanentTypeFilter::Creature],
+                        creature_types: Vec::new(),
+                    },
+                    base_power: Some(power),
+                    base_toughness: Some(toughness),
+                    delta_power: 0,
+                    delta_toughness: 0,
+                    keywords: vec![Keyword::Flying],
+                    activated_abilities: Vec::new(),
+                    triggered_abilities: Vec::new(),
+                    can_attack_as_though_without_defender: false,
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn issue_311_targeted_etbs_emit_exact_typed_effects_and_targeting() {
+        let mut pinnacle = context();
+        pinnacle.source_name = "Pinnacle Kill-Ship".into();
+        pinnacle.oracle_id = Some(ISSUE_311_PINNACLE_ORACLE_ID.into());
+        let pinnacle_match = match_clause(ISSUE_311_PINNACLE_ETB_TEXT, false, &pinnacle)
+            .expect("Pinnacle ETB must not be ambiguous")
+            .expect("Pinnacle ETB must match");
+        assert_eq!(
+            pinnacle_match.id.as_str(),
+            "etb.spacecraft.pinnacle.damage_ten_up_to_one_creature"
+        );
+        let RecipeEmission::TriggeredAbility(pinnacle_ability) = pinnacle_match.emission else {
+            panic!("Pinnacle ETB must emit a triggered ability")
+        };
+        assert!(!pinnacle_ability.may);
+        assert_eq!(
+            pinnacle_ability.effect,
+            [SpellEffectKind::DamageTarget {
+                amount: Amount::Fixed(10),
+                target: TargetFilter::default_creature(),
+            }]
+        );
+        assert_eq!(
+            pinnacle_ability.targeting,
+            Some(exact_targeting(
+                0,
+                1,
+                "Choose up to one target creature",
+                vec![0]
+            ))
+        );
+
+        let mut warmaker = context();
+        warmaker.source_name = "Warmaker Gunship".into();
+        warmaker.oracle_id = Some(ISSUE_311_WARMAKER_ORACLE_ID.into());
+        let warmaker_match = match_clause(ISSUE_311_WARMAKER_ETB_TEXT, false, &warmaker)
+            .expect("Warmaker ETB must not be ambiguous")
+            .expect("Warmaker ETB must match");
+        assert_eq!(
+            warmaker_match.id.as_str(),
+            "etb.spacecraft.warmaker.damage_artifact_count_opponent_creature"
+        );
+        let RecipeEmission::TriggeredAbility(warmaker_ability) = warmaker_match.emission else {
+            panic!("Warmaker ETB must emit a triggered ability")
+        };
+        assert_eq!(
+            warmaker_ability.effect,
+            [SpellEffectKind::DamageTarget {
+                amount: Amount::Count(CountExpression::BattlefieldPermanents {
+                    filter: BattlefieldPermanentFilter {
+                        token: None,
+                        any_of: None,
+                        controllers: RelativePlayerSet::Controller,
+                        card_type: Some(CardTypeFilter::Artifact),
+                        color: None,
+                        name: None,
+                        required_subtypes: Vec::new(),
+                        exclude_source: false,
+                    },
+                }),
+                target: TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::Opponent,
+                    ..TargetFilter::default()
+                },
+            }]
+        );
+        assert_eq!(
+            warmaker_ability
+                .targeting
+                .as_ref()
+                .expect("Warmaker target group")
+                .groups[0]
+                .min,
+            1
+        );
+        assert_eq!(
+            warmaker_ability
+                .targeting
+                .as_ref()
+                .expect("Warmaker target group")
+                .groups[0]
+                .max,
+            1
+        );
+    }
+
+    #[test]
+    fn issue_311_recipes_reject_near_misses_cross_card_mixing_and_ambiguity() {
+        let mut pinnacle = context();
+        pinnacle.source_name = "Pinnacle Kill-Ship".into();
+        pinnacle.oracle_id = Some(ISSUE_311_PINNACLE_ORACLE_ID.into());
+        let station = "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying";
+        for near_miss in [
+            "Station",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)",
+            "7+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 11+.)\n11+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as an instant. It's an artifact creature at 7+.)\n7+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7 | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying\n7+ | Flying",
+            "7+ | Flying\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)",
+            "Station ({1}, Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying",
+            "Station (Tap this artifact: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying",
+            "Station (Tap another creature: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its toughness on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying",
+            "Station (Tap another creature you control: Put +1/+1 counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on that creature. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying",
+            "Station (Tap another creature an opponent controls: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying\nDraw a card.",
+        ] {
+            assert_eq!(
+                match_station_assembly(near_miss, &pinnacle),
+                Ok(None),
+                "Station near-miss must fail closed: {near_miss}"
+            );
+        }
+        let mut unreviewed = pinnacle.clone();
+        unreviewed.oracle_id = Some("00000000-0000-0000-0000-000000000000".into());
+        assert_eq!(match_station_assembly(station, &unreviewed), Ok(None));
+        let warmaker_station = "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 6+.)\n6+ | Flying";
+        assert_eq!(
+            match_station_assembly(warmaker_station, &pinnacle),
+            Ok(None)
+        );
+        let mut warmaker = pinnacle.clone();
+        warmaker.source_name = "Warmaker Gunship".into();
+        warmaker.oracle_id = Some(ISSUE_311_WARMAKER_ORACLE_ID.into());
+        assert_eq!(
+            match_clause(ISSUE_311_PINNACLE_ETB_TEXT, false, &warmaker),
+            Ok(None),
+            "cross-card ETB variants must not mix"
+        );
+        for (context, text) in [
+            (
+                &pinnacle,
+                "When this Spacecraft enters, it deals 9 damage to up to one target creature.",
+            ),
+            (
+                &pinnacle,
+                "When this Spacecraft enters, it deals 11 damage to up to one target creature.",
+            ),
+            (
+                &pinnacle,
+                "When this Spacecraft enters, it deals 10 damage to one target creature.",
+            ),
+            (
+                &pinnacle,
+                "When this Spacecraft enters, it deals 10 damage to up to one target player.",
+            ),
+            (
+                &warmaker,
+                "When this Spacecraft enters, it deals damage equal to the number of artifacts an opponent controls to target creature an opponent controls.",
+            ),
+            (
+                &warmaker,
+                "When this Spacecraft enters, it deals damage equal to the number of artifacts you control to any target.",
+            ),
+            (
+                &warmaker,
+                "When this Spacecraft enters, it deals damage equal to the number of creatures you control to target creature an opponent controls.",
+            ),
+            (
+                &warmaker,
+                "When this Spacecraft enters, it deals damage equal to its power to target creature an opponent controls.",
+            ),
+            (
+                &warmaker,
+                "When this Spacecraft enters, it deals damage equal to the number of artifacts you control to up to one target creature an opponent controls.",
+            ),
+            (
+                &warmaker,
+                "When this Spacecraft enters, it deals damage equal to the number of artifacts you control to target creature an opponent controls. You gain 1 life.",
+            ),
+            (
+                &pinnacle,
+                "When this Spacecraft enters, it deals 10 damage to up to one target planeswalker.",
+            ),
+            (
+                &pinnacle,
+                "When this Spacecraft enters, it deals 10 damage to up to one target player.",
+            ),
+            (
+                &pinnacle,
+                "When this Spacecraft enters, you may deal 10 damage to up to one target creature.",
+            ),
+            (
+                &pinnacle,
+                "Whenever this Spacecraft enters, it deals 10 damage to up to one target creature.",
+            ),
+            (
+                &warmaker,
+                "When this Spacecraft enters, it deals damage equal to the number of artifacts an opponent controls to target creature an opponent controls.",
+            ),
+        ] {
+            assert_eq!(match_clause(text, false, context), Ok(None), "near-miss: {text}");
+        }
+
+        for (mut invalid, exact_text) in [
+            (pinnacle.clone(), ISSUE_311_PINNACLE_ETB_TEXT),
+            (warmaker.clone(), ISSUE_311_WARMAKER_ETB_TEXT),
+        ] {
+            invalid.source_is_artifact = false;
+            assert_eq!(match_clause(exact_text, false, &invalid), Ok(None));
+            invalid.source_is_artifact = true;
+            invalid.source_is_permanent = false;
+            assert_eq!(match_clause(exact_text, false, &invalid), Ok(None));
+            invalid.source_is_permanent = true;
+            invalid.source_is_spacecraft_or_planet = false;
+            assert_eq!(match_clause(exact_text, false, &invalid), Ok(None));
+        }
+
+        let duplicate_catalog = [
+            Recipe {
+                id: RecipeId("test.station311.duplicate.one"),
+                label: "test Station #311 duplicate one",
+                surface: RecipeSurface::StationAssembly,
+                matcher: match_station_6_7_flying_assembly,
+                calibration: RecipeCalibration {
+                    positive_cards: &[],
+                    negative_near_misses: &[],
+                    minimum_positive_cards: 0,
+                },
+            },
+            Recipe {
+                id: RecipeId("test.station311.duplicate.two"),
+                label: "test Station #311 duplicate two",
+                surface: RecipeSurface::StationAssembly,
+                matcher: match_station_6_7_flying_assembly,
+                calibration: RecipeCalibration {
+                    positive_cards: &[],
+                    negative_near_misses: &[],
+                    minimum_positive_cards: 0,
+                },
+            },
+        ];
+        let ambiguity = match_surface_in(
+            &duplicate_catalog,
+            station,
+            RecipeSurface::StationAssembly,
+            &pinnacle,
+        )
+        .expect_err("duplicate #311 Station recipes must be ambiguous");
+        assert_eq!(
+            ambiguity.recipe_ids,
+            [
+                RecipeId("test.station311.duplicate.one"),
+                RecipeId("test.station311.duplicate.two")
+            ]
+        );
+    }
+
+    #[test]
+    fn issue_311_card_surfaces_require_exact_identity_and_printed_fields() {
+        let cases = [
+            (
+                ISSUE_311_PINNACLE_ORACLE_ID,
+                "Pinnacle Kill-Ship",
+                "{7}",
+                "Artifact — Spacecraft",
+                ISSUE_311_PINNACLE_ETB_TEXT.to_string()
+                    + "\n"
+                    + ISSUE_311_PINNACLE_STATION_HEADER
+                    + "\n"
+                    + ISSUE_311_PINNACLE_THRESHOLD_LINE,
+                Some("7"),
+                Some("7"),
+            ),
+            (
+                ISSUE_311_WARMAKER_ORACLE_ID,
+                "Warmaker Gunship",
+                "{2}{R}",
+                "Artifact — Spacecraft",
+                ISSUE_311_WARMAKER_ETB_TEXT.to_string()
+                    + "\n"
+                    + ISSUE_311_WARMAKER_STATION_HEADER
+                    + "\n"
+                    + ISSUE_311_WARMAKER_THRESHOLD_LINE,
+                Some("4"),
+                Some("3"),
+            ),
+        ];
+        for (oracle_id, name, mana, type_line, text, power, toughness) in cases {
+            assert!(issue_311_card_surface_is_exact(
+                oracle_id, name, mana, type_line, &text, power, toughness
+            ));
+            assert!(!issue_311_card_surface_is_exact(
+                oracle_id, name, mana, "Artifact", &text, power, toughness
+            ));
+            assert!(!issue_311_card_surface_is_exact(
+                oracle_id,
+                name,
+                mana,
+                type_line,
+                &text,
+                Some("0"),
+                toughness
+            ));
+            assert!(!issue_311_card_surface_is_exact(
+                oracle_id,
+                "Wrong Name",
+                mana,
+                type_line,
+                &text,
+                power,
+                toughness
+            ));
+            assert!(!issue_311_card_surface_is_exact(
+                oracle_id, name, "{1}", type_line, &text, power, toughness
+            ));
+            assert!(!issue_311_card_surface_is_exact(
+                oracle_id,
+                name,
+                mana,
+                type_line,
+                &text,
+                power,
+                Some("0")
+            ));
+            assert!(!issue_311_card_surface_is_exact(
+                oracle_id,
+                name,
+                mana,
+                type_line,
+                "changed complete Oracle surface",
+                power,
+                toughness
+            ));
+        }
+        assert!(issue_311_card_surface_is_exact(
+            "unreviewed",
+            "Unreviewed",
+            "{1}",
+            "Artifact",
+            "anything",
+            None,
+            None
         ));
     }
 }

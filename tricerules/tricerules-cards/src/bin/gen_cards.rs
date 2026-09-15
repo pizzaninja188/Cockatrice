@@ -53,7 +53,8 @@ use recipes::{french_vanilla_keywords, keyword_ident};
 use recipes::{
     issue_298_card_surface_is_exact, issue_309_card_surface_is_exact,
     issue_309_oracle_id_is_reviewed, issue_310_card_surface_is_exact,
-    issue_310_oracle_id_is_reviewed, match_clause, match_modal_assembly, match_modal_mode,
+    issue_310_oracle_id_is_reviewed, issue_311_card_surface_is_exact,
+    issue_311_oracle_id_is_reviewed, match_clause, match_modal_assembly, match_modal_mode,
     match_station_assembly, reviewed_modal_mode_pair, validate_catalog, RecipeAmbiguity,
     RecipeContext, RecipeEmission,
 };
@@ -1694,6 +1695,17 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     ) {
         return Err(Skip::NonKeywordText.into());
     }
+    if !issue_311_card_surface_is_exact(
+        str_field(card, "oracle_id"),
+        &name,
+        &mana_cost,
+        type_line,
+        oracle_text,
+        power_text.as_deref(),
+        toughness_text.as_deref(),
+    ) {
+        return Err(Skip::NonKeywordText.into());
+    }
     let mut rules = parse_rules_text(
         &name,
         str_field(card, "oracle_id"),
@@ -1824,7 +1836,8 @@ fn evaluate(
 ) -> Result<GenCard, EvaluationError> {
     let layout = GenLayout::from_scryfall(str_field(card, "layout")).ok_or(Skip::Layout)?;
     if (issue_309_oracle_id_is_reviewed(str_field(card, "oracle_id"))
-        || issue_310_oracle_id_is_reviewed(str_field(card, "oracle_id")))
+        || issue_310_oracle_id_is_reviewed(str_field(card, "oracle_id"))
+        || issue_311_oracle_id_is_reviewed(str_field(card, "oracle_id")))
         && layout != GenLayout::Normal
     {
         return Err(Skip::NonKeywordText.into());
@@ -2472,12 +2485,12 @@ mod tests {
     use std::io::{Cursor, Write};
     use tricerules_cards::card_def::RawCardDefinition;
     use tricerules_cards::primitives::{
-        CardResultAction, CardResultSource, CardTypeFilter, CountExpression, EffectSubject,
-        EntersTappedAffected, EntryCost, GameCondition, ObjectContributionKind,
-        ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient,
-        PowerToughnessCharacteristic, ResolutionCost, SpellCastFilter, SpellManaSpentComparison,
-        StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
-        TargetObjectExclusion, TargetingSourceFilter, TypeLineAddition,
+        BattlefieldPermanentFilter, CardResultAction, CardResultSource, CardTypeFilter,
+        CountExpression, EffectSubject, EntersTappedAffected, EntryCost, GameCondition,
+        ObjectContributionKind, ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient,
+        PowerToughnessCharacteristic, RelativePlayerSet, ResolutionCost, SpellCastFilter,
+        SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController,
+        TargetFilter, TargetKind, TargetObjectExclusion, TargetingSourceFilter, TypeLineAddition,
     };
     use tricerules_cards::{
         AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount,
@@ -4244,6 +4257,133 @@ mod tests {
                 "reviewed #309 identity must remain normal-layout-only: {layout}"
             );
         }
+    }
+
+    #[test]
+    fn issue_311_two_card_cohort_generates_exact_station_and_targeted_etb_payloads() {
+        let cards = [
+            normal_card_with_oracle_id(
+                "ad556aee-3dbf-4c8b-9f3a-31947e26c6f5",
+                "Pinnacle Kill-Ship",
+                "{7}",
+                "Artifact — Spacecraft",
+                "When this Spacecraft enters, it deals 10 damage to up to one target creature.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying",
+                Some(("7", "7")),
+            ),
+            normal_card_with_oracle_id(
+                "c947171b-ed9e-4b83-af45-bd595a8d84ee",
+                "Warmaker Gunship",
+                "{2}{R}",
+                "Artifact — Spacecraft",
+                "When this Spacecraft enters, it deals damage equal to the number of artifacts you control to target creature an opponent controls.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 6+.)\n6+ | Flying",
+                Some(("4", "3")),
+            ),
+        ];
+        for card in &cards {
+            let name = str_field(card, "name");
+            let generated = evaluate_fresh(card)
+                .unwrap_or_else(|error| panic!("{name} should generate: {error:?}"));
+            assert_eq!(
+                generated.faces[0].recipe_labels[0],
+                "Station 6+/7+ Flying Spacecraft"
+            );
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert_eq!(raw.types, ["Artifact", "Spacecraft"], "{name}");
+            assert_eq!(raw.activated_abilities.len(), 1, "{name}");
+            assert_eq!(raw.static_abilities.len(), 1, "{name}");
+            let station = &raw.activated_abilities[0];
+            assert_eq!(
+                station.source_zone,
+                AbilitySourceZone::Battlefield,
+                "{name}"
+            );
+            assert_eq!(station.timing, ActivationTiming::SorcerySpeed, "{name}");
+            assert_eq!(
+                station.costs,
+                [AbilityCost::TapPermanents {
+                    constraint: ObjectPaymentConstraint::ExactCount(1),
+                    filter: TargetFilter {
+                        kind: TargetKind::Creature,
+                        controller: TargetController::You,
+                        ..TargetFilter::default()
+                    },
+                    exclude_source: true,
+                }],
+                "{name}"
+            );
+            let [trigger] = raw.triggered_abilities.as_slice() else {
+                panic!("{name} should emit one ETB trigger")
+            };
+            match name {
+                "Pinnacle Kill-Ship" => {
+                    assert_eq!(
+                        trigger.effect,
+                        [SpellEffectKind::DamageTarget {
+                            amount: Amount::Fixed(10),
+                            target: TargetFilter::default_creature(),
+                        }]
+                    );
+                    let [group] = trigger.targeting.as_ref().unwrap().groups.as_slice() else {
+                        panic!("Pinnacle target group")
+                    };
+                    assert_eq!((group.min, group.max), (0, 1));
+                }
+                "Warmaker Gunship" => {
+                    assert_eq!(
+                        trigger.effect,
+                        [SpellEffectKind::DamageTarget {
+                            amount: Amount::Count(CountExpression::BattlefieldPermanents {
+                                filter: BattlefieldPermanentFilter {
+                                    token: None,
+                                    any_of: None,
+                                    controllers: RelativePlayerSet::Controller,
+                                    card_type: Some(CardTypeFilter::Artifact),
+                                    color: None,
+                                    name: None,
+                                    required_subtypes: Vec::new(),
+                                    exclude_source: false,
+                                },
+                            }),
+                            target: TargetFilter {
+                                kind: TargetKind::Creature,
+                                controller: TargetController::Opponent,
+                                ..TargetFilter::default()
+                            },
+                        }]
+                    );
+                    let [group] = trigger.targeting.as_ref().unwrap().groups.as_slice() else {
+                        panic!("Warmaker target group")
+                    };
+                    assert_eq!((group.min, group.max), (1, 1));
+                }
+                other => panic!("unexpected #311 card {other}"),
+            }
+        }
+
+        let mut changed_surface = cards[0].clone();
+        changed_surface["oracle_text"] = json!(
+            "When this Spacecraft enters, it deals 11 damage to up to one target creature.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying"
+        );
+        assert!(
+            evaluate_fresh(&changed_surface).is_err(),
+            "an unreviewed amount mutation must remain unsupported"
+        );
+    }
+
+    #[test]
+    fn issue_311_complete_rescue_surface_is_rejected_while_issue_312_is_open() {
+        let rescue = normal_card_with_oracle_id(
+            "112aaaf0-3301-4f79-9640-d36c75a0fb30",
+            "Rescue Skiff",
+            "{5}{W}",
+            "Artifact — Spacecraft",
+            "When this Spacecraft enters, return target creature or enchantment card from your graveyard to the battlefield.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 10+.)\n10+ | Flying",
+            Some(("5", "6")),
+        );
+        assert!(
+            evaluate_fresh(&rescue).is_err(),
+            "the exact Rescue Skiff surface must remain unsupported while blocker #312 is open"
+        );
     }
 
     #[test]

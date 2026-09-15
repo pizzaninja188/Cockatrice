@@ -1574,6 +1574,8 @@ pigment_wrangler_striking_palette	1	cast	intentional: face unavailable from hand
 pilgrim_of_the_fires	0	cast	exercised
 pillarfield_ox	0	cast	exercised
 pincher_beetles	0	cast	exercised
+pinnacle_kill-ship	0	ability:0	exercised
+pinnacle_kill-ship	0	cast	exercised
 piranha_fly	0	cast	exercised
 pirate_peddlers	0	cast	exercised
 pitchburn_devils	0	cast	exercised
@@ -2446,6 +2448,8 @@ warehouse_tabby	0	ability:0	exercised
 warehouse_tabby	0	cast	exercised
 warg_tactics	0	cast	exercised
 warleaders_call	0	cast	exercised
+warmaker_gunship	0	ability:0	exercised
+warmaker_gunship	0	cast	exercised
 warpath_ghoul	0	cast	exercised
 warren_elder	0	ability:0	exercised
 warren_elder	0	cast	exercised
