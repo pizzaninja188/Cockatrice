@@ -5,6 +5,7 @@
 //! #36 tracked (its own regression test lives in `spell_effects.rs`).
 
 use crate::helpers::*;
+use tricerules_core::Zone;
 use tricerules_proto::ruled::v1::ChoiceKind;
 
 /// Put `card_ids` on top of `player`'s library, first entry on top, and return their object ids.
@@ -21,6 +22,24 @@ fn seat_on_top(e: &mut GameEngine, player: usize, card_ids: &[&str]) -> Vec<u32>
         e.state.players[player].library.push_front(oid);
     }
     oids
+}
+
+fn move_library_to_graveyard(e: &mut GameEngine, player: usize, object_id: u32) {
+    e.state.players[player]
+        .library
+        .retain(|oid| *oid != object_id);
+    e.state.players[player].graveyard.push(object_id);
+    e.state.objects.get_mut(&object_id).unwrap().zone = Zone::Graveyard;
+    *e.state.zone_change_generation.entry(object_id).or_default() += 1;
+}
+
+fn move_graveyard_to_library(e: &mut GameEngine, player: usize, object_id: u32) {
+    e.state.players[player]
+        .graveyard
+        .retain(|oid| *oid != object_id);
+    e.state.players[player].library.push_front(object_id);
+    e.state.objects.get_mut(&object_id).unwrap().zone = Zone::Library;
+    *e.state.zone_change_generation.entry(object_id).or_default() += 1;
 }
 
 fn island_deck_with(card: &str) -> Option<Vec<Vec<String>>> {
@@ -303,6 +322,93 @@ fn scry_rejects_illegal_submissions_without_mutating_the_library() {
     e.apply_command(0, &submit_resolution_choice(vec![a, b]))
         .expect("valid submission after the rejections");
     assert!(e.state.pending_resolution.is_none());
+}
+
+#[test]
+fn scry_rejects_a_stale_choose_destination_without_consuming_the_choice() {
+    let mut e = GameEngine::new(7009, &[0, 1], 20, island_deck_with("opt"), true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    ensure_in_hand(&mut e, 0, "opt");
+    let scried = seat_on_top(&mut e, 0, &["grizzly_bears"])[0];
+
+    cast_instant_and_resolve(&mut e, 0, "opt", blue_mana());
+    let pending_before = format!("{:?}", e.state.pending_resolution);
+    let library_before: Vec<u32> = e.state.players[0].library.iter().copied().collect();
+
+    // The same object id returns to the library as a new physical incarnation. A published
+    // answer for the old look must fail closed before Scry moves it or resumes its draw tail.
+    move_library_to_graveyard(&mut e, 0, scried);
+    move_graveyard_to_library(&mut e, 0, scried);
+    let err = e
+        .apply_command(0, &submit_resolution_choice(vec![scried]))
+        .expect_err("a stale Scry candidate must be rejected");
+
+    assert!(err.to_string().contains("stale library-partition cohort"));
+    assert_eq!(
+        format!("{:?}", e.state.pending_resolution),
+        pending_before,
+        "the stale answer preserves the parked choice atomically"
+    );
+    assert_eq!(
+        e.state.players[0]
+            .library
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        library_before,
+        "the stale answer does not move the returned card or run Scry's draw tail"
+    );
+}
+
+#[test]
+fn preordain_rejects_a_stale_order_top_without_consuming_the_choice() {
+    let mut e =
+        GameEngine::new(7010, &[0, 1], 20, island_deck_with("preordain"), true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    ensure_in_hand(&mut e, 0, "preordain");
+    let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow"]);
+
+    cast_instant_and_resolve(&mut e, 0, "preordain", blue_mana());
+    e.apply_command(0, &submit_resolution_choice(vec![]))
+        .expect("keep both cards on top");
+    assert!(matches!(
+        &e.state
+            .pending_resolution
+            .as_ref()
+            .expect("order-top continuation")
+            .continuation,
+        ResolutionContinuation::LibraryPartition {
+            stage: PendingLibraryPartitionStage::OrderTop,
+            kind: PendingLibraryPartitionKind::Scry,
+            ..
+        }
+    ));
+    let pending_before = format!("{:?}", e.state.pending_resolution);
+    let library_before: Vec<u32> = e.state.players[0].library.iter().copied().collect();
+
+    // OrderTop validates the remaining presentation candidates, not the cards already sent to
+    // Scry's bottom. The first retained card is returned with a fresh generation here.
+    move_library_to_graveyard(&mut e, 0, top[0]);
+    move_graveyard_to_library(&mut e, 0, top[0]);
+    let err = e
+        .apply_command(0, &submit_resolution_choice(vec![top[1], top[0]]))
+        .expect_err("a stale retained Scry candidate must be rejected");
+
+    assert!(err.to_string().contains("stale library-partition cohort"));
+    assert_eq!(
+        format!("{:?}", e.state.pending_resolution),
+        pending_before,
+        "the stale order preserves the second Scry choice atomically"
+    );
+    assert_eq!(
+        e.state.players[0]
+            .library
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        library_before,
+        "the stale order does not rearrange the retained cards or draw"
+    );
 }
 
 #[test]

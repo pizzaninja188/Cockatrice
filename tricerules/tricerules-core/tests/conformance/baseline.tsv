@@ -959,6 +959,7 @@ guard_duty	0	cast	exercised
 guardian_lions	0	cast	exercised
 guardians_of_meletis	0	cast	exercised
 gundabad_opportunist	0	cast	exercised
+gurmag_nightwatch	0	cast	exercised
 gurmag_swiftwing	0	cast	exercised
 gutless_plunderer	0	cast	exercised
 gutter_skulk	0	cast	exercised
@@ -1781,6 +1782,7 @@ sacred_nectar	0	cast	exercised
 sacred_wolf	0	cast	exercised
 safewright_cavalry	0	ability:0	exercised
 safewright_cavalry	0	cast	exercised
+sage_of_days	0	cast	exercised
 sage_of_fables	0	ability:0	unsupported: nonmana costs need additional fixture resources
 sage_of_fables	0	cast	exercised
 sagu_pummeler	0	ability:0	unsupported: ability not offered by generic battlefield fixture

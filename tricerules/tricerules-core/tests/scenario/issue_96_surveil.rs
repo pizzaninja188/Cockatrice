@@ -35,6 +35,45 @@ fn seat_on_top(e: &mut GameEngine, player: usize, card_ids: &[&str]) -> Vec<u32>
     oids
 }
 
+fn move_library_to_graveyard(e: &mut GameEngine, player: usize, object_id: u32) {
+    e.state.players[player]
+        .library
+        .retain(|oid| *oid != object_id);
+    e.state.players[player].graveyard.push(object_id);
+    e.state.objects.get_mut(&object_id).unwrap().zone = Zone::Graveyard;
+    *e.state.zone_change_generation.entry(object_id).or_default() += 1;
+}
+
+fn move_graveyard_to_library(e: &mut GameEngine, player: usize, object_id: u32) {
+    e.state.players[player]
+        .graveyard
+        .retain(|oid| *oid != object_id);
+    e.state.players[player].library.push_front(object_id);
+    e.state.objects.get_mut(&object_id).unwrap().zone = Zone::Library;
+    *e.state.zone_change_generation.entry(object_id).or_default() += 1;
+}
+
+fn grant_surveil_trigger(e: &mut GameEngine, observer: u32) {
+    let mut ability = CardRegistry::global()
+        .get("audacious_thief")
+        .expect("Audacious Thief definition")
+        .primary_face()
+        .triggered_abilities[0]
+        .clone();
+    ability.trigger = TriggerCondition::WheneverPlayerSurveils {
+        player: CastTriggerPlayer::Controller,
+    };
+    e.state.add_triggered_ability_grant(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(observer),
+        kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability)),
+        condition: None,
+        duration: EffectDuration::UntilEndOfTurn,
+        timestamp: e.state.command_index,
+    });
+}
+
 fn advance_to_main2(e: &mut GameEngine) {
     for _ in 0..20 {
         let actor = e.state.priority_player_id();
@@ -227,6 +266,44 @@ fn issue_96_surveil_rejects_illegal_submissions_atomically() {
 }
 
 #[test]
+fn issue_96_surveillance_rejects_a_stale_choose_destination_without_consuming_the_choice() {
+    let mut e = GameEngine::new(96_007, &[0, 1], 20, black_deck_with("cruel_truths"), true)
+        .expect("new engine");
+    advance_to_main1_from_game_start(&mut e);
+    ensure_in_hand(&mut e, 0, "cruel_truths");
+    let stale = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow"])[0];
+
+    cast_instant_and_resolve(&mut e, 0, "cruel_truths", black_mana(4));
+    let pending_before = format!("{:?}", e.state.pending_resolution);
+    let library_before: Vec<u32> = e.state.players[0].library.iter().copied().collect();
+
+    // Returning the same object id to the library creates a new generation. The old surveil
+    // answer must be rejected before any card moves or the surveil event is emitted.
+    move_library_to_graveyard(&mut e, 0, stale);
+    move_graveyard_to_library(&mut e, 0, stale);
+    let err = e
+        .apply_command(0, &submit_resolution_choice(vec![stale]))
+        .expect_err("a stale Surveil candidate must be rejected");
+
+    assert!(err.to_string().contains("stale library-partition cohort"));
+    assert_eq!(
+        format!("{:?}", e.state.pending_resolution),
+        pending_before,
+        "the stale answer preserves the parked Surveil choice atomically"
+    );
+    assert_eq!(
+        e.state.players[0]
+            .library
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        library_before,
+        "the stale answer leaves the library untouched"
+    );
+    assert!(e.state.players[0].graveyard.is_empty());
+}
+
+#[test]
 fn issue_96_surveil_trigger_fires_only_after_the_complete_action() {
     let mut e = GameEngine::new(96_004, &[0, 1], 20, black_deck_with("cruel_truths"), true)
         .expect("new engine");
@@ -234,24 +311,7 @@ fn issue_96_surveil_trigger_fires_only_after_the_complete_action() {
     ensure_in_hand(&mut e, 0, "cruel_truths");
     let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow"]);
     let observer = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
-    let mut ability = CardRegistry::global()
-        .get("audacious_thief")
-        .expect("Audacious Thief definition")
-        .primary_face()
-        .triggered_abilities[0]
-        .clone();
-    ability.trigger = TriggerCondition::WheneverPlayerSurveils {
-        player: CastTriggerPlayer::Controller,
-    };
-    e.state.add_triggered_ability_grant(ContinuousEffect {
-        trigger_grant_origin: None,
-        source_id: None,
-        affected: AffectedScope::Single(observer),
-        kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability)),
-        condition: None,
-        duration: EffectDuration::UntilEndOfTurn,
-        timestamp: e.state.command_index,
-    });
+    grant_surveil_trigger(&mut e, observer);
 
     cast_instant_and_resolve(&mut e, 0, "cruel_truths", black_mana(4));
     let ordering = e
@@ -275,6 +335,82 @@ fn issue_96_surveil_trigger_fires_only_after_the_complete_action() {
         .stack
         .iter()
         .any(|item| item.source_permanent_id == Some(observer) && item.is_triggered));
+}
+
+#[test]
+fn issue_96_surveillance_rejects_stale_order_top_before_trigger_and_valid_flow_completes() {
+    fn prepared(seed: u64) -> (GameEngine, Vec<u32>, u32) {
+        let mut e = GameEngine::new(seed, &[0, 1], 20, black_deck_with("cruel_truths"), true)
+            .expect("new engine");
+        advance_to_main1_from_game_start(&mut e);
+        ensure_in_hand(&mut e, 0, "cruel_truths");
+        let top = seat_on_top(&mut e, 0, &["grizzly_bears", "storm_crow"]);
+        let observer = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+        grant_surveil_trigger(&mut e, observer);
+        cast_instant_and_resolve(&mut e, 0, "cruel_truths", black_mana(4));
+        e.apply_command(0, &submit_resolution_choice(vec![]))
+            .expect("keep both surveilled cards on top");
+        assert!(matches!(
+            &e.state
+                .pending_resolution
+                .as_ref()
+                .expect("order-top continuation")
+                .continuation,
+            ResolutionContinuation::LibraryPartition {
+                stage: PendingLibraryPartitionStage::OrderTop,
+                kind: PendingLibraryPartitionKind::Surveil,
+                ..
+            }
+        ));
+        (e, top, observer)
+    }
+
+    let (mut stale, top, observer) = prepared(96_008);
+    let pending_before = format!("{:?}", stale.state.pending_resolution);
+    let library_before: Vec<u32> = stale.state.players[0].library.iter().copied().collect();
+    move_library_to_graveyard(&mut stale, 0, top[0]);
+    move_graveyard_to_library(&mut stale, 0, top[0]);
+
+    let err = stale
+        .apply_command(0, &submit_resolution_choice(vec![top[1], top[0]]))
+        .expect_err("a stale retained Surveil candidate must be rejected");
+    assert!(err.to_string().contains("stale library-partition cohort"));
+    assert_eq!(
+        format!("{:?}", stale.state.pending_resolution),
+        pending_before,
+        "the stale order preserves the second Surveil choice atomically"
+    );
+    assert_eq!(
+        stale.state.players[0]
+            .library
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        library_before,
+        "the stale order does not rearrange the retained cards"
+    );
+    assert!(stale
+        .state
+        .stack
+        .iter()
+        .all(|item| item.source_permanent_id != Some(observer)));
+    assert!(stale.state.pending_triggers.is_empty());
+    assert!(stale.state.staged_trigger_groups.is_empty());
+
+    // A fresh, unchanged continuation still completes and fires the existing Surveil trigger.
+    let (mut valid, valid_top, valid_observer) = prepared(96_009);
+    valid
+        .apply_command(
+            0,
+            &submit_resolution_choice(vec![valid_top[1], valid_top[0]]),
+        )
+        .expect("valid retained-card order");
+    assert!(valid.state.pending_resolution.is_none());
+    assert!(valid
+        .state
+        .stack
+        .iter()
+        .any(|item| item.source_permanent_id == Some(valid_observer) && item.is_triggered));
 }
 
 #[test]

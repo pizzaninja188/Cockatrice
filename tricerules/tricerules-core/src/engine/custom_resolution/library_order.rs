@@ -14,19 +14,60 @@ impl GameEngine {
             return Err(EngineError::Illegal("library-partition player missing"));
         };
         let mut ev = vec![];
-        let (stack, looked_at, stage, kind) = match &pending.continuation {
+        let (stack, looked_at, candidate_generations, stage, kind) = match &pending.continuation {
             ResolutionContinuation::LibraryPartition {
                 stack,
                 looked_at,
+                candidate_generations,
                 stage,
                 kind,
-            } => (stack.clone(), looked_at.clone(), *stage, *kind),
+            } => (
+                stack.clone(),
+                looked_at.clone(),
+                candidate_generations.clone(),
+                *stage,
+                *kind,
+            ),
             _ => {
                 return Err(EngineError::Illegal(
                     "library-partition continuation missing",
                 ));
             }
         };
+
+        // Library object ids survive zone changes for relay identity, but the looked-at card is
+        // the exact physical incarnation captured when this resolution parked (CR 400.7). Check
+        // the still-relevant cohort before any chosen card is moved so a stale answer is atomic.
+        let cohort = if stage == PendingLibraryPartitionStage::ChooseDestination {
+            looked_at.clone()
+        } else {
+            pending.presentation.candidates.clone()
+        };
+        if cohort.iter().any(|object_id| {
+            let Some(expected_generation) = candidate_generations
+                .iter()
+                .find_map(|(candidate, generation)| {
+                    (*candidate == *object_id).then_some(generation)
+                })
+                .copied()
+            else {
+                return true;
+            };
+            !(self.state.players[idx].library.contains(object_id)
+                && self.state.objects.get(object_id).is_some_and(|object| {
+                    object.zone == Zone::Library && object.owner == controller
+                })
+                && self
+                    .state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == expected_generation)
+        }) {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("stale library-partition cohort"));
+        }
 
         if stage == PendingLibraryPartitionStage::ChooseDestination {
             let remaining: Vec<ObjectId> = looked_at

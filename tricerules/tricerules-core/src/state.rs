@@ -1040,6 +1040,9 @@ pub enum ResolutionContinuation {
     LibraryPartition {
         stack: ParkedStackResolution,
         looked_at: Vec<ObjectId>,
+        /// Exact physical generations captured when the private library cohort was created.
+        /// ObjectId alone is insufficient after a card leaves and returns (CR 400.7).
+        candidate_generations: Vec<(ObjectId, u64)>,
         stage: PendingLibraryPartitionStage,
         kind: PendingLibraryPartitionKind,
     },

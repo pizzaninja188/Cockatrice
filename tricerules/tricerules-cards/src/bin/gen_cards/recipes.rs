@@ -2337,6 +2337,38 @@ fn match_etb_surveil_two(text: &str, context: &RecipeContext) -> Option<RecipeEm
     })
 }
 
+const ISSUE_290_REVIEWED_ORACLE_IDS: &[&str] = &[
+    "656fc672-efa5-484a-b5e8-eac262331439", // Sage of Days
+    "fde50a0d-9bc6-45f4-873e-3de81a513fac", // Gurmag Nightwatch
+];
+
+fn issue_290_oracle_id_is_reviewed(context: &RecipeContext) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        .is_none_or(|oracle_id| ISSUE_290_REVIEWED_ORACLE_IDS.contains(&oracle_id))
+}
+
+fn match_etb_look_top_three_optional_top_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_290_oracle_id_is_reviewed(context)
+        && text == "When this creature enters, look at the top three cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard.")
+        .then(|| {
+            triggered_ability(
+                context,
+                SpellEffectKind::LibraryPartition {
+                    count: 3,
+                    top_min: 0,
+                    top_max: Some(1),
+                    kind: LibraryPartitionKind::Look,
+                },
+            )
+        })
+}
+
 fn match_enchantment_etb_optional_linked_exile_gain_two(
     text: &str,
     context: &RecipeContext,
@@ -5576,6 +5608,26 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("etb.look.top_three.optional_top_one"),
+        label: "ETB look three optionally keep one on top",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_look_top_three_optional_top_one,
+        calibration: calibrations!(
+            "Sage of Days" => "When this creature enters, look at the top three cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard.",
+            "Gurmag Nightwatch" => "When this creature enters, look at the top three cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard.";
+            "When this creature enters, look at the top three cards of your library. Put one of those cards back on top of your library. Put the rest into your graveyard.",
+            "When this creature enters, look at the top three cards of your library. You may put two of those cards back on top of your library. Put the rest into your graveyard.",
+            "When this creature enters, look at the top two cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard.",
+            "When this creature enters, look at the top four cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard.",
+            "When this creature enters, look at the top three cards of your library. You may put one of those cards on the bottom of your library. Put the rest into your graveyard.",
+            "When this creature enters, look at the top three cards of your library. You may put one of those cards into exile. Put the rest into your graveyard.",
+            "When this creature enters, look at the top three cards of your library. You may put one of those cards into your hand. Put the rest into your graveyard.",
+            "When this creature enters, reveal the top three cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard.",
+            "When this creature enters, surveil 3.",
+            "When this creature enters, look at the top three cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
         id: RecipeId("etb.create_token.treasure.one"),
         label: "ETB create Treasure",
         surface: RecipeSurface::EtbAbility,
@@ -7386,6 +7438,97 @@ mod tests {
             .is_none(),
             "discard wording must not match the exile recipe"
         );
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(clause, false, &noncreature)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the creature ETB recipe must reject noncreature sources"
+        );
+        assert!(
+            match_clause(clause, true, &context())
+                .expect("surface check must not be ambiguous")
+                .is_none(),
+            "the ETB recipe must reject spell clauses"
+        );
+    }
+
+    #[test]
+    fn issue_290_optional_top_one_library_partition_is_exact_and_typed() {
+        let clause = "When this creature enters, look at the top three cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard.";
+        let matched = match_clause(clause, false, &context())
+            .expect("issue #290 recipe matching should not be ambiguous")
+            .expect("issue #290 ETB library partition should match");
+        assert_eq!(matched.id.as_str(), "etb.look.top_three.optional_top_one");
+
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("issue #290 must emit a triggered ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "triggered_01");
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(!ability.may);
+        assert!(ability.modal.is_none());
+        assert!(ability.targeting.is_none());
+        assert!(ability.intervening_if.is_none());
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::LibraryPartition {
+                count: 3,
+                top_min: 0,
+                top_max: Some(1),
+                kind: LibraryPartitionKind::Look,
+            }]
+        );
+
+        for oracle_id in [
+            "656fc672-efa5-484a-b5e8-eac262331439",
+            "fde50a0d-9bc6-45f4-873e-3de81a513fac",
+        ] {
+            let mut reviewed = context();
+            reviewed.oracle_id = Some(oracle_id.into());
+            assert!(
+                match_clause(clause, false, &reviewed)
+                    .expect("reviewed Oracle ID must not be ambiguous")
+                    .is_some(),
+                "reviewed Oracle ID must match: {oracle_id}"
+            );
+        }
+        for oracle_id in ["00000000-0000-0000-0000-000000000000", ""] {
+            let mut unreviewed = context();
+            unreviewed.oracle_id = Some(oracle_id.into());
+            assert!(
+                match_clause(clause, false, &unreviewed)
+                    .expect("unreviewed Oracle ID must not be ambiguous")
+                    .is_none(),
+                "unreviewed Oracle ID must fail closed: {oracle_id:?}"
+            );
+        }
+
+        for near_miss in [
+            "When this creature enters, look at the top three cards of your library. Put one of those cards back on top of your library. Put the rest into your graveyard.",
+            "When this creature enters, look at the top three cards of your library. You may put two of those cards back on top of your library. Put the rest into your graveyard.",
+            "When this creature enters, look at the top two cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard.",
+            "When this creature enters, look at the top four cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard.",
+            "When this creature enters, look at the top three cards of your library. You may put one of those cards on the bottom of your library. Put the rest into your graveyard.",
+            "When this creature enters, look at the top three cards of your library. You may put one of those cards into exile. Put the rest into your graveyard.",
+            "When this creature enters, look at the top three cards of your library. You may put one of those cards into your hand. Put the rest into your graveyard.",
+            "When this creature enters, reveal the top three cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard.",
+            "When this creature enters, surveil 3.",
+            "When this creature enters, look at the top three cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard. Draw a card.",
+        ] {
+            assert!(
+                match_clause(near_miss, false, &context())
+                    .expect("issue #290 near-miss matching should not be ambiguous")
+                    .is_none(),
+                "near-miss unexpectedly matched: {near_miss}"
+            );
+        }
 
         let mut noncreature = context();
         noncreature.source_is_creature = false;

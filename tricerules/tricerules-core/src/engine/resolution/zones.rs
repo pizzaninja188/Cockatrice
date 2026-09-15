@@ -2994,6 +2994,20 @@ fn begin_library_partition(
     }
 
     let (candidate_card_ids, candidate_names) = candidate_identities(engine, &candidates);
+    let candidate_generations = candidates
+        .iter()
+        .map(|object_id| {
+            (
+                *object_id,
+                engine
+                    .state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0),
+            )
+        })
+        .collect::<Vec<_>>();
     let effective_top_min = top_min.min(n);
     let effective_top_max = top_max.unwrap_or(n).min(n);
     let destination_min = n - effective_top_max;
@@ -3083,6 +3097,7 @@ fn begin_library_partition(
         continuation: ResolutionContinuation::LibraryPartition {
             stack: ParkedStackResolution::new(top.clone()),
             looked_at: candidates,
+            candidate_generations,
             stage: PendingLibraryPartitionStage::ChooseDestination,
             kind,
         },
