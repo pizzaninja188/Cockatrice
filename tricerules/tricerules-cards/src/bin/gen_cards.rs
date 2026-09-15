@@ -3995,6 +3995,110 @@ mod tests {
     }
 
     #[test]
+    fn issue_299_two_card_cohort_generates_exact_reviewed_dies_mercenary_cards() {
+        let dies_clause = r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##;
+        let reviewed_cards = [
+            (
+                "5d24fb6b-7176-407c-b917-6c88a6da40df",
+                "Nezumi Linkbreaker",
+                "Creature — Rat Warlock",
+                "{B}",
+                Some(("1", "1")),
+                "When this creature dies, create a 1/1 red Mercenary creature token with \"{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.\"",
+                1,
+            ),
+            (
+                "c1348afe-4dc7-41bb-9d3f-1e8751abd7db",
+                "Wanted Griffin",
+                "Creature — Griffin",
+                "{3}{W}",
+                Some(("3", "2")),
+                "Flying\nWhen this creature dies, create a 1/1 red Mercenary creature token with \"{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.\"",
+                2,
+            ),
+        ];
+
+        for (oracle_id, name, type_line, mana_cost, stats, oracle_text, trigger_line) in
+            reviewed_cards
+        {
+            let card = normal_card_with_oracle_id(
+                oracle_id,
+                name,
+                mana_cost,
+                type_line,
+                oracle_text,
+                stats,
+            );
+            let generated = evaluate_fresh(&card)
+                .unwrap_or_else(|error| panic!("{name} should generate: {error:?}"));
+            assert_eq!(generated.faces[0].recipe_labels, ["dies create Mercenary"]);
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert_eq!(raw.id, name.to_ascii_lowercase().replace(' ', "_"));
+            assert_eq!(raw.name, name);
+            assert_eq!(raw.mana_cost.to_string(), mana_cost);
+            assert_eq!(raw.power, stats.map(|(power, _)| power.parse().unwrap()));
+            assert_eq!(
+                raw.toughness,
+                stats.map(|(_, toughness)| toughness.parse().unwrap())
+            );
+            assert_eq!(
+                raw.types,
+                match name {
+                    "Nezumi Linkbreaker" => vec!["Creature", "Rat", "Warlock"],
+                    "Wanted Griffin" => vec!["Creature", "Griffin"],
+                    _ => unreachable!(),
+                }
+            );
+            assert_eq!(
+                raw.keywords,
+                if name == "Wanted Griffin" {
+                    vec![Keyword::Flying]
+                } else {
+                    Vec::new()
+                }
+            );
+            assert!(raw.activated_abilities.is_empty());
+            assert!(raw.static_abilities.is_empty());
+            let [ability] = raw.triggered_abilities.as_slice() else {
+                panic!("{name} should emit exactly one dies trigger");
+            };
+            assert_eq!(ability.ability_id.as_str(), "triggered_01");
+            assert_eq!(
+                ability.presentation,
+                AbilityPresentation::OracleLines(vec![trigger_line])
+            );
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfDies);
+            assert!(!ability.may);
+            assert!(ability.modal.is_none());
+            assert!(ability.targeting.is_none());
+            assert!(ability.intervening_if.is_none());
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::CreateTokens {
+                    token: "mercenary_r_1_1".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                }]
+            );
+        }
+
+        let unreviewed = normal_card_with_oracle_id(
+            "00000000-0000-0000-0000-000000000000",
+            "Unreviewed Mercenary Creature",
+            "{1}{B}",
+            "Creature — Rat Warlock",
+            dies_clause,
+            Some(("1", "1")),
+        );
+        assert!(
+            evaluate_fresh(&unreviewed).is_err(),
+            "an unreviewed Oracle ID must not join the exact Mercenary cohort"
+        );
+    }
+
+    #[test]
     fn issue_298_four_card_aura_cohort_generates_exact_keyword_and_static_shapes() {
         let reviewed_cards = [
             (

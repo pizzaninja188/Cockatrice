@@ -1453,6 +1453,7 @@ nether_horror	0	cast	exercised
 nettle_swine	0	cast	exercised
 new_generations_technique	0	cast	exercised
 nezumi_informant	0	cast	exercised
+nezumi_linkbreaker	0	cast	exercised
 nightblade_brigade	0	cast	exercised
 nightguard_patrol	0	cast	exercised
 nightveil_predator	0	cast	exercised
@@ -2421,6 +2422,7 @@ wandering_ones	0	cast	exercised
 wandering_tombshell	0	cast	exercised
 wandertale_mentor	0	ability:0	exercised
 wandertale_mentor	0	cast	exercised
+wanted_griffin	0	cast	exercised
 warclamp_mastiff	0	cast	exercised
 warded_battlements	0	cast	exercised
 warden_of_geometries	0	ability:0	exercised

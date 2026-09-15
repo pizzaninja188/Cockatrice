@@ -2540,6 +2540,39 @@ fn match_self_leaves_battlefield_create_food(
         })
 }
 
+const ISSUE_299_REVIEWED_ORACLE_IDS: &[&str] = &[
+    "5d24fb6b-7176-407c-b917-6c88a6da40df", // Nezumi Linkbreaker
+    "c1348afe-4dc7-41bb-9d3f-1e8751abd7db", // Wanted Griffin
+];
+
+fn issue_299_oracle_id_is_reviewed(context: &RecipeContext) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        .is_none_or(|oracle_id| ISSUE_299_REVIEWED_ORACLE_IDS.contains(&oracle_id))
+}
+
+const ISSUE_299_DIES_MERCENARY_TEXT: &str = r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##;
+
+fn match_dies_create_mercenary(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_299_oracle_id_is_reviewed(context)
+        && text == ISSUE_299_DIES_MERCENARY_TEXT)
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfDies,
+                vec![SpellEffectKind::CreateTokens {
+                    token: "mercenary_r_1_1".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                }],
+            )
+        })
+}
+
 fn match_etb_look_top_three_optional_top_one(
     text: &str,
     context: &RecipeContext,
@@ -5934,6 +5967,35 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("dies.create_token.mercenary.one"),
+        label: "dies create Mercenary",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_dies_create_mercenary,
+        calibration: calibrations!(
+            "Nezumi Linkbreaker" => r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            "Wanted Griffin" => r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##;
+            r##"When this creature leaves the battlefield, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When another creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, you may create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create two 1/1 red Mercenary creature tokens with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a tapped 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as an instant.""##,
+            r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +2/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+1 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn.""##,
+            r##"When this creature dies, create an attacking 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a 1/1 red Mercenary creature token. At the beginning of the next end step, sacrifice it."##,
+            r##"When this creature dies, create a 1/1 blue Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a 2/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a 1/1 red Soldier creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a 1/1 red Mercenary creature token with "{1}, {T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of next turn. Activate only as a sorcery.""##,
+            r#"When this creature dies, create a 1/1 red Mercenary creature token."#,
+            r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery."" Draw a card."##,
+        ),
+    },
+    Recipe {
         id: RecipeId("etb.create_token.food.one"),
         label: "ETB create Food",
         surface: RecipeSurface::EtbAbility,
@@ -8021,6 +8083,103 @@ mod tests {
                 .expect("spell surface check must not be ambiguous")
                 .is_none(),
             "the creature leave recipe must reject spell clauses"
+        );
+    }
+
+    #[test]
+    fn issue_299_dies_create_mercenary_recipe_is_exact_and_allowlisted() {
+        let clause = r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##;
+        let reviewed_ids = [
+            "5d24fb6b-7176-407c-b917-6c88a6da40df",
+            "c1348afe-4dc7-41bb-9d3f-1e8751abd7db",
+        ];
+        for oracle_id in reviewed_ids {
+            let mut reviewed = context();
+            reviewed.oracle_id = Some(oracle_id.into());
+            let matched = match_clause(clause, false, &reviewed)
+                .expect("issue #299 recipe matching should not be ambiguous")
+                .expect("reviewed dies-to-Mercenary card should match");
+            assert_eq!(matched.id.as_str(), "dies.create_token.mercenary.one");
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("issue #299 must emit a triggered ability");
+            };
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfDies);
+            assert!(!ability.may);
+            assert!(ability.modal.is_none());
+            assert!(ability.targeting.is_none());
+            assert!(ability.intervening_if.is_none());
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::CreateTokens {
+                    token: "mercenary_r_1_1".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                }]
+            );
+        }
+
+        for oracle_id in [
+            "00000000-0000-0000-0000-000000000000",
+            "",
+            "unreviewed-identical-text",
+        ] {
+            let mut unreviewed = context();
+            unreviewed.oracle_id = Some(oracle_id.into());
+            assert!(
+                match_clause(clause, false, &unreviewed)
+                    .expect("unreviewed recipe matching should not be ambiguous")
+                    .is_none(),
+                "unreviewed Oracle ID must fail closed: {oracle_id:?}"
+            );
+        }
+
+        for near_miss in [
+            r##"When this creature leaves the battlefield, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When another creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, you may create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create two 1/1 red Mercenary creature tokens with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a tapped 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as an instant.""##,
+            r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +2/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+1 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn.""##,
+            r##"When this creature dies, create an attacking 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a 1/1 red Mercenary creature token. At the beginning of the next end step, sacrifice it."##,
+            r##"When this creature dies, create a 1/1 blue Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a 2/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a 1/1 red Soldier creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a 1/1 red Mercenary creature token with "{1}, {T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery.""##,
+            r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of next turn. Activate only as a sorcery.""##,
+            r#"When this creature dies, create a 1/1 red Mercenary creature token."#,
+            r##"When this creature dies, create a 1/1 red Mercenary creature token with "{T}: Target creature you control gets +1/+0 until end of turn. Activate only as a sorcery."" Draw a card."##,
+        ] {
+            let mut reviewed = context();
+            reviewed.oracle_id = Some(reviewed_ids[0].into());
+            assert!(
+                match_clause(near_miss, false, &reviewed)
+                    .expect("issue #299 near-miss matching should not be ambiguous")
+                    .is_none(),
+                "near-miss unexpectedly matched: {near_miss}"
+            );
+        }
+
+        let mut noncreature = context();
+        noncreature.oracle_id = Some(reviewed_ids[0].into());
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(clause, false, &noncreature)
+                .expect("source-kind check should not be ambiguous")
+                .is_none(),
+            "the exact clause must remain bound to creature sources"
+        );
+        assert!(
+            match_clause(clause, true, &context())
+                .expect("surface check should not be ambiguous")
+                .is_none(),
+            "the exact clause must remain bound to triggered abilities"
         );
     }
 
