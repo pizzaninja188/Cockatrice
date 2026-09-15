@@ -2381,6 +2381,41 @@ fn match_etb_create_mutagen(text: &str, context: &RecipeContext) -> Option<Recip
         })
 }
 
+const ISSUE_297_REVIEWED_ORACLE_IDS: &[&str] = &[
+    "ac8cae63-270c-4f73-b29b-50f8f2395fd9", // City Pigeon
+];
+
+fn issue_297_oracle_id_is_reviewed(context: &RecipeContext) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        .is_none_or(|oracle_id| ISSUE_297_REVIEWED_ORACLE_IDS.contains(&oracle_id))
+}
+
+const ISSUE_297_FOOD_LEAVES_TEXT: &str = r#"When this creature leaves the battlefield, create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")"#;
+
+fn match_self_leaves_battlefield_create_food(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_297_oracle_id_is_reviewed(context)
+        && text == ISSUE_297_FOOD_LEAVES_TEXT)
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfLeavesBattlefield,
+                vec![SpellEffectKind::CreateTokens {
+                    token: "food".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                }],
+            )
+        })
+}
+
 fn match_etb_look_top_three_optional_top_one(
     text: &str,
     context: &RecipeContext,
@@ -5681,6 +5716,25 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("triggered.self_leaves_battlefield.create_token.food.one"),
+        label: "leaves the battlefield create Food",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_leaves_battlefield_create_food,
+        calibration: calibrations!(
+            "City Pigeon" => r#"When this creature leaves the battlefield, create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")"#,
+            "Featherbrained Filcher" => r#"When this creature leaves the battlefield, create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")"#;
+            r#"When this creature dies, create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")"#,
+            r#"When this creature leaves the battlefield, create a Food token."#,
+            r#"When this creature leaves the battlefield, create two Food tokens. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")"#,
+            r#"When this creature leaves the battlefield, create a tapped Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")"#,
+            r#"When this creature leaves the battlefield, create a Food token. (It's an artifact with "{3}, {T}, Sacrifice this token: You gain 3 life.")"#,
+            r#"When this creature leaves the battlefield, create a Food token. (It's an artifact with "{2}, Sacrifice this token: You gain 3 life.")"#,
+            r#"When this creature leaves the battlefield, create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 2 life.")"#,
+            r#"When this creature leaves the battlefield, create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.") Draw a card."#,
+            r#"When another creature leaves the battlefield, create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")"#
+        ),
+    },
+    Recipe {
         id: RecipeId("etb.create_token.treasure.one"),
         label: "ETB create Treasure",
         surface: RecipeSurface::EtbAbility,
@@ -7687,6 +7741,117 @@ mod tests {
                 .expect("surface check must not be ambiguous")
                 .is_none(),
             "the ETB recipe must reject spell clauses"
+        );
+    }
+
+    #[test]
+    fn issue_297_food_on_leave_recipe_is_exact_and_allowlisted() {
+        let clause = r#"When this creature leaves the battlefield, create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")"#;
+        let mut city_pigeon = context();
+        city_pigeon.oracle_id = Some("ac8cae63-270c-4f73-b29b-50f8f2395fd9".into());
+        let matched = match_clause(clause, false, &city_pigeon)
+            .expect("issue #297 recipe matching should not be ambiguous")
+            .expect("allowlisted City Pigeon should match");
+        assert_eq!(
+            matched.id.as_str(),
+            "triggered.self_leaves_battlefield.create_token.food.one"
+        );
+
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("issue #297 must emit a triggered ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "triggered_01");
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfLeavesBattlefield);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::CreateTokens {
+                token: "food".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }]
+        );
+        assert!(ability.targeting.is_none());
+        assert!(!ability.may);
+        assert!(ability.modal.is_none());
+        assert!(ability.intervening_if.is_none());
+
+        let mut featherbrained_filcher = context();
+        featherbrained_filcher.oracle_id = Some("79a9fc1c-a6a9-483a-9ba7-d09fe41760c3".into());
+        assert!(
+            match_clause(clause, false, &featherbrained_filcher)
+                .expect("calibration ID must not be ambiguous")
+                .is_none(),
+            "Featherbrained Filcher must remain calibration-only"
+        );
+
+        let recipe = CATALOG
+            .iter()
+            .find(|recipe| {
+                recipe.id.as_str() == "triggered.self_leaves_battlefield.create_token.food.one"
+            })
+            .expect("issue #297 recipe catalog entry");
+        let featherbrained_calibration = recipe
+            .calibration
+            .positive_cards
+            .iter()
+            .find(|card| card.name == "Featherbrained Filcher")
+            .expect("Featherbrained Filcher calibration");
+        assert!(
+            match_clause(featherbrained_calibration.clause, false, &context())
+                .expect("calibration context must not be ambiguous")
+                .is_some(),
+            "the catalog calibration must still prove the exact template"
+        );
+
+        for oracle_id in [
+            "00000000-0000-0000-0000-000000000000",
+            "79a9fc1c-a6a9-483a-9ba7-d09fe41760c3-unrelated",
+            "",
+        ] {
+            let mut unreviewed = context();
+            unreviewed.oracle_id = Some(oracle_id.into());
+            assert!(
+                match_clause(clause, false, &unreviewed)
+                    .expect("unreviewed Oracle ID must not be ambiguous")
+                    .is_none(),
+                "unreviewed Oracle ID must fail closed: {oracle_id:?}"
+            );
+        }
+
+        for near_miss in [
+            r#"When this creature dies, create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")"#,
+            r#"When this creature leaves the battlefield, create two Food tokens. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")"#,
+            r#"When this creature leaves the battlefield, create a tapped Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")"#,
+            r#"When this creature leaves the battlefield, create a Food token. (It's an artifact with "{3}, {T}, Sacrifice this token: You gain 3 life.")"#,
+            r#"When this creature leaves the battlefield, create a Food token. (It's an artifact with "{2}, Sacrifice this token: You gain 3 life.")"#,
+            r#"When this creature leaves the battlefield, create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 2 life.")"#,
+            r#"When this creature leaves the battlefield, create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.") Draw a card."#,
+            r#"When another creature leaves the battlefield, create a Food token. (It's an artifact with "{2}, {T}, Sacrifice this token: You gain 3 life.")"#,
+            r#"When this creature leaves the battlefield, create a Food token."#,
+        ] {
+            assert!(
+                match_clause(near_miss, false, &city_pigeon)
+                    .expect("issue #297 near-miss matching should not be ambiguous")
+                    .is_none(),
+                "near-miss unexpectedly matched: {near_miss}"
+            );
+        }
+
+        let mut noncreature = city_pigeon.clone();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(clause, false, &noncreature)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the creature leave recipe must reject noncreature sources"
+        );
+        assert!(
+            match_clause(clause, true, &city_pigeon)
+                .expect("spell surface check must not be ambiguous")
+                .is_none(),
+            "the creature leave recipe must reject spell clauses"
         );
     }
 

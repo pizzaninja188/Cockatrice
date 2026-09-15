@@ -322,6 +322,8 @@ mod issue_288_generated_opponent_hand_exile;
 mod issue_290_generated_library_partition;
 #[path = "scenario/issue_291_generated_mutagen.rs"]
 mod issue_291_generated_mutagen;
+#[path = "scenario/issue_297_city_pigeon.rs"]
+mod issue_297_city_pigeon;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]
