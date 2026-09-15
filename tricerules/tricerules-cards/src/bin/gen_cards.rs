@@ -5155,13 +5155,202 @@ mod tests {
     }
 
     #[test]
+    fn issue_286_equipment_attack_tap_composes_with_existing_equipment_recipes() {
+        let shield = normal_card(
+            "Captain America's Shield",
+            "{2}",
+            "Legendary Artifact — Equipment",
+            "Indestructible\nEquipped creature gets +0/+8 and has vigilance.\nWhenever equipped creature attacks, tap target creature defending player controls.\nEquip {2}",
+            None,
+        );
+        let generated = evaluate_fresh(&shield).expect("Captain America's Shield should qualify");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            [
+                "attached creature modifier",
+                "attached-object attacks tap defending creature",
+                "fixed generic Equip",
+            ]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.keywords, [Keyword::Indestructible]);
+        let [modifier] = raw.static_abilities.as_slice() else {
+            panic!("Captain America's Shield should emit one static ability");
+        };
+        assert!(matches!(
+            &modifier.definition,
+            StaticAbilityDef::AttachedModifier {
+                delta_power: 0,
+                delta_toughness: 8,
+                keywords,
+                ..
+            } if keywords == &[Keyword::Vigilance]
+        ));
+        let [trigger] = raw.triggered_abilities.as_slice() else {
+            panic!("Captain America's Shield should emit one triggered ability");
+        };
+        assert_eq!(trigger.ability_id.as_str(), "triggered_01");
+        assert_eq!(
+            trigger.presentation,
+            AbilityPresentation::OracleLines(vec![3])
+        );
+        assert_eq!(
+            trigger.trigger,
+            TriggerCondition::WheneverAttachedObjectAttacks
+        );
+        assert_eq!(
+            trigger.effect,
+            [SpellEffectKind::Tap {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::DefendingPlayer,
+                    ..TargetFilter::default()
+                }))
+            }]
+        );
+        let target_group = &trigger
+            .targeting
+            .as_ref()
+            .expect("attack target group")
+            .groups[0];
+        assert_eq!((target_group.min, target_group.max), (1, 1));
+        assert_eq!(
+            target_group.prompt,
+            "Choose target creature defending player controls"
+        );
+        assert_eq!(target_group.effect_indices, [0]);
+        let [equip] = raw.activated_abilities.as_slice() else {
+            panic!("Captain America's Shield should emit one Equip ability");
+        };
+        assert!(matches!(
+            equip.effect.as_slice(),
+            [SpellEffectKind::Equip { target }]
+                if target.kind == TargetKind::Creature
+                    && target.controller == TargetController::You
+        ));
+
+        let lasso = normal_card(
+            "Thunder Lasso",
+            "{2}{W}",
+            "Artifact — Equipment",
+            "When this Equipment enters, attach it to target creature you control.\nEquipped creature gets +1/+1.\nWhenever equipped creature attacks, tap target creature defending player controls.\nEquip {2}",
+            None,
+        );
+        let generated = evaluate_fresh(&lasso).expect("Thunder Lasso should qualify");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            [
+                "Equipment ETB attach to target creature you control",
+                "attached creature modifier",
+                "attached-object attacks tap defending creature",
+                "fixed generic Equip",
+            ]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        let [modifier] = raw.static_abilities.as_slice() else {
+            panic!("Thunder Lasso should emit one static ability");
+        };
+        assert!(matches!(
+            &modifier.definition,
+            StaticAbilityDef::AttachedModifier {
+                delta_power: 1,
+                delta_toughness: 1,
+                keywords,
+                ..
+            } if keywords.is_empty()
+        ));
+        let [etb, trigger] = raw.triggered_abilities.as_slice() else {
+            panic!("Thunder Lasso should emit ETB and attack triggers");
+        };
+        assert_eq!(etb.ability_id.as_str(), "triggered_01");
+        assert_eq!(etb.presentation, AbilityPresentation::OracleLines(vec![1]));
+        assert_eq!(etb.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(matches!(
+            etb.effect.as_slice(),
+            [SpellEffectKind::AttachSource { target }]
+                if target.kind == TargetKind::Creature
+                    && target.controller == TargetController::You
+        ));
+        assert_eq!(trigger.ability_id.as_str(), "triggered_02");
+        assert_eq!(
+            trigger.presentation,
+            AbilityPresentation::OracleLines(vec![3])
+        );
+        assert_eq!(
+            trigger.trigger,
+            TriggerCondition::WheneverAttachedObjectAttacks
+        );
+        assert_eq!(
+            trigger.effect,
+            [SpellEffectKind::Tap {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::DefendingPlayer,
+                    ..TargetFilter::default()
+                }))
+            }]
+        );
+        let target_group = &trigger
+            .targeting
+            .as_ref()
+            .expect("attack target group")
+            .groups[0];
+        assert_eq!((target_group.min, target_group.max), (1, 1));
+        assert_eq!(target_group.effect_indices, [0]);
+        let [equip] = raw.activated_abilities.as_slice() else {
+            panic!("Thunder Lasso should emit one Equip ability");
+        };
+        assert!(matches!(
+            equip.effect.as_slice(),
+            [SpellEffectKind::Equip { target }]
+                if target.kind == TargetKind::Creature
+                    && target.controller == TargetController::You
+        ));
+
+        for (name, type_line, text) in [
+            (
+                "Issue 286 Unsupported Source",
+                "Artifact",
+                "Whenever equipped creature attacks, tap target creature defending player controls.",
+            ),
+            (
+                "Issue 286 Aura Source",
+                "Enchantment — Aura",
+                "Whenever enchanted creature attacks, tap target creature defending player controls.",
+            ),
+            (
+                "Issue 286 Creature Source",
+                "Creature — Human",
+                "Whenever equipped creature attacks, tap target creature defending player controls.",
+            ),
+            (
+                "Issue 286 Unsupported Tail",
+                "Artifact — Equipment",
+                "Whenever equipped creature attacks, tap target creature defending player controls.\nWhenever equipped creature attacks, draw a card.",
+            ),
+            (
+                "Issue 286 Unsupported Same-Line Tail",
+                "Artifact — Equipment",
+                "Whenever equipped creature attacks, tap target creature defending player controls. Draw a card.",
+            ),
+        ] {
+            let power_toughness = type_line.contains("Creature").then_some(("2", "2"));
+            let card = normal_card(name, "{2}", type_line, text, power_toughness);
+            assert_eq!(
+                evaluate_fresh(&card),
+                Err(Skip::NonKeywordText.into()),
+                "{name} must fail closed"
+            );
+        }
+    }
+
+    #[test]
     fn issue_274_equipment_etb_recipes_reject_extra_whole_card_clauses() {
         for (name, text) in [
             ("Biorganic Carapace", "When this Equipment enters, attach it to target creature you control.\nEquipped creature gets +2/+2 and has \"Whenever this creature deals combat damage to a player, draw a card for each modified creature you control.\" (Equipment, Auras you control, and counters are modifications.)\nEquip {2}"),
             ("Iron Man Armor", "When this Equipment enters, attach it to target creature you control.\nEquipped creature gets +2/+1 and has flying.\n{2}: If this Equipment isn't a creature, it becomes a 0/0 Construct Hero artifact creature with flying and \"This creature gets +1/+1 for each artifact you control\" until end of turn.\nEquip {2}"),
             ("Baseball Bat", "When this Equipment enters, attach it to target creature you control.\nEquipped creature gets +1/+1.\nWhenever equipped creature attacks, tap up to one target creature.\nEquip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)"),
             ("Shredder's Armor", "Equipped creature gets +2/+1.\nWhen this Equipment enters, attach it to target creature you control.\nEquip—Sacrifice another nonland permanent. Activate only once each turn."),
-            ("Thunder Lasso", "When this Equipment enters, attach it to target creature you control.\nEquipped creature gets +1/+1.\nWhenever equipped creature attacks, tap target creature defending player controls.\nEquip {2}"),
             ("Falcon's Wing Harness", "When this Equipment enters, attach it to target creature you control.\nEquipped creature gets +1/+1 and has flying and ward {1}. (Whenever equipped creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {1}.)\nEquip {2}{U} ({2}{U}: Attach to target creature you control. Equip only as a sorcery.)"),
         ] {
             let card = normal_card(name, "{2}", "Artifact — Equipment", text, None);

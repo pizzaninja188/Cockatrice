@@ -1697,6 +1697,38 @@ fn match_equipment_etb_manifest_dread_attach(
         })
 }
 
+fn match_equipment_attached_object_attacks_tap_defending_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_equipment
+        && text
+            == "Whenever equipped creature attacks, tap target creature defending player controls.")
+        .then(|| {
+            let target = TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::DefendingPlayer,
+                ..TargetFilter::default()
+            };
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+                context,
+                TriggerCondition::WheneverAttachedObjectAttacks,
+                vec![SpellEffectKind::Tap {
+                    subject: EffectSubject::Chosen(Box::new(target)),
+                }],
+            ) else {
+                unreachable!("triggered_ability_with always returns a triggered ability")
+            };
+            ability.targeting = Some(exact_targeting(
+                1,
+                1,
+                "Choose target creature defending player controls",
+                vec![0],
+            ));
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
 fn match_equipment_etb_attach(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (context.source_is_equipment
         && text == "When this Equipment enters, attach it to target creature you control.")
@@ -5951,6 +5983,35 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("triggered.attached_object_attacks.tap.defending_creature"),
+        label: "attached-object attacks tap defending creature",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_equipment_attached_object_attacks_tap_defending_creature,
+        calibration: calibrations!(
+            "Captain America's Shield" => "Whenever equipped creature attacks, tap target creature defending player controls.",
+            "Thunder Lasso" => "Whenever equipped creature attacks, tap target creature defending player controls.";
+            "Whenever this Equipment attacks, tap target creature defending player controls.",
+            "Whenever this artifact attacks, tap target creature defending player controls.",
+            "Whenever equipped creature attacks, tap target creature.",
+            "Whenever equipped creature attacks, tap target creature any player controls.",
+            "Whenever equipped creature attacks, tap target creature an opponent controls.",
+            "Whenever equipped creature attacks, tap target creature attacking player controls.",
+            "Whenever equipped creature attacks, tap target permanent defending player controls.",
+            "Whenever equipped creature attacks, tap target artifact defending player controls.",
+            "Whenever equipped creature attacks, tap target noncreature artifact defending player controls.",
+            "Whenever equipped creature attacks, untap target creature defending player controls.",
+            "Whenever equipped creature attacks, put a stun counter on target creature defending player controls.",
+            "Whenever equipped creature attacks, you may tap target creature defending player controls.",
+            "Whenever equipped creature attacks, tap up to one target creature defending player controls.",
+            "At the beginning of combat, tap target creature defending player controls.",
+            "Whenever equipped creature blocks, tap target creature defending player controls.",
+            "Whenever equipped creature attacks, tap two target creatures defending player controls.",
+            "Whenever equipped creature attacks, tap target creature defending player controls. Draw a card.",
+            "Whenever equipped creature attacks, tap target creature defending player controls.\nReach",
+            "Whenever equipped creature attacks, tap target creature defending player controls, then draw a card."
+        ),
+    },
+    Recipe {
         id: RecipeId("triggered.prowess"),
         label: "prowess",
         surface: RecipeSurface::TriggeredAbility,
@@ -7507,6 +7568,121 @@ mod tests {
         assert!(
             match_clause(clause, false, &noncreature).unwrap().is_none(),
             "the creature-source recipe must reject noncreature sources"
+        );
+        assert!(
+            match_clause(clause, true, &context()).unwrap().is_none(),
+            "the triggered recipe must reject spell clauses"
+        );
+    }
+
+    #[test]
+    fn issue_286_equipment_attack_tap_defending_creature_is_exact_and_typed() {
+        let clause =
+            "Whenever equipped creature attacks, tap target creature defending player controls.";
+        let matched = match_clause(clause, false, &context())
+            .expect("issue #286 recipe matching should not be ambiguous")
+            .expect("issue #286 Equipment attack tap should match");
+        assert_eq!(
+            matched.id.as_str(),
+            "triggered.attached_object_attacks.tap.defending_creature"
+        );
+        let recipe = CATALOG
+            .iter()
+            .find(|recipe| recipe.id == matched.id)
+            .expect("issue #286 recipe should remain registered");
+        assert_eq!(recipe.surface, RecipeSurface::TriggeredAbility);
+
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("issue #286 must emit a triggered ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "triggered_01");
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverAttachedObjectAttacks
+        );
+        assert!(!ability.may);
+        assert!(ability.modal.is_none());
+        assert!(ability.intervening_if.is_none());
+        let target = TargetFilter {
+            kind: TargetKind::Creature,
+            controller: TargetController::DefendingPlayer,
+            ..TargetFilter::default()
+        };
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Tap {
+                subject: EffectSubject::Chosen(Box::new(target.clone())),
+            }]
+        );
+        let targeting = ability
+            .targeting
+            .as_ref()
+            .expect("issue #286 requires explicit target group");
+        assert_eq!(targeting.groups.len(), 1);
+        let [group] = targeting.groups.as_slice() else {
+            panic!("issue #286 must have one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(
+            group.prompt,
+            "Choose target creature defending player controls"
+        );
+        assert_eq!(group.effect_indices, [0]);
+        assert!(group.distinct_from.is_empty());
+
+        for near_miss in [
+            "Whenever this Equipment attacks, tap target creature defending player controls.",
+            "Whenever this artifact attacks, tap target creature defending player controls.",
+            "Whenever equipped creature attacks, tap target creature.",
+            "Whenever equipped creature attacks, tap target creature any player controls.",
+            "Whenever equipped creature attacks, tap target creature an opponent controls.",
+            "Whenever equipped creature attacks, tap target creature attacking player controls.",
+            "Whenever equipped creature attacks, tap target permanent defending player controls.",
+            "Whenever equipped creature attacks, tap target artifact defending player controls.",
+            "Whenever equipped creature attacks, tap target noncreature artifact defending player controls.",
+            "Whenever equipped creature attacks, untap target creature defending player controls.",
+            "Whenever equipped creature attacks, put a stun counter on target creature defending player controls.",
+            "Whenever equipped creature attacks, you may tap target creature defending player controls.",
+            "Whenever equipped creature attacks, tap up to one target creature defending player controls.",
+            "At the beginning of combat, tap target creature defending player controls.",
+            "Whenever equipped creature blocks, tap target creature defending player controls.",
+            "Whenever equipped creature attacks, tap two target creatures defending player controls.",
+            "Whenever equipped creature attacks, tap target creature defending player controls. Draw a card.",
+            "Whenever equipped creature attacks, tap target creature defending player controls.\nReach",
+            "Whenever equipped creature attacks, tap target creature defending player controls, then draw a card.",
+        ] {
+            assert!(
+                match_clause(near_miss, false, &context()).unwrap().is_none(),
+                "near-miss unexpectedly matched: {near_miss}"
+            );
+        }
+
+        let mut non_equipment = context();
+        non_equipment.source_is_equipment = false;
+        assert!(
+            match_clause(clause, false, &non_equipment)
+                .unwrap()
+                .is_none(),
+            "the attachment trigger recipe must reject Aura and creature sources"
+        );
+        let mut aura = context();
+        aura.source_is_equipment = false;
+        aura.source_is_aura = true;
+        assert!(
+            match_clause(clause, false, &aura).unwrap().is_none(),
+            "the attachment trigger recipe must reject Aura sources"
+        );
+        let mut creature = context();
+        creature.source_is_equipment = false;
+        creature.source_is_aura = false;
+        creature.source_is_creature = true;
+        assert!(
+            match_clause(clause, false, &creature).unwrap().is_none(),
+            "the attachment trigger recipe must reject creature sources"
         );
         assert!(
             match_clause(clause, true, &context()).unwrap().is_none(),

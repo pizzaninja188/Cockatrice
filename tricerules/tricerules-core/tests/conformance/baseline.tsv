@@ -331,6 +331,8 @@ canyon_crawler	0	ability:0	unsupported: ability not offered by generic battlefie
 canyon_crawler	0	cast	exercised
 canyon_minotaur	0	cast	exercised
 capital_guard	0	cast	exercised
+captain_americas_shield	0	ability:0	exercised
+captain_americas_shield	0	cast	exercised
 captain_of_the_watch	0	cast	exercised
 captains_call	0	cast	exercised
 capture_sphere	0	cast	exercised
@@ -2202,6 +2204,8 @@ three_tree_rootweaver	0	ability:0	exercised
 three_tree_rootweaver	0	cast	exercised
 three_tree_scribe	0	cast	exercised
 thrill_of_possibility	0	cast	exercised
+thunder_lasso	0	ability:0	exercised
+thunder_lasso	0	cast	exercised
 thunder_salvo	0	cast	exercised
 thundering_giant	0	cast	exercised
 thundering_tanadon	0	cast	exercised
