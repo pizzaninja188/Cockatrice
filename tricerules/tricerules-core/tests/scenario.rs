@@ -457,3 +457,5 @@ mod issue_276_generated_power_damage;
 mod issue_301_generated_beginning_of_combat;
 #[path = "scenario/issue_309_generated_station.rs"]
 mod issue_309_generated_station;
+#[path = "scenario/issue_310_generated_station.rs"]
+mod issue_310_generated_station;

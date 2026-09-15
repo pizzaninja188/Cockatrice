@@ -817,6 +817,8 @@ galewind_moose	0	cast	exercised
 galion,_elvenkings_butler	0	cast	exercised
 gallant_citizen	0	cast	exercised
 gallant_pie-wielder	0	cast	exercised
+galvanizing_sawship	0	ability:0	exercised
+galvanizing_sawship	0	cast	exercised
 gangly_stompling	0	cast	exercised
 garruks_companion	0	cast	exercised
 garruks_gorehorn	0	cast	exercised
@@ -2471,6 +2473,8 @@ wayward_giant	0	cast	exercised
 we_say_thee_nay!	0	cast	unsupported: target group 0 needs a richer fixture
 weave_fate	0	cast	exercised
 web_up	0	cast	exercised
+wedgelight_rammer	0	ability:0	exercised
+wedgelight_rammer	0	cast	exercised
 weftblade_enhancer	0	cast	exercised
 west_wind_avatar	0	cast	exercised
 wetland_sambar	0	cast	exercised

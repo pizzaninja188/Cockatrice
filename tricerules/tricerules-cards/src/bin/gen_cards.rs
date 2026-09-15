@@ -52,7 +52,8 @@ mod scaffold;
 use recipes::{french_vanilla_keywords, keyword_ident};
 use recipes::{
     issue_298_card_surface_is_exact, issue_309_card_surface_is_exact,
-    issue_309_oracle_id_is_reviewed, match_clause, match_modal_assembly, match_modal_mode,
+    issue_309_oracle_id_is_reviewed, issue_310_card_surface_is_exact,
+    issue_310_oracle_id_is_reviewed, match_clause, match_modal_assembly, match_modal_mode,
     match_station_assembly, reviewed_modal_mode_pair, validate_catalog, RecipeAmbiguity,
     RecipeContext, RecipeEmission,
 };
@@ -1682,6 +1683,17 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     ) {
         return Err(Skip::NonKeywordText.into());
     }
+    if !issue_310_card_surface_is_exact(
+        str_field(card, "oracle_id"),
+        &name,
+        &mana_cost,
+        type_line,
+        oracle_text,
+        power_text.as_deref(),
+        toughness_text.as_deref(),
+    ) {
+        return Err(Skip::NonKeywordText.into());
+    }
     let mut rules = parse_rules_text(
         &name,
         str_field(card, "oracle_id"),
@@ -1811,7 +1823,9 @@ fn evaluate(
     generated_names: &HashSet<String>,
 ) -> Result<GenCard, EvaluationError> {
     let layout = GenLayout::from_scryfall(str_field(card, "layout")).ok_or(Skip::Layout)?;
-    if issue_309_oracle_id_is_reviewed(str_field(card, "oracle_id")) && layout != GenLayout::Normal
+    if (issue_309_oracle_id_is_reviewed(str_field(card, "oracle_id"))
+        || issue_310_oracle_id_is_reviewed(str_field(card, "oracle_id")))
+        && layout != GenLayout::Normal
     {
         return Err(Skip::NonKeywordText.into());
     }

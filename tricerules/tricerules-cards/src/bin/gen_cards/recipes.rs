@@ -2744,6 +2744,228 @@ pub(super) fn issue_309_card_surface_is_exact(
     (name, mana_cost, type_line, power, toughness, oracle_text) == expected
 }
 
+const ISSUE_310_GALVANIZING_ORACLE_ID: &str = "dfe8f77a-cc26-438b-92ae-2ca7a91f813b";
+const ISSUE_310_WEDGELIGHT_ORACLE_ID: &str = "03259ab0-caa8-4620-b070-127e2c712252";
+const ISSUE_310_REVIEWED_ORACLE_IDS: &[&str] = &[
+    ISSUE_310_GALVANIZING_ORACLE_ID,
+    ISSUE_310_WEDGELIGHT_ORACLE_ID,
+];
+const ISSUE_310_GALVANIZING_STATION_HEADER: &str = r#"Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)"#;
+const ISSUE_310_GALVANIZING_THRESHOLD_LINE: &str = "3+ | Flying, haste";
+const ISSUE_310_WEDGELIGHT_STATION_HEADER: &str = r#"Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)"#;
+const ISSUE_310_WEDGELIGHT_THRESHOLD_LINE: &str = "9+ | Flying, first strike";
+const ISSUE_310_WEDGELIGHT_ETB_TEXT: &str =
+    "When this Spacecraft enters, create a 2/2 colorless Robot artifact creature token.";
+
+#[derive(Debug, Clone, Copy)]
+struct Issue310StationVariant {
+    threshold: u32,
+    base_power: i64,
+    base_toughness: i64,
+    keywords: &'static [Keyword],
+    station_header: &'static str,
+    threshold_line: &'static str,
+}
+
+const ISSUE_310_GALVANIZING_KEYWORDS: &[Keyword] = &[Keyword::Flying, Keyword::Haste];
+const ISSUE_310_WEDGELIGHT_KEYWORDS: &[Keyword] = &[Keyword::Flying, Keyword::FirstStrike];
+
+fn issue_310_context_is_reviewed(context: &RecipeContext) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        .is_none_or(|oracle_id| ISSUE_310_REVIEWED_ORACLE_IDS.contains(&oracle_id))
+}
+
+pub(super) fn issue_310_oracle_id_is_reviewed(oracle_id: &str) -> bool {
+    ISSUE_310_REVIEWED_ORACLE_IDS.contains(&oracle_id)
+}
+
+fn issue_310_variant(context: &RecipeContext) -> Option<Issue310StationVariant> {
+    match context.oracle_id.as_deref() {
+        Some(ISSUE_310_GALVANIZING_ORACLE_ID) => Some(Issue310StationVariant {
+            threshold: 3,
+            base_power: 6,
+            base_toughness: 5,
+            keywords: ISSUE_310_GALVANIZING_KEYWORDS,
+            station_header: ISSUE_310_GALVANIZING_STATION_HEADER,
+            threshold_line: ISSUE_310_GALVANIZING_THRESHOLD_LINE,
+        }),
+        Some(ISSUE_310_WEDGELIGHT_ORACLE_ID) => Some(Issue310StationVariant {
+            threshold: 9,
+            base_power: 3,
+            base_toughness: 4,
+            keywords: ISSUE_310_WEDGELIGHT_KEYWORDS,
+            station_header: ISSUE_310_WEDGELIGHT_STATION_HEADER,
+            threshold_line: ISSUE_310_WEDGELIGHT_THRESHOLD_LINE,
+        }),
+        Some(_) => None,
+        None => match context.source_name.as_str() {
+            "Galvanizing Sawship" => Some(Issue310StationVariant {
+                threshold: 3,
+                base_power: 6,
+                base_toughness: 5,
+                keywords: ISSUE_310_GALVANIZING_KEYWORDS,
+                station_header: ISSUE_310_GALVANIZING_STATION_HEADER,
+                threshold_line: ISSUE_310_GALVANIZING_THRESHOLD_LINE,
+            }),
+            "Wedgelight Rammer" => Some(Issue310StationVariant {
+                threshold: 9,
+                base_power: 3,
+                base_toughness: 4,
+                keywords: ISSUE_310_WEDGELIGHT_KEYWORDS,
+                station_header: ISSUE_310_WEDGELIGHT_STATION_HEADER,
+                threshold_line: ISSUE_310_WEDGELIGHT_THRESHOLD_LINE,
+            }),
+            _ => None,
+        },
+    }
+}
+
+pub(super) fn issue_310_card_surface_is_exact(
+    oracle_id: &str,
+    name: &str,
+    mana_cost: &str,
+    type_line: &str,
+    oracle_text: &str,
+    power: Option<&str>,
+    toughness: Option<&str>,
+) -> bool {
+    let expected = match oracle_id {
+        ISSUE_310_GALVANIZING_ORACLE_ID => (
+            "Galvanizing Sawship",
+            "{5}{R}",
+            "Artifact — Spacecraft",
+            Some("6"),
+            Some("5"),
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, haste",
+        ),
+        ISSUE_310_WEDGELIGHT_ORACLE_ID => (
+            "Wedgelight Rammer",
+            "{3}{W}",
+            "Artifact — Spacecraft",
+            Some("3"),
+            Some("4"),
+            "When this Spacecraft enters, create a 2/2 colorless Robot artifact creature token.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike",
+        ),
+        _ => return true,
+    };
+    (name, mana_cost, type_line, power, toughness, oracle_text) == expected
+}
+
+pub(super) fn match_station_3_or_9_keyword_assembly(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_artifact
+        || !context.source_is_permanent
+        || !context.source_is_spacecraft_or_planet
+        || !issue_310_context_is_reviewed(context)
+    {
+        return None;
+    }
+    let variant = issue_310_variant(context)?;
+    let lines = external_oracle_lines(text);
+    if lines.len() != 2 || lines[0] != variant.station_header || lines[1] != variant.threshold_line
+    {
+        return None;
+    }
+    let station_line = match &context.presentation {
+        AbilityPresentation::OracleLines(lines) if lines.len() == 1 && lines[0] > 0 => lines[0],
+        _ => return None,
+    };
+    let threshold_line = station_line.checked_add(1)?;
+    Some(RecipeEmission::StationAssembly(StationAssemblyEmission {
+        activated_ability: ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![AbilityCost::TapPermanents {
+                constraint: ObjectPaymentConstraint::ExactCount(1),
+                filter: TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    ..TargetFilter::default()
+                },
+                exclude_source: true,
+            }],
+            cost_modifiers: Vec::new(),
+            effect: vec![SpellEffectKind::PutCounters {
+                counter: CounterKind::Charge,
+                count: Amount::Count(CountExpression::CardResultCharacteristicSum {
+                    filter: CardResultFilter {
+                        source: CardResultSource::Payment,
+                        action: CardResultAction::Tap,
+                        players: RelativePlayerSet::Controller,
+                        card_type: Some(CardTypeFilter::Creature),
+                    },
+                    characteristic: PowerToughnessCharacteristic::Power,
+                }),
+                subject: EffectSubject::Source,
+            }],
+            targeting: None,
+            timing: ActivationTiming::SorcerySpeed,
+            conditions: Vec::new(),
+            activation_limit: None,
+        },
+        static_ability: IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: AbilityPresentation::OracleLines(vec![threshold_line]),
+            definition: StaticAbilityDef::ConditionalSelfModifier {
+                condition: GameCondition::SourceCounterCount {
+                    counter: CounterKind::Charge,
+                    min: Some(variant.threshold),
+                    max: None,
+                },
+                set_types: None,
+                add_types: TypeLineAddition {
+                    card_types: vec![PermanentTypeFilter::Creature],
+                    creature_types: Vec::new(),
+                },
+                base_power: Some(variant.base_power),
+                base_toughness: Some(variant.base_toughness),
+                delta_power: 0,
+                delta_toughness: 0,
+                keywords: variant.keywords.to_vec(),
+                activated_abilities: Vec::new(),
+                triggered_abilities: Vec::new(),
+                can_attack_as_though_without_defender: false,
+            },
+        },
+    }))
+}
+
+fn issue_310_is_wedgelight(context: &RecipeContext) -> bool {
+    match context.oracle_id.as_deref() {
+        Some(ISSUE_310_WEDGELIGHT_ORACLE_ID) => true,
+        Some(_) => false,
+        None => context.source_name == "Wedgelight Rammer",
+    }
+}
+
+fn match_wedgelight_etb_create_robot(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_artifact
+        && context.source_is_permanent
+        && context.source_is_spacecraft_or_planet
+        && issue_310_is_wedgelight(context)
+        && text == ISSUE_310_WEDGELIGHT_ETB_TEXT)
+        .then(|| {
+            triggered_ability(
+                context,
+                SpellEffectKind::CreateTokens {
+                    token: "robot_c_2_2".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                },
+            )
+        })
+}
+
 pub(super) fn match_station_8_flying_assembly(
     text: &str,
     context: &RecipeContext,
@@ -7774,6 +7996,71 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("station.spacecraft.threshold_3_or_9_keywords"),
+        label: "Station 3+ or 9+ keyword Spacecraft",
+        surface: RecipeSurface::StationAssembly,
+        matcher: match_station_3_or_9_keyword_assembly,
+        calibration: calibrations!(
+            "Galvanizing Sawship" => "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, haste",
+            "Wedgelight Rammer" => "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike";
+            "Station",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)",
+            "3+ | Flying, haste",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, haste",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 2+.)\n2+ | Flying, haste",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 4+.)\n4+ | Flying, haste",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying, haste",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 10+.)\n10+ | Flying, haste",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3.)\n3 | Flying, haste",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at three or more.)\n3+ | Flying, haste",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3-5.)\n3-5 | Flying, haste",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Haste, flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, vigilance",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | First strike, flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as an instant. It's an artifact creature at 9+.)\n9+ | Flying, first strike",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Activate only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike",
+            "Station (Tap this artifact: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike",
+            "Station (Tap another creature: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike",
+            "Station (Tap another creature you control: Put charge counters equal to its toughness on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike",
+            "Station (Tap another creature you control: Put +1/+1 counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike",
+            "Station (Tap another creature you control: Put charge counters equal to its power on that creature. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike",
+            "Station (Tap another creature an opponent controls: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n9+ | Flying, first strike",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact Vehicle at 9+.)\n9+ | Flying, first strike",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike\nDraw a card.",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n9+ | Flying, haste",
+            "3+ | Flying, haste\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, haste\n3+ | Flying, haste",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, haste\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, haste",
+            "Station ({1}, Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, haste"
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.spacecraft.wedgelight.create_robot"),
+        label: "Wedgelight Rammer ETB create one Robot",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_wedgelight_etb_create_robot,
+        calibration: singleton_calibrations!(
+            "Wedgelight Rammer" => "When this Spacecraft enters, create a 2/2 colorless Robot artifact creature token.";
+            "When this Spacecraft enters, create two 2/2 colorless Robot artifact creature tokens.",
+            "When this Spacecraft enters, create a tapped 2/2 colorless Robot artifact creature token.",
+            "When this Spacecraft enters, create a 2/2 colorless Robot creature token.",
+            "When this Spacecraft enters, create a 2/2 colorless Servo artifact creature token.",
+            "When this Spacecraft enters, create a 2/2 colorless Robot artifact creature token. You may.",
+            "When this artifact enters, create a 2/2 colorless Robot artifact creature token.",
+            "Whenever this Spacecraft enters, create a 2/2 colorless Robot artifact creature token.",
+            "When this Spacecraft enters, create a 2/2 colorless Robot artifact creature token, then draw a card.",
+            "When this Spacecraft enters, create a 3/3 colorless Robot artifact creature token.",
+            "When this Spacecraft enters, create a 2/2 white Robot artifact creature token.",
+            "When this Spacecraft enters, target player creates a 2/2 colorless Robot artifact creature token.",
+            "When this Spacecraft enters, each player creates a 2/2 colorless Robot artifact creature token.",
+            "When this Spacecraft enters, create a 2/2 colorless Robot artifact creature token under your control.",
+            "When this Spacecraft enters, you may create a 2/2 colorless Robot artifact creature token."
+        ),
+    },
+    Recipe {
         id: RecipeId("station.spacecraft.threshold_8_flying"),
         label: "Station 8+ Flying Spacecraft",
         surface: RecipeSurface::StationAssembly,
@@ -11859,5 +12146,333 @@ mod tests {
                 RecipeId("test.station.duplicate.two")
             ]
         );
+    }
+
+    #[test]
+    fn issue_310_station_variants_are_supported_for_both_reviewed_identities() {
+        let cases = [
+            (
+                "Galvanizing Sawship",
+                "dfe8f77a-cc26-438b-92ae-2ca7a91f813b",
+                "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, haste",
+            ),
+            (
+                "Wedgelight Rammer",
+                "03259ab0-caa8-4620-b070-127e2c712252",
+                "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike",
+            ),
+        ];
+        for (name, oracle_id, text) in cases {
+            let mut reviewed = context();
+            reviewed.source_name = name.into();
+            reviewed.oracle_id = Some(oracle_id.into());
+            let matched = match_station_assembly(text, &reviewed)
+                .expect("issue #310 Station variant must not be ambiguous")
+                .unwrap_or_else(|| {
+                    panic!("issue #310 reviewed Station variant should match: {name}")
+                });
+            assert_eq!(
+                matched.id.as_str(),
+                "station.spacecraft.threshold_3_or_9_keywords"
+            );
+            let RecipeEmission::StationAssembly(assembly) = matched.emission else {
+                panic!("issue #310 Station variant must emit a Station assembly: {name}");
+            };
+            let expected = if name == "Galvanizing Sawship" {
+                (3, 6, 5, vec![Keyword::Flying, Keyword::Haste])
+            } else {
+                (9, 3, 4, vec![Keyword::Flying, Keyword::FirstStrike])
+            };
+            assert_eq!(
+                assembly.static_ability.definition,
+                StaticAbilityDef::ConditionalSelfModifier {
+                    condition: GameCondition::SourceCounterCount {
+                        counter: CounterKind::Charge,
+                        min: Some(expected.0),
+                        max: None,
+                    },
+                    set_types: None,
+                    add_types: TypeLineAddition {
+                        card_types: vec![PermanentTypeFilter::Creature],
+                        creature_types: Vec::new(),
+                    },
+                    base_power: Some(expected.1),
+                    base_toughness: Some(expected.2),
+                    delta_power: 0,
+                    delta_toughness: 0,
+                    keywords: expected.3,
+                    activated_abilities: Vec::new(),
+                    triggered_abilities: Vec::new(),
+                    can_attack_as_though_without_defender: false,
+                }
+            );
+        }
+
+        let mut wedgelight = context();
+        wedgelight.source_name = "Wedgelight Rammer".into();
+        wedgelight.oracle_id = Some(ISSUE_310_WEDGELIGHT_ORACLE_ID.into());
+        let etb = match_clause(ISSUE_310_WEDGELIGHT_ETB_TEXT, false, &wedgelight)
+            .expect("Wedgelight ETB must not be ambiguous")
+            .expect("Wedgelight ETB must match");
+        assert_eq!(etb.id.as_str(), "etb.spacecraft.wedgelight.create_robot");
+        let RecipeEmission::TriggeredAbility(ability) = etb.emission else {
+            panic!("Wedgelight ETB must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::CreateTokens {
+                token: "robot_c_2_2".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }]
+        );
+    }
+
+    #[test]
+    fn issue_310_station_variants_reject_near_misses_and_unreviewed_surfaces() {
+        let galvanizing_pair = "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, haste";
+        let wedgelight_pair = "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike";
+        let mut galvanizing = context();
+        galvanizing.source_name = "Galvanizing Sawship".into();
+        galvanizing.oracle_id = Some(ISSUE_310_GALVANIZING_ORACLE_ID.into());
+        let mut wedgelight = context();
+        wedgelight.source_name = "Wedgelight Rammer".into();
+        wedgelight.oracle_id = Some(ISSUE_310_WEDGELIGHT_ORACLE_ID.into());
+
+        for near_miss in [
+            "Station",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)",
+            "3+ | Flying, haste",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 2+.)\n2+ | Flying, haste",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 4+.)\n4+ | Flying, haste",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying, haste",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 10+.)\n10+ | Flying, haste",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3.)\n3 | Flying, haste",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Haste, flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, vigilance",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as an instant. It's an artifact creature at 9+.)\n9+ | Flying, first strike",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n9+ | Flying, haste",
+            "3+ | Flying, haste\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, haste\n3+ | Flying, haste",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, haste\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, haste",
+            "Station ({1}, Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, haste",
+            "Station (Tap this artifact: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike",
+            "Station (Tap another creature: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike",
+            "Station (Tap another creature you control: Put charge counters equal to its toughness on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike",
+            "Station (Tap another creature you control: Put +1/+1 counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike",
+            "Station (Tap another creature you control: Put charge counters equal to its power on that creature. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike",
+            "Station (Tap another creature an opponent controls: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n9+ | Flying, first strike",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact Vehicle at 9+.)\n9+ | Flying, first strike",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike\nDraw a card.",
+        ] {
+            assert_eq!(
+                match_station_assembly(near_miss, &galvanizing),
+                Ok(None),
+                "Station near-miss must remain unsupported for Galvanizing: {near_miss}"
+            );
+            assert_eq!(
+                match_station_assembly(near_miss, &wedgelight),
+                Ok(None),
+                "Station near-miss must remain unsupported for Wedgelight: {near_miss}"
+            );
+        }
+
+        let mut unreviewed = galvanizing.clone();
+        unreviewed.oracle_id = Some("00000000-0000-0000-0000-000000000000".into());
+        assert_eq!(
+            match_station_assembly(galvanizing_pair, &unreviewed),
+            Ok(None)
+        );
+        assert_eq!(
+            match_station_assembly(wedgelight_pair, &galvanizing),
+            Ok(None)
+        );
+        assert_eq!(
+            match_station_assembly(galvanizing_pair, &wedgelight),
+            Ok(None)
+        );
+
+        let duplicate_catalog = [
+            Recipe {
+                id: RecipeId("test.station310.duplicate.one"),
+                label: "test Station #310 duplicate one",
+                surface: RecipeSurface::StationAssembly,
+                matcher: match_station_3_or_9_keyword_assembly,
+                calibration: RecipeCalibration {
+                    positive_cards: &[],
+                    negative_near_misses: &[],
+                    minimum_positive_cards: 0,
+                },
+            },
+            Recipe {
+                id: RecipeId("test.station310.duplicate.two"),
+                label: "test Station #310 duplicate two",
+                surface: RecipeSurface::StationAssembly,
+                matcher: match_station_3_or_9_keyword_assembly,
+                calibration: RecipeCalibration {
+                    positive_cards: &[],
+                    negative_near_misses: &[],
+                    minimum_positive_cards: 0,
+                },
+            },
+        ];
+        let ambiguity = match_surface_in(
+            &duplicate_catalog,
+            galvanizing_pair,
+            RecipeSurface::StationAssembly,
+            &galvanizing,
+        )
+        .expect_err("two matching #310 Station recipes must be ambiguous");
+        assert_eq!(
+            ambiguity.recipe_ids,
+            [
+                RecipeId("test.station310.duplicate.one"),
+                RecipeId("test.station310.duplicate.two")
+            ]
+        );
+
+        for (mut invalid, label) in [
+            (galvanizing.clone(), "non-artifact"),
+            (galvanizing.clone(), "non-permanent"),
+            (galvanizing.clone(), "non-spacecraft"),
+        ] {
+            match label {
+                "non-artifact" => invalid.source_is_artifact = false,
+                "non-permanent" => invalid.source_is_permanent = false,
+                "non-spacecraft" => invalid.source_is_spacecraft_or_planet = false,
+                _ => unreachable!(),
+            }
+            assert_eq!(
+                match_station_assembly(galvanizing_pair, &invalid),
+                Ok(None),
+                "{label} Station source must fail closed"
+            );
+        }
+
+        for near_miss in [
+            "When this Spacecraft enters, create two 2/2 colorless Robot artifact creature tokens.",
+            "When this Spacecraft enters, create a tapped 2/2 colorless Robot artifact creature token.",
+            "When this Spacecraft enters, create a 2/2 colorless Robot creature token.",
+            "When this Spacecraft enters, create a 2/2 colorless Servo artifact creature token.",
+            "When this Spacecraft enters, create a 2/2 colorless Robot artifact creature token. You may.",
+            "When this artifact enters, create a 2/2 colorless Robot artifact creature token.",
+            "Whenever this Spacecraft enters, create a 2/2 colorless Robot artifact creature token.",
+            "When this Spacecraft enters, create a 2/2 colorless Robot artifact creature token, then draw a card.",
+            "When this Spacecraft enters, create a 3/3 colorless Robot artifact creature token.",
+            "When this Spacecraft enters, create a 2/2 white Robot artifact creature token.",
+            "When this Spacecraft enters, target player creates a 2/2 colorless Robot artifact creature token.",
+            "When this Spacecraft enters, each player creates a 2/2 colorless Robot artifact creature token.",
+            "When this Spacecraft enters, create a 2/2 colorless Robot artifact creature token under your control.",
+            "When this Spacecraft enters, you may create a 2/2 colorless Robot artifact creature token.",
+        ] {
+            assert_eq!(
+                match_clause(near_miss, false, &wedgelight),
+                Ok(None),
+                "Wedgelight ETB near-miss must remain unsupported: {near_miss}"
+            );
+        }
+
+        let mut nonspacecraft = wedgelight.clone();
+        nonspacecraft.source_is_spacecraft_or_planet = false;
+        assert_eq!(
+            match_clause(ISSUE_310_WEDGELIGHT_ETB_TEXT, false, &nonspacecraft),
+            Ok(None)
+        );
+    }
+
+    #[test]
+    fn issue_310_card_surfaces_require_exact_identity_and_printed_fields() {
+        assert!(issue_310_card_surface_is_exact(
+            ISSUE_310_GALVANIZING_ORACLE_ID,
+            "Galvanizing Sawship",
+            "{5}{R}",
+            "Artifact — Spacecraft",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, haste",
+            Some("6"),
+            Some("5"),
+        ));
+        assert!(issue_310_card_surface_is_exact(
+            ISSUE_310_WEDGELIGHT_ORACLE_ID,
+            "Wedgelight Rammer",
+            "{3}{W}",
+            "Artifact — Spacecraft",
+            "When this Spacecraft enters, create a 2/2 colorless Robot artifact creature token.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, first strike",
+            Some("3"),
+            Some("4"),
+        ));
+        for (name, oracle_id, mana, type_line, text, power, toughness) in [
+            (
+                "Wrong Name",
+                ISSUE_310_GALVANIZING_ORACLE_ID,
+                "{5}{R}",
+                "Artifact — Spacecraft",
+                "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, haste",
+                Some("6"),
+                Some("5"),
+            ),
+            (
+                "Galvanizing Sawship",
+                ISSUE_310_GALVANIZING_ORACLE_ID,
+                "{4}{R}",
+                "Artifact — Spacecraft",
+                "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, haste",
+                Some("6"),
+                Some("5"),
+            ),
+            (
+                "Galvanizing Sawship",
+                ISSUE_310_GALVANIZING_ORACLE_ID,
+                "{5}{R}",
+                "Artifact — Vehicle",
+                "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, haste",
+                Some("6"),
+                Some("5"),
+            ),
+            (
+                "Galvanizing Sawship",
+                ISSUE_310_GALVANIZING_ORACLE_ID,
+                "{5}{R}",
+                "Artifact — Spacecraft",
+                "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, vigilance",
+                Some("6"),
+                Some("5"),
+            ),
+            (
+                "Galvanizing Sawship",
+                ISSUE_310_GALVANIZING_ORACLE_ID,
+                "{5}{R}",
+                "Artifact — Spacecraft",
+                "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, haste",
+                Some("7"),
+                Some("5"),
+            ),
+            (
+                "Galvanizing Sawship",
+                ISSUE_310_GALVANIZING_ORACLE_ID,
+                "{5}{R}",
+                "Artifact — Spacecraft",
+                "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 3+.)\n3+ | Flying, haste\nDraw a card.",
+                Some("6"),
+                Some("5"),
+            ),
+        ] {
+            assert!(!issue_310_card_surface_is_exact(
+                oracle_id, name, mana, type_line, text, power, toughness
+            ));
+        }
+        assert!(issue_310_card_surface_is_exact(
+            "00000000-0000-0000-0000-000000000000",
+            "Unreviewed",
+            "{1}",
+            "Artifact",
+            "unreviewed",
+            None,
+            None,
+        ));
     }
 }
