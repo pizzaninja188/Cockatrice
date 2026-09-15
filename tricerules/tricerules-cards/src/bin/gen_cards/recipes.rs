@@ -2615,6 +2615,60 @@ fn match_land_sacrifice_draw_one(text: &str, context: &RecipeContext) -> Option<
         })
 }
 
+const ISSUE_301_REVIEWED_ORACLE_IDS: &[&str] = &[
+    "295f8b8d-102a-47af-93c2-f8182c5f11ca", // Ascendant Dustspeaker
+    "5d46e85f-4a04-48b1-afe9-3a47678041d4", // Startled Relic Sloth
+];
+
+fn issue_301_oracle_id_is_reviewed(context: &RecipeContext) -> bool {
+    context
+        .oracle_id
+        // Catalog calibration contexts intentionally omit Oracle identity. Real card parsing
+        // supplies Some(oracle_id), so unknown identities fail closed during generation.
+        .as_deref()
+        .is_none_or(|oracle_id| ISSUE_301_REVIEWED_ORACLE_IDS.contains(&oracle_id))
+}
+
+fn match_beginning_of_combat_exile_graveyard_card(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_301_oracle_id_is_reviewed(context)
+        && text
+            == "At the beginning of combat on your turn, exile up to one target card from a graveyard.")
+        .then(|| {
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+                context,
+                TriggerCondition::AtBeginningOfCombat {
+                    player: CastTriggerPlayer::Controller,
+                },
+                vec![SpellEffectKind::MoveGraveyardCards {
+                    filter: GraveyardFilter {
+                        owner: GraveyardOwner::AnyPlayer,
+                        ..GraveyardFilter::default()
+                    },
+                    destination: GraveyardDestination::Exile,
+                    linked_exile_id: None,
+                }],
+            ) else {
+                unreachable!("triggered_ability_with always returns a triggered ability")
+            };
+            ability.targeting = Some(TargetingDef {
+                groups: vec![TargetGroupDef {
+                    min: 0,
+                    max: 1,
+                    prompt: "Choose up to one target card from a graveyard".into(),
+                    effect_indices: vec![0],
+                    distinct_from: Vec::new(),
+                    same_graveyard: false,
+                    cast_cost_expansion: None,
+                }],
+            });
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
 fn match_etb_look_top_three_optional_top_one(
     text: &str,
     context: &RecipeContext,
@@ -6952,6 +7006,42 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("triggered.beginning_of_combat.controller.exile_graveyard_card.optional_one"),
+        label: "controller beginning-of-combat optional graveyard exile",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_beginning_of_combat_exile_graveyard_card,
+        calibration: calibrations!(
+            "Ascendant Dustspeaker" => "At the beginning of combat on your turn, exile up to one target card from a graveyard.",
+            "Startled Relic Sloth" => "At the beginning of combat on your turn, exile up to one target card from a graveyard.";
+            "At the beginning of your upkeep, exile up to one target card from a graveyard.",
+            "At the beginning of your end step, exile up to one target card from a graveyard.",
+            "At the beginning of each combat, exile up to one target card from a graveyard.",
+            "At the beginning of combat on an opponent's turn, exile up to one target card from a graveyard.",
+            "At the beginning of combat on your turn, exile one target card from a graveyard.",
+            "At the beginning of combat on your turn, exile up to two target cards from a graveyard.",
+            "At the beginning of combat on your turn, choose a card from a graveyard, then exile it.",
+            "At the beginning of combat on your turn, exile up to one target card from your graveyard.",
+            "At the beginning of combat on your turn, exile up to one target card from an opponent's graveyard.",
+            "At the beginning of combat on your turn, exile up to one target creature card from a graveyard.",
+            "At the beginning of combat on your turn, exile up to one target card from your hand.",
+            "At the beginning of combat on your turn, exile up to one target card from a graveyard to your hand.",
+            "At the beginning of combat on your turn, exile up to one target card from a graveyard. If you do, draw a card.",
+            "At the beginning of combat on your turn, if you control a creature, exile up to one target card from a graveyard.",
+            "Whenever this creature attacks, exile up to one target card from a graveyard.",
+            "At the beginning of combat on any turn, exile up to one target card from a graveyard.",
+            "At the beginning of combat on each player's turn, exile up to one target card from a graveyard.",
+            "At the beginning of combat on your turn, exile up to one target nonland card from a graveyard.",
+            "At the beginning of combat on your turn, exile up to one target card from a library.",
+            "At the beginning of combat on your turn, exile up to one target card from the battlefield.",
+            "At the beginning of combat on your turn, exile up to one target card from exile.",
+            "At the beginning of combat on your turn, return up to one target card from a graveyard to your hand.",
+            "At the beginning of combat on your turn, put up to one target card from a graveyard on top of its owner's library.",
+            "At the beginning of combat on your turn, put up to one target card from a graveyard onto the battlefield.",
+            "At the beginning of combat on your turn, you may exile target card from a graveyard.",
+            "At the beginning of combat on your turn, exile target card from a graveyard. You may exile another target card from a graveyard."
+        ),
+    },
+    Recipe {
         id: RecipeId("activated.land.tap_sacrifice.search_basic_land.battlefield_tapped"),
         label: "tap-sacrifice land basic search",
         surface: RecipeSurface::ActivatedAbility,
@@ -7771,6 +7861,93 @@ mod tests {
     #[test]
     fn catalog_has_stable_unique_ids_and_complete_calibration_metadata() {
         validate_catalog().expect("built-in recipe catalog should be valid");
+    }
+
+    #[test]
+    fn issue_301_matches_only_the_reviewed_beginning_of_combat_graveyard_clause() {
+        const CLAUSE: &str =
+            "At the beginning of combat on your turn, exile up to one target card from a graveyard.";
+        const RECIPE_ID: &str =
+            "triggered.beginning_of_combat.controller.exile_graveyard_card.optional_one";
+        for oracle_id in ISSUE_301_REVIEWED_ORACLE_IDS {
+            let mut reviewed = context();
+            reviewed.oracle_id = Some((*oracle_id).into());
+            let matched = match_clause(CLAUSE, false, &reviewed)
+                .expect("reviewed clause should not be ambiguous")
+                .expect("reviewed clause should match");
+            assert_eq!(matched.id.as_str(), RECIPE_ID);
+        }
+
+        for oracle_id in [
+            "00000000-0000-0000-0000-000000000000",
+            "",
+            "unreviewed-identical-clause",
+        ] {
+            let mut unreviewed = context();
+            unreviewed.oracle_id = Some(oracle_id.into());
+            assert!(
+                match_clause(CLAUSE, false, &unreviewed)
+                    .expect("unreviewed clause should not be ambiguous")
+                    .is_none(),
+                "identical text must remain unsupported for an unreviewed Oracle identity: {oracle_id:?}"
+            );
+        }
+
+        let mut reviewed = context();
+        reviewed.oracle_id = Some(ISSUE_301_REVIEWED_ORACLE_IDS[0].into());
+        for negative in [
+            "At the beginning of your upkeep, exile up to one target card from a graveyard.",
+            "At the beginning of your end step, exile up to one target card from a graveyard.",
+            "At the beginning of combat on your turn, exile up to one target card from a graveyard. It attacks this combat if able.",
+            "At the beginning of each combat, exile up to one target card from a graveyard.",
+            "At the beginning of combat on an opponent's turn, exile up to one target card from a graveyard.",
+            "At the beginning of combat on your turn, exile one target card from a graveyard.",
+            "At the beginning of combat on your turn, exile up to two target cards from a graveyard.",
+            "At the beginning of combat on your turn, exile a card from a graveyard.",
+            "At the beginning of combat on your turn, choose a card from a graveyard, then exile it.",
+            "At the beginning of combat on your turn, exile up to one target card from your graveyard.",
+            "At the beginning of combat on your turn, exile up to one target card from an opponent's graveyard.",
+            "At the beginning of combat on your turn, exile up to one target creature card from a graveyard.",
+            "At the beginning of combat on your turn, exile up to one target card from your hand.",
+            "At the beginning of combat on your turn, exile up to one target card from a graveyard to your hand.",
+            "At the beginning of combat on your turn, exile up to one target card from a graveyard. If you do, draw a card.",
+            "At the beginning of combat on your turn, if you control a creature, exile up to one target card from a graveyard.",
+            "Whenever this creature attacks, exile up to one target card from a graveyard.",
+            "At the beginning of combat on any turn, exile up to one target card from a graveyard.",
+            "At the beginning of combat on each player's turn, exile up to one target card from a graveyard.",
+            "At the beginning of combat on your turn, exile up to one target nonland card from a graveyard.",
+            "At the beginning of combat on your turn, exile up to one target card from a library.",
+            "At the beginning of combat on your turn, exile up to one target card from the battlefield.",
+            "At the beginning of combat on your turn, exile up to one target card from exile.",
+            "At the beginning of combat on your turn, return up to one target card from a graveyard to your hand.",
+            "At the beginning of combat on your turn, put up to one target card from a graveyard on top of its owner's library.",
+            "At the beginning of combat on your turn, put up to one target card from a graveyard onto the battlefield.",
+            "At the beginning of combat on your turn, you may exile target card from a graveyard.",
+            "At the beginning of combat on your turn, exile target card from a graveyard. You may exile another target card from a graveyard.",
+        ] {
+            assert!(
+                match_clause(negative, false, &reviewed)
+                    .expect("near-miss should not be ambiguous")
+                    .is_none(),
+                "near-miss was accepted: {negative}"
+            );
+        }
+
+        let mut noncreature = context();
+        noncreature.oracle_id = Some(ISSUE_301_REVIEWED_ORACLE_IDS[0].into());
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(CLAUSE, false, &noncreature)
+                .expect("source-kind check should not be ambiguous")
+                .is_none(),
+            "the exact clause must remain bound to creature sources"
+        );
+        assert!(
+            match_clause(CLAUSE, true, &context())
+                .expect("surface check should not be ambiguous")
+                .is_none(),
+            "the exact clause must remain bound to triggered abilities"
+        );
     }
 
     #[test]

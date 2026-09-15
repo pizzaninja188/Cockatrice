@@ -453,3 +453,5 @@ mod issue_271_generated_targeted_ordered;
 mod issue_272_manifest_dread_equipment;
 #[path = "scenario/issue_276_generated_power_damage.rs"]
 mod issue_276_generated_power_damage;
+#[path = "scenario/issue_301_generated_beginning_of_combat.rs"]
+mod issue_301_generated_beginning_of_combat;
