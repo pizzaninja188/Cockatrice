@@ -531,6 +531,7 @@ enum RulesParseError {
 
 fn parse_rules_text(
     source_name: &str,
+    oracle_id: &str,
     oracle_text: &str,
     is_spell: bool,
     source_is_permanent: bool,
@@ -556,6 +557,9 @@ fn parse_rules_text(
         characteristic_ability_id: AbilityId::new("characteristic_01")
             .map_err(|_| RulesParseError::Unsupported)?,
         presentation: AbilityPresentation::OracleLines(vec![1]),
+        // Keep an absent ID as Some("") so printing-independent allowlists fail closed for
+        // malformed real-card input. Calibration-only contexts intentionally use None.
+        oracle_id: Some(oracle_id.to_string()),
         source_is_permanent,
         source_is_artifact,
         source_is_land,
@@ -671,6 +675,7 @@ fn parse_rules_text(
             static_ability_id: static_id,
             characteristic_ability_id: characteristic_id,
             presentation,
+            oracle_id: Some(oracle_id.to_string()),
             source_is_permanent,
             source_is_artifact,
             source_is_land,
@@ -1463,7 +1468,11 @@ fn parse_optional_power_toughness(face: &Value) -> Result<(Option<u32>, Option<u
     }
 }
 
-fn parse_multiface_face(face: &Value, layout: GenLayout) -> Result<GenFace, EvaluationError> {
+fn parse_multiface_face(
+    face: &Value,
+    layout: GenLayout,
+    oracle_id: &str,
+) -> Result<GenFace, EvaluationError> {
     let name = face
         .get("name")
         .and_then(Value::as_str)
@@ -1513,6 +1522,7 @@ fn parse_multiface_face(face: &Value, layout: GenLayout) -> Result<GenFace, Eval
     let source_is_permanent = !is_spell;
     let mut rules = parse_rules_text(
         &name,
+        oracle_id,
         oracle_text,
         is_spell,
         source_is_permanent,
@@ -1606,6 +1616,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     let oracle_text = str_field(card, "oracle_text");
     let mut rules = parse_rules_text(
         &name,
+        str_field(card, "oracle_id"),
         oracle_text,
         is_spell,
         source_is_permanent,
@@ -1665,7 +1676,7 @@ fn evaluate_multiface(card: &Value, layout: GenLayout) -> Result<GenCard, Evalua
         .filter(|faces| faces.len() == 2)
         .ok_or(Skip::MalformedFaces)?
         .iter()
-        .map(|face| parse_multiface_face(face, layout))
+        .map(|face| parse_multiface_face(face, layout, str_field(card, "oracle_id")))
         .collect::<Result<Vec<_>, _>>()?;
     let name = card
         .get("name")
@@ -2443,6 +2454,19 @@ mod tests {
             value["power"] = json!(power);
             value["toughness"] = json!(toughness);
         }
+        value
+    }
+
+    fn normal_card_with_oracle_id(
+        oracle_id: &str,
+        name: &str,
+        mana_cost: &str,
+        type_line: &str,
+        oracle_text: &str,
+        power_toughness: Option<(&str, &str)>,
+    ) -> Value {
+        let mut value = normal_card(name, mana_cost, type_line, oracle_text, power_toughness);
+        value["oracle_id"] = json!(oracle_id);
         value
     }
 
@@ -3581,6 +3605,205 @@ mod tests {
         assert!(
             evaluate_fresh(&extra).is_err(),
             "unsupported extra text must reject the whole card"
+        );
+    }
+
+    #[test]
+    fn issue_288_two_card_cohort_generates_only_exact_reviewed_etb_exile_cards() {
+        let exact_clause =
+            "When this creature enters, target opponent exiles a card from their hand.";
+        let reviewed_cards = [
+            (
+                "3e7879d5-62ea-4c9a-9fc0-659d70f3a8e1",
+                "Unscrupulous Agent",
+                "Creature — Elf Detective",
+                Some(("1", "1")),
+            ),
+            (
+                "6420e8a0-3ef4-4f95-bb6a-12409eef4d48",
+                "Skullcap Snail",
+                "Creature — Fungus Snail",
+                Some(("1", "1")),
+            ),
+        ];
+
+        for (oracle_id, name, type_line, stats) in reviewed_cards {
+            let card = normal_card_with_oracle_id(
+                oracle_id,
+                name,
+                "{1}{B}",
+                type_line,
+                exact_clause,
+                stats,
+            );
+            let generated = evaluate_fresh(&card)
+                .unwrap_or_else(|error| panic!("{name} should generate: {error:?}"));
+            assert_eq!(
+                generated.faces[0].recipe_labels,
+                ["creature ETB target opponent exiles one hand card"]
+            );
+
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert_eq!(raw.id, name.to_ascii_lowercase().replace(' ', "_"));
+            assert_eq!(raw.name, name);
+            let expected_types = match name {
+                "Unscrupulous Agent" => vec!["Creature", "Elf", "Detective"],
+                "Skullcap Snail" => vec!["Creature", "Fungus", "Snail"],
+                _ => Vec::new(),
+            };
+            assert_eq!(raw.types, expected_types);
+            assert_eq!(raw.power, Some(1));
+            assert_eq!(raw.toughness, Some(1));
+            let [ability] = raw.triggered_abilities.as_slice() else {
+                panic!("{name} should emit exactly one ETB ability");
+            };
+            assert_eq!(ability.ability_id.as_str(), "triggered_01");
+            assert_eq!(
+                ability.presentation,
+                AbilityPresentation::OracleLines(vec![1])
+            );
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+            assert!(!ability.may);
+            assert!(ability.modal.is_none());
+            assert!(ability.intervening_if.is_none());
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::ChooseHandCards {
+                    action: tricerules_cards::primitives::HandCardAction::Exile,
+                    count: 1,
+                    target: TargetFilter {
+                        kind: TargetKind::OpponentPlayer,
+                        ..TargetFilter::default()
+                    },
+                    chooser: tricerules_cards::primitives::HandCardChooser::AffectedPlayer,
+                    card_filter: None,
+                    optional: false,
+                    visibility: tricerules_cards::primitives::HandChoiceVisibility::PrivateLook,
+                }]
+            );
+            let targeting = ability.targeting.as_ref().expect("one opponent target");
+            let [group] = targeting.groups.as_slice() else {
+                panic!("{name} should emit exactly one target group");
+            };
+            assert_eq!((group.min, group.max), (1, 1));
+            assert_eq!(group.prompt, "Choose target opponent");
+            assert_eq!(group.effect_indices, [0]);
+            assert!(group.distinct_from.is_empty());
+            let schema = TargetSchema::compile(&ability.effect, Some(targeting))
+                .unwrap_or_else(|error| panic!("{name} target schema: {error}"));
+            assert_eq!(schema.groups.len(), 1);
+        }
+
+        let unreviewed = normal_card_with_oracle_id(
+            "00000000-0000-0000-0000-000000000000",
+            "Unreviewed Agent",
+            "{1}{B}",
+            "Creature — Elf Detective",
+            exact_clause,
+            Some(("1", "1")),
+        );
+        assert!(
+            evaluate_fresh(&unreviewed).is_err(),
+            "an unreviewed Oracle ID must not join the exact cohort"
+        );
+
+        let mut missing_oracle_id = normal_card(
+            "Missing Oracle ID",
+            "{1}{B}",
+            "Creature — Elf Detective",
+            exact_clause,
+            Some(("1", "1")),
+        );
+        missing_oracle_id
+            .as_object_mut()
+            .expect("synthetic card object")
+            .remove("oracle_id");
+        assert!(
+            evaluate_fresh(&missing_oracle_id).is_err(),
+            "a missing Oracle ID must fail closed for the exact cohort"
+        );
+
+        for (oracle_id, name, oracle_text) in [
+            (
+                reviewed_cards[0].0,
+                "Altered Quantity",
+                "When this creature enters, target opponent exiles two cards from their hand.",
+            ),
+            (
+                reviewed_cards[0].0,
+                "Each Opponent",
+                "When this creature enters, each opponent exiles a card from their hand.",
+            ),
+            (
+                reviewed_cards[0].0,
+                "Controller Choice",
+                "When this creature enters, target opponent exiles a card from their hand. You choose the card.",
+            ),
+            (
+                reviewed_cards[0].0,
+                "Public Reveal",
+                "When this creature enters, target opponent reveals a card from their hand.",
+            ),
+            (
+                reviewed_cards[0].0,
+                "Extra Clause",
+                "When this creature enters, target opponent exiles a card from their hand. Draw a card.",
+            ),
+        ] {
+            let card = normal_card_with_oracle_id(
+                oracle_id,
+                name,
+                "{1}{B}",
+                "Creature — Elf Detective",
+                oracle_text,
+                Some(("1", "1")),
+            );
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "{name} must fail closed as an unsupported near-miss"
+            );
+        }
+
+        let discard = normal_card_with_oracle_id(
+            reviewed_cards[0].0,
+            "Discard Variant",
+            "{1}{B}",
+            "Creature — Elf Detective",
+            "When this creature enters, target opponent discards a card.",
+            Some(("1", "1")),
+        );
+        let discard_generated =
+            evaluate_fresh(&discard).expect("the existing discard cohort should remain supported");
+        assert_eq!(
+            discard_generated.faces[0].recipe_labels,
+            ["creature ETB target opponent discards one"]
+        );
+        let discard_raw = parse_generated(&discard_generated.to_ron("fixture"));
+        let [discard_ability] = discard_raw.triggered_abilities.as_slice() else {
+            panic!("discard variant should emit one ETB ability");
+        };
+        assert!(matches!(
+            discard_ability.effect.as_slice(),
+            [SpellEffectKind::ChooseHandCards {
+                action: tricerules_cards::primitives::HandCardAction::Discard,
+                count: 1,
+                chooser: tricerules_cards::primitives::HandCardChooser::AffectedPlayer,
+                visibility: tricerules_cards::primitives::HandChoiceVisibility::PrivateLook,
+                ..
+            }]
+        ));
+
+        let noncreature = normal_card_with_oracle_id(
+            reviewed_cards[0].0,
+            "Noncreature Header Match",
+            "{1}{B}",
+            "Artifact",
+            exact_clause,
+            None,
+        );
+        assert!(
+            evaluate_fresh(&noncreature).is_err(),
+            "the exact clause must remain bound to creature ETBs"
         );
     }
 

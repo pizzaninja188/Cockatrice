@@ -1923,6 +1923,7 @@ skeletal_crocodile	0	cast	exercised
 skeletal_snake	0	cast	exercised
 skeleton_archer	0	cast	exercised
 skirmish_rhino	0	cast	exercised
+skullcap_snail	0	cast	exercised
 sky_ruin_drake	0	cast	exercised
 sky_spirit	0	cast	exercised
 sky_terror	0	cast	exercised
@@ -2304,6 +2305,7 @@ university_campus	0	ability:0	exercised
 university_campus	0	ability:1	exercised
 university_campus	0	land	exercised
 unravel_the_aether	0	cast	exercised
+unscrupulous_agent	0	cast	exercised
 unsummon	0	cast	exercised
 untamed_hunger	0	cast	exercised
 updraft_elemental	0	cast	exercised

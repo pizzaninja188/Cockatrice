@@ -185,6 +185,7 @@ fn resolve_target_names(
 
 fn exact_recipe_matches_one_clause(
     source_name: &str,
+    oracle_id: &str,
     clause: &str,
     is_spell: bool,
     source_is_permanent: bool,
@@ -200,6 +201,7 @@ fn exact_recipe_matches_one_clause(
 ) -> bool {
     let Ok(parsed) = parse_rules_text(
         source_name,
+        oracle_id,
         clause,
         is_spell,
         source_is_permanent,
@@ -276,6 +278,7 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
         let oracle_text = str_field(face.value, "oracle_text");
         let face_matches = parse_rules_text(
             face.name,
+            str_field(card, "oracle_id"),
             oracle_text,
             is_spell,
             source_is_permanent,
@@ -306,6 +309,7 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
             .filter_map(|(index, clause)| {
                 (!exact_recipe_matches_one_clause(
                     face.name,
+                    str_field(card, "oracle_id"),
                     clause,
                     is_spell,
                     source_is_permanent,

@@ -2,13 +2,14 @@ use tricerules_cards::primitives::{
     ActivationLimit, BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter,
     CreatureScopeController, CreatureScopeFilter, DiscardQuantity, DrawDiscardOrder, EffectSubject,
     EntersTappedAffected, EntryCost, GameCondition, GraveyardDestination, GraveyardFilter,
-    GraveyardOwner, HandCardAction, LifeAmount, ObjectContributionKind, ObjectPaymentConstraint,
-    PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient,
-    RelativePlayerSet, ResolutionBranchDef, ResolutionBranchSelection, ResolutionCost,
-    SearchDestination, SearchZoneSelection, SpellCastFilter, SpellCostModifier,
-    SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter,
-    TargetGroupDef, TargetKind, TargetMatchFilter, TargetObjectExclusion, TargetingDef,
-    TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
+    GraveyardOwner, HandCardAction, HandCardChooser, HandChoiceVisibility, LifeAmount,
+    ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter,
+    PlayerLifeAggregate, PlayerRecipient, RelativePlayerSet, ResolutionBranchDef,
+    ResolutionBranchSelection, ResolutionCost, SearchDestination, SearchZoneSelection,
+    SpellCastFilter, SpellCostModifier, SpellManaSpentComparison, StackSpellFilter,
+    StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
+    TargetMatchFilter, TargetObjectExclusion, TargetingDef, TargetingSourceFilter,
+    TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
@@ -84,6 +85,9 @@ pub(super) struct RecipeContext {
     pub(super) characteristic_ability_id: AbilityId,
     pub(super) presentation: AbilityPresentation,
     pub(super) source_name: String,
+    /// Printing-independent Oracle identity, when matching a real Scryfall card. Unit-test and
+    /// catalog-calibration contexts omit this so the clause shape can be exercised in isolation.
+    pub(super) oracle_id: Option<String>,
     pub(super) source_is_permanent: bool,
     pub(super) source_is_artifact: bool,
     pub(super) source_is_land: bool,
@@ -1931,6 +1935,47 @@ fn match_etb_target_opponent_discards_one(
                     card_filter: None,
                     optional: false,
                     visibility: Default::default(),
+                }],
+                1,
+                1,
+                "Choose target opponent",
+            )
+        })
+}
+
+const ISSUE_288_REVIEWED_ORACLE_IDS: &[&str] = &[
+    "3e7879d5-62ea-4c9a-9fc0-659d70f3a8e1", // Unscrupulous Agent
+    "6420e8a0-3ef4-4f95-bb6a-12409eef4d48", // Skullcap Snail
+];
+
+fn issue_288_oracle_id_is_reviewed(context: &RecipeContext) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        .is_none_or(|oracle_id| ISSUE_288_REVIEWED_ORACLE_IDS.contains(&oracle_id))
+}
+
+fn match_etb_target_opponent_exiles_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_288_oracle_id_is_reviewed(context)
+        && text == "When this creature enters, target opponent exiles a card from their hand.")
+        .then(|| {
+            targeted_trigger(
+                context,
+                vec![SpellEffectKind::ChooseHandCards {
+                    action: HandCardAction::Exile,
+                    count: 1,
+                    target: TargetFilter {
+                        kind: TargetKind::OpponentPlayer,
+                        ..TargetFilter::default()
+                    },
+                    chooser: HandCardChooser::AffectedPlayer,
+                    card_filter: None,
+                    optional: false,
+                    visibility: HandChoiceVisibility::PrivateLook,
                 }],
                 1,
                 1,
@@ -5242,6 +5287,22 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("etb.exile.target_opponent_hand.one"),
+        label: "creature ETB target opponent exiles one hand card",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_target_opponent_exiles_one,
+        calibration: calibrations!(
+            "Unscrupulous Agent" => "When this creature enters, target opponent exiles a card from their hand.",
+            "Skullcap Snail" => "When this creature enters, target opponent exiles a card from their hand.";
+            "When this creature enters, target opponent exiles two cards from their hand.",
+            "When this creature enters, each opponent exiles a card from their hand.",
+            "When this creature enters, target opponent exiles a card from their hand at random.",
+            "When this creature enters, target opponent may exile a card from their hand.",
+            "When this creature enters, target opponent reveals a card from their hand.",
+            "When this creature enters, target opponent exiles a card from their hand. Draw a card."
+        ),
+    },
+    Recipe {
         id: RecipeId("etb.create_token.clue.one"),
         label: "creature ETB create one Clue",
         surface: RecipeSurface::EtbAbility,
@@ -7084,6 +7145,7 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
             static_ability_id: AbilityId::new("static_01")?,
             characteristic_ability_id: AbilityId::new("characteristic_01")?,
             presentation: AbilityPresentation::OracleLines(vec![1]),
+            oracle_id: None,
             source_is_permanent: true,
             source_is_artifact: true,
             source_is_land: true,
@@ -7226,6 +7288,7 @@ mod tests {
             static_ability_id: AbilityId::new("static_01").unwrap(),
             characteristic_ability_id: AbilityId::new("characteristic_01").unwrap(),
             presentation: AbilityPresentation::OracleLines(vec![1]),
+            oracle_id: None,
             source_is_permanent: true,
             source_is_artifact: true,
             source_is_land: true,
@@ -7242,6 +7305,102 @@ mod tests {
     #[test]
     fn catalog_has_stable_unique_ids_and_complete_calibration_metadata() {
         validate_catalog().expect("built-in recipe catalog should be valid");
+    }
+
+    #[test]
+    fn issue_288_target_opponent_exiles_one_hand_card_is_exact_and_typed() {
+        let clause = "When this creature enters, target opponent exiles a card from their hand.";
+        let matched = match_clause(clause, false, &context())
+            .expect("issue #288 recipe matching should not be ambiguous")
+            .expect("issue #288 ETB exile should match");
+        assert_eq!(matched.id.as_str(), "etb.exile.target_opponent_hand.one");
+
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("issue #288 must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(!ability.may);
+        assert!(ability.modal.is_none());
+        assert!(ability.intervening_if.is_none());
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::ChooseHandCards {
+                action: HandCardAction::Exile,
+                count: 1,
+                target: TargetFilter {
+                    kind: TargetKind::OpponentPlayer,
+                    ..TargetFilter::default()
+                },
+                chooser: tricerules_cards::primitives::HandCardChooser::AffectedPlayer,
+                card_filter: None,
+                optional: false,
+                visibility: tricerules_cards::primitives::HandChoiceVisibility::PrivateLook,
+            }]
+        );
+        let targeting = ability.targeting.as_ref().expect("opponent target group");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("issue #288 must have exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.prompt, "Choose target opponent");
+        assert_eq!(group.effect_indices, [0]);
+        assert!(group.distinct_from.is_empty());
+
+        for oracle_id in ISSUE_288_REVIEWED_ORACLE_IDS {
+            let mut reviewed = context();
+            reviewed.oracle_id = Some((*oracle_id).into());
+            assert!(
+                match_clause(clause, false, &reviewed)
+                    .expect("reviewed Oracle ID must not be ambiguous")
+                    .is_some(),
+                "reviewed Oracle ID must match: {oracle_id}"
+            );
+        }
+        let mut unreviewed = context();
+        unreviewed.oracle_id = Some("00000000-0000-0000-0000-000000000000".into());
+        assert!(
+            match_clause(clause, false, &unreviewed)
+                .expect("unreviewed Oracle ID must not be ambiguous")
+                .is_none(),
+            "an unreviewed Oracle ID must fail closed"
+        );
+
+        for near_miss in [
+            "When this creature enters, target opponent exiles two cards from their hand.",
+            "When this creature enters, each opponent exiles a card from their hand.",
+            "When this creature enters, target opponent exiles a card from their hand at random.",
+            "When this creature enters, target opponent may exile a card from their hand.",
+            "When this creature enters, target opponent reveals a card from their hand.",
+            "When this creature enters, target opponent exiles a card from their hand. Draw a card.",
+        ] {
+            assert!(
+                match_etb_target_opponent_exiles_one(near_miss, &context()).is_none(),
+                "near-miss unexpectedly matched: {near_miss}"
+            );
+        }
+        assert!(
+            match_etb_target_opponent_exiles_one(
+                "When this creature enters, target opponent discards a card.",
+                &context(),
+            )
+            .is_none(),
+            "discard wording must not match the exile recipe"
+        );
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(clause, false, &noncreature)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the creature ETB recipe must reject noncreature sources"
+        );
+        assert!(
+            match_clause(clause, true, &context())
+                .expect("surface check must not be ambiguous")
+                .is_none(),
+            "the ETB recipe must reject spell clauses"
+        );
     }
 
     #[test]

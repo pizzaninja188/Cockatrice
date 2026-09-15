@@ -316,6 +316,8 @@ mod issue_284_generated_optional_basic_land_to_top;
 mod issue_285_generated_attack_pump_indestructible;
 #[path = "scenario/issue_286_generated_equipment_defending_tap.rs"]
 mod issue_286_generated_equipment_defending_tap;
+#[path = "scenario/issue_288_generated_opponent_hand_exile.rs"]
+mod issue_288_generated_opponent_hand_exile;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]
