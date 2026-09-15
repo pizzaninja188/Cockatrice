@@ -2349,6 +2349,38 @@ fn issue_290_oracle_id_is_reviewed(context: &RecipeContext) -> bool {
         .is_none_or(|oracle_id| ISSUE_290_REVIEWED_ORACLE_IDS.contains(&oracle_id))
 }
 
+const ISSUE_291_REVIEWED_ORACLE_IDS: &[&str] = &[
+    "b24a87af-407f-4c58-80b4-caab9c65a233", // Crustacean Commando
+    "f570bac8-9987-4963-af02-476d18abc847", // Slithering Cryptid
+];
+
+fn issue_291_oracle_id_is_reviewed(context: &RecipeContext) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        .is_none_or(|oracle_id| ISSUE_291_REVIEWED_ORACLE_IDS.contains(&oracle_id))
+}
+
+const ISSUE_291_MUTAGEN_ETB_TEXT: &str = r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#;
+
+fn match_etb_create_mutagen(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_291_oracle_id_is_reviewed(context)
+        && text == ISSUE_291_MUTAGEN_ETB_TEXT)
+        .then(|| {
+            triggered_ability(
+                context,
+                SpellEffectKind::CreateTokens {
+                    token: "mutagen".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                },
+            )
+        })
+}
+
 fn match_etb_look_top_three_optional_top_one(
     text: &str,
     context: &RecipeContext,
@@ -5628,6 +5660,27 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("etb.create_token.mutagen.one"),
+        label: "ETB create Mutagen",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_create_mutagen,
+        calibration: calibrations!(
+            "Crustacean Commando" => r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            "Slithering Cryptid" => r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#;
+            "When this creature enters, create a Mutagen token.",
+            r#"When this creature enters, create two Mutagen tokens. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            r#"When this creature enters, create a tapped Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            r#"When this creature enters, create a Mutagen token. (It's an artifact with "{2}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put two +1/+1 counters on target creature. Activate only as a sorcery.")"#,
+            r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature you control. Activate only as a sorcery.")"#,
+            r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as an instant.")"#,
+            r#"When this creature dies, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            r#"Whenever this creature attacks, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.") Draw a card."#
+        ),
+    },
+    Recipe {
         id: RecipeId("etb.create_token.treasure.one"),
         label: "ETB create Treasure",
         surface: RecipeSurface::EtbAbility,
@@ -7540,6 +7593,97 @@ mod tests {
         );
         assert!(
             match_clause(clause, true, &context())
+                .expect("surface check must not be ambiguous")
+                .is_none(),
+            "the ETB recipe must reject spell clauses"
+        );
+    }
+
+    #[test]
+    fn issue_291_mutagen_etb_recipe_is_exact_and_allowlisted() {
+        let clause = r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#;
+        let mut reviewed = context();
+        reviewed.oracle_id = Some("b24a87af-407f-4c58-80b4-caab9c65a233".into());
+        let matched = match_clause(clause, false, &reviewed)
+            .expect("issue #291 recipe matching should not be ambiguous")
+            .expect("reviewed Crustacean Commando should match");
+        assert_eq!(matched.id.as_str(), "etb.create_token.mutagen.one");
+
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("issue #291 must emit a triggered ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "triggered_01");
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::CreateTokens {
+                token: "mutagen".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }]
+        );
+        assert!(ability.targeting.is_none());
+        assert!(!ability.may);
+        assert!(ability.modal.is_none());
+        assert!(ability.intervening_if.is_none());
+
+        for oracle_id in [
+            "b24a87af-407f-4c58-80b4-caab9c65a233",
+            "f570bac8-9987-4963-af02-476d18abc847",
+        ] {
+            let mut allowlisted = context();
+            allowlisted.oracle_id = Some(oracle_id.into());
+            assert!(
+                match_clause(clause, false, &allowlisted)
+                    .expect("allowlisted Oracle ID must not be ambiguous")
+                    .is_some(),
+                "allowlisted Oracle ID must match: {oracle_id}"
+            );
+        }
+        for oracle_id in ["00000000-0000-0000-0000-000000000000", ""] {
+            let mut unreviewed = context();
+            unreviewed.oracle_id = Some(oracle_id.into());
+            assert!(
+                match_clause(clause, false, &unreviewed)
+                    .expect("unreviewed Oracle ID must not be ambiguous")
+                    .is_none(),
+                "unreviewed Oracle ID must fail closed: {oracle_id:?}"
+            );
+        }
+
+        for near_miss in [
+            r#"When this creature enters, create a Mutagen token."#,
+            r#"When this creature enters, create two Mutagen tokens. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            r#"When this creature enters, create a tapped Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            r#"When this creature enters, create a Mutagen token. (It's an artifact with "{2}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put two +1/+1 counters on target creature. Activate only as a sorcery.")"#,
+            r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature you control. Activate only as a sorcery.")"#,
+            r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as an instant.")"#,
+            r#"When this creature dies, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            r#"Whenever this creature attacks, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.") Draw a card."#,
+        ] {
+            assert!(
+                match_clause(near_miss, false, &reviewed)
+                    .expect("issue #291 near-miss matching should not be ambiguous")
+                    .is_none(),
+                "near-miss unexpectedly matched: {near_miss}"
+            );
+        }
+
+        let mut noncreature = reviewed.clone();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(clause, false, &noncreature)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the creature ETB recipe must reject noncreature sources"
+        );
+        assert!(
+            match_clause(clause, true, &reviewed)
                 .expect("surface check must not be ambiguous")
                 .is_none(),
             "the ETB recipe must reject spell clauses"

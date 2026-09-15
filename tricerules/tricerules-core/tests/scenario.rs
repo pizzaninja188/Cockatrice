@@ -320,6 +320,8 @@ mod issue_286_generated_equipment_defending_tap;
 mod issue_288_generated_opponent_hand_exile;
 #[path = "scenario/issue_290_generated_library_partition.rs"]
 mod issue_290_generated_library_partition;
+#[path = "scenario/issue_291_generated_mutagen.rs"]
+mod issue_291_generated_mutagen;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]

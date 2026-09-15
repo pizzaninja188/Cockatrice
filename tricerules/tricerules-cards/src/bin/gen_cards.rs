@@ -3808,6 +3808,184 @@ mod tests {
     }
 
     #[test]
+    fn issue_291_two_card_cohort_generates_only_exact_reviewed_mutagen_cards() {
+        let exact_clause = r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#;
+        let reviewed_cards = [
+            (
+                "b24a87af-407f-4c58-80b4-caab9c65a233",
+                "Crustacean Commando",
+                "Creature — Crab Mutant Soldier",
+                "{1}{U}",
+                Some(("0", "3")),
+            ),
+            (
+                "f570bac8-9987-4963-af02-476d18abc847",
+                "Slithering Cryptid",
+                "Creature — Fish Mutant",
+                "{2}{G/U}",
+                Some(("2", "3")),
+            ),
+        ];
+
+        for (oracle_id, name, type_line, mana_cost, stats) in reviewed_cards {
+            let card = normal_card_with_oracle_id(
+                oracle_id,
+                name,
+                mana_cost,
+                type_line,
+                exact_clause,
+                stats,
+            );
+            let generated = evaluate_fresh(&card)
+                .unwrap_or_else(|error| panic!("{name} should generate: {error:?}"));
+            assert_eq!(generated.faces[0].recipe_labels, ["ETB create Mutagen"]);
+
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert_eq!(raw.id, name.to_ascii_lowercase().replace(' ', "_"));
+            assert_eq!(raw.name, name);
+            let expected_types = match name {
+                "Crustacean Commando" => vec!["Creature", "Crab", "Mutant", "Soldier"],
+                "Slithering Cryptid" => vec!["Creature", "Fish", "Mutant"],
+                _ => Vec::new(),
+            };
+            assert_eq!(raw.types, expected_types);
+            assert_eq!(raw.mana_cost.to_string(), mana_cost);
+            assert_eq!(raw.power, stats.map(|(power, _)| power.parse().unwrap()));
+            assert_eq!(
+                raw.toughness,
+                stats.map(|(_, toughness)| toughness.parse().unwrap())
+            );
+            assert!(raw.activated_abilities.is_empty());
+            assert!(raw.static_abilities.is_empty());
+            let [ability] = raw.triggered_abilities.as_slice() else {
+                panic!("{name} should emit exactly one ETB ability");
+            };
+            assert_eq!(ability.ability_id.as_str(), "triggered_01");
+            assert_eq!(
+                ability.presentation,
+                AbilityPresentation::OracleLines(vec![1])
+            );
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+            assert!(!ability.may);
+            assert!(ability.modal.is_none());
+            assert!(ability.targeting.is_none());
+            assert!(ability.intervening_if.is_none());
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::CreateTokens {
+                    token: "mutagen".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                }]
+            );
+        }
+
+        let unreviewed = normal_card_with_oracle_id(
+            "00000000-0000-0000-0000-000000000000",
+            "Unreviewed Mutagen Creature",
+            "{1}{U}",
+            "Creature — Crab Mutant",
+            exact_clause,
+            Some(("1", "3")),
+        );
+        assert!(
+            evaluate_fresh(&unreviewed).is_err(),
+            "an unreviewed Oracle ID must not join the exact Mutagen cohort"
+        );
+
+        let mut missing_oracle_id = normal_card(
+            "Missing Mutagen Oracle ID",
+            "{1}{U}",
+            "Creature — Crab Mutant",
+            exact_clause,
+            Some(("1", "3")),
+        );
+        missing_oracle_id
+            .as_object_mut()
+            .expect("synthetic card object")
+            .remove("oracle_id");
+        assert!(
+            evaluate_fresh(&missing_oracle_id).is_err(),
+            "a missing Oracle ID must fail closed for the exact Mutagen cohort"
+        );
+
+        for (name, oracle_text) in [
+            (
+                "Missing reminder",
+                "When this creature enters, create a Mutagen token.",
+            ),
+            (
+                "Wrong count",
+                r#"When this creature enters, create two Mutagen tokens. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            ),
+            (
+                "Tapped token",
+                r#"When this creature enters, create a tapped Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            ),
+            (
+                "Wrong cost",
+                r#"When this creature enters, create a Mutagen token. (It's an artifact with "{2}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            ),
+            (
+                "Missing tap",
+                r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            ),
+            (
+                "Wrong counter count",
+                r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put two +1/+1 counters on target creature. Activate only as a sorcery.")"#,
+            ),
+            (
+                "Wrong target",
+                r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature you control. Activate only as a sorcery.")"#,
+            ),
+            (
+                "Wrong timing",
+                r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as an instant.")"#,
+            ),
+            (
+                "Wrong trigger",
+                r#"When this creature dies, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            ),
+            (
+                "Attacks trigger",
+                r#"Whenever this creature attacks, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.")"#,
+            ),
+            (
+                "Appended clause",
+                r#"When this creature enters, create a Mutagen token. (It's an artifact with "{1}, {T}, Sacrifice this token: Put a +1/+1 counter on target creature. Activate only as a sorcery.") Draw a card."#,
+            ),
+        ] {
+            let card = normal_card_with_oracle_id(
+                reviewed_cards[0].0,
+                name,
+                "{1}{U}",
+                "Creature — Crab Mutant",
+                oracle_text,
+                Some(("1", "3")),
+            );
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "{name} must fail closed as an unsupported Mutagen near-miss"
+            );
+        }
+
+        let noncreature = normal_card_with_oracle_id(
+            reviewed_cards[0].0,
+            "Noncreature Mutagen Header",
+            "{1}{U}",
+            "Artifact",
+            exact_clause,
+            None,
+        );
+        assert!(
+            evaluate_fresh(&noncreature).is_err(),
+            "the exact clause must remain bound to creature ETBs"
+        );
+    }
+
+    #[test]
     fn issue_282_exact_self_tap_loot_cards_qualify_and_extra_text_rejects() {
         for (name, mana_cost, type_line, oracle_text, stats, recipe_label, order, optional) in [
             (
