@@ -160,6 +160,8 @@ barkchannel_pathway_tidechannel_pathway	0	ability:0	exercised
 barkchannel_pathway_tidechannel_pathway	0	land	exercised
 barkchannel_pathway_tidechannel_pathway	1	ability:0	exercised
 barkchannel_pathway_tidechannel_pathway	1	land	exercised
+barkform_harvester	0	ability:0	exercised
+barkform_harvester	0	cast	exercised
 baron,_airship_kingdom	0	ability:0	exercised
 baron,_airship_kingdom	0	land	exercised
 barony_vampire	0	cast	exercised
@@ -2209,6 +2211,8 @@ tireless_missionaries	0	cast	exercised
 tishanas_tidebinder	0	cast	exercised
 titanic_growth	0	cast	exercised
 tolarian_scholar	0	cast	exercised
+tomb_trawler	0	ability:0	exercised
+tomb_trawler	0	cast	exercised
 tome_raider	0	cast	exercised
 tome_scour	0	cast	exercised
 tor_giant	0	cast	exercised

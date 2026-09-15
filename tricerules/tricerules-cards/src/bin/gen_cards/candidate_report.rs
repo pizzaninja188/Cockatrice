@@ -187,6 +187,7 @@ fn exact_recipe_matches_one_clause(
     source_name: &str,
     clause: &str,
     is_spell: bool,
+    source_is_permanent: bool,
     source_is_artifact: bool,
     source_is_land: bool,
     source_is_creature: bool,
@@ -201,6 +202,7 @@ fn exact_recipe_matches_one_clause(
         source_name,
         clause,
         is_spell,
+        source_is_permanent,
         source_is_artifact,
         source_is_land,
         source_is_creature,
@@ -257,6 +259,9 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
         let is_spell = card_types
             .iter()
             .any(|card_type| matches!(card_type.as_str(), "Instant" | "Sorcery"));
+        // Match CardFaceData::is_permanent: validated faces are permanent unless they are
+        // instants or sorceries, including Kindred permanents.
+        let source_is_permanent = !is_spell;
         let source_is_artifact = card_types.iter().any(|card_type| card_type == "Artifact");
         let source_is_land = card_types.iter().any(|card_type| card_type == "Land");
         let source_is_creature = card_types.iter().any(|card_type| card_type == "Creature");
@@ -273,6 +278,7 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
             face.name,
             oracle_text,
             is_spell,
+            source_is_permanent,
             source_is_artifact,
             source_is_land,
             source_is_creature,
@@ -302,6 +308,7 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
                     face.name,
                     clause,
                     is_spell,
+                    source_is_permanent,
                     source_is_artifact,
                     source_is_land,
                     source_is_creature,

@@ -533,6 +533,7 @@ fn parse_rules_text(
     source_name: &str,
     oracle_text: &str,
     is_spell: bool,
+    source_is_permanent: bool,
     source_is_artifact: bool,
     source_is_land: bool,
     source_is_creature: bool,
@@ -555,6 +556,7 @@ fn parse_rules_text(
         characteristic_ability_id: AbilityId::new("characteristic_01")
             .map_err(|_| RulesParseError::Unsupported)?,
         presentation: AbilityPresentation::OracleLines(vec![1]),
+        source_is_permanent,
         source_is_artifact,
         source_is_land,
         source_is_creature,
@@ -669,6 +671,7 @@ fn parse_rules_text(
             static_ability_id: static_id,
             characteristic_ability_id: characteristic_id,
             presentation,
+            source_is_permanent,
             source_is_artifact,
             source_is_land,
             source_is_creature,
@@ -1505,10 +1508,14 @@ fn parse_multiface_face(face: &Value, layout: GenLayout) -> Result<GenFace, Eval
     let is_spell = types
         .iter()
         .any(|card_type| matches!(card_type.as_str(), "Instant" | "Sorcery"));
+    // Match CardFaceData::is_permanent: validated faces are permanent unless they are instants
+    // or sorceries, including Kindred permanents.
+    let source_is_permanent = !is_spell;
     let mut rules = parse_rules_text(
         &name,
         oracle_text,
         is_spell,
+        source_is_permanent,
         types.iter().any(|card_type| card_type == "Artifact"),
         types.iter().any(|card_type| card_type == "Land"),
         is_creature,
@@ -1581,6 +1588,9 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     let is_spell = card_types
         .iter()
         .any(|value| matches!(value.as_str(), "Instant" | "Sorcery"));
+    // Match CardFaceData::is_permanent: validated faces are permanent unless they are instants
+    // or sorceries, including Kindred permanents.
+    let source_is_permanent = !is_spell;
     let (power, toughness) =
         parse_optional_power_toughness(card).map_err(|_| Skip::BadPowerToughness)?;
     if is_creature && (power.is_none() || toughness.is_none()) {
@@ -1598,6 +1608,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
         &name,
         oracle_text,
         is_spell,
+        source_is_permanent,
         card_types.iter().any(|card_type| card_type == "Artifact"),
         card_types.iter().any(|card_type| card_type == "Land"),
         is_creature,
@@ -4038,6 +4049,62 @@ mod tests {
             evaluate_fresh(&unsupported_same_line),
             Err(Skip::NonKeywordText.into()),
             "an unsupported same-line additional instruction must reject the whole card"
+        );
+    }
+
+    #[test]
+    fn issue_283_exact_graveyard_to_bottom_cards_reject_extra_or_reordered_text() {
+        for name in ["Barkform Harvester", "Tomb Trawler"] {
+            let card = normal_card(
+                name,
+                "{2}",
+                "Artifact Creature — Golem",
+                "{2}: Put target card from your graveyard on the bottom of your library.",
+                Some(("2", "2")),
+            );
+            evaluate_fresh(&card)
+                .unwrap_or_else(|error| panic!("{name} exact ability should qualify: {error:?}"));
+        }
+
+        for (name, oracle_text) in [
+            (
+                "Issue 283 Unsupported Tail",
+                "{2}: Put target card from your graveyard on the bottom of your library.\nWhenever this creature attacks, draw a card.",
+            ),
+            (
+                "Issue 283 Unsupported Same-Line Tail",
+                "{2}: Put target card from your graveyard on the bottom of your library. Then draw a card.",
+            ),
+            (
+                "Issue 283 Reordered Ability",
+                "Put target card from your graveyard on the bottom of your library with {2}:.",
+            ),
+        ] {
+            let card = normal_card(
+                name,
+                "{2}",
+                "Artifact Creature — Golem",
+                oracle_text,
+                Some(("2", "2")),
+            );
+            assert_eq!(
+                evaluate_fresh(&card),
+                Err(Skip::NonKeywordText.into()),
+                "{name} must fail closed"
+            );
+        }
+
+        let nonpermanent = normal_card(
+            "Issue 283 Nonpermanent Source",
+            "{2}",
+            "Instant",
+            "{2}: Put target card from your graveyard on the bottom of your library.",
+            None,
+        );
+        assert_eq!(
+            evaluate_fresh(&nonpermanent),
+            Err(Skip::NonKeywordText.into()),
+            "the exact activation must require a permanent source"
         );
     }
 

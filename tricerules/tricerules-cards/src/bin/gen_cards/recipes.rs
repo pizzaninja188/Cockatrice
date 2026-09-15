@@ -2,7 +2,7 @@ use tricerules_cards::primitives::{
     ActivationLimit, BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter,
     CreatureScopeController, CreatureScopeFilter, DiscardQuantity, DrawDiscardOrder, EffectSubject,
     EntersTappedAffected, EntryCost, GameCondition, GraveyardDestination, GraveyardFilter,
-    HandCardAction, LifeAmount, ObjectContributionKind, ObjectPaymentConstraint,
+    GraveyardOwner, HandCardAction, LifeAmount, ObjectContributionKind, ObjectPaymentConstraint,
     PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient,
     RelativePlayerSet, ResolutionCost, SearchDestination, SearchZoneSelection, SpellCastFilter,
     SpellCostModifier, SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef,
@@ -83,6 +83,7 @@ pub(super) struct RecipeContext {
     pub(super) characteristic_ability_id: AbilityId,
     pub(super) presentation: AbilityPresentation,
     pub(super) source_name: String,
+    pub(super) source_is_permanent: bool,
     pub(super) source_is_artifact: bool,
     pub(super) source_is_land: bool,
     pub(super) source_is_creature: bool,
@@ -3310,6 +3311,29 @@ fn match_pay_one_tap_for_any_color(text: &str, context: &RecipeContext) -> Optio
     })
 }
 
+fn match_graveyard_card_to_library_bottom(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_permanent
+        && text == "{2}: Put target card from your graveyard on the bottom of your library.")
+        .then(|| {
+            utility_activated_ability(
+                context,
+                vec![fixed_mana_cost("{2}")],
+                vec![SpellEffectKind::MoveGraveyardCards {
+                    filter: GraveyardFilter {
+                        owner: GraveyardOwner::Controller,
+                        ..GraveyardFilter::default()
+                    },
+                    destination: GraveyardDestination::LibraryBottom,
+                    linked_exile_id: None,
+                }],
+                single_targeting("Choose target card from your graveyard"),
+            )
+        })
+}
+
 fn utility_activated_ability(
     context: &RecipeContext,
     costs: Vec<AbilityCost>,
@@ -5909,6 +5933,33 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("activated.graveyard_card_to_library_bottom"),
+        label: "put a target card from your graveyard on the bottom of your library",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_graveyard_card_to_library_bottom,
+        calibration: calibrations!(
+            "Barkform Harvester" => "{2}: Put target card from your graveyard on the bottom of your library.",
+            "Tomb Trawler" => "{2}: Put target card from your graveyard on the bottom of your library.";
+            "{2}: Put target card from a graveyard on the bottom of your library.",
+            "{2}: Put target card from an opponent's graveyard on the bottom of your library.",
+            "{2}: Put target creature card from your graveyard on the bottom of your library.",
+            "{2}: Put target noncreature card from your graveyard on the bottom of your library.",
+            "{2}: Put up to one target card from your graveyard on the bottom of your library.",
+            "{2}: Choose a card from your graveyard and put it on the bottom of your library.",
+            "{2}: You may put target card from your graveyard on the bottom of your library.",
+            "{2}: Put target card from your graveyard on the top of your library.",
+            "{2}: Put target card from your graveyard into your hand.",
+            "{2}: Exile target card from your graveyard.",
+            "{2}: Put two target cards from your graveyard on the bottom of your library.",
+            "{2}, {T}: Put target card from your graveyard on the bottom of your library.",
+            "{2}, Sacrifice this creature: Put target card from your graveyard on the bottom of your library.",
+            "{2}{G}: Put target card from your graveyard on the bottom of your library.",
+            "{2}: Put target card from your graveyard on the bottom of your library. Then draw a card.",
+            "Put target card from your graveyard on the bottom of your library with {2}:.",
+            "{2}: Put target card from your graveyard on the bottom of your library. Put another card there."
+        ),
+    },
+    Recipe {
         id: RecipeId("activated.mana.tap_one"),
         label: "tap for one mana",
         surface: RecipeSurface::ActivatedAbility,
@@ -6826,6 +6877,7 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
             static_ability_id: AbilityId::new("static_01")?,
             characteristic_ability_id: AbilityId::new("characteristic_01")?,
             presentation: AbilityPresentation::OracleLines(vec![1]),
+            source_is_permanent: true,
             source_is_artifact: true,
             source_is_land: true,
             source_is_creature: true,
@@ -6967,6 +7019,7 @@ mod tests {
             static_ability_id: AbilityId::new("static_01").unwrap(),
             characteristic_ability_id: AbilityId::new("characteristic_01").unwrap(),
             presentation: AbilityPresentation::OracleLines(vec![1]),
+            source_is_permanent: true,
             source_is_artifact: true,
             source_is_land: true,
             source_is_creature: true,
@@ -6982,6 +7035,111 @@ mod tests {
     #[test]
     fn catalog_has_stable_unique_ids_and_complete_calibration_metadata() {
         validate_catalog().expect("built-in recipe catalog should be valid");
+    }
+
+    #[test]
+    fn issue_283_graveyard_to_library_bottom_activation_is_supported() {
+        let matched = match_clause(
+            "{2}: Put target card from your graveyard on the bottom of your library.",
+            false,
+            &context(),
+        )
+        .expect("issue #283 recipe matching should not be ambiguous")
+        .expect("issue #283 activation should match");
+        assert_eq!(
+            matched.id.as_str(),
+            "activated.graveyard_card_to_library_bottom"
+        );
+        let recipe = CATALOG
+            .iter()
+            .find(|recipe| recipe.id == matched.id)
+            .expect("issue #283 recipe should remain registered");
+        assert_eq!(recipe.surface, RecipeSurface::ActivatedAbility);
+    }
+
+    #[test]
+    fn issue_283_emits_targeted_controller_bottom_move_and_rejects_near_misses() {
+        let clause = "{2}: Put target card from your graveyard on the bottom of your library.";
+        let matched = match_clause(clause, false, &context())
+            .expect("issue #283 recipe matching should not be ambiguous")
+            .expect("issue #283 activation should match");
+        let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+            panic!("issue #283 must emit an activated ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "activated_01");
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(
+            ability.costs,
+            vec![AbilityCost::Mana(ManaCost::parse("{2}").unwrap())]
+        );
+        assert_eq!(
+            ability.effect,
+            vec![SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    owner: GraveyardOwner::Controller,
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::LibraryBottom,
+                linked_exile_id: None,
+            }]
+        );
+        let targeting = ability
+            .targeting
+            .as_ref()
+            .expect("issue #283 requires explicit targeting");
+        assert_eq!(targeting.groups.len(), 1);
+        assert_eq!(targeting.groups[0].min, 1);
+        assert_eq!(targeting.groups[0].max, 1);
+        assert_eq!(
+            targeting.groups[0].prompt,
+            "Choose target card from your graveyard"
+        );
+        assert_eq!(targeting.groups[0].effect_indices, vec![0]);
+
+        for near_miss in [
+            "{2}: Put target card from a graveyard on the bottom of your library.",
+            "{2}: Put target card from an opponent's graveyard on the bottom of your library.",
+            "{2}: Put target creature card from your graveyard on the bottom of your library.",
+            "{2}: Put target noncreature card from your graveyard on the bottom of your library.",
+            "{2}: Put up to one target card from your graveyard on the bottom of your library.",
+            "{2}: Choose a card from your graveyard and put it on the bottom of your library.",
+            "{2}: You may put target card from your graveyard on the bottom of your library.",
+            "{2}: Put target card from your graveyard on the top of your library.",
+            "{2}: Put target card from your graveyard into your hand.",
+            "{2}: Exile target card from your graveyard.",
+            "{2}: Put two target cards from your graveyard on the bottom of your library.",
+            "{2}, {T}: Put target card from your graveyard on the bottom of your library.",
+            "{2}, Sacrifice this creature: Put target card from your graveyard on the bottom of your library.",
+            "{2}{G}: Put target card from your graveyard on the bottom of your library.",
+            "{2}: Put target card from your graveyard on the bottom of your library. Then draw a card.",
+            "Put target card from your graveyard on the bottom of your library with {2}:.",
+            "{2}: Put target card from your graveyard on the bottom of your library. Put another card there.",
+            "{2}: Put target card on the bottom of your library from your graveyard.",
+        ] {
+            assert!(
+                match_clause(near_miss, false, &context()).unwrap().is_none(),
+                "near-miss unexpectedly matched: {near_miss}"
+            );
+        }
+
+        let mut nonpermanent = context();
+        nonpermanent.source_is_permanent = false;
+        assert!(
+            match_clause(clause, false, &nonpermanent)
+                .unwrap()
+                .is_none(),
+            "the permanent-source recipe must reject nonpermanent sources"
+        );
+        assert!(
+            match_clause(&format!("{clause}\nReach"), false, &context())
+                .unwrap()
+                .is_none(),
+            "the exact recipe must reject a reordered/appended full-card clause"
+        );
     }
 
     #[test]
