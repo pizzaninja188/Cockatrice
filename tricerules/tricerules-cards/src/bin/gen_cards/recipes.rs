@@ -4,15 +4,16 @@ use tricerules_cards::primitives::{
     EntersTappedAffected, EntryCost, GameCondition, GraveyardDestination, GraveyardFilter,
     GraveyardOwner, HandCardAction, LifeAmount, ObjectContributionKind, ObjectPaymentConstraint,
     PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient,
-    RelativePlayerSet, ResolutionCost, SearchDestination, SearchZoneSelection, SpellCastFilter,
-    SpellCostModifier, SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef,
-    TargetController, TargetFilter, TargetGroupDef, TargetKind, TargetMatchFilter,
-    TargetObjectExclusion, TargetingDef, TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
+    RelativePlayerSet, ResolutionBranchDef, ResolutionBranchSelection, ResolutionCost,
+    SearchDestination, SearchZoneSelection, SpellCastFilter, SpellCostModifier,
+    SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter,
+    TargetGroupDef, TargetKind, TargetMatchFilter, TargetObjectExclusion, TargetingDef,
+    TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
     AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
     ActivationTiming, Amount, BasicLandType, CastTriggerPlayer, CharacteristicDefiningAbility,
-    CounterKind, IdentifiedAbility, Keyword, LibraryPartitionKind, ManaAmount, ManaCost,
+    ChoiceId, CounterKind, IdentifiedAbility, Keyword, LibraryPartitionKind, ManaAmount, ManaCost,
     SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
 };
 
@@ -2038,6 +2039,52 @@ fn match_etb_return_other_creature_up_to_one(
 fn match_etb_draw(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     let effect = draw_effect(&capitalize(etb_instruction(text)?))?;
     Some(triggered_ability(context, effect))
+}
+
+fn match_self_enters_optional_search_basic_land_to_top(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top.")
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfEntersBattlefield,
+                vec![SpellEffectKind::ChooseResolutionBranch {
+                    chooser: PlayerRecipient::Controller,
+                    optional: true,
+                    selection: ResolutionBranchSelection::PlayerChoice,
+                    branches: vec![ResolutionBranchDef {
+                        branch_id: ChoiceId::new("search_for_a_basic_land")
+                            .expect("closed search branch uses a valid choice ID"),
+                        presentation: AbilityPresentation::Fallback,
+                        runtime_fallback: None,
+                        cost: ResolutionCost::None,
+                        requirement: Default::default(),
+                        effects: vec![SpellEffectKind::SearchLibrary {
+                            who: PlayerRecipient::Controller,
+                            optional: false,
+                            count: 1,
+                            count_by_cast_cost: None,
+                            filter: Some(ZoneCardFilter {
+                                card_type: Some(CardTypeFilter::BasicLand),
+                                ..ZoneCardFilter::default()
+                            }),
+                            slots: Vec::new(),
+                            zones: SearchZoneSelection::default(),
+                            destination: SearchDestination::TopOfLibrary,
+                            conditional_destination: None,
+                            shuffle: true,
+                            reveal: true,
+                            result_id: None,
+                        }],
+                    }],
+                    otherwise: Vec::new(),
+                }],
+            )
+        })
 }
 
 fn match_raid_etb_draw(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
@@ -6529,6 +6576,33 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("triggered.self_enters.optional_search_basic_land_top"),
+        label: "self enters optional basic land search to library top",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_enters_optional_search_basic_land_to_top,
+        calibration: calibrations!(
+            "Campus Guide" => "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top.",
+            "Spider-Bot" => "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top.";
+            "When this creature enters, search your library for a basic land card, reveal it, then shuffle and put that card on top.",
+            "When this creature enters, you may search your library for a land card, reveal it, then shuffle and put that card on top.",
+            "When this creature enters, you may search your library for a nonbasic land card, reveal it, then shuffle and put that card on top.",
+            "When this creature enters, you may search your library for a creature card, reveal it, then shuffle and put that card on top.",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card into your hand.",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card onto the battlefield.",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on the bottom.",
+            "When this creature enters, you may search your library for a basic land card, then shuffle and put that card on top.",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then put that card on top.",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put up to one card on top.",
+            "When this creature enters, you may search your library for up to one basic land card, reveal it, then shuffle and put that card on top.",
+            "When this creature enters, you may search your library for two basic land cards, reveal them, then shuffle and put those cards on top.",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top of an opponent's library.",
+            "When this creature enters, target opponent may search their library for a basic land card, reveal it, then shuffle and put that card on top.",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top. It gains haste.",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top.\nReach",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top, then draw a card."
+        ),
+    },
+    Recipe {
         id: RecipeId("triggered.controller_end_step.draw.one"),
         label: "controller end step draw one",
         surface: RecipeSurface::TriggeredAbility,
@@ -7139,6 +7213,132 @@ mod tests {
                 .unwrap()
                 .is_none(),
             "the exact recipe must reject a reordered/appended full-card clause"
+        );
+    }
+
+    #[test]
+    fn issue_284_optional_basic_land_to_top_etb_is_exact_and_typed() {
+        let clause = "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top.";
+        let matched = match_clause(clause, false, &context())
+            .expect("issue #284 recipe matching should not be ambiguous")
+            .expect("issue #284 ETB search should match");
+        assert_eq!(
+            matched.id.as_str(),
+            "triggered.self_enters.optional_search_basic_land_top"
+        );
+        let recipe = CATALOG
+            .iter()
+            .find(|recipe| recipe.id == matched.id)
+            .expect("issue #284 recipe should remain registered");
+        assert_eq!(recipe.surface, RecipeSurface::TriggeredAbility);
+
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("issue #284 must emit a triggered ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "triggered_01");
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(!ability.may, "optional search is represented by its branch");
+        assert!(ability.targeting.is_none());
+        let [SpellEffectKind::ChooseResolutionBranch {
+            chooser,
+            optional,
+            selection,
+            branches,
+            otherwise,
+        }] = ability.effect.as_slice()
+        else {
+            panic!("issue #284 must emit one optional resolution branch");
+        };
+        assert_eq!(*chooser, PlayerRecipient::Controller);
+        assert!(*optional);
+        assert_eq!(
+            *selection,
+            tricerules_cards::primitives::ResolutionBranchSelection::PlayerChoice
+        );
+        assert!(otherwise.is_empty());
+        let [branch] = branches.as_slice() else {
+            panic!("issue #284 must emit one search branch");
+        };
+        assert_eq!(branch.branch_id.as_str(), "search_for_a_basic_land");
+        assert_eq!(branch.presentation, AbilityPresentation::Fallback);
+        assert_eq!(
+            branch.cost,
+            tricerules_cards::primitives::ResolutionCost::None
+        );
+        assert_eq!(
+            branch.requirement,
+            tricerules_cards::primitives::ResolutionBranchRequirement::Always
+        );
+        let [SpellEffectKind::SearchLibrary {
+            who,
+            optional: search_optional,
+            count,
+            count_by_cast_cost,
+            filter: Some(filter),
+            slots,
+            zones,
+            destination,
+            conditional_destination,
+            shuffle,
+            reveal,
+            result_id,
+        }] = branch.effects.as_slice()
+        else {
+            panic!("issue #284 branch must search the library");
+        };
+        assert_eq!(*who, PlayerRecipient::Controller);
+        assert!(!search_optional);
+        assert_eq!(*count, 1);
+        assert!(count_by_cast_cost.is_none());
+        assert_eq!(filter.card_type, Some(CardTypeFilter::BasicLand));
+        assert!(filter.any_of.is_none());
+        assert!(filter.required_subtypes.is_empty());
+        assert!(slots.is_empty());
+        assert_eq!(
+            zones,
+            &tricerules_cards::primitives::SearchZoneSelection::default()
+        );
+        assert_eq!(*destination, SearchDestination::TopOfLibrary);
+        assert!(conditional_destination.is_none());
+        assert!(*shuffle);
+        assert!(*reveal);
+        assert!(result_id.is_none());
+
+        for near_miss in [
+            "When this creature enters, search your library for a basic land card, reveal it, then shuffle and put that card on top.",
+            "When this creature enters, you may search your library for up to one basic land card, reveal it, then shuffle and put that card on top.",
+            "When this creature enters, you may search your library for a land card, reveal it, then shuffle and put that card on top.",
+            "When this creature enters, you may search your library for a nonbasic land card, reveal it, then shuffle and put that card on top.",
+            "When this creature enters, you may search your library for a creature card, reveal it, then shuffle and put that card on top.",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card into your hand.",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card onto the battlefield.",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on the bottom.",
+            "When this creature enters, you may search your library for a basic land card, then shuffle and put that card on top.",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then put that card on top.",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put up to one card on top.",
+            "When this creature enters, you may search your library for a basic land card, reveal them, then shuffle and put those cards on top.",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top of an opponent's library.",
+            "When this creature enters, target opponent may search their library for a basic land card, reveal it, then shuffle and put that card on top.",
+            "When this creature enters, you may search your library for two basic land cards, reveal them, then shuffle and put those cards on top.",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top. It gains haste.",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top.\nReach",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top, then draw a card.",
+        ] {
+            assert!(
+                match_clause(near_miss, false, &context()).unwrap().is_none(),
+                "near-miss unexpectedly matched: {near_miss}"
+            );
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(clause, false, &noncreature).unwrap().is_none(),
+            "the creature-source recipe must reject noncreature sources"
         );
     }
 

@@ -4109,6 +4109,111 @@ mod tests {
     }
 
     #[test]
+    fn issue_284_exact_optional_basic_land_to_top_cards_preserve_keywords_and_fail_closed() {
+        for (name, type_line, oracle_text, expected_keywords) in [
+            (
+                "Campus Guide",
+                "Artifact Creature — Golem",
+                "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top.",
+                Vec::new(),
+            ),
+            (
+                "Spider-Bot",
+                "Artifact Creature — Spider Robot Scout",
+                "Reach\nWhen this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top.",
+                vec![Keyword::Reach],
+            ),
+        ] {
+            let card = normal_card(name, "{2}", type_line, oracle_text, Some(("2", "1")));
+            let generated = evaluate_fresh(&card)
+                .unwrap_or_else(|error| panic!("{name} exact ability should qualify: {error:?}"));
+            assert_eq!(generated.faces[0].recipe_labels, [
+                "self enters optional basic land search to library top"
+            ]);
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert_eq!(raw.keywords, expected_keywords, "{name}");
+            let [ability] = raw.triggered_abilities.as_slice() else {
+                panic!("{name} should emit one triggered ability");
+            };
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+            assert!(!ability.may);
+            assert!(ability.targeting.is_none());
+            assert!(matches!(
+                ability.effect.as_slice(),
+                [SpellEffectKind::ChooseResolutionBranch {
+                    optional: true,
+                    branches,
+                    ..
+                }] if branches.len() == 1 && matches!(
+                    branches[0].effects.as_slice(),
+                    [SpellEffectKind::SearchLibrary {
+                        filter: Some(filter),
+                        destination: tricerules_cards::SearchDestination::TopOfLibrary,
+                        shuffle: true,
+                        reveal: true,
+                        optional: false,
+                        count: 1,
+                        ..
+                    }] if filter.card_type == Some(tricerules_cards::primitives::CardTypeFilter::BasicLand)
+                )
+            ));
+        }
+
+        for (name, oracle_text) in [
+            (
+                "Issue 284 Mandatory Search",
+                "When this creature enters, search your library for a basic land card, reveal it, then shuffle and put that card on top.",
+            ),
+            (
+                "Issue 284 Up To One Search",
+                "When this creature enters, you may search your library for up to one basic land card, reveal it, then shuffle and put that card on top.",
+            ),
+            (
+                "Issue 284 Opponent Search",
+                "When this creature enters, target opponent may search their library for a basic land card, reveal it, then shuffle and put that card on top.",
+            ),
+            (
+                "Issue 284 Unsupported Tail",
+                "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top.\nWhenever this creature attacks, draw a card.",
+            ),
+            (
+                "Issue 284 Unsupported Same-Line Tail",
+                "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top. Then draw a card.",
+            ),
+            (
+                "Issue 284 Reordered Ability",
+                "Search your library for a basic land card, reveal it, then shuffle and put that card on top when this creature enters.",
+            ),
+        ] {
+            let card = normal_card(
+                name,
+                "{2}",
+                "Artifact Creature — Golem",
+                oracle_text,
+                Some(("2", "1")),
+            );
+            assert_eq!(
+                evaluate_fresh(&card),
+                Err(Skip::NonKeywordText.into()),
+                "{name} must fail closed"
+            );
+        }
+
+        let noncreature = normal_card(
+            "Issue 284 Noncreature Source",
+            "{2}",
+            "Artifact",
+            "When this creature enters, you may search your library for a basic land card, reveal it, then shuffle and put that card on top.",
+            None,
+        );
+        assert_eq!(
+            evaluate_fresh(&noncreature),
+            Err(Skip::NonKeywordText.into()),
+            "the exact ETB search must require a creature source"
+        );
+    }
+
+    #[test]
     fn etb_explore_recipe_emits_source_bound_trigger_without_targeting() {
         let card = normal_card(
             "River Herald Guide",

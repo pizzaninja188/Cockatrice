@@ -318,6 +318,7 @@ caged_zombie	0	ability:0	unsupported: nonmana costs need additional fixture reso
 caged_zombie	0	cast	exercised
 calamitous_cave-in	0	cast	exercised
 call_the_cavalry	0	cast	exercised
+campus_guide	0	cast	exercised
 canal_monitor	0	cast	exercised
 cancel	0	cast	unsupported: target group 0 needs a richer fixture
 candy_trail	0	ability:0	exercised
@@ -1985,6 +1986,7 @@ spellgorger_weird	0	cast	exercised
 spellgyre	0	cast	exercised
 spicy_oatmeal_pizza	0	ability:0	exercised
 spicy_oatmeal_pizza	0	cast	exercised
+spider-bot	0	cast	exercised
 spider-rex,_daring_dino	0	cast	exercised
 spike_jester	0	cast	exercised
 spiked_baloth	0	cast	exercised

@@ -310,6 +310,8 @@ mod issue_281_generated_etb_recursion;
 mod issue_282_self_tap_loot;
 #[path = "scenario/issue_283_generated_graveyard_to_library_bottom.rs"]
 mod issue_283_generated_graveyard_to_library_bottom;
+#[path = "scenario/issue_284_generated_optional_basic_land_to_top.rs"]
+mod issue_284_generated_optional_basic_land_to_top;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]
