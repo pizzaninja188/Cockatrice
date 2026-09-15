@@ -28,6 +28,18 @@ pub(super) fn instant_timing_step_allowed(state: &GameState) -> bool {
 }
 
 impl GameEngine {
+    /// Apply deferred draw-from-empty losses once a resolving effect has completed. A player
+    /// remains in the game during resolution so mandatory trailing instructions can finish;
+    /// the next command boundary then performs the CR 704.5b state-based action (CR 704.4).
+    pub(super) fn commit_pending_library_losses(&mut self) {
+        for player in &mut self.state.players {
+            if player.pending_library_loss {
+                player.pending_library_loss = false;
+                player.has_lost = true;
+            }
+        }
+    }
+
     pub(super) fn sweep_life(&mut self) {
         for p in &mut self.state.players {
             if p.life <= 0 {

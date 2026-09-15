@@ -1,10 +1,11 @@
 use tricerules_cards::primitives::{
-    ActivationLimit, BattlefieldAggregate, BattlefieldPermanentFilter, CardTypeFilter,
-    CreatureScopeController, CreatureScopeFilter, DiscardQuantity, DrawDiscardOrder, EffectSubject,
-    EntersTappedAffected, EntryCost, GameCondition, GraveyardDestination, GraveyardFilter,
-    GraveyardOwner, HandCardAction, HandCardChooser, HandChoiceVisibility, LifeAmount,
-    ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter,
-    PlayerLifeAggregate, PlayerRecipient, RelativePlayerSet, ResolutionBranchDef,
+    ActivationLimit, BattlefieldAggregate, BattlefieldPermanentFilter, CardResultAction,
+    CardResultFilter, CardResultSource, CardTypeFilter, CountExpression, CreatureScopeController,
+    CreatureScopeFilter, DiscardQuantity, DrawDiscardOrder, EffectSubject, EntersTappedAffected,
+    EntryCost, GameCondition, GraveyardDestination, GraveyardFilter, GraveyardOwner,
+    HandCardAction, HandCardChooser, HandChoiceVisibility, LifeAmount, ObjectContributionKind,
+    ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate,
+    PlayerRecipient, PowerToughnessCharacteristic, RelativePlayerSet, ResolutionBranchDef,
     ResolutionBranchSelection, ResolutionCost, SearchDestination, SearchZoneSelection,
     SpellCastFilter, SpellCostModifier, SpellManaSpentComparison, StackSpellFilter,
     StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
@@ -12,10 +13,11 @@ use tricerules_cards::primitives::{
     TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
-    AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone, ActivatedAbilityDef,
-    ActivationTiming, Amount, BasicLandType, CastTriggerPlayer, CharacteristicDefiningAbility,
-    ChoiceId, CounterKind, IdentifiedAbility, Keyword, LibraryPartitionKind, ManaAmount, ManaCost,
-    SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
+    external_oracle_lines, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
+    ActivatedAbilityDef, ActivationTiming, Amount, BasicLandType, CastTriggerPlayer,
+    CharacteristicDefiningAbility, ChoiceId, CounterKind, IdentifiedAbility, Keyword,
+    LibraryPartitionKind, ManaAmount, ManaCost, SpellEffectKind, TriggerCondition,
+    TriggeredAbilityDef,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,6 +33,9 @@ pub(super) enum RecipeSurface {
     /// A complete modal Oracle-text aggregate. The assembly owns the header and every bullet;
     /// individual bullet mechanics are matched again on [`Self::ModalMode`].
     ModalAssembly,
+    /// The complete paired Station header and threshold striation. The assembly owns both
+    /// lines so an orphan, reordered, duplicated, or appended Station fragment stays unsupported.
+    StationAssembly,
     EtbAbility,
     TriggeredAbility,
     ActivatedAbility,
@@ -90,6 +95,7 @@ pub(super) struct RecipeContext {
     pub(super) oracle_id: Option<String>,
     pub(super) source_is_permanent: bool,
     pub(super) source_is_artifact: bool,
+    pub(super) source_is_spacecraft_or_planet: bool,
     pub(super) source_is_land: bool,
     pub(super) source_is_creature: bool,
     pub(super) source_is_vehicle: bool,
@@ -117,6 +123,7 @@ pub(super) enum RecipeEmission {
     CharacteristicAbility(IdentifiedAbility<CharacteristicDefiningAbility>),
     ModalMode(ModalModeEmission),
     ModalAssembly(ModalAssemblyEmission),
+    StationAssembly(StationAssemblyEmission),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -129,6 +136,12 @@ pub(super) struct ModalModeEmission {
 pub(super) struct ModalAssemblyEmission {
     pub(super) min_modes: u32,
     pub(super) max_modes: u32,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct StationAssemblyEmission {
+    pub(super) activated_ability: ActivatedAbilityDef,
+    pub(super) static_ability: IdentifiedAbility<StaticAbilityDef>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -2666,6 +2679,229 @@ fn match_beginning_of_combat_exile_graveyard_card(
                 }],
             });
             RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
+const ISSUE_309_STATION_HEADER: &str = r#"Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)"#;
+const ISSUE_309_STATION_THRESHOLD: &str = "8+ | Flying";
+const ISSUE_309_REVIEWED_ORACLE_IDS: &[&str] = &[
+    "7b4c37dc-8cb0-4870-929e-11c2a45952a2", // Uthros Scanship
+    "db0894e1-2644-48d4-8de4-8cc43e940bc1", // Debris Field Crusher
+];
+
+fn issue_309_context_is_reviewed(context: &RecipeContext) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        .is_none_or(|oracle_id| ISSUE_309_REVIEWED_ORACLE_IDS.contains(&oracle_id))
+}
+
+pub(super) fn issue_309_oracle_id_is_reviewed(oracle_id: &str) -> bool {
+    ISSUE_309_REVIEWED_ORACLE_IDS.contains(&oracle_id)
+}
+
+fn issue_309_variant(context: &RecipeContext) -> Option<(i64, i64, bool)> {
+    match context.oracle_id.as_deref() {
+        Some("7b4c37dc-8cb0-4870-929e-11c2a45952a2") => Some((4, 4, false)),
+        Some("db0894e1-2644-48d4-8de4-8cc43e940bc1") => Some((1, 5, true)),
+        Some(_) => None,
+        None => match context.source_name.as_str() {
+            "Uthros Scanship" => Some((4, 4, false)),
+            "Debris Field Crusher" => Some((1, 5, true)),
+            _ => None,
+        },
+    }
+}
+
+pub(super) fn issue_309_card_surface_is_exact(
+    oracle_id: &str,
+    name: &str,
+    mana_cost: &str,
+    type_line: &str,
+    oracle_text: &str,
+    power: Option<&str>,
+    toughness: Option<&str>,
+) -> bool {
+    let expected = match oracle_id {
+        "7b4c37dc-8cb0-4870-929e-11c2a45952a2" => (
+            "Uthros Scanship",
+            "{3}{U}",
+            "Artifact — Spacecraft",
+            Some("4"),
+            Some("4"),
+            "When this Spacecraft enters, draw two cards, then discard a card.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+        ),
+        "db0894e1-2644-48d4-8de4-8cc43e940bc1" => (
+            "Debris Field Crusher",
+            "{4}{R}",
+            "Artifact — Spacecraft",
+            Some("1"),
+            Some("5"),
+            "When this Spacecraft enters, it deals 3 damage to any target.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying\n{1}{R}: This Spacecraft gets +2/+0 until end of turn.",
+        ),
+        _ => return true,
+    };
+    (name, mana_cost, type_line, power, toughness, oracle_text) == expected
+}
+
+pub(super) fn match_station_8_flying_assembly(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_artifact
+        || !context.source_is_spacecraft_or_planet
+        || !issue_309_context_is_reviewed(context)
+    {
+        return None;
+    }
+    let lines = external_oracle_lines(text);
+    let [header, threshold] = lines.as_slice() else {
+        return None;
+    };
+    if header != ISSUE_309_STATION_HEADER || threshold != ISSUE_309_STATION_THRESHOLD {
+        return None;
+    }
+    let (base_power, base_toughness, _) = issue_309_variant(context)?;
+    let station_line = match &context.presentation {
+        AbilityPresentation::OracleLines(lines) if lines.len() == 1 && lines[0] > 0 => lines[0],
+        _ => return None,
+    };
+    let threshold_line = station_line.checked_add(1)?;
+    Some(RecipeEmission::StationAssembly(StationAssemblyEmission {
+        activated_ability: ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![AbilityCost::TapPermanents {
+                constraint: ObjectPaymentConstraint::ExactCount(1),
+                filter: TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    ..TargetFilter::default()
+                },
+                exclude_source: true,
+            }],
+            cost_modifiers: Vec::new(),
+            effect: vec![SpellEffectKind::PutCounters {
+                counter: CounterKind::Charge,
+                count: Amount::Count(CountExpression::CardResultCharacteristicSum {
+                    filter: CardResultFilter {
+                        source: CardResultSource::Payment,
+                        action: CardResultAction::Tap,
+                        players: RelativePlayerSet::Controller,
+                        card_type: Some(CardTypeFilter::Creature),
+                    },
+                    characteristic: PowerToughnessCharacteristic::Power,
+                }),
+                subject: EffectSubject::Source,
+            }],
+            targeting: None,
+            timing: ActivationTiming::SorcerySpeed,
+            conditions: Vec::new(),
+            activation_limit: None,
+        },
+        static_ability: IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: AbilityPresentation::OracleLines(vec![threshold_line]),
+            definition: StaticAbilityDef::ConditionalSelfModifier {
+                condition: GameCondition::SourceCounterCount {
+                    counter: CounterKind::Charge,
+                    min: Some(8),
+                    max: None,
+                },
+                set_types: None,
+                add_types: TypeLineAddition {
+                    card_types: vec![PermanentTypeFilter::Creature],
+                    creature_types: Vec::new(),
+                },
+                base_power: Some(base_power),
+                base_toughness: Some(base_toughness),
+                delta_power: 0,
+                delta_toughness: 0,
+                keywords: vec![Keyword::Flying],
+                activated_abilities: Vec::new(),
+                triggered_abilities: Vec::new(),
+                can_attack_as_though_without_defender: false,
+            },
+        },
+    }))
+}
+
+fn issue_309_is_uthros(context: &RecipeContext) -> bool {
+    issue_309_variant(context).is_some_and(|(_, _, debris)| !debris)
+}
+
+fn issue_309_is_debris(context: &RecipeContext) -> bool {
+    issue_309_variant(context).is_some_and(|(_, _, debris)| debris)
+}
+
+fn match_uthros_etb_draw_two_discard_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_artifact
+        && context.source_is_spacecraft_or_planet
+        && issue_309_context_is_reviewed(context)
+        && issue_309_is_uthros(context)
+        && text == "When this Spacecraft enters, draw two cards, then discard a card.")
+        .then(|| {
+            triggered_ability(
+                context,
+                SpellEffectKind::DrawDiscard {
+                    who: PlayerRecipient::Controller,
+                    draw_count: 2,
+                    discard_count: 1,
+                    order: DrawDiscardOrder::DrawThenDiscard,
+                    optional: false,
+                },
+            )
+        })
+}
+
+fn match_debris_etb_damage_three_any_target(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_artifact
+        && context.source_is_spacecraft_or_planet
+        && issue_309_context_is_reviewed(context)
+        && issue_309_is_debris(context)
+        && text == "When this Spacecraft enters, it deals 3 damage to any target.")
+        .then(|| {
+            targeted_trigger(
+                context,
+                vec![SpellEffectKind::DamageTarget {
+                    amount: Amount::Fixed(3),
+                    target: TargetFilter {
+                        kind: TargetKind::AnyTarget,
+                        ..TargetFilter::default()
+                    },
+                }],
+                1,
+                1,
+                "Choose any target",
+            )
+        })
+}
+
+fn match_debris_pump_two_power(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_artifact
+        && context.source_is_spacecraft_or_planet
+        && issue_309_context_is_reviewed(context)
+        && issue_309_is_debris(context)
+        && text == "{1}{R}: This Spacecraft gets +2/+0 until end of turn.")
+        .then(|| {
+            utility_activated_ability(
+                context,
+                vec![fixed_mana_cost("{1}{R}")],
+                vec![SpellEffectKind::PumpTarget {
+                    power: 2,
+                    toughness: 0,
+                    scale: None,
+                    subject: EffectSubject::Source,
+                }],
+                None,
+            )
         })
 }
 
@@ -7537,6 +7773,94 @@ pub(super) static CATALOG: &[Recipe] = &[
             "As this land enters, you may pay 2 life. If you don't, it enters tapped. When this land enters, draw a card."
         ),
     },
+    Recipe {
+        id: RecipeId("station.spacecraft.threshold_8_flying"),
+        label: "Station 8+ Flying Spacecraft",
+        surface: RecipeSurface::StationAssembly,
+        matcher: match_station_8_flying_assembly,
+        calibration: calibrations!(
+            "Uthros Scanship" => "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+            "Debris Field Crusher" => "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying";
+            "Station",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)",
+            "8+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8 | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8-10 | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8 or more.)\n8+ | Flying",
+            "Station (Tap this artifact: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+            "Station (Tap another creature: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its toughness on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+            "Station (Tap another creature you control: Put +1/+1 counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on that creature. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact Vehicle at 8+.)\n8+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Add a mana cost. It's an artifact creature at 8+.)\n8+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying\n8+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+            "8+ | Flying\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Vigilance",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying, vigilance",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying\nDraw a card.",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying\n9+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n8+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Activate only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as an instant. It's an artifact creature at 8+.)\n8+ | Flying"
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.spacecraft.uthros.draw_two_discard_one"),
+        label: "Uthros Scanship ETB draw two then discard one",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_uthros_etb_draw_two_discard_one,
+        calibration: singleton_calibrations!(
+            "Uthros Scanship" => "When this Spacecraft enters, draw two cards, then discard a card.";
+            "When this Spacecraft enters, discard a card, then draw two cards.",
+            "When this Spacecraft enters, draw two cards, then discard two cards.",
+            "When this Spacecraft enters, draw a card, then discard a card.",
+            "When this Spacecraft enters, draw two cards, then discard a card. You may.",
+            "When this Spacecraft enters, you draw two cards, then discard a card.",
+            "When this Spacecraft enters, an opponent draws two cards, then discards a card.",
+            "When this Spacecraft enters, draw two cards, then discard a card at random.",
+            "When this artifact enters, draw two cards, then discard a card.",
+            "Whenever this Spacecraft enters, draw two cards, then discard a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.spacecraft.debris.damage_three_any_target"),
+        label: "Debris Field Crusher ETB damage any target",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_debris_etb_damage_three_any_target,
+        calibration: singleton_calibrations!(
+            "Debris Field Crusher" => "When this Spacecraft enters, it deals 3 damage to any target.";
+            "When this Spacecraft enters, it deals 2 damage to any target.",
+            "When this Spacecraft enters, it deals 3 damage to target creature.",
+            "When this Spacecraft enters, it deals 3 damage to target player.",
+            "When this Spacecraft enters, it may deal 3 damage to any target.",
+            "When this Spacecraft enters, deal 3 damage to any target.",
+            "When this artifact enters, it deals 3 damage to any target.",
+            "When this Spacecraft enters, it deals 3 damage to any target. Draw a card.",
+            "Whenever this Spacecraft enters, it deals 3 damage to any target."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.spacecraft.debris.pump_two_power"),
+        label: "Debris Field Crusher pump +2/+0",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_debris_pump_two_power,
+        calibration: singleton_calibrations!(
+            "Debris Field Crusher" => "{1}{R}: This Spacecraft gets +2/+0 until end of turn.";
+            "{1}{R}: This Spacecraft gets +1/+0 until end of turn.",
+            "{1}{R}: This Spacecraft gets +2/+1 until end of turn.",
+            "{1}{R}: This Spacecraft gets +2/+0 until your next turn.",
+            "{1}{R}: This Spacecraft gets +2/+0 permanently.",
+            "{1}{R}, {T}: This Spacecraft gets +2/+0 until end of turn.",
+            "{1}{R}: Target Spacecraft gets +2/+0 until end of turn.",
+            "{1}{R}: This Spacecraft gets +2/+0. Activate only as a sorcery.",
+            "{R}: This Spacecraft gets +2/+0 until end of turn.",
+            "{1}{R}: This Spacecraft gets +2/+0 until end of combat."
+        ),
+    },
 ];
 
 fn surface_applies(surface: RecipeSurface, is_spell: bool, context: &RecipeContext) -> bool {
@@ -7544,7 +7868,9 @@ fn surface_applies(surface: RecipeSurface, is_spell: bool, context: &RecipeConte
         RecipeSurface::KeywordClause => true,
         RecipeSurface::SpellClause => is_spell,
         RecipeSurface::AuraSpellClause => context.source_is_aura,
-        RecipeSurface::ModalAssembly | RecipeSurface::ModalMode => false,
+        RecipeSurface::ModalAssembly
+        | RecipeSurface::ModalMode
+        | RecipeSurface::StationAssembly => false,
         RecipeSurface::ZoneActivatedAbility
         | RecipeSurface::SpellStaticAbility
         | RecipeSurface::CharacteristicAbility => true,
@@ -7593,6 +7919,18 @@ pub(super) fn match_modal_mode(
     context: &RecipeContext,
 ) -> Result<Option<RecipeMatch>, RecipeAmbiguity> {
     match_surface_in(CATALOG, mode_text, RecipeSurface::ModalMode, context)
+}
+
+pub(super) fn match_station_assembly(
+    oracle_text: &str,
+    context: &RecipeContext,
+) -> Result<Option<RecipeMatch>, RecipeAmbiguity> {
+    match_surface_in(
+        CATALOG,
+        oracle_text,
+        RecipeSurface::StationAssembly,
+        context,
+    )
 }
 
 pub(super) fn reviewed_modal_mode_pair(
@@ -7704,6 +8042,7 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
             oracle_id: None,
             source_is_permanent: true,
             source_is_artifact: true,
+            source_is_spacecraft_or_planet: true,
             source_is_land: true,
             source_is_creature: true,
             source_is_vehicle: true,
@@ -7759,7 +8098,9 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
                 ));
             }
             let matched = match recipe.surface {
-                RecipeSurface::ModalAssembly | RecipeSurface::ModalMode => {
+                RecipeSurface::ModalAssembly
+                | RecipeSurface::ModalMode
+                | RecipeSurface::StationAssembly => {
                     match_surface_in(catalog, positive.clause, recipe.surface, &context)
                 }
                 _ => match_clause_in(
@@ -7801,7 +8142,9 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
                 ));
             }
             let matched = match recipe.surface {
-                RecipeSurface::ModalAssembly | RecipeSurface::ModalMode => {
+                RecipeSurface::ModalAssembly
+                | RecipeSurface::ModalMode
+                | RecipeSurface::StationAssembly => {
                     match_surface_in(catalog, negative, recipe.surface, &context)
                 }
                 _ => match_clause_in(
@@ -7847,6 +8190,7 @@ mod tests {
             oracle_id: None,
             source_is_permanent: true,
             source_is_artifact: true,
+            source_is_spacecraft_or_planet: true,
             source_is_land: true,
             source_is_creature: true,
             source_is_vehicle: true,
@@ -11370,5 +11714,150 @@ mod tests {
                 "issue #276 near-miss must remain unsupported: {near_miss}"
             );
         }
+    }
+
+    #[test]
+    fn issue_309_station_assembly_is_exact_and_allowlisted() {
+        let pair = "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying";
+        let mut uthros = context();
+        uthros.source_name = "Uthros Scanship".into();
+        let matched = match_station_assembly(pair, &uthros)
+            .expect("Station assembly must not be ambiguous")
+            .expect("reviewed Station pair should match");
+        assert_eq!(matched.id.as_str(), "station.spacecraft.threshold_8_flying");
+        let RecipeEmission::StationAssembly(assembly) = matched.emission else {
+            panic!("Station pair must emit the paired activated and static abilities")
+        };
+        assert_eq!(
+            assembly.activated_ability.costs,
+            [AbilityCost::TapPermanents {
+                constraint: ObjectPaymentConstraint::ExactCount(1),
+                filter: TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    ..TargetFilter::default()
+                },
+                exclude_source: true,
+            }]
+        );
+        assert_eq!(
+            assembly.activated_ability.timing,
+            ActivationTiming::SorcerySpeed
+        );
+        assert_eq!(
+            assembly.static_ability.definition,
+            StaticAbilityDef::ConditionalSelfModifier {
+                condition: GameCondition::SourceCounterCount {
+                    counter: CounterKind::Charge,
+                    min: Some(8),
+                    max: None,
+                },
+                set_types: None,
+                add_types: TypeLineAddition {
+                    card_types: vec![PermanentTypeFilter::Creature],
+                    creature_types: Vec::new(),
+                },
+                base_power: Some(4),
+                base_toughness: Some(4),
+                delta_power: 0,
+                delta_toughness: 0,
+                keywords: vec![Keyword::Flying],
+                activated_abilities: Vec::new(),
+                triggered_abilities: Vec::new(),
+                can_attack_as_though_without_defender: false,
+            }
+        );
+
+        for near_miss in [
+            "Station",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)",
+            "8+ | Flying",
+            "Station (Tap this artifact: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+            "Station (Tap another creature: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its toughness on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8 | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8-10 | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8 or more.)\n8+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying\n8+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+            "8+ | Flying\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying\nDraw a card.",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. It's an artifact creature at 8+.)\n8+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. Add a mana cost. It's an artifact creature at 8+.)\n8+ | Flying",
+            "Station (Tap another creature you control: Put +1/+1 counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on that creature. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact Vehicle at 8+.)\n8+ | Flying",
+            "Station (Tap another creature an opponent controls: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+            "Station (Tap another creature: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n8+ | Flying",
+        ] {
+            assert_eq!(
+                match_station_assembly(near_miss, &uthros),
+                Ok(None),
+                "Station near-miss must remain unsupported: {near_miss}"
+            );
+        }
+
+        let mut unreviewed = uthros.clone();
+        unreviewed.oracle_id = Some("00000000-0000-0000-0000-000000000000".into());
+        assert_eq!(
+            match_station_assembly(pair, &unreviewed),
+            Ok(None),
+            "an unreviewed identity must fail closed"
+        );
+        let mut nonstation = uthros.clone();
+        nonstation.source_is_spacecraft_or_planet = false;
+        assert_eq!(
+            match_station_assembly(pair, &nonstation),
+            Ok(None),
+            "non-Spacecraft/Planet sources must fail closed"
+        );
+    }
+
+    #[test]
+    fn issue_309_station_assembly_rejects_catalog_ambiguity() {
+        let pair = "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying";
+        let mut uthros = context();
+        uthros.source_name = "Uthros Scanship".into();
+        let duplicate_catalog = [
+            Recipe {
+                id: RecipeId("test.station.duplicate.one"),
+                label: "test Station duplicate one",
+                surface: RecipeSurface::StationAssembly,
+                matcher: match_station_8_flying_assembly,
+                calibration: RecipeCalibration {
+                    positive_cards: &[],
+                    negative_near_misses: &[],
+                    minimum_positive_cards: 0,
+                },
+            },
+            Recipe {
+                id: RecipeId("test.station.duplicate.two"),
+                label: "test Station duplicate two",
+                surface: RecipeSurface::StationAssembly,
+                matcher: match_station_8_flying_assembly,
+                calibration: RecipeCalibration {
+                    positive_cards: &[],
+                    negative_near_misses: &[],
+                    minimum_positive_cards: 0,
+                },
+            },
+        ];
+        let ambiguity = match_surface_in(
+            &duplicate_catalog,
+            pair,
+            RecipeSurface::StationAssembly,
+            &uthros,
+        )
+        .expect_err("two matching Station recipes must be ambiguous");
+        assert_eq!(
+            ambiguity.recipe_ids,
+            [
+                RecipeId("test.station.duplicate.one"),
+                RecipeId("test.station.duplicate.two")
+            ]
+        );
     }
 }

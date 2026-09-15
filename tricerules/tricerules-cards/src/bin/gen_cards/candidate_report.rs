@@ -190,6 +190,7 @@ fn exact_recipe_matches_one_clause(
     is_spell: bool,
     source_is_permanent: bool,
     source_is_artifact: bool,
+    source_is_spacecraft_or_planet: bool,
     source_is_land: bool,
     source_is_creature: bool,
     source_is_vehicle: bool,
@@ -206,6 +207,7 @@ fn exact_recipe_matches_one_clause(
         is_spell,
         source_is_permanent,
         source_is_artifact,
+        source_is_spacecraft_or_planet,
         source_is_land,
         source_is_creature,
         source_is_vehicle,
@@ -265,6 +267,9 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
         // instants or sorceries, including Kindred permanents.
         let source_is_permanent = !is_spell;
         let source_is_artifact = card_types.iter().any(|card_type| card_type == "Artifact");
+        let source_is_spacecraft_or_planet = subtypes
+            .iter()
+            .any(|subtype| matches!(subtype.as_str(), "Spacecraft" | "Planet"));
         let source_is_land = card_types.iter().any(|card_type| card_type == "Land");
         let source_is_creature = card_types.iter().any(|card_type| card_type == "Creature");
         let source_is_vehicle = subtypes.iter().any(|subtype| subtype == "Vehicle");
@@ -283,6 +288,7 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
             is_spell,
             source_is_permanent,
             source_is_artifact,
+            source_is_spacecraft_or_planet,
             source_is_land,
             source_is_creature,
             source_is_vehicle,
@@ -314,6 +320,7 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
                     is_spell,
                     source_is_permanent,
                     source_is_artifact,
+                    source_is_spacecraft_or_planet,
                     source_is_land,
                     source_is_creature,
                     source_is_vehicle,

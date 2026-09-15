@@ -455,3 +455,5 @@ mod issue_272_manifest_dread_equipment;
 mod issue_276_generated_power_damage;
 #[path = "scenario/issue_301_generated_beginning_of_combat.rs"]
 mod issue_301_generated_beginning_of_combat;
+#[path = "scenario/issue_309_generated_station.rs"]
+mod issue_309_generated_station;

@@ -635,10 +635,11 @@ pub(in crate::engine) fn draw_cards_for_player(
         .state
         .player_idx(drawer)
         .ok_or(EngineError::Illegal("draw recipient not found"))?;
-    // CR 120.3 / 104.3c: drawing from an empty library does NOT fail the spell —
-    // draw as many as possible, then the player loses as a state-based action
-    // (swept in by `sweep_life`). Aborting resolution here would corrupt state
-    // (cards already drawn, stack already popped).
+    // CR 121.4/704.5b: attempting to draw more cards than remain does NOT fail the spell — draw as
+    // many as possible, then the player loses when state-based actions are checked after the
+    // current resolution (CR 704.4). Aborting resolution here would corrupt state (cards already
+    // drawn, stack already popped), and applying `has_lost` before the resolution's later effects
+    // would incorrectly interrupt mandatory trailing instructions.
     let mut drawn = 0u32;
     let mut decked_out = false;
     for _ in 0..count {
@@ -655,9 +656,9 @@ pub(in crate::engine) fn draw_cards_for_player(
         "P{drawer} draws {drawn} {noun} ({spell_label})."
     )));
     if decked_out {
-        engine.state.players[idx].has_lost = true;
+        engine.state.players[idx].pending_library_loss = true;
         events.push(ev_log(format!(
-            "P{drawer} tried to draw from an empty library and loses (CR 104.3c)."
+            "P{drawer} attempted to draw more cards than remained in the library; loss pending until the next state-based-action check (CR 121.4/704.5b; CR 704.4)."
         )));
     }
 

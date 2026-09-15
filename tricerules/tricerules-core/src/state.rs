@@ -623,6 +623,11 @@ pub struct PlayerState {
     pub life: i32,
     /// Out of game: lost
     pub has_lost: bool,
+    /// CR 121.4/704.5b: an instruction attempted to draw more cards than remained in the library
+    /// while a resolving effect was still in flight. CR 704.4 delays the state-based loss until
+    /// that resolution finishes and before the next priority window; keeping it separate from
+    /// `has_lost` lets mandatory trailing instructions (such as Uthros Scanship's discard) complete.
+    pub pending_library_loss: bool,
     /// CR 702.195: an irreversible public player designation established by Storied.
     pub has_enduring_story: bool,
     pub library: VecDeque<ObjectId>,
@@ -647,6 +652,7 @@ impl PlayerState {
             id,
             life,
             has_lost: false,
+            pending_library_loss: false,
             has_enduring_story: false,
             library: VecDeque::new(),
             hand: Vec::new(),

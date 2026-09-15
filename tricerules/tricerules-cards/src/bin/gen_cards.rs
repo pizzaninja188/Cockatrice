@@ -51,8 +51,10 @@ mod scaffold;
 #[cfg(test)]
 use recipes::{french_vanilla_keywords, keyword_ident};
 use recipes::{
-    issue_298_card_surface_is_exact, match_clause, match_modal_assembly, match_modal_mode,
-    reviewed_modal_mode_pair, validate_catalog, RecipeAmbiguity, RecipeContext, RecipeEmission,
+    issue_298_card_surface_is_exact, issue_309_card_surface_is_exact,
+    issue_309_oracle_id_is_reviewed, match_clause, match_modal_assembly, match_modal_mode,
+    match_station_assembly, reviewed_modal_mode_pair, validate_catalog, RecipeAmbiguity,
+    RecipeContext, RecipeEmission,
 };
 #[cfg(test)]
 use tricerules_cards::primitives::{LifeAmount, PermanentEventFilter, TargetSchema};
@@ -536,6 +538,7 @@ fn parse_rules_text(
     is_spell: bool,
     source_is_permanent: bool,
     source_is_artifact: bool,
+    source_is_spacecraft_or_planet: bool,
     source_is_land: bool,
     source_is_creature: bool,
     source_is_vehicle: bool,
@@ -562,6 +565,7 @@ fn parse_rules_text(
         oracle_id: Some(oracle_id.to_string()),
         source_is_permanent,
         source_is_artifact,
+        source_is_spacecraft_or_planet,
         source_is_land,
         source_is_creature,
         source_is_vehicle,
@@ -643,7 +647,43 @@ fn parse_rules_text(
             }
         }
     }
+    let mut consumed_station_lines = HashSet::new();
+    if !is_spell {
+        let mut station_matches = Vec::new();
+        for line_index in 0..external_lines.len().saturating_sub(1) {
+            let station_line =
+                u16::try_from(line_index + 1).map_err(|_| RulesParseError::Unsupported)?;
+            let context = RecipeContext {
+                presentation: AbilityPresentation::OracleLines(vec![station_line]),
+                ..base_context.clone()
+            };
+            let pair = format!(
+                "{}\n{}",
+                external_lines[line_index],
+                external_lines[line_index + 1]
+            );
+            if let Some(matched) =
+                match_station_assembly(&pair, &context).map_err(RulesParseError::Ambiguous)?
+            {
+                station_matches.push((line_index, matched));
+            }
+        }
+        if station_matches.len() == 1 {
+            let (line_index, matched) = station_matches.pop().expect("one Station assembly match");
+            let RecipeEmission::StationAssembly(assembly) = matched.emission else {
+                return Err(RulesParseError::Unsupported);
+            };
+            parsed.activated_abilities.push(assembly.activated_ability);
+            parsed.static_abilities.push(assembly.static_ability);
+            parsed.recipe_labels.push(matched.label);
+            consumed_station_lines.insert(line_index);
+            consumed_station_lines.insert(line_index + 1);
+        }
+    }
     for (line_index, external_line) in external_lines.iter().enumerate() {
+        if consumed_station_lines.contains(&line_index) {
+            continue;
+        }
         let cleaned = strip_reminder(external_line);
         let clause = cleaned.trim();
         if clause.is_empty() {
@@ -678,6 +718,7 @@ fn parse_rules_text(
             oracle_id: Some(oracle_id.to_string()),
             source_is_permanent,
             source_is_artifact,
+            source_is_spacecraft_or_planet,
             source_is_land,
             source_is_creature,
             source_is_vehicle,
@@ -732,7 +773,9 @@ fn parse_rules_text(
                 }
                 parsed.cost_modifiers.push(modifier);
             }
-            RecipeEmission::ModalAssembly(_) | RecipeEmission::ModalMode(_) => {
+            RecipeEmission::ModalAssembly(_)
+            | RecipeEmission::ModalMode(_)
+            | RecipeEmission::StationAssembly(_) => {
                 return Err(RulesParseError::Unsupported);
             }
             RecipeEmission::TriggeredAbility(ability) => parsed.triggered_abilities.push(ability),
@@ -1527,6 +1570,9 @@ fn parse_multiface_face(
         is_spell,
         source_is_permanent,
         types.iter().any(|card_type| card_type == "Artifact"),
+        types
+            .iter()
+            .any(|card_type| matches!(card_type.as_str(), "Spacecraft" | "Planet")),
         types.iter().any(|card_type| card_type == "Land"),
         is_creature,
         is_vehicle,
@@ -1623,6 +1669,19 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     ) {
         return Err(Skip::NonKeywordText.into());
     }
+    let power_text = power.map(|value| value.to_string());
+    let toughness_text = toughness.map(|value| value.to_string());
+    if !issue_309_card_surface_is_exact(
+        str_field(card, "oracle_id"),
+        &name,
+        &mana_cost,
+        type_line,
+        oracle_text,
+        power_text.as_deref(),
+        toughness_text.as_deref(),
+    ) {
+        return Err(Skip::NonKeywordText.into());
+    }
     let mut rules = parse_rules_text(
         &name,
         str_field(card, "oracle_id"),
@@ -1630,6 +1689,9 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
         is_spell,
         source_is_permanent,
         card_types.iter().any(|card_type| card_type == "Artifact"),
+        subtypes
+            .iter()
+            .any(|subtype| matches!(subtype.as_str(), "Spacecraft" | "Planet")),
         card_types.iter().any(|card_type| card_type == "Land"),
         is_creature,
         is_vehicle,
@@ -1749,6 +1811,10 @@ fn evaluate(
     generated_names: &HashSet<String>,
 ) -> Result<GenCard, EvaluationError> {
     let layout = GenLayout::from_scryfall(str_field(card, "layout")).ok_or(Skip::Layout)?;
+    if issue_309_oracle_id_is_reviewed(str_field(card, "oracle_id")) && layout != GenLayout::Normal
+    {
+        return Err(Skip::NonKeywordText.into());
+    }
     // Token/funny/digital-only: not real constructed cards.
     if str_field(card, "set_type") == "funny"
         || card
@@ -2392,15 +2458,17 @@ mod tests {
     use std::io::{Cursor, Write};
     use tricerules_cards::card_def::RawCardDefinition;
     use tricerules_cards::primitives::{
-        CardTypeFilter, EffectSubject, EntersTappedAffected, EntryCost, GameCondition,
-        ObjectContributionKind, ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient,
-        ResolutionCost, SpellCastFilter, SpellManaSpentComparison, StackSpellFilter,
-        StaticAbilityDef, TargetController, TargetFilter, TargetKind, TargetObjectExclusion,
-        TargetingSourceFilter, TypeLineAddition,
+        CardResultAction, CardResultSource, CardTypeFilter, CountExpression, EffectSubject,
+        EntersTappedAffected, EntryCost, GameCondition, ObjectContributionKind,
+        ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient,
+        PowerToughnessCharacteristic, ResolutionCost, SpellCastFilter, SpellManaSpentComparison,
+        StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
+        TargetObjectExclusion, TargetingSourceFilter, TypeLineAddition,
     };
     use tricerules_cards::{
-        AbilityCost, AbilityPresentation, Amount, CastTriggerPlayer, CharacteristicDefiningAbility,
-        Color, CounterKind, Keyword, Layout, SpellEffectKind, TriggerCondition,
+        AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount,
+        CastTriggerPlayer, CharacteristicDefiningAbility, Color, CounterKind, Keyword, Layout,
+        ManaCost, SpellEffectKind, TriggerCondition,
     };
 
     fn face(
@@ -3814,6 +3882,354 @@ mod tests {
             evaluate_fresh(&noncreature).is_err(),
             "the exact clause must remain bound to creature ETBs"
         );
+    }
+
+    #[test]
+    fn issue_309_station_eight_cohort_generates_exact_cards() {
+        let cards = [
+            normal_card_with_oracle_id(
+                "7b4c37dc-8cb0-4870-929e-11c2a45952a2",
+                "Uthros Scanship",
+                "{3}{U}",
+                "Artifact — Spacecraft",
+                "When this Spacecraft enters, draw two cards, then discard a card.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+                Some(("4", "4")),
+            ),
+            normal_card_with_oracle_id(
+                "db0894e1-2644-48d4-8de4-8cc43e940bc1",
+                "Debris Field Crusher",
+                "{4}{R}",
+                "Artifact — Spacecraft",
+                "When this Spacecraft enters, it deals 3 damage to any target.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying\n{1}{R}: This Spacecraft gets +2/+0 until end of turn.",
+                Some(("1", "5")),
+            ),
+        ];
+
+        for card in cards {
+            let name = str_field(&card, "name");
+            let generated = evaluate_fresh(&card)
+                .unwrap_or_else(|error| panic!("{name} should generate: {error:?}"));
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert_eq!(raw.types, ["Artifact", "Spacecraft"], "{name}");
+            assert_eq!(
+                raw.power,
+                if name == "Uthros Scanship" {
+                    Some(4)
+                } else {
+                    Some(1)
+                }
+            );
+            assert_eq!(
+                raw.toughness,
+                if name == "Uthros Scanship" {
+                    Some(4)
+                } else {
+                    Some(5)
+                }
+            );
+            assert_eq!(raw.static_abilities.len(), 1, "{name}");
+            let [static_ability] = raw.static_abilities.as_slice() else {
+                panic!("{name} should emit one threshold ability")
+            };
+            assert_eq!(
+                static_ability.presentation,
+                AbilityPresentation::OracleLines(vec![3]),
+                "{name}"
+            );
+            assert_eq!(
+                static_ability.definition,
+                StaticAbilityDef::ConditionalSelfModifier {
+                    condition: GameCondition::SourceCounterCount {
+                        counter: CounterKind::Charge,
+                        min: Some(8),
+                        max: None,
+                    },
+                    set_types: None,
+                    add_types: TypeLineAddition {
+                        card_types: vec![PermanentTypeFilter::Creature],
+                        creature_types: Vec::new(),
+                    },
+                    base_power: if name == "Uthros Scanship" {
+                        Some(4)
+                    } else {
+                        Some(1)
+                    },
+                    base_toughness: if name == "Uthros Scanship" {
+                        Some(4)
+                    } else {
+                        Some(5)
+                    },
+                    delta_power: 0,
+                    delta_toughness: 0,
+                    keywords: vec![Keyword::Flying],
+                    activated_abilities: Vec::new(),
+                    triggered_abilities: Vec::new(),
+                    can_attack_as_though_without_defender: false,
+                },
+                "{name}"
+            );
+            let station = &raw.activated_abilities[0];
+            assert_eq!(
+                station.presentation,
+                AbilityPresentation::OracleLines(vec![2])
+            );
+            assert_eq!(station.source_zone, AbilitySourceZone::Battlefield);
+            assert_eq!(station.timing, ActivationTiming::SorcerySpeed);
+            assert_eq!(
+                station.costs,
+                [AbilityCost::TapPermanents {
+                    constraint: ObjectPaymentConstraint::ExactCount(1),
+                    filter: TargetFilter {
+                        kind: TargetKind::Creature,
+                        controller: TargetController::You,
+                        ..TargetFilter::default()
+                    },
+                    exclude_source: true,
+                }]
+            );
+            assert_eq!(
+                station.effect,
+                [SpellEffectKind::PutCounters {
+                    counter: CounterKind::Charge,
+                    count: Amount::Count(CountExpression::CardResultCharacteristicSum {
+                        filter: tricerules_cards::primitives::CardResultFilter {
+                            source: CardResultSource::Payment,
+                            action: CardResultAction::Tap,
+                            players: tricerules_cards::primitives::RelativePlayerSet::Controller,
+                            card_type: Some(CardTypeFilter::Creature),
+                        },
+                        characteristic: PowerToughnessCharacteristic::Power,
+                    }),
+                    subject: EffectSubject::Source,
+                }]
+            );
+            if name == "Uthros Scanship" {
+                assert_eq!(raw.activated_abilities.len(), 1);
+                let [ability] = raw.triggered_abilities.as_slice() else {
+                    panic!("Uthros should emit one ETB ability")
+                };
+                assert_eq!(
+                    ability.presentation,
+                    AbilityPresentation::OracleLines(vec![1])
+                );
+                assert_eq!(
+                    ability.effect,
+                    [SpellEffectKind::DrawDiscard {
+                        who: PlayerRecipient::Controller,
+                        draw_count: 2,
+                        discard_count: 1,
+                        order: DrawDiscardOrder::DrawThenDiscard,
+                        optional: false,
+                    }]
+                );
+            } else {
+                assert_eq!(raw.activated_abilities.len(), 2);
+                let pump = &raw.activated_abilities[1];
+                assert_eq!(pump.presentation, AbilityPresentation::OracleLines(vec![4]));
+                assert_eq!(
+                    pump.costs,
+                    [AbilityCost::Mana(ManaCost::parse("{1}{R}").unwrap())]
+                );
+                assert_eq!(
+                    pump.effect,
+                    [SpellEffectKind::PumpTarget {
+                        power: 2,
+                        toughness: 0,
+                        scale: None,
+                        subject: EffectSubject::Source,
+                    }]
+                );
+                let [ability] = raw.triggered_abilities.as_slice() else {
+                    panic!("Debris should emit one ETB ability")
+                };
+                assert_eq!(
+                    ability.presentation,
+                    AbilityPresentation::OracleLines(vec![1])
+                );
+                assert_eq!(
+                    ability.effect,
+                    [SpellEffectKind::DamageTarget {
+                        amount: Amount::Fixed(3),
+                        target: TargetFilter {
+                            kind: TargetKind::AnyTarget,
+                            ..TargetFilter::default()
+                        },
+                    }]
+                );
+                let [group] = ability.targeting.as_ref().unwrap().groups.as_slice() else {
+                    panic!("Debris damage should have one target group")
+                };
+                assert_eq!(
+                    (group.min, group.max, group.prompt.as_str()),
+                    (1, 1, "Choose any target")
+                );
+            }
+        }
+
+        let exact_uthros_text = "When this Spacecraft enters, draw two cards, then discard a card.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying";
+        for (oracle_id, name, type_line, text, power_toughness) in [
+            (
+                "00000000-0000-0000-0000-000000000000",
+                "Unreviewed Uthros",
+                "Artifact — Spacecraft",
+                exact_uthros_text,
+                Some(("4", "4")),
+            ),
+            (
+                "7b4c37dc-8cb0-4870-929e-11c2a45952a2",
+                "Uthros Scanship",
+                "Artifact",
+                exact_uthros_text,
+                Some(("4", "4")),
+            ),
+            (
+                "7b4c37dc-8cb0-4870-929e-11c2a45952a2",
+                "Uthros Scanship",
+                "Artifact — Spacecraft",
+                exact_uthros_text,
+                Some(("4", "5")),
+            ),
+            (
+                "7b4c37dc-8cb0-4870-929e-11c2a45952a2",
+                "Uthros Scanship",
+                "Artifact — Spacecraft",
+                "When this Spacecraft enters, draw two cards, then discard two cards.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+                Some(("4", "4")),
+            ),
+        ] {
+            assert!(
+                evaluate_fresh(&normal_card_with_oracle_id(
+                    oracle_id,
+                    name,
+                    "{3}{U}",
+                    type_line,
+                    text,
+                    power_toughness,
+                ))
+                .is_err(),
+                "Station cohort near-miss must fail closed: {name}"
+            );
+        }
+
+        let station_header = "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)";
+        let assert_uthros_rejected = |label: &str, oracle_text: String| {
+            let card = normal_card_with_oracle_id(
+                "7b4c37dc-8cb0-4870-929e-11c2a45952a2",
+                "Uthros Scanship",
+                "{3}{U}",
+                "Artifact — Spacecraft",
+                &oracle_text,
+                Some(("4", "4")),
+            );
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "issue #309 whole-card near-miss must fail closed: {label}"
+            );
+        };
+        for (label, altered_header) in [
+            (
+                "opponent-controlled payment",
+                "Station (Tap another creature an opponent controls: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)",
+            ),
+            (
+                "unrestricted creature payment",
+                "Station (Tap another creature: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)",
+            ),
+            (
+                "missing sorcery restriction",
+                "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. It's an artifact creature at 8+.)",
+            ),
+            (
+                "added mana cost",
+                "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. Add a mana cost. It's an artifact creature at 8+.)",
+            ),
+            (
+                "different counter kind",
+                "Station (Tap another creature you control: Put +1/+1 counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)",
+            ),
+            (
+                "different activation result",
+                "Station (Tap another creature you control: Put charge counters equal to its power on that creature. Station only as a sorcery. It's an artifact creature at 8+.)",
+            ),
+            (
+                "different unlocked card type",
+                "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact Vehicle at 8+.)",
+            ),
+            ("exact equals threshold", station_header),
+        ] {
+            let threshold = match label {
+                "exact equals threshold" => "8 | Flying",
+                _ => "8+ | Flying",
+            };
+            assert_uthros_rejected(label, format!("{altered_header}\n{threshold}"));
+        }
+        assert_uthros_rejected(
+            "upper-bound threshold",
+            format!("{station_header}\n8-10 | Flying"),
+        );
+        assert_uthros_rejected(
+            "inability-above-eight threshold",
+            format!(
+                "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8 or more.)\n8+ | Flying"
+            ),
+        );
+        let wrong_pt = normal_card_with_oracle_id(
+            "7b4c37dc-8cb0-4870-929e-11c2a45952a2",
+            "Uthros Scanship",
+            "{3}{U}",
+            "Artifact — Spacecraft",
+            &format!(
+                "When this Spacecraft enters, draw two cards, then discard a card.\n{station_header}\n8+ | Flying"
+            ),
+            Some(("4", "5")),
+        );
+        assert!(
+            evaluate_fresh(&wrong_pt).is_err(),
+            "a different printed P/T source must fail closed"
+        );
+        assert_uthros_rejected(
+            "duplicate Station header",
+            format!("{station_header}\n8+ | Flying\n{station_header}\n8+ | Flying"),
+        );
+        assert_uthros_rejected(
+            "discard then draw ordering",
+            format!(
+                "When this Spacecraft enters, discard a card, then draw two cards.\n{station_header}\n8+ | Flying"
+            ),
+        );
+        assert_uthros_rejected(
+            "different affected player",
+            format!(
+                "When this Spacecraft enters, an opponent draws two cards, then discards a card.\n{station_header}\n8+ | Flying"
+            ),
+        );
+    }
+
+    #[test]
+    fn issue_309_reviewed_identity_rejects_multiface_station_text() {
+        let station = "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying";
+        for layout in ["transform", "modal_dfc"] {
+            let front = face(
+                "Uthros Scanship",
+                "{3}{U}",
+                "Artifact — Spacecraft",
+                station,
+                Some(("4", "4")),
+                &["U"],
+                None,
+            );
+            let back = face("Uthros Scanship Back", "", "Artifact", "", None, &[], None);
+            let mut card = multiface(
+                layout,
+                "Uthros Scanship // Uthros Scanship Back",
+                vec![front, back],
+            );
+            card["oracle_id"] = json!("7b4c37dc-8cb0-4870-929e-11c2a45952a2");
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "reviewed #309 identity must remain normal-layout-only: {layout}"
+            );
+        }
     }
 
     #[test]

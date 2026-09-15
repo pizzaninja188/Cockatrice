@@ -529,6 +529,9 @@ deathcap_glade	0	ability:0	exercised
 deathcap_glade	0	land	exercised
 deathcap_marionette	0	cast	exercised
 deathgaze_cockatrice	0	cast	exercised
+debris_field_crusher	0	ability:0	exercised
+debris_field_crusher	0	ability:1	exercised
+debris_field_crusher	0	cast	exercised
 decode_transmissions	0	cast	exercised
 deep_goblin_skulltaker	0	cast	exercised
 deer-dog	0	cast	exercised
@@ -2326,6 +2329,8 @@ unscrupulous_agent	0	cast	exercised
 unsummon	0	cast	exercised
 untamed_hunger	0	cast	exercised
 updraft_elemental	0	cast	exercised
+uthros_scanship	0	ability:0	exercised
+uthros_scanship	0	cast	exercised
 valiant_guard	0	cast	exercised
 valkyrie_aerial_unit	0	cast	exercised
 valkyrior_skyrider	0	cast	exercised

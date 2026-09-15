@@ -2199,10 +2199,14 @@ impl GameEngine {
         };
         let mut b = res?;
         self.drain_immediate_observer_actions(None, &mut b.events)?;
+        if self.state.pending_resolution.is_none() {
+            self.commit_pending_library_losses();
+        }
         self.sweep_life();
-        // SBAs are not checked while a tier-3 resolution is parked mid-resolution (CR 608/704);
-        // they run when it completes. Zone view + legal actions still refresh so the deciding
-        // player's client sees the drawn/revealed cards and the choice prompt.
+        // CR 704.4: SBAs are not checked while a tier-3 resolution is parked mid-resolution; they
+        // run when it completes, including the CR 121.4/704.5b library-loss action. Zone view +
+        // legal actions still refresh so the deciding player's client sees the drawn/revealed
+        // cards and the choice prompt.
         if self.state.pending_resolution.is_none() && self.state.pending_spell_cast.is_none() {
             let mut d = vec![];
             self.apply_sbas(&mut d)?;

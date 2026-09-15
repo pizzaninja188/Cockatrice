@@ -156,12 +156,14 @@ impl<'a> ResolutionCtx<'a> {
         self.library_searches.push((searcher, library_owner));
     }
 
-    /// Draw `n` cards for `player` (CR 120). Returns the drawn object ids (fewer than `n` if the
-    /// library empties). CR 120.3 / 104.3c: *attempting* to draw from an empty library makes the
-    /// player lose as a state-based action — so if the library runs out before `n` cards are drawn,
-    /// we flag the player `has_lost` (the engine's post-command `sweep_life` then names the winner),
-    /// exactly as the primitive `Draw` effect does. Silently stopping would let a player Brainstorm
-    /// into an empty library without decking out.
+    /// Draw `n` cards for `player` (CR 121). Returns the drawn object ids (fewer than `n` if the
+    /// library empties). CR 121.4/704.5b: attempting to draw more cards than remain makes the
+    /// player lose the next time state-based actions are checked. CR 704.4 means that, if the
+    /// library runs out during a resolution, record the pending loss and let the enclosing
+    /// resolution finish before the engine applies that state-based action. Silently stopping
+    /// would let a player Brainstorm into an empty library without decking out, while applying
+    /// `has_lost` immediately would incorrectly interrupt a mandatory trailing instruction in the
+    /// same resolution.
     pub fn draw(&mut self, player: PlayerId, n: u32) -> Vec<ObjectId> {
         let Some(idx) = self.state.player_idx(player) else {
             return Vec::new();
@@ -181,9 +183,9 @@ impl<'a> ResolutionCtx<'a> {
             self.drawn_players.push(player);
         }
         if decked_out {
-            self.state.players[idx].has_lost = true;
+            self.state.players[idx].pending_library_loss = true;
             self.log(format!(
-                "P{player} tried to draw from an empty library and loses (CR 104.3c)."
+                "P{player} attempted to draw more cards than remained in the library; loss pending until the next state-based-action check (CR 121.4/704.5b; CR 704.4)."
             ));
         }
         drawn
