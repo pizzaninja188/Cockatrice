@@ -2375,8 +2375,8 @@ mod tests {
         CardTypeFilter, EffectSubject, EntersTappedAffected, EntryCost, GameCondition,
         ObjectContributionKind, ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient,
         ResolutionCost, SpellCastFilter, SpellManaSpentComparison, StackSpellFilter,
-        StaticAbilityDef, TargetController, TargetFilter, TargetKind, TargetingSourceFilter,
-        TypeLineAddition,
+        StaticAbilityDef, TargetController, TargetFilter, TargetKind, TargetObjectExclusion,
+        TargetingSourceFilter, TypeLineAddition,
     };
     use tricerules_cards::{
         AbilityCost, AbilityPresentation, Amount, CastTriggerPlayer, CharacteristicDefiningAbility,
@@ -4210,6 +4210,172 @@ mod tests {
             evaluate_fresh(&noncreature),
             Err(Skip::NonKeywordText.into()),
             "the exact ETB search must require a creature source"
+        );
+    }
+
+    #[test]
+    fn issue_285_exact_attack_pump_and_indestructible_cards_preserve_reminder_and_fail_closed() {
+        let clause = "Whenever this creature attacks, another target creature you control gets +1/+0 and gains indestructible until end of turn.";
+        for (name, mana_cost, type_line) in [
+            ("Hardened Escort", "{2}{W}", "Creature — Human Soldier"),
+            ("Foot Elite", "{2}{W/B}", "Creature — Human Ninja"),
+        ] {
+            let card = normal_card(
+                name,
+                mana_cost,
+                type_line,
+                &format!("{clause} (Damage and effects that say \"destroy\" don't destroy it.)"),
+                Some(("2", "4")),
+            );
+            let generated = evaluate_fresh(&card)
+                .unwrap_or_else(|error| panic!("{name} exact ability should qualify: {error:?}"));
+            assert_eq!(
+                generated.faces[0].recipe_labels,
+                ["self-attacks pump another creature you control and grant indestructible"]
+            );
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            let [ability] = raw.triggered_abilities.as_slice() else {
+                panic!("{name} should emit one triggered ability");
+            };
+            assert_eq!(
+                ability.trigger,
+                TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                }
+            );
+            assert!(!ability.may);
+            let target = TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                excluded_objects: vec![TargetObjectExclusion::Source],
+                ..TargetFilter::default()
+            };
+            assert_eq!(
+                ability.effect,
+                [
+                    SpellEffectKind::PumpTarget {
+                        power: 1,
+                        toughness: 0,
+                        scale: None,
+                        subject: EffectSubject::Chosen(Box::new(target.clone())),
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: EffectSubject::Chosen(Box::new(target)),
+                        keywords: vec![Keyword::Indestructible],
+                    },
+                ]
+            );
+            let targeting = ability.targeting.as_ref().expect("target group");
+            assert_eq!(targeting.groups.len(), 1);
+            assert_eq!((targeting.groups[0].min, targeting.groups[0].max), (1, 1));
+            assert_eq!(
+                targeting.groups[0].prompt,
+                "Choose another target creature you control"
+            );
+            assert_eq!(targeting.groups[0].effect_indices, [0, 1]);
+        }
+
+        let changed_reminder = normal_card(
+            "Issue 285 Changed Reminder",
+            "{2}{W}",
+            "Creature — Human Soldier",
+            &format!("{clause} (This reminder text is presentation-only.)"),
+            Some(("2", "4")),
+        );
+        evaluate_fresh(&changed_reminder)
+            .expect("changing reminder text without changing its boundary must remain supported");
+
+        for (name, oracle_text) in [
+            (
+                "Issue 285 ETB",
+                "When this creature enters, another target creature you control gets +1/+0 and gains indestructible until end of turn.",
+            ),
+            (
+                "Issue 285 Block",
+                "Whenever this creature blocks, another target creature you control gets +1/+0 and gains indestructible until end of turn.",
+            ),
+            (
+                "Issue 285 Combat Start",
+                "At the beginning of combat, another target creature you control gets +1/+0 and gains indestructible until end of turn.",
+            ),
+            (
+                "Issue 285 Self Target",
+                "Whenever this creature attacks, this creature gets +1/+0 and gains indestructible until end of turn.",
+            ),
+            (
+                "Issue 285 Unrestricted Target",
+                "Whenever this creature attacks, another target creature gets +1/+0 and gains indestructible until end of turn.",
+            ),
+            (
+                "Issue 285 Opponent Target",
+                "Whenever this creature attacks, another target creature an opponent controls gets +1/+0 and gains indestructible until end of turn.",
+            ),
+            (
+                "Issue 285 Optional",
+                "Whenever this creature attacks, you may have another target creature you control get +1/+0 and gain indestructible until end of turn.",
+            ),
+            (
+                "Issue 285 Different Power",
+                "Whenever this creature attacks, another target creature you control gets +2/+0 and gains indestructible until end of turn.",
+            ),
+            (
+                "Issue 285 Different Toughness",
+                "Whenever this creature attacks, another target creature you control gets +1/+1 and gains indestructible until end of turn.",
+            ),
+            (
+                "Issue 285 Vigilance",
+                "Whenever this creature attacks, another target creature you control gets +1/+0 and gains vigilance until end of turn.",
+            ),
+            (
+                "Issue 285 Hexproof",
+                "Whenever this creature attacks, another target creature you control gets +1/+0 and gains hexproof until end of turn.",
+            ),
+            (
+                "Issue 285 Counter",
+                "Whenever this creature attacks, put a +1/+1 counter on another target creature you control and it gains indestructible until end of turn.",
+            ),
+            (
+                "Issue 285 Multiple Targets",
+                "Whenever this creature attacks, up to two target creatures you control each get +1/+0 and gain indestructible until end of turn.",
+            ),
+            (
+                "Issue 285 Same-Line Tail",
+                "Whenever this creature attacks, another target creature you control gets +1/+0 and gains indestructible until end of turn. Then draw a card.",
+            ),
+            (
+                "Issue 285 Multiline Tail",
+                "Whenever this creature attacks, another target creature you control gets +1/+0 and gains indestructible until end of turn.\nWhenever this creature attacks, it phases out.",
+            ),
+            (
+                "Issue 285 Changed Reminder Boundary",
+                "Whenever this creature attacks, another target creature you control gets +1/+0 and gains indestructible until end of turn (Damage and effects that say \"destroy\" don't destroy it.)",
+            ),
+        ] {
+            let card = normal_card(
+                name,
+                "{2}{W}",
+                "Creature — Human Soldier",
+                oracle_text,
+                Some(("2", "4")),
+            );
+            assert_eq!(
+                evaluate_fresh(&card),
+                Err(Skip::NonKeywordText.into()),
+                "{name} must fail closed"
+            );
+        }
+
+        let noncreature = normal_card(
+            "Issue 285 Noncreature Source",
+            "{2}{W}",
+            "Artifact",
+            clause,
+            None,
+        );
+        assert_eq!(
+            evaluate_fresh(&noncreature),
+            Err(Skip::NonKeywordText.into()),
+            "the exact attack trigger must require a creature source"
         );
     }
 

@@ -2515,6 +2515,50 @@ fn match_self_attacks_surveil_one(text: &str, context: &RecipeContext) -> Option
     )
 }
 
+fn match_self_attacks_pump_other_controlled_creature_indestructible(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == "Whenever this creature attacks, another target creature you control gets +1/+0 and gains indestructible until end of turn.")
+        .then(|| {
+            let target = TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                excluded_objects: vec![TargetObjectExclusion::Source],
+                ..TargetFilter::default()
+            };
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+                context,
+                TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                },
+                vec![
+                    SpellEffectKind::PumpTarget {
+                        power: 1,
+                        toughness: 0,
+                        scale: None,
+                        subject: EffectSubject::Chosen(Box::new(target.clone())),
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: EffectSubject::Chosen(Box::new(target)),
+                        keywords: vec![Keyword::Indestructible],
+                    },
+                ],
+            ) else {
+                unreachable!("triggered_ability_with always returns a triggered ability")
+            };
+            ability.targeting = Some(exact_targeting(
+                1,
+                1,
+                "Choose another target creature you control",
+                vec![0, 1],
+            ));
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
 fn match_etb_create_map(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     match_creature_trigger_create_token(
         text,
@@ -5602,6 +5646,34 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId(
+            "triggered.self_attacks.pump_other_creature_you_control.plus_one_indestructible",
+        ),
+        label: "self-attacks pump another creature you control and grant indestructible",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_attacks_pump_other_controlled_creature_indestructible,
+        calibration: calibrations!(
+            "Hardened Escort" => "Whenever this creature attacks, another target creature you control gets +1/+0 and gains indestructible until end of turn.",
+            "Foot Elite" => "Whenever this creature attacks, another target creature you control gets +1/+0 and gains indestructible until end of turn.";
+            "When this creature enters, another target creature you control gets +1/+0 and gains indestructible until end of turn.",
+            "Whenever this creature blocks, another target creature you control gets +1/+0 and gains indestructible until end of turn.",
+            "At the beginning of combat, another target creature you control gets +1/+0 and gains indestructible until end of turn.",
+            "Whenever this creature attacks, this creature gets +1/+0 and gains indestructible until end of turn.",
+            "Whenever this creature attacks, another target creature gets +1/+0 and gains indestructible until end of turn.",
+            "Whenever this creature attacks, another target creature an opponent controls gets +1/+0 and gains indestructible until end of turn.",
+            "Whenever this creature attacks, you may have another target creature you control get +1/+0 and gain indestructible until end of turn.",
+            "Whenever this creature attacks, another target creature you control gets +2/+0 and gains indestructible until end of turn.",
+            "Whenever this creature attacks, another target creature you control gets +1/+1 and gains indestructible until end of turn.",
+            "Whenever this creature attacks, another target creature you control gets +1/+0 and gains vigilance until end of turn.",
+            "Whenever this creature attacks, another target creature you control gets +1/+0 and gains hexproof until end of turn.",
+            "Whenever this creature attacks, put a +1/+1 counter on another target creature you control and it gains indestructible until end of turn.",
+            "Whenever this creature attacks, another target creature you control gets +1/+0 and gains indestructible until end of turn. Draw a card.",
+            "Whenever this creature attacks, up to two target creatures you control each get +1/+0 and gain indestructible until end of turn.",
+            "Whenever this creature attacks, another target creature you control gets +1/+0 and gains indestructible until end of turn.\nReach",
+            "Whenever this creature attacks, another target creature you control gets +1/+0 and gains indestructible until end of turn, then draw a card."
+        ),
+    },
+    Recipe {
         id: RecipeId("etb.create_token.map.one"),
         label: "ETB create Map",
         surface: RecipeSurface::EtbAbility,
@@ -7339,6 +7411,106 @@ mod tests {
         assert!(
             match_clause(clause, false, &noncreature).unwrap().is_none(),
             "the creature-source recipe must reject noncreature sources"
+        );
+    }
+
+    #[test]
+    fn issue_285_self_attacks_pump_and_indestructible_is_exact_and_typed() {
+        let clause = "Whenever this creature attacks, another target creature you control gets +1/+0 and gains indestructible until end of turn.";
+        let matched = match_clause(clause, false, &context())
+            .expect("issue #285 recipe matching should not be ambiguous")
+            .expect("issue #285 attack pump should match");
+        assert_eq!(
+            matched.id.as_str(),
+            "triggered.self_attacks.pump_other_creature_you_control.plus_one_indestructible"
+        );
+        let recipe = CATALOG
+            .iter()
+            .find(|recipe| recipe.id == matched.id)
+            .expect("issue #285 recipe should remain registered");
+        assert_eq!(recipe.surface, RecipeSurface::TriggeredAbility);
+
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("issue #285 must emit a triggered ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "triggered_01");
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0,
+            }
+        );
+        assert!(!ability.may);
+        assert!(ability.modal.is_none());
+        assert!(ability.intervening_if.is_none());
+        let target = TargetFilter {
+            kind: TargetKind::Creature,
+            controller: TargetController::You,
+            excluded_objects: vec![TargetObjectExclusion::Source],
+            ..TargetFilter::default()
+        };
+        assert_eq!(
+            ability.effect,
+            [
+                SpellEffectKind::PumpTarget {
+                    power: 1,
+                    toughness: 0,
+                    scale: None,
+                    subject: EffectSubject::Chosen(Box::new(target.clone())),
+                },
+                SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::Chosen(Box::new(target.clone())),
+                    keywords: vec![Keyword::Indestructible],
+                },
+            ]
+        );
+        let targeting = ability
+            .targeting
+            .as_ref()
+            .expect("issue #285 requires explicit target group");
+        assert_eq!(targeting.groups.len(), 1);
+        let group = &targeting.groups[0];
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.prompt, "Choose another target creature you control");
+        assert_eq!(group.effect_indices, [0, 1]);
+
+        for near_miss in [
+            "When this creature enters, another target creature you control gets +1/+0 and gains indestructible until end of turn.",
+            "Whenever this creature blocks, another target creature you control gets +1/+0 and gains indestructible until end of turn.",
+            "At the beginning of combat, another target creature you control gets +1/+0 and gains indestructible until end of turn.",
+            "Whenever this creature attacks, this creature gets +1/+0 and gains indestructible until end of turn.",
+            "Whenever this creature attacks, another target creature gets +1/+0 and gains indestructible until end of turn.",
+            "Whenever this creature attacks, another target creature an opponent controls gets +1/+0 and gains indestructible until end of turn.",
+            "Whenever this creature attacks, you may have another target creature you control get +1/+0 and gain indestructible until end of turn.",
+            "Whenever this creature attacks, another target creature you control gets +2/+0 and gains indestructible until end of turn.",
+            "Whenever this creature attacks, another target creature you control gets +1/+1 and gains indestructible until end of turn.",
+            "Whenever this creature attacks, another target creature you control gets +1/+0 and gains vigilance until end of turn.",
+            "Whenever this creature attacks, another target creature you control gets +1/+0 and gains hexproof until end of turn.",
+            "Whenever this creature attacks, put a +1/+1 counter on another target creature you control and it gains indestructible until end of turn.",
+            "Whenever this creature attacks, another target creature you control gets +1/+0 and gains indestructible until end of turn. Draw a card.",
+            "Whenever this creature attacks, up to two target creatures you control each get +1/+0 and gain indestructible until end of turn.",
+            "Whenever this creature attacks, another target creature you control gets +1/+0 and gains indestructible until end of turn.\nReach",
+            "Whenever this creature attacks, another target creature you control gets +1/+0 and gains indestructible until end of turn, then draw a card.",
+        ] {
+            assert!(
+                match_clause(near_miss, false, &context()).unwrap().is_none(),
+                "near-miss unexpectedly matched: {near_miss}"
+            );
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(clause, false, &noncreature).unwrap().is_none(),
+            "the creature-source recipe must reject noncreature sources"
+        );
+        assert!(
+            match_clause(clause, true, &context()).unwrap().is_none(),
+            "the triggered recipe must reject spell clauses"
         );
     }
 
