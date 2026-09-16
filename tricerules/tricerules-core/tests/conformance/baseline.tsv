@@ -682,6 +682,8 @@ expedition_envoy	0	cast	exercised
 exploration	0	cast	exercised
 explosive_apparatus	0	ability:0	exercised
 explosive_apparatus	0	cast	exercised
+extinguisher_battleship	0	ability:0	exercised
+extinguisher_battleship	0	cast	exercised
 exultant_skymarcher	0	cast	exercised
 eyeblights_ending	0	cast	exercised
 fabled_passage	0	ability:0	exercised
@@ -708,6 +710,8 @@ feiyi_snake	0	cast	exercised
 felhide_minotaur	0	cast	exercised
 felidar_savior	0	cast	exercised
 fell	0	cast	exercised
+fell_gravship	0	ability:0	exercised
+fell_gravship	0	cast	exercised
 femeref_scouts	0	cast	exercised
 fencing_ace	0	cast	exercised
 feral_abomination	0	cast	exercised

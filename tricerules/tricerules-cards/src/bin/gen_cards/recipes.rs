@@ -2954,6 +2954,287 @@ pub(super) fn issue_311_card_surface_is_exact(
     (name, mana_cost, type_line, power, toughness, oracle_text) == expected
 }
 
+const ISSUE_313_EXTINGUISHER_ORACLE_ID: &str = "cce3dcc3-57bb-4b95-8b70-337c67bb3c4e";
+const ISSUE_313_FELL_ORACLE_ID: &str = "1a82be68-3b74-4dfc-9068-3abea61db709";
+const ISSUE_313_REVIEWED_ORACLE_IDS: &[&str] =
+    &[ISSUE_313_EXTINGUISHER_ORACLE_ID, ISSUE_313_FELL_ORACLE_ID];
+const ISSUE_313_EXTINGUISHER_STATION_HEADER: &str = r#"Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)"#;
+const ISSUE_313_EXTINGUISHER_THRESHOLD_LINE: &str = "5+ | Flying, trample";
+const ISSUE_313_FELL_STATION_HEADER: &str = r#"Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)"#;
+const ISSUE_313_FELL_THRESHOLD_LINE: &str = "8+ | Flying, lifelink";
+const ISSUE_313_EXTINGUISHER_ETB_TEXT: &str =
+    "When this Spacecraft enters, destroy target noncreature permanent. Then this Spacecraft deals 4 damage to each creature.";
+const ISSUE_313_FELL_ETB_TEXT: &str =
+    "When this Spacecraft enters, mill three cards, then return a creature or Spacecraft card from your graveyard to your hand.";
+
+#[derive(Debug, Clone, Copy)]
+struct Issue313StationVariant {
+    threshold: u32,
+    base_power: i64,
+    base_toughness: i64,
+    keywords: &'static [Keyword],
+    station_header: &'static str,
+    threshold_line: &'static str,
+}
+
+const ISSUE_313_EXTINGUISHER_KEYWORDS: &[Keyword] = &[Keyword::Flying, Keyword::Trample];
+const ISSUE_313_FELL_KEYWORDS: &[Keyword] = &[Keyword::Flying, Keyword::Lifelink];
+
+fn issue_313_context_is_reviewed(context: &RecipeContext) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        .is_none_or(|oracle_id| ISSUE_313_REVIEWED_ORACLE_IDS.contains(&oracle_id))
+}
+
+pub(super) fn issue_313_oracle_id_is_reviewed(oracle_id: &str) -> bool {
+    ISSUE_313_REVIEWED_ORACLE_IDS.contains(&oracle_id)
+}
+
+fn issue_313_variant(context: &RecipeContext) -> Option<Issue313StationVariant> {
+    match context.oracle_id.as_deref() {
+        Some(ISSUE_313_EXTINGUISHER_ORACLE_ID) => Some(Issue313StationVariant {
+            threshold: 5,
+            base_power: 10,
+            base_toughness: 10,
+            keywords: ISSUE_313_EXTINGUISHER_KEYWORDS,
+            station_header: ISSUE_313_EXTINGUISHER_STATION_HEADER,
+            threshold_line: ISSUE_313_EXTINGUISHER_THRESHOLD_LINE,
+        }),
+        Some(ISSUE_313_FELL_ORACLE_ID) => Some(Issue313StationVariant {
+            threshold: 8,
+            base_power: 3,
+            base_toughness: 2,
+            keywords: ISSUE_313_FELL_KEYWORDS,
+            station_header: ISSUE_313_FELL_STATION_HEADER,
+            threshold_line: ISSUE_313_FELL_THRESHOLD_LINE,
+        }),
+        Some(_) => None,
+        None => match context.source_name.as_str() {
+            "Extinguisher Battleship" => Some(Issue313StationVariant {
+                threshold: 5,
+                base_power: 10,
+                base_toughness: 10,
+                keywords: ISSUE_313_EXTINGUISHER_KEYWORDS,
+                station_header: ISSUE_313_EXTINGUISHER_STATION_HEADER,
+                threshold_line: ISSUE_313_EXTINGUISHER_THRESHOLD_LINE,
+            }),
+            "Fell Gravship" => Some(Issue313StationVariant {
+                threshold: 8,
+                base_power: 3,
+                base_toughness: 2,
+                keywords: ISSUE_313_FELL_KEYWORDS,
+                station_header: ISSUE_313_FELL_STATION_HEADER,
+                threshold_line: ISSUE_313_FELL_THRESHOLD_LINE,
+            }),
+            _ => None,
+        },
+    }
+}
+
+pub(super) fn issue_313_card_surface_is_exact(
+    oracle_id: &str,
+    name: &str,
+    mana_cost: &str,
+    type_line: &str,
+    oracle_text: &str,
+    power: Option<&str>,
+    toughness: Option<&str>,
+) -> bool {
+    let expected = match oracle_id {
+        ISSUE_313_EXTINGUISHER_ORACLE_ID => (
+            "Extinguisher Battleship",
+            "{8}",
+            "Artifact — Spacecraft",
+            Some("10"),
+            Some("10"),
+            "When this Spacecraft enters, destroy target noncreature permanent. Then this Spacecraft deals 4 damage to each creature.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying, trample",
+        ),
+        ISSUE_313_FELL_ORACLE_ID => (
+            "Fell Gravship",
+            "{2}{B}",
+            "Artifact — Spacecraft",
+            Some("3"),
+            Some("2"),
+            "When this Spacecraft enters, mill three cards, then return a creature or Spacecraft card from your graveyard to your hand.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying, lifelink",
+        ),
+        _ => return true,
+    };
+    (name, mana_cost, type_line, power, toughness, oracle_text) == expected
+}
+
+fn issue_313_spacecraft_context(context: &RecipeContext) -> bool {
+    context.source_is_artifact
+        && context.source_is_permanent
+        && context.source_is_spacecraft_or_planet
+        && issue_313_context_is_reviewed(context)
+}
+
+fn issue_313_station_assembly(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    if !issue_313_spacecraft_context(context) {
+        return None;
+    }
+    let variant = issue_313_variant(context)?;
+    let lines = external_oracle_lines(text);
+    if lines.len() != 2 || lines[0] != variant.station_header || lines[1] != variant.threshold_line
+    {
+        return None;
+    }
+    let station_line = match &context.presentation {
+        AbilityPresentation::OracleLines(lines) if lines.len() == 1 && lines[0] > 0 => lines[0],
+        _ => return None,
+    };
+    let threshold_line = station_line.checked_add(1)?;
+    Some(RecipeEmission::StationAssembly(StationAssemblyEmission {
+        activated_ability: ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![AbilityCost::TapPermanents {
+                constraint: ObjectPaymentConstraint::ExactCount(1),
+                filter: TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    ..TargetFilter::default()
+                },
+                exclude_source: true,
+            }],
+            cost_modifiers: Vec::new(),
+            effect: vec![SpellEffectKind::PutCounters {
+                counter: CounterKind::Charge,
+                count: Amount::Count(CountExpression::CardResultCharacteristicSum {
+                    filter: CardResultFilter {
+                        source: CardResultSource::Payment,
+                        action: CardResultAction::Tap,
+                        players: RelativePlayerSet::Controller,
+                        card_type: Some(CardTypeFilter::Creature),
+                    },
+                    characteristic: PowerToughnessCharacteristic::Power,
+                }),
+                subject: EffectSubject::Source,
+            }],
+            targeting: None,
+            timing: ActivationTiming::SorcerySpeed,
+            conditions: Vec::new(),
+            activation_limit: None,
+        },
+        static_ability: IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: AbilityPresentation::OracleLines(vec![threshold_line]),
+            definition: StaticAbilityDef::ConditionalSelfModifier {
+                condition: GameCondition::SourceCounterCount {
+                    counter: CounterKind::Charge,
+                    min: Some(variant.threshold),
+                    max: None,
+                },
+                set_types: None,
+                add_types: TypeLineAddition {
+                    card_types: vec![PermanentTypeFilter::Creature],
+                    creature_types: Vec::new(),
+                },
+                base_power: Some(variant.base_power),
+                base_toughness: Some(variant.base_toughness),
+                delta_power: 0,
+                delta_toughness: 0,
+                keywords: variant.keywords.to_vec(),
+                activated_abilities: Vec::new(),
+                triggered_abilities: Vec::new(),
+                can_attack_as_though_without_defender: false,
+            },
+        },
+    }))
+}
+
+fn issue_313_is_extinguisher(context: &RecipeContext) -> bool {
+    match context.oracle_id.as_deref() {
+        Some(ISSUE_313_EXTINGUISHER_ORACLE_ID) => true,
+        Some(_) => false,
+        None => context.source_name == "Extinguisher Battleship",
+    }
+}
+
+fn issue_313_is_fell(context: &RecipeContext) -> bool {
+    match context.oracle_id.as_deref() {
+        Some(ISSUE_313_FELL_ORACLE_ID) => true,
+        Some(_) => false,
+        None => context.source_name == "Fell Gravship",
+    }
+}
+
+fn match_extinguisher_etb_destroy_then_damage(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_313_spacecraft_context(context)
+        && issue_313_is_extinguisher(context)
+        && text == ISSUE_313_EXTINGUISHER_ETB_TEXT)
+        .then(|| {
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfEntersBattlefield,
+                vec![
+                    SpellEffectKind::Destroy {
+                        subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                            kind: TargetKind::AnyPermanent,
+                            excluded_permanent_types: vec![PermanentTypeFilter::Creature],
+                            ..TargetFilter::default()
+                        })),
+                    },
+                    SpellEffectKind::DamageAll {
+                        amount: Amount::Fixed(4),
+                        players: RelativePlayerSet::All,
+                        kind: TargetFilter::default_creature(),
+                    },
+                ],
+            ) else {
+                unreachable!("triggered_ability_with always returns a triggered ability")
+            };
+            ability.targeting = Some(exact_targeting(
+                1,
+                1,
+                "Choose target noncreature permanent",
+                vec![0],
+            ));
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
+fn match_fell_etb_mill_then_return(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (issue_313_spacecraft_context(context)
+        && issue_313_is_fell(context)
+        && text == ISSUE_313_FELL_ETB_TEXT)
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfEntersBattlefield,
+                vec![
+                    SpellEffectKind::Mill {
+                        count: Amount::Fixed(3),
+                        who: PlayerRecipient::Controller,
+                    },
+                    SpellEffectKind::ChooseGraveyardCard {
+                        filter: ZoneCardFilter {
+                            any_of: Some(vec![
+                                ZoneCardFilter {
+                                    card_type: Some(CardTypeFilter::Creature),
+                                    ..ZoneCardFilter::default()
+                                },
+                                ZoneCardFilter {
+                                    required_subtypes: vec!["Spacecraft".into()],
+                                    ..ZoneCardFilter::default()
+                                },
+                            ]),
+                            ..ZoneCardFilter::default()
+                        },
+                        destination: GraveyardDestination::Hand,
+                        optional: false,
+                        from_result: None,
+                    },
+                ],
+            )
+        })
+}
+
 pub(super) fn match_station_6_7_flying_assembly(
     text: &str,
     context: &RecipeContext,
@@ -8317,6 +8598,94 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("station.spacecraft.threshold_5_or_8_keywords"),
+        label: "Station 5+/8+ keyword Spacecraft",
+        surface: RecipeSurface::StationAssembly,
+        matcher: issue_313_station_assembly,
+        calibration: calibrations!(
+            "Extinguisher Battleship" => "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying, trample",
+            "Fell Gravship" => "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying, lifelink";
+            "Station",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)",
+            "5+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 4+.)\n4+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 6+.)\n6+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, lifelink",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5.)\n5 | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5-8.)\n5-8 | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as an instant. It's an artifact creature at 5+.)\n5+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Trample, flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its toughness on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying, vigilance",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying, trample\n5+ | Flying, trample",
+            "5+ | Flying, trample\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)",
+            "Station (Tap another creature an opponent controls: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying, trample",
+            "Station (Tap another creature you control: Put +1/+1 counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its toughness on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying, trample",
+            "Station (Tap this artifact: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on that creature. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact Vehicle at 5+.)\n5+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n5+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying, trample\nDraw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.spacecraft.extinguisher.destroy_noncreature_then_damage_all_creatures"),
+        label: "Extinguisher Battleship ETB destroy noncreature then damage all creatures",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_extinguisher_etb_destroy_then_damage,
+        calibration: singleton_calibrations!(
+            "Extinguisher Battleship" => "When this Spacecraft enters, destroy target noncreature permanent. Then this Spacecraft deals 4 damage to each creature.";
+            "When this Spacecraft enters, destroy target creature. Then this Spacecraft deals 4 damage to each creature.",
+            "When this Spacecraft enters, destroy target artifact. Then this Spacecraft deals 4 damage to each creature.",
+            "When this Spacecraft enters, destroy target land. Then this Spacecraft deals 4 damage to each creature.",
+            "When this Spacecraft enters, destroy target permanent. Then this Spacecraft deals 4 damage to each creature.",
+            "When this Spacecraft enters, destroy target noncreature permanent. Then this Spacecraft deals 3 damage to each creature.",
+            "When this Spacecraft enters, destroy target noncreature permanent. Then this Spacecraft deals 5 damage to each creature.",
+            "When this Spacecraft enters, exile target noncreature permanent. Then this Spacecraft deals 4 damage to each creature.",
+            "When this Spacecraft enters, return target noncreature permanent to its owner's hand. Then this Spacecraft deals 4 damage to each creature.",
+            "When this Spacecraft enters, destroy up to one target noncreature permanent. Then this Spacecraft deals 4 damage to each creature.",
+            "When this Spacecraft enters, you may destroy target noncreature permanent. Then this Spacecraft deals 4 damage to each creature.",
+            "When this Spacecraft enters, destroy target noncreature permanent. Then it deals 4 damage to each creature.",
+            "When this Spacecraft enters, destroy target noncreature permanent. Then this Spacecraft deals 4 damage to each noncreature permanent.",
+            "When this Spacecraft enters, destroy target noncreature permanent. Then this Spacecraft deals 4 damage to each creature your opponents control.",
+            "When this Spacecraft enters, this Spacecraft deals 4 damage to each creature. Then destroy target noncreature permanent.",
+            "When this Spacecraft enters, destroy target noncreature permanent and deal 4 damage to each creature.",
+            "When this Spacecraft enters, destroy target noncreature permanent. Then this Spacecraft deals 4 damage to target creature.",
+            "When this Spacecraft enters, destroy target noncreature permanent. Then this Spacecraft deals 4 damage to each creature. You gain 1 life.",
+            "Whenever this Spacecraft enters, destroy target noncreature permanent. Then this Spacecraft deals 4 damage to each creature."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.spacecraft.fell.mill_three_then_return_creature_or_spacecraft"),
+        label: "Fell Gravship ETB mill three then choose creature or Spacecraft to hand",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_fell_etb_mill_then_return,
+        calibration: singleton_calibrations!(
+            "Fell Gravship" => "When this Spacecraft enters, mill three cards, then return a creature or Spacecraft card from your graveyard to your hand.";
+            "When this Spacecraft enters, mill two cards, then return a creature or Spacecraft card from your graveyard to your hand.",
+            "When this Spacecraft enters, mill four cards, then return a creature or Spacecraft card from your graveyard to your hand.",
+            "When this Spacecraft enters, target player mills three cards, then return a creature or Spacecraft card from your graveyard to your hand.",
+            "When this artifact enters, mill three cards, then return a creature or Spacecraft card from your graveyard to your hand.",
+            "Whenever this Spacecraft enters, mill three cards, then return a creature or Spacecraft card from your graveyard to your hand.",
+            "When this Spacecraft enters, mill three cards, then return a creature card from your graveyard to your hand.",
+            "When this Spacecraft enters, mill three cards, then return a Spacecraft card from your graveyard to your hand.",
+            "When this Spacecraft enters, mill three cards, then return a card from your graveyard to your hand.",
+            "When this Spacecraft enters, mill three cards, then return a creature or Spacecraft card milled this way from your graveyard to your hand.",
+            "When this Spacecraft enters, mill three cards, then return target creature or Spacecraft card from your graveyard to your hand.",
+            "When this Spacecraft enters, you may mill three cards, then return a creature or Spacecraft card from your graveyard to your hand.",
+            "When this Spacecraft enters, mill three cards, then you may return a creature or Spacecraft card from your graveyard to your hand.",
+            "When this Spacecraft enters, mill three cards, then return a creature or Spacecraft card from your graveyard to the battlefield.",
+            "When this Spacecraft enters, mill three cards, then return a creature or Spacecraft card from your graveyard to exile.",
+            "When this Spacecraft enters, return a creature or Spacecraft card from your graveyard to your hand, then mill three cards.",
+            "When this Spacecraft enters, mill three cards, then return a creature or Spacecraft card from an opponent's graveyard to your hand.",
+            "When this Spacecraft enters, mill three cards, then return a creature or Spacecraft card from a graveyard to your hand.",
+            "When this Spacecraft enters, mill three cards, then return a creature or Spacecraft card from your graveyard to your hand. Draw a card."
+        ),
+    },
+    Recipe {
         id: RecipeId("station.spacecraft.threshold_3_or_9_keywords"),
         label: "Station 3+ or 9+ keyword Spacecraft",
         surface: RecipeSurface::StationAssembly,
@@ -13205,6 +13574,440 @@ mod tests {
             ));
         }
         assert!(issue_311_card_surface_is_exact(
+            "unreviewed",
+            "Unreviewed",
+            "{1}",
+            "Artifact",
+            "anything",
+            None,
+            None
+        ));
+    }
+
+    #[test]
+    fn issue_313_station_variants_emit_exact_threshold_characteristics() {
+        let cases = [
+            (
+                "Extinguisher Battleship",
+                ISSUE_313_EXTINGUISHER_ORACLE_ID,
+                ISSUE_313_EXTINGUISHER_STATION_HEADER,
+                ISSUE_313_EXTINGUISHER_THRESHOLD_LINE,
+                5,
+                10,
+                10,
+                vec![Keyword::Flying, Keyword::Trample],
+            ),
+            (
+                "Fell Gravship",
+                ISSUE_313_FELL_ORACLE_ID,
+                ISSUE_313_FELL_STATION_HEADER,
+                ISSUE_313_FELL_THRESHOLD_LINE,
+                8,
+                3,
+                2,
+                vec![Keyword::Flying, Keyword::Lifelink],
+            ),
+        ];
+        for (name, oracle_id, header, threshold_line, threshold, power, toughness, keywords) in
+            cases
+        {
+            let mut reviewed = context();
+            reviewed.source_name = name.into();
+            reviewed.oracle_id = Some(oracle_id.into());
+            let pair = format!("{header}\n{threshold_line}");
+            let matched = match_station_assembly(&pair, &reviewed)
+                .expect("#313 Station pair must not be ambiguous")
+                .expect("#313 reviewed Station pair should match");
+            assert_eq!(
+                matched.id.as_str(),
+                "station.spacecraft.threshold_5_or_8_keywords"
+            );
+            let RecipeEmission::StationAssembly(assembly) = matched.emission else {
+                panic!("#313 Station pair must emit an assembly")
+            };
+            assert_eq!(
+                assembly.activated_ability.timing,
+                ActivationTiming::SorcerySpeed
+            );
+            assert_eq!(
+                assembly.static_ability.definition,
+                StaticAbilityDef::ConditionalSelfModifier {
+                    condition: GameCondition::SourceCounterCount {
+                        counter: CounterKind::Charge,
+                        min: Some(threshold),
+                        max: None,
+                    },
+                    set_types: None,
+                    add_types: TypeLineAddition {
+                        card_types: vec![PermanentTypeFilter::Creature],
+                        creature_types: Vec::new(),
+                    },
+                    base_power: Some(power),
+                    base_toughness: Some(toughness),
+                    delta_power: 0,
+                    delta_toughness: 0,
+                    keywords,
+                    activated_abilities: Vec::new(),
+                    triggered_abilities: Vec::new(),
+                    can_attack_as_though_without_defender: false,
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn issue_313_etbs_emit_exact_typed_effects_and_resolution_contracts() {
+        let mut extinguisher = context();
+        extinguisher.source_name = "Extinguisher Battleship".into();
+        extinguisher.oracle_id = Some(ISSUE_313_EXTINGUISHER_ORACLE_ID.into());
+        let matched = match_clause(ISSUE_313_EXTINGUISHER_ETB_TEXT, false, &extinguisher)
+            .expect("Extinguisher ETB must not be ambiguous")
+            .expect("Extinguisher ETB must match");
+        assert_eq!(
+            matched.id.as_str(),
+            "etb.spacecraft.extinguisher.destroy_noncreature_then_damage_all_creatures"
+        );
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("Extinguisher ETB must emit a triggered ability")
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(!ability.may);
+        assert_eq!(
+            ability.effect,
+            [
+                SpellEffectKind::Destroy {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        excluded_permanent_types: vec![PermanentTypeFilter::Creature],
+                        ..TargetFilter::default()
+                    })),
+                },
+                SpellEffectKind::DamageAll {
+                    amount: Amount::Fixed(4),
+                    players: RelativePlayerSet::All,
+                    kind: TargetFilter::default_creature(),
+                },
+            ]
+        );
+        let [group] = ability.targeting.as_ref().unwrap().groups.as_slice() else {
+            panic!("Extinguisher target group")
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.effect_indices, [0]);
+
+        let mut fell = context();
+        fell.source_name = "Fell Gravship".into();
+        fell.oracle_id = Some(ISSUE_313_FELL_ORACLE_ID.into());
+        let matched = match_clause(ISSUE_313_FELL_ETB_TEXT, false, &fell)
+            .expect("Fell ETB must not be ambiguous")
+            .expect("Fell ETB must match");
+        assert_eq!(
+            matched.id.as_str(),
+            "etb.spacecraft.fell.mill_three_then_return_creature_or_spacecraft"
+        );
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("Fell ETB must emit a triggered ability")
+        };
+        assert!(ability.targeting.is_none());
+        assert_eq!(
+            ability.effect,
+            [
+                SpellEffectKind::Mill {
+                    count: Amount::Fixed(3),
+                    who: PlayerRecipient::Controller,
+                },
+                SpellEffectKind::ChooseGraveyardCard {
+                    filter: ZoneCardFilter {
+                        any_of: Some(vec![
+                            ZoneCardFilter {
+                                card_type: Some(CardTypeFilter::Creature),
+                                ..ZoneCardFilter::default()
+                            },
+                            ZoneCardFilter {
+                                required_subtypes: vec!["Spacecraft".into()],
+                                ..ZoneCardFilter::default()
+                            },
+                        ]),
+                        ..ZoneCardFilter::default()
+                    },
+                    destination: GraveyardDestination::Hand,
+                    optional: false,
+                    from_result: None,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn issue_313_recipes_reject_near_misses_cross_card_mixing_and_context_mutations() {
+        let mut extinguisher = context();
+        extinguisher.source_name = "Extinguisher Battleship".into();
+        extinguisher.oracle_id = Some(ISSUE_313_EXTINGUISHER_ORACLE_ID.into());
+        let station = format!(
+            "{}\n{}",
+            ISSUE_313_EXTINGUISHER_STATION_HEADER, ISSUE_313_EXTINGUISHER_THRESHOLD_LINE
+        );
+        for near_miss in [
+            "Station",
+            ISSUE_313_EXTINGUISHER_STATION_HEADER,
+            ISSUE_313_EXTINGUISHER_THRESHOLD_LINE,
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 4+.)\n4+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 6+.)\n6+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying, trample\n5+ | Flying, trample",
+            "5+ | Flying, trample\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as an instant. It's an artifact creature at 5+.)\n5+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Trample, flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying",
+        ] {
+            assert_eq!(
+                match_station_assembly(near_miss, &extinguisher),
+                Ok(None),
+                "Station near-miss must fail closed: {near_miss}"
+            );
+        }
+        let mut fell_station = extinguisher.clone();
+        fell_station.source_name = "Fell Gravship".into();
+        fell_station.oracle_id = Some(ISSUE_313_FELL_ORACLE_ID.into());
+        let fell_station_pair = format!(
+            "{}\n{}",
+            ISSUE_313_FELL_STATION_HEADER, ISSUE_313_FELL_THRESHOLD_LINE
+        );
+        assert_eq!(
+            match_station_assembly(&station, &fell_station),
+            Ok(None),
+            "cross-card Station variants must not mix"
+        );
+        assert_eq!(
+            match_clause(ISSUE_313_FELL_ETB_TEXT, false, &extinguisher),
+            Ok(None),
+            "Fell's ETB must not enter the Extinguisher recipe"
+        );
+        assert_eq!(
+            match_clause(ISSUE_313_EXTINGUISHER_ETB_TEXT, false, &fell_station),
+            Ok(None),
+            "Extinguisher's ETB must not enter the Fell recipe"
+        );
+        for mut invalid in [extinguisher.clone(), fell_station.clone()] {
+            invalid.source_is_artifact = false;
+            assert_eq!(
+                match_station_assembly(
+                    if invalid.source_name == "Extinguisher Battleship" {
+                        station.as_str()
+                    } else {
+                        fell_station_pair.as_str()
+                    },
+                    &invalid
+                ),
+                Ok(None)
+            );
+        }
+
+        for (context, exact, near_misses) in [
+            (
+                extinguisher.clone(),
+                ISSUE_313_EXTINGUISHER_ETB_TEXT,
+                vec![
+                    "When this Spacecraft enters, destroy target creature. Then this Spacecraft deals 4 damage to each creature.",
+                    "When this Spacecraft enters, destroy target artifact. Then this Spacecraft deals 4 damage to each creature.",
+                    "When this Spacecraft enters, destroy target land. Then this Spacecraft deals 4 damage to each creature.",
+                    "When this Spacecraft enters, destroy target permanent. Then this Spacecraft deals 4 damage to each creature.",
+                    "When this Spacecraft enters, destroy up to one target noncreature permanent. Then this Spacecraft deals 4 damage to each creature.",
+                    "When this Spacecraft enters, destroy target noncreature permanent. Then this Spacecraft deals 3 damage to each creature.",
+                    "When this Spacecraft enters, destroy target noncreature permanent. Then this Spacecraft deals 4 damage to target creature.",
+                    "When this Spacecraft enters, this Spacecraft deals 4 damage to each creature. Then destroy target noncreature permanent.",
+                    "When this Spacecraft enters, destroy target noncreature permanent. Then it deals 4 damage to each creature.",
+                ],
+            ),
+            (
+                fell_station.clone(),
+                ISSUE_313_FELL_ETB_TEXT,
+                vec![
+                    "When this Spacecraft enters, mill two cards, then return a creature or Spacecraft card from your graveyard to your hand.",
+                    "When this Spacecraft enters, mill four cards, then return a creature or Spacecraft card from your graveyard to your hand.",
+                    "When this Spacecraft enters, target player mills three cards, then return a creature or Spacecraft card from your graveyard to your hand.",
+                    "When this artifact enters, mill three cards, then return a creature or Spacecraft card from your graveyard to your hand.",
+                    "Whenever this Spacecraft enters, mill three cards, then return a creature or Spacecraft card from your graveyard to your hand.",
+                    "When this Spacecraft enters, mill three cards, then return a creature card from your graveyard to your hand.",
+                    "When this Spacecraft enters, mill three cards, then return a Spacecraft card from your graveyard to your hand.",
+                    "When this Spacecraft enters, mill three cards, then return a card from your graveyard to your hand.",
+                    "When this Spacecraft enters, mill three cards, then return a creature or Spacecraft card milled this way from your graveyard to your hand.",
+                    "When this Spacecraft enters, mill three cards, then return target creature or Spacecraft card from your graveyard to your hand.",
+                    "When this Spacecraft enters, you may mill three cards, then return a creature or Spacecraft card from your graveyard to your hand.",
+                    "When this Spacecraft enters, mill three cards, then you may return a creature or Spacecraft card from your graveyard to your hand.",
+                    "When this Spacecraft enters, mill three cards, then return a creature or Spacecraft card from your graveyard to the battlefield.",
+                    "When this Spacecraft enters, mill three cards, then return a creature or Spacecraft card from your graveyard to exile.",
+                    "When this Spacecraft enters, return a creature or Spacecraft card from your graveyard to your hand, then mill three cards.",
+                    "When this Spacecraft enters, mill three cards, then return a creature or Spacecraft card from an opponent's graveyard to your hand.",
+                    "When this Spacecraft enters, mill three cards, then return a creature or Spacecraft card from a graveyard to your hand.",
+                ],
+            ),
+        ] {
+            assert!(
+                match_clause(exact, false, &context)
+                    .expect("exact ETB must not be ambiguous")
+                    .is_some()
+            );
+            for near_miss in near_misses {
+                assert_eq!(
+                    match_clause(near_miss, false, &context),
+                    Ok(None),
+                    "ETB near-miss must fail closed: {near_miss}"
+                );
+            }
+            let mut unreviewed = context.clone();
+            unreviewed.oracle_id = Some("00000000-0000-0000-0000-000000000000".into());
+            assert_eq!(match_clause(exact, false, &unreviewed), Ok(None));
+            let mut nonartifact = context.clone();
+            nonartifact.source_is_artifact = false;
+            assert_eq!(match_clause(exact, false, &nonartifact), Ok(None));
+            let mut nonpermanent = context.clone();
+            nonpermanent.source_is_permanent = false;
+            assert_eq!(match_clause(exact, false, &nonpermanent), Ok(None));
+            let mut nonspacecraft = context.clone();
+            nonspacecraft.source_is_spacecraft_or_planet = false;
+            assert_eq!(match_clause(exact, false, &nonspacecraft), Ok(None));
+        }
+
+        let duplicate_catalog = [
+            Recipe {
+                id: RecipeId("test.station313.duplicate.one"),
+                label: "test Station #313 duplicate one",
+                surface: RecipeSurface::StationAssembly,
+                matcher: issue_313_station_assembly,
+                calibration: RecipeCalibration {
+                    positive_cards: &[],
+                    negative_near_misses: &[],
+                    minimum_positive_cards: 0,
+                },
+            },
+            Recipe {
+                id: RecipeId("test.station313.duplicate.two"),
+                label: "test Station #313 duplicate two",
+                surface: RecipeSurface::StationAssembly,
+                matcher: issue_313_station_assembly,
+                calibration: RecipeCalibration {
+                    positive_cards: &[],
+                    negative_near_misses: &[],
+                    minimum_positive_cards: 0,
+                },
+            },
+        ];
+        let ambiguity = match_surface_in(
+            &duplicate_catalog,
+            &station,
+            RecipeSurface::StationAssembly,
+            &extinguisher,
+        )
+        .expect_err("duplicate #313 Station recipes must be ambiguous");
+        assert_eq!(
+            ambiguity.recipe_ids,
+            [
+                RecipeId("test.station313.duplicate.one"),
+                RecipeId("test.station313.duplicate.two")
+            ]
+        );
+    }
+
+    #[test]
+    fn issue_313_cross_card_etb_surfaces_reject_both_directions() {
+        let mut extinguisher = context();
+        extinguisher.source_name = "Extinguisher Battleship".into();
+        extinguisher.oracle_id = Some(ISSUE_313_EXTINGUISHER_ORACLE_ID.into());
+
+        let mut fell = context();
+        fell.source_name = "Fell Gravship".into();
+        fell.oracle_id = Some(ISSUE_313_FELL_ORACLE_ID.into());
+
+        assert_eq!(
+            match_clause(ISSUE_313_FELL_ETB_TEXT, false, &extinguisher),
+            Ok(None),
+            "Fell ETB text must not match Extinguisher identity/context"
+        );
+        assert_eq!(
+            match_clause(ISSUE_313_EXTINGUISHER_ETB_TEXT, false, &fell),
+            Ok(None),
+            "Extinguisher ETB text must not match Fell identity/context"
+        );
+    }
+
+    #[test]
+    fn issue_313_card_surfaces_require_exact_identity_and_printed_fields() {
+        let cases = [
+            (
+                ISSUE_313_EXTINGUISHER_ORACLE_ID,
+                "Extinguisher Battleship",
+                "{8}",
+                "Artifact — Spacecraft",
+                ISSUE_313_EXTINGUISHER_ETB_TEXT.to_string()
+                    + "\n"
+                    + ISSUE_313_EXTINGUISHER_STATION_HEADER
+                    + "\n"
+                    + ISSUE_313_EXTINGUISHER_THRESHOLD_LINE,
+                Some("10"),
+                Some("10"),
+            ),
+            (
+                ISSUE_313_FELL_ORACLE_ID,
+                "Fell Gravship",
+                "{2}{B}",
+                "Artifact — Spacecraft",
+                ISSUE_313_FELL_ETB_TEXT.to_string()
+                    + "\n"
+                    + ISSUE_313_FELL_STATION_HEADER
+                    + "\n"
+                    + ISSUE_313_FELL_THRESHOLD_LINE,
+                Some("3"),
+                Some("2"),
+            ),
+        ];
+        for (oracle_id, name, mana, type_line, text, power, toughness) in cases {
+            assert!(issue_313_card_surface_is_exact(
+                oracle_id, name, mana, type_line, &text, power, toughness
+            ));
+            assert!(!issue_313_card_surface_is_exact(
+                oracle_id, name, mana, "Artifact", &text, power, toughness
+            ));
+            assert!(!issue_313_card_surface_is_exact(
+                oracle_id,
+                name,
+                mana,
+                type_line,
+                &text,
+                Some("0"),
+                toughness
+            ));
+            assert!(!issue_313_card_surface_is_exact(
+                oracle_id,
+                name,
+                mana,
+                type_line,
+                &text,
+                power,
+                Some("0")
+            ));
+            assert!(!issue_313_card_surface_is_exact(
+                oracle_id,
+                "Wrong Name",
+                mana,
+                type_line,
+                &text,
+                power,
+                toughness
+            ));
+            assert!(!issue_313_card_surface_is_exact(
+                oracle_id, name, "{1}", type_line, &text, power, toughness
+            ));
+            assert!(!issue_313_card_surface_is_exact(
+                oracle_id,
+                name,
+                mana,
+                type_line,
+                "changed complete Oracle surface",
+                power,
+                toughness
+            ));
+        }
+        assert!(issue_313_card_surface_is_exact(
             "unreviewed",
             "Unreviewed",
             "{1}",

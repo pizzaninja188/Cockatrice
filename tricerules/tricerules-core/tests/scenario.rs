@@ -461,3 +461,5 @@ mod issue_309_generated_station;
 mod issue_310_generated_station;
 #[path = "scenario/issue_311_generated_station.rs"]
 mod issue_311_generated_station;
+#[path = "scenario/issue_313_generated_station.rs"]
+mod issue_313_generated_station;

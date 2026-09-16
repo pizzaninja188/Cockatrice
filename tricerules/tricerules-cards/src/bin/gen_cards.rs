@@ -54,12 +54,15 @@ use recipes::{
     issue_298_card_surface_is_exact, issue_309_card_surface_is_exact,
     issue_309_oracle_id_is_reviewed, issue_310_card_surface_is_exact,
     issue_310_oracle_id_is_reviewed, issue_311_card_surface_is_exact,
-    issue_311_oracle_id_is_reviewed, match_clause, match_modal_assembly, match_modal_mode,
+    issue_311_oracle_id_is_reviewed, issue_313_card_surface_is_exact,
+    issue_313_oracle_id_is_reviewed, match_clause, match_modal_assembly, match_modal_mode,
     match_station_assembly, reviewed_modal_mode_pair, validate_catalog, RecipeAmbiguity,
     RecipeContext, RecipeEmission,
 };
 #[cfg(test)]
-use tricerules_cards::primitives::{LifeAmount, PermanentEventFilter, TargetSchema};
+use tricerules_cards::primitives::{
+    GraveyardDestination, LifeAmount, PermanentEventFilter, TargetSchema, ZoneCardFilter,
+};
 #[cfg(test)]
 use tricerules_cards::LibraryPartitionKind;
 
@@ -1706,6 +1709,17 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     ) {
         return Err(Skip::NonKeywordText.into());
     }
+    if !issue_313_card_surface_is_exact(
+        str_field(card, "oracle_id"),
+        &name,
+        &mana_cost,
+        type_line,
+        oracle_text,
+        power_text.as_deref(),
+        toughness_text.as_deref(),
+    ) {
+        return Err(Skip::NonKeywordText.into());
+    }
     let mut rules = parse_rules_text(
         &name,
         str_field(card, "oracle_id"),
@@ -1837,7 +1851,8 @@ fn evaluate(
     let layout = GenLayout::from_scryfall(str_field(card, "layout")).ok_or(Skip::Layout)?;
     if (issue_309_oracle_id_is_reviewed(str_field(card, "oracle_id"))
         || issue_310_oracle_id_is_reviewed(str_field(card, "oracle_id"))
-        || issue_311_oracle_id_is_reviewed(str_field(card, "oracle_id")))
+        || issue_311_oracle_id_is_reviewed(str_field(card, "oracle_id"))
+        || issue_313_oracle_id_is_reviewed(str_field(card, "oracle_id")))
         && layout != GenLayout::Normal
     {
         return Err(Skip::NonKeywordText.into());
@@ -4367,6 +4382,212 @@ mod tests {
         assert!(
             evaluate_fresh(&changed_surface).is_err(),
             "an unreviewed amount mutation must remain unsupported"
+        );
+    }
+
+    #[test]
+    fn issue_313_two_card_cohort_generates_exact_station_and_etb_payloads() {
+        let cards = [
+            normal_card_with_oracle_id(
+                "cce3dcc3-57bb-4b95-8b70-337c67bb3c4e",
+                "Extinguisher Battleship",
+                "{8}",
+                "Artifact — Spacecraft",
+                "When this Spacecraft enters, destroy target noncreature permanent. Then this Spacecraft deals 4 damage to each creature.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying, trample",
+                Some(("10", "10")),
+            ),
+            normal_card_with_oracle_id(
+                "1a82be68-3b74-4dfc-9068-3abea61db709",
+                "Fell Gravship",
+                "{2}{B}",
+                "Artifact — Spacecraft",
+                "When this Spacecraft enters, mill three cards, then return a creature or Spacecraft card from your graveyard to your hand.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying, lifelink",
+                Some(("3", "2")),
+            ),
+        ];
+
+        for card in &cards {
+            let name = str_field(card, "name");
+            let generated = evaluate_fresh(card)
+                .unwrap_or_else(|error| panic!("{name} should generate: {error:?}"));
+            assert_eq!(
+                generated.faces[0].recipe_labels[0], "Station 5+/8+ keyword Spacecraft",
+                "{name}"
+            );
+            assert_eq!(generated.faces[0].recipe_labels.len(), 2, "{name}");
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert_eq!(raw.types, ["Artifact", "Spacecraft"], "{name}");
+            assert_eq!(raw.activated_abilities.len(), 1, "{name}");
+            assert_eq!(raw.static_abilities.len(), 1, "{name}");
+            let station = &raw.activated_abilities[0];
+            assert_eq!(
+                station.source_zone,
+                AbilitySourceZone::Battlefield,
+                "{name}"
+            );
+            assert_eq!(station.timing, ActivationTiming::SorcerySpeed, "{name}");
+            assert_eq!(
+                station.costs,
+                [AbilityCost::TapPermanents {
+                    constraint: ObjectPaymentConstraint::ExactCount(1),
+                    filter: TargetFilter {
+                        kind: TargetKind::Creature,
+                        controller: TargetController::You,
+                        ..TargetFilter::default()
+                    },
+                    exclude_source: true,
+                }],
+                "{name}"
+            );
+            let static_ability = &raw.static_abilities[0];
+            let expected = if name == "Extinguisher Battleship" {
+                (5, 10, 10, vec![Keyword::Flying, Keyword::Trample])
+            } else {
+                (8, 3, 2, vec![Keyword::Flying, Keyword::Lifelink])
+            };
+            assert_eq!(
+                static_ability.definition,
+                StaticAbilityDef::ConditionalSelfModifier {
+                    condition: GameCondition::SourceCounterCount {
+                        counter: CounterKind::Charge,
+                        min: Some(expected.0),
+                        max: None,
+                    },
+                    set_types: None,
+                    add_types: TypeLineAddition {
+                        card_types: vec![PermanentTypeFilter::Creature],
+                        creature_types: Vec::new(),
+                    },
+                    base_power: Some(expected.1),
+                    base_toughness: Some(expected.2),
+                    delta_power: 0,
+                    delta_toughness: 0,
+                    keywords: expected.3,
+                    activated_abilities: Vec::new(),
+                    triggered_abilities: Vec::new(),
+                    can_attack_as_though_without_defender: false,
+                },
+                "{name}"
+            );
+            let [trigger] = raw.triggered_abilities.as_slice() else {
+                panic!("{name} should emit one ETB trigger")
+            };
+            if name == "Extinguisher Battleship" {
+                assert_eq!(
+                    trigger.effect,
+                    [
+                        SpellEffectKind::Destroy {
+                            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                                kind: TargetKind::AnyPermanent,
+                                excluded_permanent_types: vec![PermanentTypeFilter::Creature],
+                                ..TargetFilter::default()
+                            })),
+                        },
+                        SpellEffectKind::DamageAll {
+                            amount: Amount::Fixed(4),
+                            players: RelativePlayerSet::All,
+                            kind: TargetFilter::default_creature(),
+                        },
+                    ]
+                );
+                let [group] = trigger.targeting.as_ref().unwrap().groups.as_slice() else {
+                    panic!("Extinguisher target group")
+                };
+                assert_eq!((group.min, group.max), (1, 1));
+                assert_eq!(group.effect_indices, [0]);
+            } else {
+                assert_eq!(
+                    trigger.effect,
+                    [
+                        SpellEffectKind::Mill {
+                            count: Amount::Fixed(3),
+                            who: PlayerRecipient::Controller,
+                        },
+                        SpellEffectKind::ChooseGraveyardCard {
+                            filter: ZoneCardFilter {
+                                any_of: Some(vec![
+                                    ZoneCardFilter {
+                                        card_type: Some(CardTypeFilter::Creature),
+                                        ..ZoneCardFilter::default()
+                                    },
+                                    ZoneCardFilter {
+                                        required_subtypes: vec!["Spacecraft".into()],
+                                        ..ZoneCardFilter::default()
+                                    },
+                                ]),
+                                ..ZoneCardFilter::default()
+                            },
+                            destination: GraveyardDestination::Hand,
+                            optional: false,
+                            from_result: None,
+                        },
+                    ]
+                );
+                assert!(trigger.targeting.is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn issue_313_generator_rejects_unreviewed_partial_and_multiface_surfaces() {
+        let exact_extinguisher = normal_card_with_oracle_id(
+            "cce3dcc3-57bb-4b95-8b70-337c67bb3c4e",
+            "Extinguisher Battleship",
+            "{8}",
+            "Artifact — Spacecraft",
+            "When this Spacecraft enters, destroy target noncreature permanent. Then this Spacecraft deals 4 damage to each creature.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying, trample",
+            Some(("10", "10")),
+        );
+        for (label, oracle_text) in [
+            (
+                "creature-only target",
+                "When this Spacecraft enters, destroy target creature. Then this Spacecraft deals 4 damage to each creature.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying, trample",
+            ),
+            (
+                "mass damage target",
+                "When this Spacecraft enters, destroy target noncreature permanent. Then this Spacecraft deals 4 damage to target creature.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying, trample",
+            ),
+            (
+                "reversed effects",
+                "When this Spacecraft enters, this Spacecraft deals 4 damage to each creature. Then destroy target noncreature permanent.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying, trample",
+            ),
+        ] {
+            let mut changed = exact_extinguisher.clone();
+            changed["oracle_text"] = json!(oracle_text);
+            assert!(evaluate_fresh(&changed).is_err(), "#313 near-miss must reject: {label}");
+        }
+        let mut wrong_toughness = exact_extinguisher.clone();
+        wrong_toughness["toughness"] = json!("9");
+        assert!(
+            evaluate_fresh(&wrong_toughness).is_err(),
+            "a reviewed identity with the wrong printed toughness must reject"
+        );
+        let mut unreviewed = exact_extinguisher.clone();
+        unreviewed["oracle_id"] = json!("00000000-0000-0000-0000-000000000000");
+        assert!(
+            evaluate_fresh(&unreviewed).is_err(),
+            "an unreviewed identity must not inherit the exact #313 surface"
+        );
+        let mut multiface = multiface(
+            "transform",
+            "Extinguisher Battleship // Other Face",
+            vec![
+                face(
+                    "Extinguisher Battleship",
+                    "{8}",
+                    "Artifact — Spacecraft",
+                    "When this Spacecraft enters, destroy target noncreature permanent. Then this Spacecraft deals 4 damage to each creature.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 5+.)\n5+ | Flying, trample",
+                    Some(("10", "10")),
+                    &[],
+                    None,
+                ),
+                face("Other Face", "", "Artifact", "", None, &[], None),
+            ],
+        );
+        multiface["oracle_id"] = json!("cce3dcc3-57bb-4b95-8b70-337c67bb3c4e");
+        assert!(
+            evaluate_fresh(&multiface).is_err(),
+            "reviewed #313 identities must remain normal-layout-only"
         );
     }
 
