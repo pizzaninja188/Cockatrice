@@ -2718,6 +2718,179 @@ fn match_creature_pay_draw_two(text: &str, context: &RecipeContext) -> Option<Re
     })
 }
 
+const ISSUE_315_COEURL_ORACLE_ID: &str = "00d1596a-c3e2-4109-86da-388934a0c652";
+const ISSUE_315_FROSTBRIDGE_GUARD_ORACLE_ID: &str = "515c1604-59f0-45b4-91be-d2f20fdd3e1e";
+const ISSUE_315_STERLING_KEYKEEPER_ORACLE_ID: &str = "f893d3d6-efef-4394-8e15-e01deed72b4f";
+const ISSUE_315_REVIEWED_ORACLE_IDS: &[&str] = &[
+    ISSUE_315_COEURL_ORACLE_ID,
+    ISSUE_315_FROSTBRIDGE_GUARD_ORACLE_ID,
+    ISSUE_315_STERLING_KEYKEEPER_ORACLE_ID,
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Issue315Variant {
+    activation_cost: &'static str,
+    clause: &'static str,
+    prompt: &'static str,
+    excluded_permanent_type: Option<PermanentTypeFilter>,
+    excluded_subtype: Option<&'static str>,
+}
+
+fn issue_315_variant(context: &RecipeContext) -> Option<Issue315Variant> {
+    match context.oracle_id.as_deref() {
+        Some(ISSUE_315_COEURL_ORACLE_ID) if context.source_name == "Coeurl" => {
+            Some(Issue315Variant {
+                activation_cost: "{1}{W}",
+                clause: "{1}{W}, {T}: Tap target nonenchantment creature.",
+                prompt: "Choose target nonenchantment creature",
+                excluded_permanent_type: Some(PermanentTypeFilter::Enchantment),
+                excluded_subtype: None,
+            })
+        }
+        Some(ISSUE_315_FROSTBRIDGE_GUARD_ORACLE_ID)
+            if context.source_name == "Frostbridge Guard" =>
+        {
+            Some(Issue315Variant {
+                activation_cost: "{2}{W}",
+                clause: "{2}{W}, {T}: Tap target creature.",
+                prompt: "Choose target creature",
+                excluded_permanent_type: None,
+                excluded_subtype: None,
+            })
+        }
+        Some(ISSUE_315_STERLING_KEYKEEPER_ORACLE_ID)
+            if context.source_name == "Sterling Keykeeper" =>
+        {
+            Some(Issue315Variant {
+                activation_cost: "{2}",
+                clause: "{2}, {T}: Tap target non-Mount creature.",
+                prompt: "Choose target non-Mount creature",
+                excluded_permanent_type: None,
+                excluded_subtype: Some("Mount"),
+            })
+        }
+        Some(_) => None,
+        None => match context.source_name.as_str() {
+            "Coeurl" => Some(Issue315Variant {
+                activation_cost: "{1}{W}",
+                clause: "{1}{W}, {T}: Tap target nonenchantment creature.",
+                prompt: "Choose target nonenchantment creature",
+                excluded_permanent_type: Some(PermanentTypeFilter::Enchantment),
+                excluded_subtype: None,
+            }),
+            "Frostbridge Guard" => Some(Issue315Variant {
+                activation_cost: "{2}{W}",
+                clause: "{2}{W}, {T}: Tap target creature.",
+                prompt: "Choose target creature",
+                excluded_permanent_type: None,
+                excluded_subtype: None,
+            }),
+            "Sterling Keykeeper" => Some(Issue315Variant {
+                activation_cost: "{2}",
+                clause: "{2}, {T}: Tap target non-Mount creature.",
+                prompt: "Choose target non-Mount creature",
+                excluded_permanent_type: None,
+                excluded_subtype: Some("Mount"),
+            }),
+            _ => None,
+        },
+    }
+}
+
+fn issue_315_context_is_reviewed(context: &RecipeContext) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        .is_none_or(|oracle_id| ISSUE_315_REVIEWED_ORACLE_IDS.contains(&oracle_id))
+}
+
+pub(super) fn issue_315_oracle_id_is_reviewed(oracle_id: &str) -> bool {
+    ISSUE_315_REVIEWED_ORACLE_IDS.contains(&oracle_id)
+}
+
+pub(super) fn issue_315_card_surface_is_exact(
+    oracle_id: &str,
+    name: &str,
+    mana_cost: &str,
+    type_line: &str,
+    oracle_text: &str,
+    power: Option<&str>,
+    toughness: Option<&str>,
+) -> bool {
+    let expected = match oracle_id {
+        ISSUE_315_COEURL_ORACLE_ID => (
+            "Coeurl",
+            "{1}{W}",
+            "Creature — Cat Beast",
+            Some("2"),
+            Some("2"),
+            "{1}{W}, {T}: Tap target nonenchantment creature.",
+        ),
+        ISSUE_315_FROSTBRIDGE_GUARD_ORACLE_ID => (
+            "Frostbridge Guard",
+            "{1}{W}",
+            "Creature — Elemental Soldier",
+            Some("2"),
+            Some("2"),
+            "{2}{W}, {T}: Tap target creature.",
+        ),
+        ISSUE_315_STERLING_KEYKEEPER_ORACLE_ID => (
+            "Sterling Keykeeper",
+            "{1}{W}",
+            "Creature — Human Mercenary",
+            Some("2"),
+            Some("2"),
+            "{2}, {T}: Tap target non-Mount creature.",
+        ),
+        _ => return true,
+    };
+    (name, mana_cost, type_line, power, toughness, oracle_text) == expected
+}
+
+fn match_creature_pay_mana_tap_tap_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_permanent
+        || !context.source_is_creature
+        || !issue_315_context_is_reviewed(context)
+    {
+        return None;
+    }
+    let variant = issue_315_variant(context)?;
+    if text != variant.clause {
+        return None;
+    }
+    let mut target = TargetFilter {
+        kind: TargetKind::Creature,
+        ..TargetFilter::default()
+    };
+    if let Some(permanent_type) = variant.excluded_permanent_type {
+        target.excluded_permanent_types.push(permanent_type);
+    }
+    if let Some(subtype) = variant.excluded_subtype {
+        target.excluded_subtypes.push(subtype.into());
+    }
+    Some(utility_activated_ability(
+        context,
+        vec![fixed_mana_cost(variant.activation_cost), AbilityCost::Tap],
+        vec![SpellEffectKind::Tap {
+            subject: EffectSubject::Chosen(Box::new(target)),
+        }],
+        Some(TargetingDef {
+            groups: vec![TargetGroupDef {
+                min: 1,
+                max: 1,
+                prompt: variant.prompt.into(),
+                effect_indices: vec![0],
+                distinct_from: Vec::new(),
+                same_graveyard: false,
+                cast_cost_expansion: None,
+            }],
+        }),
+    ))
+}
+
 const ISSUE_301_REVIEWED_ORACLE_IDS: &[&str] = &[
     "295f8b8d-102a-47af-93c2-f8182c5f11ca", // Ascendant Dustspeaker
     "5d46e85f-4a04-48b1-afe9-3a47678041d4", // Startled Relic Sloth
@@ -7920,6 +8093,45 @@ pub(super) static CATALOG: &[Recipe] = &[
             "{3}{U}{U}: Draw two cards from your library.",
             "{3}{U}{U}: Draw two cards, then draw another card.",
             "{3}{U}{U}: Draw two cards. This ability can be activated only from your hand."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.creature.pay_mana_tap.tap_creature"),
+        label: "creature activated tap creature",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_creature_pay_mana_tap_tap_creature,
+        calibration: calibrations!(
+            "Coeurl" => "{1}{W}, {T}: Tap target nonenchantment creature.",
+            "Frostbridge Guard" => "{2}{W}, {T}: Tap target creature.",
+            "Sterling Keykeeper" => "{2}, {T}: Tap target non-Mount creature.";
+            "{1}{W}: Tap target nonenchantment creature.",
+            "{1}{W}, {T}: Untap target nonenchantment creature.",
+            "{1}{W}, {T}: Tap target nonenchantment creature or player.",
+            "{1}{W}, {T}: Tap up to one target nonenchantment creature.",
+            "{1}{W}, {T}: Tap two target nonenchantment creatures.",
+            "{1}{W}, {T}: Tap target nonenchantment creature you control.",
+            "{1}{W}, {T}, Sacrifice this creature: Tap target nonenchantment creature.",
+            "{1}{W}, {T}, Untap this creature: Tap target nonenchantment creature.",
+            "{1}{W}, {T}, Discard a card: Tap target nonenchantment creature.",
+            "{1}{W}, {T}, Pay 1 life: Tap target nonenchantment creature.",
+            "{1}{W}, {T}: Destroy target nonenchantment creature.",
+            "{1}{W}, {T}: Exile target nonenchantment creature.",
+            "{1}{W}, {T}: Tap target noncreature permanent.",
+            "{1}{W}, {T}: Tap target artifact creature.",
+            "{1}{W}, {T}: Tap target creature. Activate only as a sorcery.",
+            "{1}{W}, {T}: Tap target creature. Activate only once each turn.",
+            "{1}{W}, {T}: Tap target creature. Activate only if you control an artifact.",
+            "{1}{W}, {T}: Tap target creature. Activate only from your hand.",
+            "{2}{W}, {T}: Tap target creature.",
+            "{2}, {T}: Tap target creature.",
+            "{2}, {T}: Tap target Mount creature.",
+            "{2}, {T}: Tap target non-Vehicle creature.",
+            "{2}, {T}: Tap target creature you control.",
+            "{2}, Tap this creature: Tap target non-Mount creature.",
+            "{2}, {Q}: Tap target non-Mount creature.",
+            "{2}, {T}: Tap target non-Mount creature, then draw a card.",
+            "{2}, {T}: Tap target non-Mount creature. Untap this creature.",
+            "{2}, {T}, Sacrifice this creature: Tap target non-Mount creature."
         ),
     },
     Recipe {
@@ -14263,5 +14475,162 @@ mod tests {
             Some("3"),
             Some("4"),
         ));
+    }
+
+    #[test]
+    fn issue_315_creature_tapper_recipe_matches_the_reviewed_cohort() {
+        const RECIPE_ID: &str = "activated.creature.pay_mana_tap.tap_creature";
+        for (oracle_id, name, clause, activation_cost, expected_filter) in [
+            (
+                "00d1596a-c3e2-4109-86da-388934a0c652",
+                "Coeurl",
+                "{1}{W}, {T}: Tap target nonenchantment creature.",
+                "{1}{W}",
+                TargetFilter {
+                    kind: TargetKind::Creature,
+                    excluded_permanent_types: vec![PermanentTypeFilter::Enchantment],
+                    ..TargetFilter::default()
+                },
+            ),
+            (
+                "515c1604-59f0-45b4-91be-d2f20fdd3e1e",
+                "Frostbridge Guard",
+                "{2}{W}, {T}: Tap target creature.",
+                "{2}{W}",
+                TargetFilter {
+                    kind: TargetKind::Creature,
+                    ..TargetFilter::default()
+                },
+            ),
+            (
+                "f893d3d6-efef-4394-8e15-e01deed72b4f",
+                "Sterling Keykeeper",
+                "{2}, {T}: Tap target non-Mount creature.",
+                "{2}",
+                TargetFilter {
+                    kind: TargetKind::Creature,
+                    excluded_subtypes: vec!["Mount".into()],
+                    ..TargetFilter::default()
+                },
+            ),
+        ] {
+            let mut reviewed = context();
+            reviewed.oracle_id = Some(oracle_id.into());
+            reviewed.source_name = name.into();
+            let matched = match_clause(clause, false, &reviewed)
+                .expect("reviewed tapper clause must not be ambiguous")
+                .expect("reviewed tapper clause must match");
+            assert_eq!(matched.id.as_str(), RECIPE_ID);
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("reviewed tapper clause must emit an activated ability");
+            };
+            assert_eq!(
+                ability.costs,
+                vec![
+                    AbilityCost::Mana(ManaCost::parse(activation_cost).unwrap()),
+                    AbilityCost::Tap,
+                ]
+            );
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::Tap {
+                    subject: EffectSubject::Chosen(Box::new(expected_filter)),
+                }]
+            );
+            let targeting = ability
+                .targeting
+                .expect("reviewed tapper must target one creature");
+            assert_eq!(targeting.groups.len(), 1);
+            assert_eq!((targeting.groups[0].min, targeting.groups[0].max), (1, 1));
+            assert_eq!(targeting.groups[0].effect_indices, vec![0]);
+            assert!(targeting.groups[0].distinct_from.is_empty());
+            assert!(!targeting.groups[0].same_graveyard);
+            assert!(targeting.groups[0].cast_cost_expansion.is_none());
+        }
+
+        let mut unreviewed = context();
+        unreviewed.source_name = "Coeurl".into();
+        unreviewed.oracle_id = Some("00000000-0000-0000-0000-000000000000".into());
+        assert!(
+            match_clause(
+                "{1}{W}, {T}: Tap target nonenchantment creature.",
+                false,
+                &unreviewed
+            )
+            .expect("unreviewed identity must not be ambiguous")
+            .is_none(),
+            "an unknown Oracle identity must not borrow the exact Coeurl clause"
+        );
+
+        let mut noncreature = context();
+        noncreature.source_name = "Coeurl".into();
+        noncreature.oracle_id = Some(ISSUE_315_COEURL_ORACLE_ID.into());
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(
+                "{1}{W}, {T}: Tap target nonenchantment creature.",
+                false,
+                &noncreature
+            )
+            .expect("noncreature source must not be ambiguous")
+            .is_none(),
+            "the recipe is creature-source-only"
+        );
+
+        let mut nonpermanent = context();
+        nonpermanent.source_name = "Coeurl".into();
+        nonpermanent.oracle_id = Some(ISSUE_315_COEURL_ORACLE_ID.into());
+        nonpermanent.source_is_permanent = false;
+        assert!(
+            match_clause(
+                "{1}{W}, {T}: Tap target nonenchantment creature.",
+                false,
+                &nonpermanent
+            )
+            .expect("nonpermanent source must not be ambiguous")
+            .is_none(),
+            "the recipe is battlefield-permanent-only"
+        );
+
+        let mut reviewed = context();
+        reviewed.source_name = "Coeurl".into();
+        reviewed.oracle_id = Some(ISSUE_315_COEURL_ORACLE_ID.into());
+        for negative in [
+            "{1}{W}: Tap target nonenchantment creature.",
+            "{1}{W}, {T}: Untap target nonenchantment creature.",
+            "{1}{W}, {T}: Tap target nonenchantment creature or player.",
+            "{1}{W}, {T}: Tap up to one target nonenchantment creature.",
+            "{1}{W}, {T}: Tap two target nonenchantment creatures.",
+            "{1}{W}, {T}: Tap target nonenchantment creature you control.",
+            "{1}{W}, {T}, Sacrifice this creature: Tap target nonenchantment creature.",
+            "{1}{W}, {T}, Untap this creature: Tap target nonenchantment creature.",
+            "{1}{W}, {T}, Discard a card: Tap target nonenchantment creature.",
+            "{1}{W}, {T}, Pay 1 life: Tap target nonenchantment creature.",
+            "{1}{W}, {T}: Destroy target nonenchantment creature.",
+            "{1}{W}, {T}: Exile target nonenchantment creature.",
+            "{1}{W}, {T}: Tap target noncreature permanent.",
+            "{1}{W}, {T}: Tap target artifact creature.",
+            "{1}{W}, {T}: Tap target nonenchantment creature. Activate only as a sorcery.",
+            "{1}{W}, {T}: Tap target nonenchantment creature. Activate only once each turn.",
+            "{1}{W}, {T}: Tap target nonenchantment creature. Activate only if you control an artifact.",
+            "{1}{W}, {T}: Tap target nonenchantment creature. Activate only from your hand.",
+            "{2}{W}, {T}: Tap target creature.",
+            "{2}, {T}: Tap target creature.",
+            "{2}, {T}: Tap target Mount creature.",
+            "{2}, {T}: Tap target non-Vehicle creature.",
+            "{2}, {T}: Tap target creature you control.",
+            "{2}, Tap this creature: Tap target non-Mount creature.",
+            "{2}, {Q}: Tap target non-Mount creature.",
+            "{2}, {T}: Tap target non-Mount creature, then draw a card.",
+            "{2}, {T}: Tap target non-Mount creature. Untap this creature.",
+            "{2}, {T}, Sacrifice this creature: Tap target non-Mount creature.",
+        ] {
+            assert!(
+                match_clause(negative, false, &reviewed)
+                    .expect("negative tapper clause must not be ambiguous")
+                    .is_none(),
+                "unsupported tapper near-miss must remain unmatched: {negative}"
+            );
+        }
     }
 }

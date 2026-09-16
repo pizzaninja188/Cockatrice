@@ -56,7 +56,8 @@ use recipes::{
     issue_310_oracle_id_is_reviewed, issue_311_card_surface_is_exact,
     issue_311_oracle_id_is_reviewed, issue_313_card_surface_is_exact,
     issue_313_oracle_id_is_reviewed, issue_314_card_surface_is_exact,
-    issue_314_oracle_id_is_reviewed, match_clause, match_modal_assembly, match_modal_mode,
+    issue_314_oracle_id_is_reviewed, issue_315_card_surface_is_exact,
+    issue_315_oracle_id_is_reviewed, match_clause, match_modal_assembly, match_modal_mode,
     match_station_assembly, reviewed_modal_mode_pair, validate_catalog, RecipeAmbiguity,
     RecipeContext, RecipeEmission,
 };
@@ -1457,6 +1458,17 @@ fn issue_314_color_surface_is_exact(oracle_id: &str, card: &Value) -> bool {
     })
 }
 
+fn issue_315_color_surface_is_exact(oracle_id: &str, card: &Value) -> bool {
+    if !issue_315_oracle_id_is_reviewed(oracle_id) {
+        return true;
+    }
+    ["colors", "color_identity"].into_iter().all(|field| {
+        card.get(field)
+            .and_then(Value::as_array)
+            .is_some_and(|values| values.len() == 1 && values[0].as_str() == Some("W"))
+    })
+}
+
 fn normalize_name(name: &str) -> String {
     name.trim().to_lowercase()
 }
@@ -1746,6 +1758,20 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     if !issue_314_color_surface_is_exact(str_field(card, "oracle_id"), card) {
         return Err(Skip::NonKeywordText.into());
     }
+    if !issue_315_card_surface_is_exact(
+        str_field(card, "oracle_id"),
+        &name,
+        &mana_cost,
+        type_line,
+        oracle_text,
+        card.get("power").and_then(Value::as_str),
+        card.get("toughness").and_then(Value::as_str),
+    ) {
+        return Err(Skip::NonKeywordText.into());
+    }
+    if !issue_315_color_surface_is_exact(str_field(card, "oracle_id"), card) {
+        return Err(Skip::NonKeywordText.into());
+    }
     let mut rules = parse_rules_text(
         &name,
         str_field(card, "oracle_id"),
@@ -1879,7 +1905,8 @@ fn evaluate(
         || issue_310_oracle_id_is_reviewed(str_field(card, "oracle_id"))
         || issue_311_oracle_id_is_reviewed(str_field(card, "oracle_id"))
         || issue_313_oracle_id_is_reviewed(str_field(card, "oracle_id"))
-        || issue_314_oracle_id_is_reviewed(str_field(card, "oracle_id")))
+        || issue_314_oracle_id_is_reviewed(str_field(card, "oracle_id"))
+        || issue_315_oracle_id_is_reviewed(str_field(card, "oracle_id")))
         && layout != GenLayout::Normal
     {
         return Err(Skip::NonKeywordText.into());
@@ -8409,6 +8436,345 @@ mod tests {
             oscrop_ability.costs,
             [AbilityCost::Mana(ManaCost::parse("{6}{U}").unwrap())]
         );
+    }
+
+    #[test]
+    fn issue_315_three_card_cohort_generates_exact_typed_activated_tappers() {
+        const RECIPE_LABEL: &str = "creature activated tap creature";
+        let cases = [
+            (
+                "00d1596a-c3e2-4109-86da-388934a0c652",
+                "Coeurl",
+                "{1}{W}",
+                "Creature — Cat Beast",
+                "{1}{W}, {T}: Tap target nonenchantment creature.",
+                TargetFilter {
+                    kind: TargetKind::Creature,
+                    excluded_permanent_types: vec![PermanentTypeFilter::Enchantment],
+                    ..TargetFilter::default()
+                },
+            ),
+            (
+                "515c1604-59f0-45b4-91be-d2f20fdd3e1e",
+                "Frostbridge Guard",
+                "{2}{W}",
+                "Creature — Elemental Soldier",
+                "{2}{W}, {T}: Tap target creature.",
+                TargetFilter {
+                    kind: TargetKind::Creature,
+                    ..TargetFilter::default()
+                },
+            ),
+            (
+                "f893d3d6-efef-4394-8e15-e01deed72b4f",
+                "Sterling Keykeeper",
+                "{2}",
+                "Creature — Human Mercenary",
+                "{2}, {T}: Tap target non-Mount creature.",
+                TargetFilter {
+                    kind: TargetKind::Creature,
+                    excluded_subtypes: vec!["Mount".into()],
+                    ..TargetFilter::default()
+                },
+            ),
+        ];
+
+        for (oracle_id, name, activation_cost, type_line, oracle_text, expected_filter) in cases {
+            let mut card = normal_card_with_oracle_id(
+                oracle_id,
+                name,
+                "{1}{W}",
+                type_line,
+                oracle_text,
+                Some(("2", "2")),
+            );
+            card["colors"] = json!(["W"]);
+            card["color_identity"] = json!(["W"]);
+
+            let generated = evaluate_fresh(&card)
+                .unwrap_or_else(|error| panic!("{name} should generate: {error:?}"));
+            assert_eq!(generated.faces[0].recipe_labels, [RECIPE_LABEL]);
+
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert_eq!(raw.id, slugify(name));
+            assert_eq!(raw.name, name);
+            assert_eq!(
+                raw.types,
+                type_line
+                    .split_once(" — ")
+                    .unwrap()
+                    .0
+                    .split_whitespace()
+                    .chain(type_line.split_once(" — ").unwrap().1.split_whitespace())
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(raw.power, Some(2));
+            assert_eq!(raw.toughness, Some(2));
+
+            let [ability] = raw.activated_abilities.as_slice() else {
+                panic!("{name} should emit exactly one activated ability");
+            };
+            assert_eq!(ability.ability_id.as_str(), "activated_01");
+            assert_eq!(
+                ability.presentation,
+                AbilityPresentation::OracleLines(vec![1])
+            );
+            assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+            assert_eq!(ability.timing, ActivationTiming::Normal);
+            assert_eq!(
+                ability.costs,
+                [
+                    AbilityCost::Mana(ManaCost::parse(activation_cost).unwrap()),
+                    AbilityCost::Tap,
+                ]
+            );
+            assert!(ability.cost_modifiers.is_empty());
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::Tap {
+                    subject: EffectSubject::Chosen(Box::new(expected_filter.clone())),
+                }]
+            );
+            assert!(ability.conditions.is_empty());
+            assert!(ability.activation_limit.is_none());
+
+            let targeting = ability
+                .targeting
+                .as_ref()
+                .expect("tap ability should have a target contract");
+            let [group] = targeting.groups.as_slice() else {
+                panic!("{name} should emit exactly one target group");
+            };
+            assert_eq!((group.min, group.max), (1, 1));
+            assert_eq!(group.effect_indices, [0]);
+            assert!(group.distinct_from.is_empty());
+            assert!(!group.same_graveyard);
+            assert!(group.cast_cost_expansion.is_none());
+            assert!(TargetSchema::compile(&ability.effect, Some(targeting)).is_ok());
+        }
+    }
+
+    #[test]
+    fn issue_315_generator_is_fail_closed_for_exact_identity_surface_and_near_misses() {
+        const COEURL_ID: &str = "00d1596a-c3e2-4109-86da-388934a0c652";
+        const COEURL_TEXT: &str = "{1}{W}, {T}: Tap target nonenchantment creature.";
+        let mut exact = normal_card_with_oracle_id(
+            COEURL_ID,
+            "Coeurl",
+            "{1}{W}",
+            "Creature — Cat Beast",
+            COEURL_TEXT,
+            Some(("2", "2")),
+        );
+        exact["colors"] = json!(["W"]);
+        exact["color_identity"] = json!(["W"]);
+        let generated = evaluate_fresh(&exact).expect("the reviewed Coeurl surface qualifies");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.activated_abilities.len(), 1);
+
+        let cases: &[(&str, fn(&mut Value))] = &[
+            ("unreviewed identity", |card: &mut Value| {
+                card["oracle_id"] = json!("00000000-0000-0000-0000-000000000000");
+            }),
+            ("missing identity", |card: &mut Value| {
+                card.as_object_mut().unwrap().remove("oracle_id");
+            }),
+            ("wrong name", |card: &mut Value| {
+                card["name"] = json!("Other Cat Beast");
+            }),
+            ("cross-card name and text", |card: &mut Value| {
+                card["name"] = json!("Frostbridge Guard");
+                card["type_line"] = json!("Creature — Elemental Soldier");
+                card["oracle_text"] = json!("{2}{W}, {T}: Tap target creature.");
+            }),
+            ("wrong casting cost", |card: &mut Value| {
+                card["mana_cost"] = json!("{2}{W}");
+            }),
+            ("wrong type line", |card: &mut Value| {
+                card["type_line"] = json!("Creature — Cat Rogue");
+            }),
+            ("noncreature context", |card: &mut Value| {
+                card["type_line"] = json!("Artifact");
+                card.as_object_mut().unwrap().remove("power");
+                card.as_object_mut().unwrap().remove("toughness");
+            }),
+            ("wrong power", |card: &mut Value| {
+                card["power"] = json!("3");
+            }),
+            ("wrong toughness", |card: &mut Value| {
+                card["toughness"] = json!("3");
+            }),
+            ("noncanonical power", |card: &mut Value| {
+                card["power"] = json!("02");
+            }),
+            ("noncanonical toughness", |card: &mut Value| {
+                card["toughness"] = json!("02");
+            }),
+            ("wrong colors", |card: &mut Value| {
+                card["colors"] = json!(["R"]);
+            }),
+            ("wrong color identity", |card: &mut Value| {
+                card["color_identity"] = json!(["R"]);
+            }),
+            ("missing colors", |card: &mut Value| {
+                card.as_object_mut().unwrap().remove("colors");
+            }),
+            ("missing color identity", |card: &mut Value| {
+                card.as_object_mut().unwrap().remove("color_identity");
+            }),
+            ("activation missing tap cost", |card: &mut Value| {
+                card["oracle_text"] = json!("{1}{W}: Tap target nonenchantment creature.");
+            }),
+            ("activation untaps", |card: &mut Value| {
+                card["oracle_text"] = json!("{1}{W}, {T}: Untap target nonenchantment creature.");
+            }),
+            ("target player", |card: &mut Value| {
+                card["oracle_text"] =
+                    json!("{1}{W}, {T}: Tap target nonenchantment creature or player.");
+            }),
+            ("up to one target", |card: &mut Value| {
+                card["oracle_text"] =
+                    json!("{1}{W}, {T}: Tap up to one target nonenchantment creature.");
+            }),
+            ("two targets", |card: &mut Value| {
+                card["oracle_text"] =
+                    json!("{1}{W}, {T}: Tap two target nonenchantment creatures.");
+            }),
+            ("controller restriction", |card: &mut Value| {
+                card["oracle_text"] =
+                    json!("{1}{W}, {T}: Tap target nonenchantment creature you control.");
+            }),
+            ("sacrifice cost", |card: &mut Value| {
+                card["oracle_text"] = json!(
+                    "{1}{W}, {T}, Sacrifice this creature: Tap target nonenchantment creature."
+                );
+            }),
+            ("untap cost", |card: &mut Value| {
+                card["oracle_text"] =
+                    json!("{1}{W}, {T}, Untap this creature: Tap target nonenchantment creature.");
+            }),
+            ("discard cost", |card: &mut Value| {
+                card["oracle_text"] =
+                    json!("{1}{W}, {T}, Discard a card: Tap target nonenchantment creature.");
+            }),
+            ("life cost", |card: &mut Value| {
+                card["oracle_text"] =
+                    json!("{1}{W}, {T}, Pay 1 life: Tap target nonenchantment creature.");
+            }),
+            ("destroy effect", |card: &mut Value| {
+                card["oracle_text"] = json!("{1}{W}, {T}: Destroy target nonenchantment creature.");
+            }),
+            ("exile effect", |card: &mut Value| {
+                card["oracle_text"] = json!("{1}{W}, {T}: Exile target nonenchantment creature.");
+            }),
+            ("noncreature permanent target", |card: &mut Value| {
+                card["oracle_text"] = json!("{1}{W}, {T}: Tap target noncreature permanent.");
+            }),
+            ("artifact creature target", |card: &mut Value| {
+                card["oracle_text"] = json!("{1}{W}, {T}: Tap target artifact creature.");
+            }),
+            ("sorcery restriction", |card: &mut Value| {
+                card["oracle_text"] = json!(
+                    "{1}{W}, {T}: Tap target nonenchantment creature. Activate only as a sorcery."
+                );
+            }),
+            ("activation limit", |card: &mut Value| {
+                card["oracle_text"] = json!("{1}{W}, {T}: Tap target nonenchantment creature. Activate only once each turn.");
+            }),
+            ("activation condition", |card: &mut Value| {
+                card["oracle_text"] = json!("{1}{W}, {T}: Tap target nonenchantment creature. Activate only if you control an artifact.");
+            }),
+            ("source-zone restriction", |card: &mut Value| {
+                card["oracle_text"] = json!("{1}{W}, {T}: Tap target nonenchantment creature. Activate only from your hand.");
+            }),
+            ("extra effect", |card: &mut Value| {
+                card["oracle_text"] =
+                    json!("{1}{W}, {T}: Tap target nonenchantment creature, then draw a card.");
+            }),
+            ("self untaps", |card: &mut Value| {
+                card["oracle_text"] =
+                    json!("{1}{W}, {T}: Tap target nonenchantment creature. Untap this creature.");
+            }),
+            ("wrong Frostbridge activation cost", |card: &mut Value| {
+                card["oracle_text"] = json!("{2}{W}, {T}: Tap target nonenchantment creature.");
+            }),
+            ("wrong Sterling activation cost", |card: &mut Value| {
+                card["oracle_text"] = json!("{2}, {T}: Tap target nonenchantment creature.");
+            }),
+            ("duplicate clause", |card: &mut Value| {
+                card["oracle_text"] = json!("{1}{W}, {T}: Tap target nonenchantment creature.\n{1}{W}, {T}: Tap target nonenchantment creature.");
+            }),
+        ];
+        for (label, mutate) in cases {
+            let mut changed = exact.clone();
+            mutate(&mut changed);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#315 near-miss must fail closed: {label}"
+            );
+        }
+
+        let mut multiface = multiface(
+            "transform",
+            "Coeurl // Other Face",
+            vec![
+                face(
+                    "Coeurl",
+                    "{1}{W}",
+                    "Creature — Cat Beast",
+                    COEURL_TEXT,
+                    Some(("2", "2")),
+                    &["W"],
+                    None,
+                ),
+                face(
+                    "Other Face",
+                    "",
+                    "Creature",
+                    "",
+                    Some(("1", "1")),
+                    &["W"],
+                    None,
+                ),
+            ],
+        );
+        multiface["oracle_id"] = json!(COEURL_ID);
+        assert!(
+            evaluate_fresh(&multiface).is_err(),
+            "a reviewed #315 identity must not bypass its normal-layout restriction"
+        );
+
+        for (oracle_id, name, oracle_text) in [
+            (
+                "515c1604-59f0-45b4-91be-d2f20fdd3e1e",
+                "Frostbridge Guard",
+                COEURL_TEXT,
+            ),
+            (
+                "f893d3d6-efef-4394-8e15-e01deed72b4f",
+                "Sterling Keykeeper",
+                COEURL_TEXT,
+            ),
+        ] {
+            let mut card = normal_card_with_oracle_id(
+                oracle_id,
+                name,
+                "{1}{W}",
+                if name == "Frostbridge Guard" {
+                    "Creature — Elemental Soldier"
+                } else {
+                    "Creature — Human Mercenary"
+                },
+                oracle_text,
+                Some(("2", "2")),
+            );
+            card["colors"] = json!(["W"]);
+            card["color_identity"] = json!(["W"]);
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "a reviewed #315 card cannot borrow another cohort member's clause"
+            );
+        }
     }
 
     #[cfg(windows)]

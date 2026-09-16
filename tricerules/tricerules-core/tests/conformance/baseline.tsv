@@ -404,6 +404,8 @@ cloudkin_seer	0	cast	exercised
 cloudsculpt_technician	0	cast	exercised
 cobblebrute	0	cast	exercised
 coercion	0	cast	exercised
+coeurl	0	ability:0	exercised
+coeurl	0	cast	exercised
 cogwork_wrestler	0	cast	exercised
 cold-water_snapper	0	cast	exercised
 colorful_feiyi_sparrow	0	cast	exercised
@@ -807,6 +809,8 @@ frontier_bivouac	0	ability:0	exercised
 frontier_bivouac	0	land	exercised
 frost_breath	0	cast	exercised
 frost_ogre	0	cast	exercised
+frostbridge_guard	0	ability:0	exercised
+frostbridge_guard	0	cast	exercised
 fugitive_wizard	0	cast	exercised
 fungal_colossus	0	cast	exercised
 fusion_elemental	0	cast	exercised
@@ -2068,6 +2072,8 @@ steam_vents	0	land	exercised
 steeple_roc	0	cast	exercised
 steer_clear	0	cast	unsupported: target group 0 needs a richer fixture
 sterling_hound	0	cast	exercised
+sterling_keykeeper	0	ability:0	exercised
+sterling_keykeeper	0	cast	exercised
 sterling_supplier	0	cast	exercised
 steward_of_valeron	0	ability:0	exercised
 steward_of_valeron	0	cast	exercised
