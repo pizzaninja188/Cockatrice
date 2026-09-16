@@ -1441,6 +1441,8 @@ mutant_town	0	ability:0	exercised
 mutant_town	0	land	exercised
 mutant_town_musicians	0	cast	exercised
 mysterios_phantasm	0	cast	exercised
+mystic_archaeologist	0	ability:0	exercised
+mystic_archaeologist	0	cast	exercised
 mystic_monastery	0	ability:0	exercised
 mystic_monastery	0	land	exercised
 mystical_tutor	0	cast	exercised
@@ -1537,6 +1539,8 @@ orochi_sustainer	0	ability:0	exercised
 orochi_sustainer	0	cast	exercised
 orzhov_guildgate	0	ability:0	exercised
 orzhov_guildgate	0	land	exercised
+oscorp_research_team	0	ability:0	exercised
+oscorp_research_team	0	cast	exercised
 osseous_exhale	0	cast	unsupported: target group 0 needs a richer fixture
 otter-penguin	0	cast	exercised
 outcaster_greenblade	0	cast	exercised

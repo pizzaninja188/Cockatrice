@@ -2628,6 +2628,96 @@ fn match_land_sacrifice_draw_one(text: &str, context: &RecipeContext) -> Option<
         })
 }
 
+const ISSUE_314_MYSTIC_ORACLE_ID: &str = "b77dfe2a-ebc9-46b0-9134-2ecb2abdd8be";
+const ISSUE_314_OSCORP_ORACLE_ID: &str = "4d2e233c-0173-417f-82a0-1e692a400ae1";
+const ISSUE_314_REVIEWED_ORACLE_IDS: &[&str] =
+    &[ISSUE_314_MYSTIC_ORACLE_ID, ISSUE_314_OSCORP_ORACLE_ID];
+
+fn issue_314_variant(context: &RecipeContext) -> Option<(&'static str, &'static str)> {
+    match context.oracle_id.as_deref() {
+        Some(ISSUE_314_MYSTIC_ORACLE_ID) if context.source_name == "Mystic Archaeologist" => {
+            Some(("Mystic Archaeologist", "{3}{U}{U}"))
+        }
+        Some(ISSUE_314_OSCORP_ORACLE_ID) if context.source_name == "Oscorp Research Team" => {
+            Some(("Oscorp Research Team", "{6}{U}"))
+        }
+        Some(_) => None,
+        None => match context.source_name.as_str() {
+            "Mystic Archaeologist" => Some(("Mystic Archaeologist", "{3}{U}{U}")),
+            "Oscorp Research Team" => Some(("Oscorp Research Team", "{6}{U}")),
+            _ => None,
+        },
+    }
+}
+
+fn issue_314_context_is_reviewed(context: &RecipeContext) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        .is_none_or(|oracle_id| ISSUE_314_REVIEWED_ORACLE_IDS.contains(&oracle_id))
+}
+
+pub(super) fn issue_314_oracle_id_is_reviewed(oracle_id: &str) -> bool {
+    ISSUE_314_REVIEWED_ORACLE_IDS.contains(&oracle_id)
+}
+
+pub(super) fn issue_314_card_surface_is_exact(
+    oracle_id: &str,
+    name: &str,
+    mana_cost: &str,
+    type_line: &str,
+    oracle_text: &str,
+    power: Option<&str>,
+    toughness: Option<&str>,
+) -> bool {
+    let expected = match oracle_id {
+        ISSUE_314_MYSTIC_ORACLE_ID => (
+            "Mystic Archaeologist",
+            "{1}{U}",
+            "Creature — Human Wizard",
+            Some("2"),
+            Some("1"),
+            "{3}{U}{U}: Draw two cards.",
+        ),
+        ISSUE_314_OSCORP_ORACLE_ID => (
+            "Oscorp Research Team",
+            "{3}{U}",
+            "Creature — Human Scientist",
+            Some("1"),
+            Some("5"),
+            "{6}{U}: Draw two cards.",
+        ),
+        _ => return true,
+    };
+    (name, mana_cost, type_line, power, toughness, oracle_text) == expected
+}
+
+fn match_creature_pay_draw_two(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    if !context.source_is_creature
+        || !issue_314_context_is_reviewed(context)
+        || issue_314_variant(context).is_none()
+    {
+        return None;
+    }
+    let (_, activation_cost) = issue_314_variant(context)?;
+    let expected_text = match activation_cost {
+        "{3}{U}{U}" => "{3}{U}{U}: Draw two cards.",
+        "{6}{U}" => "{6}{U}: Draw two cards.",
+        _ => return None,
+    };
+    (text == expected_text).then(|| {
+        utility_activated_ability(
+            context,
+            vec![fixed_mana_cost(activation_cost)],
+            vec![SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(2),
+            }],
+            None,
+        )
+    })
+}
+
 const ISSUE_301_REVIEWED_ORACLE_IDS: &[&str] = &[
     "295f8b8d-102a-47af-93c2-f8182c5f11ca", // Ascendant Dustspeaker
     "5d46e85f-4a04-48b1-afe9-3a47678041d4", // Startled Relic Sloth
@@ -7795,6 +7885,41 @@ pub(super) static CATALOG: &[Recipe] = &[
             "{3}{U}, Sacrifice this artifact: Draw a card.",
             "{3}{U}, Sacrifice this artifact: You may draw two cards.",
             "{3}{U}, Sacrifice this artifact: Draw two cards, then discard a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.creature.pay_mana.draw_two"),
+        label: "creature activated draw two",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_creature_pay_draw_two,
+        calibration: calibrations!(
+            "Mystic Archaeologist" => "{3}{U}{U}: Draw two cards.",
+            "Oscorp Research Team" => "{6}{U}: Draw two cards.";
+            "{3}{U}: Draw two cards.",
+            "{4}{U}: Draw two cards.",
+            "{3}{U}{U}{U}: Draw two cards.",
+            "{5}{U}: Draw two cards.",
+            "{7}{U}: Draw two cards.",
+            "{3}{G}{G}: Draw two cards.",
+            "{3}{U}{U}: Draw one card.",
+            "{3}{U}{U}: Draw three cards.",
+            "{3}{U}{U}: Draw X cards.",
+            "{3}{U}{U}: Target player draws two cards.",
+            "{3}{U}{U}: Each player draws two cards.",
+            "{3}{U}{U}: You may draw two cards.",
+            "{3}{U}{U}: Draw two cards, then discard a card.",
+            "{3}{U}{U}: Draw two cards. You lose 2 life.",
+            "{3}{U}{U}, {T}: Draw two cards.",
+            "{3}{U}{U}, Sacrifice this creature: Draw two cards.",
+            "{3}{U}{U}, Discard a card: Draw two cards.",
+            "{3}{U}{U}, Pay 1 life: Draw two cards.",
+            "{3}{U}{U}: Draw two cards. Activate only as a sorcery.",
+            "{3}{U}{U}: Draw two cards. Activate only once each turn.",
+            "{3}{U}{U}: If you control another Wizard, draw two cards.",
+            "{3}{U}{U}: Draw two cards from your graveyard.",
+            "{3}{U}{U}: Draw two cards from your library.",
+            "{3}{U}{U}: Draw two cards, then draw another card.",
+            "{3}{U}{U}: Draw two cards. This ability can be activated only from your hand."
         ),
     },
     Recipe {
@@ -14015,6 +14140,128 @@ mod tests {
             "anything",
             None,
             None
+        ));
+    }
+
+    #[test]
+    fn issue_314_activated_draw_two_recipe_is_exact_and_identity_bound() {
+        let mut mystic = context();
+        mystic.source_name = "Mystic Archaeologist".into();
+        let matched = match_clause("{3}{U}{U}: Draw two cards.", false, &mystic)
+            .expect("Mystic recipe must not be ambiguous")
+            .expect("Mystic recipe must match");
+        assert_eq!(matched.id.as_str(), "activated.creature.pay_mana.draw_two");
+        let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+            panic!("Mystic recipe must emit an activated ability");
+        };
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(ability.timing, ActivationTiming::Normal);
+        assert_eq!(
+            ability.costs,
+            [AbilityCost::Mana(ManaCost::parse("{3}{U}{U}").unwrap())]
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(2),
+            }]
+        );
+        assert!(ability.targeting.is_none());
+        assert!(ability.conditions.is_empty());
+        assert!(ability.activation_limit.is_none());
+
+        let mut osc = context();
+        osc.source_name = "Oscorp Research Team".into();
+        osc.oracle_id = Some(ISSUE_314_OSCORP_ORACLE_ID.into());
+        let matched = match_clause("{6}{U}: Draw two cards.", false, &osc)
+            .expect("Oscorp recipe must not be ambiguous")
+            .expect("Oscorp recipe must match");
+        let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+            panic!("Oscorp recipe must emit an activated ability");
+        };
+        assert_eq!(
+            ability.costs,
+            [AbilityCost::Mana(ManaCost::parse("{6}{U}").unwrap())]
+        );
+        let oscrop_swapped_cost = osc.clone();
+        assert_eq!(
+            match_clause("{3}{U}{U}: Draw two cards.", false, &oscrop_swapped_cost),
+            Ok(None),
+            "Oscorp must reject Mystic's activation cost"
+        );
+        assert_eq!(
+            match_clause("{3}{U}{U}: Draw two cards.", true, &mystic),
+            Ok(None),
+            "the creature recipe must not collide with spell surfaces"
+        );
+
+        let mut unreviewed = mystic.clone();
+        unreviewed.oracle_id = Some("00000000-0000-0000-0000-000000000000".into());
+        assert_eq!(
+            match_clause("{3}{U}{U}: Draw two cards.", false, &unreviewed),
+            Ok(None),
+            "an unreviewed Oracle ID must fail closed"
+        );
+        let mut mismatched_name = mystic.clone();
+        mismatched_name.oracle_id = Some(ISSUE_314_MYSTIC_ORACLE_ID.into());
+        mismatched_name.source_name = "Oscorp Research Team".into();
+        assert_eq!(
+            match_clause("{3}{U}{U}: Draw two cards.", false, &mismatched_name),
+            Ok(None),
+            "an Oracle ID and name from different identities must not mix"
+        );
+        let mut noncreature = mystic.clone();
+        noncreature.source_is_creature = false;
+        assert_eq!(
+            match_clause("{3}{U}{U}: Draw two cards.", false, &noncreature),
+            Ok(None),
+            "the recipe is bound to creature sources"
+        );
+        for near_miss in [
+            "{3}{U}: Draw two cards.",
+            "{3}{U}{U}{U}: Draw two cards.",
+            "{6}{U}: Draw two cards.",
+            "{3}{U}{U}: Draw one card.",
+            "{3}{U}{U}: Draw three cards.",
+            "{3}{U}{U}: Target player draws two cards.",
+            "{3}{U}{U}: You may draw two cards.",
+            "{3}{U}{U}: Draw two cards, then discard a card.",
+            "{3}{U}{U}, {T}: Draw two cards.",
+            "{3}{U}{U}: Draw two cards. Activate only as a sorcery.",
+        ] {
+            assert_eq!(
+                match_clause(near_miss, false, &mystic),
+                Ok(None),
+                "near-miss must fail closed: {near_miss}"
+            );
+        }
+        assert!(issue_314_card_surface_is_exact(
+            ISSUE_314_MYSTIC_ORACLE_ID,
+            "Mystic Archaeologist",
+            "{1}{U}",
+            "Creature — Human Wizard",
+            "{3}{U}{U}: Draw two cards.",
+            Some("2"),
+            Some("1"),
+        ));
+        assert!(issue_314_card_surface_is_exact(
+            ISSUE_314_OSCORP_ORACLE_ID,
+            "Oscorp Research Team",
+            "{3}{U}",
+            "Creature — Human Scientist",
+            "{6}{U}: Draw two cards.",
+            Some("1"),
+            Some("5"),
+        ));
+        assert!(!issue_314_card_surface_is_exact(
+            ISSUE_314_OSCORP_ORACLE_ID,
+            "Oscorp Research Team",
+            "{3}{U}",
+            "Creature — Human Scientist",
+            "{6}{U}: Draw two cards.",
+            Some("3"),
+            Some("4"),
         ));
     }
 }

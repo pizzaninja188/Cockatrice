@@ -55,7 +55,8 @@ use recipes::{
     issue_309_oracle_id_is_reviewed, issue_310_card_surface_is_exact,
     issue_310_oracle_id_is_reviewed, issue_311_card_surface_is_exact,
     issue_311_oracle_id_is_reviewed, issue_313_card_surface_is_exact,
-    issue_313_oracle_id_is_reviewed, match_clause, match_modal_assembly, match_modal_mode,
+    issue_313_oracle_id_is_reviewed, issue_314_card_surface_is_exact,
+    issue_314_oracle_id_is_reviewed, match_clause, match_modal_assembly, match_modal_mode,
     match_station_assembly, reviewed_modal_mode_pair, validate_catalog, RecipeAmbiguity,
     RecipeContext, RecipeEmission,
 };
@@ -1445,6 +1446,17 @@ fn str_field<'a>(card: &'a Value, key: &str) -> &'a str {
     card.get(key).and_then(Value::as_str).unwrap_or("")
 }
 
+fn issue_314_color_surface_is_exact(oracle_id: &str, card: &Value) -> bool {
+    if !issue_314_oracle_id_is_reviewed(oracle_id) {
+        return true;
+    }
+    ["colors", "color_identity"].into_iter().all(|field| {
+        card.get(field)
+            .and_then(Value::as_array)
+            .is_some_and(|values| values.len() == 1 && values[0].as_str() == Some("U"))
+    })
+}
+
 fn normalize_name(name: &str) -> String {
     name.trim().to_lowercase()
 }
@@ -1720,6 +1732,20 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     ) {
         return Err(Skip::NonKeywordText.into());
     }
+    if !issue_314_card_surface_is_exact(
+        str_field(card, "oracle_id"),
+        &name,
+        &mana_cost,
+        type_line,
+        oracle_text,
+        card.get("power").and_then(Value::as_str),
+        card.get("toughness").and_then(Value::as_str),
+    ) {
+        return Err(Skip::NonKeywordText.into());
+    }
+    if !issue_314_color_surface_is_exact(str_field(card, "oracle_id"), card) {
+        return Err(Skip::NonKeywordText.into());
+    }
     let mut rules = parse_rules_text(
         &name,
         str_field(card, "oracle_id"),
@@ -1852,7 +1878,8 @@ fn evaluate(
     if (issue_309_oracle_id_is_reviewed(str_field(card, "oracle_id"))
         || issue_310_oracle_id_is_reviewed(str_field(card, "oracle_id"))
         || issue_311_oracle_id_is_reviewed(str_field(card, "oracle_id"))
-        || issue_313_oracle_id_is_reviewed(str_field(card, "oracle_id")))
+        || issue_313_oracle_id_is_reviewed(str_field(card, "oracle_id"))
+        || issue_314_oracle_id_is_reviewed(str_field(card, "oracle_id")))
         && layout != GenLayout::Normal
     {
         return Err(Skip::NonKeywordText.into());
@@ -8134,6 +8161,253 @@ mod tests {
         assert!(
             bytes.is_ascii(),
             "PowerShell 5 treats BOM-less scripts as ANSI"
+        );
+    }
+
+    #[test]
+    fn issue_314_two_card_cohort_generates_exact_reviewed_activated_draw_two_cards() {
+        let cards = [
+            normal_card_with_oracle_id(
+                "b77dfe2a-ebc9-46b0-9134-2ecb2abdd8be",
+                "Mystic Archaeologist",
+                "{1}{U}",
+                "Creature — Human Wizard",
+                "{3}{U}{U}: Draw two cards.",
+                Some(("2", "1")),
+            ),
+            normal_card_with_oracle_id(
+                "4d2e233c-0173-417f-82a0-1e692a400ae1",
+                "Oscorp Research Team",
+                "{3}{U}",
+                "Creature — Human Scientist",
+                "{6}{U}: Draw two cards.",
+                Some(("1", "5")),
+            ),
+        ];
+
+        for mut card in cards {
+            card["colors"] = json!(["U"]);
+            card["color_identity"] = json!(["U"]);
+            let name = str_field(&card, "name");
+            evaluate_fresh(&card)
+                .unwrap_or_else(|error| panic!("{name} should generate: {error:?}"));
+        }
+    }
+
+    #[test]
+    fn issue_314_generator_is_fail_closed_for_identity_surface_and_context_near_misses() {
+        let exact = normal_card_with_oracle_id(
+            "b77dfe2a-ebc9-46b0-9134-2ecb2abdd8be",
+            "Mystic Archaeologist",
+            "{1}{U}",
+            "Creature — Human Wizard",
+            "{3}{U}{U}: Draw two cards.",
+            Some(("2", "1")),
+        );
+        let mut exact = exact;
+        exact["colors"] = json!(["U"]);
+        exact["color_identity"] = json!(["U"]);
+        let generated = evaluate_fresh(&exact).expect("the reviewed Mystic surface qualifies");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        let [ability] = raw.activated_abilities.as_slice() else {
+            panic!("Mystic Archaeologist should emit exactly one activated ability");
+        };
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(ability.timing, ActivationTiming::Normal);
+        assert_eq!(
+            ability.costs,
+            [AbilityCost::Mana(ManaCost::parse("{3}{U}{U}").unwrap())]
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(2),
+            }]
+        );
+        assert!(ability.targeting.is_none());
+        assert!(ability.conditions.is_empty());
+        assert!(ability.activation_limit.is_none());
+
+        let cases: &[(&str, fn(&mut Value))] = &[
+            ("unreviewed identity", |card: &mut Value| {
+                card["oracle_id"] = json!("00000000-0000-0000-0000-000000000000");
+            }),
+            ("missing identity", |card: &mut Value| {
+                card.as_object_mut().unwrap().remove("oracle_id");
+            }),
+            ("wrong name", |card: &mut Value| {
+                card["name"] = json!("Other Archaeologist");
+            }),
+            ("wrong casting cost", |card: &mut Value| {
+                card["mana_cost"] = json!("{2}{U}");
+            }),
+            ("wrong type line", |card: &mut Value| {
+                card["type_line"] = json!("Creature — Human Rogue");
+            }),
+            ("wrong power", |card: &mut Value| {
+                card["power"] = json!("3");
+            }),
+            ("wrong toughness", |card: &mut Value| {
+                card["toughness"] = json!("2");
+            }),
+            ("noncanonical power", |card: &mut Value| {
+                card["power"] = json!("02");
+            }),
+            ("noncanonical toughness", |card: &mut Value| {
+                card["toughness"] = json!("01");
+            }),
+            ("wrong colors", |card: &mut Value| {
+                card["colors"] = json!(["R"]);
+            }),
+            ("wrong color identity", |card: &mut Value| {
+                card["color_identity"] = json!(["R"]);
+            }),
+            ("missing colors", |card: &mut Value| {
+                card.as_object_mut().unwrap().remove("colors");
+            }),
+            ("missing color identity", |card: &mut Value| {
+                card.as_object_mut().unwrap().remove("color_identity");
+            }),
+            ("activation cost swapped", |card: &mut Value| {
+                card["oracle_text"] = json!("{6}{U}: Draw two cards.");
+            }),
+            ("generic activation cost", |card: &mut Value| {
+                card["oracle_text"] = json!("{4}{U}: Draw two cards.");
+            }),
+            ("wrong color activation cost", |card: &mut Value| {
+                card["oracle_text"] = json!("{3}{G}{G}: Draw two cards.");
+            }),
+            ("malformed activation cost", |card: &mut Value| {
+                card["oracle_text"] = json!("{3}{U}{U: Draw two cards.");
+            }),
+            ("draw one", |card: &mut Value| {
+                card["oracle_text"] = json!("{3}{U}{U}: Draw one card.");
+            }),
+            ("draw three", |card: &mut Value| {
+                card["oracle_text"] = json!("{3}{U}{U}: Draw three cards.");
+            }),
+            ("draw X", |card: &mut Value| {
+                card["oracle_text"] = json!("{3}{U}{U}: Draw X cards.");
+            }),
+            ("target draw", |card: &mut Value| {
+                card["oracle_text"] = json!("{3}{U}{U}: Target player draws two cards.");
+            }),
+            ("each-player draw", |card: &mut Value| {
+                card["oracle_text"] = json!("{3}{U}{U}: Each player draws two cards.");
+            }),
+            ("optional draw", |card: &mut Value| {
+                card["oracle_text"] = json!("{3}{U}{U}: You may draw two cards.");
+            }),
+            ("draw-discard", |card: &mut Value| {
+                card["oracle_text"] = json!("{3}{U}{U}: Draw two cards, then discard a card.");
+            }),
+            ("life loss", |card: &mut Value| {
+                card["oracle_text"] = json!("{3}{U}{U}: Draw two cards. You lose 2 life.");
+            }),
+            ("tap cost", |card: &mut Value| {
+                card["oracle_text"] = json!("{3}{U}{U}, {T}: Draw two cards.");
+            }),
+            ("sacrifice cost", |card: &mut Value| {
+                card["oracle_text"] = json!("{3}{U}{U}, Sacrifice this creature: Draw two cards.");
+            }),
+            ("discard cost", |card: &mut Value| {
+                card["oracle_text"] = json!("{3}{U}{U}, Discard a card: Draw two cards.");
+            }),
+            ("life cost", |card: &mut Value| {
+                card["oracle_text"] = json!("{3}{U}{U}, Pay 1 life: Draw two cards.");
+            }),
+            ("sorcery restriction", |card: &mut Value| {
+                card["oracle_text"] =
+                    json!("{3}{U}{U}: Draw two cards. Activate only as a sorcery.");
+            }),
+            ("activation limit", |card: &mut Value| {
+                card["oracle_text"] =
+                    json!("{3}{U}{U}: Draw two cards. Activate only once each turn.");
+            }),
+            ("condition", |card: &mut Value| {
+                card["oracle_text"] =
+                    json!("{3}{U}{U}: If you control another Wizard, draw two cards.");
+            }),
+            ("source-zone restriction", |card: &mut Value| {
+                card["oracle_text"] =
+                    json!("{3}{U}{U}: Draw two cards. Activate only from your hand.");
+            }),
+            ("reordered duplicated text", |card: &mut Value| {
+                card["oracle_text"] =
+                    json!("{3}{U}{U}: Draw two cards.\n{3}{U}{U}: Draw two cards.");
+            }),
+            ("noncreature context", |card: &mut Value| {
+                card["type_line"] = json!("Artifact");
+                card.as_object_mut().unwrap().remove("power");
+                card.as_object_mut().unwrap().remove("toughness");
+            }),
+        ];
+        for (label, mutate) in cases {
+            let mut changed = exact.clone();
+            mutate(&mut changed);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#314 near-miss must fail closed: {label}"
+            );
+        }
+
+        let multiface = multiface(
+            "transform",
+            "Mystic Archaeologist // Other Face",
+            vec![
+                face(
+                    "Mystic Archaeologist",
+                    "{1}{U}",
+                    "Creature — Human Wizard",
+                    "{3}{U}{U}: Draw two cards.",
+                    Some(("2", "1")),
+                    &["U"],
+                    None,
+                ),
+                face(
+                    "Other Face",
+                    "",
+                    "Creature",
+                    "",
+                    Some(("1", "1")),
+                    &["U"],
+                    None,
+                ),
+            ],
+        );
+        let mut reviewed_multiface = multiface;
+        reviewed_multiface["oracle_id"] = json!("b77dfe2a-ebc9-46b0-9134-2ecb2abdd8be");
+        assert!(
+            evaluate_fresh(&reviewed_multiface).is_err(),
+            "a reviewed #314 identity must not bypass its normal-layout restriction"
+        );
+
+        let oscrop_surface = normal_card_with_oracle_id(
+            "4d2e233c-0173-417f-82a0-1e692a400ae1",
+            "Oscorp Research Team",
+            "{3}{U}",
+            "Creature — Human Scientist",
+            "{6}{U}: Draw two cards.",
+            Some(("1", "5")),
+        );
+        let mut oscrop_surface = oscrop_surface;
+        oscrop_surface["colors"] = json!(["U"]);
+        oscrop_surface["color_identity"] = json!(["U"]);
+        let oscrop_generated = evaluate_fresh(&oscrop_surface).expect("Oscorp qualifies");
+        let mut oscrop_swapped_cost = oscrop_surface.clone();
+        oscrop_swapped_cost["oracle_text"] = json!("{3}{U}{U}: Draw two cards.");
+        assert!(
+            evaluate_fresh(&oscrop_swapped_cost).is_err(),
+            "Oscorp must reject Mystic's activation cost"
+        );
+        let oscrop_raw = parse_generated(&oscrop_generated.to_ron("fixture"));
+        let [oscrop_ability] = oscrop_raw.activated_abilities.as_slice() else {
+            panic!("Oscorp Research Team should emit exactly one activated ability");
+        };
+        assert_eq!(
+            oscrop_ability.costs,
+            [AbilityCost::Mana(ManaCost::parse("{6}{U}").unwrap())]
         );
     }
 

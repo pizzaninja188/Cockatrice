@@ -463,3 +463,5 @@ mod issue_310_generated_station;
 mod issue_311_generated_station;
 #[path = "scenario/issue_313_generated_station.rs"]
 mod issue_313_generated_station;
+#[path = "scenario/issue_314_generated_activated_draw_two.rs"]
+mod issue_314_generated_activated_draw_two;
