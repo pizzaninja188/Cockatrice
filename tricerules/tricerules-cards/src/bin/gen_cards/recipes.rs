@@ -1,16 +1,17 @@
 use tricerules_cards::primitives::{
     ActivationLimit, BattlefieldAggregate, BattlefieldPermanentFilter, CardResultAction,
-    CardResultFilter, CardResultSource, CardTypeFilter, CountExpression, CreatureScopeController,
-    CreatureScopeFilter, DiscardQuantity, DrawDiscardOrder, EffectSubject, EntersTappedAffected,
-    EntryCost, GameCondition, GraveyardDestination, GraveyardFilter, GraveyardOwner,
-    HandCardAction, HandCardChooser, HandChoiceVisibility, LifeAmount, ObjectContributionKind,
-    ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate,
-    PlayerRecipient, PowerComparison, PowerToughnessCharacteristic, RelativePlayerSet,
-    ResolutionBranchDef, ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost,
-    SearchDestination, SearchZoneSelection, SpellCastFilter, SpellCostModifier,
-    SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter,
-    TargetGroupDef, TargetKind, TargetMatchFilter, TargetObjectExclusion, TargetingDef,
-    TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
+    CardResultFilter, CardResultSource, CardTypeFilter, CombatRole, CountExpression,
+    CreatureScopeController, CreatureScopeFilter, DiscardQuantity, DrawDiscardOrder, EffectSubject,
+    EntersTappedAffected, EntryCost, GameCondition, GraveyardDestination, GraveyardFilter,
+    GraveyardOwner, HandCardAction, HandCardChooser, HandChoiceVisibility, LibraryPlacement,
+    LifeAmount, ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter,
+    PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient, PowerComparison,
+    PowerToughnessCharacteristic, RelativePlayerSet, ResolutionBranchDef,
+    ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SearchDestination,
+    SearchZoneSelection, SpellCastFilter, SpellCostModifier, SpellManaSpentComparison,
+    StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
+    TargetMatchFilter, TargetObjectExclusion, TargetingDef, TargetingSourceFilter,
+    TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
     external_oracle_lines, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
@@ -3378,6 +3379,120 @@ fn match_graveyard_return_self_to_hand(
         conditions: Vec::new(),
         activation_limit: None,
     }))
+}
+
+/// Issue #318 exact clause templates. Each template is a reusable typed surface with at least two
+/// real positive calibrations. Every clause is compared by the complete normalized Oracle line, so
+/// an appended, reordered, or additional-clause form remains unsupported, and source-kind gating
+/// stays on the recipes whose printed template requires it.
+const ISSUE_318_OWNER_CHOICE_PLACEMENT_CLAUSE: &str =
+    "Target creature's owner puts it on their choice of the top or bottom of their library.";
+const ISSUE_318_ATTACKING_TARGET_REDUCTION_CLAUSE: &str =
+    "This spell costs {1} less to cast if it targets an attacking creature.";
+const ISSUE_318_ETB_RAT_TOKEN_CLAUSE: &str =
+    "When this creature enters, create a 1/1 black Rat creature token with \"This token can't block.\"";
+const ISSUE_318_ETB_FLYING_CLAUSE: &str =
+    "When this creature enters, target creature gains flying until end of turn.";
+const ISSUE_318_SELF_DAMAGE_DRAW_CLAUSE: &str =
+    "Whenever this creature deals damage to an opponent, draw a card.";
+
+/// CR 400.3 / 608.2d: "Target creature's owner puts it on their choice of the top or bottom of
+/// their library" is one mandatory creature target whose owner announces the logged placement
+/// choice at resolution. Bottom-only, top-only, second-from-top, shuffle, noncreature, and
+/// appended-instruction forms stay unsupported.
+fn match_spell_owner_choice_top_or_bottom_target_creature(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_318_OWNER_CHOICE_PLACEMENT_CLAUSE).then(|| {
+        RecipeEmission::SpellEffectsWithTargeting {
+            effects: vec![SpellEffectKind::PutInOwnersLibrary {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                placement: LibraryPlacement::OwnerChoiceTopOrBottom,
+            }],
+            targeting: exact_targeting(1, 1, "Choose target creature", vec![0]),
+        }
+    })
+}
+
+/// CR 601.2f: "This spell costs {1} less to cast if it targets an attacking creature" reduces the
+/// generic component once when an announced target is an attacking creature. Tapped, nontoken,
+/// union, amount-2, conditionless, and non-instant/sorcery forms stay unsupported.
+fn match_spell_attacking_creature_target_reduction_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    ((context.source_is_instant || context.source_is_sorcery)
+        && text == ISSUE_318_ATTACKING_TARGET_REDUCTION_CLAUSE)
+        .then(|| {
+            RecipeEmission::SpellCostModifier(SpellCostModifier::TargetMatchGenericReduction {
+                amount: 1,
+                filter: TargetMatchFilter::Battlefield(TargetFilter {
+                    kind: TargetKind::Creature,
+                    combat_role: Some(CombatRole::Attacking),
+                    ..TargetFilter::default()
+                }),
+            })
+        })
+}
+
+/// CR 111.1 / 701.6 / 603.2: Edgewall Pack and Voracious Vermin share the exact creature ETB
+/// template that creates the registered 1/1 black Rat token with its printed "can't block"
+/// restriction. This Rat is not one of the CR 111.10 predefined tokens.
+fn match_etb_create_rat_token_cant_block(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_318_ETB_RAT_TOKEN_CLAUSE).then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::CreateTokens {
+                token: "rat_b_1_1_cant_block".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            },
+        )
+    })
+}
+
+/// CR 611.2a / 514.2: the ETB grants flying to one mandatory creature target until end of turn.
+/// Controller-restricted, permanent, plural, and pump-union forms stay unsupported.
+fn match_etb_target_creature_gains_flying(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_318_ETB_FLYING_CLAUSE).then(|| {
+        targeted_trigger(
+            context,
+            vec![SpellEffectKind::GrantKeywords {
+                subject: chosen_creature(TargetController::Any),
+                keywords: vec![Keyword::Flying],
+            }],
+            1,
+            1,
+            "Choose target creature",
+        )
+    })
+}
+
+/// CR 603.2 / 120.3: "deals damage to an opponent" is the shipped noncombat-or-combat damage
+/// trigger documented for Thieving Magpie; only the exact draw-one body is emitted.
+fn match_self_damage_to_opponent_draw_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_318_SELF_DAMAGE_DRAW_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverSelfDealsDamageToOpponent,
+            vec![SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }],
+        )
+    })
 }
 
 const ISSUE_301_REVIEWED_ORACLE_IDS: &[&str] = &[
@@ -10025,6 +10140,104 @@ pub(super) static CATALOG: &[Recipe] = &[
             "{X}{B}: Return this card from your graveyard to your hand."
         ),
     },
+    Recipe {
+        id: RecipeId("spell.put_in_owners_library.owner_choice_top_or_bottom.target_creature"),
+        label: "target creature's owner chooses top or bottom of their library",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_owner_choice_top_or_bottom_target_creature,
+        calibration: calibrations!(
+            "Misleading Motes" => "Target creature's owner puts it on their choice of the top or bottom of their library.",
+            "Run Behind" => "Target creature's owner puts it on their choice of the top or bottom of their library.",
+            "Uneasy Partings" => "Target creature's owner puts it on their choice of the top or bottom of their library.",
+            "Dire Downdraft" => "Target creature's owner puts it on their choice of the top or bottom of their library.";
+            "Put target creature on the bottom of its owner's library.",
+            "Put target creature on top of its owner's library.",
+            "Target creature's owner puts it on their choice of the top or bottom of their library. Surveil 1.",
+            "Target creature's owner shuffles it into their library.",
+            "Target nonland permanent's owner puts it on their choice of the top or bottom of their library.",
+            "The owner of target spell or nonland permanent puts it on their choice of the top or bottom of their library.",
+            "Target artifact's owner puts it on their choice of the top or bottom of their library.",
+            "Target creature's owner puts it on the top or bottom of their library.",
+            "Target creature's owner puts it on their choice of the top or bottom of their library",
+            "Target creature's owner puts it on their choice of the top or bottom of their graveyard.",
+            "Target creature's owner puts it on their choice of the top or bottom of their library. Draw a card.",
+            "Put target creature on its owner's choice of the top or bottom of their library.",
+            "Target creature's owner puts it on their choice of the second from the top or bottom of their library."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.cost_reduction.target_match_attacking_creature.one"),
+        label: "spell costs one less to cast when it targets an attacking creature",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_attacking_creature_target_reduction_one,
+        calibration: calibrations!(
+            "Guidance Failure" => "This spell costs {1} less to cast if it targets an attacking creature.",
+            "Run Behind" => "This spell costs {1} less to cast if it targets an attacking creature.";
+            "This spell costs {1} less to cast if it targets a tapped creature.",
+            "This spell costs {1} less to cast if it targets an attacking nontoken creature.",
+            "This spell costs {1} less to cast if it targets an attacking or tapped creature.",
+            "This spell costs {2} less to cast if it targets an attacking creature.",
+            "This spell costs {1} less to cast if you control a creature.",
+            "This spell costs {1} less to cast.",
+            "This spell costs {1} less to cast if it targets an attacking creature. Draw a card.",
+            "This spell costs {1} less to cast if it targets an attacking creature"
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.create_rat_token.cant_block"),
+        label: "creature ETB create one Rat token that can't block",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_create_rat_token_cant_block,
+        calibration: calibrations!(
+            "Edgewall Pack" => r#"When this creature enters, create a 1/1 black Rat creature token with "This token can't block.""#,
+            "Voracious Vermin" => r#"When this creature enters, create a 1/1 black Rat creature token with "This token can't block.""#;
+            r#"When this creature dies, create a 1/1 black Rat creature token with "This token can't block.""#,
+            "When this creature enters, create a 1/1 black Rat creature token.",
+            r#"When this creature enters, create two 1/1 black Rat creature tokens with "This token can't block.""#,
+            r#"When this creature enters, create a tapped 1/1 black Rat creature token with "This token can't block.""#,
+            r#"When this creature enters, create a 1/1 black Rat creature token with "This creature can't block.""#,
+            r#"When this creature enters, create a 1/1 black Rat creature token with "This token can't block." Draw a card."#,
+            r#"When this creature enters, create a 1/1 black Rat creature token with "This token can't attack.""#
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.target_creature_gains_flying"),
+        label: "creature ETB grant flying to target creature until end of turn",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_target_creature_gains_flying,
+        calibration: calibrations!(
+            "Gale Swooper" => "When this creature enters, target creature gains flying until end of turn.",
+            "Stratosoarer" => "When this creature enters, target creature gains flying until end of turn.",
+            "Nephalia Moondrakes" => "When this creature enters, target creature gains flying until end of turn.";
+            "When this creature enters, target creature you control gains flying until end of turn.",
+            "When this creature enters, target creature gains flying.",
+            "When this creature enters, target creature gains flying and hexproof until end of turn.",
+            "When this creature enters, target creature gets +1/+0 and gains flying until end of turn.",
+            "When this creature enters, up to one target creature gains flying until end of turn.",
+            "When this Equipment enters, attach it to target creature you control. That creature gains flying until end of turn.",
+            "When this creature enters, target creature gains flying until end of turn. Draw a card.",
+            "When this creature enters, target creature gains first strike until end of turn.",
+            "When this creature enters, target creature gains flying until end of combat."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.self_damage_to_opponent.draw"),
+        label: "self damage to an opponent draws one card",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_damage_to_opponent_draw_one,
+        calibration: calibrations!(
+            "Thieving Magpie" => "Whenever this creature deals damage to an opponent, draw a card.",
+            "Thieving Otter" => "Whenever this creature deals damage to an opponent, draw a card.";
+            "Whenever this creature deals combat damage to a player, draw a card.",
+            "Whenever this creature deals damage to a player, draw a card.",
+            "Whenever this creature deals damage to an opponent, you may draw a card.",
+            "Whenever this creature deals damage to an opponent, draw two cards.",
+            "Whenever this creature deals damage to an opponent, create a Treasure token.",
+            "Whenever another creature deals damage to an opponent, draw a card.",
+            "Whenever this creature deals damage to an opponent, draw a card. You gain 1 life.",
+            "Whenever this creature deals damage to an opponent, draw a card"
+        ),
+    },
 ];
 
 fn surface_applies(surface: RecipeSurface, is_spell: bool, context: &RecipeContext) -> bool {
@@ -16616,6 +16829,395 @@ mod tests {
             "{X}{B}: Return this card from your graveyard to your hand.",
         ] {
             issue_317_assert_unmatched(negative, false);
+        }
+    }
+
+    fn issue_318_recipe(id: &str) -> &'static Recipe {
+        CATALOG
+            .iter()
+            .find(|recipe| recipe.id.as_str() == id)
+            .unwrap_or_else(|| panic!("missing recipe {id}"))
+    }
+
+    fn issue_318_match_spell(clause: &str, source_name: &str) -> RecipeMatch {
+        let mut source = context();
+        source.source_name = source_name.into();
+        match_clause(clause, true, &source)
+            .unwrap_or_else(|ambiguity| panic!("{source_name} is ambiguous: {ambiguity}"))
+            .unwrap_or_else(|| panic!("{source_name} should match exactly one recipe"))
+    }
+
+    fn issue_318_match_non_spell(clause: &str, source_name: &str) -> RecipeMatch {
+        let mut source = context();
+        source.source_name = source_name.into();
+        match_clause(clause, false, &source)
+            .unwrap_or_else(|ambiguity| panic!("{source_name} is ambiguous: {ambiguity}"))
+            .unwrap_or_else(|| panic!("{source_name} should match exactly one recipe"))
+    }
+
+    fn issue_318_assert_unmatched(clause: &str, is_spell: bool) {
+        assert!(
+            match_clause(clause, is_spell, &context())
+                .unwrap_or_else(|ambiguity| {
+                    panic!("near-miss must not be ambiguous: {clause}: {ambiguity}")
+                })
+                .is_none(),
+            "unsupported near-miss must remain unmatched: {clause}"
+        );
+    }
+
+    #[test]
+    fn issue_318_recipes_have_stable_ids_and_surfaces() {
+        for (id, surface) in [
+            (
+                "spell.put_in_owners_library.owner_choice_top_or_bottom.target_creature",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "spell.cost_reduction.target_match_attacking_creature.one",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "triggered.etb.create_rat_token.cant_block",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "triggered.etb.target_creature_gains_flying",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "triggered.self_damage_to_opponent.draw",
+                RecipeSurface::TriggeredAbility,
+            ),
+        ] {
+            assert_eq!(
+                issue_318_recipe(id).surface,
+                surface,
+                "{id} surface drifted"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_318_owner_choice_placement_is_exact_and_typed() {
+        for source_name in [
+            "Misleading Motes",
+            "Run Behind",
+            "Uneasy Partings",
+            "Dire Downdraft",
+        ] {
+            let matched =
+                issue_318_match_spell(ISSUE_318_OWNER_CHOICE_PLACEMENT_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "spell.put_in_owners_library.owner_choice_top_or_bottom.target_creature"
+            );
+            let RecipeEmission::SpellEffectsWithTargeting { effects, targeting } = matched.emission
+            else {
+                panic!("owner-choice placement must emit an explicitly targeted spell");
+            };
+            assert_eq!(
+                effects,
+                vec![SpellEffectKind::PutInOwnersLibrary {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    placement: LibraryPlacement::OwnerChoiceTopOrBottom,
+                }]
+            );
+            let [group] = targeting.groups.as_slice() else {
+                panic!("owner-choice placement must own exactly one target group");
+            };
+            assert_eq!((group.min, group.max), (1, 1));
+            assert_eq!(group.prompt, "Choose target creature");
+            assert_eq!(group.effect_indices, vec![0]);
+            assert!(group.distinct_from.is_empty());
+            assert!(!group.same_graveyard);
+            assert!(group.cast_cost_expansion.is_none());
+        }
+
+        assert!(
+            match_clause(ISSUE_318_OWNER_CHOICE_PLACEMENT_CLAUSE, false, &context())
+                .expect("non-spell surface check must not be ambiguous")
+                .is_none(),
+            "the placement clause is a spell clause and must not match permanent text"
+        );
+    }
+
+    #[test]
+    fn issue_318_owner_choice_placement_rejects_near_misses() {
+        for negative in [
+            "Put target creature on the bottom of its owner's library.",
+            "Put target creature on top of its owner's library.",
+            "Target creature's owner puts it on their choice of the top or bottom of their library. Surveil 1.",
+            "Target creature's owner shuffles it into their library.",
+            "Target nonland permanent's owner puts it on their choice of the top or bottom of their library.",
+            "The owner of target spell or nonland permanent puts it on their choice of the top or bottom of their library.",
+            "Target artifact's owner puts it on their choice of the top or bottom of their library.",
+            "Target creature's owner puts it on the top or bottom of their library.",
+            "Target creature's owner puts it on their choice of the top or bottom of their library",
+            "Target creature's owner puts it on their choice of the top or bottom of their graveyard.",
+            "Target creature's owner puts it on their choice of the top or bottom of their library. Draw a card.",
+            "Put target creature on its owner's choice of the top or bottom of their library.",
+            "Target creature's owner puts it on their choice of the second from the top or bottom of their library.",
+        ] {
+            issue_318_assert_unmatched(negative, true);
+        }
+    }
+
+    #[test]
+    fn issue_318_attacking_target_reduction_is_exact_and_typed() {
+        for source_name in ["Guidance Failure", "Run Behind"] {
+            let matched =
+                issue_318_match_spell(ISSUE_318_ATTACKING_TARGET_REDUCTION_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "spell.cost_reduction.target_match_attacking_creature.one"
+            );
+            assert_eq!(
+                matched.emission,
+                RecipeEmission::SpellCostModifier(SpellCostModifier::TargetMatchGenericReduction {
+                    amount: 1,
+                    filter: TargetMatchFilter::Battlefield(TargetFilter {
+                        kind: TargetKind::Creature,
+                        combat_role: Some(CombatRole::Attacking),
+                        ..TargetFilter::default()
+                    }),
+                })
+            );
+        }
+
+        let tapped = issue_318_match_spell(
+            "This spell costs {3} less to cast if it targets a tapped creature.",
+            "Near Miss",
+        );
+        assert_eq!(
+            tapped.id.as_str(),
+            "spell.cost_reduction.target_tapped_creature.three"
+        );
+
+        let mut non_spell = context();
+        non_spell.source_is_instant = false;
+        non_spell.source_is_sorcery = false;
+        assert!(
+            match_clause(
+                ISSUE_318_ATTACKING_TARGET_REDUCTION_CLAUSE,
+                true,
+                &non_spell
+            )
+            .expect("non-instant/sorcery source must not be ambiguous")
+            .is_none(),
+            "the attacking-target reduction is instant/sorcery-only"
+        );
+    }
+
+    #[test]
+    fn issue_318_attacking_target_reduction_rejects_near_misses() {
+        for negative in [
+            "This spell costs {1} less to cast if it targets a tapped creature.",
+            "This spell costs {1} less to cast if it targets an attacking nontoken creature.",
+            "This spell costs {1} less to cast if it targets an attacking or tapped creature.",
+            "This spell costs {2} less to cast if it targets an attacking creature.",
+            "This spell costs {1} less to cast if you control a creature.",
+            "This spell costs {1} less to cast.",
+            "This spell costs {1} less to cast if it targets an attacking creature. Draw a card.",
+            "This spell costs {1} less to cast if it targets an attacking creature",
+        ] {
+            issue_318_assert_unmatched(negative, true);
+        }
+    }
+
+    #[test]
+    fn issue_318_etb_rat_token_is_creature_gated() {
+        for source_name in ["Edgewall Pack", "Voracious Vermin"] {
+            let matched = issue_318_match_non_spell(ISSUE_318_ETB_RAT_TOKEN_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "triggered.etb.create_rat_token.cant_block"
+            );
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("rat ETB must emit one triggered ability");
+            };
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::CreateTokens {
+                    token: "rat_b_1_1_cant_block".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                }]
+            );
+            assert!(ability.targeting.is_none());
+            assert!(!ability.may);
+            assert!(ability.intervening_if.is_none());
+        }
+
+        let soldier = issue_318_match_non_spell(
+            "When this creature enters, create a 1/1 white Soldier creature token.",
+            "Near Miss",
+        );
+        assert_eq!(soldier.id.as_str(), "etb.create_token.printed_one_one.one");
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_318_ETB_RAT_TOKEN_CLAUSE, false, &noncreature)
+                .expect("noncreature source must not be ambiguous")
+                .is_none(),
+            "the rat ETB recipe is creature-source-only"
+        );
+        assert!(
+            match_clause(ISSUE_318_ETB_RAT_TOKEN_CLAUSE, true, &context())
+                .expect("spell surface check must not be ambiguous")
+                .is_none(),
+            "the rat ETB recipe must reject spell clauses"
+        );
+    }
+
+    #[test]
+    fn issue_318_etb_rat_token_rejects_near_misses() {
+        for negative in [
+            r#"When this creature dies, create a 1/1 black Rat creature token with "This token can't block.""#,
+            "When this creature enters, create a 1/1 black Rat creature token.",
+            r#"When this creature enters, create two 1/1 black Rat creature tokens with "This token can't block.""#,
+            r#"When this creature enters, create a tapped 1/1 black Rat creature token with "This token can't block.""#,
+            r#"When this creature enters, create a 1/1 black Rat creature token with "This creature can't block.""#,
+            r#"When this creature enters, create a 1/1 black Rat creature token with "This token can't block." Draw a card."#,
+            r#"When this creature enters, create a 1/1 black Rat creature token with "This token can't attack.""#,
+            "When this creature enters, create a 1/1 black Rat creature token with flying.",
+        ] {
+            issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_318_etb_flying_grant_is_creature_gated() {
+        for source_name in ["Gale Swooper", "Stratosoarer", "Nephalia Moondrakes"] {
+            let matched = issue_318_match_non_spell(ISSUE_318_ETB_FLYING_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "triggered.etb.target_creature_gains_flying"
+            );
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("flying ETB must emit one triggered ability");
+            };
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    keywords: vec![Keyword::Flying],
+                }]
+            );
+            let targeting = ability.targeting.expect("flying ETB must target");
+            let [group] = targeting.groups.as_slice() else {
+                panic!("flying ETB must own exactly one target group");
+            };
+            assert_eq!((group.min, group.max), (1, 1));
+            assert_eq!(group.prompt, "Choose target creature");
+            assert_eq!(group.effect_indices, vec![0]);
+            assert!(!ability.may);
+            assert!(ability.intervening_if.is_none());
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_318_ETB_FLYING_CLAUSE, false, &noncreature)
+                .expect("noncreature source must not be ambiguous")
+                .is_none(),
+            "the flying ETB recipe is creature-source-only"
+        );
+        assert!(
+            match_clause(ISSUE_318_ETB_FLYING_CLAUSE, true, &context())
+                .expect("spell surface check must not be ambiguous")
+                .is_none(),
+            "the flying ETB recipe must reject spell clauses"
+        );
+    }
+
+    #[test]
+    fn issue_318_etb_flying_grant_rejects_near_misses() {
+        for negative in [
+            "When this creature enters, target creature you control gains flying until end of turn.",
+            "When this creature enters, target creature gains flying.",
+            "When this creature enters, target creature gains flying and hexproof until end of turn.",
+            "When this creature enters, target creature gets +1/+0 and gains flying until end of turn.",
+            "When this creature enters, up to one target creature gains flying until end of turn.",
+            "When this Equipment enters, attach it to target creature you control. That creature gains flying until end of turn.",
+            "When this creature enters, target creature gains flying until end of turn. Draw a card.",
+            "When this creature enters, target creature gains first strike until end of turn.",
+            "When this creature enters, target creature gains flying until end of combat.",
+        ] {
+            issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_318_self_damage_to_opponent_draw_is_creature_gated() {
+        for source_name in ["Thieving Magpie", "Thieving Otter"] {
+            let matched = issue_318_match_non_spell(ISSUE_318_SELF_DAMAGE_DRAW_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "triggered.self_damage_to_opponent.draw"
+            );
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("self damage draw must emit one triggered ability");
+            };
+            assert_eq!(
+                ability.trigger,
+                TriggerCondition::WheneverSelfDealsDamageToOpponent
+            );
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                }]
+            );
+            assert!(ability.targeting.is_none());
+            assert!(!ability.may);
+            assert!(ability.intervening_if.is_none());
+        }
+
+        let combat_food = issue_318_match_non_spell(
+            "Whenever this creature deals combat damage to a player, create a Food token.",
+            "Near Miss",
+        );
+        assert_eq!(
+            combat_food.id.as_str(),
+            "triggered.self_combat_damage_to_player.create_token.food.one"
+        );
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_318_SELF_DAMAGE_DRAW_CLAUSE, false, &noncreature)
+                .expect("noncreature source must not be ambiguous")
+                .is_none(),
+            "the self damage draw recipe is creature-source-only"
+        );
+        assert!(
+            match_clause(ISSUE_318_SELF_DAMAGE_DRAW_CLAUSE, true, &context())
+                .expect("spell surface check must not be ambiguous")
+                .is_none(),
+            "the self damage draw recipe must reject spell clauses"
+        );
+    }
+
+    #[test]
+    fn issue_318_self_damage_to_opponent_draw_rejects_near_misses() {
+        for negative in [
+            "Whenever this creature deals combat damage to a player, draw a card.",
+            "Whenever this creature deals damage to a player, draw a card.",
+            "Whenever this creature deals damage to an opponent, you may draw a card.",
+            "Whenever this creature deals damage to an opponent, draw two cards.",
+            "Whenever this creature deals damage to an opponent, create a Treasure token.",
+            "Whenever another creature deals damage to an opponent, draw a card.",
+            "Whenever this creature deals damage to an opponent, draw a card. You gain 1 life.",
+            "Whenever this creature deals damage to an opponent, draw a card",
+        ] {
+            issue_318_assert_unmatched(negative, false);
         }
     }
 }

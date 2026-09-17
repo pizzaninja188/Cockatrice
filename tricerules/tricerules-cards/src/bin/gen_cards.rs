@@ -2597,13 +2597,14 @@ mod tests {
     use tricerules_cards::card_def::RawCardDefinition;
     use tricerules_cards::primitives::{
         BattlefieldPermanentFilter, CardResultAction, CardResultFilter, CardResultSource,
-        CardTypeFilter, CountExpression, EffectSubject, EntersTappedAffected, EntryCost,
-        GameCondition, GraveyardFilter, GraveyardOwner, ObjectContributionKind,
-        ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient, PowerComparison,
-        PowerToughnessCharacteristic, RelativePlayerSet, ResolutionBranchDef,
+        CardTypeFilter, CombatRole, CountExpression, EffectSubject, EntersTappedAffected,
+        EntryCost, GameCondition, GraveyardFilter, GraveyardOwner, LibraryPlacement,
+        ObjectContributionKind, ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient,
+        PowerComparison, PowerToughnessCharacteristic, RelativePlayerSet, ResolutionBranchDef,
         ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SpellCastFilter,
-        SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController,
-        TargetFilter, TargetKind, TargetObjectExclusion, TargetingSourceFilter, TypeLineAddition,
+        SpellCostModifier, SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef,
+        TargetController, TargetFilter, TargetKind, TargetMatchFilter, TargetObjectExclusion,
+        TargetingSourceFilter, TypeLineAddition,
     };
     use tricerules_cards::{
         AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount,
@@ -9986,6 +9987,385 @@ mod tests {
             evaluate_fresh(&unsupported_tail).is_err(),
             "an unsupported additional clause must reject the whole face"
         );
+    }
+
+    /// Issue #318 — the five exact templates must generate the five reviewed Standard cards
+    /// end-to-end through `evaluate` with their complete typed payloads, and the surrounding
+    /// clauses (Menace, Flying, Basic landcycling, and Run Behind's cost line) must stay intact.
+    #[test]
+    fn issue_318_cohort_generates_the_exact_reviewed_definitions() {
+        let mut motes = normal_card_with_oracle_id(
+            "09eec5a2-7835-4b24-9dd1-594612ee9152",
+            "Misleading Motes",
+            "{3}{U}",
+            "Instant",
+            "Target creature's owner puts it on their choice of the top or bottom of their library.",
+            None,
+        );
+        motes["colors"] = json!(["U"]);
+        let generated = evaluate_fresh(&motes).expect("Misleading Motes should qualify");
+        assert_eq!(generated.id, "misleading_motes");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["target creature's owner chooses top or bottom of their library"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{3}{U}");
+        assert_eq!(raw.types, ["Instant"]);
+        assert_eq!(raw.mana_cost.colors(), [Color::Blue]);
+        assert!(raw.cost_modifiers.is_empty());
+        assert_eq!(
+            raw.spell_effect,
+            [SpellEffectKind::PutInOwnersLibrary {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                placement: LibraryPlacement::OwnerChoiceTopOrBottom,
+            }]
+        );
+        let targeting = raw
+            .targeting
+            .as_ref()
+            .expect("Misleading Motes must target");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("Misleading Motes must own exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.prompt, "Choose target creature");
+        assert_eq!(group.effect_indices, [0]);
+        assert!(TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok());
+
+        let run_behind_clauses = "This spell costs {1} less to cast if it targets an attacking creature.\nTarget creature's owner puts it on their choice of the top or bottom of their library.";
+        let mut run_behind = normal_card_with_oracle_id(
+            "7578a192-82e5-43ff-8dee-225f313c484a",
+            "Run Behind",
+            "{3}{U}",
+            "Instant",
+            run_behind_clauses,
+            None,
+        );
+        run_behind["colors"] = json!(["U"]);
+        let generated = evaluate_fresh(&run_behind).expect("Run Behind should qualify");
+        assert_eq!(generated.id, "run_behind");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            [
+                "spell costs one less to cast when it targets an attacking creature",
+                "target creature's owner chooses top or bottom of their library"
+            ]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(
+            raw.cost_modifiers,
+            [SpellCostModifier::TargetMatchGenericReduction {
+                amount: 1,
+                filter: TargetMatchFilter::Battlefield(TargetFilter {
+                    kind: TargetKind::Creature,
+                    combat_role: Some(CombatRole::Attacking),
+                    ..TargetFilter::default()
+                }),
+            }]
+        );
+        assert_eq!(
+            raw.spell_effect,
+            [SpellEffectKind::PutInOwnersLibrary {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                placement: LibraryPlacement::OwnerChoiceTopOrBottom,
+            }]
+        );
+        assert!(TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok());
+
+        // The cost line and the targeted instruction compose in either printed order: the cost
+        // modifier lives on its own list and never joins the implicit target contract.
+        let reversed = normal_card(
+            "Run Behind Reversed Fixture",
+            "{3}{U}",
+            "Instant",
+            "Target creature's owner puts it on their choice of the top or bottom of their library.\nThis spell costs {1} less to cast if it targets an attacking creature.",
+            None,
+        );
+        let generated = evaluate_fresh(&reversed).expect("reversed clauses still compose");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.cost_modifiers.len(), 1);
+        assert_eq!(raw.spell_effect.len(), 1);
+        assert!(raw.targeting.is_some());
+        assert!(TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok());
+
+        let mut pack = normal_card_with_oracle_id(
+            "ef702a1a-4ace-43e0-8e86-dcceb0b1e4d5",
+            "Edgewall Pack",
+            "{3}{R}",
+            "Creature — Dog",
+            "Menace (This creature can't be blocked except by two or more creatures.)\nWhen this creature enters, create a 1/1 black Rat creature token with \"This token can't block.\"",
+            Some(("3", "3")),
+        );
+        pack["colors"] = json!(["R"]);
+        let generated = evaluate_fresh(&pack).expect("Edgewall Pack should qualify");
+        assert_eq!(generated.id, "edgewall_pack");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["creature ETB create one Rat token that can't block"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.keywords, [Keyword::Menace]);
+        assert_eq!((raw.power, raw.toughness), (Some(3), Some(3)));
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("Edgewall Pack must emit exactly one ETB ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![2])
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::CreateTokens {
+                token: "rat_b_1_1_cant_block".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }]
+        );
+        assert!(ability.targeting.is_none());
+
+        let mut stratosoarer = normal_card_with_oracle_id(
+            "36ab41b7-bcfb-4618-bbfb-70d608dba15a",
+            "Stratosoarer",
+            "{4}{U}",
+            "Creature — Elemental",
+            "Flying\nWhen this creature enters, target creature gains flying until end of turn.\nBasic landcycling {1}{U} ({1}{U}, Discard this card: Search your library for a basic land card, reveal it, put it into your hand, then shuffle.)",
+            Some(("3", "5")),
+        );
+        stratosoarer["colors"] = json!(["U"]);
+        let generated = evaluate_fresh(&stratosoarer).expect("Stratosoarer should qualify");
+        assert_eq!(generated.id, "stratosoarer");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            [
+                "creature ETB grant flying to target creature until end of turn",
+                "basic landcycling"
+            ]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.keywords, [Keyword::Flying]);
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("Stratosoarer must emit exactly one ETB ability");
+        };
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![2])
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                keywords: vec![Keyword::Flying],
+            }]
+        );
+        let targeting = ability.targeting.as_ref().expect("flying ETB must target");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("flying ETB must own exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.prompt, "Choose target creature");
+        let [cycling] = raw.activated_abilities.as_slice() else {
+            panic!("Stratosoarer must keep exactly one Basic landcycling ability");
+        };
+        assert_eq!(cycling.ability_id.as_str(), "activated_01");
+        assert_eq!(
+            cycling.presentation,
+            AbilityPresentation::OracleLines(vec![3])
+        );
+        assert_eq!(cycling.source_zone, AbilitySourceZone::Hand);
+        assert_eq!(
+            cycling.costs,
+            [
+                AbilityCost::Mana(ManaCost::parse("{1}{U}").expect("printed landcycling cost")),
+                AbilityCost::DiscardSelf
+            ]
+        );
+
+        let mut otter = normal_card_with_oracle_id(
+            "5dee663f-9e2e-4503-8086-fc51664fdf29",
+            "Thieving Otter",
+            "{2}{U}",
+            "Creature — Otter",
+            "Whenever this creature deals damage to an opponent, draw a card.",
+            Some(("2", "2")),
+        );
+        otter["colors"] = json!(["U"]);
+        let generated = evaluate_fresh(&otter).expect("Thieving Otter should qualify");
+        assert_eq!(generated.id, "thieving_otter");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["self damage to an opponent draws one card"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("Thieving Otter must emit exactly one triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverSelfDealsDamageToOpponent
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }]
+        );
+        assert!(ability.targeting.is_none());
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+    }
+
+    #[test]
+    fn issue_318_generator_is_fail_closed_for_near_miss_clauses() {
+        let mut motes = normal_card_with_oracle_id(
+            "09eec5a2-7835-4b24-9dd1-594612ee9152",
+            "Misleading Motes",
+            "{3}{U}",
+            "Instant",
+            "Target creature's owner puts it on their choice of the top or bottom of their library.",
+            None,
+        );
+        motes["colors"] = json!(["U"]);
+        for (label, clause) in [
+            (
+                "bottom-only",
+                "Put target creature on the bottom of its owner's library.",
+            ),
+            (
+                "top-only",
+                "Put target creature on top of its owner's library.",
+            ),
+            (
+                "appended instruction",
+                "Target creature's owner puts it on their choice of the top or bottom of their library. Surveil 1.",
+            ),
+            (
+                "shuffle instead",
+                "Target creature's owner shuffles it into their library.",
+            ),
+            (
+                "noncreature target",
+                "Target nonland permanent's owner puts it on their choice of the top or bottom of their library.",
+            ),
+        ] {
+            let mut changed = motes.clone();
+            changed["oracle_text"] = json!(clause);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#318 near-miss must fail closed: {label}"
+            );
+        }
+
+        let mut pack = normal_card_with_oracle_id(
+            "ef702a1a-4ace-43e0-8e86-dcceb0b1e4d5",
+            "Edgewall Pack",
+            "{3}{R}",
+            "Creature — Dog",
+            "Menace (This creature can't be blocked except by two or more creatures.)\nWhen this creature enters, create a 1/1 black Rat creature token with \"This token can't block.\"",
+            Some(("3", "3")),
+        );
+        pack["colors"] = json!(["R"]);
+        for (label, clause) in [
+            (
+                "dies instead of enters",
+                "Menace (This creature can't be blocked except by two or more creatures.)\nWhen this creature dies, create a 1/1 black Rat creature token with \"This token can't block.\"",
+            ),
+            (
+                "plain rat token",
+                "Menace (This creature can't be blocked except by two or more creatures.)\nWhen this creature enters, create a 1/1 black Rat creature token.",
+            ),
+            (
+                "two rat tokens",
+                "Menace (This creature can't be blocked except by two or more creatures.)\nWhen this creature enters, create two 1/1 black Rat creature tokens with \"This token can't block.\"",
+            ),
+            (
+                "wrong reminder",
+                "Menace (This creature can't be blocked except by two or more creatures.)\nWhen this creature enters, create a 1/1 black Rat creature token with \"This creature can't block.\"",
+            ),
+        ] {
+            let mut changed = pack.clone();
+            changed["oracle_text"] = json!(clause);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#318 rat near-miss must fail closed: {label}"
+            );
+        }
+
+        let mut otter = normal_card_with_oracle_id(
+            "5dee663f-9e2e-4503-8086-fc51664fdf29",
+            "Thieving Otter",
+            "{2}{U}",
+            "Creature — Otter",
+            "Whenever this creature deals damage to an opponent, draw a card.",
+            Some(("2", "2")),
+        );
+        otter["colors"] = json!(["U"]);
+        for (label, clause) in [
+            (
+                "combat damage",
+                "Whenever this creature deals combat damage to a player, draw a card.",
+            ),
+            (
+                "player instead of opponent",
+                "Whenever this creature deals damage to a player, draw a card.",
+            ),
+            (
+                "optional draw",
+                "Whenever this creature deals damage to an opponent, you may draw a card.",
+            ),
+            (
+                "two cards",
+                "Whenever this creature deals damage to an opponent, draw two cards.",
+            ),
+            (
+                "appended instruction",
+                "Whenever this creature deals damage to an opponent, draw a card. You gain 1 life.",
+            ),
+        ] {
+            let mut changed = otter.clone();
+            changed["oracle_text"] = json!(clause);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#318 draw near-miss must fail closed: {label}"
+            );
+        }
+
+        let mut swooper = normal_card_with_oracle_id(
+            "36ab41b7-bcfb-4618-bbfb-70d608dba15a",
+            "Stratosoarer",
+            "{4}{U}",
+            "Creature — Elemental",
+            "Flying\nWhen this creature enters, target creature gains flying until end of turn.",
+            Some(("3", "5")),
+        );
+        swooper["colors"] = json!(["U"]);
+        for (label, clause) in [
+            (
+                "permanent grant",
+                "Flying\nWhen this creature enters, target creature gains flying.",
+            ),
+            (
+                "controller restriction",
+                "Flying\nWhen this creature enters, target creature you control gains flying until end of turn.",
+            ),
+            (
+                "union grant",
+                "Flying\nWhen this creature enters, target creature gains flying and hexproof until end of turn.",
+            ),
+        ] {
+            let mut changed = swooper.clone();
+            changed["oracle_text"] = json!(clause);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#318 flying near-miss must fail closed: {label}"
+            );
+        }
     }
 
     #[cfg(windows)]

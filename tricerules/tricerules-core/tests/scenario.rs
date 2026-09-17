@@ -475,3 +475,5 @@ mod issue_315_generated_creature_tappers;
 mod issue_316_generated_single_clause_cohort;
 #[path = "scenario/issue_317_generated_six_clause_batch.rs"]
 mod issue_317_generated_six_clause_batch;
+#[path = "scenario/issue_318_generated_placement_cost_trigger_batch.rs"]
+mod issue_318_generated_placement_cost_trigger_batch;

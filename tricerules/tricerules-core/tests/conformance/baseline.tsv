@@ -640,6 +640,7 @@ earth_elemental	0	cast	exercised
 earthbender_ascension	0	cast	exercised
 earthshaking_si	0	cast	exercised
 eddymurk_crab	0	cast	exercised
+edgewall_pack	0	cast	exercised
 ekundu_griffin	0	cast	exercised
 elderfang_disciple	0	cast	exercised
 eldrazi_devastator	0	cast	exercised
@@ -1409,6 +1410,7 @@ minotaur_aggressor	0	cast	exercised
 minotaur_warrior	0	cast	exercised
 mischievous_pup	0	cast	exercised
 mischievous_sneakling	0	cast	exercised
+misleading_motes	0	cast	exercised
 misshapen_fiend	0	cast	exercised
 mist_leopard	0	cast	exercised
 mistmeadow_council	0	cast	exercised
@@ -1811,6 +1813,7 @@ rumble_arena	0	ability:1	exercised
 rumble_arena	0	land	exercised
 rumbling_baloth	0	cast	exercised
 run_afoul	0	cast	exercised
+run_behind	0	cast	exercised
 runeclaw_bear	0	cast	exercised
 russet_wolves	0	cast	exercised
 rustwing_falcon	0	cast	exercised
@@ -2122,6 +2125,8 @@ stormshriek_feral_flush_out	1	cast	exercised
 story_seeker	0	cast	exercised
 strangled_cemetery	0	ability:0	exercised
 strangled_cemetery	0	land	exercised
+stratosoarer	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+stratosoarer	0	cast	exercised
 straw_soldiers	0	cast	exercised
 streetbreaker_wurm	0	cast	exercised
 striped_bears	0	cast	exercised
@@ -2248,6 +2253,7 @@ the_terror_of_serpents_pass	0	cast	exercised
 the_whizzer,_classic_speedster	0	cast	exercised
 the_wondrous_wasp	0	cast	exercised
 thieving_magpie	0	cast	exercised
+thieving_otter	0	cast	exercised
 thorin_oakenshield	0	cast	exercised
 thornhide_wolves	0	cast	exercised
 thornweald_archer	0	cast	exercised
