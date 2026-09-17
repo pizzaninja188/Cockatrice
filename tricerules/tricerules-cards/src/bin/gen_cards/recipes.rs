@@ -6,9 +6,9 @@ use tricerules_cards::primitives::{
     HandCardAction, HandCardChooser, HandChoiceVisibility, LifeAmount, ObjectContributionKind,
     ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate,
     PlayerRecipient, PowerToughnessCharacteristic, RelativePlayerSet, ResolutionBranchDef,
-    ResolutionBranchSelection, ResolutionCost, SearchDestination, SearchZoneSelection,
-    SpellCastFilter, SpellCostModifier, SpellManaSpentComparison, StackSpellFilter,
-    StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
+    ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SearchDestination,
+    SearchZoneSelection, SpellCastFilter, SpellCostModifier, SpellManaSpentComparison,
+    StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
     TargetMatchFilter, TargetObjectExclusion, TargetingDef, TargetingSourceFilter,
     TypeLineAddition, ZoneCardFilter,
 };
@@ -2845,6 +2845,122 @@ pub(super) fn issue_315_card_surface_is_exact(
         _ => return true,
     };
     (name, mana_cost, type_line, power, toughness, oracle_text) == expected
+}
+
+const ISSUE_287_LONG_LAKE_NUISANCE_ORACLE_ID: &str = "a833fdf1-db0c-4846-8452-d3b2059c2355";
+const ISSUE_287_PATIENT_INSTRUCTOR_ORACLE_ID: &str = "bddd7e99-ec74-4ca6-9137-155b85695a95";
+const ISSUE_287_REVIEWED_ORACLE_IDS: &[&str] = &[
+    ISSUE_287_LONG_LAKE_NUISANCE_ORACLE_ID,
+    ISSUE_287_PATIENT_INSTRUCTOR_ORACLE_ID,
+];
+
+/// CR 701.70: Recruit is draw, then a private mandatory discard, then a nonland-gated token.
+/// The engine-owned branch reads the typed discard result emitted by the immediately preceding
+/// instruction, so no authoring surface can weaken the land/nonland check.
+fn recruit_effects() -> Vec<SpellEffectKind> {
+    vec![
+        SpellEffectKind::DrawDiscard {
+            who: PlayerRecipient::Controller,
+            draw_count: 1,
+            discard_count: 1,
+            order: DrawDiscardOrder::DrawThenDiscard,
+            optional: false,
+        },
+        SpellEffectKind::ChooseResolutionBranch {
+            chooser: PlayerRecipient::Controller,
+            optional: false,
+            selection: ResolutionBranchSelection::FirstApplicable,
+            branches: vec![
+                ResolutionBranchDef {
+                    branch_id: ChoiceId::new("create_a_soldier")
+                        .expect("closed Recruit branch uses a valid choice ID"),
+                    presentation: AbilityPresentation::Fallback,
+                    runtime_fallback: None,
+                    cost: ResolutionCost::None,
+                    requirement: ResolutionBranchRequirement::CardResultCount {
+                        filter: CardResultFilter {
+                            source: CardResultSource::PreviousEffect,
+                            action: CardResultAction::Discard,
+                            players: RelativePlayerSet::Controller,
+                            card_type: Some(CardTypeFilter::Nonland),
+                        },
+                        min: Some(1),
+                        max: None,
+                    },
+                    effects: vec![SpellEffectKind::CreateTokens {
+                        token: "human_soldier_w_1_1".into(),
+                        count: Amount::Fixed(1),
+                        who: PlayerRecipient::Controller,
+                        tapped: false,
+                        sacrifice_timing: None,
+                    }],
+                },
+                ResolutionBranchDef {
+                    branch_id: ChoiceId::new("no_soldier")
+                        .expect("closed Recruit fallback uses a valid choice ID"),
+                    presentation: AbilityPresentation::Fallback,
+                    runtime_fallback: None,
+                    cost: ResolutionCost::None,
+                    requirement: ResolutionBranchRequirement::Always,
+                    effects: Vec::new(),
+                },
+            ],
+            otherwise: Vec::new(),
+        },
+    ]
+}
+
+const ISSUE_287_RECRUIT_CLAUSE: &str = r#"When this creature enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)"#;
+
+pub(super) fn issue_287_oracle_id_is_reviewed(oracle_id: &str) -> bool {
+    ISSUE_287_REVIEWED_ORACLE_IDS.contains(&oracle_id)
+}
+
+pub(super) fn issue_287_card_surface_is_exact(
+    oracle_id: &str,
+    name: &str,
+    mana_cost: &str,
+    type_line: &str,
+    oracle_text: &str,
+    power: Option<&str>,
+    toughness: Option<&str>,
+) -> bool {
+    let expected = match oracle_id {
+        ISSUE_287_LONG_LAKE_NUISANCE_ORACLE_ID => (
+            "Long Lake Nuisance",
+            "{3}{U}",
+            "Creature — Bird",
+            Some("3"),
+            Some("1"),
+            "Flying\nWhen this creature enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)",
+        ),
+        ISSUE_287_PATIENT_INSTRUCTOR_ORACLE_ID => (
+            "Patient Instructor",
+            "{2}{W/U}",
+            "Creature — Human Citizen",
+            Some("2"),
+            Some("2"),
+            "Vigilance\nWhen this creature enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)",
+        ),
+        _ => return true,
+    };
+    (name, mana_cost, type_line, power, toughness, oracle_text) == expected
+}
+
+fn match_etb_recruit(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && context
+            .oracle_id
+            .as_deref()
+            .is_none_or(issue_287_oracle_id_is_reviewed)
+        && text == ISSUE_287_RECRUIT_CLAUSE)
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfEntersBattlefield,
+                recruit_effects(),
+            )
+        })
 }
 
 fn match_creature_pay_mana_tap_tap_creature(
@@ -7279,6 +7395,28 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("triggered.self_enters.recruit"),
+        label: "creature ETB recruit",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_recruit,
+        calibration: calibrations!(
+            "Long Lake Nuisance" => r#"When this creature enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)"#,
+            "Patient Instructor" => r#"When this creature enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)"#;
+            "When this creature enters, recruit.",
+            "When this creature enters, you recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)",
+            "When this creature enters, recruit. (Draw a card, then discard a card.)",
+            "When this creature enters, recruit. (Draw a card, then discard a card. If you discarded a land card, create a 1/1 white Human Soldier creature token.)",
+            "When this creature enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 2/2 white Human Soldier creature token.)",
+            "When this creature enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Soldier creature token.)",
+            "When this creature enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token. Draw a card.)",
+            "When this creature enters, it connives. (Draw a card, then discard a card. If you discarded a nonland card, put a +1/+1 counter on this creature.)",
+            "When this creature dies, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)",
+            "Whenever this creature attacks, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)",
+            "When this enchantment enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)",
+            "When an opponent casts their first noncreature spell each turn, you recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)"
+        ),
+    },
+    Recipe {
         id: RecipeId("triggered.self_leaves_battlefield.create_token.food.one"),
         label: "leaves the battlefield create Food",
         surface: RecipeSurface::TriggeredAbility,
@@ -10645,6 +10783,164 @@ mod tests {
         assert!(
             match_clause(clause, true, &context()).unwrap().is_none(),
             "the triggered recipe must reject spell clauses"
+        );
+    }
+
+    #[test]
+    fn issue_287_self_enters_recruit_is_exact_and_typed() {
+        const LONG_LAKE_NUISANCE_ID: &str = "a833fdf1-db0c-4846-8452-d3b2059c2355";
+        const PATIENT_INSTRUCTOR_ID: &str = "bddd7e99-ec74-4ca6-9137-155b85695a95";
+        const RECRUIT_CLAUSE: &str = r#"When this creature enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)"#;
+        const RECIPE_ID: &str = "triggered.self_enters.recruit";
+
+        for oracle_id in [LONG_LAKE_NUISANCE_ID, PATIENT_INSTRUCTOR_ID] {
+            let mut reviewed = context();
+            reviewed.oracle_id = Some(oracle_id.into());
+            let matched = match_clause(RECRUIT_CLAUSE, false, &reviewed)
+                .expect("issue #287 clause should not be ambiguous")
+                .expect("issue #287 ETB recruit should match");
+            assert_eq!(matched.id.as_str(), RECIPE_ID);
+            let recipe = CATALOG
+                .iter()
+                .find(|recipe| recipe.id == matched.id)
+                .expect("issue #287 recipe should remain registered");
+            assert_eq!(recipe.surface, RecipeSurface::EtbAbility);
+
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("issue #287 must emit a triggered ability");
+            };
+            assert_eq!(ability.ability_id.as_str(), "triggered_01");
+            assert_eq!(
+                ability.presentation,
+                AbilityPresentation::OracleLines(vec![1])
+            );
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+            assert!(!ability.may);
+            assert!(ability.modal.is_none());
+            assert!(ability.targeting.is_none());
+            assert!(ability.intervening_if.is_none());
+            let [SpellEffectKind::DrawDiscard {
+                who,
+                draw_count,
+                discard_count,
+                order,
+                optional,
+            }, SpellEffectKind::ChooseResolutionBranch {
+                chooser,
+                optional: branch_optional,
+                selection,
+                branches,
+                otherwise,
+            }] = ability.effect.as_slice()
+            else {
+                panic!(
+                    "issue #287 must emit a draw/discard continuation followed by the result-gated token"
+                );
+            };
+            assert_eq!(*who, PlayerRecipient::Controller);
+            assert_eq!((*draw_count, *discard_count), (1, 1));
+            assert_eq!(*order, DrawDiscardOrder::DrawThenDiscard);
+            assert!(!*optional);
+            assert_eq!(*chooser, PlayerRecipient::Controller);
+            assert!(!*branch_optional);
+            assert_eq!(*selection, ResolutionBranchSelection::FirstApplicable);
+            assert!(otherwise.is_empty());
+            let [soldier, fallback] = branches.as_slice() else {
+                panic!("issue #287 must emit exactly the token branch and its applicable fallback");
+            };
+            assert_eq!(soldier.branch_id.as_str(), "create_a_soldier");
+            assert_eq!(soldier.presentation, AbilityPresentation::Fallback);
+            assert_eq!(soldier.cost, ResolutionCost::None);
+            assert_eq!(
+                soldier.requirement,
+                tricerules_cards::primitives::ResolutionBranchRequirement::CardResultCount {
+                    filter: CardResultFilter {
+                        source: CardResultSource::PreviousEffect,
+                        action: CardResultAction::Discard,
+                        players: RelativePlayerSet::Controller,
+                        card_type: Some(CardTypeFilter::Nonland),
+                    },
+                    min: Some(1),
+                    max: None,
+                }
+            );
+            assert_eq!(
+                soldier.effects,
+                [SpellEffectKind::CreateTokens {
+                    token: "human_soldier_w_1_1".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                }]
+            );
+            assert_eq!(fallback.branch_id.as_str(), "no_soldier");
+            assert_eq!(fallback.presentation, AbilityPresentation::Fallback);
+            assert_eq!(
+                fallback.requirement,
+                tricerules_cards::primitives::ResolutionBranchRequirement::Always
+            );
+            assert!(fallback.effects.is_empty());
+            assert_eq!(
+                SpellEffectKind::validate_list(&ability.effect),
+                Ok(()),
+                "the engine-authored Recruit assembly must pass list validation"
+            );
+        }
+
+        for oracle_id in [
+            "00000000-0000-0000-0000-000000000000",
+            "",
+            "unreviewed-identical-clause",
+        ] {
+            let mut unreviewed = context();
+            unreviewed.oracle_id = Some(oracle_id.into());
+            assert!(
+                match_clause(RECRUIT_CLAUSE, false, &unreviewed)
+                    .expect("unreviewed clause should not be ambiguous")
+                    .is_none(),
+                "identical text must remain unsupported for an unreviewed Oracle identity: {oracle_id:?}"
+            );
+        }
+
+        let mut reviewed = context();
+        reviewed.oracle_id = Some(LONG_LAKE_NUISANCE_ID.into());
+        for negative in [
+            "When this creature enters, recruit.",
+            "When this creature enters, you recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)",
+            "When this creature enters, recruit. (Draw a card, then discard a card.)",
+            "When this creature enters, recruit. (Draw a card, then discard a card. If you discarded a land card, create a 1/1 white Human Soldier creature token.)",
+            "When this creature enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 2/2 white Human Soldier creature token.)",
+            "When this creature enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Soldier creature token.)",
+            "When this creature enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token. Draw a card.)",
+            "When this creature enters, it connives. (Draw a card, then discard a card. If you discarded a nonland card, put a +1/+1 counter on this creature.)",
+            "When this creature dies, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)",
+            "Whenever this creature attacks, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)",
+            "When this enchantment enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)",
+            "When an opponent casts their first noncreature spell each turn, you recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)",
+        ] {
+            assert!(
+                match_clause(negative, false, &reviewed)
+                    .expect("near-miss should not be ambiguous")
+                    .is_none(),
+                "near-miss was accepted: {negative}"
+            );
+        }
+
+        let mut noncreature = context();
+        noncreature.oracle_id = Some(LONG_LAKE_NUISANCE_ID.into());
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(RECRUIT_CLAUSE, false, &noncreature)
+                .expect("source-kind check should not be ambiguous")
+                .is_none(),
+            "the exact clause must remain bound to creature sources"
+        );
+        assert!(
+            match_clause(RECRUIT_CLAUSE, true, &context())
+                .expect("surface check should not be ambiguous")
+                .is_none(),
+            "the EtbAbility recipe must reject spell clauses"
         );
     }
 

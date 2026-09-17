@@ -51,6 +51,7 @@ mod scaffold;
 #[cfg(test)]
 use recipes::{french_vanilla_keywords, keyword_ident};
 use recipes::{
+    issue_287_card_surface_is_exact, issue_287_oracle_id_is_reviewed,
     issue_298_card_surface_is_exact, issue_309_card_surface_is_exact,
     issue_309_oracle_id_is_reviewed, issue_310_card_surface_is_exact,
     issue_310_oracle_id_is_reviewed, issue_311_card_surface_is_exact,
@@ -1772,6 +1773,17 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     if !issue_315_color_surface_is_exact(str_field(card, "oracle_id"), card) {
         return Err(Skip::NonKeywordText.into());
     }
+    if !issue_287_card_surface_is_exact(
+        str_field(card, "oracle_id"),
+        &name,
+        &mana_cost,
+        type_line,
+        oracle_text,
+        card.get("power").and_then(Value::as_str),
+        card.get("toughness").and_then(Value::as_str),
+    ) {
+        return Err(Skip::NonKeywordText.into());
+    }
     let mut rules = parse_rules_text(
         &name,
         str_field(card, "oracle_id"),
@@ -1901,7 +1913,8 @@ fn evaluate(
     generated_names: &HashSet<String>,
 ) -> Result<GenCard, EvaluationError> {
     let layout = GenLayout::from_scryfall(str_field(card, "layout")).ok_or(Skip::Layout)?;
-    if (issue_309_oracle_id_is_reviewed(str_field(card, "oracle_id"))
+    if (issue_287_oracle_id_is_reviewed(str_field(card, "oracle_id"))
+        || issue_309_oracle_id_is_reviewed(str_field(card, "oracle_id"))
         || issue_310_oracle_id_is_reviewed(str_field(card, "oracle_id"))
         || issue_311_oracle_id_is_reviewed(str_field(card, "oracle_id"))
         || issue_313_oracle_id_is_reviewed(str_field(card, "oracle_id"))
@@ -2554,17 +2567,18 @@ mod tests {
     use std::io::{Cursor, Write};
     use tricerules_cards::card_def::RawCardDefinition;
     use tricerules_cards::primitives::{
-        BattlefieldPermanentFilter, CardResultAction, CardResultSource, CardTypeFilter,
-        CountExpression, EffectSubject, EntersTappedAffected, EntryCost, GameCondition,
-        ObjectContributionKind, ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient,
-        PowerToughnessCharacteristic, RelativePlayerSet, ResolutionCost, SpellCastFilter,
+        BattlefieldPermanentFilter, CardResultAction, CardResultFilter, CardResultSource,
+        CardTypeFilter, CountExpression, EffectSubject, EntersTappedAffected, EntryCost,
+        GameCondition, ObjectContributionKind, ObjectPaymentConstraint, PermanentTypeFilter,
+        PlayerRecipient, PowerToughnessCharacteristic, RelativePlayerSet, ResolutionBranchDef,
+        ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SpellCastFilter,
         SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController,
         TargetFilter, TargetKind, TargetObjectExclusion, TargetingSourceFilter, TypeLineAddition,
     };
     use tricerules_cards::{
         AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount,
-        CastTriggerPlayer, CharacteristicDefiningAbility, Color, CounterKind, Keyword, Layout,
-        ManaCost, SpellEffectKind, TriggerCondition,
+        CastTriggerPlayer, CharacteristicDefiningAbility, ChoiceId, Color, CounterKind, Keyword,
+        Layout, ManaCost, SpellEffectKind, TriggerCondition,
     };
 
     fn face(
@@ -8775,6 +8789,276 @@ mod tests {
                 "a reviewed #315 card cannot borrow another cohort member's clause"
             );
         }
+    }
+
+    #[test]
+    fn issue_287_two_card_cohort_generates_exact_typed_recruit() {
+        const RECRUIT_CLAUSE: &str = r#"When this creature enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)"#;
+        let cases = [
+            (
+                "a833fdf1-db0c-4846-8452-d3b2059c2355",
+                "Long Lake Nuisance",
+                "{3}{U}",
+                "Creature — Bird",
+                "3",
+                "1",
+                "Flying",
+                Keyword::Flying,
+            ),
+            (
+                "bddd7e99-ec74-4ca6-9137-155b85695a95",
+                "Patient Instructor",
+                "{2}{W/U}",
+                "Creature — Human Citizen",
+                "2",
+                "2",
+                "Vigilance",
+                Keyword::Vigilance,
+            ),
+        ];
+
+        for (oracle_id, name, mana_cost, type_line, power, toughness, keyword_text, keyword) in
+            cases
+        {
+            let oracle_text = format!("{keyword_text}\n{RECRUIT_CLAUSE}");
+            let card = normal_card_with_oracle_id(
+                oracle_id,
+                name,
+                mana_cost,
+                type_line,
+                &oracle_text,
+                Some((power, toughness)),
+            );
+            let generated = evaluate_fresh(&card)
+                .unwrap_or_else(|error| panic!("{name} should generate: {error:?}"));
+            assert_eq!(generated.faces[0].recipe_labels, ["creature ETB recruit"]);
+
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert_eq!(raw.id, slugify(name));
+            assert_eq!(raw.name, name);
+            assert_eq!(raw.mana_cost.to_string(), mana_cost);
+            assert_eq!(raw.power, Some(power.parse().unwrap()));
+            assert_eq!(raw.toughness, Some(toughness.parse().unwrap()));
+            assert_eq!(raw.keywords, [keyword]);
+            let [ability] = raw.triggered_abilities.as_slice() else {
+                panic!("{name} should emit exactly one ETB ability");
+            };
+            assert_eq!(ability.ability_id.as_str(), "triggered_01");
+            assert_eq!(
+                ability.presentation,
+                AbilityPresentation::OracleLines(vec![2])
+            );
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+            assert!(!ability.may);
+            assert!(ability.modal.is_none());
+            assert!(ability.targeting.is_none());
+            assert!(ability.intervening_if.is_none());
+            assert_eq!(
+                ability.effect,
+                [
+                    SpellEffectKind::DrawDiscard {
+                        who: PlayerRecipient::Controller,
+                        draw_count: 1,
+                        discard_count: 1,
+                        order: DrawDiscardOrder::DrawThenDiscard,
+                        optional: false,
+                    },
+                    SpellEffectKind::ChooseResolutionBranch {
+                        chooser: PlayerRecipient::Controller,
+                        optional: false,
+                        selection: ResolutionBranchSelection::FirstApplicable,
+                        branches: vec![
+                            ResolutionBranchDef {
+                                branch_id: ChoiceId::new("create_a_soldier").unwrap(),
+                                presentation: AbilityPresentation::Fallback,
+                                runtime_fallback: None,
+                                cost: ResolutionCost::None,
+                                requirement: ResolutionBranchRequirement::CardResultCount {
+                                    filter: CardResultFilter {
+                                        source: CardResultSource::PreviousEffect,
+                                        action: CardResultAction::Discard,
+                                        players: RelativePlayerSet::Controller,
+                                        card_type: Some(CardTypeFilter::Nonland),
+                                    },
+                                    min: Some(1),
+                                    max: None,
+                                },
+                                effects: vec![SpellEffectKind::CreateTokens {
+                                    token: "human_soldier_w_1_1".into(),
+                                    count: Amount::Fixed(1),
+                                    who: PlayerRecipient::Controller,
+                                    tapped: false,
+                                    sacrifice_timing: None,
+                                }],
+                            },
+                            ResolutionBranchDef {
+                                branch_id: ChoiceId::new("no_soldier").unwrap(),
+                                presentation: AbilityPresentation::Fallback,
+                                runtime_fallback: None,
+                                cost: ResolutionCost::None,
+                                requirement: ResolutionBranchRequirement::Always,
+                                effects: Vec::new(),
+                            },
+                        ],
+                        otherwise: Vec::new(),
+                    },
+                ]
+            );
+        }
+
+        let unreviewed = normal_card_with_oracle_id(
+            "00000000-0000-0000-0000-000000000000",
+            "Unreviewed Recruit Creature",
+            "{2}{U}",
+            "Creature — Bird",
+            &format!("Flying\n{RECRUIT_CLAUSE}"),
+            Some(("2", "2")),
+        );
+        assert!(
+            evaluate_fresh(&unreviewed).is_err(),
+            "an unreviewed Oracle ID must not join the exact Recruit cohort"
+        );
+    }
+
+    #[test]
+    fn issue_287_generator_is_fail_closed_for_exact_identity_surface_and_near_misses() {
+        const LONG_LAKE_NUISANCE_ID: &str = "a833fdf1-db0c-4846-8452-d3b2059c2355";
+        const RECRUIT_CLAUSE: &str = r#"When this creature enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)"#;
+        let exact_text = format!("Flying\n{RECRUIT_CLAUSE}");
+        let exact = normal_card_with_oracle_id(
+            LONG_LAKE_NUISANCE_ID,
+            "Long Lake Nuisance",
+            "{3}{U}",
+            "Creature — Bird",
+            &exact_text,
+            Some(("3", "1")),
+        );
+        let generated =
+            evaluate_fresh(&exact).expect("the reviewed Long Lake Nuisance surface qualifies");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.triggered_abilities.len(), 1);
+
+        let cases: &[(&str, fn(&mut Value))] = &[
+            ("unreviewed identity", |card: &mut Value| {
+                card["oracle_id"] = json!("00000000-0000-0000-0000-000000000000");
+            }),
+            ("missing identity", |card: &mut Value| {
+                card.as_object_mut().unwrap().remove("oracle_id");
+            }),
+            ("wrong name", |card: &mut Value| {
+                card["name"] = json!("Other Bird");
+            }),
+            ("cross-card name and text", |card: &mut Value| {
+                card["name"] = json!("Patient Instructor");
+                card["type_line"] = json!("Creature — Human Citizen");
+                card["mana_cost"] = json!("{2}{W/U}");
+                card["oracle_text"] = json!(format!("Vigilance\n{RECRUIT_CLAUSE}"));
+                card["power"] = json!("2");
+                card["toughness"] = json!("2");
+            }),
+            ("wrong casting cost", |card: &mut Value| {
+                card["mana_cost"] = json!("{2}{U}");
+            }),
+            ("wrong type line", |card: &mut Value| {
+                card["type_line"] = json!("Creature — Bird Soldier");
+            }),
+            ("noncreature context", |card: &mut Value| {
+                card["type_line"] = json!("Enchantment");
+                card.as_object_mut().unwrap().remove("power");
+                card.as_object_mut().unwrap().remove("toughness");
+            }),
+            ("wrong power", |card: &mut Value| {
+                card["power"] = json!("4");
+            }),
+            ("wrong toughness", |card: &mut Value| {
+                card["toughness"] = json!("2");
+            }),
+            ("noncanonical power", |card: &mut Value| {
+                card["power"] = json!("03");
+            }),
+            ("noncanonical toughness", |card: &mut Value| {
+                card["toughness"] = json!("01");
+            }),
+            ("missing keyword", |card: &mut Value| {
+                card["oracle_text"] = json!(RECRUIT_CLAUSE);
+            }),
+            ("wrong keyword", |card: &mut Value| {
+                card["oracle_text"] = json!(format!("Reach\n{RECRUIT_CLAUSE}"));
+            }),
+            ("missing reminder", |card: &mut Value| {
+                card["oracle_text"] = json!("Flying\nWhen this creature enters, recruit.");
+            }),
+            ("land discard wording", |card: &mut Value| {
+                card["oracle_text"] = json!(format!(
+                    "Flying\nWhen this creature enters, recruit. (Draw a card, then discard a card. If you discarded a land card, create a 1/1 white Human Soldier creature token.)"
+                ));
+            }),
+            ("wrong token", |card: &mut Value| {
+                card["oracle_text"] = json!(format!(
+                    "Flying\nWhen this creature enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 2/2 white Human Soldier creature token.)"
+                ));
+            }),
+            ("connive wording", |card: &mut Value| {
+                card["oracle_text"] = json!(format!(
+                    "Flying\nWhen this creature enters, it connives. (Draw a card, then discard a card. If you discarded a nonland card, put a +1/+1 counter on this creature.)"
+                ));
+            }),
+            ("dies trigger", |card: &mut Value| {
+                card["oracle_text"] =
+                    json!(format!("Flying\nWhen this creature dies, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)"));
+            }),
+            ("attacks trigger", |card: &mut Value| {
+                card["oracle_text"] = json!(format!(
+                    "Flying\nWhenever this creature attacks, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)"
+                ));
+            }),
+            ("enchantment trigger", |card: &mut Value| {
+                card["oracle_text"] = json!(format!(
+                    "Flying\nWhen this enchantment enters, recruit. (Draw a card, then discard a card. If you discarded a nonland card, create a 1/1 white Human Soldier creature token.)"
+                ));
+            }),
+            ("duplicate clause", |card: &mut Value| {
+                card["oracle_text"] = json!(format!("Flying\n{RECRUIT_CLAUSE}\n{RECRUIT_CLAUSE}"));
+            }),
+        ];
+        for (label, mutate) in cases {
+            let mut changed = exact.clone();
+            mutate(&mut changed);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#287 near-miss must fail closed: {label}"
+            );
+        }
+
+        let mut multiface = multiface(
+            "transform",
+            "Long Lake Nuisance // Other Face",
+            vec![
+                face(
+                    "Long Lake Nuisance",
+                    "{3}{U}",
+                    "Creature — Bird",
+                    &exact_text,
+                    Some(("3", "1")),
+                    &["U"],
+                    None,
+                ),
+                face(
+                    "Other Face",
+                    "",
+                    "Creature",
+                    "",
+                    Some(("1", "1")),
+                    &["U"],
+                    None,
+                ),
+            ],
+        );
+        multiface["oracle_id"] = json!(LONG_LAKE_NUISANCE_ID);
+        assert!(
+            evaluate_fresh(&multiface).is_err(),
+            "a reviewed #287 identity must not bypass its normal-layout restriction"
+        );
     }
 
     #[cfg(windows)]
