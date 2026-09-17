@@ -339,6 +339,8 @@ captain_of_the_watch	0	cast	exercised
 captains_call	0	cast	exercised
 capture_sphere	0	cast	exercised
 caravan_hurda	0	cast	exercised
+careening_mine_cart	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+careening_mine_cart	0	cast	exercised
 carrion_screecher	0	cast	exercised
 carrot_cake	0	ability:0	exercised
 carrot_cake	0	cast	exercised
@@ -488,6 +490,7 @@ cult_healer	0	cast	exercised
 cultivators_caravan	0	ability:0	exercised
 cultivators_caravan	0	ability:1	unsupported: nonmana costs need additional fixture resources
 cultivators_caravan	0	cast	exercised
+cunning_maneuver	0	cast	exercised
 curio_vendor	0	cast	exercised
 curse_of_disturbance	0	cast	exercised
 curse_of_opulence	0	cast	exercised
@@ -731,6 +734,7 @@ field_creeper	0	cast	exercised
 fiery_hellhound	0	ability:0	exercised
 fiery_hellhound	0	cast	exercised
 fiery_temper	0	cast	exercised
+fight_on!	0	cast	exercised
 final_showdown	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 finishing_blow	0	cast	exercised
 firdoch_core	0	ability:0	exercised
@@ -1640,6 +1644,8 @@ prodigal_pyromancer	0	ability:0	exercised
 prodigal_pyromancer	0	cast	exercised
 prodigal_sorcerer	0	ability:0	exercised
 prodigal_sorcerer	0	cast	exercised
+project_deathlok_soldier	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+project_deathlok_soldier	0	cast	exercised
 promising_vein	0	ability:0	exercised
 promising_vein	0	ability:1	exercised
 promising_vein	0	land	exercised
@@ -2054,6 +2060,8 @@ spirited_companion	0	cast	exercised
 spitfire_lagac	0	cast	exercised
 sporecap_spider	0	cast	exercised
 spring_of_eternal_peace	0	cast	exercised
+springleaf_drum	0	ability:0	exercised
+springleaf_drum	0	cast	exercised
 springmane_cervin	0	cast	exercised
 sprout	0	cast	exercised
 spyglass_siren	0	cast	exercised
@@ -2104,6 +2112,8 @@ stormcarved_coast	0	ability:0	exercised
 stormcarved_coast	0	land	exercised
 stormcloud_spirit	0	cast	exercised
 stormfront_pegasus	0	cast	exercised
+stormkeld_vanguard_bear_down	0	cast	exercised
+stormkeld_vanguard_bear_down	1	cast	exercised
 stormplain_detainment	0	cast	exercised
 stormrider_spirit	0	cast	exercised
 stormshriek_feral_flush_out	0	ability:0	exercised

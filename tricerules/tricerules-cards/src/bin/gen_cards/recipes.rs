@@ -3194,6 +3194,192 @@ fn match_spell_destroy_creature_power_at_most(
     })
 }
 
+/// Issue #317 exact clause templates. Each template is a reusable typed surface with at least two
+/// real positive calibrations. Every clause is compared by the complete normalized Oracle line, so
+/// an appended, reordered, or additional-clause form remains unsupported, and source-kind gating
+/// stays on the recipes whose printed template requires it.
+const ISSUE_317_VEHICLE_ATTACK_TREASURE_CLAUSE: &str =
+    "Whenever this Vehicle attacks, create a Treasure token.";
+const ISSUE_317_RETURN_UP_TO_TWO_GRAVEYARD_CREATURES_CLAUSE: &str =
+    "Return up to two target creature cards from your graveyard to your hand.";
+const ISSUE_317_TAP_CREATURE_ANY_COLOR_CLAUSE: &str =
+    "{T}, Tap an untapped creature you control: Add one mana of any color.";
+const ISSUE_317_CANT_BE_BLOCKED_POWER_PREFIX: &str =
+    "This creature can't be blocked by creatures with power ";
+const ISSUE_317_CANT_BE_BLOCKED_POWER_SUFFIX: &str = " or less.";
+const ISSUE_317_CREATE_CLUE_TOKEN_CLAUSE: &str = "Create a Clue token.";
+const ISSUE_317_GRAVEYARD_RETURN_SELF_SUFFIX: &str =
+    ": Return this card from your graveyard to your hand.";
+/// The reviewed printed cost and full clause of the two calibration cards; test-only because the
+/// matcher intentionally parameterizes over any exact printed mana cost.
+#[cfg(test)]
+const ISSUE_317_GRAVEYARD_RETURN_SELF_COST: &str = "{2}{B}";
+#[cfg(test)]
+const ISSUE_317_GRAVEYARD_RETURN_SELF_TO_HAND_CLAUSE: &str =
+    "{2}{B}: Return this card from your graveyard to your hand.";
+
+/// The printed-card creature predicate shared by graveyard recursion shapes: a creature card in
+/// the controller's own graveyard (Raise Dead, Macabre Reconstruction, Vampire Soulcaller). Kept
+/// as one constructor so the spell and permanent forms cannot drift apart.
+fn graveyard_creature_card_filter() -> ZoneCardFilter {
+    ZoneCardFilter {
+        card_type: Some(CardTypeFilter::Creature),
+        ..ZoneCardFilter::default()
+    }
+}
+
+/// CR 508.1 / 603.2: an attack trigger whose printed subject is "this Vehicle". Vehicle sources are
+/// not creatures, so the clause is gated on the Vehicle subtype rather than the creature context
+/// used by the other self-attack recipes. CR 111.10a: the created Treasure is the registered token.
+fn match_self_attacks_vehicle_create_treasure(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_vehicle && text == ISSUE_317_VEHICLE_ATTACK_TREASURE_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0,
+            },
+            vec![SpellEffectKind::CreateTokens {
+                token: "treasure".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }],
+        )
+    })
+}
+
+/// CR 115.1 / 404.2 / 608.2b: "Return up to two target creature cards from your graveyard to your
+/// hand" is one optional bounded graveyard-card group (min 0, max 2) sharing one
+/// `MoveGraveyardCards` predicate for the controller's own graveyard. The one-card ETB forms keep
+/// their own recipes, so this clause matches exactly once.
+fn match_spell_return_up_to_two_graveyard_creature_cards(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_317_RETURN_UP_TO_TWO_GRAVEYARD_CREATURES_CLAUSE).then(|| {
+        RecipeEmission::SpellEffectsWithTargeting {
+            effects: vec![SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    owner: GraveyardOwner::Controller,
+                    card: Some(graveyard_creature_card_filter()),
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::Hand,
+                linked_exile_id: None,
+            }],
+            targeting: exact_targeting(
+                0,
+                2,
+                "Choose up to two target creature cards from your graveyard",
+                vec![0],
+            ),
+        }
+    })
+}
+
+/// CR 601.2h / 605.1a: "{T}, Tap an untapped creature you control" is two atomic costs on one
+/// activated ability: the source tap plus exactly one selected untapped creature the activator
+/// controls. The source is excluded from the selection cohort because a creature source paying
+/// `{T}` could otherwise be counted twice. The effect reuses the shipped any-color mana shape.
+fn match_artifact_tap_creature_add_any_color(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_artifact && text == ISSUE_317_TAP_CREATURE_ANY_COLOR_CLAUSE).then(|| {
+        utility_activated_ability(
+            context,
+            vec![
+                AbilityCost::Tap,
+                AbilityCost::TapPermanents {
+                    constraint: ObjectPaymentConstraint::ExactCount(1),
+                    filter: TargetFilter {
+                        kind: TargetKind::Creature,
+                        controller: TargetController::You,
+                        ..TargetFilter::default()
+                    },
+                    exclude_source: true,
+                },
+            ],
+            vec![five_color_mana_effect()],
+            None,
+        )
+    })
+}
+
+/// CR 509.1b / 208: "This creature can't be blocked by creatures with power N or less" is a
+/// characteristic-based blocking restriction parameterized over the inclusive power bound. The
+/// bound must be positive; zero, greater-than, and unparameterized forms stay unsupported.
+fn match_self_cannot_be_blocked_by_power_n_or_less(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    let bound = text
+        .strip_prefix(ISSUE_317_CANT_BE_BLOCKED_POWER_PREFIX)?
+        .strip_suffix(ISSUE_317_CANT_BE_BLOCKED_POWER_SUFFIX)?
+        .parse::<u32>()
+        .ok()?;
+    (context.source_is_creature && bound >= 1).then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::SelfCombatRestriction {
+                restriction: tricerules_cards::primitives::CombatRestriction {
+                    cant_be_blocked_by: vec![TargetFilter {
+                        kind: TargetKind::Creature,
+                        power: Some(PowerComparison::AtMost(bound)),
+                        ..TargetFilter::default()
+                    }],
+                    ..tricerules_cards::primitives::CombatRestriction::default()
+                },
+                condition: None,
+            },
+        })
+    })
+}
+
+/// CR 111.10f / 701.16a: "Create a Clue token" is the untargeted registered `clue` token. Only the
+/// complete sentence matches; Investigate, plural, tapped, and appended-instruction forms keep
+/// their own wording or stay unsupported.
+fn match_spell_create_clue_token(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == ISSUE_317_CREATE_CLUE_TOKEN_CLAUSE).then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::CreateTokens {
+            token: "clue".into(),
+            count: Amount::Fixed(1),
+            who: PlayerRecipient::Controller,
+            tapped: false,
+            sacrifice_timing: None,
+        })
+    })
+}
+
+/// CR 113.6 / 602.2: an activated ability that functions only while the card is in its owner's
+/// graveyard. The matcher captures the printed mana cost and emits the public-zone action as a
+/// source-relative return with no targeting, matching Merchant of Many Hats by construction.
+fn match_graveyard_return_self_to_hand(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    let cost = exact_mana_cost(text.strip_suffix(ISSUE_317_GRAVEYARD_RETURN_SELF_SUFFIX)?)?;
+    Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        ability_id: context.activated_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        cost_modifiers: Vec::new(),
+        source_zone: AbilitySourceZone::Graveyard,
+        costs: vec![AbilityCost::Mana(cost)],
+        effect: vec![SpellEffectKind::ReturnToOwnersHand {
+            subject: EffectSubject::Source,
+        }],
+        targeting: None,
+        timing: ActivationTiming::Normal,
+        conditions: Vec::new(),
+        activation_limit: None,
+    }))
+}
+
 const ISSUE_301_REVIEWED_ORACLE_IDS: &[&str] = &[
     "295f8b8d-102a-47af-93c2-f8182c5f11ca", // Ascendant Dustspeaker
     "5d46e85f-4a04-48b1-afe9-3a47678041d4", // Startled Relic Sloth
@@ -9717,6 +9903,128 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Destroy target creature with power 3 or less. You gain 1 life."
         ),
     },
+    Recipe {
+        id: RecipeId("triggered.self_attacks.vehicle.create_treasure"),
+        label: "Vehicle attack creates a Treasure",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_attacks_vehicle_create_treasure,
+        calibration: calibrations!(
+            "Careening Mine Cart" => "Whenever this Vehicle attacks, create a Treasure token.",
+            "Rocketeer Boostbuggy" => "Whenever this Vehicle attacks, create a Treasure token.";
+            "Whenever this creature attacks, create a Treasure token.",
+            "Whenever another Vehicle you control attacks, create a Treasure token.",
+            "Whenever this Vehicle attacks, you may create a Treasure token.",
+            "Whenever this Vehicle deals combat damage to a player, create a Treasure token.",
+            "Whenever this Vehicle attacks, create two Treasure tokens.",
+            "Whenever this Vehicle attacks, create a tapped Treasure token.",
+            "Whenever this Vehicle attacks, create a Treasure token. Draw a card.",
+            "Whenever this Vehicle attacks, create a Treasure token"
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.return_graveyard.creature.cards.hand.up_to_two"),
+        label: "return up to two target creature cards from your graveyard to your hand",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_return_up_to_two_graveyard_creature_cards,
+        calibration: calibrations!(
+            "Fight On!" => "Return up to two target creature cards from your graveyard to your hand.",
+            "Macabre Reconstruction" => "Return up to two target creature cards from your graveyard to your hand.",
+            "Sanguine Indulgence" => "Return up to two target creature cards from your graveyard to your hand.";
+            "Return target creature card from your graveyard to your hand.",
+            "Return up to one target creature card from your graveyard to your hand.",
+            "Return up to two target cards from your graveyard to your hand.",
+            "Return up to two target creature cards from a graveyard to your hand.",
+            "Return up to two target creature cards from your graveyard to the battlefield.",
+            "Return up to two target creature cards from an opponent's graveyard to your hand.",
+            "Return up to three target creature cards from your graveyard to your hand.",
+            "Return up to two target creature cards from your graveyard to your hand. You gain 2 life.",
+            "Return two target creature cards from your graveyard to your hand."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.tap_creature.add_any_color"),
+        label: "tap a creature for any color",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_artifact_tap_creature_add_any_color,
+        calibration: calibrations!(
+            "Springleaf Drum" => "{T}, Tap an untapped creature you control: Add one mana of any color.",
+            "Dragonbroods' Relic" => "{T}, Tap an untapped creature you control: Add one mana of any color.",
+            "Scene of the Crime" => "{T}, Tap an untapped creature you control: Add one mana of any color.";
+            "{T}, Tap an untapped artifact you control: Add one mana of any color.",
+            "{T}, Tap two untapped creatures you control: Add one mana of any color.",
+            "{T}, Tap an untapped creature you control: Add {G}.",
+            "{T}, Tap an untapped creature you control: Add one mana of any one color.",
+            "{T}, Tap an untapped creature you control: Add one mana of any type.",
+            "{T}, Exile a creature you control: Add one mana of any color.",
+            "{T}, Pay 1 life, Tap an untapped creature you control: Add one mana of any color.",
+            "{T}, Tap an untapped creature you control: Add one mana of any color. Draw a card.",
+            "{T}, Tap an untapped creature an opponent controls: Add one mana of any color."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.self.cannot_be_blocked_by_power_n_or_less"),
+        label: "self cannot be blocked by power N or less",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_self_cannot_be_blocked_by_power_n_or_less,
+        calibration: calibrations!(
+            "Stormkeld Vanguard" => "This creature can't be blocked by creatures with power 2 or less.",
+            "Gate Colossus" => "This creature can't be blocked by creatures with power 2 or less.",
+            "Bristlebane Outrider" => "This creature can't be blocked by creatures with power 2 or less.",
+            "Old Fat Spider" => "This creature can't be blocked by creatures with power 2 or less.";
+            "This creature can't be blocked.",
+            "This creature can't be blocked by creatures with power 2 or greater.",
+            "This creature can't be blocked by creatures with power 0 or less.",
+            "This creature can't be blocked by Walls.",
+            "This creature can't be blocked except by creatures with power 2 or greater.",
+            "This creature can't be blocked by creatures with power 2.",
+            "This creature can block only creatures with power 2 or greater.",
+            "This creature can't be blocked by creatures with power two or less.",
+            "This creature can't be blocked by creatures with toughness 2 or less.",
+            "This creature can't be blocked by artifacts with power 2 or less.",
+            "This creature can't be blocked by creatures with power 2 or less. It can't be blocked by Walls."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.create_clue_token"),
+        label: "create a Clue",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_create_clue_token,
+        calibration: calibrations!(
+            "Cunning Maneuver" => "Create a Clue token.",
+            "True Ancestry" => "Create a Clue token.",
+            "Jet's Brainwashing" => "Create a Clue token.";
+            "Create a Clue token. Draw a card.",
+            "Create two Clue tokens.",
+            "Create a tapped Clue token.",
+            "Investigate.",
+            "Create a Food token.",
+            "Create a Treasure token.",
+            "Create a Clue token",
+            "Create a colorless Clue token.",
+            "Create a 1/1 Clue token.",
+            "Create a Clue artifact token."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.graveyard.return_self_to_hand"),
+        label: "graveyard activation returns this card to hand",
+        surface: RecipeSurface::ZoneActivatedAbility,
+        matcher: match_graveyard_return_self_to_hand,
+        calibration: calibrations!(
+            "Project Deathlok Soldier" => "{2}{B}: Return this card from your graveyard to your hand.",
+            "Abzan Devotee" => "{2}{B}: Return this card from your graveyard to your hand.";
+            "{2}{B}: Return this card from your graveyard to the battlefield.",
+            "{2}{B}: Return this card from your graveyard to the battlefield tapped.",
+            "{2}{B}: Return target creature card from your graveyard to your hand.",
+            "{2}{B}: Return this card from your graveyard to your hand. Activate only as a sorcery.",
+            "{2}{B}, Exile this card from your graveyard: Return this card from your graveyard to your hand.",
+            "{2}{B}: Return this card from the graveyard to your hand.",
+            "{2}{B}: Return this card from your graveyard to its owner's hand.",
+            "{2}{B}: Return this creature card from your graveyard to your hand.",
+            "Return this card from your graveyard to your hand.",
+            "{X}{B}: Return this card from your graveyard to your hand."
+        ),
+    },
 ];
 
 fn surface_applies(surface: RecipeSurface, is_spell: bool, context: &RecipeContext) -> bool {
@@ -15874,6 +16182,440 @@ mod tests {
             "Destroy target creature with power 3 or less. You gain 1 life.",
         ] {
             issue_316_assert_unmatched(negative, true);
+        }
+    }
+
+    fn issue_317_recipe(id: &str) -> &'static Recipe {
+        CATALOG
+            .iter()
+            .find(|recipe| recipe.id.as_str() == id)
+            .unwrap_or_else(|| panic!("missing recipe {id}"))
+    }
+
+    fn issue_317_match_spell(clause: &str, source_name: &str) -> RecipeMatch {
+        let mut source = context();
+        source.source_name = source_name.into();
+        match_clause(clause, true, &source)
+            .unwrap_or_else(|ambiguity| panic!("{source_name} is ambiguous: {ambiguity}"))
+            .unwrap_or_else(|| panic!("{source_name} should match exactly one recipe"))
+    }
+
+    fn issue_317_match_non_spell(clause: &str, source_name: &str) -> RecipeMatch {
+        let mut source = context();
+        source.source_name = source_name.into();
+        match_clause(clause, false, &source)
+            .unwrap_or_else(|ambiguity| panic!("{source_name} is ambiguous: {ambiguity}"))
+            .unwrap_or_else(|| panic!("{source_name} should match exactly one recipe"))
+    }
+
+    fn issue_317_assert_unmatched(clause: &str, is_spell: bool) {
+        assert!(
+            match_clause(clause, is_spell, &context())
+                .unwrap_or_else(|ambiguity| {
+                    panic!("near-miss must not be ambiguous: {clause}: {ambiguity}")
+                })
+                .is_none(),
+            "unsupported near-miss must remain unmatched: {clause}"
+        );
+    }
+
+    #[test]
+    fn issue_317_recipes_have_stable_ids_and_surfaces() {
+        for (id, surface) in [
+            (
+                "triggered.self_attacks.vehicle.create_treasure",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "spell.return_graveyard.creature.cards.hand.up_to_two",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "activated.tap_creature.add_any_color",
+                RecipeSurface::ActivatedAbility,
+            ),
+            (
+                "static.self.cannot_be_blocked_by_power_n_or_less",
+                RecipeSurface::StaticAbility,
+            ),
+            ("spell.create_clue_token", RecipeSurface::SpellClause),
+            (
+                "activated.graveyard.return_self_to_hand",
+                RecipeSurface::ZoneActivatedAbility,
+            ),
+        ] {
+            assert_eq!(
+                issue_317_recipe(id).surface,
+                surface,
+                "{id} surface drifted"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_317_vehicle_attack_treasure_is_vehicle_gated() {
+        for source_name in ["Careening Mine Cart", "Rocketeer Boostbuggy"] {
+            let matched =
+                issue_317_match_non_spell(ISSUE_317_VEHICLE_ATTACK_TREASURE_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "triggered.self_attacks.vehicle.create_treasure"
+            );
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("vehicle attack Treasure must emit one triggered ability");
+            };
+            assert_eq!(
+                ability.trigger,
+                TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                }
+            );
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::CreateTokens {
+                    token: "treasure".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                }]
+            );
+            assert!(ability.targeting.is_none());
+            assert!(!ability.may);
+            assert!(ability.intervening_if.is_none());
+        }
+
+        let mut nonvehicle = context();
+        nonvehicle.source_is_vehicle = false;
+        assert!(
+            match_clause(ISSUE_317_VEHICLE_ATTACK_TREASURE_CLAUSE, false, &nonvehicle)
+                .expect("nonvehicle source must not be ambiguous")
+                .is_none(),
+            "the attack Treasure recipe is Vehicle-source-only"
+        );
+    }
+
+    #[test]
+    fn issue_317_vehicle_attack_treasure_rejects_near_misses() {
+        for negative in [
+            "Whenever this creature attacks, create a Treasure token.",
+            "Whenever another Vehicle you control attacks, create a Treasure token.",
+            "Whenever this Vehicle attacks, you may create a Treasure token.",
+            "Whenever this Vehicle deals combat damage to a player, create a Treasure token.",
+            "Whenever this Vehicle attacks, create two Treasure tokens.",
+            "Whenever this Vehicle attacks, create a tapped Treasure token.",
+            "Whenever this Vehicle attacks, create a Treasure token. Draw a card.",
+            "Whenever this Vehicle attacks, create a Treasure token",
+        ] {
+            issue_317_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_317_return_up_to_two_graveyard_creatures_is_exact_and_typed() {
+        for source_name in ["Fight On!", "Macabre Reconstruction", "Sanguine Indulgence"] {
+            let matched = issue_317_match_spell(
+                ISSUE_317_RETURN_UP_TO_TWO_GRAVEYARD_CREATURES_CLAUSE,
+                source_name,
+            );
+            assert_eq!(
+                matched.id.as_str(),
+                "spell.return_graveyard.creature.cards.hand.up_to_two"
+            );
+            let RecipeEmission::SpellEffectsWithTargeting { effects, targeting } = matched.emission
+            else {
+                panic!("graveyard return must emit an explicitly targeted spell");
+            };
+            assert_eq!(
+                effects,
+                vec![SpellEffectKind::MoveGraveyardCards {
+                    filter: GraveyardFilter {
+                        owner: GraveyardOwner::Controller,
+                        card: Some(graveyard_creature_card_filter()),
+                        ..GraveyardFilter::default()
+                    },
+                    destination: GraveyardDestination::Hand,
+                    linked_exile_id: None,
+                }]
+            );
+            let [group] = targeting.groups.as_slice() else {
+                panic!("graveyard return must have exactly one target group");
+            };
+            assert_eq!((group.min, group.max), (0, 2));
+            assert_eq!(
+                group.prompt,
+                "Choose up to two target creature cards from your graveyard"
+            );
+            assert_eq!(group.effect_indices, vec![0]);
+            assert!(group.distinct_from.is_empty());
+            assert!(!group.same_graveyard);
+        }
+
+        let plain = issue_317_match_spell(
+            "Return target card from your graveyard to your hand.",
+            "Near Miss",
+        );
+        assert_eq!(plain.id.as_str(), "spell.return_graveyard_card.hand");
+    }
+
+    #[test]
+    fn issue_317_return_up_to_two_graveyard_creatures_rejects_near_misses() {
+        for negative in [
+            "Return target creature card from your graveyard to your hand.",
+            "Return up to one target creature card from your graveyard to your hand.",
+            "Return up to two target cards from your graveyard to your hand.",
+            "Return up to two target creature cards from a graveyard to your hand.",
+            "Return up to two target creature cards from your graveyard to the battlefield.",
+            "Return up to two target creature cards from an opponent's graveyard to your hand.",
+            "Return up to three target creature cards from your graveyard to your hand.",
+            "Return up to two target creature cards from your graveyard to your hand. You gain 2 life.",
+            "Return two target creature cards from your graveyard to your hand.",
+        ] {
+            issue_317_assert_unmatched(negative, true);
+        }
+    }
+
+    #[test]
+    fn issue_317_tap_creature_any_color_is_artifact_gated() {
+        for source_name in [
+            "Springleaf Drum",
+            "Dragonbroods' Relic",
+            "Scene of the Crime",
+        ] {
+            let matched =
+                issue_317_match_non_spell(ISSUE_317_TAP_CREATURE_ANY_COLOR_CLAUSE, source_name);
+            assert_eq!(matched.id.as_str(), "activated.tap_creature.add_any_color");
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("tap-creature any-color must emit one activated ability");
+            };
+            assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+            assert_eq!(
+                ability.costs,
+                vec![
+                    AbilityCost::Tap,
+                    AbilityCost::TapPermanents {
+                        constraint: ObjectPaymentConstraint::ExactCount(1),
+                        filter: TargetFilter {
+                            kind: TargetKind::Creature,
+                            controller: TargetController::You,
+                            ..TargetFilter::default()
+                        },
+                        exclude_source: true,
+                    },
+                ]
+            );
+            assert_eq!(ability.effect, vec![five_color_mana_effect()]);
+            assert!(ability.targeting.is_none());
+            assert_eq!(ability.timing, ActivationTiming::Normal);
+            assert!(ability.activation_limit.is_none());
+        }
+
+        let plain = issue_317_match_non_spell("{T}: Add one mana of any color.", "Near Miss");
+        assert_eq!(plain.id.as_str(), "activated.mana.tap_any_color");
+
+        let mut nonartifact = context();
+        nonartifact.source_is_artifact = false;
+        assert!(
+            match_clause(ISSUE_317_TAP_CREATURE_ANY_COLOR_CLAUSE, false, &nonartifact)
+                .expect("nonartifact source must not be ambiguous")
+                .is_none(),
+            "the tap-creature mana recipe is Artifact-source-only"
+        );
+    }
+
+    #[test]
+    fn issue_317_tap_creature_any_color_rejects_near_misses() {
+        for negative in [
+            "{T}, Tap an untapped artifact you control: Add one mana of any color.",
+            "{T}, Tap two untapped creatures you control: Add one mana of any color.",
+            "{T}, Tap an untapped creature you control: Add {G}.",
+            "{T}, Tap an untapped creature you control: Add one mana of any one color.",
+            "{T}, Tap an untapped creature you control: Add one mana of any type.",
+            "{T}, Exile a creature you control: Add one mana of any color.",
+            "{T}, Pay 1 life, Tap an untapped creature you control: Add one mana of any color.",
+            "{T}, Tap an untapped creature you control: Add one mana of any color. Draw a card.",
+            "{T}, Tap an untapped creature an opponent controls: Add one mana of any color.",
+        ] {
+            issue_317_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_317_power_bounded_self_block_restriction_is_creature_gated() {
+        for (source_name, bound) in [
+            ("Stormkeld Vanguard", 2u32),
+            ("Gate Colossus", 2),
+            ("Bristlebane Outrider", 2),
+            ("Old Fat Spider", 2),
+        ] {
+            let matched = issue_317_match_non_spell(
+                &format!("This creature can't be blocked by creatures with power {bound} or less."),
+                source_name,
+            );
+            assert_eq!(
+                matched.id.as_str(),
+                "static.self.cannot_be_blocked_by_power_n_or_less"
+            );
+            let RecipeEmission::StaticAbility(ability) = matched.emission else {
+                panic!("power-bounded self block restriction must emit one static ability");
+            };
+            assert_eq!(
+                ability.definition,
+                StaticAbilityDef::SelfCombatRestriction {
+                    restriction: tricerules_cards::primitives::CombatRestriction {
+                        cant_be_blocked_by: vec![TargetFilter {
+                            kind: TargetKind::Creature,
+                            power: Some(PowerComparison::AtMost(bound)),
+                            ..TargetFilter::default()
+                        }],
+                        ..tricerules_cards::primitives::CombatRestriction::default()
+                    },
+                    condition: None,
+                }
+            );
+        }
+
+        let one = issue_317_match_non_spell(
+            "This creature can't be blocked by creatures with power 1 or less.",
+            "Near Miss",
+        );
+        assert_eq!(
+            one.id.as_str(),
+            "static.self.cannot_be_blocked_by_power_n_or_less"
+        );
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(
+                "This creature can't be blocked by creatures with power 2 or less.",
+                false,
+                &noncreature,
+            )
+            .expect("noncreature source must not be ambiguous")
+            .is_none(),
+            "the block-restriction recipe is creature-source-only"
+        );
+    }
+
+    #[test]
+    fn issue_317_power_bounded_self_block_restriction_rejects_near_misses() {
+        for negative in [
+            "This creature can't be blocked.",
+            "This creature can't be blocked by creatures with power 2 or greater.",
+            "This creature can't be blocked by creatures with power 0 or less.",
+            "This creature can't be blocked by Walls.",
+            "This creature can't be blocked except by creatures with power 2 or greater.",
+            "This creature can't be blocked by creatures with power 2.",
+            "This creature can block only creatures with power 2 or greater.",
+            "This creature can't be blocked by creatures with power two or less.",
+            "This creature can't be blocked by creatures with toughness 2 or less.",
+            "This creature can't be blocked by artifacts with power 2 or less.",
+            "This creature can't be blocked by creatures with power 2 or less. It can't be blocked by Walls.",
+        ] {
+            issue_317_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_317_spell_create_clue_token_is_exact_and_typed() {
+        for source_name in ["Cunning Maneuver", "True Ancestry", "Jet's Brainwashing"] {
+            let matched = issue_317_match_spell(ISSUE_317_CREATE_CLUE_TOKEN_CLAUSE, source_name);
+            assert_eq!(matched.id.as_str(), "spell.create_clue_token");
+            assert_eq!(
+                matched.emission,
+                RecipeEmission::SpellEffect(SpellEffectKind::CreateTokens {
+                    token: "clue".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn issue_317_spell_create_clue_token_rejects_near_misses() {
+        for negative in [
+            "Create a Clue token. Draw a card.",
+            "Create two Clue tokens.",
+            "Create a tapped Clue token.",
+            "Investigate.",
+            "Create a Food token.",
+            "Create a Treasure token.",
+            "Create a Clue token",
+            "Create a colorless Clue token.",
+            "Create a 1/1 Clue token.",
+            "Create a Clue artifact token.",
+        ] {
+            issue_317_assert_unmatched(negative, true);
+        }
+    }
+
+    #[test]
+    fn issue_317_graveyard_return_self_to_hand_is_typed() {
+        for source_name in ["Project Deathlok Soldier", "Abzan Devotee"] {
+            let matched = issue_317_match_non_spell(
+                ISSUE_317_GRAVEYARD_RETURN_SELF_TO_HAND_CLAUSE,
+                source_name,
+            );
+            assert_eq!(
+                matched.id.as_str(),
+                "activated.graveyard.return_self_to_hand"
+            );
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("graveyard return must emit one activated ability");
+            };
+            assert_eq!(ability.source_zone, AbilitySourceZone::Graveyard);
+            assert_eq!(
+                ability.costs,
+                vec![AbilityCost::Mana(
+                    ManaCost::parse(ISSUE_317_GRAVEYARD_RETURN_SELF_COST)
+                        .expect("fixture mana cost")
+                )]
+            );
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::ReturnToOwnersHand {
+                    subject: EffectSubject::Source,
+                }]
+            );
+            assert!(ability.targeting.is_none());
+            assert_eq!(ability.timing, ActivationTiming::Normal);
+            assert!(ability.activation_limit.is_none());
+        }
+
+        let other_cost = issue_317_match_non_spell(
+            "{B}: Return this card from your graveyard to your hand.",
+            "Near Miss",
+        );
+        let RecipeEmission::ActivatedAbility(ability) = other_cost.emission else {
+            panic!("graveyard return must emit one activated ability");
+        };
+        assert_eq!(
+            ability.costs,
+            vec![AbilityCost::Mana(
+                ManaCost::parse("{B}").expect("fixture cost")
+            )]
+        );
+    }
+
+    #[test]
+    fn issue_317_graveyard_return_self_to_hand_rejects_near_misses() {
+        for negative in [
+            "{2}{B}: Return this card from your graveyard to the battlefield.",
+            "{2}{B}: Return this card from your graveyard to the battlefield tapped.",
+            "{2}{B}: Return target creature card from your graveyard to your hand.",
+            "{2}{B}: Return this card from your graveyard to your hand. Activate only as a sorcery.",
+            "{2}{B}, Exile this card from your graveyard: Return this card from your graveyard to your hand.",
+            "{2}{B}: Return this card from the graveyard to your hand.",
+            "{2}{B}: Return this card from your graveyard to its owner's hand.",
+            "{2}{B}: Return this creature card from your graveyard to your hand.",
+            "Return this card from your graveyard to your hand.",
+            "{X}{B}: Return this card from your graveyard to your hand.",
+        ] {
+            issue_317_assert_unmatched(negative, false);
         }
     }
 }

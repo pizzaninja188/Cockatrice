@@ -473,3 +473,5 @@ mod issue_314_generated_activated_draw_two;
 mod issue_315_generated_creature_tappers;
 #[path = "scenario/issue_316_generated_single_clause_cohort.rs"]
 mod issue_316_generated_single_clause_cohort;
+#[path = "scenario/issue_317_generated_six_clause_batch.rs"]
+mod issue_317_generated_six_clause_batch;

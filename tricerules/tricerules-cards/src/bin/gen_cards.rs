@@ -505,6 +505,30 @@ fn oracle_tag_report(
     oracle_tag_report_from_reader(file, unsupported_oracle_ids)
 }
 
+/// Appends one separately matched instruction's effects to a spell's assembled effect list
+/// (CR 608.2c-f: instructions on distinct Oracle lines resolve in printed order). Composition is
+/// only exact while the complete list carries at most one target role, because the implicit
+/// fallback target contract binds every targeted effect to one shared target; a clause whose
+/// recipe authored explicit target groups never merges. Everything else stays fail-closed.
+fn assemble_spell_effects(
+    parsed: &mut ParsedRules,
+    effects: Vec<SpellEffectKind>,
+) -> Result<(), RulesParseError> {
+    if !parsed.spell_effect.is_empty() || parsed.targeting.is_some() {
+        let target_roles = parsed
+            .spell_effect
+            .iter()
+            .chain(effects.iter())
+            .map(|effect| effect.target_roles().len())
+            .sum::<usize>();
+        if parsed.targeting.is_some() || target_roles > 1 {
+            return Err(RulesParseError::Unsupported);
+        }
+    }
+    parsed.spell_effect.extend(effects);
+    Ok(())
+}
+
 /// Strips parenthetical reminder text from oracle text (Scryfall sometimes includes it).
 fn strip_reminder(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -758,17 +782,9 @@ fn parse_rules_text(
                 }
             }
             RecipeEmission::SpellEffect(effect) => {
-                if !parsed.spell_effect.is_empty() {
-                    return Err(RulesParseError::Unsupported);
-                }
-                parsed.spell_effect.push(effect);
+                assemble_spell_effects(&mut parsed, vec![effect])?
             }
-            RecipeEmission::SpellEffects(effects) => {
-                if !parsed.spell_effect.is_empty() {
-                    return Err(RulesParseError::Unsupported);
-                }
-                parsed.spell_effect = effects;
-            }
+            RecipeEmission::SpellEffects(effects) => assemble_spell_effects(&mut parsed, effects)?,
             RecipeEmission::SpellEffectsWithTargeting { effects, targeting } => {
                 if !parsed.spell_effect.is_empty() || parsed.targeting.is_some() {
                     return Err(RulesParseError::Unsupported);
@@ -2871,11 +2887,13 @@ mod tests {
         multiface["scryfall_uri"] = json!("https://scryfall.com/card/test/1/quiet-front-busy-back");
         multiface["rulings_uri"] = json!("https://api.scryfall.com/cards/oracle-multiface/rulings");
 
+        // Every clause is individually supported, but the second authors its own explicit target
+        // group, which cannot merge with the effect list the first clause contributed.
         let mut near_miss = normal_card(
             "Two Instructions",
             "{2}{U}",
             "Sorcery",
-            "Draw two cards.\nYou gain 2 life.",
+            "Draw two cards.\nDestroy target tapped creature.",
             None,
         );
         near_miss["oracle_id"] = json!("oracle-near-miss");
@@ -2903,7 +2921,8 @@ mod tests {
         assert!(occurrences.iter().any(|occurrence| {
             occurrence["card_name"] == "Two Instructions"
                 && occurrence["cluster_kind"] == "face_near_miss"
-                && occurrence["original_clause"] == "Draw two cards.\nYou gain 2 life."
+                && occurrence["original_clause"]
+                    == "Draw two cards.\nDestroy target tapped creature."
         }));
     }
 
@@ -9845,6 +9864,128 @@ mod tests {
                 "#289 near-miss must fail closed: {label}"
             );
         }
+    }
+
+    #[test]
+    fn issue_317_multi_clause_spells_assemble_ordered_effects() {
+        // Cunning Maneuver's shape: two separately-supported sentences on distinct Oracle lines
+        // resolve in printed order as one spell effect list (CR 608.2c-f).
+        let card = normal_card(
+            "Cunning Maneuver Fixture",
+            "{1}{R}",
+            "Instant",
+            "Target creature gets +3/+1 until end of turn.\nCreate a Clue token. (It's an artifact with \"{2}, Sacrifice this token: Draw a card.\")",
+            None,
+        );
+        let generated = evaluate_fresh(&card).expect("both exact clauses should compose");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(
+            raw.spell_effect,
+            [
+                SpellEffectKind::PumpTarget {
+                    power: 3,
+                    toughness: 1,
+                    scale: None,
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                },
+                SpellEffectKind::CreateTokens {
+                    token: "clue".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                },
+            ]
+        );
+        assert!(raw.targeting.is_none());
+        assert!(
+            TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok(),
+            "the derived target contract must accept the assembled effect list"
+        );
+
+        // A clause that carries its own explicit target group still fails closed when another
+        // clause already contributed effects: merging authored groups stays unsupported.
+        let explicit = normal_card(
+            "Explicit Group Fixture",
+            "{1}{B}",
+            "Instant",
+            "Target creature gets +3/+1 until end of turn.\nDestroy target tapped creature.",
+            None,
+        );
+        assert!(
+            evaluate_fresh(&explicit).is_err(),
+            "a second clause with its own explicit target group must remain unsupported"
+        );
+    }
+
+    #[test]
+    fn issue_317_multi_clause_assembly_keeps_target_contracts_fail_closed() {
+        // A clause that authors explicit target groups cannot merge with another clause in
+        // either printed order; the authored group would not cover the composed effect list.
+        for text in [
+            "Destroy target tapped creature.\nCreate a Clue token.",
+            "Create a Clue token.\nDestroy target tapped creature.",
+        ] {
+            let card = normal_card(
+                "Explicit Group Order Fixture",
+                "{1}{B}",
+                "Instant",
+                text,
+                None,
+            );
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "an explicitly targeted clause must never merge: {text}"
+            );
+        }
+
+        // Two separately targeted instructions would share one implicit target group, merging
+        // distinct printed targets; only aggregate recipes with authored groups may do that.
+        let two_targeted = normal_card(
+            "Two Targeted Fixture",
+            "{1}{R}",
+            "Instant",
+            "Target creature gets +3/+1 until end of turn.\nTarget creature gets +1/+3 until end of turn.",
+            None,
+        );
+        assert!(
+            evaluate_fresh(&two_targeted).is_err(),
+            "two targeted instructions must not share one implicit target group"
+        );
+
+        // One targeted instruction may compose with untargeted instructions in printed order,
+        // including when the targeted instruction is not the first clause.
+        let clue_first = normal_card(
+            "Clue First Fixture",
+            "{1}{R}",
+            "Instant",
+            "Create a Clue token.\nTarget creature gets +3/+1 until end of turn.",
+            None,
+        );
+        let generated = evaluate_fresh(&clue_first).expect("one targeted instruction composes");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert!(matches!(
+            raw.spell_effect.as_slice(),
+            [
+                SpellEffectKind::CreateTokens { .. },
+                SpellEffectKind::PumpTarget { .. }
+            ]
+        ));
+        assert!(raw.targeting.is_none());
+        assert!(TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok());
+
+        // An unsupported instruction on any line still rejects the whole face.
+        let unsupported_tail = normal_card(
+            "Unsupported Tail Fixture",
+            "{1}{R}",
+            "Instant",
+            "Target creature gets +3/+1 until end of turn.\nFateseal 2.",
+            None,
+        );
+        assert!(
+            evaluate_fresh(&unsupported_tail).is_err(),
+            "an unsupported additional clause must reject the whole face"
+        );
     }
 
     #[cfg(windows)]
