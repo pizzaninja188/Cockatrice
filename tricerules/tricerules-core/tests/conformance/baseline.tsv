@@ -28,6 +28,7 @@ affa_protector	0	cast	exercised
 ageless_guardian	0	cast	exercised
 agent_maria_hill	0	cast	exercised
 agent_of_atlas	0	cast	exercised
+aggressive_mammoth	0	cast	exercised
 aggressive_negotiations	0	cast	exercised
 air_elemental	0	cast	exercised
 air_response_unit	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
@@ -59,6 +60,7 @@ ambush_viper	0	cast	exercised
 ambush_wolf	0	cast	exercised
 amphin_cutthroat	0	cast	exercised
 anaba_bodyguard	0	cast	exercised
+ancestors_aid	0	cast	exercised
 ancestral_reminiscence	0	cast	exercised
 ancient_brontodon	0	cast	exercised
 ancient_carp	0	cast	exercised
@@ -525,6 +527,7 @@ dawns_light_archer	0	cast	exercised
 dawnstrike_paladin	0	cast	exercised
 dawnwing_marshal	0	ability:0	exercised
 dawnwing_marshal	0	cast	exercised
+day_of_judgment	0	cast	exercised
 daybreak_chaplain	0	cast	exercised
 daybreak_charger	0	cast	exercised
 dazzling_angel	0	cast	exercised
@@ -665,6 +668,7 @@ endless_one	0	cast	exercised
 enduring_curiosity	0	cast	exercised
 enforcer_griffin	0	cast	exercised
 enormous_baloth	0	cast	exercised
+enter_the_enigma	0	cast	exercised
 enterprising_scallywag	0	cast	exercised
 environmental_scientist	0	cast	exercised
 epf_point_squad	0	cast	exercised
@@ -1160,6 +1164,7 @@ ironroot_treefolk	0	cast	exercised
 isamaru,_hound_of_konda	0	cast	exercised
 island	0	ability:0	exercised
 island	0	land	exercised
+itll_quench_ya!	0	cast	unsupported: target group 0 needs a richer fixture
 izzet_guildgate	0	ability:0	exercised
 izzet_guildgate	0	land	exercised
 jace_beleren	0	ability:0	exercised
@@ -1646,6 +1651,7 @@ prodigal_pyromancer	0	ability:0	exercised
 prodigal_pyromancer	0	cast	exercised
 prodigal_sorcerer	0	ability:0	exercised
 prodigal_sorcerer	0	cast	exercised
+professional_wrestler	0	cast	exercised
 project_deathlok_soldier	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 project_deathlok_soldier	0	cast	exercised
 promising_vein	0	ability:0	exercised
@@ -1917,6 +1923,7 @@ shadowy_backstreet	0	land	exercised
 shaman_of_spring	0	cast	exercised
 shanodin_dryads	0	cast	exercised
 sharae_of_numbing_depths	0	cast	exercised
+shared_roots	0	cast	exercised
 sharlayan,_nation_of_scholars	0	ability:0	exercised
 sharlayan,_nation_of_scholars	0	land	exercised
 shattered_acolyte	0	ability:0	exercised
@@ -2342,6 +2349,8 @@ twincast	0	cast	unsupported: target group 0 needs a richer fixture
 twinscroll_shaman	0	cast	exercised
 twist_reality	0	cast	exercised
 two-headed_cerberus	0	cast	exercised
+two-headed_hunter_twice_the_rage	0	cast	exercised
+two-headed_hunter_twice_the_rage	1	cast	exercised
 two-headed_zombie	0	cast	exercised
 typhoid_rats	0	cast	exercised
 tyrox,_saurid_tyrant	0	cast	exercised

@@ -1,17 +1,17 @@
 use tricerules_cards::primitives::{
     ActivationLimit, BattlefieldAggregate, BattlefieldPermanentFilter, CardResultAction,
-    CardResultFilter, CardResultSource, CardTypeFilter, CombatRole, CountExpression,
-    CreatureScopeController, CreatureScopeFilter, DiscardQuantity, DrawDiscardOrder, EffectSubject,
-    EntersTappedAffected, EntryCost, GameCondition, GraveyardDestination, GraveyardFilter,
-    GraveyardOwner, HandCardAction, HandCardChooser, HandChoiceVisibility, LibraryPlacement,
-    LifeAmount, ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter,
-    PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient, PowerComparison,
-    PowerToughnessCharacteristic, RelativePlayerSet, ResolutionBranchDef,
-    ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SearchDestination,
-    SearchZoneSelection, SpellCastFilter, SpellCostModifier, SpellManaSpentComparison,
-    StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
-    TargetMatchFilter, TargetObjectExclusion, TargetingDef, TargetingSourceFilter,
-    TypeLineAddition, ZoneCardFilter,
+    CardResultFilter, CardResultSource, CardTypeFilter, CombatRestriction, CombatRestrictionScope,
+    CombatRole, CountExpression, CreatureScopeController, CreatureScopeFilter, DiscardQuantity,
+    DrawDiscardOrder, EffectSubject, EntersTappedAffected, EntryCost, GameCondition,
+    GraveyardDestination, GraveyardFilter, GraveyardOwner, HandCardAction, HandCardChooser,
+    HandChoiceVisibility, LibraryPlacement, LifeAmount, ObjectContributionKind,
+    ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate,
+    PlayerRecipient, PowerComparison, PowerToughnessCharacteristic, RelativePlayerSet,
+    ResolutionBranchDef, ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost,
+    SearchDestination, SearchZoneSelection, SpellCastFilter, SpellCostModifier,
+    SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter,
+    TargetGroupDef, TargetKind, TargetMatchFilter, TargetObjectExclusion, TargetingDef,
+    TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
     external_oracle_lines, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
@@ -6495,6 +6495,175 @@ pub(super) fn match_discard_batch_counter_trigger(
         })
 }
 
+/// Issue #323 exact clause templates. Each template is a reusable typed surface with at least two
+/// real positive calibrations. Every clause is compared by the complete normalized Oracle line, so
+/// an appended, reordered, or additional-clause form remains unsupported, and source-kind gating
+/// stays on the recipes whose printed template requires it.
+const ISSUE_323_DESTROY_ALL_CREATURES_CLAUSE: &str = "Destroy all creatures.";
+const ISSUE_323_COUNTER_UNLESS_PAYS_TWO_CLAUSE: &str =
+    "Counter target spell unless its controller pays {2}.";
+const ISSUE_323_DOUBLE_STRIKE_GRANT_CLAUSE: &str =
+    "Target creature gains double strike until end of turn.";
+const ISSUE_323_CREATE_TREASURE_TOKEN_CLAUSE: &str = "Create a Treasure token.";
+const ISSUE_323_SEARCH_BASIC_LAND_TAPPED_CLAUSE: &str =
+    "Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.";
+const ISSUE_323_OTHER_CREATURES_TRAMPLE_CLAUSE: &str = "Other creatures you control have trample.";
+const ISSUE_323_CANT_BE_BLOCKED_THIS_TURN_CLAUSE: &str =
+    "Target creature can't be blocked this turn.";
+const ISSUE_323_MAXIMUM_ONE_BLOCKER_CLAUSE: &str =
+    "This creature can't be blocked by more than one creature.";
+
+/// CR 701.7 / 614.1: "Destroy all creatures" is the untargeted mass-destruction instruction
+/// (Wrath of God, Day of Judgment) that emits `DestroyAll` with the default `Creature` kind and no
+/// target group. Filtered sweeps ("with flying", "you don't control"), the can't-be-regenerated
+/// rider, and non-`Creature` sweeps stay unsupported.
+fn match_spell_destroy_all_creatures(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == ISSUE_323_DESTROY_ALL_CREATURES_CLAUSE).then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::DestroyAll {
+            kind: TargetFilter::default_creature(),
+            prevent_regeneration: false,
+        })
+    })
+}
+
+/// CR 701.6 / 118.12a: "unless its controller pays {2}" publishes a fixed generic cost the
+/// countered spell's controller may pay. Other amounts, filtered stack targets, and the
+/// per-card/permanent variants stay unsupported.
+fn match_spell_counter_unless_pays_two(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == ISSUE_323_COUNTER_UNLESS_PAYS_TWO_CLAUSE).then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::CounterTargetSpell {
+            spell_filter: StackSpellFilter::default(),
+            unless_controller_pays: Some(Amount::Fixed(2)),
+            unless_controller_pays_by_cast_cost: None,
+        })
+    })
+}
+
+/// CR 702.4 / 611.2a: "Target creature gains double strike until end of turn" is one mandatory
+/// creature target bound to a single keyword grant. Permanent grants, union grants, power pumps,
+/// and untap riders stay unsupported.
+fn match_spell_grant_double_strike(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == ISSUE_323_DOUBLE_STRIKE_GRANT_CLAUSE).then(|| {
+        RecipeEmission::SpellEffectsWithTargeting {
+            effects: vec![SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                keywords: vec![Keyword::DoubleStrike],
+            }],
+            targeting: exact_targeting(1, 1, "Choose target creature", vec![0]),
+        }
+    })
+}
+
+/// CR 111.10a: "Create a Treasure token" makes the registered predefined Treasure with its
+/// sacrifice-for-mana ability. Plural, tapped, and appended-instruction forms stay unsupported;
+/// the ETB and attack-trigger Treasure recipes are separate surfaces.
+fn match_spell_create_treasure_token(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == ISSUE_323_CREATE_TREASURE_TOKEN_CLAUSE).then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::CreateTokens {
+            token: "treasure".into(),
+            count: Amount::Fixed(1),
+            who: PlayerRecipient::Controller,
+            tapped: false,
+            sacrifice_timing: None,
+        })
+    })
+}
+
+/// CR 701.23 / 614.1d: search the controller's library for one basic land, put it onto the
+/// battlefield tapped, then shuffle. Reveal-to-hand, untapped, nonbasic, up-to-two, and optional
+/// forms stay unsupported; the land-sacrifice and landfall recipes are separate surfaces.
+fn match_spell_search_basic_land_battlefield_tapped(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_323_SEARCH_BASIC_LAND_TAPPED_CLAUSE).then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::SearchLibrary {
+            who: PlayerRecipient::Controller,
+            optional: false,
+            count: 1,
+            count_by_cast_cost: None,
+            filter: Some(ZoneCardFilter {
+                card_type: Some(CardTypeFilter::BasicLand),
+                ..ZoneCardFilter::default()
+            }),
+            slots: Vec::new(),
+            zones: SearchZoneSelection::default(),
+            destination: SearchDestination::Battlefield { tapped: true },
+            conditional_destination: None,
+            shuffle: true,
+            reveal: false,
+            result_id: None,
+        })
+    })
+}
+
+/// CR 611.3 layer 6: an anthem granting trample to every other creature the source's controller
+/// controls, excluding the source itself. "Creatures you control", other keywords, subtype/power
+/// scopes, and noncreature sources stay unsupported.
+fn match_static_other_creatures_trample(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_323_OTHER_CREATURES_TRAMPLE_CLAUSE).then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::AnthemKeyword {
+                filter: CreatureScopeFilter {
+                    controller: Some(CreatureScopeController::YouControl),
+                    exclude_self: true,
+                    ..CreatureScopeFilter::default()
+                },
+                condition: None,
+                keyword: Keyword::Trample,
+            },
+        })
+    })
+}
+
+/// CR 509.1b / 611.2c: one mandatory creature target becomes unblockable until cleanup through the
+/// shared combat-restriction path. "Can't block", "this combat", permanent, and optional/plural
+/// forms stay unsupported.
+fn match_spell_target_creature_cant_be_blocked(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_323_CANT_BE_BLOCKED_THIS_TURN_CLAUSE).then(|| {
+        RecipeEmission::SpellEffectsWithTargeting {
+            effects: vec![SpellEffectKind::ApplyCombatRestriction {
+                scope: CombatRestrictionScope::Chosen(TargetFilter::default_creature()),
+                restriction: CombatRestriction {
+                    cant_be_blocked: true,
+                    ..CombatRestriction::default()
+                },
+            }],
+            targeting: exact_targeting(1, 1, "Choose target creature", vec![0]),
+        }
+    })
+}
+
+/// CR 509.1b: the source creature can be blocked by at most one creature through the shared
+/// combat-restriction path. Total unblockability, other maximums, power/subtype filters, the
+/// except-by-two form, and noncreature sources stay unsupported.
+fn match_static_self_max_one_blocker(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_323_MAXIMUM_ONE_BLOCKER_CLAUSE).then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::SelfCombatRestriction {
+                restriction: CombatRestriction {
+                    maximum_blockers: Some(1),
+                    ..CombatRestriction::default()
+                },
+                condition: None,
+            },
+        })
+    })
+}
+
 macro_rules! calibrations {
     ($($positive_name:literal => $positive_clause:literal),+; $($negative:literal),+ $(,)?) => {
         RecipeCalibration {
@@ -10113,7 +10282,7 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Create a tapped Clue token.",
             "Investigate.",
             "Create a Food token.",
-            "Create a Treasure token.",
+            "Create a tapped Treasure token.",
             "Create a Clue token",
             "Create a colorless Clue token.",
             "Create a 1/1 Clue token.",
@@ -10236,6 +10405,144 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Whenever another creature deals damage to an opponent, draw a card.",
             "Whenever this creature deals damage to an opponent, draw a card. You gain 1 life.",
             "Whenever this creature deals damage to an opponent, draw a card"
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.destroy_all.creatures"),
+        label: "destroy all creatures",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_destroy_all_creatures,
+        calibration: calibrations!(
+            "Day of Judgment" => "Destroy all creatures.",
+            "Supreme Verdict" => "Destroy all creatures.",
+            "Doomskar" => "Destroy all creatures.";
+            "Destroy all nonland permanents.",
+            "Destroy all creatures you don't control.",
+            "Destroy all creatures with flying.",
+            "Destroy all creatures. They can't be regenerated.",
+            "Exile all creatures.",
+            "Destroy all creatures with power 4 or greater.",
+            "Destroy all creatures"
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.counter.target_spell.unless_pays.two"),
+        label: "counter target spell unless its controller pays two",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_counter_unless_pays_two,
+        calibration: calibrations!(
+            "It'll Quench Ya!" => "Counter target spell unless its controller pays {2}.",
+            "Quench" => "Counter target spell unless its controller pays {2}.",
+            "Miscalculation" => "Counter target spell unless its controller pays {2}.";
+            "Counter target spell unless its controller pays {1}.",
+            "Counter target spell unless its controller pays {3}.",
+            "Counter target noncreature spell unless its controller pays {2}.",
+            "Counter target spell unless its controller pays {2} for each card in your graveyard.",
+            "Counter target spell unless its controller pays {2}",
+            "Counter target spell unless its controller pays {2}. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.grant_keywords.target_creature.double_strike"),
+        label: "target creature gains double strike until end of turn",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_grant_double_strike,
+        calibration: calibrations!(
+            "Two-Headed Hunter // Twice the Rage" => "Target creature gains double strike until end of turn.",
+            "Temur Battle Rage" => "Target creature gains double strike until end of turn.",
+            "Assault Strobe" => "Target creature gains double strike until end of turn.";
+            "Target creature gains double strike until end of turn. Untap it.",
+            "Target creature gets +1/+0 and gains double strike until end of turn.",
+            "Creatures you control gain double strike until end of turn.",
+            "Target creature gains first strike until end of turn.",
+            "Target creature gains double strike.",
+            "Target creature gains double strike until end of turn. Scry 1.",
+            "Target creature gains double strike until end of combat."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.create_treasure_token"),
+        label: "create one Treasure token",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_create_treasure_token,
+        calibration: calibrations!(
+            "Ancestors' Aid" => "Create a Treasure token.",
+            "Prizefight" => "Create a Treasure token.",
+            "Strike It Rich" => "Create a Treasure token.";
+            "Create two Treasure tokens.",
+            "Create a tapped Treasure token.",
+            "Create a Treasure token. You gain 1 life.",
+            "Create a Treasure token, then draw a card.",
+            "Create a Food token.",
+            "Create a Treasure token"
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.search_library.basic_land.battlefield_tapped"),
+        label: "search library for a basic land onto the battlefield tapped",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_search_basic_land_battlefield_tapped,
+        calibration: calibrations!(
+            "Shared Roots" => "Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            "Thunderherd Migration" => "Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            "Natural Connection" => "Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.";
+            "Search your library for a basic land card, reveal it, put it into your hand, then shuffle.",
+            "Search your library for a basic land card, put it onto the battlefield, then shuffle.",
+            "Search your library for a land card, put it onto the battlefield tapped, then shuffle.",
+            "Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.",
+            "You may search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            "Search your library for a basic land card, put it onto the battlefield tapped, then shuffle"
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.other_creatures_you_control.have_trample"),
+        label: "other creatures you control have trample",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_other_creatures_trample,
+        calibration: calibrations!(
+            "Aggressive Mammoth" => "Other creatures you control have trample.",
+            "Nylea's Forerunner" => "Other creatures you control have trample.",
+            "Khenra Charioteer" => "Other creatures you control have trample.";
+            "Creatures you control have trample.",
+            "Other creatures you control get +1/+1.",
+            "Other creatures you control have trample and haste.",
+            "Other attacking creatures you control have trample.",
+            "Other creatures you control with power 4 or greater have trample.",
+            "Other creatures you control have trample"
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.target_creature_cant_be_blocked_this_turn"),
+        label: "target creature can't be blocked this turn",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_target_creature_cant_be_blocked,
+        calibration: calibrations!(
+            "Enter the Enigma" => "Target creature can't be blocked this turn.",
+            "Infiltrate" => "Target creature can't be blocked this turn.",
+            "Artful Dodge" => "Target creature can't be blocked this turn.";
+            "Target creature can't block this turn.",
+            "Target creature can't be blocked this combat.",
+            "Target creature is unblockable this turn.",
+            "Up to one target creature can't be blocked this turn.",
+            "Target creature can't be blocked this turn. Draw a card.",
+            "Target creature can't be blocked this turn"
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.self.cannot_be_blocked_by_more_than_one_creature"),
+        label: "self can't be blocked by more than one creature",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_self_max_one_blocker,
+        calibration: calibrations!(
+            "Professional Wrestler" => "This creature can't be blocked by more than one creature.",
+            "Charging Rhino" => "This creature can't be blocked by more than one creature.",
+            "Stalking Tiger" => "This creature can't be blocked by more than one creature.";
+            "This creature can't be blocked.",
+            "This creature can't be blocked by more than two creatures.",
+            "This creature can't be blocked by creatures with power 2 or greater.",
+            "This creature can't be blocked except by two or more creatures.",
+            "This creature can block only creatures with power 2 or less.",
+            "This creature can't be blocked by more than one creature"
         ),
     },
 ];
@@ -16756,7 +17063,7 @@ mod tests {
             "Create a tapped Clue token.",
             "Investigate.",
             "Create a Food token.",
-            "Create a Treasure token.",
+            "Create a tapped Treasure token.",
             "Create a Clue token",
             "Create a colorless Clue token.",
             "Create a 1/1 Clue token.",
@@ -17216,6 +17523,447 @@ mod tests {
             "Whenever another creature deals damage to an opponent, draw a card.",
             "Whenever this creature deals damage to an opponent, draw a card. You gain 1 life.",
             "Whenever this creature deals damage to an opponent, draw a card",
+        ] {
+            issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_323_recipes_have_stable_ids_and_surfaces() {
+        for (id, surface) in [
+            ("spell.destroy_all.creatures", RecipeSurface::SpellClause),
+            (
+                "spell.counter.target_spell.unless_pays.two",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "spell.grant_keywords.target_creature.double_strike",
+                RecipeSurface::SpellClause,
+            ),
+            ("spell.create_treasure_token", RecipeSurface::SpellClause),
+            (
+                "spell.search_library.basic_land.battlefield_tapped",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "static.other_creatures_you_control.have_trample",
+                RecipeSurface::StaticAbility,
+            ),
+            (
+                "spell.target_creature_cant_be_blocked_this_turn",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "static.self.cannot_be_blocked_by_more_than_one_creature",
+                RecipeSurface::StaticAbility,
+            ),
+        ] {
+            assert_eq!(
+                issue_318_recipe(id).surface,
+                surface,
+                "{id} surface drifted"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_323_destroy_all_creatures_is_exact_and_typed() {
+        for source_name in ["Day of Judgment", "Supreme Verdict", "Doomskar"] {
+            let matched =
+                issue_318_match_spell(ISSUE_323_DESTROY_ALL_CREATURES_CLAUSE, source_name);
+            assert_eq!(matched.id.as_str(), "spell.destroy_all.creatures");
+            assert_eq!(
+                matched.emission,
+                RecipeEmission::SpellEffect(SpellEffectKind::DestroyAll {
+                    kind: TargetFilter::default_creature(),
+                    prevent_regeneration: false,
+                })
+            );
+        }
+        assert!(
+            match_clause(ISSUE_323_DESTROY_ALL_CREATURES_CLAUSE, false, &context())
+                .expect("non-spell surface check must not be ambiguous")
+                .is_none(),
+            "destroy-all creatures is a spell clause and must not match permanent text"
+        );
+    }
+
+    #[test]
+    fn issue_323_destroy_all_creatures_rejects_near_misses() {
+        for negative in [
+            "Destroy all nonland permanents.",
+            "Destroy all creatures you don't control.",
+            "Destroy all creatures with flying.",
+            "Destroy all creatures. They can't be regenerated.",
+            "Exile all creatures.",
+            "Destroy all creatures with power 4 or greater.",
+            "Destroy all creatures",
+            "Destroy all creatures. Draw a card.",
+        ] {
+            issue_318_assert_unmatched(negative, true);
+        }
+    }
+
+    #[test]
+    fn issue_323_counter_unless_pays_two_is_exact_and_typed() {
+        for source_name in ["It'll Quench Ya!", "Quench", "Miscalculation"] {
+            let matched =
+                issue_318_match_spell(ISSUE_323_COUNTER_UNLESS_PAYS_TWO_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "spell.counter.target_spell.unless_pays.two"
+            );
+            assert_eq!(
+                matched.emission,
+                RecipeEmission::SpellEffect(SpellEffectKind::CounterTargetSpell {
+                    spell_filter: StackSpellFilter::default(),
+                    unless_controller_pays: Some(Amount::Fixed(2)),
+                    unless_controller_pays_by_cast_cost: None,
+                })
+            );
+        }
+        assert!(
+            match_clause(ISSUE_323_COUNTER_UNLESS_PAYS_TWO_CLAUSE, false, &context())
+                .expect("non-spell surface check must not be ambiguous")
+                .is_none(),
+            "the unless-pays counter clause is a spell clause"
+        );
+    }
+
+    #[test]
+    fn issue_323_counter_unless_pays_two_rejects_near_misses() {
+        for negative in [
+            "Counter target spell unless its controller pays {1}.",
+            "Counter target spell unless its controller pays {3}.",
+            "Counter target noncreature spell unless its controller pays {2}.",
+            "Counter target spell unless its controller pays {2} for each card in your graveyard.",
+            "Counter target spell unless its controller pays {2}",
+            "Counter target spell unless its controller pays {2}. Draw a card.",
+        ] {
+            issue_318_assert_unmatched(negative, true);
+        }
+    }
+
+    #[test]
+    fn issue_323_double_strike_grant_is_exact_and_typed() {
+        for source_name in [
+            "Two-Headed Hunter // Twice the Rage",
+            "Temur Battle Rage",
+            "Assault Strobe",
+        ] {
+            let matched = issue_318_match_spell(ISSUE_323_DOUBLE_STRIKE_GRANT_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "spell.grant_keywords.target_creature.double_strike"
+            );
+            let RecipeEmission::SpellEffectsWithTargeting { effects, targeting } = matched.emission
+            else {
+                panic!("double strike grant must emit an explicitly targeted spell");
+            };
+            assert_eq!(
+                effects,
+                vec![SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    keywords: vec![Keyword::DoubleStrike],
+                }]
+            );
+            let [group] = targeting.groups.as_slice() else {
+                panic!("double strike grant must own exactly one target group");
+            };
+            assert_eq!((group.min, group.max), (1, 1));
+            assert_eq!(group.prompt, "Choose target creature");
+            assert_eq!(group.effect_indices, vec![0]);
+            assert!(group.distinct_from.is_empty());
+        }
+        assert!(
+            match_clause(ISSUE_323_DOUBLE_STRIKE_GRANT_CLAUSE, false, &context())
+                .expect("non-spell surface check must not be ambiguous")
+                .is_none(),
+            "the double strike grant is a spell clause"
+        );
+    }
+
+    #[test]
+    fn issue_323_double_strike_grant_rejects_near_misses() {
+        for negative in [
+            "Target creature gains double strike until end of turn. Untap it.",
+            "Target creature gets +1/+0 and gains double strike until end of turn.",
+            "Creatures you control gain double strike until end of turn.",
+            "Target creature gains first strike until end of turn.",
+            "Target creature gains double strike.",
+            "Target creature gains double strike until end of turn. Scry 1.",
+            "Target creature gains double strike until end of combat.",
+        ] {
+            issue_318_assert_unmatched(negative, true);
+        }
+    }
+
+    #[test]
+    fn issue_323_create_treasure_token_is_exact_and_typed() {
+        for source_name in ["Ancestors' Aid", "Prizefight", "Strike It Rich"] {
+            let matched =
+                issue_318_match_spell(ISSUE_323_CREATE_TREASURE_TOKEN_CLAUSE, source_name);
+            assert_eq!(matched.id.as_str(), "spell.create_treasure_token");
+            assert_eq!(
+                matched.emission,
+                RecipeEmission::SpellEffect(SpellEffectKind::CreateTokens {
+                    token: "treasure".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                })
+            );
+        }
+        assert!(
+            match_clause(ISSUE_323_CREATE_TREASURE_TOKEN_CLAUSE, false, &context())
+                .expect("non-spell surface check must not be ambiguous")
+                .is_none(),
+            "the create-Treasure clause is a spell clause; ETB/attack forms use their own surface"
+        );
+    }
+
+    #[test]
+    fn issue_323_create_treasure_token_rejects_near_misses() {
+        for negative in [
+            "Create two Treasure tokens.",
+            "Create a tapped Treasure token.",
+            "Create a Treasure token. You gain 1 life.",
+            "Create a Treasure token, then draw a card.",
+            "Create a Food token.",
+            "Create a Treasure token",
+            "Create a Treasure token.\nDraw a card.",
+        ] {
+            issue_318_assert_unmatched(negative, true);
+        }
+    }
+
+    #[test]
+    fn issue_323_search_basic_land_is_exact_and_typed() {
+        for source_name in [
+            "Shared Roots",
+            "Thunderherd Migration",
+            "Natural Connection",
+        ] {
+            let matched =
+                issue_318_match_spell(ISSUE_323_SEARCH_BASIC_LAND_TAPPED_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "spell.search_library.basic_land.battlefield_tapped"
+            );
+            assert_eq!(
+                matched.emission,
+                RecipeEmission::SpellEffect(SpellEffectKind::SearchLibrary {
+                    who: PlayerRecipient::Controller,
+                    optional: false,
+                    count: 1,
+                    count_by_cast_cost: None,
+                    filter: Some(ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::BasicLand),
+                        ..ZoneCardFilter::default()
+                    }),
+                    slots: Vec::new(),
+                    zones: SearchZoneSelection::default(),
+                    destination: SearchDestination::Battlefield { tapped: true },
+                    conditional_destination: None,
+                    shuffle: true,
+                    reveal: false,
+                    result_id: None,
+                })
+            );
+        }
+        assert!(
+            match_clause(ISSUE_323_SEARCH_BASIC_LAND_TAPPED_CLAUSE, false, &context())
+                .expect("non-spell surface check must not be ambiguous")
+                .is_none(),
+            "the basic-land search is a spell clause"
+        );
+    }
+
+    #[test]
+    fn issue_323_search_basic_land_rejects_near_misses() {
+        for negative in [
+            "Search your library for a basic land card, reveal it, put it into your hand, then shuffle.",
+            "Search your library for a basic land card, put it onto the battlefield, then shuffle.",
+            "Search your library for a land card, put it onto the battlefield tapped, then shuffle.",
+            "Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.",
+            "You may search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            "Search your library for a basic land card, put it onto the battlefield tapped, then shuffle",
+        ] {
+            issue_318_assert_unmatched(negative, true);
+        }
+    }
+
+    #[test]
+    fn issue_323_other_creatures_trample_is_creature_gated_and_excludes_self() {
+        for source_name in [
+            "Aggressive Mammoth",
+            "Nylea's Forerunner",
+            "Khenra Charioteer",
+        ] {
+            let matched =
+                issue_318_match_non_spell(ISSUE_323_OTHER_CREATURES_TRAMPLE_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "static.other_creatures_you_control.have_trample"
+            );
+            let RecipeEmission::StaticAbility(ability) = matched.emission else {
+                panic!("the trample anthem must emit one static ability");
+            };
+            assert_eq!(ability.ability_id.as_str(), "static_01");
+            assert_eq!(
+                ability.definition,
+                StaticAbilityDef::AnthemKeyword {
+                    filter: CreatureScopeFilter {
+                        controller: Some(CreatureScopeController::YouControl),
+                        exclude_self: true,
+                        ..CreatureScopeFilter::default()
+                    },
+                    condition: None,
+                    keyword: Keyword::Trample,
+                }
+            );
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(
+                ISSUE_323_OTHER_CREATURES_TRAMPLE_CLAUSE,
+                false,
+                &noncreature
+            )
+            .expect("noncreature source must not be ambiguous")
+            .is_none(),
+            "the trample anthem is creature-source-only"
+        );
+        assert!(
+            match_clause(ISSUE_323_OTHER_CREATURES_TRAMPLE_CLAUSE, true, &context())
+                .expect("spell surface check must not be ambiguous")
+                .is_none(),
+            "the trample anthem must reject spell clauses"
+        );
+    }
+
+    #[test]
+    fn issue_323_other_creatures_trample_rejects_near_misses() {
+        for negative in [
+            "Creatures you control have trample.",
+            "Other creatures you control get +1/+1.",
+            "Other creatures you control have trample and haste.",
+            "Other attacking creatures you control have trample.",
+            "Other creatures you control with power 4 or greater have trample.",
+            "Other creatures you control have trample",
+        ] {
+            issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_323_target_creature_cant_be_blocked_is_exact_and_typed() {
+        for source_name in ["Enter the Enigma", "Infiltrate", "Artful Dodge"] {
+            let matched =
+                issue_318_match_spell(ISSUE_323_CANT_BE_BLOCKED_THIS_TURN_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "spell.target_creature_cant_be_blocked_this_turn"
+            );
+            let RecipeEmission::SpellEffectsWithTargeting { effects, targeting } = matched.emission
+            else {
+                panic!("the unblockable grant must emit an explicitly targeted spell");
+            };
+            assert_eq!(
+                effects,
+                vec![SpellEffectKind::ApplyCombatRestriction {
+                    scope: CombatRestrictionScope::Chosen(TargetFilter::default_creature()),
+                    restriction: CombatRestriction {
+                        cant_be_blocked: true,
+                        ..CombatRestriction::default()
+                    },
+                }]
+            );
+            let [group] = targeting.groups.as_slice() else {
+                panic!("the unblockable grant must own exactly one target group");
+            };
+            assert_eq!((group.min, group.max), (1, 1));
+            assert_eq!(group.prompt, "Choose target creature");
+            assert_eq!(group.effect_indices, vec![0]);
+        }
+        assert!(
+            match_clause(
+                ISSUE_323_CANT_BE_BLOCKED_THIS_TURN_CLAUSE,
+                false,
+                &context()
+            )
+            .expect("non-spell surface check must not be ambiguous")
+            .is_none(),
+            "the unblockable grant is a spell clause"
+        );
+    }
+
+    #[test]
+    fn issue_323_target_creature_cant_be_blocked_rejects_near_misses() {
+        for negative in [
+            "Target creature can't block this turn.",
+            "Target creature can't be blocked this combat.",
+            "Target creature is unblockable this turn.",
+            "Up to one target creature can't be blocked this turn.",
+            "Target creature can't be blocked this turn. Draw a card.",
+            "Target creature can't be blocked this turn",
+        ] {
+            issue_318_assert_unmatched(negative, true);
+        }
+    }
+
+    #[test]
+    fn issue_323_self_max_one_blocker_is_creature_gated_and_typed() {
+        for source_name in ["Professional Wrestler", "Charging Rhino", "Stalking Tiger"] {
+            let matched =
+                issue_318_match_non_spell(ISSUE_323_MAXIMUM_ONE_BLOCKER_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "static.self.cannot_be_blocked_by_more_than_one_creature"
+            );
+            let RecipeEmission::StaticAbility(ability) = matched.emission else {
+                panic!("the maximum-blocker restriction must emit one static ability");
+            };
+            assert_eq!(
+                ability.definition,
+                StaticAbilityDef::SelfCombatRestriction {
+                    restriction: CombatRestriction {
+                        maximum_blockers: Some(1),
+                        ..CombatRestriction::default()
+                    },
+                    condition: None,
+                }
+            );
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_323_MAXIMUM_ONE_BLOCKER_CLAUSE, false, &noncreature)
+                .expect("noncreature source must not be ambiguous")
+                .is_none(),
+            "the maximum-blocker restriction is creature-source-only"
+        );
+        assert!(
+            match_clause(ISSUE_323_MAXIMUM_ONE_BLOCKER_CLAUSE, true, &context())
+                .expect("spell surface check must not be ambiguous")
+                .is_none(),
+            "the maximum-blocker restriction must reject spell clauses"
+        );
+    }
+
+    #[test]
+    fn issue_323_self_max_one_blocker_rejects_near_misses() {
+        for negative in [
+            "This creature can't be blocked.",
+            "This creature can't be blocked by more than two creatures.",
+            "This creature can't be blocked by creatures with power 2 or greater.",
+            "This creature can't be blocked except by two or more creatures.",
+            "This creature can block only creatures with power 2 or less.",
+            "This creature can't be blocked by more than one creature",
         ] {
             issue_318_assert_unmatched(negative, false);
         }

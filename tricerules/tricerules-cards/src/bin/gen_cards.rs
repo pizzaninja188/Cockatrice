@@ -506,26 +506,74 @@ fn oracle_tag_report(
 }
 
 /// Appends one separately matched instruction's effects to a spell's assembled effect list
-/// (CR 608.2c-f: instructions on distinct Oracle lines resolve in printed order). Composition is
-/// only exact while the complete list carries at most one target role, because the implicit
-/// fallback target contract binds every targeted effect to one shared target; a clause whose
-/// recipe authored explicit target groups never merges. Everything else stays fail-closed.
+/// (CR 608.2c-f: instructions on distinct Oracle lines resolve in printed order).
+///
+/// Composition is exact while the complete list carries at most one implicit target role, because
+/// the implicit fallback target contract binds every targeted effect to one shared target. Once a
+/// clause has authored explicit target groups, only further untargeted instructions may append:
+/// they add no target role, so the authored group still covers every targeted effect. A further
+/// targeted instruction in either direction would either need its own group or silently join the
+/// implicit one, so both stay unsupported.
 fn assemble_spell_effects(
     parsed: &mut ParsedRules,
     effects: Vec<SpellEffectKind>,
 ) -> Result<(), RulesParseError> {
     if !parsed.spell_effect.is_empty() || parsed.targeting.is_some() {
-        let target_roles = parsed
-            .spell_effect
-            .iter()
-            .chain(effects.iter())
-            .map(|effect| effect.target_roles().len())
-            .sum::<usize>();
-        if parsed.targeting.is_some() || target_roles > 1 {
-            return Err(RulesParseError::Unsupported);
+        if parsed.targeting.is_some() {
+            if effects
+                .iter()
+                .any(|effect| !effect.target_roles().is_empty())
+            {
+                return Err(RulesParseError::Unsupported);
+            }
+        } else {
+            let target_roles = parsed
+                .spell_effect
+                .iter()
+                .chain(effects.iter())
+                .map(|effect| effect.target_roles().len())
+                .sum::<usize>();
+            if target_roles > 1 {
+                return Err(RulesParseError::Unsupported);
+            }
         }
     }
     parsed.spell_effect.extend(effects);
+    Ok(())
+}
+
+/// Splices one clause whose recipe authored explicit target groups into the assembled spell.
+///
+/// The single authored group must be the only source of target roles. It may compose with
+/// untargeted instructions already assembled in printed order by shifting its authored effect
+/// indices, so the group still binds exactly its own effects. A second target group, or any
+/// already-assembled targeted instruction, stays fail-closed.
+fn assemble_spell_effects_with_targeting(
+    parsed: &mut ParsedRules,
+    effects: Vec<SpellEffectKind>,
+    mut targeting: TargetingDef,
+) -> Result<(), RulesParseError> {
+    if parsed.targeting.is_some()
+        || parsed
+            .spell_effect
+            .iter()
+            .any(|effect| !effect.target_roles().is_empty())
+    {
+        return Err(RulesParseError::Unsupported);
+    }
+    let offset =
+        u32::try_from(parsed.spell_effect.len()).map_err(|_| RulesParseError::Unsupported)?;
+    if offset != 0 {
+        for group in &mut targeting.groups {
+            for index in &mut group.effect_indices {
+                *index = index
+                    .checked_add(offset)
+                    .ok_or(RulesParseError::Unsupported)?;
+            }
+        }
+    }
+    parsed.spell_effect.extend(effects);
+    parsed.targeting = Some(targeting);
     Ok(())
 }
 
@@ -786,11 +834,7 @@ fn parse_rules_text(
             }
             RecipeEmission::SpellEffects(effects) => assemble_spell_effects(&mut parsed, effects)?,
             RecipeEmission::SpellEffectsWithTargeting { effects, targeting } => {
-                if !parsed.spell_effect.is_empty() || parsed.targeting.is_some() {
-                    return Err(RulesParseError::Unsupported);
-                }
-                parsed.spell_effect = effects;
-                parsed.targeting = Some(targeting);
+                assemble_spell_effects_with_targeting(&mut parsed, effects, targeting)?
             }
             RecipeEmission::SpellCostModifier(modifier) => {
                 if !parsed.cost_modifiers.is_empty() {
@@ -2597,14 +2641,15 @@ mod tests {
     use tricerules_cards::card_def::RawCardDefinition;
     use tricerules_cards::primitives::{
         BattlefieldPermanentFilter, CardResultAction, CardResultFilter, CardResultSource,
-        CardTypeFilter, CombatRole, CountExpression, EffectSubject, EntersTappedAffected,
+        CardTypeFilter, CombatRestriction, CombatRestrictionScope, CombatRole, CountExpression,
+        CreatureScopeController, CreatureScopeFilter, EffectSubject, EntersTappedAffected,
         EntryCost, GameCondition, GraveyardFilter, GraveyardOwner, LibraryPlacement,
         ObjectContributionKind, ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient,
         PowerComparison, PowerToughnessCharacteristic, RelativePlayerSet, ResolutionBranchDef,
-        ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SpellCastFilter,
-        SpellCostModifier, SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef,
-        TargetController, TargetFilter, TargetKind, TargetMatchFilter, TargetObjectExclusion,
-        TargetingSourceFilter, TypeLineAddition,
+        ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SearchDestination,
+        SearchZoneSelection, SpellCastFilter, SpellCostModifier, SpellManaSpentComparison,
+        StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
+        TargetMatchFilter, TargetObjectExclusion, TargetingSourceFilter, TypeLineAddition,
     };
     use tricerules_cards::{
         AbilityCost, AbilityPresentation, AbilitySourceZone, ActivationTiming, Amount,
@@ -2888,13 +2933,13 @@ mod tests {
         multiface["scryfall_uri"] = json!("https://scryfall.com/card/test/1/quiet-front-busy-back");
         multiface["rulings_uri"] = json!("https://api.scryfall.com/cards/oracle-multiface/rulings");
 
-        // Every clause is individually supported, but the second authors its own explicit target
-        // group, which cannot merge with the effect list the first clause contributed.
+        // Every clause is individually supported, but the second targeted instruction cannot
+        // join the first's explicit target group, so the composed face stays unsupported.
         let mut near_miss = normal_card(
             "Two Instructions",
             "{2}{U}",
             "Sorcery",
-            "Draw two cards.\nDestroy target tapped creature.",
+            "Destroy target tapped creature.\nTarget creature gets +2/+0 and gains first strike until end of turn.",
             None,
         );
         near_miss["oracle_id"] = json!("oracle-near-miss");
@@ -2923,7 +2968,7 @@ mod tests {
             occurrence["card_name"] == "Two Instructions"
                 && occurrence["cluster_kind"] == "face_near_miss"
                 && occurrence["original_clause"]
-                    == "Draw two cards.\nDestroy target tapped creature."
+                    == "Destroy target tapped creature.\nTarget creature gets +2/+0 and gains first strike until end of turn."
         }));
     }
 
@@ -9921,11 +9966,20 @@ mod tests {
 
     #[test]
     fn issue_317_multi_clause_assembly_keeps_target_contracts_fail_closed() {
-        // A clause that authors explicit target groups cannot merge with another clause in
-        // either printed order; the authored group would not cover the composed effect list.
-        for text in [
-            "Destroy target tapped creature.\nCreate a Clue token.",
-            "Create a Clue token.\nDestroy target tapped creature.",
+        // A single authored target group may compose with untargeted instructions in either
+        // printed order; the authored indices shift so the group still binds exactly its own
+        // targeted effects and never orphans the untargeted instruction.
+        for (label, text, expected_indices) in [
+            (
+                "targeted clause first",
+                "Destroy target tapped creature.\nCreate a Clue token.",
+                vec![0u32],
+            ),
+            (
+                "untargeted clause first",
+                "Create a Clue token.\nDestroy target tapped creature.",
+                vec![1u32],
+            ),
         ] {
             let card = normal_card(
                 "Explicit Group Order Fixture",
@@ -9934,9 +9988,46 @@ mod tests {
                 text,
                 None,
             );
+            let generated = evaluate_fresh(&card)
+                .unwrap_or_else(|error| panic!("{label} must compose: {error:?}"));
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            let targeting = raw
+                .targeting
+                .as_ref()
+                .unwrap_or_else(|| panic!("{label} must keep its authored group"));
+            let [group] = targeting.groups.as_slice() else {
+                panic!("{label} must keep exactly one authored group");
+            };
+            assert_eq!(group.effect_indices, expected_indices, "{label}");
+            assert!(TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok());
+        }
+
+        // A second targeted instruction must never join the authored group nor silently acquire
+        // an implicit one, in either printed order or either target shape.
+        for (label, text) in [
+            (
+                "explicit then explicit",
+                "Destroy target tapped creature.\nTarget creature gets +2/+0 and gains first strike until end of turn.",
+            ),
+            (
+                "explicit then implicit",
+                "Destroy target tapped creature.\nTarget creature gets +3/+1 until end of turn.",
+            ),
+            (
+                "implicit then explicit",
+                "Target creature gets +3/+1 until end of turn.\nDestroy target tapped creature.",
+            ),
+        ] {
+            let card = normal_card(
+                "Second Targeted Fixture",
+                "{1}{B}",
+                "Instant",
+                text,
+                None,
+            );
             assert!(
                 evaluate_fresh(&card).is_err(),
-                "an explicitly targeted clause must never merge: {text}"
+                "a second targeted instruction must stay fail-closed ({label}): {text}"
             );
         }
 
@@ -10364,6 +10455,674 @@ mod tests {
             assert!(
                 evaluate_fresh(&changed).is_err(),
                 "#318 flying near-miss must fail closed: {label}"
+            );
+        }
+    }
+
+    /// Issue #323 — the eight exact templates must generate the eight reviewed Standard cards
+    /// end-to-end through `evaluate` with their complete typed payloads, composing the mass-destroy,
+    /// unless-pays, double-strike, Treasure, basic-land search, trample anthem, unblockable, and
+    /// maximum-blocker definitions while keeping their surrounding clauses.
+    #[test]
+    fn issue_323_cohort_generates_the_exact_reviewed_definitions() {
+        let mut judgment = normal_card_with_oracle_id(
+            "d057289d-5e28-43d5-8ff3-4a1bc723477d",
+            "Day of Judgment",
+            "{2}{W}{W}",
+            "Sorcery",
+            "Destroy all creatures.",
+            None,
+        );
+        judgment["colors"] = json!(["W"]);
+        let generated = evaluate_fresh(&judgment).expect("Day of Judgment should qualify");
+        assert_eq!(generated.id, "day_of_judgment");
+        assert_eq!(generated.faces[0].recipe_labels, ["destroy all creatures"]);
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{2}{W}{W}");
+        assert_eq!(raw.types, ["Sorcery"]);
+        assert_eq!(raw.mana_cost.colors(), [Color::White]);
+        assert_eq!(
+            raw.spell_effect,
+            [SpellEffectKind::DestroyAll {
+                kind: TargetFilter::default_creature(),
+                prevent_regeneration: false,
+            }]
+        );
+        assert!(raw.targeting.is_none());
+        assert!(TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok());
+
+        let mut quench = normal_card_with_oracle_id(
+            "cb184995-700f-4900-994a-4ce7fd12f942",
+            "It'll Quench Ya!",
+            "{1}{U}",
+            "Instant — Lesson",
+            "Counter target spell unless its controller pays {2}.",
+            None,
+        );
+        quench["colors"] = json!(["U"]);
+        let generated = evaluate_fresh(&quench).expect("It'll Quench Ya! should qualify");
+        assert_eq!(generated.id, "itll_quench_ya!");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["counter target spell unless its controller pays two"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{1}{U}");
+        assert_eq!(raw.types, ["Instant", "Lesson"]);
+        assert_eq!(raw.mana_cost.colors(), [Color::Blue]);
+        assert_eq!(
+            raw.spell_effect,
+            [SpellEffectKind::CounterTargetSpell {
+                spell_filter: StackSpellFilter::default(),
+                unless_controller_pays: Some(Amount::Fixed(2)),
+                unless_controller_pays_by_cast_cost: None,
+            }]
+        );
+        assert!(raw.targeting.is_none());
+        assert!(TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok());
+
+        let mut hunter = multiface(
+            "adventure",
+            "Two-Headed Hunter // Twice the Rage",
+            vec![
+                face(
+                    "Two-Headed Hunter",
+                    "{4}{R}",
+                    "Creature — Giant",
+                    "Menace (This creature can't be blocked except by two or more creatures.)",
+                    Some(("5", "4")),
+                    &["R"],
+                    None,
+                ),
+                face(
+                    "Twice the Rage",
+                    "{1}{R}",
+                    "Instant — Adventure",
+                    "Target creature gains double strike until end of turn. (Then exile this card. You may cast the creature later from exile.)",
+                    None,
+                    &["R"],
+                    None,
+                ),
+            ],
+        );
+        for face_value in hunter["card_faces"]
+            .as_array_mut()
+            .expect("synthetic Adventure faces")
+        {
+            face_value
+                .as_object_mut()
+                .expect("synthetic face object")
+                .remove("colors");
+        }
+        hunter["oracle_id"] = json!("0f222f3d-f02b-42b9-aedf-fb7ed92d4889");
+        let generated = evaluate_fresh(&hunter).expect("Two-Headed Hunter should qualify");
+        assert_eq!(generated.id, "two-headed_hunter_twice_the_rage");
+        assert!(generated.faces[0].recipe_labels.is_empty());
+        assert_eq!(
+            generated.faces[1].recipe_labels,
+            ["target creature gains double strike until end of turn"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.layout, Layout::Adventure);
+        assert_eq!(raw.faces[0].face_id.as_str(), "two_headed_hunter");
+        assert_eq!(raw.faces[0].types, ["Creature", "Giant"]);
+        assert_eq!(raw.faces[0].keywords, [Keyword::Menace]);
+        assert_eq!(
+            (raw.faces[0].power, raw.faces[0].toughness),
+            (Some(5), Some(4))
+        );
+        assert_eq!(raw.faces[1].face_id.as_str(), "twice_the_rage");
+        assert_eq!(raw.faces[1].mana_cost.to_string(), "{1}{R}");
+        assert_eq!(raw.faces[1].types, ["Instant", "Adventure"]);
+        assert_eq!(
+            raw.faces[1].spell_effect,
+            [SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                keywords: vec![Keyword::DoubleStrike],
+            }]
+        );
+        let targeting = raw.faces[1]
+            .targeting
+            .as_ref()
+            .expect("Twice the Rage must target");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("Twice the Rage must own exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.prompt, "Choose target creature");
+        assert_eq!(group.effect_indices, [0]);
+        assert!(
+            TargetSchema::compile(&raw.faces[1].spell_effect, raw.faces[1].targeting.as_ref())
+                .is_ok()
+        );
+
+        let aid_clauses = "Target creature gets +2/+0 and gains first strike until end of turn.\nCreate a Treasure token. (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")";
+        let mut aid = normal_card_with_oracle_id(
+            "a95a0b13-d50f-41cf-8668-de60d445e7b0",
+            "Ancestors' Aid",
+            "{1}{R}",
+            "Instant",
+            aid_clauses,
+            None,
+        );
+        aid["colors"] = json!(["R"]);
+        let generated = evaluate_fresh(&aid).expect("Ancestors' Aid should qualify");
+        assert_eq!(generated.id, "ancestors_aid");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            [
+                "creature +N/+0 and first strike",
+                "create one Treasure token"
+            ]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{1}{R}");
+        assert_eq!(raw.types, ["Instant"]);
+        assert_eq!(raw.mana_cost.colors(), [Color::Red]);
+        assert_eq!(
+            raw.spell_effect,
+            [
+                SpellEffectKind::PumpTarget {
+                    power: 2,
+                    toughness: 0,
+                    scale: None,
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                },
+                SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    keywords: vec![Keyword::FirstStrike],
+                },
+                SpellEffectKind::CreateTokens {
+                    token: "treasure".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                },
+            ]
+        );
+        let targeting = raw.targeting.as_ref().expect("Ancestors' Aid must target");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("Ancestors' Aid must own exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.prompt, "Choose target creature");
+        assert_eq!(group.effect_indices, [0, 1]);
+        assert!(TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok());
+
+        // The pump clause and the untargeted Treasure clause compose in either printed order: the
+        // authored target indices shift so the shared pump/grant target group is never orphaned.
+        let reversed = normal_card(
+            "Ancestors' Aid Reversed Fixture",
+            "{1}{R}",
+            "Instant",
+            "Create a Treasure token.\nTarget creature gets +2/+0 and gains first strike until end of turn.",
+            None,
+        );
+        let generated = evaluate_fresh(&reversed).expect("reversed clauses still compose");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert!(matches!(
+            raw.spell_effect.as_slice(),
+            [
+                SpellEffectKind::CreateTokens { .. },
+                SpellEffectKind::PumpTarget { .. },
+                SpellEffectKind::GrantKeywords { .. }
+            ]
+        ));
+        let targeting = raw
+            .targeting
+            .as_ref()
+            .expect("reversed clauses still target");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("reversed clauses must keep one authored group");
+        };
+        assert_eq!(group.effect_indices, [1, 2]);
+        assert!(TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok());
+
+        let mut roots = normal_card_with_oracle_id(
+            "9e0fd3bf-f47a-4f06-8ff1-73f6bf5d1e03",
+            "Shared Roots",
+            "{1}{G}",
+            "Sorcery — Lesson",
+            "Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            None,
+        );
+        roots["colors"] = json!(["G"]);
+        let generated = evaluate_fresh(&roots).expect("Shared Roots should qualify");
+        assert_eq!(generated.id, "shared_roots");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["search library for a basic land onto the battlefield tapped"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{1}{G}");
+        assert_eq!(raw.types, ["Sorcery", "Lesson"]);
+        assert_eq!(raw.mana_cost.colors(), [Color::Green]);
+        assert_eq!(
+            raw.spell_effect,
+            [SpellEffectKind::SearchLibrary {
+                who: PlayerRecipient::Controller,
+                optional: false,
+                count: 1,
+                count_by_cast_cost: None,
+                filter: Some(ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::BasicLand),
+                    ..ZoneCardFilter::default()
+                }),
+                slots: Vec::new(),
+                zones: SearchZoneSelection::default(),
+                destination: SearchDestination::Battlefield { tapped: true },
+                conditional_destination: None,
+                shuffle: true,
+                reveal: false,
+                result_id: None,
+            }]
+        );
+        assert!(raw.targeting.is_none());
+
+        let mut mammoth = normal_card_with_oracle_id(
+            "032b5fc4-5aca-41b6-9bf6-2c1ed0018968",
+            "Aggressive Mammoth",
+            "{3}{G}{G}{G}",
+            "Creature — Elephant",
+            "Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)\nOther creatures you control have trample.",
+            Some(("8", "8")),
+        );
+        mammoth["colors"] = json!(["G"]);
+        let generated = evaluate_fresh(&mammoth).expect("Aggressive Mammoth should qualify");
+        assert_eq!(generated.id, "aggressive_mammoth");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["other creatures you control have trample"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!((raw.power, raw.toughness), (Some(8), Some(8)));
+        assert_eq!(raw.types, ["Creature", "Elephant"]);
+        assert_eq!(raw.keywords, [Keyword::Trample]);
+        let [ability] = raw.static_abilities.as_slice() else {
+            panic!("Aggressive Mammoth must emit exactly one static ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "static_01");
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![2])
+        );
+        assert_eq!(
+            ability.definition,
+            StaticAbilityDef::AnthemKeyword {
+                filter: CreatureScopeFilter {
+                    controller: Some(CreatureScopeController::YouControl),
+                    exclude_self: true,
+                    ..CreatureScopeFilter::default()
+                },
+                condition: None,
+                keyword: Keyword::Trample,
+            }
+        );
+
+        let mut enigma = normal_card_with_oracle_id(
+            "67554654-e751-4679-9e92-f3588525ae4f",
+            "Enter the Enigma",
+            "{U}",
+            "Sorcery",
+            "Target creature can't be blocked this turn.\nDraw a card.",
+            None,
+        );
+        enigma["colors"] = json!(["U"]);
+        let generated = evaluate_fresh(&enigma).expect("Enter the Enigma should qualify");
+        assert_eq!(generated.id, "enter_the_enigma");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["target creature can't be blocked this turn", "draw spell"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{U}");
+        assert_eq!(raw.types, ["Sorcery"]);
+        assert_eq!(raw.mana_cost.colors(), [Color::Blue]);
+        assert_eq!(
+            raw.spell_effect,
+            [
+                SpellEffectKind::ApplyCombatRestriction {
+                    scope: CombatRestrictionScope::Chosen(TargetFilter::default_creature()),
+                    restriction: CombatRestriction {
+                        cant_be_blocked: true,
+                        ..CombatRestriction::default()
+                    },
+                },
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                },
+            ]
+        );
+        let targeting = raw
+            .targeting
+            .as_ref()
+            .expect("Enter the Enigma must target");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("Enter the Enigma must own exactly one target group");
+        };
+        assert_eq!(group.effect_indices, [0]);
+        assert!(TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok());
+
+        let wrestler_clauses = "When this creature enters, create a Treasure token. (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")\nThis creature can't be blocked by more than one creature.";
+        let mut wrestler = normal_card_with_oracle_id(
+            "3dd92eea-02ca-4e55-8f69-8c8059dd7ee6",
+            "Professional Wrestler",
+            "{3}{G}",
+            "Creature — Human Warrior Performer",
+            wrestler_clauses,
+            Some(("4", "4")),
+        );
+        wrestler["colors"] = json!(["G"]);
+        let generated = evaluate_fresh(&wrestler).expect("Professional Wrestler should qualify");
+        assert_eq!(generated.id, "professional_wrestler");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            [
+                "ETB create Treasure",
+                "self can't be blocked by more than one creature"
+            ]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{3}{G}");
+        assert_eq!(raw.types, ["Creature", "Human", "Warrior", "Performer"]);
+        assert_eq!((raw.power, raw.toughness), (Some(4), Some(4)));
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("Professional Wrestler must emit exactly one ETB ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::CreateTokens {
+                token: "treasure".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }]
+        );
+        assert!(ability.targeting.is_none());
+        let [restriction] = raw.static_abilities.as_slice() else {
+            panic!("Professional Wrestler must emit exactly one static ability");
+        };
+        assert_eq!(restriction.ability_id.as_str(), "static_01");
+        assert_eq!(
+            restriction.presentation,
+            AbilityPresentation::OracleLines(vec![2])
+        );
+        assert_eq!(
+            restriction.definition,
+            StaticAbilityDef::SelfCombatRestriction {
+                restriction: CombatRestriction {
+                    maximum_blockers: Some(1),
+                    ..CombatRestriction::default()
+                },
+                condition: None,
+            }
+        );
+    }
+
+    #[test]
+    fn issue_323_generator_is_fail_closed_for_near_miss_clauses() {
+        let base = normal_card_with_oracle_id(
+            "d057289d-5e28-43d5-8ff3-4a1bc723477d",
+            "Day of Judgment",
+            "{2}{W}{W}",
+            "Sorcery",
+            "Destroy all creatures.",
+            None,
+        );
+        for (label, clause) in [
+            ("filtered sweep", "Destroy all creatures with flying."),
+            (
+                "regeneration rider",
+                "Destroy all creatures. They can't be regenerated.",
+            ),
+            ("unsupported append", "Destroy all creatures.\nFateseal 2."),
+        ] {
+            let mut changed = base.clone();
+            changed["oracle_text"] = json!(clause);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#323 destroy-all near-miss must fail closed: {label}"
+            );
+        }
+
+        let quench = normal_card_with_oracle_id(
+            "cb184995-700f-4900-994a-4ce7fd12f942",
+            "It'll Quench Ya!",
+            "{1}{U}",
+            "Instant — Lesson",
+            "Counter target spell unless its controller pays {2}.",
+            None,
+        );
+        for (label, clause) in [
+            (
+                "wrong amount",
+                "Counter target spell unless its controller pays {3}.",
+            ),
+            (
+                "filtered stack target",
+                "Counter target noncreature spell unless its controller pays {2}.",
+            ),
+            (
+                "appended instruction",
+                "Counter target spell unless its controller pays {2}. Draw a card.",
+            ),
+        ] {
+            let mut changed = quench.clone();
+            changed["oracle_text"] = json!(clause);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#323 counter near-miss must fail closed: {label}"
+            );
+        }
+
+        let mut hunter = multiface(
+            "adventure",
+            "Two-Headed Hunter // Twice the Rage",
+            vec![
+                face(
+                    "Two-Headed Hunter",
+                    "{4}{R}",
+                    "Creature — Giant",
+                    "Menace (This creature can't be blocked except by two or more creatures.)",
+                    Some(("5", "4")),
+                    &["R"],
+                    None,
+                ),
+                face(
+                    "Twice the Rage",
+                    "{1}{R}",
+                    "Instant — Adventure",
+                    "Target creature gains double strike until end of turn. (Then exile this card. You may cast the creature later from exile.)",
+                    None,
+                    &["R"],
+                    None,
+                ),
+            ],
+        );
+        for face_value in hunter["card_faces"]
+            .as_array_mut()
+            .expect("synthetic Adventure faces")
+        {
+            face_value
+                .as_object_mut()
+                .expect("synthetic face object")
+                .remove("colors");
+        }
+        hunter["oracle_id"] = json!("0f222f3d-f02b-42b9-aedf-fb7ed92d4889");
+        for (label, clause) in [
+            (
+                "union pump",
+                "Target creature gets +1/+0 and gains double strike until end of turn.",
+            ),
+            ("permanent grant", "Target creature gains double strike."),
+            (
+                "team grant",
+                "Creatures you control gain double strike until end of turn.",
+            ),
+        ] {
+            let mut changed = hunter.clone();
+            changed["card_faces"][1]["oracle_text"] = json!(clause);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#323 double-strike near-miss must fail closed: {label}"
+            );
+        }
+
+        let aid = normal_card_with_oracle_id(
+            "a95a0b13-d50f-41cf-8668-de60d445e7b0",
+            "Ancestors' Aid",
+            "{1}{R}",
+            "Instant",
+            "Target creature gets +2/+0 and gains first strike until end of turn.\nCreate a Treasure token.",
+            None,
+        );
+        for (label, clause) in [
+            (
+                "plural token",
+                "Target creature gets +2/+0 and gains first strike until end of turn.\nCreate two Treasure tokens.",
+            ),
+            (
+                "tapped token",
+                "Target creature gets +2/+0 and gains first strike until end of turn.\nCreate a tapped Treasure token.",
+            ),
+            (
+                "unsupported second target",
+                "Target creature gets +2/+0 and gains first strike until end of turn.\nDestroy target tapped creature.",
+            ),
+        ] {
+            let mut changed = aid.clone();
+            changed["oracle_text"] = json!(clause);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#323 Treasure near-miss must fail closed: {label}"
+            );
+        }
+
+        let roots = normal_card_with_oracle_id(
+            "9e0fd3bf-f47a-4f06-8ff1-73f6bf5d1e03",
+            "Shared Roots",
+            "{1}{G}",
+            "Sorcery — Lesson",
+            "Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            None,
+        );
+        for (label, clause) in [
+            (
+                "reveal to hand",
+                "Search your library for a basic land card, reveal it, put it into your hand, then shuffle.",
+            ),
+            (
+                "untapped",
+                "Search your library for a basic land card, put it onto the battlefield, then shuffle.",
+            ),
+            (
+                "optional",
+                "You may search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            ),
+        ] {
+            let mut changed = roots.clone();
+            changed["oracle_text"] = json!(clause);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#323 search near-miss must fail closed: {label}"
+            );
+        }
+
+        let mammoth = normal_card_with_oracle_id(
+            "032b5fc4-5aca-41b6-9bf6-2c1ed0018968",
+            "Aggressive Mammoth",
+            "{3}{G}{G}{G}",
+            "Creature — Elephant",
+            "Trample\nOther creatures you control have trample.",
+            Some(("8", "8")),
+        );
+        for (label, clause) in [
+            (
+                "includes self",
+                "Trample\nCreatures you control have trample.",
+            ),
+            (
+                "union keyword",
+                "Trample\nOther creatures you control have trample and haste.",
+            ),
+            (
+                "power scope",
+                "Trample\nOther creatures you control with power 4 or greater have trample.",
+            ),
+        ] {
+            let mut changed = mammoth.clone();
+            changed["oracle_text"] = json!(clause);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#323 trample anthem near-miss must fail closed: {label}"
+            );
+        }
+
+        let enigma = normal_card_with_oracle_id(
+            "67554654-e751-4679-9e92-f3588525ae4f",
+            "Enter the Enigma",
+            "{U}",
+            "Sorcery",
+            "Target creature can't be blocked this turn.\nDraw a card.",
+            None,
+        );
+        for (label, clause) in [
+            (
+                "can't block",
+                "Target creature can't block this turn.\nDraw a card.",
+            ),
+            (
+                "optional target",
+                "Up to one target creature can't be blocked this turn.\nDraw a card.",
+            ),
+            (
+                "this combat",
+                "Target creature can't be blocked this combat.\nDraw a card.",
+            ),
+        ] {
+            let mut changed = enigma.clone();
+            changed["oracle_text"] = json!(clause);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#323 unblockable near-miss must fail closed: {label}"
+            );
+        }
+
+        let wrestler = normal_card_with_oracle_id(
+            "3dd92eea-02ca-4e55-8f69-8c8059dd7ee6",
+            "Professional Wrestler",
+            "{3}{G}",
+            "Creature — Human Warrior Performer",
+            "When this creature enters, create a Treasure token.\nThis creature can't be blocked by more than one creature.",
+            Some(("4", "4")),
+        );
+        for (label, clause) in [
+            (
+                "total unblockability",
+                "When this creature enters, create a Treasure token.\nThis creature can't be blocked.",
+            ),
+            (
+                "two blockers",
+                "When this creature enters, create a Treasure token.\nThis creature can't be blocked by more than two creatures.",
+            ),
+            (
+                "except by two",
+                "When this creature enters, create a Treasure token.\nThis creature can't be blocked except by two or more creatures.",
+            ),
+        ] {
+            let mut changed = wrestler.clone();
+            changed["oracle_text"] = json!(clause);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#323 maximum-blocker near-miss must fail closed: {label}"
             );
         }
     }
