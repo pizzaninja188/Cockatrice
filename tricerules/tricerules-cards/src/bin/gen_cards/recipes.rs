@@ -8428,6 +8428,244 @@ fn match_etb_aura_enchanted_creature_fights_up_to_one(
     })
 }
 
+/// Issue #351 exact clause templates. Each template is a reusable typed surface with two real
+/// named positive calibrations drawn from the pinned candidate report. Every clause is compared by
+/// the complete normalized Oracle line, so an appended, reordered, or additional-clause form
+/// remains unsupported, and source-kind gating stays on the recipes whose printed template
+/// requires it.
+const ISSUE_351_PLUS_TWO_PLUS_TWO_REACH_UNTAP_CLAUSE: &str =
+    "Target creature gets +2/+2 and gains reach until end of turn. Untap it.";
+const ISSUE_351_PLUS_THREE_PLUS_ZERO_REACH_FIRST_STRIKE_CLAUSE: &str =
+    "Target creature gets +3/+0 and gains reach and first strike until end of turn.";
+const ISSUE_351_ATTACK_DEFENDING_LOSE_ONE_GAIN_ONE_CLAUSE: &str =
+    "Whenever this creature attacks, defending player loses 1 life and you gain 1 life.";
+const ISSUE_351_REPARTEE_COUNTER_CLAUSE: &str = "Repartee — Whenever you cast an instant or sorcery spell that targets a creature, put a +1/+1 counter on this creature.";
+const ISSUE_351_ACTIVATED_REACH_CLAUSE: &str = ": This creature gains reach until end of turn.";
+const ISSUE_351_POWER_TWO_UNBLOCKABLE_CLAUSE: &str =
+    "{1}, {T}: Target creature with power 2 or less can't be blocked this turn.";
+const ISSUE_351_ETB_ALL_OTHER_MINUS_TWO_CLAUSE: &str =
+    "When this creature enters, all other creatures get -2/-2 until end of turn.";
+const ISSUE_351_CONTROL_ARTIFACT_PLUS_ONE_ZERO_DEATHTOUCH_CLAUSE: &str =
+    "As long as you control an artifact, this creature gets +1/+0 and has deathtouch.";
+
+/// CR 611.2a / 514.2 / 702.17: a fixed +2/+2 pump and a reach grant to the same one mandatory
+/// creature target, then that same target untaps — the shared-target sibling of the shipped
+/// +1/+3 reach/untap recipe. Other values, other keywords, a controller restriction, a missing
+/// untap, and riders stay unsupported.
+fn match_spell_creature_plus_two_plus_two_reach_untap(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_351_PLUS_TWO_PLUS_TWO_REACH_UNTAP_CLAUSE)
+        .then(|| combat_trick(TargetController::Any, 2, 2, &[Keyword::Reach], true))
+}
+
+/// CR 611.2a / 702.17 / 702.7: one mandatory creature target gets a fixed +3/+0 pump and both
+/// reach and first strike until cleanup. The two keywords are one `GrantKeywords` instruction in
+/// printed order, matching how the shipped multi-keyword pumps emit them. Another split, only one
+/// keyword, a controller restriction, a missing "until end of turn", and riders stay unsupported.
+fn match_spell_creature_plus_three_plus_zero_reach_first_strike(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_351_PLUS_THREE_PLUS_ZERO_REACH_FIRST_STRIKE_CLAUSE).then(|| {
+        combat_trick(
+            TargetController::Any,
+            3,
+            0,
+            &[Keyword::Reach, Keyword::FirstStrike],
+            false,
+        )
+    })
+}
+
+/// CR 508.1 / 603.2 / 119.3: a mandatory self-attack trigger makes the event-time defending player
+/// lose one life and its controller gain one life, in printed order. The `DefendingPlayer`
+/// recipient keeps that player even if the source leaves before resolution. A different loser
+/// scope ("each opponent"/"target opponent"), another amount, reordered instructions, a
+/// combat-damage witness, and riders stay unsupported.
+fn match_self_attacks_defending_player_lose_one_gain_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_351_ATTACK_DEFENDING_LOSE_ONE_GAIN_ONE_CLAUSE)
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                },
+                vec![
+                    SpellEffectKind::LoseLife {
+                        amount: LifeAmount::Fixed(1),
+                        who: PlayerRecipient::DefendingPlayer,
+                    },
+                    SpellEffectKind::GainLife {
+                        amount: Amount::Fixed(1),
+                    },
+                ],
+            )
+        })
+}
+
+/// CR 603.2 / 115.9b: the Repartee ability word (matched exactly, em dash included) gates the
+/// controller's cast of an instant or sorcery that currently targets a battlefield creature, then
+/// one +1/+1 counter lands on the source. `targeted_permanent_type: Some(Creature)` is the shipped
+/// `SpellCastFilter` field for "targets a creature". The unprefixed wording, an unrestricted cast
+/// filter, other card types, a target-counter or each-creature payoff, an opponent caster, and
+/// riders stay unsupported.
+fn match_repartee_targeting_creature_put_counter_self(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_351_REPARTEE_COUNTER_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverPlayerCastsSpell {
+                caster: CastTriggerPlayer::Controller,
+                filter: SpellCastFilter {
+                    card_type: Some(CardTypeFilter::InstantOrSorcery),
+                    targeted_permanent_type: Some(PermanentTypeFilter::Creature),
+                    ..SpellCastFilter::default()
+                },
+                ordinal: None,
+                ordinal_scope: Default::default(),
+            },
+            vec![SpellEffectKind::PutCounters {
+                counter: CounterKind::PlusOnePlusOne,
+                count: Amount::Fixed(1),
+                subject: EffectSubject::Source,
+            }],
+        )
+    })
+}
+
+/// CR 602.1 / 611.2a / 702.17: a printed mana cost captures verbatim before the fixed instruction
+/// grants the source creature reach until cleanup. No targeting. A tap or compound cost, another
+/// keyword, a targeted or non-creature subject, a missing duration, and riders stay unsupported.
+fn match_activated_mana_self_gains_reach(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_creature {
+        return None;
+    }
+    let cost = exact_mana_cost(text.strip_suffix(ISSUE_351_ACTIVATED_REACH_CLAUSE)?)?;
+    Some(utility_activated_ability(
+        context,
+        vec![AbilityCost::Mana(cost)],
+        vec![SpellEffectKind::GrantKeywords {
+            subject: EffectSubject::Source,
+            keywords: vec![Keyword::Reach],
+        }],
+        None,
+    ))
+}
+
+/// CR 602.1 / 509.1b / 208: `{1}, {T}` binds one mandatory creature target whose current power is
+/// at most two, and that creature can't be blocked until cleanup through the shared
+/// combat-restriction path. A tap-less or different mana cost, another power bound, a missing
+/// power restriction, a "you control"/"another" narrowing, "can't block", and riders stay
+/// unsupported.
+fn match_activated_mana_tap_target_power_two_unblockable(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_permanent {
+        return None;
+    }
+    let target = TargetFilter {
+        kind: TargetKind::Creature,
+        power: Some(PowerComparison::AtMost(2)),
+        ..TargetFilter::default()
+    };
+    (text == ISSUE_351_POWER_TWO_UNBLOCKABLE_CLAUSE).then(|| {
+        utility_activated_ability(
+            context,
+            vec![fixed_mana_cost("{1}"), AbilityCost::Tap],
+            vec![SpellEffectKind::ApplyCombatRestriction {
+                scope: CombatRestrictionScope::Chosen(target),
+                restriction: CombatRestriction {
+                    cant_be_blocked: true,
+                    ..CombatRestriction::default()
+                },
+            }],
+            single_targeting("Choose target creature with power 2 or less"),
+        )
+    })
+}
+
+/// CR 603.6a / 611.3 / 613.4c: the source's own entry trigger gives every creature except the
+/// source -2/-2 until cleanup. `controller: None` is "all creatures" and `exclude_self: true` is
+/// the "other" wording; the source-excluding recipient is the mass sibling of `PumpTarget`. A
+/// source-inclusive scope, another value, a controller-restricted scope, the "Whenever" wording,
+/// and riders stay unsupported.
+fn match_etb_all_other_creatures_minus_two_minus_two(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_351_ETB_ALL_OTHER_MINUS_TWO_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WhenSelfEntersBattlefield,
+            vec![SpellEffectKind::PumpAll {
+                filter: CreatureScopeFilter {
+                    exclude_self: true,
+                    ..CreatureScopeFilter::default()
+                },
+                power: -2,
+                toughness: -2,
+            }],
+        )
+    })
+}
+
+/// CR 604.1 / 611.3: a continuous conditional self-modifier grants +1/+0 and deathtouch while its
+/// controller controls at least one artifact, reusing the shipped `BattlefieldAggregate` count
+/// condition. The source itself is a creature, not an artifact, so `exclude_source` stays false.
+/// Another delta or keyword, a missing modifier, a different permanent type, and riders stay
+/// unsupported.
+fn match_static_control_artifact_plus_one_zero_deathtouch(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text == ISSUE_351_CONTROL_ARTIFACT_PLUS_ONE_ZERO_DEATHTOUCH_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: StaticAbilityDef::ConditionalSelfModifier {
+                    condition: GameCondition::BattlefieldAggregate {
+                        filter: BattlefieldPermanentFilter {
+                            token: None,
+                            any_of: None,
+                            controllers: RelativePlayerSet::Controller,
+                            card_type: Some(CardTypeFilter::Artifact),
+                            color: None,
+                            name: None,
+                            required_subtypes: Vec::new(),
+                            exclude_source: false,
+                        },
+                        aggregate: BattlefieldAggregate::Count,
+                        min: Some(1),
+                        max: None,
+                    },
+                    set_types: None,
+                    add_types: TypeLineAddition::default(),
+                    base_power: None,
+                    base_toughness: None,
+                    delta_power: 1,
+                    delta_toughness: 0,
+                    keywords: vec![Keyword::Deathtouch],
+                    activated_abilities: Vec::new(),
+                    triggered_abilities: Vec::new(),
+                    can_attack_as_though_without_defender: false,
+                },
+            })
+        })
+}
+
 macro_rules! calibrations {
     ($($positive_name:literal => $positive_clause:literal),+; $($negative:literal),+ $(,)?) => {
         RecipeCalibration {
@@ -13455,6 +13693,162 @@ pub(super) static CATALOG: &[Recipe] = &[
             "When this Aura enters, target creature you control fights up to one target creature an opponent controls.",
             "When this Equipment enters, attached creature fights up to one target creature an opponent controls.",
             "When this Aura enters, enchanted creature fights up to one target creature an opponent controls. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump.creature.plus_two_plus_two.reach.untap"),
+        label: "creature +2/+2 reach and untap",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_creature_plus_two_plus_two_reach_untap,
+        calibration: calibrations!(
+            "Pillar Launch" => "Target creature gets +2/+2 and gains reach until end of turn. Untap it.",
+            "Arachnoid Adaptation" => "Target creature gets +2/+2 and gains reach until end of turn. Untap it.";
+            // The shipped +1/+3 reach/untap recipe owns its own values, so the value, keyword, and
+            // rider near-misses below stay reviewed negatives.
+            "Target creature gets +2/+2 and gains reach until end of turn.",
+            "Target creature gets +2/+2 and gains trample until end of turn. Untap it.",
+            "Target creature gets +3/+3 and gains reach until end of turn. Untap it.",
+            "Target creature gets +2/+3 and gains reach until end of turn. Untap it.",
+            "Target creature you control gets +2/+2 and gains reach until end of turn. Untap it.",
+            "Target creature gets +2/+2 and gains reach until end of turn. Untap it. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump.creature.plus_three_plus_zero.reach.first_strike"),
+        label: "creature +3/+0 reach and first strike",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_creature_plus_three_plus_zero_reach_first_strike,
+        calibration: calibrations!(
+            "Smaug's Fury" => "Target creature gets +3/+0 and gains reach and first strike until end of turn.",
+            "Rig for War" => "Target creature gets +3/+0 and gains reach and first strike until end of turn.";
+            // The shipped single-keyword first-strike recipe owns "+3/+0 and gains first strike
+            // until end of turn", so this recipe keeps value, split, keyword, and rider forms that
+            // no other recipe consumes as its reviewed negatives.
+            "Target creature gets +3/+1 and gains reach and first strike until end of turn.",
+            "Target creature gets +3/+0 and gains reach and deathtouch until end of turn.",
+            "Target creature gets +2/+0 and gains reach and first strike until end of turn.",
+            "Target creature gets +3/+0 and gains reach and first strike.",
+            "Target creature you control gets +3/+0 and gains reach and first strike until end of turn.",
+            "Target creature gets +3/+0 and gains reach and first strike until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.self_attacks.defending_player_loses_one_you_gain_one"),
+        label: "self attack defending player loses one and you gain one",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_attacks_defending_player_lose_one_gain_one,
+        calibration: calibrations!(
+            "Agate-Blade Assassin" => "Whenever this creature attacks, defending player loses 1 life and you gain 1 life.",
+            "Ragged Recluse // Odious Witch" => "Whenever this creature attacks, defending player loses 1 life and you gain 1 life.";
+            // The shipped each-opponent and gain-two attack drains and the closest reordered,
+            // targeted, and witness variants stay as reviewed near-misses.
+            "Whenever this creature attacks, defending player loses 1 life.",
+            "Whenever this creature attacks, each opponent loses 1 life and you gain 1 life.",
+            "Whenever this creature attacks, defending player loses 2 life and you gain 2 life.",
+            "Whenever this creature attacks, target opponent loses 1 life and you gain 1 life.",
+            "Whenever this creature attacks, you gain 1 life and defending player loses 1 life.",
+            "Whenever this creature deals combat damage to a player, defending player loses 1 life and you gain 1 life.",
+            "Whenever this creature attacks, defending player loses 1 life and you gain 1 life. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.controller_casts_spell_targeting_creature.put_counter_self"),
+        label: "Repartee instant or sorcery targeting a creature puts a counter on this creature",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_repartee_targeting_creature_put_counter_self,
+        calibration: calibrations!(
+            "Lecturing Scornmage" => "Repartee — Whenever you cast an instant or sorcery spell that targets a creature, put a +1/+1 counter on this creature.",
+            "Scolding Administrator" => "Repartee — Whenever you cast an instant or sorcery spell that targets a creature, put a +1/+1 counter on this creature.";
+            // The ability word is matched exactly, so the unprefixed heroic wording and every
+            // different filter or payoff (owned by Graduation Day and Stirring Hopesinger) stay
+            // unsupported here.
+            "Whenever you cast an instant or sorcery spell that targets a creature, put a +1/+1 counter on this creature.",
+            "Repartee — Whenever you cast an instant or sorcery spell, put a +1/+1 counter on this creature.",
+            "Repartee — Whenever you cast a spell that targets a creature, put a +1/+1 counter on this creature.",
+            "Repartee — Whenever you cast an instant or sorcery spell that targets a creature, put a +1/+1 counter on target creature you control.",
+            "Repartee — Whenever you cast an instant or sorcery spell that targets a creature, put a +1/+1 counter on each creature you control.",
+            "Repartee — Whenever an opponent casts an instant or sorcery spell that targets a creature, put a +1/+1 counter on this creature.",
+            "Repartee — Whenever you cast an instant or sorcery spell that targets a creature, put a +1/+1 counter on this creature. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.mana.pump_self.reach"),
+        label: "mana buys the source creature reach until end of turn",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_mana_self_gains_reach,
+        calibration: calibrations!(
+            "Frog Butler" => "{2}: This creature gains reach until end of turn.",
+            "Moopsy" => "{2}: This creature gains reach until end of turn.",
+            "Wall of Tanglecord" => "{G}: This creature gains reach until end of turn.";
+            // The template captures the printed mana cost verbatim (the parametric cousin of the
+            // shipped cost-capturing activations; Wall of Tanglecord prints the {G} form), so the
+            // other singleton mana keyword grants, the tap/compound costs, and the targeted form
+            // stay near-misses.
+            "{2}: This creature gains deathtouch until end of turn.",
+            "{2}: This creature gains trample until end of turn.",
+            "{2}: This creature gains reach.",
+            "{2}: Target creature gains reach until end of turn.",
+            "{2}, {T}: This creature gains reach until end of turn.",
+            "When this creature enters, it gains reach until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.mana.tap.target_power_two_or_less_cant_be_blocked"),
+        label: "{1}, {T}: power-two-or-less creature can't be blocked",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_mana_tap_target_power_two_unblockable,
+        calibration: calibrations!(
+            "Ragged Playmate" => "{1}, {T}: Target creature with power 2 or less can't be blocked this turn.",
+            "Hazoret, Godseeker" => "{1}, {T}: Target creature with power 2 or less can't be blocked this turn.";
+            // The shipped cost/cost-variant and controller/"another" activations are owned by their
+            // own activation shapes or stay unsupported, so they are reviewed near-misses here.
+            "{1}, {T}, Sacrifice this land: Target creature with power 2 or less can't be blocked this turn.",
+            "{1}, {T}: Target creature you control with power 2 or less can't be blocked this turn.",
+            "{T}: Another target creature you control with power 2 or less can't be blocked this turn.",
+            "{T}: Another target creature with power 2 or less can't be blocked this turn.",
+            // The unbounded shipped unblockable activation and the value/blocks near-misses.
+            "Target creature can't be blocked this turn.",
+            "{1}, {T}: Target creature with power 3 or less can't be blocked this turn.",
+            "{2}, {T}: Target creature with power 2 or less can't be blocked this turn.",
+            "{1}, {T}: Target creature with power 2 or less can't block this turn.",
+            "{1}, {T}: Target creature with power 2 or less can't be blocked this turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.all_other_creatures_minus_two_minus_two"),
+        label: "entry gives all other creatures -2/-2",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_all_other_creatures_minus_two_minus_two,
+        calibration: calibrations!(
+            "Shefet Archfiend" => "When this creature enters, all other creatures get -2/-2 until end of turn.",
+            "Demon of Dark Schemes" => "When this creature enters, all other creatures get -2/-2 until end of turn.";
+            // The source-inclusive, other-value, controller-scoped, and witness forms stay
+            // near-misses.
+            "When this creature enters, all creatures get -2/-2 until end of turn.",
+            "When this creature enters, all other creatures get -1/-1 until end of turn.",
+            "When this creature enters, all other creatures you control get -2/-2 until end of turn.",
+            "When this creature enters, all other creatures an opponent controls get -2/-2 until end of turn.",
+            "Whenever this creature enters, all other creatures get -2/-2 until end of turn.",
+            "When this creature enters, all other creatures get -2/-2 until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.conditional_self.control_artifact.plus_one_zero_deathtouch"),
+        label: "while controlling an artifact +1/+0 and deathtouch",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_control_artifact_plus_one_zero_deathtouch,
+        calibration: calibrations!(
+            "Gravblade Heavy" => "As long as you control an artifact, this creature gets +1/+0 and has deathtouch.",
+            "Dhund Operative" => "As long as you control an artifact, this creature gets +1/+0 and has deathtouch.";
+            // The shipped artifact conditionals own the other keywords and the keyless/nonmodifier
+            // forms, so those and the delta/permanent-type variants stay reviewed negatives.
+            "As long as you control an artifact, this creature gets +1/+0 and has haste.",
+            "As long as you control an artifact, this creature gets +1/+1 and has deathtouch.",
+            "As long as you control an artifact, this creature gets +1/+0 and has lifelink.",
+            "As long as you control an artifact, this creature gets +1/+0.",
+            "As long as you control an artifact, this creature has deathtouch.",
+            "As long as you control a creature, this creature gets +1/+0 and has deathtouch.",
+            "As long as you control an artifact, this creature gets +2/+0 and has deathtouch."
         ),
     },
 ];
@@ -25327,5 +25721,532 @@ mod tests {
                 .unwrap_or_else(|| panic!("shipped clause should stay supported: {clause}"));
             assert_eq!(matched.id.as_str(), expected, "{clause}");
         }
+    }
+
+    fn issue_351_exact_id(clause: &str, is_spell: bool, context: &RecipeContext) -> &'static str {
+        match_clause(clause, is_spell, context)
+            .expect("issue #351 clause must not be ambiguous")
+            .unwrap_or_else(|| panic!("issue #351 clause must be supported: {clause}"))
+            .id
+            .as_str()
+    }
+
+    #[test]
+    fn issue_351_pump_recipes_are_exact_and_share_one_target() {
+        let chosen = || EffectSubject::Chosen(Box::new(TargetFilter::default_creature()));
+        assert_eq!(
+            issue_351_exact_id(
+                ISSUE_351_PLUS_TWO_PLUS_TWO_REACH_UNTAP_CLAUSE,
+                true,
+                &context()
+            ),
+            "spell.pump.creature.plus_two_plus_two.reach.untap"
+        );
+        let Some(RecipeEmission::SpellEffects(effects)) =
+            match_spell_creature_plus_two_plus_two_reach_untap(
+                ISSUE_351_PLUS_TWO_PLUS_TWO_REACH_UNTAP_CLAUSE,
+                &context(),
+            )
+        else {
+            panic!("+2/+2 reach must emit the shared-target pump/grant/untap sequence");
+        };
+        assert_eq!(
+            effects,
+            vec![
+                SpellEffectKind::PumpTarget {
+                    power: 2,
+                    toughness: 2,
+                    scale: None,
+                    subject: chosen(),
+                },
+                SpellEffectKind::GrantKeywords {
+                    subject: chosen(),
+                    keywords: vec![Keyword::Reach],
+                },
+                SpellEffectKind::Untap { subject: chosen() },
+            ]
+        );
+
+        assert_eq!(
+            issue_351_exact_id(
+                ISSUE_351_PLUS_THREE_PLUS_ZERO_REACH_FIRST_STRIKE_CLAUSE,
+                true,
+                &context()
+            ),
+            "spell.pump.creature.plus_three_plus_zero.reach.first_strike"
+        );
+        let Some(RecipeEmission::SpellEffects(effects)) =
+            match_spell_creature_plus_three_plus_zero_reach_first_strike(
+                ISSUE_351_PLUS_THREE_PLUS_ZERO_REACH_FIRST_STRIKE_CLAUSE,
+                &context(),
+            )
+        else {
+            panic!("+3/+0 reach and first strike must emit one pump and one grant");
+        };
+        assert_eq!(
+            effects,
+            vec![
+                SpellEffectKind::PumpTarget {
+                    power: 3,
+                    toughness: 0,
+                    scale: None,
+                    subject: chosen(),
+                },
+                SpellEffectKind::GrantKeywords {
+                    subject: chosen(),
+                    keywords: vec![Keyword::Reach, Keyword::FirstStrike],
+                },
+            ]
+        );
+
+        for clause in [
+            ISSUE_351_PLUS_TWO_PLUS_TWO_REACH_UNTAP_CLAUSE,
+            ISSUE_351_PLUS_THREE_PLUS_ZERO_REACH_FIRST_STRIKE_CLAUSE,
+        ] {
+            assert_eq!(
+                match_clause(clause, false, &context()).expect("unambiguous"),
+                None,
+                "SpellClause templates match only on the spell surface: {clause}"
+            );
+        }
+
+        for near_miss in [
+            "Target creature gets +2/+1 and gains reach until end of turn. Untap it.",
+            "Target creature gets +2/+2 and gains reach until end of turn.",
+            "Target creature gets +2/+3 and gains reach until end of turn. Untap it.",
+            "Target creature gets +3/+3 and gains reach until end of turn. Untap it.",
+            "Target creature you control gets +2/+2 and gains reach until end of turn. Untap it.",
+            "Target creature gets +2/+2 and gains trample until end of turn. Untap it.",
+            "Target creature gets +2/+2 and gains reach until end of turn. Untap it. Draw a card.",
+        ] {
+            assert!(
+                match_spell_creature_plus_two_plus_two_reach_untap(near_miss, &context()).is_none(),
+                "the +2/+2 reach/untap matcher accepted {near_miss}"
+            );
+            assert!(
+                match_clause(near_miss, true, &context())
+                    .expect("unambiguous")
+                    .is_none(),
+                "the catalog unexpectedly owns the +2/+2 near-miss {near_miss}"
+            );
+        }
+        for near_miss in [
+            "Target creature gets +3/+0 and gains reach until end of turn.",
+            "Target creature gets +3/+1 and gains reach and first strike until end of turn.",
+            "Target creature gets +3/+0 and gains reach and deathtouch until end of turn.",
+            "Target creature gets +2/+0 and gains reach and first strike until end of turn.",
+            "Target creature gets +3/+0 and gains reach and first strike.",
+            "Target creature you control gets +3/+0 and gains reach and first strike until end of turn.",
+            "Target creature gets +3/+0 and gains reach and first strike until end of turn. Draw a card.",
+        ] {
+            assert!(
+                match_spell_creature_plus_three_plus_zero_reach_first_strike(near_miss, &context())
+                    .is_none(),
+                "the +3/+0 multi-keyword matcher accepted {near_miss}"
+            );
+            assert!(
+                match_clause(near_miss, true, &context())
+                    .expect("unambiguous")
+                    .is_none(),
+                "the catalog unexpectedly owns the +3/+0 near-miss {near_miss}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_351_attack_and_repartee_triggers_are_exact() {
+        assert_eq!(
+            issue_351_exact_id(
+                ISSUE_351_ATTACK_DEFENDING_LOSE_ONE_GAIN_ONE_CLAUSE,
+                false,
+                &context()
+            ),
+            "triggered.self_attacks.defending_player_loses_one_you_gain_one"
+        );
+        let Some(RecipeEmission::TriggeredAbility(ability)) =
+            match_self_attacks_defending_player_lose_one_gain_one(
+                ISSUE_351_ATTACK_DEFENDING_LOSE_ONE_GAIN_ONE_CLAUSE,
+                &context(),
+            )
+        else {
+            panic!("the attack drain must emit a triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0
+            }
+        );
+        assert!(ability.targeting.is_none());
+        assert!(!ability.may);
+        assert_eq!(
+            ability.effect,
+            [
+                SpellEffectKind::LoseLife {
+                    amount: LifeAmount::Fixed(1),
+                    who: PlayerRecipient::DefendingPlayer,
+                },
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(1),
+                },
+            ]
+        );
+        for near_miss in [
+            "Whenever this creature attacks, defending player loses 1 life.",
+            "Whenever this creature attacks, each opponent loses 1 life and you gain 1 life.",
+            "Whenever this creature attacks, defending player loses 2 life and you gain 2 life.",
+            "Whenever this creature attacks, target opponent loses 1 life and you gain 1 life.",
+            "Whenever this creature attacks, you gain 1 life and defending player loses 1 life.",
+            "Whenever this creature deals combat damage to a player, defending player loses 1 life and you gain 1 life.",
+            "Whenever this creature attacks, defending player loses 1 life and you gain 1 life. Draw a card.",
+        ] {
+            assert!(
+                match_self_attacks_defending_player_lose_one_gain_one(near_miss, &context())
+                    .is_none(),
+                "the defending-player drain accepted {near_miss}"
+            );
+            assert!(
+                match_clause(near_miss, false, &context())
+                    .expect("unambiguous")
+                    .is_none(),
+                "the catalog unexpectedly owns the attack-drain near-miss {near_miss}"
+            );
+        }
+
+        assert_eq!(
+            issue_351_exact_id(ISSUE_351_REPARTEE_COUNTER_CLAUSE, false, &context()),
+            "triggered.controller_casts_spell_targeting_creature.put_counter_self"
+        );
+        let Some(RecipeEmission::TriggeredAbility(ability)) =
+            match_repartee_targeting_creature_put_counter_self(
+                ISSUE_351_REPARTEE_COUNTER_CLAUSE,
+                &context(),
+            )
+        else {
+            panic!("Repartee must emit a triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverPlayerCastsSpell {
+                caster: CastTriggerPlayer::Controller,
+                filter: SpellCastFilter {
+                    card_type: Some(CardTypeFilter::InstantOrSorcery),
+                    targeted_permanent_type: Some(PermanentTypeFilter::Creature),
+                    ..SpellCastFilter::default()
+                },
+                ordinal: None,
+                ordinal_scope: Default::default(),
+            }
+        );
+        assert!(ability.targeting.is_none());
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::PutCounters {
+                counter: CounterKind::PlusOnePlusOne,
+                count: Amount::Fixed(1),
+                subject: EffectSubject::Source,
+            }]
+        );
+        for near_miss in [
+            "Whenever you cast an instant or sorcery spell that targets a creature, put a +1/+1 counter on this creature.",
+            "Repartee — Whenever you cast an instant or sorcery spell, put a +1/+1 counter on this creature.",
+            "Repartee — Whenever you cast a spell that targets a creature, put a +1/+1 counter on this creature.",
+            "Repartee — Whenever you cast an instant or sorcery spell that targets a creature, put a +1/+1 counter on target creature you control.",
+            "Repartee — Whenever you cast an instant or sorcery spell that targets a creature, put a +1/+1 counter on each creature you control.",
+            "Repartee — Whenever an opponent casts an instant or sorcery spell that targets a creature, put a +1/+1 counter on this creature.",
+            "Repartee — Whenever you cast an instant or sorcery spell that targets a creature, put a +1/+1 counter on this creature. Draw a card.",
+        ] {
+            assert!(
+                match_repartee_targeting_creature_put_counter_self(near_miss, &context()).is_none(),
+                "the Repartee matcher accepted {near_miss}"
+            );
+            assert!(
+                match_clause(near_miss, false, &context())
+                    .expect("unambiguous")
+                    .is_none(),
+                "the catalog unexpectedly owns the Repartee near-miss {near_miss}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_351_activated_abilities_are_exact() {
+        assert_eq!(
+            issue_351_exact_id(
+                "{2}: This creature gains reach until end of turn.",
+                false,
+                &context()
+            ),
+            "activated.mana.pump_self.reach"
+        );
+        let Some(RecipeEmission::ActivatedAbility(ability)) = match_activated_mana_self_gains_reach(
+            "{2}: This creature gains reach until end of turn.",
+            &context(),
+        ) else {
+            panic!("the activated reach grant must emit an activated ability");
+        };
+        assert_eq!(
+            ability.costs,
+            [AbilityCost::Mana(
+                ManaCost::parse("{2}").expect("valid cost")
+            )]
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Source,
+                keywords: vec![Keyword::Reach],
+            }]
+        );
+        assert!(ability.targeting.is_none());
+        assert_eq!(
+            issue_351_exact_id(ISSUE_351_POWER_TWO_UNBLOCKABLE_CLAUSE, false, &context()),
+            "activated.mana.tap.target_power_two_or_less_cant_be_blocked"
+        );
+        let Some(RecipeEmission::ActivatedAbility(ability)) =
+            match_activated_mana_tap_target_power_two_unblockable(
+                ISSUE_351_POWER_TWO_UNBLOCKABLE_CLAUSE,
+                &context(),
+            )
+        else {
+            panic!("the power-two unblockable activation must emit an activated ability");
+        };
+        assert_eq!(
+            ability.costs,
+            [
+                AbilityCost::Mana(ManaCost::parse("{1}").expect("valid cost")),
+                AbilityCost::Tap,
+            ]
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::ApplyCombatRestriction {
+                scope: CombatRestrictionScope::Chosen(TargetFilter {
+                    kind: TargetKind::Creature,
+                    power: Some(PowerComparison::AtMost(2)),
+                    ..TargetFilter::default()
+                }),
+                restriction: CombatRestriction {
+                    cant_be_blocked: true,
+                    ..CombatRestriction::default()
+                },
+            }]
+        );
+        let targeting = ability
+            .targeting
+            .as_ref()
+            .expect("unblockable target group");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("the unblockable activation needs exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.effect_indices, [0]);
+        assert_eq!(group.prompt, "Choose target creature with power 2 or less");
+
+        for near_miss in [
+            "{2}: This creature gains deathtouch until end of turn.",
+            "{2}: This creature gains trample until end of turn.",
+            "{2}: This creature gains reach.",
+            "{2}: Target creature gains reach until end of turn.",
+            "{2}, {T}: This creature gains reach until end of turn.",
+            "When this creature enters, it gains reach until end of turn.",
+        ] {
+            assert!(
+                match_activated_mana_self_gains_reach(near_miss, &context()).is_none(),
+                "the activated reach matcher accepted {near_miss}"
+            );
+            assert!(
+                match_clause(near_miss, false, &context())
+                    .expect("unambiguous")
+                    .is_none(),
+                "the catalog unexpectedly owns the activated-reach near-miss {near_miss}"
+            );
+        }
+        for near_miss in [
+            "Target creature can't be blocked this turn.",
+            "{1}, {T}: Target creature with power 3 or less can't be blocked this turn.",
+            "{2}, {T}: Target creature with power 2 or less can't be blocked this turn.",
+            "{1}, {T}: Target creature with power 2 or less can't block this turn.",
+            "{1}, {T}: Target creature with power 2 or less can't be blocked this turn. Draw a card.",
+        ] {
+            assert!(
+                match_activated_mana_tap_target_power_two_unblockable(near_miss, &context())
+                    .is_none(),
+                "the power-two unblockable matcher accepted {near_miss}"
+            );
+            assert!(
+                match_clause(near_miss, false, &context())
+                    .expect("unambiguous")
+                    .is_none(),
+                "the catalog unexpectedly owns the unblockable near-miss {near_miss}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_351_mass_and_conditional_modifiers_are_exact() {
+        assert_eq!(
+            issue_351_exact_id(ISSUE_351_ETB_ALL_OTHER_MINUS_TWO_CLAUSE, false, &context()),
+            "triggered.etb.all_other_creatures_minus_two_minus_two"
+        );
+        let Some(RecipeEmission::TriggeredAbility(ability)) =
+            match_etb_all_other_creatures_minus_two_minus_two(
+                ISSUE_351_ETB_ALL_OTHER_MINUS_TWO_CLAUSE,
+                &context(),
+            )
+        else {
+            panic!("the mass -2/-2 ETB must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(ability.targeting.is_none());
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::PumpAll {
+                filter: CreatureScopeFilter {
+                    exclude_self: true,
+                    ..CreatureScopeFilter::default()
+                },
+                power: -2,
+                toughness: -2,
+            }]
+        );
+
+        assert_eq!(
+            issue_351_exact_id(
+                ISSUE_351_CONTROL_ARTIFACT_PLUS_ONE_ZERO_DEATHTOUCH_CLAUSE,
+                false,
+                &context()
+            ),
+            "static.conditional_self.control_artifact.plus_one_zero_deathtouch"
+        );
+        let Some(RecipeEmission::StaticAbility(ability)) =
+            match_static_control_artifact_plus_one_zero_deathtouch(
+                ISSUE_351_CONTROL_ARTIFACT_PLUS_ONE_ZERO_DEATHTOUCH_CLAUSE,
+                &context(),
+            )
+        else {
+            panic!("the artifact conditional must emit a static ability");
+        };
+        assert_eq!(
+            ability.definition,
+            StaticAbilityDef::ConditionalSelfModifier {
+                condition: GameCondition::BattlefieldAggregate {
+                    filter: BattlefieldPermanentFilter {
+                        token: None,
+                        any_of: None,
+                        controllers: RelativePlayerSet::Controller,
+                        card_type: Some(CardTypeFilter::Artifact),
+                        color: None,
+                        name: None,
+                        required_subtypes: Vec::new(),
+                        exclude_source: false,
+                    },
+                    aggregate: BattlefieldAggregate::Count,
+                    min: Some(1),
+                    max: None,
+                },
+                set_types: None,
+                add_types: TypeLineAddition::default(),
+                base_power: None,
+                base_toughness: None,
+                delta_power: 1,
+                delta_toughness: 0,
+                keywords: vec![Keyword::Deathtouch],
+                activated_abilities: Vec::new(),
+                triggered_abilities: Vec::new(),
+                can_attack_as_though_without_defender: false,
+            }
+        );
+
+        for near_miss in [
+            "When this creature enters, all creatures get -2/-2 until end of turn.",
+            "When this creature enters, all other creatures get -1/-1 until end of turn.",
+            "When this creature enters, all other creatures you control get -2/-2 until end of turn.",
+            "When this creature enters, all other creatures an opponent controls get -2/-2 until end of turn.",
+            "Whenever this creature enters, all other creatures get -2/-2 until end of turn.",
+            "When this creature enters, all other creatures get -2/-2 until end of turn. Draw a card.",
+        ] {
+            assert!(
+                match_etb_all_other_creatures_minus_two_minus_two(near_miss, &context()).is_none(),
+                "the mass -2/-2 matcher accepted {near_miss}"
+            );
+            assert!(
+                match_clause(near_miss, false, &context())
+                    .expect("unambiguous")
+                    .is_none(),
+                "the catalog unexpectedly owns the mass near-miss {near_miss}"
+            );
+        }
+        for near_miss in [
+            "As long as you control an artifact, this creature gets +1/+0 and has haste.",
+            "As long as you control an artifact, this creature gets +1/+1 and has deathtouch.",
+            "As long as you control an artifact, this creature gets +1/+0 and has lifelink.",
+            "As long as you control an artifact, this creature gets +1/+0.",
+            "As long as you control an artifact, this creature has deathtouch.",
+            "As long as you control a creature, this creature gets +1/+0 and has deathtouch.",
+            "As long as you control an artifact, this creature gets +2/+0 and has deathtouch.",
+        ] {
+            assert!(
+                match_static_control_artifact_plus_one_zero_deathtouch(near_miss, &context())
+                    .is_none(),
+                "the artifact conditional accepted {near_miss}"
+            );
+            assert!(
+                match_clause(near_miss, false, &context())
+                    .expect("unambiguous")
+                    .is_none(),
+                "the catalog unexpectedly owns the artifact-conditional near-miss {near_miss}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_351_source_kind_gating_stays_on_each_template() {
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        for clause in [
+            ISSUE_351_ATTACK_DEFENDING_LOSE_ONE_GAIN_ONE_CLAUSE,
+            ISSUE_351_REPARTEE_COUNTER_CLAUSE,
+            ISSUE_351_ACTIVATED_REACH_CLAUSE,
+            ISSUE_351_ETB_ALL_OTHER_MINUS_TWO_CLAUSE,
+            ISSUE_351_CONTROL_ARTIFACT_PLUS_ONE_ZERO_DEATHTOUCH_CLAUSE,
+        ] {
+            assert_eq!(
+                match_clause(clause, false, &noncreature).expect("unambiguous"),
+                None,
+                "creature-source template must stay gated: {clause}"
+            );
+        }
+        let mut nonpermanent = context();
+        nonpermanent.source_is_permanent = false;
+        assert_eq!(
+            match_clause(ISSUE_351_POWER_TWO_UNBLOCKABLE_CLAUSE, false, &nonpermanent)
+                .expect("unambiguous"),
+            None
+        );
+    }
+
+    #[test]
+    fn issue_351_reach_activation_captures_the_printed_cost() {
+        let Some(RecipeEmission::ActivatedAbility(one)) = match_activated_mana_self_gains_reach(
+            "{1}: This creature gains reach until end of turn.",
+            &context(),
+        ) else {
+            panic!("a different printed mana cost must stay a supported template instance");
+        };
+        assert_eq!(
+            one.costs,
+            [AbilityCost::Mana(
+                ManaCost::parse("{1}").expect("valid cost")
+            )]
+        );
+        assert!(
+            match_activated_mana_self_gains_reach(
+                "{2}: This creature gains reach until end of turn.",
+                &context()
+            )
+            .is_some(),
+            "the exact {{2}} template stays supported"
+        );
     }
 }

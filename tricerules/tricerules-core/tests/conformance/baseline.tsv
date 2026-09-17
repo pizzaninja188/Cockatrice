@@ -31,6 +31,7 @@ aerial_assault	0	cast	unsupported: target group 0 needs a richer fixture
 aerial_responder	0	cast	exercised
 affa_protector	0	cast	exercised
 affectionate_indrik	0	cast	exercised
+agate-blade_assassin	0	cast	exercised
 ageless_guardian	0	cast	exercised
 agent_maria_hill	0	cast	exercised
 agent_of_atlas	0	cast	exercised
@@ -846,6 +847,9 @@ friendly_teddy	0	cast	exercised
 frilled_sea_serpent	0	ability:0	exercised
 frilled_sea_serpent	0	cast	exercised
 frog-squirrels	0	cast	exercised
+frog_butler	0	ability:0	exercised
+frog_butler	0	ability:1	exercised
+frog_butler	0	cast	exercised
 front_porch_sentries	0	cast	exercised
 frontier_bivouac	0	ability:0	exercised
 frontier_bivouac	0	land	exercised
@@ -996,6 +1000,7 @@ grab_the_prize	0	cast	exercised
 graduation_day	0	cast	exercised
 grappler_spider	0	cast	exercised
 grasping_longneck	0	cast	exercised
+gravblade_heavy	0	cast	exercised
 gravedigger	0	cast	exercised
 gravelgill_scoundrel	0	cast	exercised
 graveshifter	0	cast	exercised
@@ -1327,6 +1332,7 @@ leafkin_druid	0	ability:0	exercised
 leafkin_druid	0	cast	exercised
 leaping_ambush	0	cast	exercised
 leatherback_baloth	0	cast	exercised
+lecturing_scornmage	0	cast	exercised
 legion_guildmage	0	ability:0	exercised
 legion_guildmage	0	ability:1	exercised
 legion_guildmage	0	cast	exercised
@@ -1663,6 +1669,7 @@ pigment_wrangler_striking_palette	0	cast	exercised
 pigment_wrangler_striking_palette	1	cast	intentional: face unavailable from hand
 pilfer	0	cast	exercised
 pilgrim_of_the_fires	0	cast	exercised
+pillar_launch	0	cast	exercised
 pillarfield_ox	0	cast	exercised
 pincher_beetles	0	cast	exercised
 pinnacle_kill-ship	0	ability:0	exercised
@@ -1748,6 +1755,8 @@ quill-blade_laureate_twofold_intent	1	cast	intentional: face unavailable from ha
 quilled_slagwurm	0	cast	exercised
 rabid_bite	0	cast	exercised
 radiant_strike	0	cast	exercised
+ragged_playmate	0	ability:0	exercised
+ragged_playmate	0	cast	exercised
 raging_bull	0	cast	exercised
 raging_cougar	0	cast	exercised
 raging_goblin	0	cast	exercised
@@ -2002,6 +2011,8 @@ shattered_sanctum	0	land	exercised
 shatterskull_giant	0	cast	exercised
 shatterskull_recruit	0	cast	exercised
 shatterstorm	0	cast	exercised
+shefet_archfiend	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+shefet_archfiend	0	cast	exercised
 shepherd_of_the_lost	0	cast	exercised
 shepherding_spirits	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 shepherding_spirits	0	cast	exercised
@@ -2087,6 +2098,7 @@ slithering_cryptid	0	cast	exercised
 sliver_construct	0	cast	exercised
 slumbering_keepguard	0	ability:0	exercised
 slumbering_keepguard	0	cast	exercised
+smaugs_fury	0	cast	exercised
 snapping_drake	0	cast	exercised
 snare_thopter	0	cast	exercised
 snarespinner	0	cast	exercised
