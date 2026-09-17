@@ -7740,6 +7740,216 @@ fn match_etb_equipment_create_treasure(
     })
 }
 
+/// Issue #337 exact clause templates. Each template is a reusable typed surface with at least two
+/// real positive calibrations. Every clause is compared by the complete normalized Oracle line, so
+/// an appended, reordered, or additional-clause form remains unsupported, and source-kind gating
+/// stays on the recipes whose printed template requires it (the creature, Equipment, and
+/// enchantment ETBs); the spell and becomes-tapped templates are not source-gated beyond the
+/// printed wording they own.
+const ISSUE_337_PLUS_ONE_PLUS_THREE_FLYING_UNTAP_CLAUSE: &str =
+    "Target creature gets +1/+3 and gains flying until end of turn. Untap it.";
+const ISSUE_337_ATTACKING_TARGET_REDUCTION_TWO_CLAUSE: &str =
+    "This spell costs {2} less to cast if it targets an attacking creature.";
+const ISSUE_337_ETB_GAIN_LIFE_ONE_DRAW_ONE_CLAUSE: &str =
+    "When this creature enters, you gain 1 life and draw a card.";
+const ISSUE_337_ETB_ANOTHER_DEATHTOUCH_CLAUSE: &str =
+    "When this creature enters, another target creature you control gains deathtouch until end of turn.";
+const ISSUE_337_SELF_TAPPED_SCRY_ONE_CLAUSE: &str =
+    "Whenever this creature becomes tapped, scry 1.";
+const ISSUE_337_ETB_CREATE_TWO_TREASURE_CLAUSE: &str =
+    "When this creature enters, create two Treasure tokens.";
+const ISSUE_337_EQUIPMENT_ETB_ATTACH_UNTAP_CLAUSE: &str =
+    "When this Equipment enters, attach it to target creature you control. Untap that creature.";
+const ISSUE_337_ENCHANTMENT_ETB_TAPPED_EXILE_CLAUSE: &str =
+    "When this enchantment enters, exile target tapped creature an opponent controls until this enchantment leaves the battlefield.";
+
+/// CR 611.2a / 514.2 / 701.26: a fixed +1/+3 pump, a flying grant, and an untap of the same one
+/// mandatory creature target, the flying sibling of the shipped reach/hexproof pump-untap recipes.
+/// Other values, other keywords, controller restriction, no-untap, and appended instructions stay
+/// unsupported.
+fn match_spell_creature_plus_one_three_flying_untap(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_337_PLUS_ONE_PLUS_THREE_FLYING_UNTAP_CLAUSE)
+        .then(|| combat_trick(TargetController::Any, 1, 3, &[Keyword::Flying], true))
+}
+
+/// CR 601.2f / 118.7a: "This spell costs {2} less to cast if it targets an attacking creature"
+/// reduces the generic component twice while an announced target is an attacking creature, the
+/// amount-two sibling of #318's `{1}` recipe. Tapped, nontoken, union, other amounts, conditionless,
+/// and non-instant/sorcery forms stay unsupported.
+fn match_spell_attacking_creature_target_reduction_two(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    ((context.source_is_instant || context.source_is_sorcery)
+        && text == ISSUE_337_ATTACKING_TARGET_REDUCTION_TWO_CLAUSE)
+        .then(|| {
+            RecipeEmission::SpellCostModifier(SpellCostModifier::TargetMatchGenericReduction {
+                amount: 2,
+                filter: TargetMatchFilter::Battlefield(TargetFilter {
+                    kind: TargetKind::Creature,
+                    combat_role: Some(CombatRole::Attacking),
+                    ..TargetFilter::default()
+                }),
+            })
+        })
+}
+
+/// CR 603.6 / 121.1 / 121.2: a mandatory ETB trigger that gains 1 life then draws a card in the
+/// printed order, reusing the shipped `GainLife` and `Draw` instructions. Other life amounts,
+/// other draw counts, reversed order, non-creature sources, and riders stay unsupported.
+fn match_etb_gain_life_one_draw_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_337_ETB_GAIN_LIFE_ONE_DRAW_ONE_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WhenSelfEntersBattlefield,
+            vec![
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(1),
+                },
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                },
+            ],
+        )
+    })
+}
+
+/// CR 603.6 / 115.1 / 702.2b: a mandatory ETB trigger grants deathtouch until end of turn to one
+/// mandatory other creature the controller controls. `excluded_objects: [Source]` binds "another"
+/// to the entering source (CR 115 and the shipped source-excluding ETB recipes); one target group
+/// carries the single grant. Unrestricted, controller-less, other-keyword, up-to-one, non-until-EOT,
+/// non-creature sources, and riders stay unsupported.
+fn match_etb_another_target_creature_you_control_gains_deathtouch(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_337_ETB_ANOTHER_DEATHTOUCH_CLAUSE).then(|| {
+        let target = TargetFilter {
+            kind: TargetKind::Creature,
+            controller: TargetController::You,
+            excluded_objects: vec![TargetObjectExclusion::Source],
+            ..TargetFilter::default()
+        };
+        targeted_trigger(
+            context,
+            vec![SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Chosen(Box::new(target)),
+                keywords: vec![Keyword::Deathtouch],
+            }],
+            1,
+            1,
+            "Choose another target creature you control",
+        )
+    })
+}
+
+/// CR 603.2 / 701.22a: "Whenever this creature becomes tapped" is the shipped non-targeting
+/// self-tap trigger condition; this exact template's effect is the private scry 1. Other scry
+/// counts, other instructions, self-untap, attack triggers, non-creature sources, and riders stay
+/// unsupported.
+fn match_self_becomes_tapped_scry_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_337_SELF_TAPPED_SCRY_ONE_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverSelfBecomesTapped,
+            vec![SpellEffectKind::Scry {
+                count: Amount::Fixed(1),
+            }],
+        )
+    })
+}
+
+/// CR 111.10a / 603.6: a creature's own entry trigger creates the two registered Treasure tokens
+/// at once, the count-two sibling of the shipped one-Treasure recipes. Tapped, other counts,
+/// other sources, riders, and the "Whenever" wording stay with their own recipes or unsupported.
+fn match_etb_create_two_treasure(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_337_ETB_CREATE_TWO_TREASURE_CLAUSE).then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::CreateTokens {
+                token: "treasure".into(),
+                count: Amount::Fixed(2),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            },
+        )
+    })
+}
+
+/// CR 301.5 / 701.3 / 603.6: an Equipment's own entry trigger attaches it to one mandatory
+/// creature the controller controls, then untaps that same chosen creature, reusing the shipped
+/// `AttachSource` and `Untap` instructions on one shared target group. A second sentence naming a
+/// different creature, "may", artifact wording, other keywords, non-Equipment sources, and riders
+/// stay unsupported.
+fn match_etb_equipment_attach_target_untap(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_equipment && text == ISSUE_337_EQUIPMENT_ETB_ATTACH_UNTAP_CLAUSE).then(
+        || {
+            let target = chosen_creature(TargetController::You);
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfEntersBattlefield,
+                vec![
+                    SpellEffectKind::AttachSource {
+                        target: TargetFilter {
+                            kind: TargetKind::Creature,
+                            controller: TargetController::You,
+                            ..TargetFilter::default()
+                        },
+                    },
+                    SpellEffectKind::Untap { subject: target },
+                ],
+            ) else {
+                unreachable!("triggered_ability_with always returns a triggered ability")
+            };
+            ability.targeting = Some(exact_targeting(
+                1,
+                1,
+                "Choose target creature you control",
+                vec![0, 1],
+            ));
+            RecipeEmission::TriggeredAbility(ability)
+        },
+    )
+}
+
+/// CR 603.6 / 610.3 / 701.13: an enchantment's own entry trigger exiles one mandatory tapped
+/// creature an opponent controls until the source leaves, reusing the shipped linked-exile
+/// `ExileUntilSourceLeaves` continuation. Untapped, controller-inclusive, up-to-one, other source
+/// kinds, other return conditions, non-enchantment sources, and riders stay unsupported.
+fn match_etb_enchantment_exile_target_tapped_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_enchantment && text == ISSUE_337_ENCHANTMENT_ETB_TAPPED_EXILE_CLAUSE).then(
+        || {
+            let target = TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::Opponent,
+                tapped: Some(true),
+                ..TargetFilter::default()
+            };
+            targeted_trigger(
+                context,
+                vec![SpellEffectKind::ExileUntilSourceLeaves { target }],
+                1,
+                1,
+                "Choose target tapped creature an opponent controls",
+            )
+        },
+    )
+}
+
 macro_rules! calibrations {
     ($($positive_name:literal => $positive_clause:literal),+; $($negative:literal),+ $(,)?) => {
         RecipeCalibration {
@@ -8038,7 +8248,10 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Leaping Ambush" => "Target creature gets +1/+3 and gains reach until end of turn. Untap it.";
             "Target creature you control gets +1/+3 and gains reach until end of turn. Untap it.",
             "Target creature gets +1/+2 and gains reach until end of turn. Untap it.",
-            "Target creature gets +1/+3 and gains flying until end of turn. Untap it.",
+            // The +1/+3 flying form is now owned by #337's exact
+            // `spell.pump.creature.plus_one_plus_three_flying.untap` recipe, so this list uses a
+            // non-colliding value instead and the flying matcher is asserted directly in tests.
+            "Target creature gets +1/+4 and gains reach until end of turn. Untap it.",
             "Target creature gets +1/+3 and gains reach until end of turn."
         ),
     },
@@ -9269,7 +9482,10 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Meticulous Artisan" => "When this creature enters, create a Treasure token.",
             "Plundering Pirate" => "When this creature enters, create a Treasure token.";
             "When this creature enters, you may create a Treasure token.",
-            "When this creature enters, create two Treasure tokens.",
+            // The two-Treasure form is owned by #337's exact `triggered.etb.create_two_treasure`
+            // recipe, so this list uses a non-colliding count and the count-two matcher is asserted
+            // directly in tests.
+            "When this creature enters, create three Treasure tokens.",
             "When this creature enters, create a tapped Treasure token.",
             "When this creature enters, create a Treasure token, then draw a card.",
             "Whenever another creature enters, create a Treasure token."
@@ -11418,7 +11634,10 @@ pub(super) static CATALOG: &[Recipe] = &[
             "This spell costs {1} less to cast if it targets a tapped creature.",
             "This spell costs {1} less to cast if it targets an attacking nontoken creature.",
             "This spell costs {1} less to cast if it targets an attacking or tapped creature.",
-            "This spell costs {2} less to cast if it targets an attacking creature.",
+            // The {2} amount is owned by #337's exact
+            // `spell.cost_reduction.target_match_attacking_creature.two` recipe, so this list uses
+            // a non-colliding amount and the two matchers are asserted directly in tests.
+            "This spell costs {3} less to cast if it targets an attacking creature.",
             "This spell costs {1} less to cast if you control a creature.",
             "This spell costs {1} less to cast.",
             "This spell costs {1} less to cast if it targets an attacking creature. Draw a card.",
@@ -12326,6 +12545,145 @@ pub(super) static CATALOG: &[Recipe] = &[
             "When this Equipment enters, create a Treasure token. Draw a card.",
             "Whenever this Equipment enters, create a Treasure token.",
             "When this Equipment enters, create a Treasure token, then draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump.creature.plus_one_plus_three_flying.untap"),
+        label: "creature +1/+3 flying and untap",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_creature_plus_one_three_flying_untap,
+        // Reviewed deviation from the issue text: the reach wording is owned by the shipped
+        // `spell.pump_grant_untap.creature.plus_1_plus_3.reach` recipe, so it is asserted directly
+        // on this matcher in the catalog tests instead of as a catalog negative.
+        calibration: calibrations!(
+            "Acrobatic Leap" => "Target creature gets +1/+3 and gains flying until end of turn. Untap it.",
+            "Wings of the Cosmos" => "Target creature gets +1/+3 and gains flying until end of turn. Untap it.",
+            "Escape from Orthanc" => "Target creature gets +1/+3 and gains flying until end of turn. Untap it.";
+            "Target creature gets +1/+2 and gains flying until end of turn. Untap it.",
+            "Target creature you control gets +1/+3 and gains flying until end of turn. Untap it.",
+            "Target creature gets +1/+3 and gains flying until end of turn.",
+            "Target creature gets +1/+3 and gains flying until end of turn. Untap it. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.cost_reduction.target_match_attacking_creature.two"),
+        label: "spell costs two less to cast when it targets an attacking creature",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_attacking_creature_target_reduction_two,
+        // Reviewed deviation from the issue text: the {1} wording is owned by the shipped
+        // `spell.cost_reduction.target_match_attacking_creature.one` recipe, so it is asserted
+        // directly on this matcher in the catalog tests instead of as a catalog negative.
+        calibration: calibrations!(
+            "Depower" => "This spell costs {2} less to cast if it targets an attacking creature.",
+            "Ephara's Dispersal" => "This spell costs {2} less to cast if it targets an attacking creature.",
+            "Bury in Books" => "This spell costs {2} less to cast if it targets an attacking creature.";
+            "This spell costs {2} less to cast if it targets a tapped creature.",
+            "This spell costs {2} less to cast if it targets an attacking or tapped creature.",
+            "This spell costs {2} less to cast if you control a creature.",
+            "This spell costs {3} less to cast if it targets an attacking creature.",
+            "This spell costs {2} less to cast if it targets an attacking creature. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.gain_life_one_draw_one"),
+        label: "creature ETB gain one life then draw a card",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_gain_life_one_draw_one,
+        // Reviewed deviation from the issue text: "you gain 1 life." and "draw a card." are owned
+        // by the shipped `etb.gain_life.fixed` and `etb.draw` recipes, so they are asserted
+        // directly on this matcher in the catalog tests instead of as catalog negatives.
+        calibration: calibrations!(
+            "Inspiring Overseer" => "When this creature enters, you gain 1 life and draw a card.",
+            "Priest of Ancient Lore" => "When this creature enters, you gain 1 life and draw a card.";
+            "When this creature enters, you gain 2 life and draw a card.",
+            "When this creature enters, you gain 1 life and draw two cards.",
+            "When this creature enters, draw a card and you gain 1 life.",
+            "When this land enters, you gain 1 life and draw a card.",
+            "When this creature enters, you gain 1 life and draw a card. Scry 1."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.another_target_creature_you_control.gains_deathtouch"),
+        label: "creature ETB another target creature you control gains deathtouch",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_another_target_creature_you_control_gains_deathtouch,
+        calibration: calibrations!(
+            "Blooming Stinger" => "When this creature enters, another target creature you control gains deathtouch until end of turn.",
+            "Toxic Scorpion" => "When this creature enters, another target creature you control gains deathtouch until end of turn.";
+            "When this creature enters, target creature you control gains deathtouch until end of turn.",
+            "When this creature enters, another target creature gains deathtouch until end of turn.",
+            "When this creature enters, another target creature you control gains lifelink until end of turn.",
+            "When this creature enters, up to one other target creature you control gains deathtouch until end of turn.",
+            "When this creature enters, another target creature you control gains deathtouch.",
+            "When this creature enters, another target creature you control gains deathtouch until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.self_becomes_tapped.scry_one"),
+        label: "self becomes tapped scry one",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_becomes_tapped_scry_one,
+        calibration: calibrations!(
+            "Attentive Sunscribe" => "Whenever this creature becomes tapped, scry 1.",
+            "Moonfolk Puzzlemaker" => "Whenever this creature becomes tapped, scry 1.";
+            "Whenever this creature becomes tapped, scry 2.",
+            "Whenever this creature becomes tapped, surveil 1.",
+            "Whenever this creature becomes untapped, scry 1.",
+            "Whenever this creature attacks, scry 1.",
+            "Whenever this creature becomes tapped, scry 1. Draw a card.",
+            "Whenever this artifact becomes tapped, scry 1."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.create_two_treasure"),
+        label: "creature ETB create two Treasure",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_create_two_treasure,
+        // Reviewed deviation from the issue text: the one-Treasure wording is owned by the shipped
+        // `triggered.etb.create_treasure` recipe, so it is asserted directly on this matcher in the
+        // catalog tests instead of as a catalog negative.
+        calibration: calibrations!(
+            "Rapacious Dragon" => "When this creature enters, create two Treasure tokens.",
+            "Prosperous Pirates" => "When this creature enters, create two Treasure tokens.";
+            "When this creature enters, create two tapped Treasure tokens.",
+            "When this creature enters, create three Treasure tokens.",
+            "When this creature enters, create two Treasure tokens. Draw a card.",
+            "Whenever this creature enters, create two Treasure tokens.",
+            "When this Equipment enters, create two Treasure tokens."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.equipment.attach_target_untap"),
+        label: "Equipment ETB attach to target then untap it",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_equipment_attach_target_untap,
+        // Reviewed deviation from the issue text: the plain attach wording is owned by the shipped
+        // `etb.equipment.attach_creature.you_control` recipe, so it is asserted directly on this
+        // matcher in the catalog tests instead of as a catalog negative.
+        calibration: calibrations!(
+            "Super Suit" => "When this Equipment enters, attach it to target creature you control. Untap that creature.",
+            "Galadhrim Bow" => "When this Equipment enters, attach it to target creature you control. Untap that creature.";
+            "When this Equipment enters, attach it to target creature. Untap that creature.",
+            "When this Equipment enters, you may attach it to target creature you control. Untap that creature.",
+            "When this artifact enters, attach it to target creature you control. Untap that creature.",
+            "When this Equipment enters, attach it to target creature you control. That creature gains hexproof until end of turn.",
+            "When this Equipment enters, attach it to target creature you control"
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.exile_target_tapped_creature_until_leaves"),
+        label: "enchantment ETB exile a tapped opposing creature until source leaves",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_enchantment_exile_target_tapped_creature,
+        calibration: calibrations!(
+            "Super Villain Lockup" => "When this enchantment enters, exile target tapped creature an opponent controls until this enchantment leaves the battlefield.",
+            "Seal Away" => "When this enchantment enters, exile target tapped creature an opponent controls until this enchantment leaves the battlefield.";
+            "When this enchantment enters, exile target creature an opponent controls until this enchantment leaves the battlefield.",
+            "When this enchantment enters, exile target tapped creature until this enchantment leaves the battlefield.",
+            "When this enchantment enters, exile up to one target tapped creature an opponent controls until this enchantment leaves the battlefield.",
+            "When this artifact enters, exile target tapped creature an opponent controls until this artifact leaves the battlefield.",
+            "When this enchantment enters, exile target tapped creature an opponent controls until your next turn.",
+            "When this enchantment enters, exile target tapped creature an opponent controls until this enchantment leaves the battlefield. Draw a card."
         ),
     },
 ];
@@ -19106,7 +19464,8 @@ mod tests {
             "This spell costs {1} less to cast if it targets a tapped creature.",
             "This spell costs {1} less to cast if it targets an attacking nontoken creature.",
             "This spell costs {1} less to cast if it targets an attacking or tapped creature.",
-            "This spell costs {2} less to cast if it targets an attacking creature.",
+            // The {2} amount now matches #337's exact recipe, so it is no longer an unmatched
+            // near-miss; `issue_337_...` asserts that the {1} matcher itself rejects it.
             "This spell costs {1} less to cast if you control a creature.",
             "This spell costs {1} less to cast.",
             "This spell costs {1} less to cast if it targets an attacking creature. Draw a card.",
@@ -22439,6 +22798,476 @@ mod tests {
             )
             .is_none(),
             "the artifact wording stays with the existing artifact recipes"
+        );
+    }
+
+    #[test]
+    fn issue_337_exact_clauses_match_their_recipes() {
+        for (clause, is_spell, expected) in [
+            (
+                "Target creature gets +1/+3 and gains flying until end of turn. Untap it.",
+                true,
+                "spell.pump.creature.plus_one_plus_three_flying.untap",
+            ),
+            (
+                "This spell costs {2} less to cast if it targets an attacking creature.",
+                true,
+                "spell.cost_reduction.target_match_attacking_creature.two",
+            ),
+            (
+                "When this creature enters, you gain 1 life and draw a card.",
+                false,
+                "triggered.etb.gain_life_one_draw_one",
+            ),
+            (
+                "When this creature enters, another target creature you control gains deathtouch until end of turn.",
+                false,
+                "triggered.etb.another_target_creature_you_control.gains_deathtouch",
+            ),
+            (
+                "Whenever this creature becomes tapped, scry 1.",
+                false,
+                "triggered.self_becomes_tapped.scry_one",
+            ),
+            (
+                "When this creature enters, create two Treasure tokens.",
+                false,
+                "triggered.etb.create_two_treasure",
+            ),
+            (
+                "When this Equipment enters, attach it to target creature you control. Untap that creature.",
+                false,
+                "triggered.etb.equipment.attach_target_untap",
+            ),
+            (
+                "When this enchantment enters, exile target tapped creature an opponent controls until this enchantment leaves the battlefield.",
+                false,
+                "triggered.etb.exile_target_tapped_creature_until_leaves",
+            ),
+        ] {
+            let matched = match_clause(clause, is_spell, &context())
+                .expect("clause should not be ambiguous")
+                .unwrap_or_else(|| panic!("clause should match a recipe: {clause}"));
+            assert_eq!(matched.id.as_str(), expected, "{clause}");
+        }
+    }
+
+    #[test]
+    fn issue_337_recipes_have_stable_ids_and_surfaces() {
+        for (id, surface) in [
+            (
+                "spell.pump.creature.plus_one_plus_three_flying.untap",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "spell.cost_reduction.target_match_attacking_creature.two",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "triggered.etb.gain_life_one_draw_one",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "triggered.etb.another_target_creature_you_control.gains_deathtouch",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "triggered.self_becomes_tapped.scry_one",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "triggered.etb.create_two_treasure",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "triggered.etb.equipment.attach_target_untap",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "triggered.etb.exile_target_tapped_creature_until_leaves",
+                RecipeSurface::EtbAbility,
+            ),
+        ] {
+            assert_eq!(issue_318_recipe(id).surface, surface, "{id}");
+        }
+    }
+
+    #[test]
+    fn issue_337_pump_grant_untap_shares_one_target_and_rejects_near_misses() {
+        let chosen = chosen_creature(TargetController::Any);
+        let RecipeEmission::SpellEffects(effects) =
+            match_spell_creature_plus_one_three_flying_untap(
+                ISSUE_337_PLUS_ONE_PLUS_THREE_FLYING_UNTAP_CLAUSE,
+                &context(),
+            )
+            .expect("the +1/+3 flying untap clause should match")
+        else {
+            panic!("the pump must emit ordered spell effects");
+        };
+        assert_eq!(
+            effects,
+            [
+                SpellEffectKind::PumpTarget {
+                    power: 1,
+                    toughness: 3,
+                    scale: None,
+                    subject: chosen.clone(),
+                },
+                SpellEffectKind::GrantKeywords {
+                    subject: chosen.clone(),
+                    keywords: vec![Keyword::Flying],
+                },
+                SpellEffectKind::Untap { subject: chosen },
+            ]
+        );
+        for near_miss in [
+            "Target creature gets +1/+3 and gains reach until end of turn. Untap it.",
+            "Target creature gets +1/+2 and gains flying until end of turn. Untap it.",
+            "Target creature you control gets +1/+3 and gains flying until end of turn. Untap it.",
+            "Target creature gets +1/+3 and gains flying until end of turn.",
+            "Target creature gets +1/+3 and gains flying until end of turn. Untap it. Draw a card.",
+        ] {
+            assert!(
+                match_spell_creature_plus_one_three_flying_untap(near_miss, &context()).is_none(),
+                "the flying pump-untap accepted {near_miss}"
+            );
+        }
+        assert_eq!(
+            match_clause(
+                "Target creature gets +1/+3 and gains reach until end of turn. Untap it.",
+                true,
+                &context()
+            )
+            .expect("the reach wording should stay unambiguous")
+            .expect("the reach wording should stay supported")
+            .id
+            .as_str(),
+            "spell.pump_grant_untap.creature.plus_1_plus_3.reach",
+            "adding the flying recipe must not widen or steal the shipped reach recipe"
+        );
+    }
+
+    #[test]
+    fn issue_337_cost_reduction_two_is_exact_and_distinct_from_one() {
+        let RecipeEmission::SpellCostModifier(SpellCostModifier::TargetMatchGenericReduction {
+            amount,
+            filter,
+        }) = match_spell_attacking_creature_target_reduction_two(
+            ISSUE_337_ATTACKING_TARGET_REDUCTION_TWO_CLAUSE,
+            &context(),
+        )
+        .expect("the {2} attacking clause should match")
+        else {
+            panic!("the {{2}} clause must emit a target-match generic reduction");
+        };
+        assert_eq!(amount, 2);
+        assert_eq!(
+            filter,
+            TargetMatchFilter::Battlefield(TargetFilter {
+                kind: TargetKind::Creature,
+                combat_role: Some(CombatRole::Attacking),
+                ..TargetFilter::default()
+            })
+        );
+        assert!(
+            match_spell_attacking_creature_target_reduction_one(
+                ISSUE_337_ATTACKING_TARGET_REDUCTION_TWO_CLAUSE,
+                &context()
+            )
+            .is_none(),
+            "the shipped {{1}} matcher must stay exact and reject the {{2}} clause"
+        );
+        assert!(
+            match_spell_attacking_creature_target_reduction_two(
+                "This spell costs {1} less to cast if it targets an attacking creature.",
+                &context()
+            )
+            .is_none(),
+            "the {{2}} matcher must reject the {{1}} clause"
+        );
+        let mut non_spell = context();
+        non_spell.source_is_instant = false;
+        non_spell.source_is_sorcery = false;
+        assert!(
+            match_spell_attacking_creature_target_reduction_two(
+                ISSUE_337_ATTACKING_TARGET_REDUCTION_TWO_CLAUSE,
+                &non_spell
+            )
+            .is_none(),
+            "the attacking-target reduction stays instant/sorcery-only"
+        );
+        assert_eq!(
+            match_clause(
+                "This spell costs {1} less to cast if it targets an attacking creature.",
+                true,
+                &context()
+            )
+            .expect("the {1} wording should stay unambiguous")
+            .expect("the {1} wording should stay supported")
+            .id
+            .as_str(),
+            "spell.cost_reduction.target_match_attacking_creature.one"
+        );
+    }
+
+    #[test]
+    fn issue_337_etb_gain_life_then_draw_keeps_printed_order() {
+        let RecipeEmission::TriggeredAbility(ability) = match_etb_gain_life_one_draw_one(
+            ISSUE_337_ETB_GAIN_LIFE_ONE_DRAW_ONE_CLAUSE,
+            &context(),
+        )
+        .expect("the gain-one-then-draw clause should match") else {
+            panic!("the gain/draw ETB must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(!ability.may);
+        assert!(ability.targeting.is_none());
+        assert_eq!(
+            ability.effect,
+            [
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(1),
+                },
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                },
+            ],
+            "CR 603.6: the printed instruction order is life then draw"
+        );
+        assert!(
+            match_etb_gain_life_one_draw_one(
+                "When this creature enters, you gain 1 life.",
+                &context()
+            )
+            .is_none(),
+            "the life-only clause stays with the shipped gain-life recipe"
+        );
+        assert!(
+            match_etb_gain_life_one_draw_one("When this creature enters, draw a card.", &context())
+                .is_none(),
+            "the draw-only clause stays with the shipped draw recipe"
+        );
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_etb_gain_life_one_draw_one(
+                ISSUE_337_ETB_GAIN_LIFE_ONE_DRAW_ONE_CLAUSE,
+                &noncreature
+            )
+            .is_none(),
+            "the gain/draw ETB stays bound to creature sources"
+        );
+    }
+
+    #[test]
+    fn issue_337_etb_deathtouch_grant_excludes_the_source() {
+        let RecipeEmission::TriggeredAbility(ability) =
+            match_etb_another_target_creature_you_control_gains_deathtouch(
+                ISSUE_337_ETB_ANOTHER_DEATHTOUCH_CLAUSE,
+                &context(),
+            )
+            .expect("the another-target deathtouch clause should match")
+        else {
+            panic!("the deathtouch ETB must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(!ability.may);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    excluded_objects: vec![TargetObjectExclusion::Source],
+                    ..TargetFilter::default()
+                })),
+                keywords: vec![Keyword::Deathtouch],
+            }]
+        );
+        let targeting = ability.targeting.as_ref().expect("deathtouch target group");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("the deathtouch ETB must own exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.effect_indices, [0]);
+        assert_eq!(group.prompt, "Choose another target creature you control");
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_etb_another_target_creature_you_control_gains_deathtouch(
+                ISSUE_337_ETB_ANOTHER_DEATHTOUCH_CLAUSE,
+                &noncreature
+            )
+            .is_none(),
+            "the deathtouch ETB stays bound to creature sources"
+        );
+    }
+
+    #[test]
+    fn issue_337_self_becomes_tapped_scries_one() {
+        let RecipeEmission::TriggeredAbility(ability) =
+            match_self_becomes_tapped_scry_one(ISSUE_337_SELF_TAPPED_SCRY_ONE_CLAUSE, &context())
+                .expect("the self-tapped scry clause should match")
+        else {
+            panic!("the self-tapped scry must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WheneverSelfBecomesTapped);
+        assert!(!ability.may);
+        assert!(ability.targeting.is_none());
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Scry {
+                count: Amount::Fixed(1),
+            }]
+        );
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_self_becomes_tapped_scry_one(ISSUE_337_SELF_TAPPED_SCRY_ONE_CLAUSE, &noncreature)
+                .is_none(),
+            "the self-tapped scry stays bound to creature sources"
+        );
+    }
+
+    #[test]
+    fn issue_337_etb_create_two_treasure_is_count_two() {
+        let RecipeEmission::TriggeredAbility(ability) =
+            match_etb_create_two_treasure(ISSUE_337_ETB_CREATE_TWO_TREASURE_CLAUSE, &context())
+                .expect("the two-Treasure clause should match")
+        else {
+            panic!("the two-Treasure ETB must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(!ability.may);
+        assert!(ability.targeting.is_none());
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::CreateTokens {
+                token: "treasure".into(),
+                count: Amount::Fixed(2),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }]
+        );
+        assert!(
+            match_etb_create_two_treasure(
+                "When this creature enters, create a Treasure token.",
+                &context()
+            )
+            .is_none(),
+            "the one-Treasure clause stays with the shipped recipe"
+        );
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_etb_create_two_treasure(ISSUE_337_ETB_CREATE_TWO_TREASURE_CLAUSE, &noncreature)
+                .is_none(),
+            "the two-Treasure ETB stays bound to creature sources"
+        );
+    }
+
+    #[test]
+    fn issue_337_equipment_attach_untap_shares_one_target() {
+        let RecipeEmission::TriggeredAbility(ability) = match_etb_equipment_attach_target_untap(
+            ISSUE_337_EQUIPMENT_ETB_ATTACH_UNTAP_CLAUSE,
+            &context(),
+        )
+        .expect("the Equipment attach/untap clause should match") else {
+            panic!("the Equipment attach ETB must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(!ability.may);
+        assert_eq!(
+            ability.effect,
+            [
+                SpellEffectKind::AttachSource {
+                    target: TargetFilter {
+                        kind: TargetKind::Creature,
+                        controller: TargetController::You,
+                        ..TargetFilter::default()
+                    },
+                },
+                SpellEffectKind::Untap {
+                    subject: chosen_creature(TargetController::You),
+                },
+            ]
+        );
+        let targeting = ability.targeting.as_ref().expect("attach target group");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("the attach ETB must own exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(
+            group.effect_indices,
+            [0, 1],
+            "attach and untap bind to the same chosen creature"
+        );
+        assert_eq!(group.prompt, "Choose target creature you control");
+        assert!(
+            match_etb_equipment_attach_target_untap(
+                "When this Equipment enters, attach it to target creature you control.",
+                &context()
+            )
+            .is_none(),
+            "the plain attach clause stays with the shipped recipe"
+        );
+        let mut non_equipment = context();
+        non_equipment.source_is_equipment = false;
+        assert!(
+            match_etb_equipment_attach_target_untap(
+                ISSUE_337_EQUIPMENT_ETB_ATTACH_UNTAP_CLAUSE,
+                &non_equipment
+            )
+            .is_none(),
+            "the attach ETB stays bound to Equipment sources"
+        );
+    }
+
+    #[test]
+    fn issue_337_enchantment_exiles_tapped_opposing_creature_until_leaves() {
+        let RecipeEmission::TriggeredAbility(ability) =
+            match_etb_enchantment_exile_target_tapped_creature(
+                ISSUE_337_ENCHANTMENT_ETB_TAPPED_EXILE_CLAUSE,
+                &context(),
+            )
+            .expect("the tapped-exile clause should match")
+        else {
+            panic!("the linked exile ETB must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(!ability.may);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::ExileUntilSourceLeaves {
+                target: TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::Opponent,
+                    tapped: Some(true),
+                    ..TargetFilter::default()
+                },
+            }]
+        );
+        let targeting = ability.targeting.as_ref().expect("exile target group");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("the linked exile ETB must own exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.effect_indices, [0]);
+        assert_eq!(
+            group.prompt,
+            "Choose target tapped creature an opponent controls"
+        );
+        let mut non_enchantment = context();
+        non_enchantment.source_is_enchantment = false;
+        assert!(
+            match_etb_enchantment_exile_target_tapped_creature(
+                ISSUE_337_ENCHANTMENT_ETB_TAPPED_EXILE_CLAUSE,
+                &non_enchantment
+            )
+            .is_none(),
+            "the linked exile ETB stays bound to enchantment sources"
         );
     }
 }

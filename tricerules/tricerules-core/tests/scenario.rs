@@ -491,3 +491,5 @@ mod issue_333_generated_hand_landfall_mana_batch;
 mod issue_335_generated_eight_clause_batch;
 #[path = "scenario/issue_336_generated_eight_clause_batch.rs"]
 mod issue_336_generated_eight_clause_batch;
+#[path = "scenario/issue_337_generated_eight_clause_batch.rs"]
+mod issue_337_generated_eight_clause_batch;

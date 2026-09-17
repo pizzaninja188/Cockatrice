@@ -16,6 +16,7 @@ accursed_spirit	0	cast	exercised
 acolyte_of_xathrid	0	ability:0	exercised
 acolyte_of_xathrid	0	cast	exercised
 acrobatic_cheerleader	0	cast	exercised
+acrobatic_leap	0	cast	exercised
 act_of_treason	0	cast	exercised
 adorned_crocodile	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 adorned_crocodile	0	cast	exercised
@@ -119,6 +120,7 @@ assault_griffin	0	cast	exercised
 assault_zeppelid	0	cast	exercised
 assert_perfection	0	cast	exercised
 atlantean_cavalry	0	cast	exercised
+attentive_sunscribe	0	cast	exercised
 attercop	0	cast	exercised
 audacious_thief	0	cast	exercised
 auroral_procession	0	cast	exercised
@@ -243,6 +245,7 @@ bloodcrazed_paladin	0	cast	exercised
 bloodthirsty_aerialist	0	cast	exercised
 blooming_marsh	0	ability:0	exercised
 blooming_marsh	0	land	exercised
+blooming_stinger	0	cast	exercised
 blossombind	0	cast	exercised
 blossoming_sands	0	ability:0	exercised
 blossoming_sands	0	land	exercised
@@ -572,6 +575,7 @@ demonic_tutor	0	cast	exercised
 dependable_quinjet	0	ability:0	exercised
 dependable_quinjet	0	ability:1	unsupported: nonmana costs need additional fixture resources
 dependable_quinjet	0	cast	exercised
+depower	0	cast	exercised
 depressurize	0	cast	exercised
 deranged_whelp	0	cast	exercised
 derelict_attic_widows_walk	0	cast	exercised
@@ -1173,6 +1177,7 @@ insomnia,_crown_city	0	land	exercised
 inspired_charge	0	cast	exercised
 inspiring_captain	0	cast	exercised
 inspiring_cleric	0	cast	exercised
+inspiring_overseer	0	cast	exercised
 inspiring_paladin	0	cast	exercised
 inspiring_vantage	0	ability:0	exercised
 inspiring_vantage	0	land	exercised
@@ -1749,6 +1754,7 @@ rambunctious_mutt	0	cast	exercised
 rampaging_ceratops	0	cast	exercised
 rampaging_ferocidon	0	cast	exercised
 rampaging_soulrager	0	cast	exercised
+rapacious_dragon	0	cast	exercised
 raptor_companion	0	cast	exercised
 ratcatcher_trainee_pest_problem	0	cast	exercised
 ratcatcher_trainee_pest_problem	1	cast	exercised
@@ -2218,6 +2224,9 @@ sungrace_pegasus	0	cast	exercised
 sunspire_griffin	0	cast	exercised
 suntail_hawk	0	cast	exercised
 super_speed	0	cast	exercised
+super_suit	0	ability:0	exercised
+super_suit	0	cast	exercised
+super_villain_lockup	0	cast	exercised
 sure_strike	0	cast	exercised
 surly_farrier	0	ability:0	exercised
 surly_farrier	0	cast	exercised
