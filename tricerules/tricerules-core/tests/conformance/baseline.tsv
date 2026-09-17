@@ -20,6 +20,8 @@ act_of_treason	0	cast	exercised
 adorned_crocodile	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 adorned_crocodile	0	cast	exercised
 adult_gold_dragon	0	cast	exercised
+adventurers_inn	0	ability:0	exercised
+adventurers_inn	0	land	exercised
 aegis_of_the_heavens	0	cast	exercised
 aegis_turtle	0	cast	exercised
 aerial_assault	0	cast	unsupported: target group 0 needs a richer fixture
@@ -70,6 +72,7 @@ ancient_den	0	land	exercised
 ancient_spider	0	cast	exercised
 angel_of_mercy	0	cast	exercised
 angel_of_retribution	0	cast	exercised
+angelic_edict	0	cast	exercised
 angelic_wall	0	cast	exercised
 angels_mercy	0	cast	exercised
 ankle_biter	0	cast	exercised
@@ -114,6 +117,7 @@ assault_griffin	0	cast	exercised
 assault_zeppelid	0	cast	exercised
 assert_perfection	0	cast	exercised
 atlantean_cavalry	0	cast	exercised
+attercop	0	cast	exercised
 audacious_thief	0	cast	exercised
 auroral_procession	0	cast	exercised
 avacynian_priest	0	ability:0	exercised
@@ -245,6 +249,7 @@ bog_imp	0	cast	exercised
 boggart_brute	0	cast	exercised
 boggart_prankster	0	cast	exercised
 bogstomper	0	cast	exercised
+bogwater_lumaret	0	cast	exercised
 boiling_rock_prison	0	ability:0	exercised
 boiling_rock_prison	0	ability:1	exercised
 boiling_rock_prison	0	land	exercised
@@ -619,6 +624,7 @@ dreamroot_cascade	0	ability:0	exercised
 dreamroot_cascade	0	land	exercised
 dreg_reaver	0	cast	exercised
 drill_too_deep	0	cast	exercised
+drix_fatemaker	0	cast	exercised
 dromoka_warrior	0	cast	exercised
 dross_crocodile	0	cast	exercised
 drown_in_shapelessness	0	cast	exercised
@@ -974,6 +980,7 @@ gorilla_warrior	0	cast	exercised
 grab_the_prize	0	cast	exercised
 graduation_day	0	cast	exercised
 grappler_spider	0	cast	exercised
+grasping_longneck	0	cast	exercised
 gravedigger	0	cast	exercised
 gravelgill_scoundrel	0	cast	exercised
 gravpack_monoist	0	cast	exercised
@@ -1685,6 +1692,7 @@ prophetic_prism	0	cast	exercised
 prosperity_tycoon	0	ability:0	unsupported: nonmana costs need additional fixture resources
 prosperity_tycoon	0	cast	exercised
 prowling_caracal	0	cast	exercised
+pulse_tracker	0	cast	exercised
 punk_frogs	0	cast	exercised
 purple_dragon_punks	0	ability:0	exercised
 purple_dragon_punks	0	cast	exercised
@@ -2167,6 +2175,8 @@ stratosoarer	0	cast	exercised
 straw_soldiers	0	cast	exercised
 streetbreaker_wurm	0	cast	exercised
 striped_bears	0	cast	exercised
+strix_lookout	0	ability:0	exercised
+strix_lookout	0	cast	exercised
 submerged_boneyard	0	ability:0	exercised
 submerged_boneyard	0	land	exercised
 subterranean_cavern	0	ability:0	exercised

@@ -487,3 +487,5 @@ mod issue_328_generated_eight_clause_batch;
 mod issue_329_generated_warp_flashback;
 #[path = "scenario/issue_333_generated_hand_landfall_mana_batch.rs"]
 mod issue_333_generated_hand_landfall_mana_batch;
+#[path = "scenario/issue_335_generated_eight_clause_batch.rs"]
+mod issue_335_generated_eight_clause_batch;

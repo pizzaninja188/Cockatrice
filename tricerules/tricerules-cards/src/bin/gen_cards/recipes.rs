@@ -7325,6 +7325,202 @@ fn match_static_self_count_scaled_artifact_plus_one_zero(
     })
 }
 
+/// Issue #335 exact clause templates. Each template is a reusable typed surface with at least two
+/// real positive calibrations. Every clause is compared by the complete normalized Oracle line, so
+/// an appended, reordered, or additional-clause form remains unsupported, and source-kind gating
+/// stays on the recipes whose printed template requires it.
+const ISSUE_335_SELF_ATTACKS_EACH_OPPONENT_LOSES_ONE_CLAUSE: &str =
+    "Whenever this creature attacks, each opponent loses 1 life.";
+const ISSUE_335_SELF_DIES_GAIN_TWO_CLAUSE: &str = "When this creature dies, you gain 2 life.";
+const ISSUE_335_SELF_OR_OTHER_CREATURE_ENTERS_GAIN_ONE_CLAUSE: &str =
+    "Whenever this creature or another creature you control enters, you gain 1 life.";
+const ISSUE_335_EXILE_CREATURE_OR_ENCHANTMENT_CLAUSE: &str =
+    "Exile target creature or enchantment.";
+const ISSUE_335_LAND_ENTERS_GAIN_TWO_CLAUSE: &str = "When this land enters, you gain 2 life.";
+const ISSUE_335_ANTHEM_COUNTER_TRAMPLE_CLAUSE: &str =
+    "Each creature you control with a +1/+1 counter on it has trample.";
+const ISSUE_335_LANDFALL_PUMP_SELF_CLAUSE: &str =
+    "Landfall — Whenever a land you control enters, this creature gets +1/+1 until end of turn.";
+const ISSUE_335_TAP_LOOT_CLAUSE: &str = "{1}{U}, {T}: Draw a card, then discard a card.";
+
+/// CR 508.1 / 119.3: a self-attack trigger that makes each opponent — not the attacking
+/// controller — lose one life. The player scope is `EachOpponent`, so the controller is never
+/// among the losers. "each player", a single target opponent, other amounts, combat-damage
+/// witnesses, and another-creature attackers stay unsupported.
+fn match_self_attacks_each_opponent_loses_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_335_SELF_ATTACKS_EACH_OPPONENT_LOSES_ONE_CLAUSE)
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                },
+                vec![SpellEffectKind::LoseLife {
+                    amount: LifeAmount::Fixed(1),
+                    who: PlayerRecipient::EachOpponent,
+                }],
+            )
+        })
+}
+
+/// CR 603.6c / 119.3: a dies trigger that gains its controller two life. Other amounts, the
+/// leave-the-battlefield wording, opponent life loss, and appended instructions stay unsupported.
+fn match_self_dies_gain_life_two(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_335_SELF_DIES_GAIN_TWO_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WhenSelfDies,
+            vec![SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2),
+            }],
+        )
+    })
+}
+
+/// CR 603.6a: "this creature or another creature you control enters" is the self-inclusive,
+/// controller-scoped creature entry trigger; `exclude_source` stays false so the source's own
+/// entry counts (603.6a checks the newcomers). Another-only, any-player, other amounts, and
+/// riders stay unsupported.
+fn match_self_or_other_creature_enters_gain_life_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_335_SELF_OR_OTHER_CREATURE_ENTERS_GAIN_ONE_CLAUSE)
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverPermanentEntersBattlefield {
+                    controller: CastTriggerPlayer::Controller,
+                    filter: PermanentEventFilter {
+                        permanent_type: Some(PermanentTypeFilter::Creature),
+                        ..PermanentEventFilter::default()
+                    },
+                    creature_filter: None,
+                },
+                vec![SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(1),
+                }],
+            )
+        })
+}
+
+/// CR 701.13 / 115.1: "Exile target creature or enchantment" is one mandatory target whose union
+/// is the shipped OR-combined `permanent_types` field already used by `Destroy target artifact or
+/// enchantment`; the issue's `(any_of)` parenthetical denotes that same union semantics. The
+/// single targeted instruction uses the implicit one-target contract, so no explicit group is
+/// authored. Single-type, other unions, up-to-one, and riders stay unsupported.
+fn match_spell_exile_creature_or_enchantment(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_335_EXILE_CREATURE_OR_ENCHANTMENT_CLAUSE).then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::Exile {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                permanent_types: vec![
+                    PermanentTypeFilter::Creature,
+                    PermanentTypeFilter::Enchantment,
+                ],
+                ..TargetFilter::default()
+            })),
+        })
+    })
+}
+
+/// CR 603.6a: "When this land enters" is the land's own entry trigger, so this reuses the shipped
+/// `etb.land.gain_life.one` `WhenSelfEntersBattlefield` shape. Adjudicated deviation from the
+/// issue text: the proposed `WheneverPermanentEntersBattlefield { exclude_self: true }` would
+/// exclude the entering land itself and never fire. Other amounts, the Landfall wording, other
+/// effects, and riders stay unsupported.
+fn match_land_enters_gain_life_two(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_land && text == ISSUE_335_LAND_ENTERS_GAIN_TWO_CLAUSE).then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2),
+            },
+        )
+    })
+}
+
+/// CR 604.1 / 611.3 / 613.1f layer 6: a static anthem granting trample only to the controller's creatures
+/// that currently carry a +1/+1 counter. This reuses the shipped counter-filtered `AnthemKeyword`
+/// shape (`CreatureScopeFilter::required_counter`). Unfiltered, other-counter, other-keyword,
+/// other-scope, and noncreature-source forms stay unsupported.
+fn match_anthem_creatures_with_counter_trample(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_335_ANTHEM_COUNTER_TRAMPLE_CLAUSE).then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::AnthemKeyword {
+                filter: CreatureScopeFilter {
+                    controller: Some(CreatureScopeController::YouControl),
+                    required_counter: Some(CounterKind::PlusOnePlusOne),
+                    ..CreatureScopeFilter::default()
+                },
+                condition: None,
+                keyword: Keyword::Trample,
+            },
+        })
+    })
+}
+
+/// CR 603.6a / 611.2a: the Landfall trigger watches the controller's lands entering and pumps the
+/// source +1/+1 until cleanup, reusing the shipped `triggered.landfall.gain_life_one` event filter
+/// (no self-exclusion wording, so `exclude_source` stays false). The issue's `exclude_self: true`
+/// is behaviourally inert for a creature source and is not followed, matching the shipped
+/// counterpart. Other sizes, partial pumps, counters, prefixes, and riders stay unsupported.
+fn match_landfall_pump_self_plus_one_plus_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_335_LANDFALL_PUMP_SELF_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverPermanentEntersBattlefield {
+                controller: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    permanent_type: Some(PermanentTypeFilter::Land),
+                    ..PermanentEventFilter::default()
+                },
+                creature_filter: None,
+            },
+            vec![SpellEffectKind::PumpTarget {
+                power: 1,
+                toughness: 1,
+                scale: None,
+                subject: EffectSubject::Source,
+            }],
+        )
+    })
+}
+
+/// CR 602.2 / 701.9: `{1}{U}, {T}` pays the fixed mana plus the tap symbol to draw one then
+/// discard one (loot order), reusing the shipped draw-then-discard emission. Other costs,
+/// discard-then-draw order, other counts, and timing restrictions stay unsupported.
+fn match_tap_loot_draw_discard(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (text == ISSUE_335_TAP_LOOT_CLAUSE).then(|| {
+        utility_activated_ability(
+            context,
+            vec![fixed_mana_cost("{1}{U}"), AbilityCost::Tap],
+            vec![SpellEffectKind::DrawDiscard {
+                who: PlayerRecipient::Controller,
+                draw_count: 1,
+                discard_count: 1,
+                order: DrawDiscardOrder::DrawThenDiscard,
+                optional: false,
+            }],
+            None,
+        )
+    })
+}
+
 macro_rules! calibrations {
     ($($positive_name:literal => $positive_clause:literal),+; $($negative:literal),+ $(,)?) => {
         RecipeCalibration {
@@ -8667,7 +8863,7 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Scoured Barrens" => "When this land enters, you gain 1 life.",
             "Stark Industries" => "When this land enters, you gain 1 life.";
             "When this land enters, you may gain 1 life.",
-            "When this land enters, you gain 2 life.",
+            "When this land enters, you gain 3 life.",
             "When this land enters, you gain 1 life and draw a card.",
             "When this artifact enters, you gain 1 life."
         ),
@@ -11630,6 +11826,142 @@ pub(super) static CATALOG: &[Recipe] = &[
             "This creature gets +1/+0 for each artifact you control as long as you control a Robot.",
             "This creature gets +0/+1 for each artifact you control.",
             "This creature gets +1/+0 for each artifact you control. It can't block."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.self_attacks.each_opponent_loses_one"),
+        label: "this creature attacks and each opponent loses one life",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_attacks_each_opponent_loses_one,
+        calibration: calibrations!(
+            "Pulse Tracker" => "Whenever this creature attacks, each opponent loses 1 life.",
+            "Mardu Shadowspear" => "Whenever this creature attacks, each opponent loses 1 life.",
+            "Vicious Conquistador" => "Whenever this creature attacks, each opponent loses 1 life.";
+            "Whenever this creature attacks, each player loses 1 life.",
+            "Whenever this creature attacks, target opponent loses 1 life.",
+            "Whenever this creature attacks, each opponent loses 2 life.",
+            "Whenever this creature deals combat damage to a player, each opponent loses 1 life.",
+            "Whenever another creature attacks, each opponent loses 1 life.",
+            "Whenever this creature attacks, each opponent loses 1 life. You gain 1 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.self_dies.gain_life_two"),
+        label: "this creature dies and its controller gains two life",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_dies_gain_life_two,
+        calibration: calibrations!(
+            "Grasping Longneck" => "When this creature dies, you gain 2 life.",
+            "Haywire Mite" => "When this creature dies, you gain 2 life.",
+            "Highland Game" => "When this creature dies, you gain 2 life.";
+            "When this creature dies, you gain 1 life.",
+            "When this creature leaves the battlefield, you gain 2 life.",
+            "Whenever this creature dies, each opponent loses 2 life.",
+            "When this creature dies, you gain 2 life and draw a card.",
+            "When this creature dies, target opponent loses 2 life.",
+            "When this creature dies, you gain 2 life. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.self_or_other_creature_enters.gain_life_one"),
+        label: "this or another controlled creature enters and its controller gains one life",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_or_other_creature_enters_gain_life_one,
+        calibration: calibrations!(
+            "Bogwater Lumaret" => "Whenever this creature or another creature you control enters, you gain 1 life.",
+            "Kor Celebrant" => "Whenever this creature or another creature you control enters, you gain 1 life.",
+            "Pious Evangel // Wayward Disciple" => "Whenever this creature or another creature you control enters, you gain 1 life.";
+            "Whenever a creature enters, you gain 1 life.",
+            "Whenever this creature or another creature you control enters, you gain 2 life.",
+            "Whenever this creature or another creature enters, you gain 1 life.",
+            "Whenever this creature enters, you gain 1 life.",
+            "Whenever this creature or another creature you control enters, you gain 1 life and draw a card.",
+            "Whenever this creature or another creature you control enters, you gain 1 life. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.exile.target_creature_or_enchantment"),
+        label: "exile target creature or enchantment",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_exile_creature_or_enchantment,
+        calibration: calibrations!(
+            "Angelic Edict" => "Exile target creature or enchantment.",
+            "Blessed Light" => "Exile target creature or enchantment.",
+            "Iona's Judgment" => "Exile target creature or enchantment.";
+            "Exile target creature or artifact.",
+            "Exile target enchantment.",
+            "Exile target creature or enchantment. Its controller gains 2 life.",
+            "Exile up to one target creature or enchantment.",
+            "Destroy target creature or enchantment.",
+            "Exile target creature or enchantment. You gain 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.land_enters.gain_life_two"),
+        label: "this land enters and its controller gains two life",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_land_enters_gain_life_two,
+        calibration: calibrations!(
+            "Adventurer's Inn" => "When this land enters, you gain 2 life.",
+            "Kabira Crossroads" => "When this land enters, you gain 2 life.",
+            "Radiant Fountain" => "When this land enters, you gain 2 life.";
+            "When this land enters, you gain 2 life and draw a card.",
+            "Whenever a land you control enters, you gain 2 life.",
+            "When this land enters, target opponent loses 2 life.",
+            "When this land enters tapped, you gain 2 life.",
+            "When this artifact enters, you gain 2 life.",
+            "When this land enters, you gain 2 life. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.anthem.creatures_you_control_with_counter.trample"),
+        label: "controlled creatures with a plus one plus one counter have trample",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_anthem_creatures_with_counter_trample,
+        calibration: calibrations!(
+            "Drix Fatemaker" => "Each creature you control with a +1/+1 counter on it has trample.",
+            "Bramblewood Paragon" => "Each creature you control with a +1/+1 counter on it has trample.",
+            "Crowned Ceratok" => "Each creature you control with a +1/+1 counter on it has trample.";
+            "Each creature you control has trample.",
+            "Each creature you control with a +1/+1 counter on it has first strike.",
+            "Creatures you control with a +1/+1 counter on it have trample.",
+            "Each other creature you control with a +1/+1 counter on it has trample.",
+            "Each creature you control with a counter on it has trample.",
+            "Each creature you control with a +1/+1 counter on it has trample and vigilance."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.landfall.pump_self_plus_one_plus_one"),
+        label: "landfall pumps this creature plus one plus one until end of turn",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_landfall_pump_self_plus_one_plus_one,
+        calibration: calibrations!(
+            "Attercop" => "Landfall — Whenever a land you control enters, this creature gets +1/+1 until end of turn.",
+            "Scythe Leopard" => "Landfall — Whenever a land you control enters, this creature gets +1/+1 until end of turn.",
+            "Snapping Gnarlid" => "Landfall — Whenever a land you control enters, this creature gets +1/+1 until end of turn.";
+            "Landfall — Whenever a land you control enters, this creature gets +2/+2 until end of turn.",
+            "Landfall — Whenever a land you control enters, this creature gets +1/+0 until end of turn.",
+            "Whenever a land you control enters, this creature gets +1/+1 until end of turn.",
+            "Landfall — Whenever a land enters, this creature gets +1/+1 until end of turn.",
+            "Landfall — Whenever a land you control enters, put a +1/+1 counter on this creature.",
+            "Landfall — Whenever a land you control enters, this creature gets +1/+1 until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.mana.tap_loot_draw_discard"),
+        label: "pay one blue and tap to draw then discard a card",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_tap_loot_draw_discard,
+        calibration: calibrations!(
+            "Strix Lookout" => "{1}{U}, {T}: Draw a card, then discard a card.",
+            "Erratic Visionary" => "{1}{U}, {T}: Draw a card, then discard a card.",
+            "Teferi's Protege" => "{1}{U}, {T}: Draw a card, then discard a card.";
+            "{U}, {T}: Draw a card, then discard a card.",
+            "{1}{U}, {T}: Draw a card.",
+            "{1}{U}, {T}: Draw two cards, then discard a card.",
+            "{1}{U}, {T}: Draw a card, then discard a card. Activate only as a sorcery.",
+            "{1}{U}: Draw a card, then discard a card.",
+            "{1}{U}, {T}: Discard a card, then draw a card."
         ),
     },
 ];
@@ -20833,5 +21165,638 @@ mod tests {
             &context()
         )
         .is_none());
+    }
+
+    #[test]
+    fn issue_335_eight_recipe_templates_match_their_exact_recipes() {
+        for (clause, is_spell, expected) in [
+            (
+                ISSUE_335_SELF_ATTACKS_EACH_OPPONENT_LOSES_ONE_CLAUSE,
+                false,
+                "triggered.self_attacks.each_opponent_loses_one",
+            ),
+            (
+                ISSUE_335_SELF_DIES_GAIN_TWO_CLAUSE,
+                false,
+                "triggered.self_dies.gain_life_two",
+            ),
+            (
+                ISSUE_335_SELF_OR_OTHER_CREATURE_ENTERS_GAIN_ONE_CLAUSE,
+                false,
+                "triggered.self_or_other_creature_enters.gain_life_one",
+            ),
+            (
+                ISSUE_335_EXILE_CREATURE_OR_ENCHANTMENT_CLAUSE,
+                true,
+                "spell.exile.target_creature_or_enchantment",
+            ),
+            (
+                ISSUE_335_LAND_ENTERS_GAIN_TWO_CLAUSE,
+                false,
+                "triggered.land_enters.gain_life_two",
+            ),
+            (
+                ISSUE_335_ANTHEM_COUNTER_TRAMPLE_CLAUSE,
+                false,
+                "static.anthem.creatures_you_control_with_counter.trample",
+            ),
+            (
+                ISSUE_335_LANDFALL_PUMP_SELF_CLAUSE,
+                false,
+                "triggered.landfall.pump_self_plus_one_plus_one",
+            ),
+            (
+                ISSUE_335_TAP_LOOT_CLAUSE,
+                false,
+                "activated.mana.tap_loot_draw_discard",
+            ),
+        ] {
+            let matched = match_clause(clause, is_spell, &context())
+                .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{clause} should match exactly one recipe"));
+            assert_eq!(matched.id.as_str(), expected, "{clause}");
+        }
+    }
+
+    #[test]
+    fn issue_335_recipes_have_stable_ids_and_surfaces() {
+        for (id, surface) in [
+            (
+                "triggered.self_attacks.each_opponent_loses_one",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "triggered.self_dies.gain_life_two",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "triggered.self_or_other_creature_enters.gain_life_one",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "spell.exile.target_creature_or_enchantment",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "triggered.land_enters.gain_life_two",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "static.anthem.creatures_you_control_with_counter.trample",
+                RecipeSurface::StaticAbility,
+            ),
+            (
+                "triggered.landfall.pump_self_plus_one_plus_one",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "activated.mana.tap_loot_draw_discard",
+                RecipeSurface::ActivatedAbility,
+            ),
+        ] {
+            assert_eq!(
+                issue_318_recipe(id).surface,
+                surface,
+                "{id} surface drifted"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_335_self_attacks_each_opponent_loses_one_is_exact_and_scoped() {
+        for source_name in ["Pulse Tracker", "Mardu Shadowspear", "Vicious Conquistador"] {
+            let matched = issue_318_match_non_spell(
+                ISSUE_335_SELF_ATTACKS_EACH_OPPONENT_LOSES_ONE_CLAUSE,
+                source_name,
+            );
+            assert_eq!(
+                matched.id.as_str(),
+                "triggered.self_attacks.each_opponent_loses_one"
+            );
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("{source_name} must emit a triggered ability");
+            };
+            assert_eq!(
+                ability.trigger,
+                TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                }
+            );
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::LoseLife {
+                    amount: LifeAmount::Fixed(1),
+                    who: PlayerRecipient::EachOpponent,
+                }]
+            );
+            assert!(ability.targeting.is_none());
+            assert!(!ability.may);
+            assert!(ability.intervening_if.is_none());
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(
+                ISSUE_335_SELF_ATTACKS_EACH_OPPONENT_LOSES_ONE_CLAUSE,
+                false,
+                &noncreature
+            )
+            .expect("source-kind check must not be ambiguous")
+            .is_none(),
+            "the each-opponent attack template must remain bound to creature sources"
+        );
+        assert!(
+            match_clause(
+                ISSUE_335_SELF_ATTACKS_EACH_OPPONENT_LOSES_ONE_CLAUSE,
+                true,
+                &context()
+            )
+            .expect("spell surface check must not be ambiguous")
+            .is_none(),
+            "the each-opponent attack template must reject the spell surface"
+        );
+    }
+
+    #[test]
+    fn issue_335_self_dies_gain_life_two_is_exact_and_scoped() {
+        for source_name in ["Grasping Longneck", "Haywire Mite", "Highland Game"] {
+            let matched =
+                issue_318_match_non_spell(ISSUE_335_SELF_DIES_GAIN_TWO_CLAUSE, source_name);
+            assert_eq!(matched.id.as_str(), "triggered.self_dies.gain_life_two");
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("{source_name} must emit a triggered ability");
+            };
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfDies);
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(2),
+                }]
+            );
+            assert!(ability.targeting.is_none());
+            assert!(!ability.may);
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_335_SELF_DIES_GAIN_TWO_CLAUSE, false, &noncreature)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the dies-gain-two template must remain bound to creature sources"
+        );
+    }
+
+    #[test]
+    fn issue_335_self_or_other_creature_enters_gain_life_one_is_self_inclusive() {
+        for source_name in [
+            "Bogwater Lumaret",
+            "Kor Celebrant",
+            "Pious Evangel // Wayward Disciple",
+        ] {
+            let matched = issue_318_match_non_spell(
+                ISSUE_335_SELF_OR_OTHER_CREATURE_ENTERS_GAIN_ONE_CLAUSE,
+                source_name,
+            );
+            assert_eq!(
+                matched.id.as_str(),
+                "triggered.self_or_other_creature_enters.gain_life_one"
+            );
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("{source_name} must emit a triggered ability");
+            };
+            assert_eq!(
+                ability.trigger,
+                TriggerCondition::WheneverPermanentEntersBattlefield {
+                    controller: CastTriggerPlayer::Controller,
+                    filter: PermanentEventFilter {
+                        permanent_type: Some(PermanentTypeFilter::Creature),
+                        ..PermanentEventFilter::default()
+                    },
+                    creature_filter: None,
+                }
+            );
+            let TriggerCondition::WheneverPermanentEntersBattlefield { filter, .. } =
+                &ability.trigger
+            else {
+                unreachable!("the trigger was just asserted as a creature entry event");
+            };
+            assert!(
+                !filter.exclude_source,
+                "CR 603.6a: \"this creature or another\" must include the source's own entry"
+            );
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(1),
+                }]
+            );
+            assert!(ability.targeting.is_none());
+        }
+    }
+
+    #[test]
+    fn issue_335_exile_creature_or_enchantment_is_exact_and_typed() {
+        for source_name in ["Angelic Edict", "Blessed Light", "Iona's Judgment"] {
+            let matched =
+                issue_318_match_spell(ISSUE_335_EXILE_CREATURE_OR_ENCHANTMENT_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "spell.exile.target_creature_or_enchantment"
+            );
+            let RecipeEmission::SpellEffect(SpellEffectKind::Exile { subject }) = matched.emission
+            else {
+                panic!("{source_name} must emit the shipped exile spell effect");
+            };
+            let EffectSubject::Chosen(filter) = subject else {
+                panic!("{source_name} must exile a chosen target");
+            };
+            assert_eq!(filter.kind, TargetKind::AnyPermanent);
+            assert_eq!(
+                filter.permanent_types,
+                [
+                    PermanentTypeFilter::Creature,
+                    PermanentTypeFilter::Enchantment,
+                ]
+            );
+            assert!(
+                filter.any_of.is_none(),
+                "the type union uses the shipped OR-combined permanent_types field"
+            );
+        }
+
+        assert!(
+            match_clause(
+                ISSUE_335_EXILE_CREATURE_OR_ENCHANTMENT_CLAUSE,
+                false,
+                &context()
+            )
+            .expect("non-spell surface check must not be ambiguous")
+            .is_none(),
+            "the exile-union template is a spell clause and must not match permanent text"
+        );
+    }
+
+    #[test]
+    fn issue_335_land_enters_gain_life_two_is_land_gated_and_self_entry() {
+        for source_name in ["Adventurer's Inn", "Kabira Crossroads", "Radiant Fountain"] {
+            let matched =
+                issue_318_match_non_spell(ISSUE_335_LAND_ENTERS_GAIN_TWO_CLAUSE, source_name);
+            assert_eq!(matched.id.as_str(), "triggered.land_enters.gain_life_two");
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("{source_name} must emit a triggered ability");
+            };
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(2),
+                }]
+            );
+            assert!(ability.targeting.is_none());
+        }
+
+        let mut nonland = context();
+        nonland.source_is_land = false;
+        assert!(
+            match_clause(ISSUE_335_LAND_ENTERS_GAIN_TWO_CLAUSE, false, &nonland)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the land-ETB template must remain bound to land sources"
+        );
+    }
+
+    #[test]
+    fn issue_335_anthem_counter_trample_is_exact_and_typed() {
+        for source_name in ["Drix Fatemaker", "Bramblewood Paragon", "Crowned Ceratok"] {
+            let matched =
+                issue_318_match_non_spell(ISSUE_335_ANTHEM_COUNTER_TRAMPLE_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "static.anthem.creatures_you_control_with_counter.trample"
+            );
+            let RecipeEmission::StaticAbility(ability) = matched.emission else {
+                panic!("{source_name} must emit a static ability");
+            };
+            assert_eq!(
+                ability.definition,
+                StaticAbilityDef::AnthemKeyword {
+                    filter: CreatureScopeFilter {
+                        controller: Some(CreatureScopeController::YouControl),
+                        required_counter: Some(CounterKind::PlusOnePlusOne),
+                        ..CreatureScopeFilter::default()
+                    },
+                    condition: None,
+                    keyword: Keyword::Trample,
+                }
+            );
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_335_ANTHEM_COUNTER_TRAMPLE_CLAUSE, false, &noncreature)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the counter-filtered anthem must remain bound to creature sources"
+        );
+    }
+
+    #[test]
+    fn issue_335_landfall_pump_is_exact_and_typed() {
+        for source_name in ["Attercop", "Scythe Leopard", "Snapping Gnarlid"] {
+            let matched =
+                issue_318_match_non_spell(ISSUE_335_LANDFALL_PUMP_SELF_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "triggered.landfall.pump_self_plus_one_plus_one"
+            );
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("{source_name} must emit a triggered ability");
+            };
+            assert_eq!(
+                ability.trigger,
+                TriggerCondition::WheneverPermanentEntersBattlefield {
+                    controller: CastTriggerPlayer::Controller,
+                    filter: PermanentEventFilter {
+                        permanent_type: Some(PermanentTypeFilter::Land),
+                        ..PermanentEventFilter::default()
+                    },
+                    creature_filter: None,
+                }
+            );
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::PumpTarget {
+                    power: 1,
+                    toughness: 1,
+                    scale: None,
+                    subject: EffectSubject::Source,
+                }]
+            );
+            assert!(ability.targeting.is_none());
+            assert!(!ability.may);
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_335_LANDFALL_PUMP_SELF_CLAUSE, false, &noncreature)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the landfall pump template must remain bound to creature sources"
+        );
+    }
+
+    #[test]
+    fn issue_335_tap_loot_is_exact_and_ordered() {
+        for source_name in ["Strix Lookout", "Erratic Visionary", "Teferi's Protege"] {
+            let matched = issue_318_match_non_spell(ISSUE_335_TAP_LOOT_CLAUSE, source_name);
+            assert_eq!(matched.id.as_str(), "activated.mana.tap_loot_draw_discard");
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("{source_name} must emit an activated ability");
+            };
+            assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+            assert_eq!(
+                ability.costs,
+                [
+                    AbilityCost::Mana(ManaCost::parse("{1}{U}").expect("fixed mana cost")),
+                    AbilityCost::Tap,
+                ]
+            );
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::DrawDiscard {
+                    who: PlayerRecipient::Controller,
+                    draw_count: 1,
+                    discard_count: 1,
+                    order: DrawDiscardOrder::DrawThenDiscard,
+                    optional: false,
+                }]
+            );
+            assert!(ability.targeting.is_none());
+            assert_eq!(ability.timing, ActivationTiming::Normal);
+            assert!(ability.activation_limit.is_none());
+        }
+    }
+
+    #[test]
+    fn issue_335_recipes_reject_near_misses() {
+        for negative in [
+            "Whenever this creature attacks, each player loses 1 life.",
+            "Whenever this creature attacks, target opponent loses 1 life.",
+            "Whenever this creature attacks, each opponent loses 2 life.",
+            "Whenever this creature deals combat damage to a player, each opponent loses 1 life.",
+            "Whenever another creature attacks, each opponent loses 1 life.",
+            "Whenever this creature attacks, each opponent loses 1 life. You gain 1 life.",
+        ] {
+            assert!(
+                match_self_attacks_each_opponent_loses_one(negative, &context()).is_none(),
+                "each-opponent attack accepted near-miss {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, false);
+        }
+
+        for negative in [
+            "When this creature dies, you gain 1 life.",
+            "When this creature leaves the battlefield, you gain 2 life.",
+            "Whenever this creature dies, each opponent loses 2 life.",
+            "When this creature dies, you gain 2 life and draw a card.",
+            "When this creature dies, target opponent loses 2 life.",
+            "When this creature dies, you gain 2 life. Draw a card.",
+        ] {
+            assert!(
+                match_self_dies_gain_life_two(negative, &context()).is_none(),
+                "dies-gain-two accepted near-miss {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, false);
+        }
+
+        for negative in [
+            "Whenever a creature enters, you gain 1 life.",
+            "Whenever this creature or another creature you control enters, you gain 2 life.",
+            "Whenever this creature or another creature enters, you gain 1 life.",
+            "Whenever this creature enters, you gain 1 life.",
+            "Whenever this creature or another creature you control enters, you gain 1 life and draw a card.",
+            "Whenever this creature or another creature you control enters, you gain 1 life. Draw a card.",
+        ] {
+            assert!(
+                match_self_or_other_creature_enters_gain_life_one(negative, &context()).is_none(),
+                "self-or-other lifegain accepted near-miss {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, false);
+        }
+
+        for negative in [
+            "Exile target creature or artifact.",
+            "Exile target enchantment.",
+            "Exile target creature or enchantment. Its controller gains 2 life.",
+            "Exile up to one target creature or enchantment.",
+            "Destroy target creature or enchantment.",
+            "Exile target creature or enchantment. You gain 2 life.",
+        ] {
+            assert!(
+                match_spell_exile_creature_or_enchantment(negative, &context()).is_none(),
+                "exile-union accepted near-miss {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, true);
+        }
+
+        for negative in [
+            "When this land enters, you gain 2 life and draw a card.",
+            "Whenever a land you control enters, you gain 2 life.",
+            "When this land enters, target opponent loses 2 life.",
+            "When this land enters tapped, you gain 2 life.",
+            "When this artifact enters, you gain 2 life.",
+            "When this land enters, you gain 2 life. Draw a card.",
+        ] {
+            assert!(
+                match_land_enters_gain_life_two(negative, &context()).is_none(),
+                "land-ETB gain-two accepted near-miss {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, false);
+        }
+
+        for negative in [
+            "Each creature you control has trample.",
+            "Each creature you control with a +1/+1 counter on it has first strike.",
+            "Creatures you control with a +1/+1 counter on it have trample.",
+            "Each other creature you control with a +1/+1 counter on it has trample.",
+            "Each creature you control with a counter on it has trample.",
+            "Each creature you control with a +1/+1 counter on it has trample and vigilance.",
+        ] {
+            assert!(
+                match_anthem_creatures_with_counter_trample(negative, &context()).is_none(),
+                "counter anthem accepted near-miss {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, false);
+        }
+
+        for negative in [
+            "Landfall — Whenever a land you control enters, this creature gets +2/+2 until end of turn.",
+            "Landfall — Whenever a land you control enters, this creature gets +1/+0 until end of turn.",
+            "Whenever a land you control enters, this creature gets +1/+1 until end of turn.",
+            "Landfall — Whenever a land enters, this creature gets +1/+1 until end of turn.",
+            "Landfall — Whenever a land you control enters, put a +1/+1 counter on this creature.",
+            "Landfall — Whenever a land you control enters, this creature gets +1/+1 until end of turn. Draw a card.",
+        ] {
+            assert!(
+                match_landfall_pump_self_plus_one_plus_one(negative, &context()).is_none(),
+                "landfall pump accepted near-miss {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, false);
+        }
+
+        for negative in [
+            "{U}, {T}: Draw a card, then discard a card.",
+            "{1}{U}, {T}: Draw a card.",
+            "{1}{U}, {T}: Draw two cards, then discard a card.",
+            "{1}{U}, {T}: Draw a card, then discard a card. Activate only as a sorcery.",
+            "{1}{U}: Draw a card, then discard a card.",
+            "{1}{U}, {T}: Discard a card, then draw a card.",
+        ] {
+            assert!(
+                match_tap_loot_draw_discard(negative, &context()).is_none(),
+                "tap-loot accepted near-miss {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_335_recipes_do_not_disturb_shipped_recipes() {
+        for (clause, is_spell, expected) in [
+            (
+                "Whenever another creature you control enters, you gain 1 life.",
+                false,
+                "triggered.other_controlled_creature_etb.gain_life.one",
+            ),
+            ("Exile target creature.", true, "spell.exile.creature"),
+            (
+                "When this land enters, you gain 1 life.",
+                false,
+                "etb.land.gain_life.one",
+            ),
+            (
+                "Whenever this creature attacks, you gain 2 life.",
+                false,
+                "triggered.self_attacks.gain_life.controller.two",
+            ),
+            (
+                "When this creature dies, draw a card.",
+                false,
+                "dies.draw.controller.one",
+            ),
+            (
+                "Other creatures you control have trample.",
+                false,
+                "static.other_creatures_you_control.have_trample",
+            ),
+            (
+                "Creatures you control get +1/+1.",
+                false,
+                "static.anthem_pt.creatures_you_control.plus_one_plus_one",
+            ),
+            (
+                "{T}, Discard a card: Draw a card.",
+                false,
+                "activated.tap_discard.draw_one",
+            ),
+            (
+                "Landfall — Whenever a land you control enters, mill a card.",
+                false,
+                "triggered.landfall.mill.one",
+            ),
+            (
+                "Landfall — Whenever a land you control enters, this creature deals 1 damage to each opponent.",
+                false,
+                "triggered.landfall.damage.each_opponent.one",
+            ),
+        ] {
+            let matched = match_clause(clause, is_spell, &context())
+                .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{clause} should stay consumed by its shipped recipe"));
+            assert_eq!(matched.id.as_str(), expected, "{clause}");
+        }
+
+        // The new templates never claim their shipped siblings' wording.
+        assert!(match_self_or_other_creature_enters_gain_life_one(
+            "Whenever another creature you control enters, you gain 1 life.",
+            &context()
+        )
+        .is_none());
+        assert!(
+            match_spell_exile_creature_or_enchantment("Exile target creature.", &context())
+                .is_none()
+        );
+        assert!(match_land_enters_gain_life_two(
+            "When this land enters, you gain 1 life.",
+            &context()
+        )
+        .is_none());
+        assert!(match_anthem_creatures_with_counter_trample(
+            "Other creatures you control have trample.",
+            &context()
+        )
+        .is_none());
+        assert!(match_landfall_pump_self_plus_one_plus_one(
+            "Landfall — Whenever a land you control enters, mill a card.",
+            &context()
+        )
+        .is_none());
+        assert!(
+            match_tap_loot_draw_discard("{T}: Draw a card, then discard a card.", &context())
+                .is_none()
+        );
+        assert!(match_self_attacks_each_opponent_loses_one(
+            "Whenever this creature attacks, you gain 2 life.",
+            &context()
+        )
+        .is_none());
+        assert!(
+            match_self_dies_gain_life_two("When this creature dies, draw a card.", &context())
+                .is_none()
+        );
     }
 }
