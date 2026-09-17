@@ -3,16 +3,16 @@ use tricerules_cards::primitives::{
     BattlefieldPermanentFilter, CardResultAction, CardResultFilter, CardResultSource,
     CardTypeFilter, CombatRestriction, CombatRestrictionScope, CombatRole, CountExpression,
     CreatureScopeController, CreatureScopeFilter, DiscardQuantity, DrawDiscardOrder, EffectSubject,
-    EntersTappedAffected, EntryCost, GameCondition, GraveyardDestination, GraveyardFilter,
-    GraveyardOwner, HandCardAction, HandCardChooser, HandChoiceVisibility, LibraryPlacement,
-    LifeAmount, ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter,
-    PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient, PowerComparison,
-    PowerToughnessCharacteristic, RelativePlayerSet, ResolutionBranchDef,
-    ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SearchDestination,
-    SearchZoneSelection, SpellCastFilter, SpellCostModifier, SpellManaSpentComparison,
-    StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
-    TargetMatchFilter, TargetObjectExclusion, TargetingDef, TargetingSourceFilter,
-    TypeLineAddition, ZoneCardFilter,
+    EntersTappedAffected, EntersWithCountersAffected, EntryCost, GameCondition,
+    GraveyardDestination, GraveyardFilter, GraveyardOwner, HandCardAction, HandCardChooser,
+    HandChoiceVisibility, LibraryPlacement, LifeAmount, ObjectContributionKind,
+    ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate,
+    PlayerRecipient, PowerComparison, PowerToughnessCharacteristic, RelativePlayerSet,
+    ResolutionBranchDef, ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost,
+    SearchDestination, SearchZoneSelection, SpellCastFilter, SpellCostModifier,
+    SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter,
+    TargetGroupDef, TargetKind, TargetMatchFilter, TargetObjectExclusion, TargetingDef,
+    TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
     external_oracle_lines, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
@@ -8180,6 +8180,243 @@ fn match_landfall_equipped_creature_plus_two_plus_two(
     })
 }
 
+/// Issue #344 exact clause templates. Each template is a reusable typed surface with at least two
+/// real positive calibrations. Every clause is compared by the complete normalized Oracle line, so
+/// an appended, reordered, or additional-clause form remains unsupported, and source-kind gating
+/// stays on the recipes whose printed template requires it (the creature, Equipment, and Aura
+/// forms); the spell and static templates are not source-gated beyond the printed wording.
+const ISSUE_344_SECOND_SPELL_COUNTER_CLAUSE: &str =
+    "Whenever you cast your second spell each turn, put a +1/+1 counter on this creature.";
+const ISSUE_344_LANDFALL_PUMP_PLUS_ONE_ZERO_CLAUSE: &str =
+    "Landfall — Whenever a land you control enters, this creature gets +1/+0 until end of turn.";
+const ISSUE_344_COUNTER_LOOT_CLAUSE: &str =
+    "Counter target spell. Draw a card, then discard a card.";
+const ISSUE_344_DISCARD_THEN_DRAW_TWO_CLAUSE: &str = "Discard a card, then draw two cards.";
+const ISSUE_344_EQUIPMENT_ALLY_ATTACH_CLAUSE: &str =
+    "When this Equipment enters, create a 1/1 white Ally creature token, then attach this Equipment to it.";
+const ISSUE_344_RAID_ENTRY_COUNTER_CLAUSE: &str =
+    "Raid — This creature enters with a +1/+1 counter on it if you attacked this turn.";
+const ISSUE_344_RAID_DAMAGE_TWO_CLAUSE: &str =
+    "Raid — When this creature enters, if you attacked this turn, this creature deals 2 damage to any target.";
+const ISSUE_344_AURA_FIGHT_UP_TO_ONE_CLAUSE: &str =
+    "When this Aura enters, enchanted creature fights up to one target creature an opponent controls.";
+
+/// CR 603.2 / 121: the shared per-turn cast ordinal counts the controller's second committed spell,
+/// then one +1/+1 counter lands on the source. The unfiltered default keeps the ordinal counting
+/// every spell (AllSpells, matching the flurry vocabulary); other ordinals, filtered scopes, other
+/// counter counts, opponent casters, and riders stay unsupported.
+fn match_controller_second_spell_put_counter_self(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_344_SECOND_SPELL_COUNTER_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverPlayerCastsSpell {
+                caster: CastTriggerPlayer::Controller,
+                filter: SpellCastFilter::default(),
+                ordinal: Some(2),
+                ordinal_scope: Default::default(),
+            },
+            vec![SpellEffectKind::PutCounters {
+                counter: CounterKind::PlusOnePlusOne,
+                count: Amount::Fixed(1),
+                subject: EffectSubject::Source,
+            }],
+        )
+    })
+}
+
+/// CR 603.6a / 611.2a: the Landfall ability word plus the controller's land entry event pumps the
+/// source +1/+0 until cleanup, the partial-pump sibling of the shipped +1/+1 landfall recipe (same
+/// event filter, no self-exclusion wording). The ability-word-less line, other sizes, other
+/// pumps/counters, non-creature sources, and riders stay unsupported.
+fn match_landfall_pump_self_plus_one_zero(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_344_LANDFALL_PUMP_PLUS_ONE_ZERO_CLAUSE).then(
+        || {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverPermanentEntersBattlefield {
+                    controller: CastTriggerPlayer::Controller,
+                    filter: PermanentEventFilter {
+                        permanent_type: Some(PermanentTypeFilter::Land),
+                        ..PermanentEventFilter::default()
+                    },
+                    creature_filter: None,
+                },
+                vec![SpellEffectKind::PumpTarget {
+                    power: 1,
+                    toughness: 0,
+                    scale: None,
+                    subject: EffectSubject::Source,
+                }],
+            )
+        },
+    )
+}
+
+/// CR 701.6 / 701.9 / 121: the unrestricted counter instruction consumes the implicit one-spell
+/// target contract, then the controller privately loots in printed order (draw one, then discard
+/// one). The default unrestricted `StackSpellFilter` is the shipped counter shape; a different or
+/// additional counter, restricted spell types, an unless-payment, another loot order/count, and
+/// riders stay unsupported.
+fn match_spell_counter_target_spell_draw_discard(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_344_COUNTER_LOOT_CLAUSE).then(|| {
+        RecipeEmission::SpellEffects(vec![
+            SpellEffectKind::CounterTargetSpell {
+                spell_filter: StackSpellFilter::default(),
+                unless_controller_pays: None,
+                unless_controller_pays_by_cast_cost: None,
+            },
+            SpellEffectKind::DrawDiscard {
+                who: PlayerRecipient::Controller,
+                draw_count: 1,
+                discard_count: 1,
+                order: DrawDiscardOrder::DrawThenDiscard,
+                optional: false,
+            },
+        ])
+    })
+}
+
+/// CR 701.9 / 121: an instant or sorcery's controller privately discards one then draws two in
+/// printed order. Discard-then-draw order, another count on either side, a whole-hand or filtered
+/// discard, the drawn-out loot wording, and riders stay unsupported.
+fn match_spell_discard_then_draw_two(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == ISSUE_344_DISCARD_THEN_DRAW_TWO_CLAUSE).then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::DrawDiscard {
+            who: PlayerRecipient::Controller,
+            draw_count: 2,
+            discard_count: 1,
+            order: DrawDiscardOrder::DiscardThenDraw,
+            optional: false,
+        })
+    })
+}
+
+/// CR 301.5 / 701.3 / 111.10a: an Equipment's own entry trigger creates the registered Ally token,
+/// then attaches the exact source to that just-created token via the shipped `PreviousEffectObject`
+/// reference (no targeting). Another token, a mandatory creature target, a missing attach, and the
+/// "Whenever" wording or non-Equipment/artifact sources stay unsupported.
+fn match_etb_equipment_create_ally_token_attach_self(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_equipment && text == ISSUE_344_EQUIPMENT_ALLY_ATTACH_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WhenSelfEntersBattlefield,
+            vec![
+                SpellEffectKind::CreateTokens {
+                    token: "ally_w_1_1".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                },
+                SpellEffectKind::AttachEquipment {
+                    equipment: EffectSubject::Source,
+                    creature: EffectSubject::PreviousEffectObject,
+                },
+            ],
+        )
+    })
+}
+
+/// CR 614.1c / 122 / 508.1: the Raid ability word gates a creature's own entry replacement so it
+/// enters with one +1/+1 counter only when its controller attacked this turn, reusing the shipped
+/// `EntersWithCounters` replacement over the shared `AttackedThisTurn` condition. Two counters, a
+/// conditionless entry counter, the unprefixed wording, an opponent-attacked condition, a
+/// when-enters trigger, and riders stay unsupported.
+fn match_static_enters_with_counter_raid_attacked_this_turn(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_344_RAID_ENTRY_COUNTER_CLAUSE).then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::EntersWithCounters {
+                affected: EntersWithCountersAffected::Self_,
+                counter: CounterKind::PlusOnePlusOne,
+                amount: Amount::Conditional {
+                    condition: GameCondition::AttackedThisTurn {
+                        players: RelativePlayerSet::Controller,
+                    },
+                    when_true: 1,
+                    otherwise: 0,
+                },
+                cast_cost_condition: None,
+            },
+        })
+    })
+}
+
+/// CR 603.6 / 508.1 / 120: the Raid ETB trigger deals two damage to one mandatory any-target only
+/// when the controller attacked this turn. The shipped `WhenSelfEntersBattlefield` trigger carries
+/// the CR 603.4 intervening condition, and the single damage instruction owns the implicit
+/// one-target contract. No intervening condition, other amounts, creature/player-only targets, an
+/// opponent-attacked condition, and riders stay unsupported.
+fn match_etb_raid_attacked_this_turn_damage_two_any_target(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_344_RAID_DAMAGE_TWO_CLAUSE).then(|| {
+        let RecipeEmission::TriggeredAbility(mut ability) = targeted_trigger(
+            context,
+            vec![SpellEffectKind::DamageTarget {
+                amount: Amount::Fixed(2),
+                target: TargetFilter {
+                    kind: TargetKind::AnyTarget,
+                    ..TargetFilter::default()
+                },
+            }],
+            1,
+            1,
+            "Choose any target",
+        ) else {
+            unreachable!("targeted_trigger always returns a triggered ability")
+        };
+        ability.intervening_if = Some(GameCondition::AttackedThisTurn {
+            players: RelativePlayerSet::Controller,
+        });
+        RecipeEmission::TriggeredAbility(ability)
+    })
+}
+
+/// CR 603.6 / 701.14 / 115.1: an Aura's own entry trigger has the enchanted creature (the
+/// untargeted `AttachedObject` reference) fight up to one `Chosen` creature an opponent controls,
+/// reusing the shipped fight instruction with one optional target group (min 0, max 1). A
+/// mandatory target, an unrestricted or "you control" target, a "target creature" or Equipment
+/// wording, non-Aura sources, and riders stay unsupported.
+fn match_etb_aura_enchanted_creature_fights_up_to_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_aura && text == ISSUE_344_AURA_FIGHT_UP_TO_ONE_CLAUSE).then(|| {
+        targeted_trigger(
+            context,
+            vec![SpellEffectKind::Fight {
+                first: EffectSubject::AttachedObject,
+                second: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::Opponent,
+                    ..TargetFilter::default()
+                })),
+            }],
+            0,
+            1,
+            "Choose up to one target creature an opponent controls",
+        )
+    })
+}
+
 macro_rules! calibrations {
     ($($positive_name:literal => $positive_clause:literal),+; $($negative:literal),+ $(,)?) => {
         RecipeCalibration {
@@ -12612,7 +12849,10 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Scythe Leopard" => "Landfall — Whenever a land you control enters, this creature gets +1/+1 until end of turn.",
             "Snapping Gnarlid" => "Landfall — Whenever a land you control enters, this creature gets +1/+1 until end of turn.";
             "Landfall — Whenever a land you control enters, this creature gets +2/+2 until end of turn.",
-            "Landfall — Whenever a land you control enters, this creature gets +1/+0 until end of turn.",
+            // The +1/+0 wording is now owned by #344's exact
+            // `triggered.landfall.pump_self_plus_one_zero` recipe, so this list keeps a
+            // non-colliding partial-pump near-miss instead and that matcher is asserted directly.
+            "Landfall — Whenever a land you control enters, this creature gets +1/+3 until end of turn.",
             "Whenever a land you control enters, this creature gets +1/+1 until end of turn.",
             "Landfall — Whenever a land enters, this creature gets +1/+1 until end of turn.",
             "Landfall — Whenever a land you control enters, put a +1/+1 counter on this creature.",
@@ -13053,6 +13293,133 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Whenever a land you control enters, equipped creature gets +2/+2 until end of turn.",
             "Landfall — Whenever a land enters, equipped creature gets +2/+2 until end of turn.",
             "Landfall — Whenever a land you control enters, target creature you control gets +2/+2 until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.controller_second_spell.put_counter_self"),
+        label: "second spell each turn puts a +1/+1 counter on this creature",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_controller_second_spell_put_counter_self,
+        calibration: calibrations!(
+            "Illvoi Operative" => "Whenever you cast your second spell each turn, put a +1/+1 counter on this creature.",
+            "Thunder Drake" => "Whenever you cast your second spell each turn, put a +1/+1 counter on this creature.";
+            "Whenever you cast your first spell each turn, put a +1/+1 counter on this creature.",
+            "Whenever you cast your third spell each turn, put a +1/+1 counter on this creature.",
+            "Whenever you cast your second spell each turn, put two +1/+1 counters on this creature.",
+            "Whenever you cast your second spell each turn, draw a card.",
+            "Whenever an opponent casts their second spell each turn, put a +1/+1 counter on this creature.",
+            "Whenever you cast your second spell each turn, put a +1/+1 counter on this creature. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.landfall.pump_self_plus_one_zero"),
+        label: "landfall pumps this creature plus one plus zero until end of turn",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_landfall_pump_self_plus_one_zero,
+        calibration: calibrations!(
+            "Icecave Crasher" => "Landfall — Whenever a land you control enters, this creature gets +1/+0 until end of turn.",
+            "Sunstar Expansionist" => "Landfall — Whenever a land you control enters, this creature gets +1/+0 until end of turn.";
+            "Landfall — Whenever a land you control enters, this creature gets +1/+2 until end of turn.",
+            "Landfall — Whenever a land you control enters, this creature gets +2/+0 until end of turn.",
+            "Whenever a land you control enters, this creature gets +1/+0 until end of turn.",
+            "Landfall — Whenever a land enters, this creature gets +1/+0 until end of turn.",
+            "Landfall — Whenever a land you control enters, this creature gets +1/+0 until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.counter.target_spell.draw_discard"),
+        label: "counter target spell then loot",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_counter_target_spell_draw_discard,
+        calibration: calibrations!(
+            "Refute" => "Counter target spell. Draw a card, then discard a card.",
+            "Failed Inspection" => "Counter target spell. Draw a card, then discard a card.";
+            "Counter target spell. Draw a card.",
+            "Counter target spell. Discard a card, then draw a card.",
+            "Counter target spell. Draw two cards, then discard a card.",
+            "Counter target noncreature spell. Draw a card, then discard a card.",
+            "Counter target spell unless its controller pays {2}. Draw a card, then discard a card.",
+            "Counter target spell. Draw a card, then discard a card. You lose 1 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.discard_then_draw_two"),
+        label: "discard a card then draw two cards",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_discard_then_draw_two,
+        calibration: calibrations!(
+            "Romantic Rendezvous" => "Discard a card, then draw two cards.",
+            "Fast // Furious" => "Discard a card, then draw two cards.";
+            "Discard a card, then draw a card.",
+            "Discard two cards, then draw two cards.",
+            "Discard a card, then draw three cards.",
+            "Draw two cards, then discard a card.",
+            "Discard your hand, then draw two cards.",
+            "Discard a card, then draw two cards. You gain 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.equipment.create_ally_token_attach_self"),
+        label: "Equipment ETB creates an Ally token then attaches itself",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_equipment_create_ally_token_attach_self,
+        calibration: calibrations!(
+            "Kyoshi Battle Fan" => "When this Equipment enters, create a 1/1 white Ally creature token, then attach this Equipment to it.",
+            "Hook Swords" => "When this Equipment enters, create a 1/1 white Ally creature token, then attach this Equipment to it.";
+            "When this Equipment enters, create a 1/1 colorless Thopter artifact creature token with flying.",
+            "When this Equipment enters, create a 1/1 white Ally creature token.",
+            "When this Equipment enters, create a 1/1 white Ally creature token, then attach this Equipment to target creature you control.",
+            "When this artifact enters, create a 1/1 white Ally creature token, then attach this artifact to it.",
+            "Whenever this Equipment enters, create a 1/1 white Ally creature token, then attach this Equipment to it.",
+            "When this Equipment enters, create a 1/1 white Ally creature token, then attach this Equipment to it. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.enters_with_counter.raid_attacked_this_turn"),
+        label: "Raid entry replacement with a conditional +1/+1 counter",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_enters_with_counter_raid_attacked_this_turn,
+        calibration: calibrations!(
+            "Goblin Boarders" => "Raid — This creature enters with a +1/+1 counter on it if you attacked this turn.",
+            "Rigging Runner" => "Raid — This creature enters with a +1/+1 counter on it if you attacked this turn.",
+            "Storm Fleet Aerialist" => "Raid — This creature enters with a +1/+1 counter on it if you attacked this turn.";
+            "Raid — This creature enters with two +1/+1 counters on it if you attacked this turn.",
+            "Raid — This creature enters with a +1/+1 counter on it.",
+            "This creature enters with a +1/+1 counter on it if you attacked this turn.",
+            "Raid — This creature enters with a +1/+1 counter on it if an opponent attacked this turn.",
+            "Raid — When this creature enters, put a +1/+1 counter on it if you attacked this turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.raid_attacked_this_turn.damage_two_any_target"),
+        label: "Raid ETB deals two damage to any target",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_raid_attacked_this_turn_damage_two_any_target,
+        calibration: calibrations!(
+            "Gorehorn Raider" => "Raid — When this creature enters, if you attacked this turn, this creature deals 2 damage to any target.",
+            "Mardu Heart-Piercer" => "Raid — When this creature enters, if you attacked this turn, this creature deals 2 damage to any target.",
+            "Storm Fleet Pyromancer" => "Raid — When this creature enters, if you attacked this turn, this creature deals 2 damage to any target.";
+            "Raid — When this creature enters, it deals 2 damage to any target.",
+            "Raid — When this creature enters, if you attacked this turn, this creature deals 3 damage to any target.",
+            "Raid — When this creature enters, if you attacked this turn, this creature deals 2 damage to target creature.",
+            "When this creature enters, if you attacked this turn, this creature deals 2 damage to any target.",
+            "Raid — When this creature enters, if an opponent attacked this turn, this creature deals 2 damage to any target."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.aura.enchanted_creature_fights_up_to_one"),
+        label: "Aura ETB has the enchanted creature fight up to one opposing creature",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_aura_enchanted_creature_fights_up_to_one,
+        calibration: calibrations!(
+            "Pitiless Fists" => "When this Aura enters, enchanted creature fights up to one target creature an opponent controls.",
+            "Meltstrider's Resolve" => "When this Aura enters, enchanted creature fights up to one target creature an opponent controls.";
+            "When this Aura enters, enchanted creature fights target creature an opponent controls.",
+            "When this Aura enters, enchanted creature fights target creature.",
+            "When this Aura enters, enchanted creature fights up to one target creature.",
+            "When this Aura enters, target creature you control fights up to one target creature an opponent controls.",
+            "When this Equipment enters, attached creature fights up to one target creature an opponent controls.",
+            "When this Aura enters, enchanted creature fights up to one target creature an opponent controls. Draw a card."
         ),
     },
 ];
@@ -24235,5 +24602,575 @@ mod tests {
             &non_equipment
         )
         .is_none());
+    }
+
+    fn issue_344_recipe(id: &str) -> &'static Recipe {
+        CATALOG
+            .iter()
+            .find(|recipe| recipe.id.as_str() == id)
+            .unwrap_or_else(|| panic!("missing recipe {id}"))
+    }
+
+    #[test]
+    fn issue_344_exact_clauses_match_their_recipes() {
+        for (clause, is_spell, expected) in [
+            (
+                "Whenever you cast your second spell each turn, put a +1/+1 counter on this creature.",
+                false,
+                "triggered.controller_second_spell.put_counter_self",
+            ),
+            (
+                "Landfall — Whenever a land you control enters, this creature gets +1/+0 until end of turn.",
+                false,
+                "triggered.landfall.pump_self_plus_one_zero",
+            ),
+            (
+                "Counter target spell. Draw a card, then discard a card.",
+                true,
+                "spell.counter.target_spell.draw_discard",
+            ),
+            (
+                "Discard a card, then draw two cards.",
+                true,
+                "spell.discard_then_draw_two",
+            ),
+            (
+                "When this Equipment enters, create a 1/1 white Ally creature token, then attach this Equipment to it.",
+                false,
+                "triggered.etb.equipment.create_ally_token_attach_self",
+            ),
+            (
+                "Raid — This creature enters with a +1/+1 counter on it if you attacked this turn.",
+                false,
+                "static.enters_with_counter.raid_attacked_this_turn",
+            ),
+            (
+                "Raid — When this creature enters, if you attacked this turn, this creature deals 2 damage to any target.",
+                false,
+                "triggered.etb.raid_attacked_this_turn.damage_two_any_target",
+            ),
+            (
+                "When this Aura enters, enchanted creature fights up to one target creature an opponent controls.",
+                false,
+                "triggered.etb.aura.enchanted_creature_fights_up_to_one",
+            ),
+        ] {
+            let matched = match_clause(clause, is_spell, &context())
+                .expect("clause should not be ambiguous")
+                .unwrap_or_else(|| panic!("clause should match a recipe: {clause}"));
+            assert_eq!(matched.id.as_str(), expected, "{clause}");
+        }
+    }
+
+    #[test]
+    fn issue_344_recipes_have_stable_ids_and_surfaces() {
+        for (id, surface) in [
+            (
+                "triggered.controller_second_spell.put_counter_self",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "triggered.landfall.pump_self_plus_one_zero",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "spell.counter.target_spell.draw_discard",
+                RecipeSurface::SpellClause,
+            ),
+            ("spell.discard_then_draw_two", RecipeSurface::SpellClause),
+            (
+                "triggered.etb.equipment.create_ally_token_attach_self",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "static.enters_with_counter.raid_attacked_this_turn",
+                RecipeSurface::StaticAbility,
+            ),
+            (
+                "triggered.etb.raid_attacked_this_turn.damage_two_any_target",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "triggered.etb.aura.enchanted_creature_fights_up_to_one",
+                RecipeSurface::EtbAbility,
+            ),
+        ] {
+            assert_eq!(
+                issue_344_recipe(id).surface,
+                surface,
+                "{id} surface drifted"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_344_second_spell_counter_counts_the_unfiltered_second_cast() {
+        let RecipeEmission::TriggeredAbility(ability) =
+            match_controller_second_spell_put_counter_self(
+                ISSUE_344_SECOND_SPELL_COUNTER_CLAUSE,
+                &context(),
+            )
+            .expect("the second-spell clause should match")
+        else {
+            panic!("the second-spell trigger must emit a triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverPlayerCastsSpell {
+                caster: CastTriggerPlayer::Controller,
+                filter: SpellCastFilter::default(),
+                ordinal: Some(2),
+                ordinal_scope: Default::default(),
+            }
+        );
+        assert!(!ability.may);
+        assert!(ability.targeting.is_none());
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::PutCounters {
+                counter: CounterKind::PlusOnePlusOne,
+                count: Amount::Fixed(1),
+                subject: EffectSubject::Source,
+            }]
+        );
+        for negative in [
+            "Whenever you cast your first spell each turn, put a +1/+1 counter on this creature.",
+            "Whenever you cast your third spell each turn, put a +1/+1 counter on this creature.",
+            "Whenever you cast your second spell each turn, put two +1/+1 counters on this creature.",
+            "Whenever you cast your second spell each turn, draw a card.",
+            "Whenever an opponent casts their second spell each turn, put a +1/+1 counter on this creature.",
+            "Whenever you cast your second spell each turn, put a +1/+1 counter on this creature. Draw a card.",
+        ] {
+            assert!(
+                match_controller_second_spell_put_counter_self(negative, &context()).is_none(),
+                "the second-spell counter accepted {negative}"
+            );
+        }
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(match_controller_second_spell_put_counter_self(
+            ISSUE_344_SECOND_SPELL_COUNTER_CLAUSE,
+            &noncreature
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn issue_344_landfall_plus_one_zero_is_exact() {
+        let RecipeEmission::TriggeredAbility(ability) = match_landfall_pump_self_plus_one_zero(
+            ISSUE_344_LANDFALL_PUMP_PLUS_ONE_ZERO_CLAUSE,
+            &context(),
+        )
+        .expect("the landfall +1/+0 clause should match") else {
+            panic!("the landfall +1/+0 trigger must emit a triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverPermanentEntersBattlefield {
+                controller: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    permanent_type: Some(PermanentTypeFilter::Land),
+                    ..PermanentEventFilter::default()
+                },
+                creature_filter: None,
+            }
+        );
+        assert!(!ability.may);
+        assert!(ability.targeting.is_none());
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::PumpTarget {
+                power: 1,
+                toughness: 0,
+                scale: None,
+                subject: EffectSubject::Source,
+            }]
+        );
+        for negative in [
+            "Landfall — Whenever a land you control enters, this creature gets +1/+2 until end of turn.",
+            "Landfall — Whenever a land you control enters, this creature gets +2/+0 until end of turn.",
+            "Whenever a land you control enters, this creature gets +1/+0 until end of turn.",
+            "Landfall — Whenever a land enters, this creature gets +1/+0 until end of turn.",
+            "Landfall — Whenever a land you control enters, this creature gets +1/+0 until end of turn. Draw a card.",
+        ] {
+            assert!(
+                match_landfall_pump_self_plus_one_zero(negative, &context()).is_none(),
+                "the landfall +1/+0 pump accepted {negative}"
+            );
+        }
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(match_landfall_pump_self_plus_one_zero(
+            ISSUE_344_LANDFALL_PUMP_PLUS_ONE_ZERO_CLAUSE,
+            &noncreature
+        )
+        .is_none());
+        // The shipped +1/+1 wording must keep its own recipe.
+        assert!(match_landfall_pump_self_plus_one_zero(
+            "Landfall — Whenever a land you control enters, this creature gets +1/+1 until end of turn.",
+            &context()
+        )
+        .is_none());
+        assert_eq!(
+            match_clause(
+                "Landfall — Whenever a land you control enters, this creature gets +1/+1 until end of turn.",
+                false,
+                &context()
+            )
+            .expect("the shipped +1/+1 wording must stay unambiguous")
+            .expect("the shipped +1/+1 wording must stay supported")
+            .id
+            .as_str(),
+            "triggered.landfall.pump_self_plus_one_plus_one"
+        );
+    }
+
+    #[test]
+    fn issue_344_counter_loot_orders_draw_then_private_discard() {
+        let RecipeEmission::SpellEffects(effects) = match_spell_counter_target_spell_draw_discard(
+            ISSUE_344_COUNTER_LOOT_CLAUSE,
+            &context(),
+        )
+        .expect("the counter-loot clause should match") else {
+            panic!("the counter loot must emit ordered spell effects");
+        };
+        assert_eq!(
+            effects,
+            [
+                SpellEffectKind::CounterTargetSpell {
+                    spell_filter: StackSpellFilter::default(),
+                    unless_controller_pays: None,
+                    unless_controller_pays_by_cast_cost: None,
+                },
+                SpellEffectKind::DrawDiscard {
+                    who: PlayerRecipient::Controller,
+                    draw_count: 1,
+                    discard_count: 1,
+                    order: DrawDiscardOrder::DrawThenDiscard,
+                    optional: false,
+                },
+            ]
+        );
+        for negative in [
+            "Counter target spell. Draw a card.",
+            "Counter target spell. Discard a card, then draw a card.",
+            "Counter target spell. Draw two cards, then discard a card.",
+            "Counter target noncreature spell. Draw a card, then discard a card.",
+            "Counter target spell unless its controller pays {2}. Draw a card, then discard a card.",
+            "Counter target spell. Draw a card, then discard a card. You lose 1 life.",
+        ] {
+            assert!(
+                match_spell_counter_target_spell_draw_discard(negative, &context()).is_none(),
+                "the counter loot accepted {negative}"
+            );
+        }
+        // The unrestricted counter stays with its shipped recipe.
+        assert!(
+            match_spell_counter_target_spell_draw_discard("Counter target spell.", &context())
+                .is_none()
+        );
+        assert_eq!(
+            match_clause("Counter target spell.", true, &context())
+                .expect("the plain counter must stay unambiguous")
+                .expect("the plain counter must stay supported")
+                .id
+                .as_str(),
+            "spell.counter.unrestricted"
+        );
+    }
+
+    #[test]
+    fn issue_344_discard_then_draw_two_orders_private_discard_first() {
+        let RecipeEmission::SpellEffect(effect) =
+            match_spell_discard_then_draw_two(ISSUE_344_DISCARD_THEN_DRAW_TWO_CLAUSE, &context())
+                .expect("the discard-then-draw-two clause should match")
+        else {
+            panic!("the discard-then-draw-two must emit one spell effect");
+        };
+        assert_eq!(
+            effect,
+            SpellEffectKind::DrawDiscard {
+                who: PlayerRecipient::Controller,
+                draw_count: 2,
+                discard_count: 1,
+                order: DrawDiscardOrder::DiscardThenDraw,
+                optional: false,
+            }
+        );
+        for negative in [
+            "Discard a card, then draw a card.",
+            "Discard two cards, then draw two cards.",
+            "Discard a card, then draw three cards.",
+            "Draw two cards, then discard a card.",
+            "Discard your hand, then draw two cards.",
+            "Discard a card, then draw two cards. You gain 2 life.",
+        ] {
+            assert!(
+                match_spell_discard_then_draw_two(negative, &context()).is_none(),
+                "the discard-then-draw-two accepted {negative}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_344_equipment_ally_attach_is_equipment_gated() {
+        let RecipeEmission::TriggeredAbility(ability) =
+            match_etb_equipment_create_ally_token_attach_self(
+                ISSUE_344_EQUIPMENT_ALLY_ATTACH_CLAUSE,
+                &context(),
+            )
+            .expect("the Equipment Ally attach clause should match")
+        else {
+            panic!("the Equipment Ally attach must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(!ability.may);
+        assert!(ability.targeting.is_none());
+        assert_eq!(
+            ability.effect,
+            [
+                SpellEffectKind::CreateTokens {
+                    token: "ally_w_1_1".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                },
+                SpellEffectKind::AttachEquipment {
+                    equipment: EffectSubject::Source,
+                    creature: EffectSubject::PreviousEffectObject,
+                },
+            ]
+        );
+        for negative in [
+            "When this Equipment enters, create a 1/1 colorless Thopter artifact creature token with flying.",
+            "When this Equipment enters, create a 1/1 white Ally creature token.",
+            "When this Equipment enters, create a 1/1 white Ally creature token, then attach this Equipment to target creature you control.",
+            "When this artifact enters, create a 1/1 white Ally creature token, then attach this artifact to it.",
+            "Whenever this Equipment enters, create a 1/1 white Ally creature token, then attach this Equipment to it.",
+            "When this Equipment enters, create a 1/1 white Ally creature token, then attach this Equipment to it. Draw a card.",
+        ] {
+            assert!(
+                match_etb_equipment_create_ally_token_attach_self(negative, &context()).is_none(),
+                "the Equipment Ally attach accepted {negative}"
+            );
+        }
+        let mut non_equipment = context();
+        non_equipment.source_is_equipment = false;
+        assert!(match_etb_equipment_create_ally_token_attach_self(
+            ISSUE_344_EQUIPMENT_ALLY_ATTACH_CLAUSE,
+            &non_equipment
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn issue_344_raid_entry_counter_is_conditional() {
+        let RecipeEmission::StaticAbility(ability) =
+            match_static_enters_with_counter_raid_attacked_this_turn(
+                ISSUE_344_RAID_ENTRY_COUNTER_CLAUSE,
+                &context(),
+            )
+            .expect("the Raid entry counter clause should match")
+        else {
+            panic!("the Raid entry counter must emit a static ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "static_01");
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(
+            ability.definition,
+            StaticAbilityDef::EntersWithCounters {
+                affected: EntersWithCountersAffected::Self_,
+                counter: CounterKind::PlusOnePlusOne,
+                amount: Amount::Conditional {
+                    condition: GameCondition::AttackedThisTurn {
+                        players: RelativePlayerSet::Controller,
+                    },
+                    when_true: 1,
+                    otherwise: 0,
+                },
+                cast_cost_condition: None,
+            }
+        );
+        for negative in [
+            "Raid — This creature enters with two +1/+1 counters on it if you attacked this turn.",
+            "Raid — This creature enters with a +1/+1 counter on it.",
+            "This creature enters with a +1/+1 counter on it if you attacked this turn.",
+            "Raid — This creature enters with a +1/+1 counter on it if an opponent attacked this turn.",
+            "Raid — When this creature enters, put a +1/+1 counter on it if you attacked this turn.",
+            "Raid — This creature enters with a +1/+1 counter on it if you attacked this turn. Draw a card.",
+        ] {
+            assert!(
+                match_static_enters_with_counter_raid_attacked_this_turn(negative, &context())
+                    .is_none(),
+                "the Raid entry counter accepted {negative}"
+            );
+        }
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(match_static_enters_with_counter_raid_attacked_this_turn(
+            ISSUE_344_RAID_ENTRY_COUNTER_CLAUSE,
+            &noncreature
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn issue_344_raid_damage_is_intervening_and_targeted() {
+        let RecipeEmission::TriggeredAbility(ability) =
+            match_etb_raid_attacked_this_turn_damage_two_any_target(
+                ISSUE_344_RAID_DAMAGE_TWO_CLAUSE,
+                &context(),
+            )
+            .expect("the Raid damage clause should match")
+        else {
+            panic!("the Raid damage must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.intervening_if,
+            Some(GameCondition::AttackedThisTurn {
+                players: RelativePlayerSet::Controller,
+            })
+        );
+        assert!(!ability.may);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::DamageTarget {
+                amount: Amount::Fixed(2),
+                target: TargetFilter {
+                    kind: TargetKind::AnyTarget,
+                    ..TargetFilter::default()
+                },
+            }]
+        );
+        let targeting = ability.targeting.as_ref().expect("damage target group");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("the Raid damage must own exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.effect_indices, [0]);
+        assert_eq!(group.prompt, "Choose any target");
+        for negative in [
+            "Raid — When this creature enters, it deals 2 damage to any target.",
+            "Raid — When this creature enters, if you attacked this turn, this creature deals 3 damage to any target.",
+            "Raid — When this creature enters, if you attacked this turn, this creature deals 2 damage to target creature.",
+            "When this creature enters, if you attacked this turn, this creature deals 2 damage to any target.",
+            "Raid — When this creature enters, if an opponent attacked this turn, this creature deals 2 damage to any target.",
+            "Raid — When this creature enters, if you attacked this turn, this creature deals 2 damage to any target. Draw a card.",
+        ] {
+            assert!(
+                match_etb_raid_attacked_this_turn_damage_two_any_target(negative, &context())
+                    .is_none(),
+                "the Raid damage accepted {negative}"
+            );
+        }
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(match_etb_raid_attacked_this_turn_damage_two_any_target(
+            ISSUE_344_RAID_DAMAGE_TWO_CLAUSE,
+            &noncreature
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn issue_344_aura_fight_uses_the_attached_object_subject() {
+        let RecipeEmission::TriggeredAbility(ability) =
+            match_etb_aura_enchanted_creature_fights_up_to_one(
+                ISSUE_344_AURA_FIGHT_UP_TO_ONE_CLAUSE,
+                &context(),
+            )
+            .expect("the Aura fight clause should match")
+        else {
+            panic!("the Aura fight must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(!ability.may);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Fight {
+                first: EffectSubject::AttachedObject,
+                second: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::Opponent,
+                    ..TargetFilter::default()
+                })),
+            }]
+        );
+        let targeting = ability.targeting.as_ref().expect("fight target group");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("the Aura fight must own exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (0, 1));
+        assert_eq!(group.effect_indices, [0]);
+        assert_eq!(
+            group.prompt,
+            "Choose up to one target creature an opponent controls"
+        );
+        for negative in [
+            "When this Aura enters, enchanted creature fights target creature an opponent controls.",
+            "When this Aura enters, enchanted creature fights target creature.",
+            "When this Aura enters, enchanted creature fights up to one target creature.",
+            "When this Aura enters, target creature you control fights up to one target creature an opponent controls.",
+            "When this Equipment enters, attached creature fights up to one target creature an opponent controls.",
+            "When this Aura enters, enchanted creature fights up to one target creature an opponent controls. Draw a card.",
+        ] {
+            assert!(
+                match_etb_aura_enchanted_creature_fights_up_to_one(negative, &context()).is_none(),
+                "the Aura fight accepted {negative}"
+            );
+        }
+        let mut non_aura = context();
+        non_aura.source_is_aura = false;
+        assert!(match_etb_aura_enchanted_creature_fights_up_to_one(
+            ISSUE_344_AURA_FIGHT_UP_TO_ONE_CLAUSE,
+            &non_aura
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn issue_344_new_recipes_do_not_disturb_shipped_clauses() {
+        for (clause, is_spell, expected) in [
+            (
+                "Landfall — Whenever a land you control enters, this creature gets +1/+1 until end of turn.",
+                false,
+                "triggered.landfall.pump_self_plus_one_plus_one",
+            ),
+            (
+                "Counter target spell.",
+                true,
+                "spell.counter.unrestricted",
+            ),
+            (
+                "Raid — When this creature enters, if you attacked this turn, draw a card.",
+                false,
+                "triggered.etb.raid.draw.one",
+            ),
+            (
+                "When this creature enters, create a 1/1 white Ally creature token.",
+                false,
+                "etb.create_token.ally_w_1_1.one",
+            ),
+            (
+                "When this Equipment enters, attach it to target creature you control.",
+                false,
+                "etb.equipment.attach_target_controlled_creature",
+            ),
+            (
+                "When this creature enters, it deals 1 damage to any target.",
+                false,
+                "etb.damage.any_target.one.source",
+            ),
+        ] {
+            let matched = match_clause(clause, is_spell, &context())
+                .expect("shipped clause should not be ambiguous")
+                .unwrap_or_else(|| panic!("shipped clause should stay supported: {clause}"));
+            assert_eq!(matched.id.as_str(), expected, "{clause}");
+        }
     }
 }

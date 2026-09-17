@@ -2308,18 +2308,26 @@ impl GameEngine {
     /// triggers (CR 603.6) through the same hook as a resolved creature spell, so Soul Warden et al.
     /// see them. A [`TokenCreated`](rv1::TokenCreated) event carries the self-describing identity
     /// the relay needs (tokens have no deck card / Oracle entry).
+    /// Returns `None` when a CR 616 entry replacement parked the batch for a player choice, or the
+    /// committed token references when the tokens entered. Publishing those refs lets a later
+    /// instruction in the same resolution name "the token it created" without targeting (CR 608.2),
+    /// exactly as `ManifestDread` already publishes its manifested permanent.
     fn create_tokens(
         &mut self,
         request: TokenCreationRequest<'_>,
         enters_tapped: bool,
         delayed_sacrifice: Option<DelayedTokenSacrificeTiming>,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<bool, EngineError> {
+    ) -> Result<Option<Vec<TriggerObjectRef>>, EngineError> {
         let item = request.item.clone();
         let (entries, logs) = self.prepare_token_entries(request, enters_tapped)?;
+        let created_ids = entries
+            .iter()
+            .map(|entry| entry.event.object_id)
+            .collect::<Vec<_>>();
         // CR 603.6: one token-making instruction puts all of its tokens onto the battlefield
         // simultaneously, so every entrant exists before their ETB triggers are collected.
-        self.begin_token_entry_batch(
+        if self.begin_token_entry_batch(
             item,
             entries,
             logs,
@@ -2328,7 +2336,31 @@ impl GameEngine {
                 ..Default::default()
             },
             events,
-        )
+        )? {
+            return Ok(None);
+        }
+        Ok(Some(self.token_entry_object_refs(&created_ids)))
+    }
+
+    /// The committed public references for a token batch, in mint order.
+    pub(super) fn token_entry_object_refs(&self, ids: &[ObjectId]) -> Vec<TriggerObjectRef> {
+        ids.iter()
+            .filter_map(|&object_id| {
+                self.state
+                    .objects
+                    .get(&object_id)
+                    .map(|object| TriggerObjectRef {
+                        object_id,
+                        zone_change_generation: self
+                            .state
+                            .zone_change_generation
+                            .get(&object_id)
+                            .copied()
+                            .unwrap_or(0),
+                        controller_at_event: object.controller,
+                    })
+            })
+            .collect()
     }
 
     pub(super) fn prepare_token_entries(

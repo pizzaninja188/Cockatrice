@@ -1989,6 +1989,16 @@ impl GameEngine {
             }
             BattlefieldEntryCompletion::TokenBatch(batch) => {
                 let amass = batch.options.amass;
+                // CR 608.2: once a parked token batch commits, publish every created object so the
+                // resumed effect list can name "the token it created" via `PreviousEffectObject`.
+                let current_id = event.object_id;
+                let created_ids = batch
+                    .ready
+                    .iter()
+                    .map(|entry| entry.event.object_id)
+                    .chain(std::iter::once(current_id))
+                    .chain(batch.remaining.iter().map(|entry| entry.event.object_id))
+                    .collect::<Vec<_>>();
                 let current = TokenBattlefieldEntry {
                     event,
                     created: batch.current_created.clone(),
@@ -2004,7 +2014,16 @@ impl GameEngine {
                 if let Some(amass) = amass {
                     return self.finish_amass_after_token_entry(stack, amass, events);
                 }
-                self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+                let previous_result = EffectResult {
+                    produced_objects: self.token_entry_object_refs(&created_ids),
+                    ..EffectResult::default()
+                };
+                self.complete_parked_resolution_with_previous(
+                    stack.item,
+                    stack.resume_effect_index,
+                    previous_result,
+                    events,
+                )
             }
             BattlefieldEntryCompletion::ZoneEntryBatch(mut batch) => {
                 batch.ready.push(event);

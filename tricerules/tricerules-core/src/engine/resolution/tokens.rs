@@ -157,19 +157,21 @@ impl GameEngine {
         label: &str,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
-        self.create_tokens(
-            TokenCreationRequest {
-                token_id: &snapshot.token_id,
-                copy: Some(snapshot),
-                count,
-                recipients: vec![item.controller],
-                spell_label: label,
-                item,
-            },
-            false,
-            None,
-            events,
-        )
+        Ok(self
+            .create_tokens(
+                TokenCreationRequest {
+                    token_id: &snapshot.token_id,
+                    copy: Some(snapshot),
+                    count,
+                    recipients: vec![item.controller],
+                    spell_label: label,
+                    item,
+                },
+                false,
+                None,
+                events,
+            )?
+            .is_none())
     }
 
     pub(in crate::engine) fn finish_populate_choice(
@@ -241,7 +243,7 @@ pub(super) fn create_tokens(
         AmountContext::for_stack_item(&item, controller)
             .with_previous_effect_result(cx.previous_effect_result),
     );
-    if engine.create_tokens(
+    let Some(created) = engine.create_tokens(
         TokenCreationRequest {
             token_id: &token,
             copy: None,
@@ -253,9 +255,13 @@ pub(super) fn create_tokens(
         tapped,
         sacrifice_timing,
         events,
-    )? {
+    )?
+    else {
         return Ok(EffectOutcome::Suspended);
-    }
+    };
+    // CR 608.2: publish the created token(s) so a later instruction in this resolution can name
+    // "the token it created" through the shipped `PreviousEffectObject` reference.
+    cx.effect_result.produced_objects = created;
 
     Ok(EffectOutcome::Continue)
 }

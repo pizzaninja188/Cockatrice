@@ -944,6 +944,7 @@ goblin_assailant	0	cast	exercised
 goblin_berserker	0	cast	exercised
 goblin_bird-grabber	0	ability:0	unsupported: nonmana costs need additional fixture resources
 goblin_bird-grabber	0	cast	exercised
+goblin_boarders	0	cast	exercised
 goblin_brigand	0	cast	exercised
 goblin_chariot	0	cast	exercised
 goblin_chieftain	0	cast	exercised
@@ -988,6 +989,7 @@ gongaga,_reactor_town	0	land	exercised
 goobbue_gardener	0	ability:0	exercised
 goobbue_gardener	0	cast	exercised
 gore_swine	0	cast	exercised
+gorehorn_raider	0	cast	exercised
 gorging_vulture	0	cast	exercised
 gorilla_warrior	0	cast	exercised
 grab_the_prize	0	cast	exercised
@@ -1146,6 +1148,7 @@ hydraulic_helper	0	cast	exercised
 hydro-man,_fluid_felon	0	cast	exercised
 hyena_pack	0	cast	exercised
 hymn_to_tourach	0	cast	exercised
+icecave_crasher	0	cast	exercised
 iceridge_serpent	0	cast	exercised
 icetill_explorer	0	cast	exercised
 icewind_elemental	0	cast	exercised
@@ -1160,6 +1163,7 @@ illvoi_galeblade	0	ability:0	exercised
 illvoi_galeblade	0	cast	exercised
 illvoi_light_jammer	0	ability:0	exercised
 illvoi_light_jammer	0	cast	exercised
+illvoi_operative	0	cast	exercised
 impale	0	cast	exercised
 imperial_outrider	0	cast	exercised
 imperious_inkmage	0	cast	exercised
@@ -1297,6 +1301,8 @@ krenkos_enforcer	0	cast	exercised
 krovikan_scoundrel	0	cast	exercised
 kulrath_zealot	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 kulrath_zealot	0	cast	exercised
+kyoshi_battle_fan	0	ability:0	exercised
+kyoshi_battle_fan	0	cast	exercised
 kyoshi_village	0	ability:0	exercised
 kyoshi_village	0	ability:1	exercised
 kyoshi_village	0	land	exercised
@@ -1664,6 +1670,7 @@ pinnacle_kill-ship	0	cast	exercised
 piranha_fly	0	cast	exercised
 pirate_peddlers	0	cast	exercised
 pitchburn_devils	0	cast	exercised
+pitiless_fists	0	cast	exercised
 pitiless_gorgon	0	cast	exercised
 plains	0	ability:0	exercised
 plains	0	land	exercised
@@ -1794,6 +1801,7 @@ reclamation_sage	0	cast	exercised
 red_tiger_mechan	0	cast	exercised
 redcap_thief	0	cast	exercised
 redwood_treefolk	0	cast	exercised
+refute	0	cast	unsupported: target group 0 needs a richer fixture
 regal_unicorn	0	cast	exercised
 regathan_firecat	0	cast	exercised
 reigning_victor	0	cast	exercised
@@ -1844,6 +1852,7 @@ riverpyre_verge	0	land	exercised
 riverwalk_technique	0	cast	exercised
 roc_hunter	0	cast	exercised
 rocky_rebuke	0	cast	exercised
+romantic_rendezvous	0	cast	exercised
 rooftop_assassin	0	cast	exercised
 rooftop_percher	0	cast	exercised
 rootrider_faun	0	ability:0	exercised
