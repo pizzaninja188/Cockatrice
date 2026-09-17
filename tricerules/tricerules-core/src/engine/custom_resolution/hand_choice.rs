@@ -3,7 +3,7 @@ use super::*;
 impl GameEngine {
     /// Resolve a chosen hand-card action after revalidating the complete cohort. Discard and
     /// direct exile deliberately share only this selection boundary; their semantic mutation
-    /// paths stay distinct for future discard triggers and replacement effects.
+    /// paths stay distinct so discard triggers and replacement effects observe only true discards.
     pub(super) fn finish_hand_choice(
         &mut self,
         pending: PendingResolution,
@@ -81,17 +81,21 @@ impl GameEngine {
             .unwrap_or_else(|| stack.item.card_id.clone());
         let mut events = vec![];
         let mut result = CardResultCohort::default();
+        let mut discard_receipts = Vec::new();
         for &object_id in chosen {
-            result
-                .cards
-                .push(resolution::zones::perform_hand_card_action(
-                    self,
-                    &mut events,
-                    hand_choice.affected_player,
-                    object_id,
-                    hand_choice.action,
-                    &card_name,
-                )?);
+            let (entry, discard_receipt) = resolution::zones::perform_hand_card_action(
+                self,
+                &mut events,
+                hand_choice.affected_player,
+                object_id,
+                hand_choice.action,
+                &card_name,
+            )?;
+            result.cards.push(entry);
+            discard_receipts.extend(discard_receipt);
+        }
+        if !discard_receipts.is_empty() {
+            self.fire_discard_batches(vec![(hand_choice.affected_player, discard_receipts)]);
         }
         if hand_choice.draw_after > 0 && (!hand_choice.draw_only_if_discarded || !chosen.is_empty())
         {
@@ -296,9 +300,10 @@ impl GameEngine {
             .map(|face| face.name.to_string())
             .unwrap_or_else(|| stack.item.card_id.clone());
         let mut result = CardResultCohort::default();
+        let mut discard_receipts: Vec<(PlayerId, Vec<crate::state::DiscardReceipt>)> = Vec::new();
         for (choice, selection) in discard.choices.iter().zip(&discard.selections) {
             for object_id in selection {
-                result.cards.push(resolution::zones::perform_discard_action(
+                let (entry, discard_receipt) = resolution::zones::perform_discard_action(
                     self,
                     events,
                     choice.player,
@@ -307,9 +312,18 @@ impl GameEngine {
                     choice
                         .selection_cause(selection)
                         .expect("validated discard selection"),
-                )?);
+                )?;
+                result.cards.push(entry);
+                match discard_receipts
+                    .iter_mut()
+                    .find(|(player, _)| *player == choice.player)
+                {
+                    Some((_, receipts)) => receipts.push(discard_receipt),
+                    None => discard_receipts.push((choice.player, vec![discard_receipt])),
+                }
             }
         }
+        self.fire_discard_batches(discard_receipts);
         Ok(Some(result))
     }
 }

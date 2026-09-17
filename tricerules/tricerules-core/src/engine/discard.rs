@@ -2,9 +2,12 @@
 use super::events::object_display_name;
 use super::triggers::CollectedTrigger;
 use super::*;
-use crate::state::{DiscardCause, DiscardReceipt};
+use crate::state::{DiscardBatch, DiscardCause, DiscardReceipt};
 
 impl GameEngine {
+    /// Commit one card of a semantic discard action without publishing trigger events. Callers
+    /// performing a multi-card action collect receipts and publish one batch per player through
+    /// [`Self::fire_discard_batches`], so a single instruction triggers "one or more cards" once.
     pub(super) fn commit_discard_to(
         &mut self,
         player: PlayerId,
@@ -12,7 +15,7 @@ impl GameEngine {
         cause: DiscardCause,
         destination: Zone,
         revealed: bool,
-    ) -> Result<(String, rv1::RuledEvent), EngineError> {
+    ) -> Result<(String, rv1::RuledEvent, DiscardReceipt), EngineError> {
         let object = self
             .state
             .objects
@@ -54,7 +57,6 @@ impl GameEngine {
             known_card_id: (revealed || matches!(destination, Zone::Graveyard | Zone::Exile))
                 .then_some(card_id),
         };
-        self.fire_triggers(&[GameEvent::Discarded(receipt)]);
         if destination == Zone::Exile {
             if let Some(cost) = madness {
                 self.stage_madness_trigger(player, object_id, before_generation, cost);
@@ -69,7 +71,42 @@ impl GameEngine {
         Ok((
             name,
             resolution::permanent_moved_event(&self.state, object_id, player, destination),
+            receipt,
         ))
+    }
+
+    /// Commit one card of a semantic discard action, choosing the madness-aware destination
+    /// without publishing trigger events. `revealed` marks an already-public selection.
+    pub(super) fn commit_discard(
+        &mut self,
+        affected_player: PlayerId,
+        object_id: ObjectId,
+        cause: DiscardCause,
+        revealed: bool,
+    ) -> Result<(String, rv1::RuledEvent, DiscardReceipt), EngineError> {
+        let destination = if self.madness_ability(object_id).is_some() {
+            Zone::Exile
+        } else {
+            Zone::Graveyard
+        };
+        self.commit_discard_to(affected_player, object_id, cause, destination, revealed)
+    }
+
+    /// Publish the completed semantic discard actions of one instruction or turn-based action.
+    /// Receipts are grouped per discarding player, in commit order, so each player's batch
+    /// triggers "one or more cards" exactly once (CR 603.2c) while per-card observers see every
+    /// card. Cards replaced to a hidden zone still count; the count is never re-derived from a
+    /// destination zone's contents.
+    pub(super) fn fire_discard_batches(&mut self, receipts: Vec<(PlayerId, Vec<DiscardReceipt>)>) {
+        let events = receipts
+            .into_iter()
+            .filter_map(|(player, cards)| {
+                (!cards.is_empty()).then_some(GameEvent::Discarded(DiscardBatch { player, cards }))
+            })
+            .collect::<Vec<_>>();
+        if !events.is_empty() {
+            self.fire_triggers(&events);
+        }
     }
 }
 
@@ -290,9 +327,10 @@ impl GameEngine {
         }
         let mut events = Vec::new();
         let mut result = CardResultCohort::default();
+        let mut discard_receipts: Vec<(PlayerId, Vec<DiscardReceipt>)> = Vec::new();
         for card in &batch.cards {
             let destination = card.destination.expect("all discard destinations chosen");
-            let (name, moved) = self.commit_discard_to(
+            let (name, moved, discard_receipt) = self.commit_discard_to(
                 card.player,
                 card.object.object_id,
                 card.cause,
@@ -300,6 +338,13 @@ impl GameEngine {
                 batch.revealed,
             )?;
             events.push(moved);
+            match discard_receipts
+                .iter_mut()
+                .find(|(player, _)| *player == card.player)
+            {
+                Some((_, receipts)) => receipts.push(discard_receipt),
+                None => discard_receipts.push((card.player, vec![discard_receipt])),
+            }
             let mut receipt = super::payment::card_result_entry(
                 &self.state,
                 self.registry,
@@ -320,6 +365,7 @@ impl GameEngine {
                 format!("P{} discards {name}.", card.player)
             }));
         }
+        self.fire_discard_batches(discard_receipts);
         // Moves use the normal zone funnel, then apply the owner's explicit top-first order.
         for card in &batch.cards {
             if card.destination == Some(Zone::Library) {

@@ -3119,6 +3119,9 @@ impl SpellEffectKind {
         if context == EffectContext::Spell && self.requires_triggering_spell_context() {
             return Err("spells cannot reference triggering-spell mana spending".into());
         }
+        if context == EffectContext::Spell && self.uses_trigger_event_count() {
+            return Err("spells cannot reference a trigger event's count".into());
+        }
         if context == EffectContext::Ability {
             self.validate_cast_snapshot_references(0)?;
         }
@@ -4802,6 +4805,53 @@ impl SpellEffectKind {
                 conditional: Some(conditional),
                 ..
             } => conditional.condition.requires_triggering_spell_context(),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn uses_trigger_event_count(&self) -> bool {
+        match self {
+            Self::DamageTarget { amount, .. }
+            | Self::DamageAll { amount, .. }
+            | Self::Scry { count: amount }
+            | Self::Earthbend { count: amount }
+            | Self::CounterTargetSpell {
+                unless_controller_pays: Some(amount),
+                ..
+            }
+            | Self::DamageTargets { amount, .. }
+            | Self::DamagePlayer { amount, .. }
+            | Self::DamageAttackedPlayerOrPlaneswalker { amount }
+            | Self::Draw { count: amount, .. }
+            | Self::GainLife { amount }
+            | Self::TargetPlayerGainsLife { amount, .. }
+            | Self::Mill { count: amount, .. }
+            | Self::PutCounters { count: amount, .. }
+            | Self::Amass { count: amount, .. }
+            | Self::CreateTokens { count: amount, .. }
+            | Self::CreateTokenCopies { count: amount, .. }
+            | Self::CreateAttackingTokens { count: amount, .. } => {
+                amount.uses_trigger_event_count()
+            }
+            Self::PumpTarget {
+                scale: Some(scale), ..
+            } => scale.amount().is_some_and(Amount::uses_trigger_event_count),
+            Self::ChooseResolutionBranch {
+                branches,
+                otherwise,
+                ..
+            } => {
+                branches
+                    .iter()
+                    .any(|branch| branch.effects.iter().any(Self::uses_trigger_event_count))
+                    || otherwise.iter().any(Self::uses_trigger_event_count)
+            }
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.uses_trigger_event_count()
+            }
+            Self::MayBehold { if_beheld, .. } => {
+                if_beheld.iter().any(Self::uses_trigger_event_count)
+            }
             _ => false,
         }
     }

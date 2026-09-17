@@ -271,6 +271,13 @@ impl ActivatedAbilityDef {
         {
             return Err("activated abilities cannot reference a trigger's defending player".into());
         }
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::uses_trigger_event_count)
+        {
+            return Err("activated abilities cannot reference a trigger event's count".into());
+        }
         for condition in &self.conditions {
             condition.validate_live()?;
         }
@@ -371,6 +378,13 @@ pub enum TriggerCondition {
         player: CastTriggerPlayer,
         #[serde(default)]
         filter: Option<super::ZoneCardFilter>,
+    },
+    /// CR 603.2c: one occurrence per committed discard action. Scrounging Skyray and Marauding
+    /// Mako group every card one instruction or cost made a player discard into one trigger and
+    /// read the committed cardinality as `Amount::EventCount` ("that many").
+    WheneverPlayerDiscardsOneOrMoreCards {
+        #[serde(default)]
+        player: CastTriggerPlayer,
     },
     /// When this permanent enters the battlefield.
     WhenSelfEntersBattlefield,
@@ -837,6 +851,11 @@ impl TriggerCondition {
         )
     }
 
+    /// Whether a matching event supplies the committed cardinality read by `Amount::EventCount`.
+    pub(crate) fn supplies_event_count(&self) -> bool {
+        matches!(self, Self::WheneverPlayerDiscardsOneOrMoreCards { .. })
+    }
+
     /// Whether a matching attack event supplies an event-time defending player.
     pub(crate) fn supplies_defending_player(&self) -> bool {
         matches!(
@@ -1250,6 +1269,17 @@ impl TriggeredAbilityDef {
         if effects
             .iter()
             .copied()
+            .any(SpellEffectKind::uses_trigger_event_count)
+            && !self.trigger.supplies_event_count()
+        {
+            return Err(
+                "trigger-event count requires a trigger that supplies a committed cardinality"
+                    .into(),
+            );
+        }
+        if effects
+            .iter()
+            .copied()
             .any(SpellEffectKind::uses_defending_player_reference)
             && !self.trigger.supplies_defending_player()
         {
@@ -1330,6 +1360,15 @@ impl ReflexiveTriggeredAbilityDef {
             return Err(
                 "reflexive triggered abilities cannot reference triggering-spell mana spending"
                     .into(),
+            );
+        }
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::uses_trigger_event_count)
+        {
+            return Err(
+                "reflexive triggered abilities cannot reference a trigger event's count".into(),
             );
         }
         if let Some(condition) = self.intervening_if.as_ref() {

@@ -5231,6 +5231,33 @@ mod tests {
     }
 
     #[test]
+    fn issue_289_event_count_loads_only_on_a_trigger_that_supplies_it() {
+        let valid = r#"(
+            id: "event_count_probe", name: "Event Count Probe", face_id: "event_count_probe",
+            types: ["Creature"], power: 1, toughness: 1,
+            triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+                trigger: WheneverPlayerDiscardsOneOrMoreCards(player: Controller),
+                effect: [PutCounters(counter: PlusOnePlusOne, count: EventCount, subject: Source)])],
+        )"#;
+        CardRegistry::from_chunks(&[valid])
+            .expect("the discard-batch trigger supplies the committed count");
+
+        for fields in [
+            "static_abilities: [(ability_id: \"static_01\", presentation: Fallback, definition: EntersWithCounters(counter: PlusOnePlusOne, amount: EventCount))]",
+            "static_abilities: [(ability_id: \"static_01\", presentation: Fallback, definition: SpellGenericReduction(casters: Controller, amount: EventCount))]",
+            "spell_effect: [GainLife(amount: EventCount)]",
+            "activated_abilities: [(ability_id: \"activated_01\", presentation: Fallback, costs: [], effect: [GainLife(amount: EventCount)])]",
+            "triggered_abilities: [(ability_id: \"triggered_01\", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [GainLife(amount: EventCount)])]",
+        ] {
+            let card = format!("(id: \"event_count_probe\", name: \"Event Count Probe\", face_id: \"event_count_probe\", types: [\"Creature\"], power: 1, toughness: 1, {fields})");
+            assert!(
+                matches!(CardRegistry::from_chunks(&[&card]), Err(RegistryError::InvalidCard { .. })),
+                "must reject event count outside a supplying trigger: {fields}"
+            );
+        }
+    }
+
+    #[test]
     fn content_hash_is_stable_and_well_formed() {
         let h = CardRegistry::content_hash();
         assert_eq!(h.len(), 16, "expected 16-char hex digest");

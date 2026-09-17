@@ -5931,6 +5931,82 @@ fn match_player_life_threshold_entry(
         })
 }
 
+const ISSUE_289_SKYRAY_ORACLE_ID: &str = "3a46d85b-ce1a-4842-a342-92a5bddb1053";
+const ISSUE_289_MAKO_ORACLE_ID: &str = "e349be42-5f14-44a9-9608-281985c10e2d";
+const ISSUE_289_REVIEWED_ORACLE_IDS: &[&str] =
+    &[ISSUE_289_SKYRAY_ORACLE_ID, ISSUE_289_MAKO_ORACLE_ID];
+/// The exact printing-independent Oracle header of both cohort cards: the discard-batch trigger
+/// is bound to reviewed identities so an unreviewed card with the same clause stays fail-closed.
+const ISSUE_289_DISCARD_BATCH_CLAUSE: &str =
+    "Whenever you discard one or more cards, put that many +1/+1 counters on this creature.";
+
+fn issue_289_context_is_reviewed(context: &RecipeContext) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        .is_none_or(|oracle_id| ISSUE_289_REVIEWED_ORACLE_IDS.contains(&oracle_id))
+}
+
+pub(super) fn issue_289_oracle_id_is_reviewed(oracle_id: &str) -> bool {
+    ISSUE_289_REVIEWED_ORACLE_IDS.contains(&oracle_id)
+}
+
+pub(super) fn issue_289_card_surface_is_exact(
+    oracle_id: &str,
+    name: &str,
+    mana_cost: &str,
+    type_line: &str,
+    oracle_text: &str,
+    power: Option<&str>,
+    toughness: Option<&str>,
+) -> bool {
+    let expected = match oracle_id {
+        ISSUE_289_SKYRAY_ORACLE_ID => (
+            "Scrounging Skyray",
+            "{1}{U}",
+            "Creature — Fish Pirate",
+            Some("1"),
+            Some("2"),
+            "Flying\nWhenever you discard one or more cards, put that many +1/+1 counters on this creature.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+        ),
+        ISSUE_289_MAKO_ORACLE_ID => (
+            "Marauding Mako",
+            "{R}",
+            "Creature — Shark Pirate",
+            Some("1"),
+            Some("1"),
+            "Whenever you discard one or more cards, put that many +1/+1 counters on this creature.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+        ),
+        _ => return true,
+    };
+    (name, mana_cost, type_line, power, toughness, oracle_text) == expected
+}
+
+/// Scrounging Skyray and Marauding Mako share one exact Oracle clause: the event groups every
+/// card a single discard action committed, and the counter amount is that committed count
+/// (CR 603.2c, 608.2h, 701.9).
+pub(super) fn match_discard_batch_counter_trigger(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_289_context_is_reviewed(context)
+        && text == ISSUE_289_DISCARD_BATCH_CLAUSE)
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverPlayerDiscardsOneOrMoreCards {
+                    player: CastTriggerPlayer::Controller,
+                },
+                vec![SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::EventCount,
+                    subject: EffectSubject::Source,
+                }],
+            )
+        })
+}
+
 macro_rules! calibrations {
     ($($positive_name:literal => $positive_clause:literal),+; $($negative:literal),+ $(,)?) => {
         RecipeCalibration {
@@ -5968,6 +6044,22 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Affinity for artifacts if you control an artifact",
             "Affinity for artifacts. Draw a card.",
             "Affinity for artifacts and flying"
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.discard.one_or_more.plus_one_counters_source"),
+        label: "discard one or more cards puts that many +1/+1 counters on this creature",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_discard_batch_counter_trigger,
+        calibration: calibrations!(
+            "Scrounging Skyray" => "Whenever you discard one or more cards, put that many +1/+1 counters on this creature.",
+            "Marauding Mako" => "Whenever you discard one or more cards, put that many +1/+1 counters on this creature.";
+            "Whenever an opponent discards one or more cards, put that many +1/+1 counters on this creature.",
+            "Whenever you discard a card, put a +1/+1 counter on this creature.",
+            "Whenever you discard one or more cards, put that many +1/+1 counters on target creature.",
+            "Whenever you discard one or more creature cards, put that many +1/+1 counters on this creature.",
+            "Whenever you discard one or more cards, draw that many cards.",
+            "Whenever you discard one or more cards, put that many +1/+1 counters on this creature. This ability triggers only once each turn."
         ),
     },
     Recipe {
@@ -14926,6 +15018,79 @@ mod tests {
                     .expect("negative tapper clause must not be ambiguous")
                     .is_none(),
                 "unsupported tapper near-miss must remain unmatched: {negative}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_289_discard_batch_recipe_is_exact_and_allowlisted() {
+        let clause = ISSUE_289_DISCARD_BATCH_CLAUSE;
+        for (name, oracle_id) in [
+            ("Scrounging Skyray", ISSUE_289_SKYRAY_ORACLE_ID),
+            ("Marauding Mako", ISSUE_289_MAKO_ORACLE_ID),
+        ] {
+            let mut reviewed = context();
+            reviewed.source_name = name.into();
+            reviewed.oracle_id = Some(oracle_id.into());
+            let matched = match_clause(clause, false, &reviewed)
+                .expect("reviewed discard-batch clause must not be ambiguous")
+                .expect("reviewed discard-batch clause must match");
+            assert_eq!(
+                matched.id.as_str(),
+                "triggered.discard.one_or_more.plus_one_counters_source"
+            );
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("discard-batch clause must emit one triggered ability")
+            };
+            assert_eq!(
+                ability.trigger,
+                TriggerCondition::WheneverPlayerDiscardsOneOrMoreCards {
+                    player: CastTriggerPlayer::Controller,
+                }
+            );
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::EventCount,
+                    subject: EffectSubject::Source,
+                }]
+            );
+        }
+
+        let mut unreviewed = context();
+        unreviewed.source_name = "Unreviewed Batcher".into();
+        unreviewed.oracle_id = Some("00000000-0000-0000-0000-000000000000".into());
+        assert!(
+            match_clause(clause, false, &unreviewed)
+                .expect("unreviewed identity must not be ambiguous")
+                .is_none(),
+            "an unknown Oracle identity must not borrow the cohort clause"
+        );
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(clause, false, &noncreature)
+                .expect("noncreature source must not be ambiguous")
+                .is_none(),
+            "the recipe is creature-source-only"
+        );
+
+        for negative in [
+            "Whenever an opponent discards one or more cards, put that many +1/+1 counters on this creature.",
+            "Whenever you discard a card, put a +1/+1 counter on this creature.",
+            "Whenever you discard one or more cards, put that many +1/+1 counters on target creature.",
+            "Whenever you discard one or more creature cards, put that many +1/+1 counters on this creature.",
+            "Whenever you discard one or more cards, draw that many cards.",
+            "Whenever you discard one or more cards, put that many +1/+1 counters on this creature. This ability triggers only once each turn.",
+            "Whenever you discard one or more cards, put that many +1/+1 counters on this creature",
+        ] {
+            assert!(
+                match_clause(negative, false, &context())
+                    .expect("discard-batch near-miss must not be ambiguous")
+                    .is_none(),
+                "unsupported discard-batch near-miss must remain unmatched: {negative}"
             );
         }
     }

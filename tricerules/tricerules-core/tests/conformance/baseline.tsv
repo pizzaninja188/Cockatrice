@@ -1343,6 +1343,8 @@ mantis_rider	0	cast	exercised
 marauding_blight-priest	0	cast	exercised
 marauding_brinefang	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 marauding_brinefang	0	cast	exercised
+marauding_mako	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+marauding_mako	0	cast	exercised
 marauding_sphinx	0	cast	exercised
 mardu_devotee	0	ability:0	exercised
 mardu_devotee	0	cast	exercised
@@ -1861,6 +1863,8 @@ scream_puff	0	cast	exercised
 screaming_phantom	0	cast	exercised
 scroll_thief	0	cast	exercised
 scrounger_of_souls	0	cast	exercised
+scrounging_skyray	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+scrounging_skyray	0	cast	exercised
 scrubland	0	ability:0	exercised
 scrubland	0	land	exercised
 sea_eagle	0	cast	exercised

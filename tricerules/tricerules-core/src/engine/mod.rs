@@ -614,7 +614,7 @@ enum TargetingSourceKind {
 
 #[derive(Clone)]
 enum GameEvent {
-    Discarded(crate::state::DiscardReceipt),
+    Discarded(crate::state::DiscardBatch),
     Waterbent {
         player: PlayerId,
     },

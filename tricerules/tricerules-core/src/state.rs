@@ -71,6 +71,16 @@ pub struct DiscardReceipt {
     pub known_card_id: Option<String>,
 }
 
+/// One semantic CR 701.9 discard action: every card one instruction, cost, or turn-based action
+/// caused one player to discard, captured after replacement destinations committed. Megrim and
+/// Waste Not observe each contained card; "discard one or more cards" observers (CR 603.2c) see
+/// the committed batch once and read `cards.len()` as the event-time count.
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct DiscardBatch {
+    pub player: PlayerId,
+    pub cards: Vec<DiscardReceipt>,
+}
+
 /// Committed CR 701.68 operation. A forced instruction can complete without a recipient;
 /// optional payments always have one. Never infer payment from the surviving counter bag.
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -234,6 +244,10 @@ pub struct TriggerContext {
     /// Chosen X retained only for a permanent spell's own ETB trigger. Other permanents observing
     /// that entry do not inherit the entrant's X.
     pub entering_chosen_x: Option<u32>,
+    /// Committed cardinality of the trigger event, captured when the trigger is collected and
+    /// read by `Amount::EventCount` ("that many"). Only triggers whose condition names a
+    /// committed batch publish it; `None` everywhere else.
+    pub event_count: Option<u32>,
 }
 
 /// CR 400.7d casting information retained for the permanent that a spell becomes. It is not

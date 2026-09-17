@@ -52,6 +52,7 @@ mod scaffold;
 use recipes::{french_vanilla_keywords, keyword_ident};
 use recipes::{
     issue_287_card_surface_is_exact, issue_287_oracle_id_is_reviewed,
+    issue_289_card_surface_is_exact, issue_289_oracle_id_is_reviewed,
     issue_298_card_surface_is_exact, issue_309_card_surface_is_exact,
     issue_309_oracle_id_is_reviewed, issue_310_card_surface_is_exact,
     issue_310_oracle_id_is_reviewed, issue_311_card_surface_is_exact,
@@ -1784,6 +1785,17 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     ) {
         return Err(Skip::NonKeywordText.into());
     }
+    if !issue_289_card_surface_is_exact(
+        str_field(card, "oracle_id"),
+        &name,
+        &mana_cost,
+        type_line,
+        oracle_text,
+        card.get("power").and_then(Value::as_str),
+        card.get("toughness").and_then(Value::as_str),
+    ) {
+        return Err(Skip::NonKeywordText.into());
+    }
     let mut rules = parse_rules_text(
         &name,
         str_field(card, "oracle_id"),
@@ -1914,6 +1926,7 @@ fn evaluate(
 ) -> Result<GenCard, EvaluationError> {
     let layout = GenLayout::from_scryfall(str_field(card, "layout")).ok_or(Skip::Layout)?;
     if (issue_287_oracle_id_is_reviewed(str_field(card, "oracle_id"))
+        || issue_289_oracle_id_is_reviewed(str_field(card, "oracle_id"))
         || issue_309_oracle_id_is_reviewed(str_field(card, "oracle_id"))
         || issue_310_oracle_id_is_reviewed(str_field(card, "oracle_id"))
         || issue_311_oracle_id_is_reviewed(str_field(card, "oracle_id"))
@@ -9059,6 +9072,140 @@ mod tests {
             evaluate_fresh(&multiface).is_err(),
             "a reviewed #287 identity must not bypass its normal-layout restriction"
         );
+    }
+
+    #[test]
+    fn issue_289_two_card_cohort_generates_exact_discard_batch_counters() {
+        const SKYRAY_ID: &str = "3a46d85b-ce1a-4842-a342-92a5bddb1053";
+        const MAKO_ID: &str = "e349be42-5f14-44a9-9608-281985c10e2d";
+        const DISCARD_BATCH_LINE: &str = "Whenever you discard one or more cards, put that many +1/+1 counters on this creature.";
+        let mut skyray = normal_card_with_oracle_id(
+            SKYRAY_ID,
+            "Scrounging Skyray",
+            "{1}{U}",
+            "Creature — Fish Pirate",
+            &format!("Flying\n{DISCARD_BATCH_LINE}\nCycling {{2}} ({{2}}, Discard this card: Draw a card.)"),
+            Some(("1", "2")),
+        );
+        skyray["colors"] = json!(["U"]);
+        skyray["color_identity"] = json!(["U"]);
+        let mut mako = normal_card_with_oracle_id(
+            MAKO_ID,
+            "Marauding Mako",
+            "{R}",
+            "Creature — Shark Pirate",
+            &format!(
+                "{DISCARD_BATCH_LINE}\nCycling {{2}} ({{2}}, Discard this card: Draw a card.)"
+            ),
+            Some(("1", "1")),
+        );
+        mako["colors"] = json!(["R"]);
+        mako["color_identity"] = json!(["R"]);
+
+        for card in [skyray, mako] {
+            let name = str_field(&card, "name").to_string();
+            let generated = evaluate_fresh(&card)
+                .unwrap_or_else(|error| panic!("{name} should generate: {error:?}"));
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            let [ability] = raw.triggered_abilities.as_slice() else {
+                panic!("{name} should emit exactly one triggered ability");
+            };
+            assert_eq!(
+                ability.trigger,
+                TriggerCondition::WheneverPlayerDiscardsOneOrMoreCards {
+                    player: CastTriggerPlayer::Controller,
+                }
+            );
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::EventCount,
+                    subject: EffectSubject::Source,
+                }]
+            );
+            let [cycling] = raw.activated_abilities.as_slice() else {
+                panic!("{name} should emit exactly one Cycling ability");
+            };
+            assert!(matches!(
+                cycling.costs.as_slice(),
+                [AbilityCost::Mana(cost), AbilityCost::DiscardSelf] if cost.to_string() == "{2}"
+            ));
+        }
+    }
+
+    #[test]
+    fn issue_289_generator_is_fail_closed_for_identity_surface_and_near_misses() {
+        const SKYRAY_ID: &str = "3a46d85b-ce1a-4842-a342-92a5bddb1053";
+        const DISCARD_BATCH_LINE: &str = "Whenever you discard one or more cards, put that many +1/+1 counters on this creature.";
+        let exact = || {
+            let mut card = normal_card_with_oracle_id(
+                SKYRAY_ID,
+                "Scrounging Skyray",
+                "{1}{U}",
+                "Creature — Fish Pirate",
+                &format!(
+                    "Flying\n{DISCARD_BATCH_LINE}\nCycling {{2}} ({{2}}, Discard this card: Draw a card.)"
+                ),
+                Some(("1", "2")),
+            );
+            card["colors"] = json!(["U"]);
+            card["color_identity"] = json!(["U"]);
+            card
+        };
+        evaluate_fresh(&exact()).expect("the reviewed Scrounging Skyray surface qualifies");
+
+        let cases: &[(&str, fn(&mut Value))] = &[
+            ("unreviewed identity", |card: &mut Value| {
+                card["oracle_id"] = json!("00000000-0000-0000-0000-000000000000");
+            }),
+            ("missing identity", |card: &mut Value| {
+                card.as_object_mut().unwrap().remove("oracle_id");
+            }),
+            ("wrong name", |card: &mut Value| {
+                card["name"] = json!("Other Skyray");
+            }),
+            ("wrong casting cost", |card: &mut Value| {
+                card["mana_cost"] = json!("{2}{U}");
+            }),
+            ("wrong type line", |card: &mut Value| {
+                card["type_line"] = json!("Creature - Fish");
+            }),
+            ("wrong power", |card: &mut Value| {
+                card["power"] = json!("2");
+            }),
+            ("wrong toughness", |card: &mut Value| {
+                card["toughness"] = json!("1");
+            }),
+            ("discard a card variant", |card: &mut Value| {
+                card["oracle_text"] = json!(
+                    "Flying\nWhenever you discard a card, put a +1/+1 counter on this creature.\nCycling {2} ({2}, Discard this card: Draw a card.)"
+                );
+            }),
+            ("targeted counters variant", |card: &mut Value| {
+                card["oracle_text"] = json!(
+                    "Flying\nWhenever you discard one or more cards, put that many +1/+1 counters on target creature.\nCycling {2} ({2}, Discard this card: Draw a card.)"
+                );
+            }),
+            ("opponent scope variant", |card: &mut Value| {
+                card["oracle_text"] = json!(
+                    "Flying\nWhenever an opponent discards one or more cards, put that many +1/+1 counters on this creature.\nCycling {2} ({2}, Discard this card: Draw a card.)"
+                );
+            }),
+            ("appended once-per-turn clause", |card: &mut Value| {
+                card["oracle_text"] = json!(
+                    "Flying\nWhenever you discard one or more cards, put that many +1/+1 counters on this creature. This ability triggers only once each turn.\nCycling {2} ({2}, Discard this card: Draw a card.)"
+                );
+            }),
+        ];
+        for (label, mutate) in cases {
+            let mut changed = exact();
+            mutate(&mut changed);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#289 near-miss must fail closed: {label}"
+            );
+        }
     }
 
     #[cfg(windows)]

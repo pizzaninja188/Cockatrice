@@ -46,14 +46,15 @@ impl GameEngine {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal("Ward discard choice became stale"));
             }
-            let card_name = object_display_name(&self.state, self.registry, card);
-            move_object_to_zone(&mut self.state, self.registry, card, Zone::Graveyard, None)?;
-            events.push(permanent_moved_event(
-                &self.state,
-                card,
+            // CR 702.21a: paying Ward is a semantic discard cost, so it shares the same committed
+            // event boundary and replacement handling as Cycling and every other discard cost.
+            let (card_name, moved) = crate::engine::resolution::perform_discard(
+                self,
                 pending.deciding_player,
-                rv1::permanent_moved::Destination::Graveyard,
-            ));
+                card,
+                crate::state::DiscardCause::Cost,
+            )?;
+            events.push(moved);
             events.push(ev_log(format!(
                 "P{} discards {card_name} to pay Ward.",
                 pending.deciding_player

@@ -1,6 +1,6 @@
 use super::events::{ev_game_over, ev_log, ev_phase, ev_priority_changed, finish_with_events};
 use super::legal_actions::fill_legal;
-use super::resolution::{draw_card, perform_discard};
+use super::resolution::draw_card;
 use super::*;
 
 /// Sorcery-speed window: your main phase, stack empty, you are the active player (CR 307.5,
@@ -570,6 +570,7 @@ impl GameEngine {
         }
 
         let mut ev = vec![];
+        let mut discard_receipts = Vec::with_capacity(oids.len());
         for oid in oids {
             let owner = self
                 .state
@@ -577,12 +578,15 @@ impl GameEngine {
                 .get(&oid)
                 .map(|o| o.owner)
                 .ok_or(EngineError::Illegal("no object"))?;
-            let (card_name, moved) =
-                perform_discard(self, player, oid, crate::state::DiscardCause::Cleanup)?;
+            // CR 514.1: the turn-based action discards every excess card as one event.
+            let (card_name, moved, discard_receipt) =
+                self.commit_discard(player, oid, crate::state::DiscardCause::Cleanup, false)?;
             ev.push(ev_log(format!("P{player} discards {card_name} (cleanup)")));
             debug_assert_eq!(owner, player);
             ev.push(moved);
+            discard_receipts.push(discard_receipt);
         }
+        self.fire_discard_batches(vec![(player, discard_receipts)]);
         self.apply_sbas(&mut ev)?;
         if self.state.players[idx].hand.len() > self.maximum_hand_size(player) {
             ev.push(ev_priority_changed(self));

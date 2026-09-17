@@ -843,26 +843,64 @@ impl GameEngine {
                 }
                 out
             }
-            GameEvent::Discarded(receipt) => sources
-                .iter()
-                .flat_map(|source| {
-                    self.matching_snapshot_abilities(source, |condition| {
+            GameEvent::Discarded(batch) => {
+                let mut out = Vec::new();
+                for source in sources {
+                    // CR 603.2c: a per-card observer triggers once for each occurrence in the
+                    // event, so a multi-card discard still produces one trigger per matching card.
+                    for trigger in self.matching_snapshot_abilities(source, |condition| {
+                        matches!(
+                            condition,
+                            TriggerCondition::WheneverPlayerDiscardsCard { .. }
+                        )
+                    }) {
                         let TriggerCondition::WheneverPlayerDiscardsCard { player, filter } =
-                            condition
+                            &trigger.ability.trigger
                         else {
-                            return false;
+                            unreachable!("filtered to discard-card triggers")
                         };
-                        self.relative_player_matches(*player, receipt.player, source.controller)
-                            && filter.as_ref().is_none_or(|filter| {
-                                receipt
-                                    .known_card_id
-                                    .as_ref()
-                                    .and_then(|id| self.registry.get(id))
-                                    .is_some_and(|card| card.matches_zone_card_filter(filter))
+                        if !self.relative_player_matches(*player, batch.player, trigger.controller)
+                        {
+                            continue;
+                        }
+                        let occurrences = batch
+                            .cards
+                            .iter()
+                            .filter(|receipt| {
+                                filter.as_ref().is_none_or(|filter| {
+                                    receipt
+                                        .known_card_id
+                                        .as_ref()
+                                        .and_then(|id| self.registry.get(id))
+                                        .is_some_and(|card| card.matches_zone_card_filter(filter))
+                                })
                             })
-                    })
-                })
-                .collect(),
+                            .count();
+                        out.extend(std::iter::repeat_n(trigger, occurrences));
+                    }
+                    // The batch observer triggers once per committed discard action and carries
+                    // the exact event-time count captured at collection.
+                    for mut trigger in self.matching_snapshot_abilities(source, |condition| {
+                        matches!(
+                            condition,
+                            TriggerCondition::WheneverPlayerDiscardsOneOrMoreCards { .. }
+                        )
+                    }) {
+                        let TriggerCondition::WheneverPlayerDiscardsOneOrMoreCards { player } =
+                            &trigger.ability.trigger
+                        else {
+                            unreachable!("filtered to discard-batch triggers")
+                        };
+                        if !self.relative_player_matches(*player, batch.player, trigger.controller)
+                        {
+                            continue;
+                        }
+                        trigger.trigger_context.event_count = Some(batch.cards.len() as u32);
+                        out.push(trigger);
+                    }
+                }
+                out
+            }
             GameEvent::LibrarySearched {
                 searcher,
                 library_owner,
@@ -2295,7 +2333,7 @@ impl GameEngine {
     fn trigger_player_for(event: &GameEvent) -> Option<PlayerId> {
         match event {
             GameEvent::PhaseBegan { active_player, .. } => Some(*active_player),
-            GameEvent::Discarded(receipt) => Some(receipt.player),
+            GameEvent::Discarded(batch) => Some(batch.player),
             GameEvent::Sacrificed { player, .. } => Some(*player),
             GameEvent::Surveilled { player } => Some(*player),
             GameEvent::Explored { object } => Some(object.controller_at_event),
@@ -2558,6 +2596,7 @@ impl TriggerSourceSnapshot {
 mod tests {
     use super::super::damage::DamageEvent;
     use super::*;
+    use crate::state::DiscardBatch;
     use tricerules_cards::{AbilityId, AbilityPresentation, CardFaceId, IdentifiedAbility};
 
     #[test]
@@ -2644,6 +2683,70 @@ mod tests {
                 .count(),
             2,
             "the combined III, IV ability triggers once for each crossed numeral"
+        );
+    }
+
+    fn discard_receipt(player: PlayerId, object_id: ObjectId) -> crate::state::DiscardReceipt {
+        crate::state::DiscardReceipt {
+            player,
+            object_id,
+            before_generation: 0,
+            after_generation: 1,
+            destination: Zone::Graveyard,
+            cause: crate::state::DiscardCause::Effect,
+            known_card_id: None,
+        }
+    }
+
+    #[test]
+    fn issue_289_per_card_observer_fires_for_each_occurrence_in_one_batch() {
+        let (mut engine, source) = trigger_limit_source();
+        add_limited_grant(
+            &mut engine,
+            source,
+            TriggerCondition::WheneverPlayerDiscardsCard {
+                player: CastTriggerPlayer::Controller,
+                filter: None,
+            },
+        );
+        let triggers = engine.collect_event_triggers(&[GameEvent::Discarded(DiscardBatch {
+            player: 0,
+            cards: vec![discard_receipt(0, 1), discard_receipt(0, 2)],
+        })]);
+        assert_eq!(triggers.len(), 2, "one occurrence per discarded card");
+        assert!(triggers
+            .iter()
+            .all(|trigger| trigger.trigger_context.event_count.is_none()));
+    }
+
+    #[test]
+    fn issue_289_batch_observer_groups_each_players_action_with_its_committed_count() {
+        let (mut engine, source) = trigger_limit_source();
+        add_limited_grant(
+            &mut engine,
+            source,
+            TriggerCondition::WheneverPlayerDiscardsOneOrMoreCards {
+                player: CastTriggerPlayer::AnyPlayer,
+            },
+        );
+        let triggers = engine.collect_event_triggers(&[
+            GameEvent::Discarded(DiscardBatch {
+                player: 0,
+                cards: vec![discard_receipt(0, 1), discard_receipt(0, 2)],
+            }),
+            GameEvent::Discarded(DiscardBatch {
+                player: 1,
+                cards: vec![discard_receipt(1, 3)],
+            }),
+        ]);
+        let counts = triggers
+            .iter()
+            .map(|trigger| trigger.trigger_context.event_count)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            counts,
+            [Some(2), Some(1)],
+            "each player's simultaneous discard is one event with its own count"
         );
     }
 

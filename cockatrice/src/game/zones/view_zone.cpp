@@ -156,12 +156,16 @@ void ZoneViewZone::zoneDumpReceived(const Response &r)
 void ZoneViewZone::reorganizeCards()
 {
     const auto *zvLogic = qobject_cast<ZoneViewZoneLogic *>(getLogic());
-    const bool isStackZoneView =
-        forceStackFanLayout ||
-        (zvLogic && zvLogic->getOriginalZone()->getName().compare(QStringLiteral("stack"), Qt::CaseInsensitive) == 0);
+    // A synthetic fan view (trigger ordering, replacement-effect picking) reuses the stack fan
+    // layout over a deck-zone scaffold, but it is not the stack: its cards carry popup-local index
+    // ids, so the engine's published-stack filter and LIFO sort must not touch them. Applying the
+    // filter hid every candidate and left those popups empty.
+    const bool isRealStackZone =
+        zvLogic && zvLogic->getOriginalZone()->getName().compare(QStringLiteral("stack"), Qt::CaseInsensitive) == 0;
+    const bool isStackZoneView = forceStackFanLayout || isRealStackZone;
     RuledClientState *ruledState = nullptr;
     int stackOwnerId = -1;
-    if (isStackZoneView) {
+    if (isRealStackZone) {
         if (auto *player = getLogic()->getPlayer()) {
             if (auto *ag = player->getGame(); ag && RuledActions::isRuledGame(ag)) {
                 ruledState = ag->getGameEventHandler()->ruled();
@@ -204,29 +208,24 @@ void ZoneViewZone::reorganizeCards()
 
     const int cardCount = cardsToDisplay.size();
     if (isStackZoneView) {
-        // For ruled games, sort cardsToDisplay by engine push order so the fan layout mirrors
-        // the engine's authoritative LIFO order. Index 0 → rightmost → resolves first visually.
-        // This corrects the mismatch between physical spells (appended on Event_MoveCard) and
-        // synthetic ability cards (prepended on createSyntheticAbilityStackCard).
-        if (auto *player = getLogic()->getPlayer()) {
-            if (auto *ag = player->getGame()) {
-                if (RuledActions::isRuledGame(ag)) {
-                    if (auto *geh = ag->getGameEventHandler()->ruled()) {
-                        const QList<quint32> &oidOrder = geh->getStackOidOrder();
-                        const int pid = player->getPlayerInfo()->getId();
-                        std::sort(cardsToDisplay.begin(), cardsToDisplay.end(),
-                                  [&](CardItem *a, CardItem *b) {
-                                      int ia = static_cast<int>(oidOrder.indexOf(
-                                          geh->engineOidForCardId(pid, a->getId())));
-                                      int ib = static_cast<int>(oidOrder.indexOf(
-                                          geh->engineOidForCardId(pid, b->getId())));
-                                      if (ia < 0) ia = INT_MAX;
-                                      if (ib < 0) ib = INT_MAX;
-                                      return ia < ib;
-                                  });
-                    }
-                }
-            }
+        // For the real ruled stack view, sort cardsToDisplay by engine push order so the fan
+        // layout mirrors the engine's authoritative LIFO order. Index 0 → rightmost → resolves
+        // first visually. This corrects the mismatch between physical spells (appended on
+        // Event_MoveCard) and synthetic ability cards (prepended on createSyntheticAbilityStackCard).
+        // `ruledState` is set only for the real stack zone, so popup fan views keep click order.
+        if (ruledState) {
+            const QList<quint32> &oidOrder = ruledState->getStackOidOrder();
+            const int pid = stackOwnerId;
+            std::sort(cardsToDisplay.begin(), cardsToDisplay.end(),
+                      [&](CardItem *a, CardItem *b) {
+                          int ia = static_cast<int>(
+                              oidOrder.indexOf(ruledState->engineOidForCardId(pid, a->getId())));
+                          int ib = static_cast<int>(
+                              oidOrder.indexOf(ruledState->engineOidForCardId(pid, b->getId())));
+                          if (ia < 0) ia = INT_MAX;
+                          if (ib < 0) ib = INT_MAX;
+                          return ia < ib;
+                      });
         }
         // Horizontal fan: list index 0 on the right (stack top / LIFO front); older objects fan left; z rises to the
         // right so the foremost spell stays visually on top. Ruled stack window uses a wider step so faces stay

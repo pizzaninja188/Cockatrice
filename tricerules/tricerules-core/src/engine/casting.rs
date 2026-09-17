@@ -1645,8 +1645,11 @@ impl GameEngine {
             .map(|target| capture_stack_target(self, target))
             .collect();
         // Reserve without consuming: a failed payment must not advance the deterministic id
-        // stream, while target triggers still need the eventual ability's exact identity.
-        let virtual_id = self.state.next_object_id;
+        // stream, while target-watchers collected before costs still need the eventual ability's
+        // identity. The reservation is provisional: paying a cost can itself stage triggers
+        // (madness, or a discard cost observed by a discard trigger), and those allocations
+        // consume the id stream, so the final identity is allocated only after payment commits.
+        let reserved_virtual_id = self.state.next_object_id;
         let crime_events: Vec<_> = self.crime_event(player, targets).into_iter().collect();
         // Snapshot target-watchers before costs: the source itself can be sacrificed while paying
         // for the activation. Nothing is staged unless payment succeeds and the ability is pushed.
@@ -1654,7 +1657,7 @@ impl GameEngine {
             controller: player,
             source: TargetingSourceKind::Ability,
             stack_object: StackObjectRef {
-                object_id: virtual_id,
+                object_id: reserved_virtual_id,
                 zone_change_generation: None,
             },
             targets: stack_targets.clone(),
@@ -1691,6 +1694,22 @@ impl GameEngine {
         self.state.undoable_mana_abilities.clear();
         self.record_limited_activations(activation_uses);
 
+        // Allocate the ability's stack identity now that every cost has committed. Triggers
+        // staged while paying consumed ids from the same stream, so the provisional reservation
+        // may already have been taken; re-point pre-payment target watchers at the real identity.
+        let virtual_id = self.state.next_object_id;
+        self.state.next_object_id += 1;
+        if virtual_id != reserved_virtual_id {
+            for trigger in &mut target_triggers {
+                if let Some(stack_object) = trigger.trigger_context.targeting_stack_object.as_mut()
+                {
+                    if stack_object.object_id == reserved_virtual_id {
+                        stack_object.object_id = virtual_id;
+                    }
+                }
+            }
+        }
+
         let card_name = source_token_identity
             .as_ref()
             .map(|identity| identity.name.clone())
@@ -1706,8 +1725,6 @@ impl GameEngine {
             &ability.presentation,
             ability_text.clone(),
         );
-
-        self.state.next_object_id += 1;
 
         self.state.stack_presentations.insert(
             virtual_id,

@@ -2603,19 +2603,18 @@ pub(super) fn snapshot_creature_scope(
         .collect()
 }
 
-/// The semantic discard seam. Direct exile and ordinary zone moves never call it.
+/// The semantic discard seam for one self-contained discard. Direct exile and ordinary zone moves
+/// never call it. Multi-card instructions commit each card through [`GameEngine::commit_discard`]
+/// and publish one batch through [`GameEngine::fire_discard_batches`] instead.
 pub(crate) fn perform_discard(
     engine: &mut GameEngine,
     affected_player: PlayerId,
     object_id: ObjectId,
     cause: crate::state::DiscardCause,
 ) -> Result<(String, rv1::RuledEvent), EngineError> {
-    let destination = if engine.madness_ability(object_id).is_some() {
-        Zone::Exile
-    } else {
-        Zone::Graveyard
-    };
-    engine.commit_discard_to(affected_player, object_id, cause, destination, false)
+    let (name, moved, receipt) = engine.commit_discard(affected_player, object_id, cause, false)?;
+    engine.fire_discard_batches(vec![(affected_player, vec![receipt])]);
+    Ok((name, moved))
 }
 
 /// Move `oid` into zone `z`, maintaining every zone list and the CR 400.7 new-object resets.

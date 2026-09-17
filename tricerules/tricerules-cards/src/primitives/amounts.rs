@@ -181,10 +181,11 @@ impl CountExpression {
 /// selected from public game state when the effect resolves.
 ///
 /// In RON a bare integer (`amount: 3`) is [`Amount::Fixed`]; the string `amount: "X"` is the
-/// chosen X, resolved from the resolving stack item's `chosen_x`. Custom (de)serialize keeps the
-/// existing integer corpus untouched and roundtrips X as the string `"X"` (RON renders a bare
-/// `X` identifier as an ambiguous unit value, so the quoted form is used). Applied to the
-/// amount-bearing effects that can legally scale with X — the "name two cards" pair is Fireball
+/// chosen X, resolved from the resolving stack item's `chosen_x`; a bare `amount: EventCount` is
+/// the trigger event's committed cardinality. Custom (de)serialize keeps the existing integer
+/// corpus untouched and roundtrips X as the string `"X"` (RON renders a bare `X` identifier as an
+/// ambiguous unit value, so the quoted form is used). Applied to the amount-bearing effects that
+/// can legally scale with X — the "name two cards" pair is Fireball
 /// (`DamageTarget { amount: "X" }`) and Blue Sun's Zenith (`Draw { count: "X" }`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Amount {
@@ -204,6 +205,11 @@ pub enum Amount {
     /// Count public game state using an engine-owned context. This is shared by entry
     /// replacements and ordinary resolving effects rather than being an entry-only mini-language.
     Count(CountExpression),
+    /// CR 603.2c / 608.2h: the committed cardinality of the trigger event that created the
+    /// resolving ability ("that many"). Scrounging Skyray and Marauding Mako read the number of
+    /// cards one discard action committed. Valid only on a triggered ability whose trigger
+    /// publishes the count; the value is captured with the trigger and never reconstructed.
+    EventCount,
     /// Divide another amount by a positive literal and round down. Banshee and Brass Infiniscope
     /// share this arithmetic shape.
     DivideRoundedDown { amount: Box<Amount>, divisor: u32 },
@@ -214,6 +220,14 @@ impl Amount {
         match self {
             Self::Conditional { condition, .. } => condition.requires_triggering_spell_context(),
             Self::DivideRoundedDown { amount, .. } => amount.requires_triggering_spell_context(),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn uses_trigger_event_count(&self) -> bool {
+        match self {
+            Self::EventCount => true,
+            Self::DivideRoundedDown { amount, .. } => amount.uses_trigger_event_count(),
             _ => false,
         }
     }
@@ -237,6 +251,7 @@ impl Amount {
         self.validate_live()?;
         self.validate_source_context(has_source)?;
         if self.is_x()
+            || self.uses_trigger_event_count()
             || self.resolve_unconditional(0) == Some(0)
             || self.card_result_filter().is_some()
         {
@@ -252,6 +267,9 @@ impl Amount {
         }
         if context == EffectContext::Spell && self.requires_triggering_spell_context() {
             return Err("spells cannot reference triggering-spell mana spending".into());
+        }
+        if context == EffectContext::Spell && self.uses_trigger_event_count() {
+            return Err("spells cannot reference a trigger event's count".into());
         }
         self.validate_source_context(context == EffectContext::Ability)
     }
@@ -272,6 +290,12 @@ impl Amount {
         if self.contains_cast_cost() {
             return Err("cast-cost amount requires a resolving stack item".into());
         }
+        // Event counts exist only with the trigger that captured them. Cost determination and
+        // entry replacements evaluate outside any resolving trigger, so they must reject the
+        // amount instead of silently resolving it as zero.
+        if self.uses_trigger_event_count() {
+            return Err("trigger-event count requires a triggered ability that supplies it".into());
+        }
         self.validate_cast_snapshot_references(0)?;
         self.validate()
     }
@@ -285,7 +309,10 @@ impl Amount {
             Amount::DivideRoundedDown { amount, divisor } => {
                 amount.resolve_unconditional(x)?.checked_div(*divisor)
             }
-            Amount::Conditional { .. } | Amount::Count(_) | Amount::CastCost(_) => None,
+            Amount::Conditional { .. }
+            | Amount::Count(_)
+            | Amount::CastCost(_)
+            | Amount::EventCount => None,
         }
     }
 
@@ -300,7 +327,10 @@ impl Amount {
 
     pub fn requires_game_state(&self) -> bool {
         match self {
-            Amount::Conditional { .. } | Amount::Count(_) | Amount::CastCost(_) => true,
+            Amount::Conditional { .. }
+            | Amount::Count(_)
+            | Amount::CastCost(_)
+            | Amount::EventCount => true,
             Amount::DivideRoundedDown { amount, .. } => amount.requires_game_state(),
             Amount::Fixed(_) | Amount::X => false,
         }
@@ -336,7 +366,7 @@ impl Amount {
                 }
                 amount.validate()
             }
-            Amount::Fixed(_) | Amount::X | Amount::CastCost(_) => Ok(()),
+            Amount::Fixed(_) | Amount::X | Amount::CastCost(_) | Amount::EventCount => Ok(()),
         }
     }
 }
@@ -373,6 +403,7 @@ impl Serialize for Amount {
             Amount::Count(expression) => {
                 s.serialize_newtype_variant("Amount", 1, "Count", expression)
             }
+            Amount::EventCount => s.serialize_unit_variant("Amount", 4, "EventCount"),
             Amount::DivideRoundedDown { amount, divisor } => {
                 let mut variant =
                     s.serialize_struct_variant("Amount", 3, "DivideRoundedDown", 2)?;
@@ -389,6 +420,7 @@ enum AmountVariant {
     CastCost,
     Conditional,
     Count,
+    EventCount,
     DivideRoundedDown,
 }
 
@@ -547,7 +579,7 @@ impl<'de> Deserialize<'de> for Amount {
             type Value = Amount;
             fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 f.write_str(
-                    "a non-negative integer, the string \"X\", Conditional(...), or Count(...)",
+                    "a non-negative integer, the string \"X\", Conditional(...), Count(...), or EventCount",
                 )
             }
             fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Amount, E> {
@@ -559,11 +591,16 @@ impl<'de> Deserialize<'de> for Amount {
                     .map_err(|_| E::custom("amount must be non-negative"))
             }
             fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Amount, E> {
-                if v == "X" {
-                    Ok(Amount::X)
-                } else {
-                    Err(E::custom(format!("unknown amount {v:?}, expected \"X\"")))
+                match v {
+                    "X" => Ok(Amount::X),
+                    "EventCount" => Ok(Amount::EventCount),
+                    _ => Err(E::custom(format!(
+                        "unknown amount {v:?}, expected \"X\" or \"EventCount\""
+                    ))),
                 }
+            }
+            fn visit_unit<E: serde::de::Error>(self) -> Result<Amount, E> {
+                Ok(Amount::EventCount)
             }
             fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Amount, A::Error> {
                 ConditionalAmountVisitor.visit_map(map)
@@ -591,6 +628,10 @@ impl<'de> Deserialize<'de> for Amount {
                     AmountVariant::Count => {
                         let expression: CountExpression = access.newtype_variant()?;
                         Ok(Amount::Count(expression))
+                    }
+                    AmountVariant::EventCount => {
+                        access.unit_variant()?;
+                        Ok(Amount::EventCount)
                     }
                     AmountVariant::DivideRoundedDown => {
                         access.struct_variant(&["amount", "divisor"], DivideRoundedDownVisitor)

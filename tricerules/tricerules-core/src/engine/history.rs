@@ -1517,6 +1517,11 @@ impl GameEngine {
             }
             Amount::Fixed(value) => *value,
             Amount::X => context.chosen_x,
+            // CR 608.2h: the trigger event's committed cardinality, captured at collection.
+            Amount::EventCount => context
+                .stack_item
+                .and_then(|item| item.trigger_context.event_count)
+                .unwrap_or(0),
             Amount::DivideRoundedDown { amount, divisor } => self
                 .resolve_amount(amount, context)
                 .checked_div(*divisor)

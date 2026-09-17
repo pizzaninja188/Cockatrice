@@ -1416,8 +1416,9 @@ fn choose_hand_cards_for_player(
                 events.extend(batch.events);
                 return Ok(EffectOutcome::Suspended);
             }
+            let mut discard_receipts = Vec::new();
             for oid in selected {
-                let result = perform_hand_card_action(
+                let (result, discard_receipt) = perform_hand_card_action(
                     engine,
                     events,
                     affected_player,
@@ -1426,6 +1427,10 @@ fn choose_hand_cards_for_player(
                     spell_label,
                 )?;
                 cx.effect_result.cards.push(result);
+                discard_receipts.extend(discard_receipt);
+            }
+            if !discard_receipts.is_empty() {
+                engine.fire_discard_batches(vec![(affected_player, discard_receipts)]);
             }
         }
         return Ok(EffectOutcome::Continue);
@@ -1553,6 +1558,8 @@ fn hand_action_verb(action: HandCardAction) -> &'static str {
     }
 }
 
+/// Commit one card of a semantic discard action without publishing triggers. Callers collect the
+/// returned receipt and publish the action's batch through [`GameEngine::fire_discard_batches`].
 pub(in crate::engine) fn perform_discard_action(
     engine: &mut GameEngine,
     events: &mut Vec<rv1::RuledEvent>,
@@ -1560,18 +1567,22 @@ pub(in crate::engine) fn perform_discard_action(
     object_id: ObjectId,
     spell_label: &str,
     cause: crate::state::DiscardCause,
-) -> Result<CardResultEntry, EngineError> {
-    let (card_name, moved) = perform_discard(engine, affected_player, object_id, cause)?;
+) -> Result<(CardResultEntry, crate::state::DiscardReceipt), EngineError> {
+    let (card_name, moved, discard_receipt) =
+        engine.commit_discard(affected_player, object_id, cause, false)?;
     events.push(moved);
     events.push(ev_log(format!(
         "P{affected_player} discards {card_name} ({spell_label})."
     )));
-    Ok(payment::card_result_entry(
-        &engine.state,
-        engine.registry,
-        CardResultAction::Discard,
-        affected_player,
-        object_id,
+    Ok((
+        payment::card_result_entry(
+            &engine.state,
+            engine.registry,
+            CardResultAction::Discard,
+            affected_player,
+            object_id,
+        ),
+        discard_receipt,
     ))
 }
 
@@ -1615,7 +1626,7 @@ pub(crate) fn perform_hand_card_action(
     object_id: ObjectId,
     action: HandCardAction,
     spell_label: &str,
-) -> Result<CardResultEntry, EngineError> {
+) -> Result<(CardResultEntry, Option<crate::state::DiscardReceipt>), EngineError> {
     match action {
         HandCardAction::Discard => perform_discard_action(
             engine,
@@ -1624,9 +1635,11 @@ pub(crate) fn perform_hand_card_action(
             object_id,
             spell_label,
             crate::state::DiscardCause::Effect,
-        ),
+        )
+        .map(|(entry, receipt)| (entry, Some(receipt))),
         HandCardAction::Exile => {
             perform_exile_from_hand(engine, events, affected_player, object_id, spell_label)
+                .map(|entry| (entry, None))
         }
     }
 }
