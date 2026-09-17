@@ -7138,6 +7138,193 @@ fn match_cast_method_flashback(text: &str, context: &RecipeContext) -> Option<Re
         .map(RecipeEmission::FlashbackCost)
 }
 
+/// Issue #333 exact clause templates. Each template is a reusable typed surface with at least two
+/// real positive calibrations. Every clause is compared by the complete normalized Oracle line, so
+/// an appended, reordered, or additional-clause form remains unsupported, and source-kind gating
+/// stays on the recipes whose printed template requires it.
+const ISSUE_333_TARGET_OPPONENT_REVEAL_DISCARD_CLAUSE: &str =
+    "Target opponent reveals their hand. You choose a nonland card from it. That player discards that card.";
+const ISSUE_333_LANDFALL_GAIN_LIFE_CLAUSE: &str =
+    "Landfall — Whenever a land you control enters, you gain 1 life.";
+const ISSUE_333_OTHER_CREATURE_ENTERS_PUMP_CLAUSE: &str =
+    "Whenever another creature you control enters, this creature gets +1/+1 until end of turn.";
+const ISSUE_333_TWO_MANA_ANY_ONE_COLOR_CLAUSE: &str = "{T}: Add two mana of any one color.";
+const ISSUE_333_THREE_MANA_ANY_ONE_COLOR_CLAUSE: &str = "{T}: Add three mana of any one color.";
+const ISSUE_333_COUNT_SCALED_ARTIFACT_CLAUSE: &str =
+    "This creature gets +1/+0 for each artifact you control.";
+
+/// CR 701.9 / 701.20: "target opponent reveals their hand; you choose a nonland card from it; that
+/// player discards that card" is one mandatory player target bound to the controller-selected,
+/// publicly revealed discard. The shipped Coercion/Thoughtseize payload shares the typed shape,
+/// but the nonland filter, opponent restriction, count of one, and absence of a rider are this
+/// exact template's contract. Any other reveal/choose/exile/plural/optional wording stays
+/// unsupported.
+fn match_spell_target_opponent_reveal_discard_nonland(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_333_TARGET_OPPONENT_REVEAL_DISCARD_CLAUSE).then(|| {
+        RecipeEmission::SpellEffectsWithTargeting {
+            effects: vec![SpellEffectKind::ChooseHandCards {
+                action: HandCardAction::Discard,
+                count: 1,
+                target: TargetFilter {
+                    kind: TargetKind::OpponentPlayer,
+                    ..TargetFilter::default()
+                },
+                chooser: HandCardChooser::Controller,
+                card_filter: Some(CardTypeFilter::Nonland),
+                optional: false,
+                visibility: HandChoiceVisibility::PublicReveal,
+            }],
+            targeting: exact_targeting(1, 1, "Choose target opponent", vec![0]),
+        }
+    })
+}
+
+/// CR 603.6a: the Landfall ability word is presentation, but the printed template includes it, so
+/// the exact clause keeps the `Landfall — ` prefix. The trigger watches the controller's lands
+/// entering and gains a fixed 1 life. Noncreature sources, other amounts, other effects, and the
+/// prefix-less wording stay unsupported.
+fn match_landfall_gain_life_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_333_LANDFALL_GAIN_LIFE_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverPermanentEntersBattlefield {
+                controller: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    permanent_type: Some(PermanentTypeFilter::Land),
+                    ..PermanentEventFilter::default()
+                },
+                creature_filter: None,
+            },
+            vec![SpellEffectKind::GainLife {
+                amount: Amount::Fixed(1),
+            }],
+        )
+    })
+}
+
+/// CR 603.6a / 611.2c: another creature the controller controls entering gives the source +1/+1
+/// until cleanup; `exclude_source` is the "another" contract (CR 608.2h snapshot semantics).
+/// Self-inclusive, all-player, other pump sizes, counters, other ability words, and missing
+/// until-end-of-turn wording stay unsupported.
+fn match_other_creature_enters_pump_self_plus_one_plus_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_333_OTHER_CREATURE_ENTERS_PUMP_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverPermanentEntersBattlefield {
+                controller: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    permanent_type: Some(PermanentTypeFilter::Creature),
+                    exclude_source: true,
+                    ..PermanentEventFilter::default()
+                },
+                creature_filter: None,
+            },
+            vec![SpellEffectKind::PumpTarget {
+                power: 1,
+                toughness: 1,
+                scale: None,
+                subject: EffectSubject::Source,
+            }],
+        )
+    })
+}
+
+/// CR 605 / 106.1: five mutually exclusive color bags where every choice produces `per_color` mana
+/// of exactly one color. This keeps "of any one color" distinct from a fixed multi-pip cost and
+/// from "any color" combination outputs, matching the shipped Sol Ring `(c: 2)` bag shape.
+fn any_one_color_mana_options(per_color: u32) -> Vec<ManaAmount> {
+    ['W', 'U', 'B', 'R', 'G']
+        .into_iter()
+        .map(|symbol| {
+            let mut amount =
+                parse_mana_amount(symbol).expect("five-color recipe uses valid symbols");
+            match symbol {
+                'W' => amount.w = per_color,
+                'U' => amount.u = per_color,
+                'B' => amount.b = per_color,
+                'R' => amount.r = per_color,
+                _ => amount.g = per_color,
+            }
+            amount
+        })
+        .collect()
+}
+
+/// CR 605.1a: the plain tap symbol produces `per_color` mana of one chosen color. Other costs,
+/// sacrifice or mana variants, restrictions, and other multipliers stay unsupported.
+fn tap_for_any_one_color_mana(context: &RecipeContext, per_color: u32) -> RecipeEmission {
+    RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        ability_id: context.activated_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        cost_modifiers: Vec::new(),
+        source_zone: AbilitySourceZone::Battlefield,
+        costs: vec![AbilityCost::Tap],
+        effect: vec![SpellEffectKind::ProduceMana {
+            options: any_one_color_mana_options(per_color),
+            restriction: None,
+            conditional: None,
+        }],
+        targeting: None,
+        timing: ActivationTiming::Normal,
+        conditions: Vec::new(),
+        activation_limit: None,
+    })
+}
+
+fn match_tap_for_two_mana_any_one_color(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_333_TWO_MANA_ANY_ONE_COLOR_CLAUSE)
+        .then(|| tap_for_any_one_color_mana(context, 2))
+}
+
+fn match_tap_for_three_mana_any_one_color(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_333_THREE_MANA_ANY_ONE_COLOR_CLAUSE)
+        .then(|| tap_for_any_one_color_mana(context, 3))
+}
+
+/// CR 613.4c / layer 7c: this creature gets +1/+0 for each artifact its controller controls. The
+/// count is a pre-layer-7 battlefield permanent count, matching the shipped `CountScaledSelfPt`
+/// vocabulary. Other artifact scopes, creature scopes, pump values, equipped forms, conditions,
+/// and noncreature sources stay unsupported.
+fn match_static_self_count_scaled_artifact_plus_one_zero(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_333_COUNT_SCALED_ARTIFACT_CLAUSE).then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::CountScaledSelfPt {
+                count: CountExpression::BattlefieldPermanents {
+                    filter: BattlefieldPermanentFilter {
+                        token: None,
+                        any_of: None,
+                        controllers: RelativePlayerSet::Controller,
+                        card_type: Some(CardTypeFilter::Artifact),
+                        color: None,
+                        name: None,
+                        required_subtypes: Vec::new(),
+                        exclude_source: false,
+                    },
+                },
+                power_per_match: 1,
+                toughness_per_match: 0,
+            },
+        })
+    })
+}
+
 macro_rules! calibrations {
     ($($positive_name:literal => $positive_clause:literal),+; $($negative:literal),+ $(,)?) => {
         RecipeCalibration {
@@ -9334,7 +9521,6 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Oasis Gardener" => "{T}: Add one mana of any color.";
             "{T}: Add one mana of any color or {C}.",
             "{T}: Add one mana of any type.",
-            "{T}: Add two mana of any one color.",
             "{T}, Pay 1 life: Add one mana of any color.",
             "{T}: Add one mana of any color. Spend this mana only to cast creature spells.",
             "{2}, {T}: Add one mana of any color."
@@ -11331,6 +11517,119 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Flashback {2}{U}. Draw a card.",
             "Flashback 2",
             "Flashback {02}{U}"
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.target_opponent_reveal.discard_nonland"),
+        label: "target opponent reveals and you choose a nonland card to discard",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_target_opponent_reveal_discard_nonland,
+        calibration: calibrations!(
+            "Pilfer" => "Target opponent reveals their hand. You choose a nonland card from it. That player discards that card.",
+            "Render Speechless" => "Target opponent reveals their hand. You choose a nonland card from it. That player discards that card.",
+            "Dark Inquiry" => "Target opponent reveals their hand. You choose a nonland card from it. That player discards that card.";
+            "Target player reveals their hand. You choose a nonland card from it. That player discards that card.",
+            "Target opponent reveals their hand. You choose a card from it. That player discards that card.",
+            "Target opponent reveals their hand. You choose a nonland card from it. That player exiles that card.",
+            "Target opponent reveals their hand. You choose two nonland cards from it. That player discards those cards.",
+            "Target opponent reveals their hand. You may choose a nonland card from it. That player discards that card.",
+            "Target opponent reveals their hand. You choose a nonland card from it. That player discards that card. Draw a card.",
+            "Target opponent reveals their hand. You choose a nonland card from it.",
+            "You choose a nonland card from target opponent's revealed hand. That player discards that card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.landfall.gain_life_one"),
+        label: "landfall gain one life",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_landfall_gain_life_one,
+        calibration: calibrations!(
+            "Eumidian Terrabotanist" => "Landfall — Whenever a land you control enters, you gain 1 life.",
+            "Jaddi Offshoot" => "Landfall — Whenever a land you control enters, you gain 1 life.",
+            "Kazandu Nectarpot" => "Landfall — Whenever a land you control enters, you gain 1 life.";
+            "Landfall — Whenever a land you control enters, you gain 2 life.",
+            "Landfall — Whenever a land you control enters, draw a card.",
+            "Whenever a land you control enters, you gain 1 life.",
+            "Landfall — Whenever a land enters, you gain 1 life.",
+            "Landfall — Whenever a land you control enters, you gain 1 life and draw a card.",
+            "Landfall — Whenever a land you control enters, you gain 1 life. Scry 1.",
+            "Landfall — Whenever a land you control enters, each opponent loses 1 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.other_creature_enters.pump_self_plus_one_plus_one"),
+        label: "another creature enters and pumps the source plus one plus one",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_other_creature_enters_pump_self_plus_one_plus_one,
+        calibration: calibrations!(
+            "Loporrit Scout" => "Whenever another creature you control enters, this creature gets +1/+1 until end of turn.",
+            "Griffin Protector" => "Whenever another creature you control enters, this creature gets +1/+1 until end of turn.",
+            "Kinsbaile Aspirant" => "Whenever another creature you control enters, this creature gets +1/+1 until end of turn.";
+            "Whenever a creature you control enters, this creature gets +1/+1 until end of turn.",
+            "Whenever another creature you control enters, this creature gets +2/+2 until end of turn.",
+            "Whenever another creature enters, this creature gets +1/+1 until end of turn.",
+            "Whenever another creature you control enters, put a +1/+1 counter on this creature.",
+            "Whenever another creature you control enters, this creature gets +1/+1.",
+            "Alliance — Whenever another creature you control enters, this creature gets +1/+1 until end of turn.",
+            "Whenever another creature you control enters, this creature gets +1/+1 until end of turn. Draw a card.",
+            "Whenever another creature an opponent controls enters, this creature gets +1/+1 until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.tap.add_two_mana_any_one_color"),
+        label: "tap for two mana of any one color",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_tap_for_two_mana_any_one_color,
+        calibration: calibrations!(
+            "Transdimensional Bovine" => "{T}: Add two mana of any one color.",
+            "Khalni Gem" => "{T}: Add two mana of any one color.",
+            "Zaxara, the Exemplary" => "{T}: Add two mana of any one color.";
+            "{1}, {T}: Add two mana of any one color.",
+            "{T}, Sacrifice this artifact: Add two mana of any one color.",
+            "{T}: Add two mana of any color.",
+            "{T}: Add {G}{G}.",
+            "{T}: Add two mana of any one color. Spend this mana only to cast artifact spells.",
+            "{T}: Add two mana in any combination of colors.",
+            "{T}, Pay 1 life: Add two mana of any one color.",
+            "{T}: Add two mana of any one color. Activate only once each turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.tap.add_three_mana_any_one_color"),
+        label: "tap for three mana of any one color",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_tap_for_three_mana_any_one_color,
+        calibration: calibrations!(
+            "Gilded Lotus" => "{T}: Add three mana of any one color.",
+            "Lotus Field" => "{T}: Add three mana of any one color.",
+            "Coveted Jewel" => "{T}: Add three mana of any one color.";
+            "{T}, Sacrifice this artifact: Add three mana of any one color.",
+            "{T}: Add three mana of any color.",
+            "{T}: Add three mana in any combination of colors.",
+            "{T}: Add {C}{C}{C}.",
+            "{T}: Add three mana of any one color. Spend this mana only to cast artifact spells.",
+            "{2}, {T}: Add three mana of any one color.",
+            "{T}: Add four mana of any one color.",
+            "{T}: Add three mana of any one color. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.self.count_scaled.artifact.plus_one_zero"),
+        label: "this creature gets plus one plus zero per artifact its controller controls",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_self_count_scaled_artifact_plus_one_zero,
+        calibration: calibrations!(
+            "Guidelight Synergist" => "This creature gets +1/+0 for each artifact you control.",
+            "Nim Lasher" => "This creature gets +1/+0 for each artifact you control.",
+            "Storm-Kiln Artist" => "This creature gets +1/+0 for each artifact you control.";
+            "This creature gets +1/+1 for each artifact you control.",
+            "This creature gets +1/+0 for each creature you control.",
+            "This creature gets +2/+0 for each artifact you control.",
+            "Equipped creature gets +1/+0 for each artifact you control.",
+            "This creature gets +1/+0 for each artifact an opponent controls.",
+            "This creature gets +1/+0 for each artifact you control as long as you control a Robot.",
+            "This creature gets +0/+1 for each artifact you control.",
+            "This creature gets +1/+0 for each artifact you control. It can't block."
         ),
     },
 ];
@@ -20015,5 +20314,524 @@ mod tests {
             panic!("Flashback must emit the first-class face cost emission");
         };
         assert_eq!(flashback_cost.to_string(), "{2}");
+    }
+
+    #[test]
+    fn issue_333_six_recipe_templates_match_their_exact_recipes() {
+        for (clause, is_spell, expected) in [
+            (
+                "Target opponent reveals their hand. You choose a nonland card from it. That player discards that card.",
+                true,
+                "spell.target_opponent_reveal.discard_nonland",
+            ),
+            (
+                "Landfall — Whenever a land you control enters, you gain 1 life.",
+                false,
+                "triggered.landfall.gain_life_one",
+            ),
+            (
+                "Whenever another creature you control enters, this creature gets +1/+1 until end of turn.",
+                false,
+                "triggered.other_creature_enters.pump_self_plus_one_plus_one",
+            ),
+            (
+                "{T}: Add two mana of any one color.",
+                false,
+                "activated.tap.add_two_mana_any_one_color",
+            ),
+            (
+                "{T}: Add three mana of any one color.",
+                false,
+                "activated.tap.add_three_mana_any_one_color",
+            ),
+            (
+                "This creature gets +1/+0 for each artifact you control.",
+                false,
+                "static.self.count_scaled.artifact.plus_one_zero",
+            ),
+        ] {
+            let matched = match_clause(clause, is_spell, &context())
+                .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{clause} should match exactly one recipe"));
+            assert_eq!(matched.id.as_str(), expected, "{clause}");
+        }
+    }
+
+    #[test]
+    fn issue_333_recipes_have_stable_ids_and_surfaces() {
+        for (id, surface) in [
+            (
+                "spell.target_opponent_reveal.discard_nonland",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "triggered.landfall.gain_life_one",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "triggered.other_creature_enters.pump_self_plus_one_plus_one",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "activated.tap.add_two_mana_any_one_color",
+                RecipeSurface::ActivatedAbility,
+            ),
+            (
+                "activated.tap.add_three_mana_any_one_color",
+                RecipeSurface::ActivatedAbility,
+            ),
+            (
+                "static.self.count_scaled.artifact.plus_one_zero",
+                RecipeSurface::StaticAbility,
+            ),
+        ] {
+            assert_eq!(
+                issue_318_recipe(id).surface,
+                surface,
+                "{id} surface drifted"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_333_target_opponent_reveal_discard_is_exact_and_typed() {
+        for source_name in ["Pilfer", "Render Speechless", "Dark Inquiry"] {
+            let matched =
+                issue_318_match_spell(ISSUE_333_TARGET_OPPONENT_REVEAL_DISCARD_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "spell.target_opponent_reveal.discard_nonland"
+            );
+            let RecipeEmission::SpellEffectsWithTargeting { effects, targeting } = matched.emission
+            else {
+                panic!("{source_name} must emit an explicitly targeted spell");
+            };
+            assert_eq!(
+                effects,
+                vec![SpellEffectKind::ChooseHandCards {
+                    action: HandCardAction::Discard,
+                    count: 1,
+                    target: TargetFilter {
+                        kind: TargetKind::OpponentPlayer,
+                        ..TargetFilter::default()
+                    },
+                    chooser: HandCardChooser::Controller,
+                    card_filter: Some(CardTypeFilter::Nonland),
+                    optional: false,
+                    visibility: HandChoiceVisibility::PublicReveal,
+                }]
+            );
+            let [group] = targeting.groups.as_slice() else {
+                panic!("{source_name} must own exactly one target group");
+            };
+            assert_eq!((group.min, group.max), (1, 1));
+            assert_eq!(group.prompt, "Choose target opponent");
+            assert_eq!(group.effect_indices, vec![0]);
+            assert!(group.distinct_from.is_empty());
+            assert!(!group.same_graveyard);
+            assert!(group.cast_cost_expansion.is_none());
+        }
+
+        assert!(
+            match_clause(
+                ISSUE_333_TARGET_OPPONENT_REVEAL_DISCARD_CLAUSE,
+                false,
+                &context()
+            )
+            .expect("non-spell surface check must not be ambiguous")
+            .is_none(),
+            "the reveal-discard template is a spell clause and must not match permanent text"
+        );
+    }
+
+    #[test]
+    fn issue_333_landfall_gain_life_is_exact_and_typed() {
+        for source_name in [
+            "Eumidian Terrabotanist",
+            "Jaddi Offshoot",
+            "Kazandu Nectarpot",
+        ] {
+            let matched =
+                issue_318_match_non_spell(ISSUE_333_LANDFALL_GAIN_LIFE_CLAUSE, source_name);
+            assert_eq!(matched.id.as_str(), "triggered.landfall.gain_life_one");
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("{source_name} must emit a triggered ability");
+            };
+            assert_eq!(
+                ability.trigger,
+                TriggerCondition::WheneverPermanentEntersBattlefield {
+                    controller: CastTriggerPlayer::Controller,
+                    filter: PermanentEventFilter {
+                        permanent_type: Some(PermanentTypeFilter::Land),
+                        ..PermanentEventFilter::default()
+                    },
+                    creature_filter: None,
+                }
+            );
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(1),
+                }]
+            );
+            assert!(!ability.may);
+            assert!(ability.targeting.is_none());
+            assert!(ability.intervening_if.is_none());
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_333_LANDFALL_GAIN_LIFE_CLAUSE, false, &noncreature)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the landfall template must remain bound to creature sources"
+        );
+    }
+
+    #[test]
+    fn issue_333_other_creature_enters_pump_is_exact_and_typed() {
+        for source_name in ["Loporrit Scout", "Griffin Protector", "Kinsbaile Aspirant"] {
+            let matched =
+                issue_318_match_non_spell(ISSUE_333_OTHER_CREATURE_ENTERS_PUMP_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "triggered.other_creature_enters.pump_self_plus_one_plus_one"
+            );
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("{source_name} must emit a triggered ability");
+            };
+            assert_eq!(
+                ability.trigger,
+                TriggerCondition::WheneverPermanentEntersBattlefield {
+                    controller: CastTriggerPlayer::Controller,
+                    filter: PermanentEventFilter {
+                        permanent_type: Some(PermanentTypeFilter::Creature),
+                        exclude_source: true,
+                        ..PermanentEventFilter::default()
+                    },
+                    creature_filter: None,
+                }
+            );
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::PumpTarget {
+                    power: 1,
+                    toughness: 1,
+                    scale: None,
+                    subject: EffectSubject::Source,
+                }]
+            );
+            assert!(!ability.may);
+            assert!(ability.targeting.is_none());
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(
+                ISSUE_333_OTHER_CREATURE_ENTERS_PUMP_CLAUSE,
+                false,
+                &noncreature
+            )
+            .expect("source-kind check must not be ambiguous")
+            .is_none(),
+            "the creature-enters pump template must remain bound to creature sources"
+        );
+    }
+
+    fn assert_any_one_color_options(options: &[ManaAmount], per_color: u32) {
+        assert_eq!(
+            options,
+            [
+                ManaAmount {
+                    w: per_color,
+                    ..ManaAmount::default()
+                },
+                ManaAmount {
+                    u: per_color,
+                    ..ManaAmount::default()
+                },
+                ManaAmount {
+                    b: per_color,
+                    ..ManaAmount::default()
+                },
+                ManaAmount {
+                    r: per_color,
+                    ..ManaAmount::default()
+                },
+                ManaAmount {
+                    g: per_color,
+                    ..ManaAmount::default()
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn issue_333_two_and_three_mana_any_one_color_are_exact_and_typed() {
+        for (clause, source_name, expected_id, per_color) in [
+            (
+                ISSUE_333_TWO_MANA_ANY_ONE_COLOR_CLAUSE,
+                "Transdimensional Bovine",
+                "activated.tap.add_two_mana_any_one_color",
+                2,
+            ),
+            (
+                ISSUE_333_TWO_MANA_ANY_ONE_COLOR_CLAUSE,
+                "Khalni Gem",
+                "activated.tap.add_two_mana_any_one_color",
+                2,
+            ),
+            (
+                ISSUE_333_TWO_MANA_ANY_ONE_COLOR_CLAUSE,
+                "Zaxara, the Exemplary",
+                "activated.tap.add_two_mana_any_one_color",
+                2,
+            ),
+            (
+                ISSUE_333_THREE_MANA_ANY_ONE_COLOR_CLAUSE,
+                "Gilded Lotus",
+                "activated.tap.add_three_mana_any_one_color",
+                3,
+            ),
+            (
+                ISSUE_333_THREE_MANA_ANY_ONE_COLOR_CLAUSE,
+                "Lotus Field",
+                "activated.tap.add_three_mana_any_one_color",
+                3,
+            ),
+            (
+                ISSUE_333_THREE_MANA_ANY_ONE_COLOR_CLAUSE,
+                "Coveted Jewel",
+                "activated.tap.add_three_mana_any_one_color",
+                3,
+            ),
+        ] {
+            let matched = issue_318_match_non_spell(clause, source_name);
+            assert_eq!(matched.id.as_str(), expected_id, "{source_name}");
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("{source_name} must emit an activated ability");
+            };
+            assert_eq!(ability.costs, vec![AbilityCost::Tap]);
+            assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+            assert_eq!(ability.timing, ActivationTiming::Normal);
+            assert!(ability.targeting.is_none());
+            assert!(ability.activation_limit.is_none());
+            let [SpellEffectKind::ProduceMana {
+                options,
+                restriction,
+                conditional,
+            }] = ability.effect.as_slice()
+            else {
+                panic!("{source_name} must produce mana as its sole effect");
+            };
+            assert!(restriction.is_none());
+            assert!(conditional.is_none());
+            assert_any_one_color_options(options, per_color);
+        }
+    }
+
+    #[test]
+    fn issue_333_count_scaled_artifact_is_exact_and_typed() {
+        for source_name in ["Guidelight Synergist", "Nim Lasher", "Storm-Kiln Artist"] {
+            let matched =
+                issue_318_match_non_spell(ISSUE_333_COUNT_SCALED_ARTIFACT_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "static.self.count_scaled.artifact.plus_one_zero"
+            );
+            let RecipeEmission::StaticAbility(ability) = matched.emission else {
+                panic!("{source_name} must emit a static ability");
+            };
+            assert_eq!(
+                ability.definition,
+                StaticAbilityDef::CountScaledSelfPt {
+                    count: CountExpression::BattlefieldPermanents {
+                        filter: BattlefieldPermanentFilter {
+                            token: None,
+                            any_of: None,
+                            controllers: RelativePlayerSet::Controller,
+                            card_type: Some(CardTypeFilter::Artifact),
+                            color: None,
+                            name: None,
+                            required_subtypes: Vec::new(),
+                            exclude_source: false,
+                        },
+                    },
+                    power_per_match: 1,
+                    toughness_per_match: 0,
+                }
+            );
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_333_COUNT_SCALED_ARTIFACT_CLAUSE, false, &noncreature)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the count-scaled template must remain bound to creature sources"
+        );
+    }
+
+    #[test]
+    fn issue_333_recipes_reject_near_misses() {
+        for negative in [
+            "Target player reveals their hand. You choose a nonland card from it. That player discards that card.",
+            "Target opponent reveals their hand. You choose a card from it. That player discards that card.",
+            "Target opponent reveals their hand. You choose a nonland card from it. That player exiles that card.",
+            "Target opponent reveals their hand. You choose two nonland cards from it. That player discards those cards.",
+            "Target opponent reveals their hand. You may choose a nonland card from it. That player discards that card.",
+            "Target opponent reveals their hand. You choose a nonland card from it. That player discards that card. Draw a card.",
+            "Target opponent reveals their hand. You choose a nonland card from it.",
+        ] {
+            assert!(
+                match_spell_target_opponent_reveal_discard_nonland(negative, &context()).is_none(),
+                "reveal-discard accepted near-miss {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, true);
+        }
+
+        for negative in [
+            "Landfall — Whenever a land you control enters, you gain 2 life.",
+            "Landfall — Whenever a land you control enters, draw a card.",
+            "Whenever a land you control enters, you gain 1 life.",
+            "Landfall — Whenever a land enters, you gain 1 life.",
+            "Landfall — Whenever a land you control enters, you gain 1 life and draw a card.",
+            "Landfall — Whenever a land you control enters, each opponent loses 1 life.",
+        ] {
+            assert!(
+                match_landfall_gain_life_one(negative, &context()).is_none(),
+                "landfall accepted near-miss {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, false);
+        }
+
+        for negative in [
+            "Whenever a creature you control enters, this creature gets +1/+1 until end of turn.",
+            "Whenever another creature you control enters, this creature gets +2/+2 until end of turn.",
+            "Whenever another creature enters, this creature gets +1/+1 until end of turn.",
+            "Whenever another creature you control enters, put a +1/+1 counter on this creature.",
+            "Whenever another creature you control enters, this creature gets +1/+1.",
+            "Alliance — Whenever another creature you control enters, this creature gets +1/+1 until end of turn.",
+            "Whenever another creature an opponent controls enters, this creature gets +1/+1 until end of turn.",
+        ] {
+            assert!(
+                match_other_creature_enters_pump_self_plus_one_plus_one(negative, &context())
+                    .is_none(),
+                "creature-enters pump accepted near-miss {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, false);
+        }
+
+        for negative in [
+            "{1}, {T}: Add two mana of any one color.",
+            "{T}, Sacrifice this artifact: Add two mana of any one color.",
+            "{T}: Add two mana of any color.",
+            "{T}: Add {G}{G}.",
+            "{T}: Add two mana of any one color. Spend this mana only to cast artifact spells.",
+            "{T}: Add two mana in any combination of colors.",
+            "{T}: Add four mana of any one color.",
+        ] {
+            assert!(
+                match_tap_for_two_mana_any_one_color(negative, &context()).is_none(),
+                "two-mana recipe accepted near-miss {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, false);
+        }
+
+        for negative in [
+            "{T}, Sacrifice this artifact: Add three mana of any one color.",
+            "{T}: Add three mana of any color.",
+            "{T}: Add three mana in any combination of colors.",
+            "{T}: Add {C}{C}{C}.",
+            "{T}: Add three mana of any one color. Spend this mana only to cast artifact spells.",
+            "{2}, {T}: Add three mana of any one color.",
+        ] {
+            assert!(
+                match_tap_for_three_mana_any_one_color(negative, &context()).is_none(),
+                "three-mana recipe accepted near-miss {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, false);
+        }
+
+        for negative in [
+            "This creature gets +1/+1 for each artifact you control.",
+            "This creature gets +1/+0 for each creature you control.",
+            "This creature gets +2/+0 for each artifact you control.",
+            "Equipped creature gets +1/+0 for each artifact you control.",
+            "This creature gets +1/+0 for each artifact an opponent controls.",
+            "This creature gets +1/+0 for each artifact you control as long as you control a Robot.",
+            "This creature gets +0/+1 for each artifact you control.",
+        ] {
+            assert!(
+                match_static_self_count_scaled_artifact_plus_one_zero(negative, &context())
+                    .is_none(),
+                "count-scaled recipe accepted near-miss {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_333_recipes_do_not_disturb_shipped_recipes() {
+        for (clause, is_spell, expected) in [
+            (
+                "{T}: Add one mana of any color.",
+                false,
+                "activated.mana.tap_any_color",
+            ),
+            ("{T}: Add {G}.", false, "activated.mana.tap_one"),
+            (
+                "{T}: Add {B} or {R}.",
+                false,
+                "activated.mana.tap_two_or_three_colors",
+            ),
+            (
+                "Landfall — Whenever a land you control enters, mill a card.",
+                false,
+                "triggered.landfall.mill.one",
+            ),
+            (
+                "Whenever another creature you control enters, you gain 1 life.",
+                false,
+                "triggered.other_controlled_creature_etb.gain_life.one",
+            ),
+            ("Draw a card.", true, "spell.draw.fixed"),
+        ] {
+            let matched = match_clause(clause, is_spell, &context())
+                .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{clause} should stay consumed by its shipped recipe"));
+            assert_eq!(matched.id.as_str(), expected, "{clause}");
+        }
+
+        // Each multi-mana template is claimed only by its own recipe, and neither claims the
+        // shipped one-mana any-color template.
+        assert!(match_tap_for_two_mana_any_one_color(
+            ISSUE_333_THREE_MANA_ANY_ONE_COLOR_CLAUSE,
+            &context()
+        )
+        .is_none());
+        assert!(match_tap_for_three_mana_any_one_color(
+            ISSUE_333_TWO_MANA_ANY_ONE_COLOR_CLAUSE,
+            &context()
+        )
+        .is_none());
+        assert!(match_tap_for_two_mana_any_one_color(
+            "{T}: Add one mana of any color.",
+            &context()
+        )
+        .is_none());
+        assert!(match_tap_for_three_mana_any_one_color(
+            "{T}: Add one mana of any color.",
+            &context()
+        )
+        .is_none());
+        assert!(match_landfall_gain_life_one(
+            "Landfall — Whenever a land you control enters, mill a card.",
+            &context()
+        )
+        .is_none());
     }
 }

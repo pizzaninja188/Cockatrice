@@ -695,6 +695,7 @@ esper_origins_summon:_esper_maduin	1	cast	intentional: face unavailable from han
 essence_scatter	0	cast	unsupported: target group 0 needs a richer fixture
 etched_cornfield	0	ability:0	exercised
 etched_cornfield	0	land	exercised
+eumidian_terrabotanist	0	cast	exercised
 evils_thrall	0	cast	exercised
 eviscerate	0	cast	exercised
 evolving_wilds	0	ability:0	exercised
@@ -893,6 +894,8 @@ gifts_ungiven	0	cast	exercised
 gigantic_big_bear	0	cast	exercised
 gigantosaurus	0	cast	exercised
 gilacorn	0	cast	exercised
+gilded_lotus	0	ability:0	exercised
+gilded_lotus	0	cast	exercised
 gilded_sentinel	0	cast	exercised
 glacial_wall	0	cast	exercised
 gladecover_scout	0	cast	exercised
@@ -1005,6 +1008,7 @@ guadosalam,_farplane_gateway	0	land	exercised
 guard_duty	0	cast	exercised
 guardian_lions	0	cast	exercised
 guardians_of_meletis	0	cast	exercised
+guidelight_synergist	0	cast	exercised
 gundabad_opportunist	0	cast	exercised
 gurmag_nightwatch	0	cast	exercised
 gurmag_swiftwing	0	cast	exercised
@@ -1333,6 +1337,7 @@ lonely_arroyo	0	land	exercised
 long_lake_nuisance	0	cast	exercised
 longbow_archer	0	cast	exercised
 looming_altisaur	0	cast	exercised
+loporrit_scout	0	cast	exercised
 los_diablos_missile_base	0	ability:0	exercised
 los_diablos_missile_base	0	land	exercised
 lost_days	0	cast	exercised
@@ -1621,6 +1626,7 @@ phytoburst	0	cast	exercised
 piggy_bank	0	cast	exercised
 pigment_wrangler_striking_palette	0	cast	exercised
 pigment_wrangler_striking_palette	1	cast	intentional: face unavailable from hand
+pilfer	0	cast	exercised
 pilgrim_of_the_fires	0	cast	exercised
 pillarfield_ox	0	cast	exercised
 pincher_beetles	0	cast	exercised
@@ -2341,6 +2347,8 @@ tranquil_cove	0	land	exercised
 tranquil_expanse	0	ability:0	exercised
 tranquil_expanse	0	land	exercised
 tranquility	0	cast	exercised
+transdimensional_bovine	0	ability:0	exercised
+transdimensional_bovine	0	cast	exercised
 trapped_in_the_screen	0	cast	exercised
 traumatic_critique	0	cast	exercised
 traveling_philosopher	0	cast	exercised
