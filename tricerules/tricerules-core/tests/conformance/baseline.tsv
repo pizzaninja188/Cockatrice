@@ -378,6 +378,7 @@ charmed_sleep	0	cast	exercised
 chase_inspiration	0	cast	exercised
 child_of_night	0	cast	exercised
 chitinous_graspling	0	cast	exercised
+chomping_changeling	0	cast	exercised
 chrome_companion	0	ability:0	exercised
 chrome_companion	0	cast	exercised
 chupacabra_echo	0	cast	exercised
@@ -575,6 +576,8 @@ disentomb	0	cast	exercised
 dismal_backwater	0	ability:0	exercised
 dismal_backwater	0	land	exercised
 dispelling_exhale	0	cast	unsupported: target group 0 needs a richer fixture
+disruptive_stormbrood_petty_revenge	0	cast	exercised
+disruptive_stormbrood_petty_revenge	1	cast	exercised
 dive_down	0	cast	exercised
 divert_disaster	0	cast	unsupported: target group 0 needs a richer fixture
 divination	0	cast	exercised
@@ -742,6 +745,7 @@ fire_nation_cadets	0	cast	exercised
 fire_nation_soldier	0	cast	exercised
 fire_prophecy	0	cast	exercised
 fireball	0	cast	exercised
+firebrand_archer	0	cast	exercised
 fireshrieker	0	ability:0	exercised
 fireshrieker	0	cast	exercised
 fisk_tower	0	ability:0	exercised
@@ -960,6 +964,7 @@ greenwood_sentinel	0	cast	exercised
 grendel,_spawn_of_knull	0	cast	exercised
 griffin_protector	0	cast	exercised
 griffin_sentinel	0	cast	exercised
+griffnaut_tracker	0	cast	exercised
 griptide	0	cast	exercised
 gristle_glutton	0	ability:0	exercised
 gristle_glutton	0	cast	exercised
@@ -1208,6 +1213,7 @@ killers_mask	0	ability:0	exercised
 killers_mask	0	cast	exercised
 kin-tree_nurturer	0	cast	exercised
 kindercatch	0	cast	exercised
+kindled_fury	0	cast	exercised
 kindly_customer	0	cast	exercised
 king_cheetah	0	cast	exercised
 kinjallis_dawnrunner	0	cast	exercised
@@ -2138,6 +2144,7 @@ sungrace_pegasus	0	cast	exercised
 sunspire_griffin	0	cast	exercised
 suntail_hawk	0	cast	exercised
 super_speed	0	cast	exercised
+sure_strike	0	cast	exercised
 surly_farrier	0	ability:0	exercised
 surly_farrier	0	cast	exercised
 surrak,_elusive_hunter	0	cast	exercised
@@ -2242,6 +2249,8 @@ thraben_purebloods	0	cast	exercised
 thraben_valiant	0	cast	exercised
 thrashing_brontodon	0	ability:0	exercised
 thrashing_brontodon	0	cast	exercised
+threadbind_clique_rip_the_seams	0	cast	exercised
+threadbind_clique_rip_the_seams	1	cast	unsupported: target group 0 needs a richer fixture
 threaten	0	cast	exercised
 three_tree_mascot	0	ability:0	exercised
 three_tree_mascot	0	cast	exercised

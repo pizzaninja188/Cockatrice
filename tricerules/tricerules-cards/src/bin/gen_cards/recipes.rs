@@ -5,12 +5,12 @@ use tricerules_cards::primitives::{
     EntryCost, GameCondition, GraveyardDestination, GraveyardFilter, GraveyardOwner,
     HandCardAction, HandCardChooser, HandChoiceVisibility, LifeAmount, ObjectContributionKind,
     ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate,
-    PlayerRecipient, PowerToughnessCharacteristic, RelativePlayerSet, ResolutionBranchDef,
-    ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SearchDestination,
-    SearchZoneSelection, SpellCastFilter, SpellCostModifier, SpellManaSpentComparison,
-    StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
-    TargetMatchFilter, TargetObjectExclusion, TargetingDef, TargetingSourceFilter,
-    TypeLineAddition, ZoneCardFilter,
+    PlayerRecipient, PowerComparison, PowerToughnessCharacteristic, RelativePlayerSet,
+    ResolutionBranchDef, ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost,
+    SearchDestination, SearchZoneSelection, SpellCastFilter, SpellCostModifier,
+    SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter,
+    TargetGroupDef, TargetKind, TargetMatchFilter, TargetObjectExclusion, TargetingDef,
+    TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
     external_oracle_lines, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
@@ -3005,6 +3005,193 @@ fn match_creature_pay_mana_tap_tap_creature(
             }],
         }),
     ))
+}
+
+/// Issue #316 exact templates. Each template is a reusable typed surface with at least two real
+/// positive calibrations; cohort containment comes from generating against an isolated pinned
+/// input, not from identity allowlists. Source-context gating stays on the recipes that require a
+/// creature source, and every clause is compared by the complete normalized Oracle line so an
+/// appended, reordered, or additional-clause form remains unsupported.
+const ISSUE_316_TAPPED_CREATURE_CLAUSE: &str = "Destroy target tapped creature.";
+const ISSUE_316_ARTIFACT_OR_ENCHANTMENT_ETB_CLAUSE: &str =
+    "When this creature enters, destroy up to one target artifact or enchantment.";
+const ISSUE_316_SINGLE_GRAVEYARD_EXILE_ETB_CLAUSE: &str =
+    "When this creature enters, exile up to two target cards from a single graveyard.";
+const ISSUE_316_NONCREATURE_CAST_PING_CLAUSE: &str =
+    "Whenever you cast a noncreature spell, this creature deals 1 damage to each opponent.";
+const ISSUE_316_FIRST_STRIKE_PREFIX: &str = "Target creature gets +";
+const ISSUE_316_FIRST_STRIKE_SUFFIX: &str = "/+0 and gains first strike until end of turn.";
+const ISSUE_316_POWER_BOUND_PREFIX: &str = "Destroy target creature with power ";
+const ISSUE_316_POWER_BOUND_SUFFIX: &str = " or less.";
+
+/// CR 115.1 / 701.8: "Destroy target tapped creature" is one mandatory creature target whose
+/// current tapped status is an engine target-legality predicate (compare the existing modal
+/// "deals 2 damage to target tapped creature" consumer).
+fn match_spell_destroy_tapped_creature(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == ISSUE_316_TAPPED_CREATURE_CLAUSE).then(|| RecipeEmission::SpellEffectsWithTargeting {
+        effects: vec![SpellEffectKind::Destroy {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                kind: TargetKind::Creature,
+                tapped: Some(true),
+                ..TargetFilter::default()
+            })),
+        }],
+        targeting: exact_targeting(1, 1, "Choose target tapped creature", vec![0]),
+    })
+}
+
+/// CR 603.2 / 701.8: a creature entry trigger destroys up to one artifact or enchantment. The
+/// type union reuses the `spell.destroy.artifact_or_enchantment` predicate, but only in the
+/// ability context and only for a creature source, so the spell forms stay with their recipes.
+fn match_etb_destroy_up_to_one_artifact_or_enchantment(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_316_ARTIFACT_OR_ENCHANTMENT_ETB_CLAUSE).then(
+        || {
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfEntersBattlefield,
+                vec![SpellEffectKind::Destroy {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        permanent_types: vec![
+                            PermanentTypeFilter::Artifact,
+                            PermanentTypeFilter::Enchantment,
+                        ],
+                        ..TargetFilter::default()
+                    })),
+                }],
+            ) else {
+                unreachable!("triggered_ability_with always returns a triggered ability")
+            };
+            ability.targeting = Some(exact_targeting(
+                0,
+                1,
+                "Choose up to one target artifact or enchantment",
+                vec![0],
+            ));
+            RecipeEmission::TriggeredAbility(ability)
+        },
+    )
+}
+
+/// CR 115.6 / 404.2 / 603.2: a creature entry trigger exiles up to two target cards, and grouped
+/// target validation requires every chosen card to belong to one player's graveyard.
+fn match_etb_exile_up_to_two_cards_from_single_graveyard(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_316_SINGLE_GRAVEYARD_EXILE_ETB_CLAUSE).then(|| {
+        let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+            context,
+            TriggerCondition::WhenSelfEntersBattlefield,
+            vec![SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    owner: GraveyardOwner::AnyPlayer,
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::Exile,
+                linked_exile_id: None,
+            }],
+        ) else {
+            unreachable!("triggered_ability_with always returns a triggered ability")
+        };
+        ability.targeting = Some(TargetingDef {
+            groups: vec![TargetGroupDef {
+                min: 0,
+                max: 2,
+                prompt: "Choose up to two target cards from a single graveyard".into(),
+                effect_indices: vec![0],
+                distinct_from: Vec::new(),
+                same_graveyard: true,
+                cast_cost_expansion: None,
+            }],
+        });
+        RecipeEmission::TriggeredAbility(ability)
+    })
+}
+
+/// CR 603.2 / 601.2i: reuses the shipped controller-relative noncreature cast trigger and the
+/// untargeted per-opponent damage recipient.
+fn match_controller_casts_noncreature_ping_each_opponent_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_316_NONCREATURE_CAST_PING_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverPlayerCastsSpell {
+                caster: CastTriggerPlayer::Controller,
+                filter: SpellCastFilter {
+                    card_type: Some(CardTypeFilter::Noncreature),
+                    ..SpellCastFilter::default()
+                },
+                ordinal: None,
+                ordinal_scope: Default::default(),
+            },
+            vec![SpellEffectKind::DamagePlayer {
+                amount: Amount::Fixed(1),
+                who: PlayerRecipient::EachOpponent,
+            }],
+        )
+    })
+}
+
+/// CR 611.2a / 702.7: "gets +N/+0 and gains first strike until end of turn" is parameterized over
+/// a positive power amount; a zero power bonus or any nonzero toughness bonus stays unsupported.
+fn match_spell_pump_creature_plus_n_zero_first_strike(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    let power = text
+        .strip_prefix(ISSUE_316_FIRST_STRIKE_PREFIX)?
+        .strip_suffix(ISSUE_316_FIRST_STRIKE_SUFFIX)?
+        .parse::<i32>()
+        .ok()?;
+    (power >= 1).then(|| RecipeEmission::SpellEffectsWithTargeting {
+        effects: vec![
+            SpellEffectKind::PumpTarget {
+                power,
+                toughness: 0,
+                scale: None,
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            },
+            SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                keywords: vec![Keyword::FirstStrike],
+            },
+        ],
+        targeting: exact_targeting(1, 1, "Choose target creature", vec![0, 1]),
+    })
+}
+
+/// CR 208 / 701.8: "Destroy target creature with power N or less" is parameterized over the
+/// inclusive power bound; greater-than, toughness, and up-to-one forms stay unsupported.
+fn match_spell_destroy_creature_power_at_most(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    let bound = text
+        .strip_prefix(ISSUE_316_POWER_BOUND_PREFIX)?
+        .strip_suffix(ISSUE_316_POWER_BOUND_SUFFIX)?
+        .parse::<u32>()
+        .ok()?;
+    (bound >= 1).then(|| RecipeEmission::SpellEffectsWithTargeting {
+        effects: vec![SpellEffectKind::Destroy {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                kind: TargetKind::Creature,
+                power: Some(PowerComparison::AtMost(bound)),
+                ..TargetFilter::default()
+            })),
+        }],
+        targeting: exact_targeting(
+            1,
+            1,
+            &format!("Choose target creature with power {bound} or less"),
+            vec![0],
+        ),
+    })
 }
 
 const ISSUE_301_REVIEWED_ORACLE_IDS: &[&str] = &[
@@ -9405,6 +9592,131 @@ pub(super) static CATALOG: &[Recipe] = &[
             "{1}{R}: This Spacecraft gets +2/+0 until end of combat."
         ),
     },
+    Recipe {
+        id: RecipeId("spell.destroy.target_tapped_creature"),
+        label: "destroy target tapped creature",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_destroy_tapped_creature,
+        calibration: calibrations!(
+            "Push" => "Destroy target tapped creature.",
+            "Rip the Seams" => "Destroy target tapped creature.";
+            "Destroy target untapped creature.",
+            "Destroy target tapped artifact or creature.",
+            "Destroy target tapped artifact.",
+            "Destroy up to one target tapped creature.",
+            "Destroy target tapped creature. You gain 1 life.",
+            "Destroy target tapped creature. You gain 2 life.",
+            "Destroy target tapped creature",
+            "Destroy target tapped permanent.",
+            "Destroy two target tapped creatures.",
+            "Destroy target tapped creature you control."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.destroy_up_to_one_artifact_or_enchantment"),
+        label: "destroy up to one target artifact or enchantment on entry",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_destroy_up_to_one_artifact_or_enchantment,
+        calibration: calibrations!(
+            "Chomping Changeling" => "When this creature enters, destroy up to one target artifact or enchantment.",
+            "Disruptive Stormbrood" => "When this creature enters, destroy up to one target artifact or enchantment.";
+            "Destroy target artifact or enchantment.",
+            "Destroy up to one target artifact or enchantment.",
+            "Destroy up to one target artifact.",
+            "Destroy up to one target enchantment.",
+            "Destroy up to one target creature or enchantment.",
+            "Destroy up to one target enchantment or artifact.",
+            "When this artifact enters, destroy up to one target artifact or enchantment.",
+            "When this creature enters, destroy target artifact or enchantment.",
+            "When this creature enters, destroy up to two target artifacts or enchantments.",
+            "When this creature enters, you may destroy up to one target artifact or enchantment.",
+            "When this creature enters, destroy up to one target artifact or enchantment. You gain 1 life.",
+            "Whenever this creature enters, destroy up to one target artifact or enchantment."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.exile_up_to_two_target_cards_from_a_single_graveyard"),
+        label: "exile up to two target cards from a single graveyard on entry",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_exile_up_to_two_cards_from_single_graveyard,
+        calibration: calibrations!(
+            "Griffnaut Tracker" => "When this creature enters, exile up to two target cards from a single graveyard.",
+            "Feral Deathgorger" => "When this creature enters, exile up to two target cards from a single graveyard.";
+            "When this creature enters, exile up to two target cards from a graveyard.",
+            "When this creature enters, exile up to one target card from a single graveyard.",
+            "When this creature enters, exile up to two target creature cards from a single graveyard.",
+            "When this creature enters, exile up to three target cards from a single graveyard.",
+            "When this creature enters, exile target card from a single graveyard.",
+            "When this creature enters, exile up to two target cards from a single graveyard. If at least one creature card was exiled this way, each opponent loses 2 life and you gain 2 life.",
+            "When this creature enters, exile up to two target cards from a single graveyard. You gain 1 life.",
+            "Whenever this creature attacks, exile up to two target cards from a single graveyard.",
+            "At the beginning of combat on your turn, exile up to two target cards from a single graveyard.",
+            "When this creature enters, exile up to two target cards from target opponent's graveyard."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.controller_casts_noncreature.ping_each_opponent_one"),
+        label: "noncreature cast pings each opponent for one",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_controller_casts_noncreature_ping_each_opponent_one,
+        calibration: calibrations!(
+            "Firebrand Archer" => "Whenever you cast a noncreature spell, this creature deals 1 damage to each opponent.",
+            "Coruscation Mage" => "Whenever you cast a noncreature spell, this creature deals 1 damage to each opponent.";
+            "Whenever you cast a spell, this creature deals 1 damage to each opponent.",
+            "Whenever an opponent casts a noncreature spell, this creature deals 1 damage to each opponent.",
+            "Whenever you cast a creature spell, this creature deals 1 damage to each opponent.",
+            "Whenever you cast a noncreature spell, this creature deals 2 damage to each opponent.",
+            "Whenever you cast a noncreature spell, this creature deals 1 damage to target opponent.",
+            "Whenever you cast a noncreature spell, this creature deals 1 damage to each player.",
+            "Whenever you cast a noncreature spell, this creature deals 1 damage to target creature an opponent controls.",
+            "Whenever you cast a noncreature spell, this creature deals 1 damage to each opponent. You gain 1 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump.target_creature_plus_n_zero_first_strike"),
+        label: "creature +N/+0 and first strike",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_pump_creature_plus_n_zero_first_strike,
+        calibration: calibrations!(
+            "Kindled Fury" => "Target creature gets +1/+0 and gains first strike until end of turn.",
+            "Sure Strike" => "Target creature gets +3/+0 and gains first strike until end of turn.";
+            "Target creature gets +0/+0 and gains first strike until end of turn.",
+            "Target creature gets +0/+1 and gains first strike until end of turn.",
+            "Target creature gets +1/+1 and gains first strike until end of turn.",
+            "Target creature gets +2/+2 and gains first strike until end of turn.",
+            "Target creature gets +1/+0 and gains trample until end of turn.",
+            "Target creature gets +1/+0 and gains double strike until end of turn.",
+            "Target creature gets +1/+0 and gains first strike until end of combat.",
+            "Target creature gets +1/+0 and gains first strike until your next turn.",
+            "Target creature you control gets +1/+0 and gains first strike until end of turn.",
+            "Creatures you control get +1/+0 and gain first strike until end of turn.",
+            "Up to one target creature gets +1/+0 and gains first strike until end of turn.",
+            "Target creature gets +1/+0 and gains first strike until end of turn. Scry 1.",
+            "Target creature gets +1/+0 and gains first strike until end of turn. Investigate.",
+            "Target creature gets +1/+0 and gains first strike until end of turn. If this spell was kicked, that creature gains trample until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.destroy.target_creature_power_n_or_less"),
+        label: "destroy creature with power N or less",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_destroy_creature_power_at_most,
+        calibration: calibrations!(
+            "Defeat" => "Destroy target creature with power 2 or less.",
+            "Reave Soul" => "Destroy target creature with power 3 or less.";
+            "Destroy target creature with power 3 or greater.",
+            "Destroy target creature with power 2 or greater.",
+            "Destroy target creature with power 0 or less.",
+            "Destroy target creature with power three or less.",
+            "Destroy target creature with power 3 or less",
+            "Destroy up to one target creature with power 3 or less.",
+            "Destroy target creature with toughness 3 or less.",
+            "Destroy target creature with toughness 4 or greater.",
+            "Destroy target artifact creature with power 3 or less.",
+            "Destroy two target creatures with power 3 or less.",
+            "Destroy target creature with power 3 or less. You gain 1 life."
+        ),
+    },
 ];
 
 fn surface_applies(surface: RecipeSurface, is_spell: bool, context: &RecipeContext) -> bool {
@@ -15092,6 +15404,476 @@ mod tests {
                     .is_none(),
                 "unsupported discard-batch near-miss must remain unmatched: {negative}"
             );
+        }
+    }
+
+    fn issue_316_recipe(id: &str) -> &'static Recipe {
+        CATALOG
+            .iter()
+            .find(|recipe| recipe.id.as_str() == id)
+            .unwrap_or_else(|| panic!("missing recipe {id}"))
+    }
+
+    fn issue_316_match_spell(clause: &str, source_name: &str) -> RecipeMatch {
+        let mut reviewed = context();
+        reviewed.source_name = source_name.into();
+        match_clause(clause, true, &reviewed)
+            .unwrap_or_else(|ambiguity| panic!("{source_name} is ambiguous: {ambiguity}"))
+            .unwrap_or_else(|| panic!("{source_name} should match exactly one recipe"))
+    }
+
+    fn issue_316_match_non_spell(clause: &str, source_name: &str) -> RecipeMatch {
+        let mut reviewed = context();
+        reviewed.source_name = source_name.into();
+        match_clause(clause, false, &reviewed)
+            .unwrap_or_else(|ambiguity| panic!("{source_name} is ambiguous: {ambiguity}"))
+            .unwrap_or_else(|| panic!("{source_name} should match exactly one recipe"))
+    }
+
+    fn issue_316_assert_unmatched(clause: &str, is_spell: bool) {
+        assert!(
+            match_clause(clause, is_spell, &context())
+                .unwrap_or_else(|ambiguity| {
+                    panic!("near-miss must not be ambiguous: {clause}: {ambiguity}")
+                })
+                .is_none(),
+            "unsupported near-miss must remain unmatched: {clause}"
+        );
+    }
+
+    #[test]
+    fn issue_316_recipes_have_stable_ids_and_surfaces() {
+        for (id, surface) in [
+            (
+                "spell.destroy.target_tapped_creature",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "triggered.etb.destroy_up_to_one_artifact_or_enchantment",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "triggered.etb.exile_up_to_two_target_cards_from_a_single_graveyard",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "triggered.controller_casts_noncreature.ping_each_opponent_one",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "spell.pump.target_creature_plus_n_zero_first_strike",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "spell.destroy.target_creature_power_n_or_less",
+                RecipeSurface::SpellClause,
+            ),
+        ] {
+            assert_eq!(
+                issue_316_recipe(id).surface,
+                surface,
+                "{id} surface drifted"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_316_tapped_creature_destroy_is_exact_and_typed() {
+        for source_name in ["Push", "Rip the Seams"] {
+            let matched = issue_316_match_spell(ISSUE_316_TAPPED_CREATURE_CLAUSE, source_name);
+            assert_eq!(matched.id.as_str(), "spell.destroy.target_tapped_creature");
+            let RecipeEmission::SpellEffectsWithTargeting { effects, targeting } = matched.emission
+            else {
+                panic!("tapped-creature destroy must emit an explicitly targeted spell");
+            };
+            assert_eq!(
+                effects,
+                vec![SpellEffectKind::Destroy {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::Creature,
+                        tapped: Some(true),
+                        ..TargetFilter::default()
+                    })),
+                }]
+            );
+            assert_eq!(targeting.groups.len(), 1);
+            let group = &targeting.groups[0];
+            assert_eq!((group.min, group.max), (1, 1));
+            assert_eq!(group.prompt, "Choose target tapped creature");
+            assert_eq!(group.effect_indices, vec![0]);
+            assert!(group.distinct_from.is_empty());
+            assert!(!group.same_graveyard);
+            assert!(group.cast_cost_expansion.is_none());
+        }
+
+        let plain = issue_316_match_spell("Destroy target creature.", "Near Miss");
+        assert_eq!(plain.id.as_str(), "spell.destroy.creature");
+    }
+
+    #[test]
+    fn issue_316_tapped_creature_destroy_rejects_near_misses() {
+        for negative in [
+            "Destroy target untapped creature.",
+            "Destroy target tapped artifact or creature.",
+            "Destroy target tapped artifact.",
+            "Destroy up to one target tapped creature.",
+            "Destroy target tapped creature. You gain 1 life.",
+            "Destroy target tapped creature. You gain 2 life.",
+            "Destroy target tapped creature",
+            "Destroy target tapped permanent.",
+            "Destroy two target tapped creatures.",
+            "Destroy target tapped creature you control.",
+        ] {
+            issue_316_assert_unmatched(negative, true);
+        }
+    }
+
+    #[test]
+    fn issue_316_etb_artifact_or_enchantment_destroy_is_creature_gated() {
+        for source_name in ["Chomping Changeling", "Disruptive Stormbrood"] {
+            let matched = issue_316_match_non_spell(
+                ISSUE_316_ARTIFACT_OR_ENCHANTMENT_ETB_CLAUSE,
+                source_name,
+            );
+            assert_eq!(
+                matched.id.as_str(),
+                "triggered.etb.destroy_up_to_one_artifact_or_enchantment"
+            );
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("artifact-or-enchantment ETB must emit one triggered ability");
+            };
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+            assert!(!ability.may);
+            assert!(ability.intervening_if.is_none());
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::Destroy {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        permanent_types: vec![
+                            PermanentTypeFilter::Artifact,
+                            PermanentTypeFilter::Enchantment,
+                        ],
+                        ..TargetFilter::default()
+                    })),
+                }]
+            );
+            let targeting = ability.targeting.expect("ETB must target optionally");
+            assert_eq!(targeting.groups.len(), 1);
+            let group = &targeting.groups[0];
+            assert_eq!((group.min, group.max), (0, 1));
+            assert_eq!(
+                group.prompt,
+                "Choose up to one target artifact or enchantment"
+            );
+            assert_eq!(group.effect_indices, vec![0]);
+            assert!(!group.same_graveyard);
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(
+                ISSUE_316_ARTIFACT_OR_ENCHANTMENT_ETB_CLAUSE,
+                false,
+                &noncreature
+            )
+            .expect("noncreature source must not be ambiguous")
+            .is_none(),
+            "the ETB destroy recipe is creature-source-only"
+        );
+    }
+
+    #[test]
+    fn issue_316_etb_artifact_or_enchantment_destroy_rejects_near_misses() {
+        for negative in [
+            "Destroy target artifact or enchantment.",
+            "Destroy up to one target artifact or enchantment.",
+            "Destroy up to one target artifact.",
+            "Destroy up to one target enchantment.",
+            "Destroy up to one target creature or enchantment.",
+            "Destroy up to one target enchantment or artifact.",
+            "When this artifact enters, destroy up to one target artifact or enchantment.",
+            "When this creature enters, destroy target artifact or enchantment.",
+            "When this creature enters, destroy up to two target artifacts or enchantments.",
+            "When this creature enters, you may destroy up to one target artifact or enchantment.",
+            "When this creature enters, destroy up to one target artifact or enchantment. You gain 1 life.",
+            "Whenever this creature enters, destroy up to one target artifact or enchantment.",
+        ] {
+            issue_316_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_316_etb_single_graveyard_exile_is_creature_gated() {
+        for source_name in ["Griffnaut Tracker", "Feral Deathgorger"] {
+            let matched =
+                issue_316_match_non_spell(ISSUE_316_SINGLE_GRAVEYARD_EXILE_ETB_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "triggered.etb.exile_up_to_two_target_cards_from_a_single_graveyard"
+            );
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("single-graveyard exile must emit one triggered ability");
+            };
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::MoveGraveyardCards {
+                    filter: GraveyardFilter {
+                        owner: GraveyardOwner::AnyPlayer,
+                        ..GraveyardFilter::default()
+                    },
+                    destination: GraveyardDestination::Exile,
+                    linked_exile_id: None,
+                }]
+            );
+            let targeting = ability.targeting.expect("exile must target optionally");
+            assert_eq!(targeting.groups.len(), 1);
+            let group = &targeting.groups[0];
+            assert_eq!((group.min, group.max), (0, 2));
+            assert_eq!(
+                group.prompt,
+                "Choose up to two target cards from a single graveyard"
+            );
+            assert_eq!(group.effect_indices, vec![0]);
+            assert!(group.same_graveyard);
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(
+                ISSUE_316_SINGLE_GRAVEYARD_EXILE_ETB_CLAUSE,
+                false,
+                &noncreature
+            )
+            .expect("noncreature source must not be ambiguous")
+            .is_none(),
+            "the graveyard exile recipe is creature-source-only"
+        );
+    }
+
+    #[test]
+    fn issue_316_etb_single_graveyard_exile_rejects_near_misses() {
+        for negative in [
+            "When this creature enters, exile up to two target cards from a graveyard.",
+            "When this creature enters, exile up to one target card from a single graveyard.",
+            "When this creature enters, exile up to two target creature cards from a single graveyard.",
+            "When this creature enters, exile up to three target cards from a single graveyard.",
+            "When this creature enters, exile target card from a single graveyard.",
+            "When this creature enters, exile up to two target cards from a single graveyard. If at least one creature card was exiled this way, each opponent loses 2 life and you gain 2 life.",
+            "When this creature enters, exile up to two target cards from a single graveyard. You gain 1 life.",
+            "Whenever this creature attacks, exile up to two target cards from a single graveyard.",
+            "At the beginning of combat on your turn, exile up to two target cards from a single graveyard.",
+            "When this creature enters, exile up to two target cards from target opponent's graveyard.",
+        ] {
+            issue_316_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_316_noncreature_cast_ping_is_creature_gated() {
+        for source_name in ["Firebrand Archer", "Coruscation Mage"] {
+            let matched =
+                issue_316_match_non_spell(ISSUE_316_NONCREATURE_CAST_PING_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "triggered.controller_casts_noncreature.ping_each_opponent_one"
+            );
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("noncreature cast ping must emit one triggered ability");
+            };
+            assert_eq!(
+                ability.trigger,
+                TriggerCondition::WheneverPlayerCastsSpell {
+                    caster: CastTriggerPlayer::Controller,
+                    filter: SpellCastFilter {
+                        card_type: Some(CardTypeFilter::Noncreature),
+                        ..SpellCastFilter::default()
+                    },
+                    ordinal: None,
+                    ordinal_scope: Default::default(),
+                }
+            );
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::DamagePlayer {
+                    amount: Amount::Fixed(1),
+                    who: PlayerRecipient::EachOpponent,
+                }]
+            );
+            assert!(ability.targeting.is_none());
+        }
+
+        let counter = issue_316_match_non_spell(
+            "Whenever you cast a noncreature spell, put a +1/+1 counter on this creature.",
+            "Near Miss",
+        );
+        assert_eq!(
+            counter.id.as_str(),
+            "triggered.controller_casts.noncreature.put_counter.plus_one_plus_one.source.one"
+        );
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_316_NONCREATURE_CAST_PING_CLAUSE, false, &noncreature)
+                .expect("noncreature source must not be ambiguous")
+                .is_none(),
+            "the cast-ping recipe is creature-source-only"
+        );
+    }
+
+    #[test]
+    fn issue_316_noncreature_cast_ping_rejects_near_misses() {
+        for negative in [
+            "Whenever you cast a spell, this creature deals 1 damage to each opponent.",
+            "Whenever an opponent casts a noncreature spell, this creature deals 1 damage to each opponent.",
+            "Whenever you cast a creature spell, this creature deals 1 damage to each opponent.",
+            "Whenever you cast a noncreature spell, this creature deals 2 damage to each opponent.",
+            "Whenever you cast a noncreature spell, this creature deals 1 damage to target opponent.",
+            "Whenever you cast a noncreature spell, this creature deals 1 damage to each player.",
+            "Whenever you cast a noncreature spell, this creature deals 1 damage to target creature an opponent controls.",
+            "Whenever you cast a noncreature spell, this creature deals 1 damage to each opponent. You gain 1 life.",
+        ] {
+            issue_316_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_316_first_strike_pump_is_parameterized_and_exact() {
+        for (source_name, clause, power) in [
+            (
+                "Kindled Fury",
+                "Target creature gets +1/+0 and gains first strike until end of turn.",
+                1,
+            ),
+            (
+                "Sure Strike",
+                "Target creature gets +3/+0 and gains first strike until end of turn.",
+                3,
+            ),
+        ] {
+            let matched = issue_316_match_spell(clause, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "spell.pump.target_creature_plus_n_zero_first_strike"
+            );
+            let RecipeEmission::SpellEffectsWithTargeting { effects, targeting } = matched.emission
+            else {
+                panic!("first-strike pump must emit an explicitly targeted spell");
+            };
+            assert_eq!(
+                effects,
+                vec![
+                    SpellEffectKind::PumpTarget {
+                        power,
+                        toughness: 0,
+                        scale: None,
+                        subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                        keywords: vec![Keyword::FirstStrike],
+                    },
+                ]
+            );
+            assert_eq!(targeting.groups.len(), 1);
+            let group = &targeting.groups[0];
+            assert_eq!((group.min, group.max), (1, 1));
+            assert_eq!(group.prompt, "Choose target creature");
+            assert_eq!(group.effect_indices, vec![0, 1]);
+            assert!(!group.same_graveyard);
+        }
+    }
+
+    #[test]
+    fn issue_316_first_strike_pump_rejects_near_misses() {
+        for negative in [
+            "Target creature gets +0/+0 and gains first strike until end of turn.",
+            "Target creature gets +0/+1 and gains first strike until end of turn.",
+            "Target creature gets +1/+1 and gains first strike until end of turn.",
+            "Target creature gets +2/+2 and gains first strike until end of turn.",
+            "Target creature gets +1/+0 and gains trample until end of turn.",
+            "Target creature gets +1/+0 and gains double strike until end of turn.",
+            "Target creature gets +1/+0 and gains first strike until end of combat.",
+            "Target creature gets +1/+0 and gains first strike until your next turn.",
+            "Target creature you control gets +1/+0 and gains first strike until end of turn.",
+            "Creatures you control get +1/+0 and gain first strike until end of turn.",
+            "Up to one target creature gets +1/+0 and gains first strike until end of turn.",
+            "Target creature gets +1/+0 and gains first strike until end of turn. Scry 1.",
+            "Target creature gets +1/+0 and gains first strike until end of turn. Investigate.",
+            "Target creature gets +1/+0 and gains first strike until end of turn. If this spell was kicked, that creature gains trample until end of turn.",
+        ] {
+            issue_316_assert_unmatched(negative, true);
+        }
+    }
+
+    #[test]
+    fn issue_316_power_bounded_destroy_is_parameterized_and_exact() {
+        for (source_name, clause, bound) in [
+            ("Defeat", "Destroy target creature with power 2 or less.", 2),
+            (
+                "Reave Soul",
+                "Destroy target creature with power 3 or less.",
+                3,
+            ),
+            (
+                "Petty Revenge",
+                "Destroy target creature with power 3 or less.",
+                3,
+            ),
+        ] {
+            let matched = issue_316_match_spell(clause, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "spell.destroy.target_creature_power_n_or_less"
+            );
+            let RecipeEmission::SpellEffectsWithTargeting { effects, targeting } = matched.emission
+            else {
+                panic!("power-bounded destroy must emit an explicitly targeted spell");
+            };
+            assert_eq!(
+                effects,
+                vec![SpellEffectKind::Destroy {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::Creature,
+                        power: Some(PowerComparison::AtMost(bound)),
+                        ..TargetFilter::default()
+                    })),
+                }]
+            );
+            assert_eq!(targeting.groups.len(), 1);
+            let group = &targeting.groups[0];
+            assert_eq!((group.min, group.max), (1, 1));
+            assert_eq!(
+                group.prompt,
+                format!("Choose target creature with power {bound} or less")
+            );
+            assert_eq!(group.effect_indices, vec![0]);
+        }
+
+        let plain = issue_316_match_spell("Destroy target creature.", "Near Miss");
+        assert_eq!(plain.id.as_str(), "spell.destroy.creature");
+    }
+
+    #[test]
+    fn issue_316_power_bounded_destroy_rejects_near_misses() {
+        for negative in [
+            "Destroy target creature with power 3 or greater.",
+            "Destroy target creature with power 2 or greater.",
+            "Destroy target creature with power 0 or less.",
+            "Destroy target creature with power three or less.",
+            "Destroy target creature with power 3 or less",
+            "Destroy up to one target creature with power 3 or less.",
+            "Destroy target creature with toughness 3 or less.",
+            "Destroy target creature with toughness 4 or greater.",
+            "Destroy target artifact creature with power 3 or less.",
+            "Destroy two target creatures with power 3 or less.",
+            "Destroy target creature with power 3 or less. You gain 1 life.",
+        ] {
+            issue_316_assert_unmatched(negative, true);
         }
     }
 }

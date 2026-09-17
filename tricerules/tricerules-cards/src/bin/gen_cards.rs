@@ -2582,8 +2582,9 @@ mod tests {
     use tricerules_cards::primitives::{
         BattlefieldPermanentFilter, CardResultAction, CardResultFilter, CardResultSource,
         CardTypeFilter, CountExpression, EffectSubject, EntersTappedAffected, EntryCost,
-        GameCondition, ObjectContributionKind, ObjectPaymentConstraint, PermanentTypeFilter,
-        PlayerRecipient, PowerToughnessCharacteristic, RelativePlayerSet, ResolutionBranchDef,
+        GameCondition, GraveyardFilter, GraveyardOwner, ObjectContributionKind,
+        ObjectPaymentConstraint, PermanentTypeFilter, PlayerRecipient, PowerComparison,
+        PowerToughnessCharacteristic, RelativePlayerSet, ResolutionBranchDef,
         ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SpellCastFilter,
         SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController,
         TargetFilter, TargetKind, TargetObjectExclusion, TargetingSourceFilter, TypeLineAddition,
@@ -8802,6 +8803,644 @@ mod tests {
                 "a reviewed #315 card cannot borrow another cohort member's clause"
             );
         }
+    }
+
+    /// Issue #316 — the six exact templates must generate the seven reviewed Standard cards
+    /// end-to-end through `evaluate`/`evaluate_multiface` with their complete typed payloads.
+    #[test]
+    fn issue_316_cohort_generates_the_exact_reviewed_definitions() {
+        let mut rip_the_seams = multiface(
+            "adventure",
+            "Threadbind Clique // Rip the Seams",
+            vec![
+                face(
+                    "Threadbind Clique",
+                    "{3}{U}",
+                    "Creature — Faerie",
+                    "Flying",
+                    Some(("3", "3")),
+                    &["U"],
+                    None,
+                ),
+                face(
+                    "Rip the Seams",
+                    "{2}{W}",
+                    "Instant — Adventure",
+                    "Destroy target tapped creature. (Then exile this card. You may cast the creature later from exile.)",
+                    None,
+                    &["W"],
+                    None,
+                ),
+            ],
+        );
+        for face_value in rip_the_seams["card_faces"]
+            .as_array_mut()
+            .expect("synthetic Adventure faces")
+        {
+            face_value
+                .as_object_mut()
+                .expect("synthetic face object")
+                .remove("colors");
+        }
+        rip_the_seams["oracle_id"] = json!("bd575e82-99e7-44c7-ab93-d33f5678e1ad");
+        let generated =
+            evaluate_fresh(&rip_the_seams).expect("Rip the Seams should qualify end-to-end");
+        assert_eq!(generated.id, "threadbind_clique_rip_the_seams");
+        assert!(generated.faces[0].recipe_labels.is_empty());
+        assert_eq!(
+            generated.faces[1].recipe_labels,
+            ["destroy target tapped creature"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.layout, Layout::Adventure);
+        assert_eq!(raw.faces[0].face_id.as_str(), "threadbind_clique");
+        assert_eq!(raw.faces[1].face_id.as_str(), "rip_the_seams");
+        assert_eq!(raw.faces[0].types, ["Creature", "Faerie"]);
+        assert_eq!(raw.faces[0].keywords, [Keyword::Flying]);
+        assert_eq!(
+            (raw.faces[0].power, raw.faces[0].toughness),
+            (Some(3), Some(3))
+        );
+        assert_eq!(raw.faces[0].colors(), [Color::Blue]);
+        assert_eq!(raw.faces[1].types, ["Instant", "Adventure"]);
+        assert_eq!(raw.faces[1].colors(), [Color::White]);
+        assert_eq!(
+            raw.faces[1].spell_effect,
+            [SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    tapped: Some(true),
+                    ..TargetFilter::default()
+                })),
+            }]
+        );
+        let targeting = raw.faces[1]
+            .targeting
+            .as_ref()
+            .expect("Rip the Seams must target");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("Rip the Seams must own exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.prompt, "Choose target tapped creature");
+        assert_eq!(group.effect_indices, [0]);
+        assert!(
+            TargetSchema::compile(&raw.faces[1].spell_effect, raw.faces[1].targeting.as_ref())
+                .is_ok()
+        );
+
+        let mut changeling = normal_card_with_oracle_id(
+            "d740dbd9-8e90-4121-8d53-c6ddf5178d58",
+            "Chomping Changeling",
+            "{2}{G}",
+            "Creature — Shapeshifter",
+            "Changeling (This card is every creature type.)\nWhen this creature enters, destroy up to one target artifact or enchantment.",
+            Some(("1", "2")),
+        );
+        changeling["colors"] = json!(["G"]);
+        let generated = evaluate_fresh(&changeling).expect("Chomping Changeling should qualify");
+        assert_eq!(generated.id, "chomping_changeling");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            [
+                "Changeling",
+                "destroy up to one target artifact or enchantment on entry"
+            ]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        let [changeling_definition] = raw.characteristic_defining_abilities.as_slice() else {
+            panic!("Chomping Changeling must keep its Changeling CDA");
+        };
+        assert_eq!(
+            changeling_definition.definition,
+            CharacteristicDefiningAbility::Changeling
+        );
+        assert_eq!(
+            changeling_definition.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("Chomping Changeling must emit exactly one ETB ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![2])
+        );
+        assert!(!ability.may);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![
+                        PermanentTypeFilter::Artifact,
+                        PermanentTypeFilter::Enchantment,
+                    ],
+                    ..TargetFilter::default()
+                })),
+            }]
+        );
+        let targeting = ability.targeting.as_ref().expect("ETB must target");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("one optional target group");
+        };
+        assert_eq!((group.min, group.max), (0, 1));
+        assert_eq!(
+            group.prompt,
+            "Choose up to one target artifact or enchantment"
+        );
+
+        let mut stormbrood = multiface(
+            "adventure",
+            "Disruptive Stormbrood // Petty Revenge",
+            vec![
+                face(
+                    "Disruptive Stormbrood",
+                    "{4}{G}",
+                    "Creature — Dragon",
+                    "Flying\nWhen this creature enters, destroy up to one target artifact or enchantment.",
+                    Some(("3", "3")),
+                    &["G"],
+                    None,
+                ),
+                face(
+                    "Petty Revenge",
+                    "{1}{B}",
+                    "Sorcery — Omen",
+                    "Destroy target creature with power 3 or less. (Then shuffle this card into its owner's library.)",
+                    None,
+                    &["B"],
+                    None,
+                ),
+            ],
+        );
+        for face_value in stormbrood["card_faces"]
+            .as_array_mut()
+            .expect("synthetic Omen faces")
+        {
+            face_value
+                .as_object_mut()
+                .expect("synthetic face object")
+                .remove("colors");
+        }
+        stormbrood["oracle_id"] = json!("ec74ae5d-1284-443c-9842-18954f8cf5a8");
+        let generated = evaluate_fresh(&stormbrood).expect("Disruptive Stormbrood should qualify");
+        assert_eq!(generated.id, "disruptive_stormbrood_petty_revenge");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["destroy up to one target artifact or enchantment on entry"]
+        );
+        assert_eq!(
+            generated.faces[1].recipe_labels,
+            ["destroy creature with power N or less"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.layout, Layout::Omen);
+        assert_eq!(raw.faces[0].keywords, [Keyword::Flying]);
+        assert_eq!(raw.faces[1].types, ["Sorcery", "Omen"]);
+        assert_eq!(
+            raw.faces[1].spell_effect,
+            [SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    power: Some(PowerComparison::AtMost(3)),
+                    ..TargetFilter::default()
+                })),
+            }]
+        );
+        let targeting = raw.faces[1]
+            .targeting
+            .as_ref()
+            .expect("Petty Revenge must target");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("Petty Revenge must own exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.prompt, "Choose target creature with power 3 or less");
+
+        let mut tracker = normal_card_with_oracle_id(
+            "6eff5e17-946b-4433-9f48-88f103844c42",
+            "Griffnaut Tracker",
+            "{3}{W}",
+            "Creature — Human Detective",
+            "Flying\nWhen this creature enters, exile up to two target cards from a single graveyard.",
+            Some(("3", "2")),
+        );
+        tracker["colors"] = json!(["W"]);
+        let generated = evaluate_fresh(&tracker).expect("Griffnaut Tracker should qualify");
+        assert_eq!(generated.id, "griffnaut_tracker");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["exile up to two target cards from a single graveyard on entry"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.keywords, [Keyword::Flying]);
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("Griffnaut Tracker must emit exactly one ETB ability");
+        };
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![2])
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    owner: GraveyardOwner::AnyPlayer,
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::Exile,
+                linked_exile_id: None,
+            }]
+        );
+        let targeting = ability.targeting.as_ref().expect("ETB must target");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("one optional same-graveyard target group");
+        };
+        assert_eq!((group.min, group.max), (0, 2));
+        assert!(group.same_graveyard);
+        assert_eq!(
+            group.prompt,
+            "Choose up to two target cards from a single graveyard"
+        );
+
+        let mut archer = normal_card_with_oracle_id(
+            "2e9289d6-dbc6-456d-88cf-d1f534e731d6",
+            "Firebrand Archer",
+            "{1}{R}",
+            "Creature — Human Archer",
+            "Whenever you cast a noncreature spell, this creature deals 1 damage to each opponent.",
+            Some(("2", "1")),
+        );
+        archer["colors"] = json!(["R"]);
+        let generated = evaluate_fresh(&archer).expect("Firebrand Archer should qualify");
+        assert_eq!(generated.id, "firebrand_archer");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["noncreature cast pings each opponent for one"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("Firebrand Archer must emit exactly one triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverPlayerCastsSpell {
+                caster: CastTriggerPlayer::Controller,
+                filter: SpellCastFilter {
+                    card_type: Some(CardTypeFilter::Noncreature),
+                    ..SpellCastFilter::default()
+                },
+                ordinal: None,
+                ordinal_scope: Default::default(),
+            }
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::DamagePlayer {
+                amount: Amount::Fixed(1),
+                who: PlayerRecipient::EachOpponent,
+            }]
+        );
+        assert!(ability.targeting.is_none());
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+
+        for (oracle_id, name, mana_cost, clause, expected_power) in [
+            (
+                "ebeee06e-3345-4f02-896f-cb0b2cfa5548",
+                "Kindled Fury",
+                "{R}",
+                "Target creature gets +1/+0 and gains first strike until end of turn. (It deals combat damage before creatures without first strike.)",
+                1,
+            ),
+            (
+                "fb694e7e-f66e-4958-b6ed-aa74bc9ac43e",
+                "Sure Strike",
+                "{1}{R}",
+                "Target creature gets +3/+0 and gains first strike until end of turn. (It deals combat damage before creatures without first strike.)",
+                3,
+            ),
+        ] {
+            let card = normal_card_with_oracle_id(
+                oracle_id,
+                name,
+                mana_cost,
+                "Instant",
+                clause,
+                None,
+            );
+            let generated = evaluate_fresh(&card)
+                .unwrap_or_else(|error| panic!("{name} should qualify: {error:?}"));
+            assert_eq!(generated.id, slugify(name));
+            assert_eq!(
+                generated.faces[0].recipe_labels,
+                ["creature +N/+0 and first strike"]
+            );
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert_eq!(
+                raw.spell_effect,
+                [
+                    SpellEffectKind::PumpTarget {
+                        power: expected_power,
+                        toughness: 0,
+                        scale: None,
+                        subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                        keywords: vec![Keyword::FirstStrike],
+                    },
+                ]
+            );
+            let targeting = raw.targeting.as_ref().expect("must target one creature");
+            let [group] = targeting.groups.as_slice() else {
+                panic!("{name} must own exactly one target group");
+            };
+            assert_eq!((group.min, group.max), (1, 1));
+            assert_eq!(group.effect_indices, [0, 1]);
+            assert!(TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok());
+        }
+    }
+
+    #[test]
+    fn issue_316_generator_is_fail_closed_for_near_miss_clauses() {
+        let mut archer = normal_card_with_oracle_id(
+            "2e9289d6-dbc6-456d-88cf-d1f534e731d6",
+            "Firebrand Archer",
+            "{1}{R}",
+            "Creature — Human Archer",
+            "Whenever you cast a noncreature spell, this creature deals 1 damage to each opponent.",
+            Some(("2", "1")),
+        );
+        archer["colors"] = json!(["R"]);
+        let base_archer = archer;
+        let archer_cases: &[(&str, &str)] = &[
+            (
+                "cast any spell",
+                "Whenever you cast a spell, this creature deals 1 damage to each opponent.",
+            ),
+            (
+                "opponent casts",
+                "Whenever an opponent casts a noncreature spell, this creature deals 1 damage to each opponent.",
+            ),
+            (
+                "each player",
+                "Whenever you cast a noncreature spell, this creature deals 1 damage to each player.",
+            ),
+            (
+                "appended instruction",
+                "Whenever you cast a noncreature spell, this creature deals 1 damage to each opponent. You gain 1 life.",
+            ),
+        ];
+        for (label, clause) in archer_cases {
+            let mut changed = base_archer.clone();
+            changed["oracle_text"] = json!(clause);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#316 near-miss must fail closed: {label}"
+            );
+        }
+
+        let mut counters = base_archer.clone();
+        counters["oracle_text"] =
+            json!("Whenever you cast a noncreature spell, put a +1/+1 counter on this creature.");
+        let generated =
+            evaluate_fresh(&counters).expect("the existing cast-counter recipe applies");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["controller casts noncreature put one counter on source"]
+        );
+
+        let mut noncreature_source = base_archer.clone();
+        noncreature_source["type_line"] = json!("Enchantment");
+        noncreature_source
+            .as_object_mut()
+            .expect("synthetic card object")
+            .remove("power");
+        noncreature_source
+            .as_object_mut()
+            .expect("synthetic card object")
+            .remove("toughness");
+        assert!(
+            evaluate_fresh(&noncreature_source).is_err(),
+            "the creature cast-ping recipe is creature-source-only"
+        );
+
+        let mut changeling = normal_card_with_oracle_id(
+            "d740dbd9-8e90-4121-8d53-c6ddf5178d58",
+            "Chomping Changeling",
+            "{2}{G}",
+            "Creature — Shapeshifter",
+            "Changeling (This card is every creature type.)\nWhen this creature enters, destroy up to one target artifact or enchantment.",
+            Some(("1", "2")),
+        );
+        changeling["colors"] = json!(["G"]);
+        let base_changeling = changeling;
+        let changeling_cases: &[(&str, &str)] = &[
+            (
+                "optional destroy",
+                "Changeling (This card is every creature type.)\nWhen this creature enters, you may destroy up to one target artifact or enchantment.",
+            ),
+            (
+                "mandatory destroy",
+                "Changeling (This card is every creature type.)\nWhen this creature enters, destroy target artifact or enchantment.",
+            ),
+            (
+                "appended instruction",
+                "Changeling (This card is every creature type.)\nWhen this creature enters, destroy up to one target artifact or enchantment. You gain 1 life.",
+            ),
+            (
+                "up to two",
+                "Changeling (This card is every creature type.)\nWhen this creature enters, destroy up to two target artifacts or enchantments.",
+            ),
+            (
+                "artifact source",
+                "Changeling (This card is every creature type.)\nWhen this artifact enters, destroy up to one target artifact or enchantment.",
+            ),
+            (
+                "attack trigger",
+                "Changeling (This card is every creature type.)\nWhenever this creature attacks, destroy up to one target artifact or enchantment.",
+            ),
+        ];
+        for (label, clause) in changeling_cases {
+            let mut changed = base_changeling.clone();
+            changed["oracle_text"] = json!(clause);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#316 near-miss must fail closed: {label}"
+            );
+        }
+
+        let mut tracker = normal_card_with_oracle_id(
+            "6eff5e17-946b-4433-9f48-88f103844c42",
+            "Griffnaut Tracker",
+            "{3}{W}",
+            "Creature — Human Detective",
+            "Flying\nWhen this creature enters, exile up to two target cards from a single graveyard.",
+            Some(("3", "2")),
+        );
+        tracker["colors"] = json!(["W"]);
+        let base_tracker = tracker;
+        let tracker_cases: &[(&str, &str)] = &[
+            (
+                "multiplayer-open graveyard",
+                "Flying\nWhen this creature enters, exile up to two target cards from a graveyard.",
+            ),
+            (
+                "up to one",
+                "Flying\nWhen this creature enters, exile up to one target card from a single graveyard.",
+            ),
+            (
+                "creature cards only",
+                "Flying\nWhen this creature enters, exile up to two target creature cards from a single graveyard.",
+            ),
+            (
+                "conditional drain",
+                "Flying\nWhen this creature enters, exile up to two target cards from a single graveyard. If at least one creature card was exiled this way, each opponent loses 2 life and you gain 2 life.",
+            ),
+            (
+                "attack trigger",
+                "Flying\nWhenever this creature attacks, exile up to two target cards from a single graveyard.",
+            ),
+        ];
+        for (label, clause) in tracker_cases {
+            let mut changed = base_tracker.clone();
+            changed["oracle_text"] = json!(clause);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#316 near-miss must fail closed: {label}"
+            );
+        }
+
+        let mut fury = normal_card_with_oracle_id(
+            "ebeee06e-3345-4f02-896f-cb0b2cfa5548",
+            "Kindled Fury",
+            "{R}",
+            "Instant",
+            "Target creature gets +1/+0 and gains first strike until end of turn.",
+            None,
+        );
+        fury["colors"] = json!(["R"]);
+        let base_fury = fury;
+        let fury_cases: &[(&str, &str)] = &[
+            (
+                "toughness bonus",
+                "Target creature gets +1/+1 and gains first strike until end of turn.",
+            ),
+            (
+                "double strike",
+                "Target creature gets +1/+0 and gains double strike until end of turn.",
+            ),
+            (
+                "until end of combat",
+                "Target creature gets +1/+0 and gains first strike until end of combat.",
+            ),
+            (
+                "controlled creature",
+                "Target creature you control gets +1/+0 and gains first strike until end of turn.",
+            ),
+            (
+                "appended scry",
+                "Target creature gets +1/+0 and gains first strike until end of turn. Scry 1.",
+            ),
+            (
+                "up to one target",
+                "Up to one target creature gets +1/+0 and gains first strike until end of turn.",
+            ),
+        ];
+        for (label, clause) in fury_cases {
+            let mut changed = base_fury.clone();
+            changed["oracle_text"] = json!(clause);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#316 near-miss must fail closed: {label}"
+            );
+        }
+
+        let mut revenge = multiface(
+            "adventure",
+            "Disruptive Stormbrood // Petty Revenge",
+            vec![
+                face(
+                    "Disruptive Stormbrood",
+                    "{4}{G}",
+                    "Creature — Dragon",
+                    "Flying\nWhen this creature enters, destroy up to one target artifact or enchantment.",
+                    Some(("3", "3")),
+                    &["G"],
+                    None,
+                ),
+                face(
+                    "Petty Revenge",
+                    "{1}{B}",
+                    "Sorcery — Omen",
+                    "Destroy target creature with power 3 or less. (Then shuffle this card into its owner's library.)",
+                    None,
+                    &["B"],
+                    None,
+                ),
+            ],
+        );
+        revenge["oracle_id"] = json!("ec74ae5d-1284-443c-9842-18954f8cf5a8");
+        let base_revenge = revenge;
+        for (label, clause) in [
+            (
+                "greater bound",
+                "Destroy target creature with power 3 or greater. (Then shuffle this card into its owner's library.)",
+            ),
+            (
+                "toughness bound",
+                "Destroy target creature with toughness 3 or less. (Then shuffle this card into its owner's library.)",
+            ),
+            (
+                "up to one target",
+                "Destroy up to one target creature with power 3 or less. (Then shuffle this card into its owner's library.)",
+            ),
+            (
+                "appended instruction",
+                "Destroy target creature with power 3 or less. You gain 1 life. (Then shuffle this card into its owner's library.)",
+            ),
+        ] {
+            let mut changed = base_revenge.clone();
+            changed["card_faces"][1]["oracle_text"] = json!(clause);
+            assert!(
+                evaluate_fresh(&changed).is_err(),
+                "#316 near-miss must fail closed: {label}"
+            );
+        }
+
+        let mut untapped = normal_card_with_oracle_id(
+            "bd575e82-99e7-44c7-ab93-d33f5678e1ad",
+            "Rip the Seams Test",
+            "{2}{W}",
+            "Instant",
+            "Destroy target untapped creature.",
+            None,
+        );
+        untapped["colors"] = json!(["W"]);
+        assert!(
+            evaluate_fresh(&untapped).is_err(),
+            "an untapped-only destroy must not borrow the tapped-creature recipe"
+        );
+        let mut plain_destroy = untapped.clone();
+        plain_destroy["oracle_text"] = json!("Destroy target creature.");
+        let generated = evaluate_fresh(&plain_destroy)
+            .expect("the existing destroy recipe stays the only match");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["destroy target creature"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(
+            raw.spell_effect,
+            [SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            }]
+        );
     }
 
     #[test]

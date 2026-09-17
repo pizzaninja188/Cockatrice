@@ -471,3 +471,5 @@ mod issue_313_generated_station;
 mod issue_314_generated_activated_draw_two;
 #[path = "scenario/issue_315_generated_creature_tappers.rs"]
 mod issue_315_generated_creature_tappers;
+#[path = "scenario/issue_316_generated_single_clause_cohort.rs"]
+mod issue_316_generated_single_clause_cohort;
