@@ -9409,10 +9409,6 @@ mod tests {
                 "Target creature you control gets +1/+0 and gains first strike until end of turn.",
             ),
             (
-                "appended scry",
-                "Target creature gets +1/+0 and gains first strike until end of turn. Scry 1.",
-            ),
-            (
                 "up to one target",
                 "Up to one target creature gets +1/+0 and gains first strike until end of turn.",
             ),
@@ -11462,6 +11458,427 @@ mod tests {
                 subject: EffectSubject::Source,
             }]
         );
+    }
+
+    #[test]
+    fn issue_328_cohort_generates_the_exact_reviewed_definitions() {
+        let mut watch = normal_card_with_oracle_id(
+            "2d400c01-d2d0-442a-bc3d-cf106a754dab",
+            "Not on My Watch",
+            "{1}{W}",
+            "Instant",
+            "Exile target attacking creature.",
+            None,
+        );
+        watch["colors"] = json!(["W"]);
+        let generated = evaluate_fresh(&watch).expect("Not on My Watch should qualify");
+        assert_eq!(generated.id, "not_on_my_watch");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["exile target attacking creature"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{1}{W}");
+        assert_eq!(raw.types, ["Instant"]);
+        assert_eq!(
+            raw.spell_effect,
+            [SpellEffectKind::Exile {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    combat_role: Some(CombatRole::Attacking),
+                    ..TargetFilter::default()
+                })),
+            }]
+        );
+        assert!(raw.targeting.is_none());
+        assert!(TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok());
+
+        let mut cub = normal_card_with_oracle_id(
+            "cae60cf8-cd64-4595-a4dd-946694cf2bb1",
+            "Felidar Cub",
+            "{1}{W}",
+            "Creature — Cat Beast",
+            "Sacrifice this creature: Destroy target enchantment.",
+            Some(("2", "2")),
+        );
+        cub["colors"] = json!(["W"]);
+        let generated = evaluate_fresh(&cub).expect("Felidar Cub should qualify");
+        assert_eq!(generated.id, "felidar_cub");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["sacrifice this creature to destroy target enchantment"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{1}{W}");
+        assert_eq!(raw.types, ["Creature", "Cat", "Beast"]);
+        assert_eq!((raw.power, raw.toughness), (Some(2), Some(2)));
+        let [ability] = raw.activated_abilities.as_slice() else {
+            panic!("Felidar Cub must emit one activated ability");
+        };
+        assert_eq!(ability.costs, [AbilityCost::SacrificeSelf]);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![PermanentTypeFilter::Enchantment],
+                    ..TargetFilter::default()
+                })),
+            }]
+        );
+        assert!(ability.targeting.is_none());
+
+        let mut giant = normal_card_with_oracle_id(
+            "46c7a552-4a98-4e1a-8651-8fb0e7153aec",
+            "Ravenous Giant",
+            "{2}{R}{R}",
+            "Creature — Giant",
+            "At the beginning of your upkeep, this creature deals 1 damage to you.",
+            Some(("5", "5")),
+        );
+        giant["colors"] = json!(["R"]);
+        let generated = evaluate_fresh(&giant).expect("Ravenous Giant should qualify");
+        assert_eq!(generated.id, "ravenous_giant");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["upkeep self damage one to controller"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{2}{R}{R}");
+        assert_eq!((raw.power, raw.toughness), (Some(5), Some(5)));
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("Ravenous Giant must emit one triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::AtBeginningOfUpkeep {
+                player: CastTriggerPlayer::Controller,
+            }
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::DamagePlayer {
+                amount: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+            }]
+        );
+        assert!(ability.targeting.is_none());
+
+        let mut wall = normal_card_with_oracle_id(
+            "74d31e99-ab48-483a-a62e-5b424b27d017",
+            "Rune-Sealed Wall",
+            "{2}{U}",
+            "Artifact Creature — Wall",
+            "Defender\n{T}: Surveil 1. (Look at the top card of your library. You may put it into your graveyard.)",
+            Some(("0", "6")),
+        );
+        wall["colors"] = json!(["U"]);
+        let generated = evaluate_fresh(&wall).expect("Rune-Sealed Wall should qualify");
+        assert_eq!(generated.id, "rune-sealed_wall");
+        assert_eq!(generated.faces[0].recipe_labels, ["tap to surveil one"]);
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{2}{U}");
+        assert_eq!(raw.types, ["Artifact", "Creature", "Wall"]);
+        assert_eq!(raw.keywords, [Keyword::Defender]);
+        let [ability] = raw.activated_abilities.as_slice() else {
+            panic!("Rune-Sealed Wall must emit one activated ability");
+        };
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![2])
+        );
+        assert_eq!(ability.costs, [AbilityCost::Tap]);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::LibraryPartition {
+                count: 1,
+                top_min: 0,
+                top_max: None,
+                kind: LibraryPartitionKind::Surveil,
+            }]
+        );
+        assert!(ability.targeting.is_none());
+
+        let mut cavalry = normal_card_with_oracle_id(
+            "6a92b011-fd01-4b6a-a17c-73ac1967ff98",
+            "Axgard Cavalry",
+            "{1}{R}",
+            "Creature — Dwarf Berserker",
+            "{T}: Target creature gains haste until end of turn. (It can attack and {T} this turn.)",
+            Some(("2", "2")),
+        );
+        cavalry["colors"] = json!(["R"]);
+        let generated = evaluate_fresh(&cavalry).expect("Axgard Cavalry should qualify");
+        assert_eq!(generated.id, "axgard_cavalry");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["tap to grant target creature haste until end of turn"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{1}{R}");
+        let [ability] = raw.activated_abilities.as_slice() else {
+            panic!("Axgard Cavalry must emit one activated ability");
+        };
+        assert_eq!(ability.costs, [AbilityCost::Tap]);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                keywords: vec![Keyword::Haste],
+            }]
+        );
+        let targeting = ability
+            .targeting
+            .as_ref()
+            .expect("Axgard Cavalry targets a creature");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("Axgard Cavalry must own exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.prompt, "Choose target creature");
+        assert_eq!(group.effect_indices, [0]);
+
+        let mut regrower = normal_card_with_oracle_id(
+            "adac526d-1a85-431a-a302-0a4b8f4a0c44",
+            "Elvish Regrower",
+            "{2}{G}{G}",
+            "Creature — Elf Druid",
+            "When this creature enters, return target permanent card from your graveyard to your hand.",
+            Some(("4", "3")),
+        );
+        regrower["colors"] = json!(["G"]);
+        let generated = evaluate_fresh(&regrower).expect("Elvish Regrower should qualify");
+        assert_eq!(generated.id, "elvish_regrower");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["creature ETB return target permanent card to hand"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{2}{G}{G}");
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("Elvish Regrower must emit one triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    owner: GraveyardOwner::Controller,
+                    card: Some(ZoneCardFilter {
+                        excluded_card_types: vec![CardTypeFilter::Instant, CardTypeFilter::Sorcery,],
+                        ..ZoneCardFilter::default()
+                    }),
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::Hand,
+                linked_exile_id: None,
+            }]
+        );
+        assert!(ability.targeting.is_none());
+
+        let mut heroism = normal_card_with_oracle_id(
+            "c1ed20c0-f75d-4aca-8874-6955bd9fb21b",
+            "Kindled Heroism",
+            "{R}",
+            "Instant",
+            "Target creature gets +1/+0 and gains first strike until end of turn. Scry 1.",
+            None,
+        );
+        heroism["colors"] = json!(["R"]);
+        let generated = evaluate_fresh(&heroism).expect("Kindled Heroism should qualify");
+        assert_eq!(generated.id, "kindled_heroism");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["creature +1/+0 and first strike then scry one"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{R}");
+        assert_eq!(
+            raw.spell_effect,
+            [
+                SpellEffectKind::PumpTarget {
+                    power: 1,
+                    toughness: 0,
+                    scale: None,
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                },
+                SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    keywords: vec![Keyword::FirstStrike],
+                },
+                SpellEffectKind::Scry {
+                    count: Amount::Fixed(1),
+                },
+            ]
+        );
+        let targeting = raw
+            .targeting
+            .as_ref()
+            .expect("Kindled Heroism must target a creature");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("Kindled Heroism must own exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.effect_indices, [0, 1]);
+        assert!(TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok());
+
+        // The pinned Scryfall bulk omits per-face colors on Adventure faces; the generator
+        // derives them from the face mana cost. The creature face is a plain Haste body already
+        // supported, and the Adventure face is the new can't-block clause.
+        let mut bruiser = multiface(
+            "adventure",
+            "Bellowing Bruiser // Beat a Path",
+            vec![
+                face(
+                    "Bellowing Bruiser",
+                    "{4}{R}",
+                    "Creature — Ogre",
+                    "Haste",
+                    Some(("4", "4")),
+                    &["R"],
+                    None,
+                ),
+                face(
+                    "Beat a Path",
+                    "{2}{R}",
+                    "Sorcery — Adventure",
+                    "Up to two target creatures can't block this turn. (Then exile this card. You may cast the creature later from exile.)",
+                    None,
+                    &["R"],
+                    None,
+                ),
+            ],
+        );
+        for face in bruiser["card_faces"]
+            .as_array_mut()
+            .expect("synthetic Adventure faces")
+        {
+            face.as_object_mut()
+                .expect("synthetic face object")
+                .remove("colors");
+        }
+        let generated = evaluate_fresh(&bruiser).expect("Bellowing Bruiser should qualify");
+        assert_eq!(generated.id, "bellowing_bruiser_beat_a_path");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.layout, Layout::Adventure);
+        assert_eq!(raw.faces[0].keywords, [Keyword::Haste]);
+        assert!(raw.faces[0].spell_effect.is_empty());
+        assert_eq!(raw.faces[1].types, ["Sorcery", "Adventure"]);
+        assert_eq!(
+            raw.faces[1].spell_effect,
+            [SpellEffectKind::ApplyCombatRestriction {
+                scope: CombatRestrictionScope::Chosen(TargetFilter::default_creature()),
+                restriction: CombatRestriction {
+                    cant_block: true,
+                    ..CombatRestriction::default()
+                },
+            }]
+        );
+        let targeting = raw.faces[1]
+            .targeting
+            .as_ref()
+            .expect("Beat a Path targets up to two creatures");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("Beat a Path must own exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (0, 2));
+        assert_eq!(group.effect_indices, [0]);
+    }
+
+    #[test]
+    fn issue_328_generator_is_fail_closed_for_near_miss_clauses() {
+        for (oracle_id, name, type_line, oracle_text, power_toughness) in [
+            (
+                "2d400c01-d2d0-442a-bc3d-cf106a754dab",
+                "Not on My Watch",
+                "Instant",
+                "Exile target attacking or blocking creature.",
+                None,
+            ),
+            (
+                "cae60cf8-cd64-4595-a4dd-946694cf2bb1",
+                "Felidar Cub",
+                "Creature — Cat Beast",
+                "{1}, Sacrifice this creature: Destroy target enchantment.",
+                Some(("2", "2")),
+            ),
+            (
+                "46c7a552-4a98-4e1a-8651-8fb0e7153aec",
+                "Ravenous Giant",
+                "Creature — Giant",
+                "At the beginning of your upkeep, this creature deals 2 damage to you.",
+                Some(("5", "5")),
+            ),
+            (
+                "74d31e99-ab48-483a-a62e-5b424b27d017",
+                "Rune-Sealed Wall",
+                "Artifact Creature — Wall",
+                "{4}, {T}: Surveil 1.",
+                Some(("0", "6")),
+            ),
+            (
+                "6a92b011-fd01-4b6a-a17c-73ac1967ff98",
+                "Axgard Cavalry",
+                "Creature — Dwarf Berserker",
+                "{T}: Target creature you control gains haste until end of turn.",
+                Some(("2", "2")),
+            ),
+            (
+                "adac526d-1a85-431a-a302-0a4b8f4a0c44",
+                "Elvish Regrower",
+                "Creature — Elf Druid",
+                "When this creature enters, return target permanent card from an opponent's graveyard to your hand.",
+                Some(("4", "3")),
+            ),
+            (
+                "c1ed20c0-f75d-4aca-8874-6955bd9fb21b",
+                "Kindled Heroism",
+                "Instant",
+                "Target creature gets +1/+0 and gains first strike until end of turn. Scry 2.",
+                None,
+            ),
+        ] {
+            let card = normal_card_with_oracle_id(
+                oracle_id,
+                name,
+                "{1}",
+                type_line,
+                oracle_text,
+                power_toughness,
+            );
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "issue #328 near-miss must not qualify: {oracle_text}"
+            );
+        }
+
+        // The adventure near-miss moves the clause onto the permanent creature face, where the
+        // spell-only surface must leave it unsupported rather than leaking onto a permanent.
+        let adventure_near_miss = multiface(
+            "adventure",
+            "Near Miss // Beat a Path",
+            vec![
+                face(
+                    "Near Miss",
+                    "{4}{R}",
+                    "Creature — Ogre",
+                    "Up to two target creatures can't block this turn.",
+                    Some(("4", "4")),
+                    &["R"],
+                    None,
+                ),
+                face(
+                    "Beat a Path",
+                    "{2}{R}",
+                    "Sorcery — Adventure",
+                    "Up to two target creatures can't block this turn.",
+                    None,
+                    &["R"],
+                    None,
+                ),
+            ],
+        );
+        assert!(evaluate_fresh(&adventure_near_miss).is_err());
     }
 
     #[cfg(windows)]

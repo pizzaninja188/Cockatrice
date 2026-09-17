@@ -134,6 +134,8 @@ avengers_hangar	0	land	exercised
 axebane_beast	0	cast	exercised
 axebane_stag	0	cast	exercised
 axegrinder_giant	0	cast	exercised
+axgard_cavalry	0	ability:0	exercised
+axgard_cavalry	0	cast	exercised
 azorius_guildgate	0	ability:0	exercised
 azorius_guildgate	0	land	exercised
 azula_always_lies	0	cast	exercised
@@ -190,6 +192,8 @@ bearer_of_glory	0	cast	exercised
 beast-kin_ranger	0	cast	exercised
 bedhead_beastie	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 bedhead_beastie	0	cast	exercised
+bellowing_bruiser_beat_a_path	0	cast	exercised
+bellowing_bruiser_beat_a_path	1	cast	exercised
 bellowing_crier	0	cast	exercised
 beloved_chaplain	0	cast	exercised
 benalish_knight	0	cast	exercised
@@ -665,6 +669,7 @@ elvish_archers	0	cast	exercised
 elvish_lookout	0	cast	exercised
 elvish_mystic	0	ability:0	exercised
 elvish_mystic	0	cast	exercised
+elvish_regrower	0	cast	exercised
 elvish_visionary	0	cast	exercised
 elvish_warrior	0	cast	exercised
 embermouth_sentinel	0	cast	exercised
@@ -725,6 +730,8 @@ feed_the_cauldron	0	cast	exercised
 feisty_spikeling	0	cast	exercised
 feiyi_snake	0	cast	exercised
 felhide_minotaur	0	cast	exercised
+felidar_cub	0	ability:0	unsupported: target group 0 needs a richer fixture
+felidar_cub	0	cast	exercised
 felidar_savior	0	cast	exercised
 fell	0	cast	exercised
 fell_gravship	0	ability:0	exercised
@@ -1230,6 +1237,7 @@ killers_mask	0	cast	exercised
 kin-tree_nurturer	0	cast	exercised
 kindercatch	0	cast	exercised
 kindled_fury	0	cast	exercised
+kindled_heroism	0	cast	exercised
 kindly_customer	0	cast	exercised
 king_cheetah	0	cast	exercised
 kinjallis_dawnrunner	0	cast	exercised
@@ -1516,6 +1524,7 @@ north_pole_gates	0	ability:1	exercised
 north_pole_gates	0	land	exercised
 norwood_archers	0	cast	exercised
 norwood_ranger	0	cast	exercised
+not_on_my_watch	0	cast	unsupported: target group 0 needs a richer fixture
 nourish	0	cast	exercised
 novice_inspector	0	cast	exercised
 noxious_groodion	0	cast	exercised
@@ -1722,6 +1731,7 @@ rattleback_apothecary	0	cast	exercised
 raucous_carnival	0	ability:0	exercised
 raucous_carnival	0	land	exercised
 raven_of_fell_omens	0	cast	exercised
+ravenous_giant	0	cast	exercised
 ravenous_lindwurm	0	cast	exercised
 ravine_raider	0	ability:0	exercised
 ravine_raider	0	cast	exercised
@@ -1826,6 +1836,8 @@ rumble_arena	0	land	exercised
 rumbling_baloth	0	cast	exercised
 run_afoul	0	cast	exercised
 run_behind	0	cast	exercised
+rune-sealed_wall	0	ability:0	exercised
+rune-sealed_wall	0	cast	exercised
 runeclaw_bear	0	cast	exercised
 russet_wolves	0	cast	exercised
 rustwing_falcon	0	cast	exercised

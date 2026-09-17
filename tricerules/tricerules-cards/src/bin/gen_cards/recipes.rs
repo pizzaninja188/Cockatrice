@@ -6883,6 +6883,221 @@ fn match_triggered_another_creature_dies_put_counter_self(
     })
 }
 
+/// Issue #328 exact clause templates. Each template is a reusable typed surface with at least two
+/// real positive calibrations. Every clause is compared by the complete normalized Oracle line, so
+/// an appended, reordered, or additional-clause form remains unsupported, and source-kind gating
+/// stays on the recipes whose printed template requires it.
+const ISSUE_328_EXILE_ATTACKING_CREATURE_CLAUSE: &str = "Exile target attacking creature.";
+const ISSUE_328_SACRIFICE_SELF_DESTROY_ENCHANTMENT_CLAUSE: &str =
+    "Sacrifice this creature: Destroy target enchantment.";
+const ISSUE_328_UPKEEP_SELF_DAMAGE_ONE_CLAUSE: &str =
+    "At the beginning of your upkeep, this creature deals 1 damage to you.";
+const ISSUE_328_TAP_SURVEIL_ONE_CLAUSE: &str = "{T}: Surveil 1.";
+const ISSUE_328_TAP_TARGET_CREATURE_GAINS_HASTE_CLAUSE: &str =
+    "{T}: Target creature gains haste until end of turn.";
+const ISSUE_328_ETB_RETURN_PERMANENT_CARD_CLAUSE: &str =
+    "When this creature enters, return target permanent card from your graveyard to your hand.";
+const ISSUE_328_UP_TO_TWO_CANT_BLOCK_CLAUSE: &str =
+    "Up to two target creatures can't block this turn.";
+const ISSUE_328_PUMP_FIRST_STRIKE_SCRY_ONE_CLAUSE: &str =
+    "Target creature gets +1/+0 and gains first strike until end of turn. Scry 1.";
+
+/// CR 508.1 / 701.13: "Exile target attacking creature" is the attacking-only sibling of the
+/// shipped exile and the destroy-attacking-or-blocking recipes. Blocking-only, attacking-or-
+/// blocking, unrestricted, controlled-only, up-to-one, and appended-instruction forms stay
+/// unsupported.
+fn match_spell_exile_attacking_creature(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == ISSUE_328_EXILE_ATTACKING_CREATURE_CLAUSE).then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::Exile {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                kind: TargetKind::Creature,
+                combat_role: Some(CombatRole::Attacking),
+                ..TargetFilter::default()
+            })),
+        })
+    })
+}
+
+/// CR 118.12a / 602.2b / 701.21: "Sacrifice this creature" is one atomic `SacrificeSelf` cost that
+/// destroys one mandatory enchantment permanent. The shipped Naturalize recipe keeps its own
+/// `{1}, Sacrifice … artifact or enchantment` clause; any mana component, artifact or union
+/// target, "another creature" cost, exile replacement, and appended instruction stay unsupported.
+fn match_activated_sacrifice_self_destroy_enchantment(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_328_SACRIFICE_SELF_DESTROY_ENCHANTMENT_CLAUSE).then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![AbilityCost::SacrificeSelf],
+            effect: vec![SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![PermanentTypeFilter::Enchantment],
+                    ..TargetFilter::default()
+                })),
+            }],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
+/// CR 503.1 / 603.2b / 120.3: an upkeep trigger whose source creature deals exactly one damage to
+/// its controller as an untargeted `DamagePlayer` recipient. Any-amount, each-upkeep, each-
+/// opponent, target-player, end-step, and noncreature-source forms stay unsupported.
+fn match_triggered_upkeep_self_damage_controller_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_328_UPKEEP_SELF_DAMAGE_ONE_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::AtBeginningOfUpkeep {
+                player: CastTriggerPlayer::Controller,
+            },
+            vec![SpellEffectKind::DamagePlayer {
+                amount: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+            }],
+        )
+    })
+}
+
+/// CR 701.25: one tap symbol buys Surveil 1 through the shipped private library-partition effect,
+/// mirroring the `{4}, {T}: Surveil 1.` recipe with no mana component. Any mana component,
+/// different surveil count, scry, timing restriction, or added life cost stays unsupported.
+fn match_activated_tap_surveil_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (text == ISSUE_328_TAP_SURVEIL_ONE_CLAUSE).then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![AbilityCost::Tap],
+            effect: vec![SpellEffectKind::LibraryPartition {
+                count: 1,
+                top_min: 0,
+                top_max: None,
+                kind: LibraryPartitionKind::Surveil,
+            }],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
+/// CR 611.2a / 514.2: one tap symbol grants haste until cleanup to one mandatory creature target.
+/// Controlled-only, source-only, mana-component, permanent, plural, pump riders, and appended
+/// instructions stay unsupported.
+fn match_activated_tap_target_creature_gains_haste(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_328_TAP_TARGET_CREATURE_GAINS_HASTE_CLAUSE).then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![AbilityCost::Tap],
+            effect: vec![SpellEffectKind::GrantKeywords {
+                subject: chosen_creature(TargetController::Any),
+                keywords: vec![Keyword::Haste],
+            }],
+            targeting: Some(exact_targeting(1, 1, "Choose target creature", vec![0])),
+            timing: ActivationTiming::Normal,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
+/// CR 110.4a: "a permanent card" is every card that is not an instant or sorcery, which is exactly
+/// the engine's own `CardFace::is_permanent` predicate; the schema has no single `Permanent`
+/// card-type variant, so the recipe excludes the two nonpermanent card types. The mandatory
+/// graveyard-card target revalidates the exact object at resolution. Creature-only, battlefield
+/// destination, opponent graveyard, optional, dies-trigger, noncreature-source, and appended
+/// instruction forms stay unsupported.
+fn match_triggered_etb_return_permanent_card_to_hand(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_328_ETB_RETURN_PERMANENT_CARD_CLAUSE).then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    owner: GraveyardOwner::Controller,
+                    card: Some(ZoneCardFilter {
+                        excluded_card_types: vec![CardTypeFilter::Instant, CardTypeFilter::Sorcery],
+                        ..ZoneCardFilter::default()
+                    }),
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::Hand,
+                linked_exile_id: None,
+            },
+        )
+    })
+}
+
+/// CR 509.1b / 611.2c: "Up to two target creatures can't block this turn" is one bounded (min 0,
+/// max 2) creature group bound to a single continuous can't-block restriction. Singular, plural-
+/// unbound, controlled-only, attack-restriction, permanent, and appended-instruction forms stay
+/// unsupported.
+fn match_spell_up_to_two_target_creatures_cant_block(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_328_UP_TO_TWO_CANT_BLOCK_CLAUSE).then(|| {
+        RecipeEmission::SpellEffectsWithTargeting {
+            effects: vec![SpellEffectKind::ApplyCombatRestriction {
+                scope: CombatRestrictionScope::Chosen(TargetFilter::default_creature()),
+                restriction: CombatRestriction {
+                    cant_block: true,
+                    ..CombatRestriction::default()
+                },
+            }],
+            targeting: exact_targeting(0, 2, "Choose up to two target creatures", vec![0]),
+        }
+    })
+}
+
+/// CR 611.2a / 514.2 / 701.22: the shipped #316 `+N/+0` first-strike pump plus a following Scry 1
+/// shares one mandatory creature target across the pump and the keyword grant, while scry is
+/// untargeted. The plain pump and any other scry count, rider, value, or conditional variant stay
+/// unsupported.
+fn match_spell_pump_first_strike_scry_one(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == ISSUE_328_PUMP_FIRST_STRIKE_SCRY_ONE_CLAUSE).then(|| {
+        RecipeEmission::SpellEffectsWithTargeting {
+            effects: vec![
+                SpellEffectKind::PumpTarget {
+                    power: 1,
+                    toughness: 0,
+                    scale: None,
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                },
+                SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    keywords: vec![Keyword::FirstStrike],
+                },
+                SpellEffectKind::Scry {
+                    count: Amount::Fixed(1),
+                },
+            ],
+            targeting: exact_targeting(1, 1, "Choose target creature", vec![0, 1]),
+        }
+    })
+}
+
 macro_rules! calibrations {
     ($($positive_name:literal => $positive_clause:literal),+; $($negative:literal),+ $(,)?) => {
         RecipeCalibration {
@@ -9834,7 +10049,6 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Zealous Lorecaster" => "When this creature enters, return target instant or sorcery card from your graveyard to your hand.",
             "Salvager of Secrets" => "When this creature enters, return target instant or sorcery card from your graveyard to your hand.";
             "When this creature enters, return target creature card from a graveyard to your hand.",
-            "When this creature enters, return target permanent card from your graveyard to your hand.",
             "When this creature enters, return target card from your graveyard to your hand.",
             "When this creature enters, return target instant or sorcery card from a graveyard to your hand.",
             "When this creature enters, return target instant or sorcery card from an opponent's graveyard to your hand.",
@@ -10380,7 +10594,6 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Target creature you control gets +1/+0 and gains first strike until end of turn.",
             "Creatures you control get +1/+0 and gain first strike until end of turn.",
             "Up to one target creature gets +1/+0 and gains first strike until end of turn.",
-            "Target creature gets +1/+0 and gains first strike until end of turn. Scry 1.",
             "Target creature gets +1/+0 and gains first strike until end of turn. Investigate.",
             "Target creature gets +1/+0 and gains first strike until end of turn. If this spell was kicked, that creature gains trample until end of turn."
         ),
@@ -10906,6 +11119,141 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Whenever another creature you control dies, put a +1/+1 counter on target creature.",
             r#"Whenever another creature you control dies, create a 1/1 black Rat creature token with "This token can't block.""#,
             "Whenever another creature you control dies, put a +1/+1 counter on this creature"
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.exile.target_attacking_creature"),
+        label: "exile target attacking creature",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_exile_attacking_creature,
+        calibration: calibrations!(
+            "Not on My Watch" => "Exile target attacking creature.",
+            "Resounding Silence" => "Exile target attacking creature.",
+            "Second Thoughts" => "Exile target attacking creature.";
+            "Exile target attacking or blocking creature.",
+            "Exile target blocking creature.",
+            "Exile target attacking creature you control.",
+            "Exile up to one target attacking creature.",
+            "Exile target attacking creature. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.sacrifice_self.destroy_target_enchantment"),
+        label: "sacrifice this creature to destroy target enchantment",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_sacrifice_self_destroy_enchantment,
+        calibration: calibrations!(
+            "Felidar Cub" => "Sacrifice this creature: Destroy target enchantment.",
+            "Kami of Ancient Law" => "Sacrifice this creature: Destroy target enchantment.",
+            "Ronom Unicorn" => "Sacrifice this creature: Destroy target enchantment.";
+            "{1}, Sacrifice this creature: Destroy target enchantment.",
+            "Sacrifice this creature: Destroy target artifact.",
+            "Sacrifice this creature: Destroy target artifact or enchantment.",
+            "Sacrifice another creature: Destroy target enchantment.",
+            "Sacrifice this creature: Exile target enchantment.",
+            "Sacrifice this creature: Destroy target enchantment. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.upkeep.self_damage_controller_one"),
+        label: "upkeep self damage one to controller",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_triggered_upkeep_self_damage_controller_one,
+        calibration: calibrations!(
+            "Ravenous Giant" => "At the beginning of your upkeep, this creature deals 1 damage to you.",
+            "Nettletooth Djinn" => "At the beginning of your upkeep, this creature deals 1 damage to you.",
+            "Serendib Efreet" => "At the beginning of your upkeep, this creature deals 1 damage to you.";
+            "At the beginning of your upkeep, this creature deals 2 damage to you.",
+            "At the beginning of each upkeep, this creature deals 1 damage to you.",
+            "At the beginning of your upkeep, this creature deals 1 damage to each opponent.",
+            "At the beginning of your upkeep, this creature deals 1 damage to target player.",
+            "At the beginning of your end step, this creature deals 1 damage to you.",
+            "At the beginning of your upkeep, this creature deals 1 damage to you. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.tap.surveil_one"),
+        label: "tap to surveil one",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_tap_surveil_one,
+        calibration: calibrations!(
+            "Rune-Sealed Wall" => "{T}: Surveil 1.",
+            "Sinister Starfish" => "{T}: Surveil 1.",
+            "Microscope" => "{T}: Surveil 1.";
+            "{1}, {T}: Surveil 1.",
+            "{T}: Surveil 2.",
+            "{T}: Scry 1.",
+            "{T}: Surveil 1. Activate only as a sorcery.",
+            "{T}, Pay 1 life: Surveil 1.",
+            "{T}: Surveil 1. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.tap.target_creature_gains_haste"),
+        label: "tap to grant target creature haste until end of turn",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_tap_target_creature_gains_haste,
+        calibration: calibrations!(
+            "Axgard Cavalry" => "{T}: Target creature gains haste until end of turn.",
+            "Akki Drillmaster" => "{T}: Target creature gains haste until end of turn.",
+            "Bloodlust Inciter" => "{T}: Target creature gains haste until end of turn.";
+            "{T}: Target creature you control gains haste until end of turn.",
+            "{T}: This creature gains haste until end of turn.",
+            "{1}, {T}: Target creature gains haste until end of turn.",
+            "{T}: Target creature gains haste.",
+            "{T}: Target creature gains haste and trample until end of turn.",
+            "{T}: Target creature gets +1/+0 and gains haste until end of turn.",
+            "{T}: Target creature gains haste until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.return_target_permanent_card_to_hand"),
+        label: "creature ETB return target permanent card to hand",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_triggered_etb_return_permanent_card_to_hand,
+        calibration: calibrations!(
+            "Elvish Regrower" => "When this creature enters, return target permanent card from your graveyard to your hand.",
+            "Gloomshrieker" => "When this creature enters, return target permanent card from your graveyard to your hand.",
+            "Golgari Findbroker" => "When this creature enters, return target permanent card from your graveyard to your hand.";
+            "When this creature enters, return target creature card from a graveyard to your hand.",
+            "When this creature enters, return target permanent card from your graveyard to the battlefield.",
+            "When this creature enters, return target permanent card from an opponent's graveyard to your hand.",
+            "When this creature enters, you may return target permanent card from your graveyard to your hand.",
+            "When this creature dies, return target permanent card from your graveyard to your hand.",
+            "When this creature enters, return target permanent card from your graveyard to your hand. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.up_to_two_target_creatures_cant_block"),
+        label: "up to two target creatures can't block this turn",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_up_to_two_target_creatures_cant_block,
+        calibration: calibrations!(
+            "Bellowing Bruiser // Beat a Path" => "Up to two target creatures can't block this turn.",
+            "Abandon the Post" => "Up to two target creatures can't block this turn.",
+            "Nightbird's Clutches" => "Up to two target creatures can't block this turn.";
+            "Target creature can't block this turn.",
+            "Up to two target creatures you control can't block this turn.",
+            "Up to two target creatures can't attack this turn.",
+            "Up to two target creatures can't block.",
+            "Up to one target creature can't block this turn.",
+            "Up to two target creatures can't block this turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump.target_creature_plus_one_zero_first_strike_scry_one"),
+        label: "creature +1/+0 and first strike then scry one",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_pump_first_strike_scry_one,
+        calibration: calibrations!(
+            "Kindled Heroism" => "Target creature gets +1/+0 and gains first strike until end of turn. Scry 1.",
+            "Coming In Hot" => "Target creature gets +1/+0 and gains first strike until end of turn. Scry 1.",
+            "Storm Strike" => "Target creature gets +1/+0 and gains first strike until end of turn. Scry 1.";
+            "Target creature gets +1/+0 and gains first strike until end of turn. Scry 2.",
+            "Target creature gets +1/+0 and gains first strike until end of turn. Investigate.",
+            "Target creature gets +1/+1 and gains first strike until end of turn. Scry 1.",
+            "Target creature gains first strike until end of turn. Scry 1.",
+            "Target creature gets +1/+0 and gains first strike until end of turn. Scry 1. Draw a card."
         ),
     },
 ];
@@ -14830,7 +15178,6 @@ mod tests {
 
         for near_miss in [
             "When this creature enters, return target creature card from a graveyard to your hand.",
-            "When this creature enters, return target permanent card from your graveyard to your hand.",
             "When this creature enters, return target card from your graveyard to your hand.",
             "When this creature enters, return target instant or sorcery card from a graveyard to your hand.",
             "When this creature enters, return target instant or sorcery card from an opponent's graveyard to your hand.",
@@ -16993,7 +17340,6 @@ mod tests {
             "Target creature you control gets +1/+0 and gains first strike until end of turn.",
             "Creatures you control get +1/+0 and gain first strike until end of turn.",
             "Up to one target creature gets +1/+0 and gains first strike until end of turn.",
-            "Target creature gets +1/+0 and gains first strike until end of turn. Scry 1.",
             "Target creature gets +1/+0 and gains first strike until end of turn. Investigate.",
             "Target creature gets +1/+0 and gains first strike until end of turn. If this spell was kicked, that creature gains trample until end of turn.",
         ] {
@@ -18801,6 +19147,601 @@ mod tests {
             "Whenever another creature you control dies, put a +1/+1 counter on this creature",
         ] {
             issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_328_cohort_clauses_match_their_exact_recipes() {
+        for (clause, is_spell, expected) in [
+            (
+                "Exile target attacking creature.",
+                true,
+                "spell.exile.target_attacking_creature",
+            ),
+            (
+                "Sacrifice this creature: Destroy target enchantment.",
+                false,
+                "activated.sacrifice_self.destroy_target_enchantment",
+            ),
+            (
+                "At the beginning of your upkeep, this creature deals 1 damage to you.",
+                false,
+                "triggered.upkeep.self_damage_controller_one",
+            ),
+            (
+                "{T}: Surveil 1.",
+                false,
+                "activated.tap.surveil_one",
+            ),
+            (
+                "{T}: Target creature gains haste until end of turn.",
+                false,
+                "activated.tap.target_creature_gains_haste",
+            ),
+            (
+                "When this creature enters, return target permanent card from your graveyard to your hand.",
+                false,
+                "triggered.etb.return_target_permanent_card_to_hand",
+            ),
+            (
+                "Up to two target creatures can't block this turn.",
+                true,
+                "spell.up_to_two_target_creatures_cant_block",
+            ),
+            (
+                "Target creature gets +1/+0 and gains first strike until end of turn. Scry 1.",
+                true,
+                "spell.pump.target_creature_plus_one_zero_first_strike_scry_one",
+            ),
+        ] {
+            let matched = match_clause(clause, is_spell, &context())
+                .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{clause} should match exactly one recipe"));
+            assert_eq!(matched.id.as_str(), expected, "{clause}");
+        }
+    }
+
+    #[test]
+    fn issue_328_recipes_have_stable_ids_and_surfaces() {
+        for (id, surface) in [
+            (
+                "spell.exile.target_attacking_creature",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "activated.sacrifice_self.destroy_target_enchantment",
+                RecipeSurface::ActivatedAbility,
+            ),
+            (
+                "triggered.upkeep.self_damage_controller_one",
+                RecipeSurface::TriggeredAbility,
+            ),
+            ("activated.tap.surveil_one", RecipeSurface::ActivatedAbility),
+            (
+                "activated.tap.target_creature_gains_haste",
+                RecipeSurface::ActivatedAbility,
+            ),
+            (
+                "triggered.etb.return_target_permanent_card_to_hand",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "spell.up_to_two_target_creatures_cant_block",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "spell.pump.target_creature_plus_one_zero_first_strike_scry_one",
+                RecipeSurface::SpellClause,
+            ),
+        ] {
+            assert_eq!(
+                issue_318_recipe(id).surface,
+                surface,
+                "{id} surface drifted"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_328_exile_attacking_creature_is_exact_and_typed() {
+        for source_name in ["Not on My Watch", "Resounding Silence", "Second Thoughts"] {
+            let matched =
+                issue_318_match_spell(ISSUE_328_EXILE_ATTACKING_CREATURE_CLAUSE, source_name);
+            assert_eq!(matched.id.as_str(), "spell.exile.target_attacking_creature");
+            let RecipeEmission::SpellEffect(effect) = matched.emission else {
+                panic!("the attacking exile must emit one spell effect");
+            };
+            assert_eq!(
+                effect,
+                SpellEffectKind::Exile {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::Creature,
+                        combat_role: Some(CombatRole::Attacking),
+                        ..TargetFilter::default()
+                    })),
+                }
+            );
+        }
+        assert!(
+            match_clause(ISSUE_328_EXILE_ATTACKING_CREATURE_CLAUSE, false, &context())
+                .expect("non-spell surface check must not be ambiguous")
+                .is_none(),
+            "the attacking exile is a spell clause"
+        );
+    }
+
+    #[test]
+    fn issue_328_exile_attacking_creature_rejects_near_misses() {
+        for negative in [
+            "Exile target attacking or blocking creature.",
+            "Exile target blocking creature.",
+            "Exile target creature.",
+            "Exile target attacking creature you control.",
+            "Exile up to one target attacking creature.",
+            "Exile target attacking creature. Draw a card.",
+        ] {
+            // The unrestricted "Exile target creature." clause stays owned by the shipped
+            // exile-creature recipe; the attacking-only template must not claim it.
+            let outcome = match_clause(negative, true, &context())
+                .unwrap_or_else(|ambiguity| panic!("{negative}: {ambiguity}"));
+            match outcome {
+                None => {}
+                Some(matched) => assert_eq!(
+                    matched.id.as_str(),
+                    "spell.exile.creature",
+                    "{negative} must not be claimed by the attacking-exile recipe"
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn issue_328_sacrifice_self_destroy_enchantment_is_typed() {
+        for source_name in ["Felidar Cub", "Kami of Ancient Law", "Ronom Unicorn"] {
+            let matched = issue_318_match_non_spell(
+                ISSUE_328_SACRIFICE_SELF_DESTROY_ENCHANTMENT_CLAUSE,
+                source_name,
+            );
+            assert_eq!(
+                matched.id.as_str(),
+                "activated.sacrifice_self.destroy_target_enchantment"
+            );
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("sacrifice-to-destroy must emit an activated ability");
+            };
+            assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+            assert_eq!(ability.costs, vec![AbilityCost::SacrificeSelf]);
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::Destroy {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        permanent_types: vec![PermanentTypeFilter::Enchantment],
+                        ..TargetFilter::default()
+                    })),
+                }]
+            );
+            assert!(ability.targeting.is_none());
+            assert_eq!(ability.timing, ActivationTiming::Normal);
+            assert!(ability.activation_limit.is_none());
+        }
+        assert!(
+            match_clause(
+                ISSUE_328_SACRIFICE_SELF_DESTROY_ENCHANTMENT_CLAUSE,
+                true,
+                &context()
+            )
+            .expect("spell surface check must not be ambiguous")
+            .is_none(),
+            "sacrifice-to-destroy is an activated ability, not a spell clause"
+        );
+    }
+
+    #[test]
+    fn issue_328_sacrifice_self_destroy_enchantment_rejects_near_misses() {
+        for negative in [
+            "{1}, Sacrifice this creature: Destroy target enchantment.",
+            "Sacrifice this creature: Destroy target artifact.",
+            "Sacrifice this creature: Destroy target artifact or enchantment.",
+            "Sacrifice another creature: Destroy target enchantment.",
+            "Sacrifice this creature: Exile target enchantment.",
+            "Sacrifice this creature: Destroy target enchantment. Draw a card.",
+        ] {
+            issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_328_upkeep_self_damage_is_creature_gated_and_typed() {
+        for source_name in ["Ravenous Giant", "Nettletooth Djinn", "Serendib Efreet"] {
+            let matched =
+                issue_318_match_non_spell(ISSUE_328_UPKEEP_SELF_DAMAGE_ONE_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "triggered.upkeep.self_damage_controller_one"
+            );
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("the upkeep self-damage must emit a triggered ability");
+            };
+            assert_eq!(
+                ability.trigger,
+                TriggerCondition::AtBeginningOfUpkeep {
+                    player: CastTriggerPlayer::Controller,
+                }
+            );
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::DamagePlayer {
+                    amount: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                }]
+            );
+            assert!(ability.targeting.is_none());
+            assert!(!ability.may);
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_328_UPKEEP_SELF_DAMAGE_ONE_CLAUSE, false, &noncreature)
+                .expect("noncreature source must not be ambiguous")
+                .is_none(),
+            "the upkeep self-damage recipe is creature-source-only"
+        );
+        assert!(
+            match_clause(ISSUE_328_UPKEEP_SELF_DAMAGE_ONE_CLAUSE, true, &context())
+                .expect("spell surface check must not be ambiguous")
+                .is_none(),
+            "the upkeep self-damage must reject spell clauses"
+        );
+    }
+
+    #[test]
+    fn issue_328_upkeep_self_damage_rejects_near_misses() {
+        for negative in [
+            "At the beginning of your upkeep, this creature deals 2 damage to you.",
+            "At the beginning of each upkeep, this creature deals 1 damage to you.",
+            "At the beginning of your upkeep, this creature deals 1 damage to each opponent.",
+            "At the beginning of your upkeep, this creature deals 1 damage to target player.",
+            "At the beginning of your end step, this creature deals 1 damage to you.",
+            "At the beginning of your upkeep, this creature deals 1 damage to you. Draw a card.",
+        ] {
+            issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_328_tap_surveil_one_is_typed_and_exact() {
+        for source_name in ["Rune-Sealed Wall", "Sinister Starfish", "Microscope"] {
+            let matched = issue_318_match_non_spell(ISSUE_328_TAP_SURVEIL_ONE_CLAUSE, source_name);
+            assert_eq!(matched.id.as_str(), "activated.tap.surveil_one");
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("the surveil activation must emit an activated ability");
+            };
+            assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+            assert_eq!(ability.costs, vec![AbilityCost::Tap]);
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::LibraryPartition {
+                    count: 1,
+                    top_min: 0,
+                    top_max: None,
+                    kind: LibraryPartitionKind::Surveil,
+                }]
+            );
+            assert!(ability.targeting.is_none());
+            assert_eq!(ability.timing, ActivationTiming::Normal);
+        }
+        assert!(
+            match_clause(ISSUE_328_TAP_SURVEIL_ONE_CLAUSE, true, &context())
+                .expect("spell surface check must not be ambiguous")
+                .is_none(),
+            "the surveil activation is not a spell clause"
+        );
+    }
+
+    #[test]
+    fn issue_328_tap_surveil_one_rejects_near_misses() {
+        for negative in [
+            "{4}, {T}: Surveil 1.",
+            "{1}, {T}: Surveil 1.",
+            "{T}: Surveil 2.",
+            "{T}: Scry 1.",
+            "{T}: Surveil 1. Activate only as a sorcery.",
+            "{T}, Pay 1 life: Surveil 1.",
+            "{T}: Surveil 1. Draw a card.",
+        ] {
+            assert!(
+                match_clause(negative, false, &context())
+                    .unwrap_or_else(|ambiguity| panic!("{negative}: {ambiguity}"))
+                    .is_none()
+                    || matches!(
+                        match_clause(negative, false, &context())
+                            .unwrap_or_else(|ambiguity| panic!("{negative}: {ambiguity}")),
+                        Some(matched) if matched.id.as_str()
+                            == "activated.land.pay_four_tap.surveil_one"
+                    ),
+                "the {negative:?} near-miss must not be claimed by the tap-surveil recipe"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_328_tap_target_creature_gains_haste_is_typed() {
+        for source_name in ["Axgard Cavalry", "Akki Drillmaster", "Bloodlust Inciter"] {
+            let matched = issue_318_match_non_spell(
+                ISSUE_328_TAP_TARGET_CREATURE_GAINS_HASTE_CLAUSE,
+                source_name,
+            );
+            assert_eq!(
+                matched.id.as_str(),
+                "activated.tap.target_creature_gains_haste"
+            );
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("the haste grant must emit an activated ability");
+            };
+            assert_eq!(ability.costs, vec![AbilityCost::Tap]);
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::GrantKeywords {
+                    subject: chosen_creature(TargetController::Any),
+                    keywords: vec![Keyword::Haste],
+                }]
+            );
+            assert_eq!(
+                ability.targeting,
+                Some(exact_targeting(1, 1, "Choose target creature", vec![0]))
+            );
+            assert_eq!(ability.timing, ActivationTiming::Normal);
+            assert!(ability.activation_limit.is_none());
+        }
+        assert!(
+            match_clause(
+                ISSUE_328_TAP_TARGET_CREATURE_GAINS_HASTE_CLAUSE,
+                true,
+                &context()
+            )
+            .expect("spell surface check must not be ambiguous")
+            .is_none(),
+            "the haste grant is an activated ability, not a spell clause"
+        );
+    }
+
+    #[test]
+    fn issue_328_tap_target_creature_gains_haste_rejects_near_misses() {
+        for negative in [
+            "{T}: Target creature you control gains haste until end of turn.",
+            "{T}: This creature gains haste until end of turn.",
+            "{1}, {T}: Target creature gains haste until end of turn.",
+            "{T}: Target creature gains haste.",
+            "{T}: Target creature gains haste and trample until end of turn.",
+            "{T}: Target creature gets +1/+0 and gains haste until end of turn.",
+            "{T}: Target creature gains haste until end of turn. Draw a card.",
+        ] {
+            issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_328_etb_return_permanent_card_is_creature_gated_and_typed() {
+        for source_name in ["Elvish Regrower", "Gloomshrieker", "Golgari Findbroker"] {
+            let matched =
+                issue_318_match_non_spell(ISSUE_328_ETB_RETURN_PERMANENT_CARD_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "triggered.etb.return_target_permanent_card_to_hand"
+            );
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("the permanent-card return must emit a triggered ability");
+            };
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::MoveGraveyardCards {
+                    filter: GraveyardFilter {
+                        owner: GraveyardOwner::Controller,
+                        card: Some(ZoneCardFilter {
+                            excluded_card_types: vec![
+                                CardTypeFilter::Instant,
+                                CardTypeFilter::Sorcery,
+                            ],
+                            ..ZoneCardFilter::default()
+                        }),
+                        ..GraveyardFilter::default()
+                    },
+                    destination: GraveyardDestination::Hand,
+                    linked_exile_id: None,
+                }]
+            );
+            assert!(ability.targeting.is_none());
+            assert!(!ability.may);
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(
+                ISSUE_328_ETB_RETURN_PERMANENT_CARD_CLAUSE,
+                false,
+                &noncreature
+            )
+            .expect("noncreature source must not be ambiguous")
+            .is_none(),
+            "the permanent-card return recipe is creature-source-only"
+        );
+    }
+
+    #[test]
+    fn issue_328_etb_return_permanent_card_rejects_near_misses() {
+        for negative in [
+            "When this creature enters, return target creature card from your graveyard to your hand.",
+            "When this creature enters, return target permanent card from your graveyard to the battlefield.",
+            "When this creature enters, return target permanent card from an opponent's graveyard to your hand.",
+            "When this creature enters, you may return target permanent card from your graveyard to your hand.",
+            "When this creature dies, return target permanent card from your graveyard to your hand.",
+            "When this creature enters, return target permanent card from your graveyard to your hand. Draw a card.",
+        ] {
+            // The exact creature-card clause is consumed by the existing creature recursion
+            // recipe, which is the correct single match; every other near-miss stays unmatched.
+            let outcome = match_clause(negative, false, &context())
+                .unwrap_or_else(|ambiguity| panic!("{negative}: {ambiguity}"));
+            match outcome {
+                None => {}
+                Some(matched) => assert_eq!(
+                    matched.id.as_str(),
+                    "triggered.etb.return_creature_card_from_graveyard.hand",
+                    "{negative} must not be claimed by the permanent-card recipe"
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn issue_328_up_to_two_cant_block_is_bounded_and_typed() {
+        for source_name in [
+            "Bellowing Bruiser // Beat a Path",
+            "Abandon the Post",
+            "Nightbird's Clutches",
+        ] {
+            let matched = issue_318_match_spell(ISSUE_328_UP_TO_TWO_CANT_BLOCK_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "spell.up_to_two_target_creatures_cant_block"
+            );
+            let RecipeEmission::SpellEffectsWithTargeting { effects, targeting } = matched.emission
+            else {
+                panic!("the can't-block restriction must emit an explicitly targeted spell");
+            };
+            assert_eq!(
+                effects,
+                vec![SpellEffectKind::ApplyCombatRestriction {
+                    scope: CombatRestrictionScope::Chosen(TargetFilter::default_creature()),
+                    restriction: CombatRestriction {
+                        cant_block: true,
+                        ..CombatRestriction::default()
+                    },
+                }]
+            );
+            let [group] = targeting.groups.as_slice() else {
+                panic!("the can't-block restriction must own exactly one target group");
+            };
+            assert_eq!((group.min, group.max), (0, 2));
+            assert_eq!(group.prompt, "Choose up to two target creatures");
+            assert_eq!(group.effect_indices, vec![0]);
+        }
+        assert!(
+            match_clause(ISSUE_328_UP_TO_TWO_CANT_BLOCK_CLAUSE, false, &context())
+                .expect("non-spell surface check must not be ambiguous")
+                .is_none(),
+            "the can't-block restriction is a spell clause"
+        );
+    }
+
+    #[test]
+    fn issue_328_up_to_two_cant_block_rejects_near_misses() {
+        for negative in [
+            "Target creature can't block this turn.",
+            "Up to two target creatures you control can't block this turn.",
+            "Up to two target creatures can't attack this turn.",
+            "Up to two target creatures can't block.",
+            "Up to one target creature can't block this turn.",
+            "Up to two target creatures can't block this turn. Draw a card.",
+        ] {
+            issue_318_assert_unmatched(negative, true);
+        }
+    }
+
+    #[test]
+    fn issue_328_pump_first_strike_scry_one_shares_one_target_group() {
+        for source_name in ["Kindled Heroism", "Coming In Hot", "Storm Strike"] {
+            let matched =
+                issue_318_match_spell(ISSUE_328_PUMP_FIRST_STRIKE_SCRY_ONE_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "spell.pump.target_creature_plus_one_zero_first_strike_scry_one"
+            );
+            let RecipeEmission::SpellEffectsWithTargeting { effects, targeting } = matched.emission
+            else {
+                panic!("the pump/scry template must emit an explicitly targeted spell");
+            };
+            assert_eq!(
+                effects,
+                vec![
+                    SpellEffectKind::PumpTarget {
+                        power: 1,
+                        toughness: 0,
+                        scale: None,
+                        subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                        keywords: vec![Keyword::FirstStrike],
+                    },
+                    SpellEffectKind::Scry {
+                        count: Amount::Fixed(1),
+                    },
+                ]
+            );
+            let [group] = targeting.groups.as_slice() else {
+                panic!("the pump/scry template must own exactly one target group");
+            };
+            assert_eq!((group.min, group.max), (1, 1));
+            assert_eq!(group.prompt, "Choose target creature");
+            assert_eq!(
+                group.effect_indices,
+                vec![0, 1],
+                "the single group must cover the pump and the keyword grant, not the scry"
+            );
+        }
+        assert!(
+            match_clause(
+                ISSUE_328_PUMP_FIRST_STRIKE_SCRY_ONE_CLAUSE,
+                false,
+                &context()
+            )
+            .expect("non-spell surface check must not be ambiguous")
+            .is_none(),
+            "the pump/scry template is a spell clause"
+        );
+    }
+
+    #[test]
+    fn issue_328_pump_first_strike_scry_one_rejects_near_misses() {
+        for negative in [
+            "Target creature gets +1/+0 and gains first strike until end of turn. Scry 2.",
+            "Target creature gets +1/+0 and gains first strike until end of turn. Investigate.",
+            "Target creature gets +1/+1 and gains first strike until end of turn. Scry 1.",
+            "Target creature gains first strike until end of turn. Scry 1.",
+            "Target creature gets +1/+0 and gains first strike until end of turn. Scry 1. Draw a card.",
+        ] {
+            issue_318_assert_unmatched(negative, true);
+        }
+    }
+
+    #[test]
+    fn issue_328_previously_shipped_clauses_keep_their_existing_recipes() {
+        for (clause, is_spell, expected) in [
+            ("Exile target creature.", true, "spell.exile.creature"),
+            (
+                "{4}, {T}: Surveil 1.",
+                false,
+                "activated.land.pay_four_tap.surveil_one",
+            ),
+            (
+                "When this creature enters, return target creature card from your graveyard to your hand.",
+                false,
+                "triggered.etb.return_creature_card_from_graveyard.hand",
+            ),
+            (
+                "Target creature gets +1/+0 and gains first strike until end of turn.",
+                true,
+                "spell.pump.target_creature_plus_n_zero_first_strike",
+            ),
+        ] {
+            let matched = match_clause(clause, is_spell, &context())
+                .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{clause} should stay consumed by its shipped recipe"));
+            assert_eq!(matched.id.as_str(), expected, "{clause}");
         }
     }
 }
