@@ -493,3 +493,5 @@ mod issue_335_generated_eight_clause_batch;
 mod issue_336_generated_eight_clause_batch;
 #[path = "scenario/issue_337_generated_eight_clause_batch.rs"]
 mod issue_337_generated_eight_clause_batch;
+#[path = "scenario/issue_343_generated_eight_clause_batch.rs"]
+mod issue_343_generated_eight_clause_batch;

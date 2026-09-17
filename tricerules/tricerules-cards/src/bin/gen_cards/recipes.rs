@@ -7950,6 +7950,236 @@ fn match_etb_enchantment_exile_target_tapped_creature(
     )
 }
 
+/// Issue #343 exact clause templates. Each template is a reusable typed surface with at least two
+/// real positive calibrations. Every clause is compared by the complete normalized Oracle line, so
+/// an appended, reordered, or additional-clause form remains unsupported, and source-kind gating
+/// stays on the recipes whose printed template requires it.
+const ISSUE_343_ETB_DESTROY_DAMAGED_OPPONENT_CREATURE_CLAUSE: &str =
+    "When this creature enters, destroy target creature an opponent controls that was dealt damage this turn.";
+const ISSUE_343_SPELL_PLUS_TWO_PLUS_TWO_LIFELINK_CLAUSE: &str =
+    "Target creature gets +2/+2 and gains lifelink until end of turn.";
+/// The printed activation mana cost is captured before this literal suffix.
+const ISSUE_343_ACTIVATED_PUT_COUNTER_SUFFIX: &str = ": Put a +1/+1 counter on this creature.";
+const ISSUE_343_CAST_MANA_VALUE_FOUR_COUNTER_CLAUSE: &str =
+    "Whenever you cast a spell with mana value 4 or greater, put a +1/+1 counter on this creature.";
+const ISSUE_343_TAP_LOOT_CREATE_TREASURE_CLAUSE: &str =
+    "{2}, {T}: Draw a card, then discard a card. Create a Treasure token.";
+const ISSUE_343_ARTIFACT_LINKED_EXILE_CLAUSE: &str =
+    "When this artifact enters, exile target nonland permanent an opponent controls until this artifact leaves the battlefield.";
+const ISSUE_343_ANY_GRAVEYARD_LIBRARY_BOTTOM_CLAUSE: &str =
+    "{2}: Put target card from a graveyard on the bottom of its owner's library.";
+const ISSUE_343_LANDFALL_EQUIPPED_PUMP_CLAUSE: &str =
+    "Landfall — Whenever a land you control enters, equipped creature gets +2/+2 until end of turn.";
+
+/// CR 120.4b / 701.8 / 115.1: a mandatory creature entry trigger destroys one mandatory creature an
+/// opponent controls that was dealt damage this turn. `was_dealt_damage_this_turn: Some(true)` is
+/// the shipped event-time target predicate, and the single targeted instruction uses the implicit
+/// one-target contract. Undamaged, controller-inclusive, non-creature, optional, and rider forms
+/// stay unsupported.
+fn match_etb_destroy_target_creature_opponent_was_dealt_damage(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_343_ETB_DESTROY_DAMAGED_OPPONENT_CREATURE_CLAUSE)
+        .then(|| {
+            targeted_trigger(
+                context,
+                vec![SpellEffectKind::Destroy {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::Creature,
+                        controller: TargetController::Opponent,
+                        was_dealt_damage_this_turn: Some(true),
+                        ..TargetFilter::default()
+                    })),
+                }],
+                1,
+                1,
+                "Choose target creature an opponent controls that was dealt damage this turn",
+            )
+        })
+}
+
+/// CR 611.2a / 514.2 / 702.15: a fixed +2/+2 pump and a lifelink grant to the same one mandatory
+/// creature target, the shared-target sibling of the shipped trample and first-strike pumps. Other
+/// values, other keywords, a controller restriction, and riders stay unsupported.
+fn match_spell_creature_plus_two_plus_two_lifelink(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_343_SPELL_PLUS_TWO_PLUS_TWO_LIFELINK_CLAUSE)
+        .then(|| combat_trick(TargetController::Any, 2, 2, &[Keyword::Lifelink], false))
+}
+
+/// CR 602.1 / 602.2 / 601.2h: an activated ability whose printed mana cost is captured verbatim
+/// before the fixed instruction puts one +1/+1 counter on the source. No targeting. A non-mana or
+/// compound cost, another counter kind or count, a target, a timing line, and riders stay
+/// unsupported, and the recipe stays bound to creature sources.
+fn match_activated_mana_put_counter_self(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_creature {
+        return None;
+    }
+    let cost = exact_mana_cost(text.strip_suffix(ISSUE_343_ACTIVATED_PUT_COUNTER_SUFFIX)?)?;
+    Some(utility_activated_ability(
+        context,
+        vec![AbilityCost::Mana(cost)],
+        vec![SpellEffectKind::PutCounters {
+            counter: CounterKind::PlusOnePlusOne,
+            count: Amount::Fixed(1),
+            subject: EffectSubject::Source,
+        }],
+        None,
+    ))
+}
+
+/// CR 603.2 / 202.3: a mandatory cast trigger using the shipped `WheneverPlayerCastsSpell`
+/// event-time filter with an inclusive minimum mana value of four, then one +1/+1 counter on the
+/// source. Other bounds, card-type or caster restrictions, other counter counts, and riders stay
+/// unsupported, and the recipe stays bound to creature sources.
+fn match_controller_casts_spell_mana_value_four_put_counter_self(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_343_CAST_MANA_VALUE_FOUR_COUNTER_CLAUSE).then(
+        || {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverPlayerCastsSpell {
+                    caster: CastTriggerPlayer::Controller,
+                    filter: SpellCastFilter {
+                        min_mana_value: Some(4),
+                        ..SpellCastFilter::default()
+                    },
+                    ordinal: None,
+                    ordinal_scope: Default::default(),
+                },
+                vec![SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Source,
+                }],
+            )
+        },
+    )
+}
+
+/// CR 701.9 / 111.10a: `{2}, {T}` draws one then discards one from the controller's private hand,
+/// then creates the registered Treasure token in that printed order. Either count, another cost,
+/// discard-then-draw, a tapped token, and riders stay unsupported.
+fn match_activated_mana_tap_loot_create_treasure(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_343_TAP_LOOT_CREATE_TREASURE_CLAUSE).then(|| {
+        utility_activated_ability(
+            context,
+            vec![fixed_mana_cost("{2}"), AbilityCost::Tap],
+            vec![
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                },
+                SpellEffectKind::Discard {
+                    who: PlayerRecipient::Controller,
+                    quantity: DiscardQuantity::Exact(1),
+                },
+                SpellEffectKind::CreateTokens {
+                    token: "treasure".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                },
+            ],
+            None,
+        )
+    })
+}
+
+/// CR 610.3 / 701.13 / 115.1: an artifact's own entry trigger exiles one mandatory nonland
+/// permanent an opponent controls until the source leaves, reusing the shipped linked-exile
+/// continuation. The enchantment wording, controller-inclusive scope, land-inclusive scope,
+/// up-to-one bound, other return conditions, and riders stay unsupported.
+fn match_etb_artifact_exile_target_nonland_permanent_opponent_until_leaves(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_artifact && text == ISSUE_343_ARTIFACT_LINKED_EXILE_CLAUSE).then(|| {
+        let target = TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            controller: TargetController::Opponent,
+            excluded_permanent_types: vec![PermanentTypeFilter::Land],
+            ..TargetFilter::default()
+        };
+        targeted_trigger(
+            context,
+            vec![SpellEffectKind::ExileUntilSourceLeaves { target }],
+            1,
+            1,
+            "Choose target nonland permanent an opponent controls",
+        )
+    })
+}
+
+/// CR 404 / 400.3 / 401: `{2}` puts one mandatory target card from any player's graveyard on the
+/// bottom of its owner's library, reusing the shipped `MoveGraveyardCards` predicate with the
+/// any-player owner scope. The controller-only wording, a card-type restriction, a tap or other
+/// cost, top placement, and riders stay unsupported.
+fn match_activated_mana_move_graveyard_card_to_library_bottom_any_graveyard(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_permanent && text == ISSUE_343_ANY_GRAVEYARD_LIBRARY_BOTTOM_CLAUSE).then(
+        || {
+            utility_activated_ability(
+                context,
+                vec![fixed_mana_cost("{2}")],
+                vec![SpellEffectKind::MoveGraveyardCards {
+                    filter: GraveyardFilter {
+                        owner: GraveyardOwner::AnyPlayer,
+                        ..GraveyardFilter::default()
+                    },
+                    destination: GraveyardDestination::LibraryBottom,
+                    linked_exile_id: None,
+                }],
+                single_targeting("Choose target card from a graveyard"),
+            )
+        },
+    )
+}
+
+/// CR 603.6a / 611.2a / 701.3: the Landfall ability word plus the controller's land entry event
+/// pumps the attached creature +2/+2 until cleanup, reusing the shipped
+/// `WheneverPermanentEntersBattlefield` land filter and the `AttachedObject` pump subject. Other
+/// sizes, partial pumps, counters, a prefix-less trigger, non-Equipment sources, and riders stay
+/// unsupported.
+fn match_landfall_equipped_creature_plus_two_plus_two(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_equipment && text == ISSUE_343_LANDFALL_EQUIPPED_PUMP_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverPermanentEntersBattlefield {
+                controller: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    permanent_type: Some(PermanentTypeFilter::Land),
+                    ..PermanentEventFilter::default()
+                },
+                creature_filter: None,
+            },
+            vec![SpellEffectKind::PumpTarget {
+                power: 2,
+                toughness: 2,
+                scale: None,
+                subject: EffectSubject::AttachedObject,
+            }],
+        )
+    })
+}
+
 macro_rules! calibrations {
     ($($positive_name:literal => $positive_clause:literal),+; $($negative:literal),+ $(,)?) => {
         RecipeCalibration {
@@ -8045,7 +8275,11 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Banishing Light" => "When this enchantment enters, exile target nonland permanent an opponent controls until this enchantment leaves the battlefield.",
             "Stormplain Detainment" => "When this enchantment enters, exile target nonland permanent an opponent controls until this enchantment leaves the battlefield.";
             "When this enchantment enters, exile up to one target nonland permanent an opponent controls until this enchantment leaves the battlefield.",
-            "When this artifact enters, exile target nonland permanent an opponent controls until this artifact leaves the battlefield.",
+            // The artifact wording is now owned by #343's exact
+            // `triggered.etb.artifact.exile_target_nonland_permanent_opponent_until_leaves` recipe,
+            // so this list keeps a non-colliding non-enchantment source near-miss instead and the
+            // artifact matcher is asserted directly in tests.
+            "When this creature enters, exile target nonland permanent an opponent controls until this creature leaves the battlefield.",
             "When this enchantment enters, exile target artifact or creature an opponent controls until this enchantment leaves the battlefield.",
             "When this enchantment enters, exile target creature an opponent controls until this enchantment leaves the battlefield.",
             "When this enchantment enters, exile target nonland permanent an opponent controls until this enchantment leaves the battlefield. You gain 2 life.",
@@ -12684,6 +12918,141 @@ pub(super) static CATALOG: &[Recipe] = &[
             "When this artifact enters, exile target tapped creature an opponent controls until this artifact leaves the battlefield.",
             "When this enchantment enters, exile target tapped creature an opponent controls until your next turn.",
             "When this enchantment enters, exile target tapped creature an opponent controls until this enchantment leaves the battlefield. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.destroy.target_creature_opponent_was_dealt_damage"),
+        label: "creature ETB destroy a damage-marked opposing creature",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_destroy_target_creature_opponent_was_dealt_damage,
+        calibration: calibrations!(
+            "Stingblade Assassin" => "When this creature enters, destroy target creature an opponent controls that was dealt damage this turn.",
+            "Fathom Fleet Cutthroat" => "When this creature enters, destroy target creature an opponent controls that was dealt damage this turn.",
+            "Rooftop Assassin" => "When this creature enters, destroy target creature an opponent controls that was dealt damage this turn.";
+            "When this creature enters, destroy target creature an opponent controls.",
+            "When this creature enters, destroy target creature that was dealt damage this turn.",
+            "When this creature enters, destroy target creature an opponent controls that was dealt damage this turn. Draw a card.",
+            "When this creature enters, deal 2 damage to target creature an opponent controls that was dealt damage this turn.",
+            "Whenever this creature enters, destroy target creature an opponent controls that was dealt damage this turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump.creature.plus_two_plus_two.lifelink"),
+        label: "creature +2/+2 and lifelink",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_creature_plus_two_plus_two_lifelink,
+        // The plain pump and the up-to-one control wordings are owned by the shipped
+        // `spell.pump.creature.fixed` recipe, so they are asserted directly on this matcher in the
+        // catalog tests instead of as catalog negatives.
+        calibration: calibrations!(
+            "Give In to Violence" => "Target creature gets +2/+2 and gains lifelink until end of turn.",
+            "Moment of Heroism" => "Target creature gets +2/+2 and gains lifelink until end of turn.";
+            "Target creature gets +2/+1 and gains lifelink until end of turn.",
+            "Target creature gains lifelink until end of turn.",
+            "Target creature gets +2/+2 and gains deathtouch until end of turn.",
+            "Target creature you control gets +2/+2 and gains lifelink until end of turn.",
+            "Target creature gets +2/+2 and gains lifelink until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.mana.put_counter_self"),
+        label: "pay the printed mana cost to put a +1/+1 counter on this creature",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_mana_put_counter_self,
+        calibration: calibrations!(
+            "Toadstool Admirer" => "{3}{G}: Put a +1/+1 counter on this creature.",
+            "Jungle Delver" => "{2}{G}: Put a +1/+1 counter on this creature.",
+            "Ruins Recluse" => "{3}{G}: Put a +1/+1 counter on this creature.",
+            "Verdant Automaton" => "{2}{G}: Put a +1/+1 counter on this creature.";
+            "{3}{G}: Put two +1/+1 counters on this creature.",
+            "{3}{G}: Put a +1/+1 counter on target creature.",
+            "{3}{G}, {T}: Put a +1/+1 counter on this creature.",
+            "{3}{G}: Put a +1/+1 counter on this creature. Activate only as a sorcery.",
+            "{3}{G}, Sacrifice this creature: Put a +1/+1 counter on this creature."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.controller_casts_spell_mana_value_four.put_counter_self"),
+        label:
+            "cast a spell with mana value four or greater to put a +1/+1 counter on this creature",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_controller_casts_spell_mana_value_four_put_counter_self,
+        calibration: calibrations!(
+            "Lurking Lizards" => "Whenever you cast a spell with mana value 4 or greater, put a +1/+1 counter on this creature.",
+            "Ascendant Packleader" => "Whenever you cast a spell with mana value 4 or greater, put a +1/+1 counter on this creature.";
+            "Whenever you cast a spell with mana value 5 or greater, put a +1/+1 counter on this creature.",
+            "Whenever you cast a spell with mana value 4 or greater, put two +1/+1 counters on this creature.",
+            "Whenever you cast an instant or sorcery spell with mana value 4 or greater, put a +1/+1 counter on this creature.",
+            "Whenever you cast a spell with mana value 4 or less, put a +1/+1 counter on this creature.",
+            "Whenever an opponent casts a spell with mana value 4 or greater, put a +1/+1 counter on this creature."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.mana.tap_loot_create_treasure"),
+        label: "pay two and tap to loot then create a Treasure",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_mana_tap_loot_create_treasure,
+        calibration: calibrations!(
+            "Collector's Vault" => "{2}, {T}: Draw a card, then discard a card. Create a Treasure token.",
+            "Daily Bugle Newspaper" => "{2}, {T}: Draw a card, then discard a card. Create a Treasure token.";
+            "{2}, {T}: Draw a card, then discard a card.",
+            "{2}, {T}: Draw a card, then discard a card. Create two Treasure tokens.",
+            "{1}, {T}: Draw a card, then discard a card. Create a Treasure token.",
+            "{2}, {T}: Draw a card. Create a Treasure token.",
+            "{2}, {T}: Discard a card, then draw a card. Create a Treasure token."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.artifact.exile_target_nonland_permanent_opponent_until_leaves"),
+        label: "artifact ETB linked exile an opposing nonland permanent",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_artifact_exile_target_nonland_permanent_opponent_until_leaves,
+        // The enchantment wording is owned by the shipped
+        // `etb.enchantment.exile_opponent_nonland_until_source_leaves` recipe, so it is asserted
+        // directly on this matcher in the catalog tests instead of as a catalog negative.
+        calibration: calibrations!(
+            "White Auracite" => "When this artifact enters, exile target nonland permanent an opponent controls until this artifact leaves the battlefield.",
+            "Malfunctioning Holodeck" => "When this artifact enters, exile target nonland permanent an opponent controls until this artifact leaves the battlefield.",
+            "Perilous Snare" => "When this artifact enters, exile target nonland permanent an opponent controls until this artifact leaves the battlefield.";
+            "When this artifact enters, exile target nonland permanent until this artifact leaves the battlefield.",
+            "When this artifact enters, exile target permanent an opponent controls until this artifact leaves the battlefield.",
+            "When this artifact enters, exile up to one target nonland permanent an opponent controls until this artifact leaves the battlefield.",
+            "When this artifact enters, exile target nonland permanent an opponent controls until your next turn.",
+            "When this artifact enters, exile target nonland permanent an opponent controls until this artifact leaves the battlefield. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.mana.move_graveyard_card_to_library_bottom.any_graveyard"),
+        label:
+            "pay two to put a target card from any graveyard on the bottom of its owner's library",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_mana_move_graveyard_card_to_library_bottom_any_graveyard,
+        // The controller-only wording is owned by the shipped
+        // `activated.graveyard_card_to_library_bottom` recipe, so it is asserted directly on this
+        // matcher in the catalog tests instead of as a catalog negative.
+        calibration: calibrations!(
+            "Hoverstone Pilgrim" => "{2}: Put target card from a graveyard on the bottom of its owner's library.",
+            "Sundering Archaic" => "{2}: Put target card from a graveyard on the bottom of its owner's library.";
+            "{2}: Put target creature card from a graveyard on the bottom of its owner's library.",
+            "{2}, {T}: Put target card from a graveyard on the bottom of its owner's library.",
+            "{3}: Put target card from a graveyard on the bottom of its owner's library.",
+            "{2}: Put target card from a graveyard on top of its owner's library.",
+            "{2}: Put up to one target card from a graveyard on the bottom of its owner's library."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.landfall.equipped_creature_plus_two_plus_two"),
+        label: "landfall pumps the equipped creature plus two plus two until end of turn",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_landfall_equipped_creature_plus_two_plus_two,
+        calibration: calibrations!(
+            "Adventuring Gear" => "Landfall — Whenever a land you control enters, equipped creature gets +2/+2 until end of turn.",
+            "Skyclave Pick-Axe" => "Landfall — Whenever a land you control enters, equipped creature gets +2/+2 until end of turn.";
+            "Landfall — Whenever a land you control enters, equipped creature gets +1/+1 until end of turn.",
+            "Landfall — Whenever a land you control enters, equipped creature gets +2/+0 until end of turn.",
+            "Whenever a land you control enters, equipped creature gets +2/+2 until end of turn.",
+            "Landfall — Whenever a land enters, equipped creature gets +2/+2 until end of turn.",
+            "Landfall — Whenever a land you control enters, target creature you control gets +2/+2 until end of turn."
         ),
     },
 ];
@@ -23269,5 +23638,602 @@ mod tests {
             .is_none(),
             "the linked exile ETB stays bound to enchantment sources"
         );
+    }
+
+    #[test]
+    fn issue_343_exact_clauses_match_their_recipes() {
+        for (clause, is_spell, expected) in [
+            (
+                "When this creature enters, destroy target creature an opponent controls that was dealt damage this turn.",
+                false,
+                "triggered.etb.destroy.target_creature_opponent_was_dealt_damage",
+            ),
+            (
+                "Target creature gets +2/+2 and gains lifelink until end of turn.",
+                true,
+                "spell.pump.creature.plus_two_plus_two.lifelink",
+            ),
+            (
+                "{3}{G}: Put a +1/+1 counter on this creature.",
+                false,
+                "activated.mana.put_counter_self",
+            ),
+            (
+                "Whenever you cast a spell with mana value 4 or greater, put a +1/+1 counter on this creature.",
+                false,
+                "triggered.controller_casts_spell_mana_value_four.put_counter_self",
+            ),
+            (
+                "{2}, {T}: Draw a card, then discard a card. Create a Treasure token.",
+                false,
+                "activated.mana.tap_loot_create_treasure",
+            ),
+            (
+                "When this artifact enters, exile target nonland permanent an opponent controls until this artifact leaves the battlefield.",
+                false,
+                "triggered.etb.artifact.exile_target_nonland_permanent_opponent_until_leaves",
+            ),
+            (
+                "{2}: Put target card from a graveyard on the bottom of its owner's library.",
+                false,
+                "activated.mana.move_graveyard_card_to_library_bottom.any_graveyard",
+            ),
+            (
+                "Landfall — Whenever a land you control enters, equipped creature gets +2/+2 until end of turn.",
+                false,
+                "triggered.landfall.equipped_creature_plus_two_plus_two",
+            ),
+        ] {
+            let matched = match_clause(clause, is_spell, &context())
+                .expect("clause should not be ambiguous")
+                .unwrap_or_else(|| panic!("clause should match a recipe: {clause}"));
+            assert_eq!(matched.id.as_str(), expected, "{clause}");
+        }
+    }
+
+    fn issue_343_recipe(id: &str) -> &'static Recipe {
+        CATALOG
+            .iter()
+            .find(|recipe| recipe.id.as_str() == id)
+            .unwrap_or_else(|| panic!("missing recipe {id}"))
+    }
+
+    #[test]
+    fn issue_343_recipes_have_stable_ids_and_surfaces() {
+        for (id, surface) in [
+            (
+                "triggered.etb.destroy.target_creature_opponent_was_dealt_damage",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "spell.pump.creature.plus_two_plus_two.lifelink",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "activated.mana.put_counter_self",
+                RecipeSurface::ActivatedAbility,
+            ),
+            (
+                "triggered.controller_casts_spell_mana_value_four.put_counter_self",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "activated.mana.tap_loot_create_treasure",
+                RecipeSurface::ActivatedAbility,
+            ),
+            (
+                "triggered.etb.artifact.exile_target_nonland_permanent_opponent_until_leaves",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "activated.mana.move_graveyard_card_to_library_bottom.any_graveyard",
+                RecipeSurface::ActivatedAbility,
+            ),
+            (
+                "triggered.landfall.equipped_creature_plus_two_plus_two",
+                RecipeSurface::TriggeredAbility,
+            ),
+        ] {
+            assert_eq!(
+                issue_343_recipe(id).surface,
+                surface,
+                "{id} surface drifted"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_343_etb_destroy_damage_marked_opposing_creature_is_exact() {
+        let RecipeEmission::TriggeredAbility(ability) =
+            match_etb_destroy_target_creature_opponent_was_dealt_damage(
+                ISSUE_343_ETB_DESTROY_DAMAGED_OPPONENT_CREATURE_CLAUSE,
+                &context(),
+            )
+            .expect("the damage-marked destroy clause should match")
+        else {
+            panic!("the damage-marked destroy must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(!ability.may);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::Opponent,
+                    was_dealt_damage_this_turn: Some(true),
+                    ..TargetFilter::default()
+                })),
+            }]
+        );
+        let targeting = ability.targeting.as_ref().expect("destroy target group");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("the damage-marked destroy must own exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.effect_indices, [0]);
+        assert_eq!(
+            group.prompt,
+            "Choose target creature an opponent controls that was dealt damage this turn"
+        );
+        for negative in [
+            "When this creature enters, destroy target creature an opponent controls.",
+            "When this creature enters, destroy target creature that was dealt damage this turn.",
+            "When this creature enters, destroy target creature an opponent controls that was dealt damage this turn. Draw a card.",
+            "When this creature enters, deal 2 damage to target creature an opponent controls that was dealt damage this turn.",
+            "Whenever this creature enters, destroy target creature an opponent controls that was dealt damage this turn.",
+        ] {
+            assert!(
+                match_etb_destroy_target_creature_opponent_was_dealt_damage(negative, &context())
+                    .is_none(),
+                "the damage-marked destroy accepted {negative}"
+            );
+        }
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_etb_destroy_target_creature_opponent_was_dealt_damage(
+                ISSUE_343_ETB_DESTROY_DAMAGED_OPPONENT_CREATURE_CLAUSE,
+                &noncreature
+            )
+            .is_none(),
+            "the damage-marked destroy stays bound to creature sources"
+        );
+        assert_eq!(
+            match_clause("Destroy target creature.", true, &context())
+                .expect("the plain destroy must stay unambiguous")
+                .expect("the plain destroy must stay supported")
+                .id
+                .as_str(),
+            "spell.destroy.creature",
+            "adding the ETB recipe must not disturb the shipped plain destroy recipe"
+        );
+    }
+
+    #[test]
+    fn issue_343_plus_two_plus_two_lifelink_shares_one_target() {
+        let chosen = chosen_creature(TargetController::Any);
+        let RecipeEmission::SpellEffects(effects) =
+            match_spell_creature_plus_two_plus_two_lifelink(
+                ISSUE_343_SPELL_PLUS_TWO_PLUS_TWO_LIFELINK_CLAUSE,
+                &context(),
+            )
+            .expect("the +2/+2 lifelink clause should match")
+        else {
+            panic!("the pump must emit ordered spell effects");
+        };
+        assert_eq!(
+            effects,
+            [
+                SpellEffectKind::PumpTarget {
+                    power: 2,
+                    toughness: 2,
+                    scale: None,
+                    subject: chosen.clone(),
+                },
+                SpellEffectKind::GrantKeywords {
+                    subject: chosen.clone(),
+                    keywords: vec![Keyword::Lifelink],
+                },
+            ]
+        );
+        for negative in [
+            "Target creature gets +2/+1 and gains lifelink until end of turn.",
+            "Target creature gains lifelink until end of turn.",
+            "Target creature gets +2/+2 and gains deathtouch until end of turn.",
+            "Target creature you control gets +2/+2 and gains lifelink until end of turn.",
+            "Target creature gets +2/+2 and gains lifelink until end of turn. Draw a card.",
+        ] {
+            assert!(
+                match_spell_creature_plus_two_plus_two_lifelink(negative, &context()).is_none(),
+                "the lifelink pump accepted {negative}"
+            );
+        }
+        // The plain pump wording is owned by a shipped recipe; assert matcher exclusion and route.
+        assert!(match_spell_creature_plus_two_plus_two_lifelink(
+            "Target creature gets +2/+2 until end of turn.",
+            &context()
+        )
+        .is_none());
+        assert_eq!(
+            match_clause(
+                "Target creature gets +2/+2 until end of turn.",
+                true,
+                &context()
+            )
+            .expect("the plain pump must stay unambiguous")
+            .expect("the plain pump must stay supported")
+            .id
+            .as_str(),
+            "spell.pump.creature.fixed"
+        );
+        assert!(match_spell_creature_plus_two_plus_two_lifelink(
+            "Up to one target creature gets +2/+2 and gains lifelink until end of turn.",
+            &context()
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn issue_343_activated_counter_parameterizes_the_printed_mana_cost() {
+        for (clause, cost) in [
+            ("{3}{G}: Put a +1/+1 counter on this creature.", "{3}{G}"),
+            ("{2}{G}: Put a +1/+1 counter on this creature.", "{2}{G}"),
+            ("{1}{R}: Put a +1/+1 counter on this creature.", "{1}{R}"),
+        ] {
+            let RecipeEmission::ActivatedAbility(ability) =
+                match_activated_mana_put_counter_self(clause, &context())
+                    .expect("the activated counter clause should match")
+            else {
+                panic!("the activated counter must emit an activated ability");
+            };
+            assert!(ability.targeting.is_none());
+            assert_eq!(
+                ability.costs,
+                [AbilityCost::Mana(ManaCost::parse(cost).unwrap())]
+            );
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Source,
+                }]
+            );
+        }
+        for negative in [
+            "{3}{G}: Put two +1/+1 counters on this creature.",
+            "{3}{G}: Put a +1/+1 counter on target creature.",
+            "{3}{G}, {T}: Put a +1/+1 counter on this creature.",
+            "{3}{G}: Put a +1/+1 counter on this creature. Activate only as a sorcery.",
+            "{3}{G}, Sacrifice this creature: Put a +1/+1 counter on this creature.",
+            "Put a +1/+1 counter on this creature.",
+        ] {
+            assert!(
+                match_activated_mana_put_counter_self(negative, &context()).is_none(),
+                "the activated counter accepted {negative}"
+            );
+        }
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(match_activated_mana_put_counter_self(
+            "{3}{G}: Put a +1/+1 counter on this creature.",
+            &noncreature
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn issue_343_cast_mana_value_four_counter_is_exact() {
+        let RecipeEmission::TriggeredAbility(ability) =
+            match_controller_casts_spell_mana_value_four_put_counter_self(
+                ISSUE_343_CAST_MANA_VALUE_FOUR_COUNTER_CLAUSE,
+                &context(),
+            )
+            .expect("the mana-value-four cast clause should match")
+        else {
+            panic!("the cast counter must emit a triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverPlayerCastsSpell {
+                caster: CastTriggerPlayer::Controller,
+                filter: SpellCastFilter {
+                    min_mana_value: Some(4),
+                    ..SpellCastFilter::default()
+                },
+                ordinal: None,
+                ordinal_scope: Default::default(),
+            }
+        );
+        assert!(!ability.may);
+        assert!(ability.targeting.is_none());
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::PutCounters {
+                counter: CounterKind::PlusOnePlusOne,
+                count: Amount::Fixed(1),
+                subject: EffectSubject::Source,
+            }]
+        );
+        for negative in [
+            "Whenever you cast a spell with mana value 5 or greater, put a +1/+1 counter on this creature.",
+            "Whenever you cast a spell with mana value 4 or greater, put two +1/+1 counters on this creature.",
+            "Whenever you cast an instant or sorcery spell with mana value 4 or greater, put a +1/+1 counter on this creature.",
+            "Whenever you cast a spell with mana value 4 or less, put a +1/+1 counter on this creature.",
+            "Whenever an opponent casts a spell with mana value 4 or greater, put a +1/+1 counter on this creature.",
+        ] {
+            assert!(
+                match_controller_casts_spell_mana_value_four_put_counter_self(negative, &context())
+                    .is_none(),
+                "the cast counter accepted {negative}"
+            );
+        }
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_controller_casts_spell_mana_value_four_put_counter_self(
+                ISSUE_343_CAST_MANA_VALUE_FOUR_COUNTER_CLAUSE,
+                &noncreature
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn issue_343_tap_loot_create_treasure_keeps_printed_order() {
+        let RecipeEmission::ActivatedAbility(ability) =
+            match_activated_mana_tap_loot_create_treasure(
+                ISSUE_343_TAP_LOOT_CREATE_TREASURE_CLAUSE,
+                &context(),
+            )
+            .expect("the loot-Treasure clause should match")
+        else {
+            panic!("the loot-Treasure must emit an activated ability");
+        };
+        assert!(ability.targeting.is_none());
+        assert_eq!(
+            ability.costs,
+            [
+                AbilityCost::Mana(ManaCost::parse("{2}").unwrap()),
+                AbilityCost::Tap,
+            ]
+        );
+        assert_eq!(
+            ability.effect,
+            [
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                },
+                SpellEffectKind::Discard {
+                    who: PlayerRecipient::Controller,
+                    quantity: DiscardQuantity::Exact(1),
+                },
+                SpellEffectKind::CreateTokens {
+                    token: "treasure".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                },
+            ]
+        );
+        for negative in [
+            "{2}, {T}: Draw a card, then discard a card.",
+            "{2}, {T}: Draw a card, then discard a card. Create two Treasure tokens.",
+            "{1}, {T}: Draw a card, then discard a card. Create a Treasure token.",
+            "{2}, {T}: Draw a card. Create a Treasure token.",
+            "{2}, {T}: Discard a card, then draw a card. Create a Treasure token.",
+        ] {
+            assert!(
+                match_activated_mana_tap_loot_create_treasure(negative, &context()).is_none(),
+                "the loot-Treasure accepted {negative}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_343_artifact_linked_exile_is_artifact_gated() {
+        let RecipeEmission::TriggeredAbility(ability) =
+            match_etb_artifact_exile_target_nonland_permanent_opponent_until_leaves(
+                ISSUE_343_ARTIFACT_LINKED_EXILE_CLAUSE,
+                &context(),
+            )
+            .expect("the artifact linked-exile clause should match")
+        else {
+            panic!("the artifact linked exile must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(!ability.may);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::ExileUntilSourceLeaves {
+                target: TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    controller: TargetController::Opponent,
+                    excluded_permanent_types: vec![PermanentTypeFilter::Land],
+                    ..TargetFilter::default()
+                },
+            }]
+        );
+        let targeting = ability.targeting.as_ref().expect("exile target group");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("the artifact linked exile must own exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.effect_indices, [0]);
+        assert_eq!(
+            group.prompt,
+            "Choose target nonland permanent an opponent controls"
+        );
+        for negative in [
+            "When this artifact enters, exile target nonland permanent until this artifact leaves the battlefield.",
+            "When this artifact enters, exile target permanent an opponent controls until this artifact leaves the battlefield.",
+            "When this artifact enters, exile up to one target nonland permanent an opponent controls until this artifact leaves the battlefield.",
+            "When this artifact enters, exile target nonland permanent an opponent controls until your next turn.",
+            "When this artifact enters, exile target nonland permanent an opponent controls until this artifact leaves the battlefield. Draw a card.",
+        ] {
+            assert!(
+                match_etb_artifact_exile_target_nonland_permanent_opponent_until_leaves(
+                    negative,
+                    &context()
+                )
+                .is_none(),
+                "the artifact linked exile accepted {negative}"
+            );
+        }
+        let mut non_artifact = context();
+        non_artifact.source_is_artifact = false;
+        assert!(
+            match_etb_artifact_exile_target_nonland_permanent_opponent_until_leaves(
+                ISSUE_343_ARTIFACT_LINKED_EXILE_CLAUSE,
+                &non_artifact
+            )
+            .is_none()
+        );
+        // The enchantment wording stays with the shipped enchantment recipe.
+        assert!(match_etb_artifact_exile_target_nonland_permanent_opponent_until_leaves(
+            "When this enchantment enters, exile target nonland permanent an opponent controls until this enchantment leaves the battlefield.",
+            &context()
+        )
+        .is_none());
+        assert_eq!(
+            match_clause(
+                "When this enchantment enters, exile target nonland permanent an opponent controls until this enchantment leaves the battlefield.",
+                false,
+                &context()
+            )
+            .expect("the enchantment wording must stay unambiguous")
+            .expect("the enchantment wording must stay supported")
+            .id
+            .as_str(),
+            "etb.enchantment.exile_opponent_nonland_until_source_leaves"
+        );
+    }
+
+    #[test]
+    fn issue_343_any_graveyard_bottom_uses_any_player_owner_scope() {
+        let RecipeEmission::ActivatedAbility(ability) =
+            match_activated_mana_move_graveyard_card_to_library_bottom_any_graveyard(
+                ISSUE_343_ANY_GRAVEYARD_LIBRARY_BOTTOM_CLAUSE,
+                &context(),
+            )
+            .expect("the any-graveyard clause should match")
+        else {
+            panic!("the any-graveyard bottom must emit an activated ability");
+        };
+        assert_eq!(
+            ability.costs,
+            [AbilityCost::Mana(ManaCost::parse("{2}").unwrap())]
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    owner: GraveyardOwner::AnyPlayer,
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::LibraryBottom,
+                linked_exile_id: None,
+            }]
+        );
+        let targeting = ability.targeting.as_ref().expect("graveyard target group");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("the any-graveyard bottom must own exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.prompt, "Choose target card from a graveyard");
+        assert_eq!(group.effect_indices, [0]);
+        for negative in [
+            "{2}: Put target creature card from a graveyard on the bottom of its owner's library.",
+            "{2}, {T}: Put target card from a graveyard on the bottom of its owner's library.",
+            "{3}: Put target card from a graveyard on the bottom of its owner's library.",
+            "{2}: Put target card from a graveyard on top of its owner's library.",
+            "{2}: Put up to one target card from a graveyard on the bottom of its owner's library.",
+        ] {
+            assert!(
+                match_activated_mana_move_graveyard_card_to_library_bottom_any_graveyard(
+                    negative,
+                    &context()
+                )
+                .is_none(),
+                "the any-graveyard bottom accepted {negative}"
+            );
+        }
+        // The controller-only wording stays with the shipped recipe.
+        assert!(
+            match_activated_mana_move_graveyard_card_to_library_bottom_any_graveyard(
+                "{2}: Put target card from your graveyard on the bottom of your library.",
+                &context()
+            )
+            .is_none()
+        );
+        assert_eq!(
+            match_clause(
+                "{2}: Put target card from your graveyard on the bottom of your library.",
+                false,
+                &context()
+            )
+            .expect("the controller-only wording must stay unambiguous")
+            .expect("the controller-only wording must stay supported")
+            .id
+            .as_str(),
+            "activated.graveyard_card_to_library_bottom"
+        );
+    }
+
+    #[test]
+    fn issue_343_landfall_equipped_pump_is_equipment_gated() {
+        let RecipeEmission::TriggeredAbility(ability) =
+            match_landfall_equipped_creature_plus_two_plus_two(
+                ISSUE_343_LANDFALL_EQUIPPED_PUMP_CLAUSE,
+                &context(),
+            )
+            .expect("the landfall equipped-pump clause should match")
+        else {
+            panic!("the landfall equipped pump must emit a triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverPermanentEntersBattlefield {
+                controller: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    permanent_type: Some(PermanentTypeFilter::Land),
+                    ..PermanentEventFilter::default()
+                },
+                creature_filter: None,
+            }
+        );
+        assert!(!ability.may);
+        assert!(ability.targeting.is_none());
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::PumpTarget {
+                power: 2,
+                toughness: 2,
+                scale: None,
+                subject: EffectSubject::AttachedObject,
+            }]
+        );
+        for negative in [
+            "Landfall — Whenever a land you control enters, equipped creature gets +1/+1 until end of turn.",
+            "Landfall — Whenever a land you control enters, equipped creature gets +2/+0 until end of turn.",
+            "Whenever a land you control enters, equipped creature gets +2/+2 until end of turn.",
+            "Landfall — Whenever a land enters, equipped creature gets +2/+2 until end of turn.",
+            "Landfall — Whenever a land you control enters, target creature you control gets +2/+2 until end of turn.",
+        ] {
+            assert!(
+                match_landfall_equipped_creature_plus_two_plus_two(negative, &context()).is_none(),
+                "the landfall equipped pump accepted {negative}"
+            );
+        }
+        let mut non_equipment = context();
+        non_equipment.source_is_equipment = false;
+        assert!(match_landfall_equipped_creature_plus_two_plus_two(
+            ISSUE_343_LANDFALL_EQUIPPED_PUMP_CLAUSE,
+            &non_equipment
+        )
+        .is_none());
     }
 }

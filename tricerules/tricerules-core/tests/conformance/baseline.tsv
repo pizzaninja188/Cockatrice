@@ -23,6 +23,8 @@ adorned_crocodile	0	cast	exercised
 adult_gold_dragon	0	cast	exercised
 adventurers_inn	0	ability:0	exercised
 adventurers_inn	0	land	exercised
+adventuring_gear	0	ability:0	exercised
+adventuring_gear	0	cast	exercised
 aegis_of_the_heavens	0	cast	exercised
 aegis_turtle	0	cast	exercised
 aerial_assault	0	cast	unsupported: target group 0 needs a richer fixture
@@ -431,6 +433,8 @@ coeurl	0	ability:0	exercised
 coeurl	0	cast	exercised
 cogwork_wrestler	0	cast	exercised
 cold-water_snapper	0	cast	exercised
+collectors_vault	0	ability:0	exercised
+collectors_vault	0	cast	exercised
 colorful_feiyi_sparrow	0	cast	exercised
 colorstorm_stallion	0	cast	exercised
 colossadactyl	0	cast	exercised
@@ -909,6 +913,7 @@ gilacorn	0	cast	exercised
 gilded_lotus	0	ability:0	exercised
 gilded_lotus	0	cast	exercised
 gilded_sentinel	0	cast	exercised
+give_in_to_violence	0	cast	exercised
 glacial_wall	0	cast	exercised
 gladecover_scout	0	cast	exercised
 glamorous_grapplers	0	cast	exercised
@@ -1119,6 +1124,8 @@ hot_dog_cart	0	ability:0	exercised
 hot_dog_cart	0	cast	exercised
 hover_barrier	0	cast	exercised
 hovermyr	0	cast	exercised
+hoverstone_pilgrim	0	ability:0	exercised
+hoverstone_pilgrim	0	cast	exercised
 howling_fury	0	cast	exercised
 howling_mine	0	cast	exercised
 huatlis_snubhorn	0	cast	exercised
@@ -1367,6 +1374,7 @@ lumbering_worldwagon	0	cast	exercised
 lumengrid_gargoyle	0	cast	exercised
 lumengrid_warden	0	cast	exercised
 luminous_rebuke	0	cast	exercised
+lurking_lizards	0	cast	exercised
 lush_oasis	0	ability:0	exercised
 lush_oasis	0	land	exercised
 lush_portico	0	land	exercised
@@ -2164,6 +2172,7 @@ sterling_supplier	0	cast	exercised
 steward_of_valeron	0	ability:0	exercised
 steward_of_valeron	0	cast	exercised
 stickytongue_sentinel	0	cast	exercised
+stingblade_assassin	0	cast	exercised
 stir_up_trouble	0	cast	unsupported: required cast-cost group needs a specialized fixture
 stomped_by_the_foot	0	cast	exercised
 stomper_cub	0	cast	exercised
@@ -2357,6 +2366,8 @@ timid_shieldbearer	0	cast	exercised
 tireless_missionaries	0	cast	exercised
 tishanas_tidebinder	0	cast	exercised
 titanic_growth	0	cast	exercised
+toadstool_admirer	0	ability:0	exercised
+toadstool_admirer	0	cast	exercised
 tolarian_scholar	0	cast	exercised
 tomb_trawler	0	ability:0	exercised
 tomb_trawler	0	cast	exercised
@@ -2602,6 +2613,8 @@ wedgelight_rammer	0	cast	exercised
 weftblade_enhancer	0	cast	exercised
 west_wind_avatar	0	cast	exercised
 wetland_sambar	0	cast	exercised
+white_auracite	0	ability:0	exercised
+white_auracite	0	cast	exercised
 white_knight	0	cast	exercised
 white_tiger,_ava_ayala	0	ability:0	exercised
 white_tiger,_ava_ayala	0	cast	exercised
