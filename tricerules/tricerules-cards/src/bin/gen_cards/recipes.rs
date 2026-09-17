@@ -50,10 +50,11 @@ pub(super) enum RecipeSurface {
     /// whether the card will become a permanent after resolving.
     SpellStaticAbility,
     CharacteristicAbility,
-    /// A printed alternative cast-method cost line (`Warp {cost}`, `Flashback {cost}`) that emits a
-    /// cost field on the containing face instead of an ability or resolution effect. Warp is
-    /// permanent-face-only (CR 702.185) and Flashback is instant/sorcery-face-only (CR 702.34), so
-    /// each matcher owns its own face-type gate rather than relying on [`Self::SpellClause`].
+    /// A printed alternative cast-method cost line (`Warp {cost}`, `Flashback {cost}`,
+    /// `Harmonize {cost}`) that emits a cost field on the containing face instead of an ability or
+    /// resolution effect. Warp is permanent-face-only (CR 702.185) and Flashback/Harmonize are
+    /// instant/sorcery-face-only (CR 702.34, 702.180), so each matcher owns its own face-type gate
+    /// rather than relying on [`Self::SpellClause`].
     CastMethodClause,
 }
 
@@ -135,6 +136,8 @@ pub(super) enum RecipeEmission {
     WarpCost(ManaCost),
     /// CR 702.34: the face-level graveyard alternative cost printed as `Flashback {cost}`.
     FlashbackCost(ManaCost),
+    /// CR 702.180: the face-level graveyard alternative cost printed as `Harmonize {cost}`.
+    HarmonizeCost(ManaCost),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -7108,9 +7111,9 @@ fn match_spell_pump_first_strike_scry_one(text: &str, _: &RecipeContext) -> Opti
     })
 }
 
-/// CR 702.185 / 702.34: the shared strict parser for a printed alternative cast-method cost line.
-/// The whole remainder after `Keyword ` must be one canonical non-empty mana cost, so a rider,
-/// em-dash variant, malformed or non-canonical cost, remaining reminder text, or appended
+/// CR 702.185 / 702.34 / 702.180: the shared strict parser for a printed alternative cast-method
+/// cost line. The whole remainder after `Keyword ` must be one canonical non-empty mana cost, so a
+/// rider, em-dash variant, malformed or non-canonical cost, remaining reminder text, or appended
 /// instruction never matches.
 fn parse_cast_method_cost(text: &str, keyword: &str) -> Option<ManaCost> {
     let rest = text.strip_prefix(keyword)?.strip_prefix(' ')?;
@@ -7137,6 +7140,14 @@ fn match_cast_method_flashback(text: &str, context: &RecipeContext) -> Option<Re
     (context.source_is_instant || context.source_is_sorcery)
         .then(|| parse_cast_method_cost(text, "Flashback"))?
         .map(RecipeEmission::FlashbackCost)
+}
+
+/// CR 702.180: Harmonize is a graveyard alternative cost for an instant or sorcery face. The
+/// face-type gate is checked before the cost so a permanent line can never emit `harmonize_cost`.
+fn match_cast_method_harmonize(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_instant || context.source_is_sorcery)
+        .then(|| parse_cast_method_cost(text, "Harmonize"))?
+        .map(RecipeEmission::HarmonizeCost)
 }
 
 /// Issue #333 exact clause templates. Each template is a reusable typed surface with at least two
@@ -12625,6 +12636,30 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("cast_method.harmonize"),
+        label: "harmonize alternative cast cost",
+        surface: RecipeSurface::CastMethodClause,
+        matcher: match_cast_method_harmonize,
+        calibration: calibrations!(
+            "Roamer's Routine" => "Harmonize {4}{G}",
+            "Ureni's Rebuff" => "Harmonize {5}{U}",
+            "Synchronized Charge" => "Harmonize {4}{G}",
+            "Unending Whisper" => "Harmonize {5}{U}",
+            "Glacial Dragonhunt" => "Harmonize {4}{U}{R}",
+            "Wild Ride" => "Harmonize {4}{R}",
+            "Channeled Dragonfire" => "Harmonize {5}{R}{R}";
+            "Harmonize {4}{G} with a rider",
+            "Harmonize — {4}{G}",
+            "Harmonize  {4}{G}",
+            "Harmonize {4}{G}.",
+            "Harmonize {4}{G} and draw a card.",
+            "Harmonize {04}{G}",
+            "Harmonize 4G",
+            "Harmonize {4}{G",
+            "{4}{G}: Harmonize this card."
+        ),
+    },
+    Recipe {
         id: RecipeId("spell.target_opponent_reveal.discard_nonland"),
         label: "target opponent reveals and you choose a nonland card to discard",
         surface: RecipeSurface::SpellClause,
@@ -13435,8 +13470,8 @@ fn surface_applies(surface: RecipeSurface, is_spell: bool, context: &RecipeConte
         RecipeSurface::ZoneActivatedAbility
         | RecipeSurface::SpellStaticAbility
         | RecipeSurface::CharacteristicAbility => true,
-        // Warp and Flashback print on permanent or instant/sorcery faces respectively; each matcher
-        // performs its own face-type gate so a wrong-type line always fails closed.
+        // Warp, Flashback, and Harmonize print on permanent or instant/sorcery faces respectively;
+        // each matcher performs its own face-type gate so a wrong-type line always fails closed.
         RecipeSurface::CastMethodClause => true,
         RecipeSurface::EtbAbility
         | RecipeSurface::TriggeredAbility
@@ -22108,6 +22143,126 @@ mod tests {
     }
 
     #[test]
+    fn issue_350_harmonize_clause_matches_its_exact_recipe() {
+        for clause in ["Harmonize {4}{G}", "Harmonize {5}{U}"] {
+            let matched = match_clause(clause, false, &context())
+                .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{clause} should match exactly one recipe"));
+            assert_eq!(matched.id.as_str(), "cast_method.harmonize", "{clause}");
+            let RecipeEmission::HarmonizeCost(cost) = matched.emission else {
+                panic!("Harmonize must emit the first-class face cost emission");
+            };
+            assert!(!cost.is_empty());
+        }
+    }
+
+    #[test]
+    fn issue_350_recipes_have_stable_ids_and_surfaces() {
+        assert_eq!(
+            issue_318_recipe("cast_method.harmonize").surface,
+            RecipeSurface::CastMethodClause
+        );
+    }
+
+    #[test]
+    fn issue_350_harmonize_emits_the_printed_cost_on_instant_or_sorcery_faces_only() {
+        for (instant, sorcery, clause, expected) in [
+            (false, true, "Harmonize {4}{G}", "{4}{G}"),
+            (true, false, "Harmonize {5}{U}", "{5}{U}"),
+        ] {
+            let mut spell_face = context();
+            spell_face.source_is_instant = instant;
+            spell_face.source_is_sorcery = sorcery;
+            let matched = match_cast_method_harmonize(clause, &spell_face)
+                .expect("Harmonize must accept an instant/sorcery face");
+            let RecipeEmission::HarmonizeCost(cost) = matched else {
+                panic!("Harmonize must emit the first-class face cost emission");
+            };
+            assert_eq!(cost.to_string(), expected);
+        }
+
+        let mut permanent = context();
+        permanent.source_is_instant = false;
+        permanent.source_is_sorcery = false;
+        assert!(
+            match_clause("Harmonize {4}{G}", false, &permanent)
+                .expect("permanent-face check must not be ambiguous")
+                .is_none(),
+            "Harmonize must fail closed on a permanent face"
+        );
+        assert!(match_cast_method_harmonize("Harmonize {4}{G}", &permanent).is_none());
+    }
+
+    #[test]
+    fn issue_350_harmonize_rejects_near_misses() {
+        for negative in [
+            "Harmonize {4}{G} with a rider",
+            "Harmonize — {4}{G}",
+            "Harmonize  {4}{G}",
+            "Harmonize {4}{G}.",
+            "Harmonize {4}{G} and draw a card.",
+            "Harmonize {04}{G}",
+            "Harmonize 4G",
+            "Harmonize {4}{G",
+            "{4}{G}: Harmonize this card.",
+        ] {
+            assert!(
+                match_cast_method_harmonize(negative, &context()).is_none(),
+                "Harmonize accepted near-miss {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, false);
+        }
+
+        // Cross-method lines must never be claimed by the Harmonize matcher.
+        for cross_method in ["Warp {4}{G}", "Flashback {4}{G}"] {
+            assert!(
+                match_cast_method_harmonize(cross_method, &context()).is_none(),
+                "Harmonize accepted cross-method line {cross_method:?}"
+            );
+        }
+
+        // Each cast-method line must be claimed only by its own recipe.
+        assert_eq!(
+            match_clause("Harmonize {4}{G}", false, &context())
+                .expect("cross-method check must not be ambiguous")
+                .expect("the Harmonize line matches its own recipe")
+                .id
+                .as_str(),
+            "cast_method.harmonize"
+        );
+        assert_eq!(
+            match_clause("Warp {4}{G}", false, &context())
+                .expect("cross-method check must not be ambiguous")
+                .expect("the Warp line matches its own recipe")
+                .id
+                .as_str(),
+            "cast_method.warp"
+        );
+    }
+
+    #[test]
+    fn issue_350_harmonize_clauses_do_not_disturb_shipped_recipes() {
+        for (clause, is_spell, expected) in [
+            ("Draw a card.", true, "spell.draw.fixed"),
+            (
+                "Return target creature to its owner's hand.",
+                true,
+                "spell.return_to_hand.creature",
+            ),
+            (
+                "Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+                true,
+                "spell.search_library.basic_land.battlefield_tapped",
+            ),
+        ] {
+            let matched = match_clause(clause, is_spell, &context())
+                .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{clause} should stay consumed by its shipped recipe"));
+            assert_eq!(matched.id.as_str(), expected, "{clause}");
+        }
+    }
+
+    #[test]
     fn issue_333_six_recipe_templates_match_their_exact_recipes() {
         for (clause, is_spell, expected) in [
             (
@@ -23134,7 +23289,7 @@ mod tests {
 
         for negative in [
             "Landfall — Whenever a land you control enters, this creature gets +2/+2 until end of turn.",
-            "Landfall — Whenever a land you control enters, this creature gets +1/+0 until end of turn.",
+            "Landfall — Whenever a land you control enters, this creature gets +0/+1 until end of turn.",
             "Whenever a land you control enters, this creature gets +1/+1 until end of turn.",
             "Landfall — Whenever a land enters, this creature gets +1/+1 until end of turn.",
             "Landfall — Whenever a land you control enters, put a +1/+1 counter on this creature.",

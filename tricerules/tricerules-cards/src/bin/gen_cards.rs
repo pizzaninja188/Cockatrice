@@ -598,6 +598,7 @@ struct ParsedRules {
     cost_modifiers: Vec<SpellCostModifier>,
     warp_cost: Option<ManaCost>,
     flashback_cost: Option<ManaCost>,
+    harmonize_cost: Option<ManaCost>,
     spell_effect: Vec<SpellEffectKind>,
     targeting: Option<TargetingDef>,
     modal_spell: Option<ModalDef>,
@@ -856,6 +857,12 @@ fn parse_rules_text(
                 }
                 parsed.flashback_cost = Some(cost);
             }
+            RecipeEmission::HarmonizeCost(cost) => {
+                if parsed.harmonize_cost.is_some() {
+                    return Err(RulesParseError::Unsupported);
+                }
+                parsed.harmonize_cost = Some(cost);
+            }
             RecipeEmission::ModalAssembly(_)
             | RecipeEmission::ModalMode(_)
             | RecipeEmission::StationAssembly(_) => {
@@ -1009,6 +1016,7 @@ struct GenFace {
     cost_modifiers: Vec<SpellCostModifier>,
     warp_cost: Option<ManaCost>,
     flashback_cost: Option<ManaCost>,
+    harmonize_cost: Option<ManaCost>,
     spell_effect: Vec<SpellEffectKind>,
     targeting: Option<TargetingDef>,
     modal_spell: Option<ModalDef>,
@@ -1044,6 +1052,12 @@ fn push_face_fields(s: &mut String, face: &GenFace, indent: &str, include_name: 
     if let Some(cost) = &face.flashback_cost {
         s.push_str(&format!(
             "{indent}flashback_cost: Some({:?}),\n",
+            cost.to_string()
+        ));
+    }
+    if let Some(cost) = &face.harmonize_cost {
+        s.push_str(&format!(
+            "{indent}harmonize_cost: Some({:?}),\n",
             cost.to_string()
         ));
     }
@@ -1743,6 +1757,7 @@ fn parse_multiface_face(
         cost_modifiers: rules.cost_modifiers,
         warp_cost: rules.warp_cost,
         flashback_cost: rules.flashback_cost,
+        harmonize_cost: rules.harmonize_cost,
         spell_effect: rules.spell_effect,
         targeting: rules.targeting,
         modal_spell: rules.modal_spell,
@@ -1935,6 +1950,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
             cost_modifiers: rules.cost_modifiers,
             warp_cost: rules.warp_cost,
             flashback_cost: rules.flashback_cost,
+            harmonize_cost: rules.harmonize_cost,
             spell_effect: rules.spell_effect,
             targeting: rules.targeting,
             modal_spell: rules.modal_spell,
@@ -12278,6 +12294,223 @@ mod tests {
             );
             assert!(ability.targeting.is_none());
         }
+    }
+
+    #[test]
+    fn issue_350_cohort_generates_the_exact_reviewed_definitions() {
+        let mut routine = normal_card_with_oracle_id(
+            "cf2355f3-11d2-4b03-b663-9fad6b07e4b2",
+            "Roamer's Routine",
+            "{2}{G}",
+            "Sorcery",
+            "Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.\nHarmonize {4}{G} (You may cast this card from your graveyard for its harmonize cost. You may tap a creature you control to reduce that cost by {X}, where X is its power. Then exile this spell.)",
+            None,
+        );
+        routine["colors"] = json!(["G"]);
+        let generated = evaluate_fresh(&routine).expect("Roamer's Routine should qualify");
+        assert_eq!(generated.id, "roamers_routine");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            [
+                "search library for a basic land onto the battlefield tapped",
+                "harmonize alternative cast cost"
+            ]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{2}{G}");
+        assert_eq!(raw.types, ["Sorcery"]);
+        assert_eq!(
+            raw.harmonize_cost.as_ref().map(ToString::to_string),
+            Some("{4}{G}".to_string())
+        );
+        assert!(raw.flashback_cost.is_none());
+        assert!(raw.warp_cost.is_none());
+        assert_eq!(
+            raw.spell_effect,
+            [SpellEffectKind::SearchLibrary {
+                who: PlayerRecipient::Controller,
+                optional: false,
+                count: 1,
+                count_by_cast_cost: None,
+                filter: Some(ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::BasicLand),
+                    ..ZoneCardFilter::default()
+                }),
+                slots: Vec::new(),
+                zones: SearchZoneSelection::default(),
+                destination: SearchDestination::Battlefield { tapped: true },
+                conditional_destination: None,
+                shuffle: true,
+                reveal: false,
+                result_id: None,
+            }]
+        );
+        assert!(raw.targeting.is_none());
+        assert!(raw.triggered_abilities.is_empty());
+
+        let mut rebuff = normal_card_with_oracle_id(
+            "c0b7e989-8194-484c-93aa-a44df0764a77",
+            "Ureni's Rebuff",
+            "{1}{U}",
+            "Sorcery",
+            "Return target creature to its owner's hand.\nHarmonize {5}{U} (You may cast this card from your graveyard for its harmonize cost. You may tap a creature you control to reduce that cost by {X}, where X is its power. Then exile this spell.)",
+            None,
+        );
+        rebuff["colors"] = json!(["U"]);
+        let generated = evaluate_fresh(&rebuff).expect("Ureni's Rebuff should qualify");
+        assert_eq!(generated.id, "urenis_rebuff");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["return target creature", "harmonize alternative cast cost"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{1}{U}");
+        assert_eq!(raw.types, ["Sorcery"]);
+        assert_eq!(
+            raw.harmonize_cost.as_ref().map(ToString::to_string),
+            Some("{5}{U}".to_string())
+        );
+        assert_eq!(
+            raw.spell_effect,
+            [SpellEffectKind::ReturnToOwnersHand {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            }]
+        );
+        assert!(raw.targeting.is_none());
+        assert!(raw.triggered_abilities.is_empty());
+    }
+
+    #[test]
+    fn issue_350_generator_is_fail_closed_for_harmonize_near_misses() {
+        for (oracle_id, name, mana_cost, type_line, oracle_text) in [
+            (
+                "22222222-0000-0000-0000-000000000001",
+                "Near Miss Harmonize Permanent",
+                "{1}{G}",
+                "Creature — Bear",
+                "Harmonize {4}{G}",
+            ),
+            (
+                "22222222-0000-0000-0000-000000000002",
+                "Near Miss Harmonize Rider",
+                "{2}{G}",
+                "Sorcery",
+                "Draw a card.\nHarmonize {4}{G} with a rider",
+            ),
+            (
+                "22222222-0000-0000-0000-000000000003",
+                "Near Miss Harmonize Em Dash",
+                "{2}{G}",
+                "Sorcery",
+                "Draw a card.\nHarmonize — {4}{G}",
+            ),
+            (
+                "22222222-0000-0000-0000-000000000004",
+                "Near Miss Harmonize Brace",
+                "{2}{G}",
+                "Sorcery",
+                "Draw a card.\nHarmonize 4G",
+            ),
+            (
+                "22222222-0000-0000-0000-000000000005",
+                "Near Miss Harmonize Append",
+                "{2}{G}",
+                "Sorcery",
+                "Draw a card.\nHarmonize {4}{G}. Draw a card.",
+            ),
+            (
+                "22222222-0000-0000-0000-000000000006",
+                "Near Miss Harmonize Unterminated",
+                "{2}{G}",
+                "Sorcery",
+                "Draw a card.\nHarmonize {4}{G",
+            ),
+        ] {
+            let mut card = normal_card_with_oracle_id(
+                oracle_id,
+                name,
+                mana_cost,
+                type_line,
+                oracle_text,
+                None,
+            );
+            card["colors"] = json!(["G"]);
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "Harmonize near-miss must not qualify: {oracle_text}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_350_harmonize_assembly_is_order_independent() {
+        for text in [
+            "Draw a card.\nHarmonize {4}{G}",
+            "Harmonize {4}{G}\nDraw a card.",
+        ] {
+            let mut card = normal_card("Harmonize Order Probe", "{2}{G}", "Sorcery", text, None);
+            card["colors"] = json!(["G"]);
+            let generated =
+                evaluate_fresh(&card).expect("the probe should qualify in either order");
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert_eq!(
+                raw.harmonize_cost.as_ref().map(ToString::to_string),
+                Some("{4}{G}".to_string()),
+                "the harmonize cost must survive assembly in either order: {text}"
+            );
+            assert_eq!(
+                raw.spell_effect,
+                [SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                }]
+            );
+        }
+    }
+
+    #[test]
+    fn issue_350_targeted_clause_contract_survives_harmonize_lines() {
+        for text in [
+            "Harmonize {5}{U}\nTarget creature gets +1/+0 and gains first strike until end of turn.",
+            "Target creature gets +1/+0 and gains first strike until end of turn.\nHarmonize {5}{U}",
+        ] {
+            let mut card = normal_card("Harmonize Target Probe", "{2}{U}", "Instant", text, None);
+            card["colors"] = json!(["U"]);
+            let generated =
+                evaluate_fresh(&card).expect("targeted harmonize probe should qualify");
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert_eq!(
+                raw.harmonize_cost.as_ref().map(ToString::to_string),
+                Some("{5}{U}".to_string())
+            );
+            assert_eq!(raw.spell_effect.len(), 2);
+            let targeting = raw.targeting.as_ref().expect("the probe targets a creature");
+            let [group] = targeting.groups.as_slice() else {
+                panic!("the probe must own exactly one target group");
+            };
+            assert_eq!((group.min, group.max), (1, 1));
+            assert_eq!(group.effect_indices, [0, 1]);
+            assert!(
+                TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok(),
+                "no orphaned or shared target group for: {text}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_350_duplicate_harmonize_fields_fail_closed() {
+        let mut duplicate_harmonize = normal_card(
+            "Duplicate Harmonize Probe",
+            "{1}{G}",
+            "Sorcery",
+            "Draw a card.\nHarmonize {4}{G}\nHarmonize {5}{G}",
+            None,
+        );
+        duplicate_harmonize["colors"] = json!(["G"]);
+        assert!(
+            evaluate_fresh(&duplicate_harmonize).is_err(),
+            "a second Harmonize line must fail closed instead of overwriting the face cost"
+        );
     }
 
     #[cfg(windows)]
