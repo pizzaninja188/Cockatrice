@@ -1624,6 +1624,16 @@ pub enum SpellEffectKind {
         #[serde(default)]
         subject: EffectSubject,
     },
+    /// CR 122: put `count` counters of `counter` on every creature matching `filter`. Untargeted —
+    /// the mass, one-shot sibling of [`Self::PutCounters`], mirroring [`Self::PumpAll`] and
+    /// [`Self::GrantKeywordsAll`]. Web-Warriors, Ridgescale Tusker, and Primeval Protector share
+    /// this instruction.
+    PutCountersAll {
+        counter: CounterKind,
+        count: Amount,
+        #[serde(default)]
+        filter: CreatureScopeFilter,
+    },
     /// Heirloom Auntie and Reluctant Dounguard remove counters without paying a cost.
     RemoveCounters {
         counter: CounterKind,
@@ -2654,6 +2664,7 @@ impl SpellEffectKind {
             | SpellEffectKind::TapAll { .. }
             | SpellEffectKind::UntapAll { .. }
             | SpellEffectKind::PumpAll { .. }
+            | SpellEffectKind::PutCountersAll { .. }
             | SpellEffectKind::GrantKeywordsAll { .. }
             | SpellEffectKind::RemoveAbilitiesAll { .. }
             | SpellEffectKind::ReturnTriggeredCard { .. }
@@ -3238,6 +3249,13 @@ impl SpellEffectKind {
         | SpellEffectKind::RemoveCounters { counter, .. } = self
         {
             counter.validate()?;
+        }
+        if let SpellEffectKind::PutCountersAll {
+            counter, filter, ..
+        } = self
+        {
+            counter.validate()?;
+            filter.validate()?;
         }
         if matches!(self, SpellEffectKind::PutCounterSnapshot { .. })
             && context == EffectContext::Spell

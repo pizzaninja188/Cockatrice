@@ -2188,6 +2188,39 @@ fn untargeted_filters_reject_source_exclusion() {
 }
 
 #[test]
+fn issue_327_put_counters_all_is_an_untargeted_mass_counter() {
+    let valid = SpellEffectKind::PutCountersAll {
+        counter: CounterKind::PlusOnePlusOne,
+        count: Amount::Fixed(1),
+        filter: CreatureScopeFilter {
+            controller: Some(CreatureScopeController::YouControl),
+            exclude_self: true,
+            ..CreatureScopeFilter::default()
+        },
+    };
+    assert!(
+        valid.target_filters().is_empty(),
+        "PutCountersAll is the untargeted mass sibling of PutCounters"
+    );
+    assert!(valid.validate(EffectContext::Spell).is_ok());
+    assert!(valid.validate(EffectContext::Ability).is_ok());
+
+    let conflicting_scope = SpellEffectKind::PutCountersAll {
+        counter: CounterKind::PlusOnePlusOne,
+        count: Amount::Fixed(1),
+        filter: CreatureScopeFilter {
+            required_counter: Some(CounterKind::Stun),
+            requires_any_counter: true,
+            ..CreatureScopeFilter::default()
+        },
+    };
+    assert!(
+        conflicting_scope.validate(EffectContext::Spell).is_err(),
+        "any-counter and named-counter scope requirements cannot combine"
+    );
+}
+
+#[test]
 fn untargeted_filter_preserves_you_scope_but_defers_opponent_scope() {
     let keywords = vec![Keyword::Indestructible];
     let filter = |controller| TargetFilter {

@@ -935,6 +935,66 @@ pub(super) fn put_counters(
     Ok(EffectOutcome::Continue)
 }
 
+/// CR 122 / 608.2h: put `count` counters on every creature matching the authored scope. Untargeted
+/// mass sibling of [`put_counters`]; the filtered set is snapshotted as the instruction resolves so
+/// a creature that later begins matching never gains counters from this one-shot effect.
+pub(super) fn put_counters_all(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::PutCountersAll {
+        counter,
+        count,
+        filter,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let count = cx.engine.resolve_amount(
+        &count,
+        AmountContext::for_stack_item(cx.top, cx.controller)
+            .with_previous_effect_result(cx.previous_effect_result),
+    );
+    let filter_source = cx.top.source_permanent_id.unwrap_or(cx.top.id);
+    let affected = snapshot_creature_scope(cx.engine, &filter, cx.controller, filter_source);
+    let engine = &mut *cx.engine;
+    let events = &mut *cx.events;
+    let receipts = &mut cx.effect_result.counter_placements;
+    let spell_label = cx.spell_label;
+    let mut counter_events = Vec::new();
+    for tid in affected {
+        let tgt = object_display_name(&engine.state, engine.registry, tid);
+        let Some(counter_event) = engine.place_counters_with_event(tid, counter, count, false)
+        else {
+            continue;
+        };
+        let GameEvent::CountersPlaced {
+            object,
+            kind,
+            before,
+            after,
+            ..
+        } = &counter_event
+        else {
+            unreachable!("counter placement funnel returned a different event");
+        };
+        receipts.push(crate::state::CounterPlacementReceipt {
+            object: *object,
+            counter: *kind,
+            count: after.saturating_sub(*before),
+        });
+        counter_events.push(counter_event);
+        events.push(ev_log(format!(
+            "{spell_label} puts {count} {} counter{} on {tgt}",
+            counter_label(counter),
+            if count == 1 { "" } else { "s" },
+        )));
+    }
+    engine.fire_triggers(&counter_events);
+
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn can_put_counters(
     engine: &GameEngine,
     top: &StackItem,

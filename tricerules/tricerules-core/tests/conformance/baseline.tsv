@@ -150,6 +150,7 @@ balamb_t-rexaur	0	cast	exercised
 balduvian_barbarians	0	cast	exercised
 balduvian_bears	0	cast	exercised
 baleful_strix	0	cast	exercised
+ball_lightning	0	cast	exercised
 bane_alley_blackguard	0	cast	exercised
 banehound	0	cast	exercised
 banishing_betrayal	0	cast	exercised
@@ -377,6 +378,8 @@ chaplains_blessing	0	cast	exercised
 chardalyn_dragon	0	cast	exercised
 charging_badger	0	cast	exercised
 charging_monstrosaur	0	cast	exercised
+charging_strifeknight	0	ability:0	exercised
+charging_strifeknight	0	cast	exercised
 charity_extractor	0	cast	exercised
 charmed_sleep	0	cast	exercised
 chase_inspiration	0	cast	exercised
@@ -512,6 +515,7 @@ dakmor_bat	0	cast	exercised
 dakmor_scorpion	0	cast	exercised
 dancing_scimitar	0	cast	exercised
 daring_thunder-thief	0	cast	exercised
+dark_deed	0	cast	exercised
 dark_endurance	0	cast	exercised
 dark_remedy	0	cast	exercised
 darkbore_pathway_slitherbore_pathway	0	ability:0	exercised
@@ -918,6 +922,7 @@ goblin_deathraiders	0	cast	exercised
 goblin_firebomb	0	ability:0	exercised
 goblin_firebomb	0	cast	exercised
 goblin_hero	0	cast	exercised
+goblin_oriflamme	0	cast	exercised
 goblin_piker	0	cast	exercised
 goblin_roughrider	0	cast	exercised
 goblin_sky_raider	0	cast	exercised
@@ -1077,6 +1082,7 @@ hobgoblin_dragoon	0	cast	exercised
 hollowhenge_beast	0	cast	exercised
 holy_strength	0	cast	exercised
 honey_mammoth	0	cast	exercised
+honor	0	cast	exercised
 hornet_cobra	0	cast	exercised
 horrid_vigor	0	cast	exercised
 hostile_minotaur	0	cast	exercised
@@ -1938,6 +1944,8 @@ shepherding_spirits	0	ability:0	unsupported: ability not offered by generic batt
 shepherding_spirits	0	cast	exercised
 shining_aerosaur	0	cast	exercised
 shipwreck_dowser	0	cast	exercised
+shivan_dragon	0	ability:0	exercised
+shivan_dragon	0	cast	exercised
 shock	0	cast	exercised
 shock_brigade	0	cast	exercised
 shoot_the_sheriff	0	cast	exercised
@@ -2458,6 +2466,7 @@ volcanic_spite	0	cast	exercised
 volunteer_militia	0	cast	exercised
 voracious_varmint	0	ability:0	exercised
 voracious_varmint	0	cast	exercised
+voracious_vermin	0	cast	exercised
 vorstclaw	0	cast	exercised
 vow_to_erebor	0	cast	exercised
 vulpine_goliath	0	cast	exercised
@@ -2530,6 +2539,7 @@ watery_grave	0	land	exercised
 wayward_giant	0	cast	exercised
 we_say_thee_nay!	0	cast	unsupported: target group 0 needs a richer fixture
 weave_fate	0	cast	exercised
+web-warriors	0	cast	exercised
 web_up	0	cast	exercised
 wedgelight_rammer	0	ability:0	exercised
 wedgelight_rammer	0	cast	exercised

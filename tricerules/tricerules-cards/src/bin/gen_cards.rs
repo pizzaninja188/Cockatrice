@@ -11127,6 +11127,343 @@ mod tests {
         }
     }
 
+    #[test]
+    fn issue_327_cohort_generates_the_exact_reviewed_definitions() {
+        let mut honor = normal_card_with_oracle_id(
+            "48c0cd06-465d-4901-bf23-948a003afc0b",
+            "Honor",
+            "{W}",
+            "Sorcery",
+            "Put a +1/+1 counter on target creature.\nDraw a card.",
+            None,
+        );
+        honor["colors"] = json!(["W"]);
+        let generated = evaluate_fresh(&honor).expect("Honor should qualify");
+        assert_eq!(generated.id, "honor");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["put a +1/+1 counter on target creature", "draw spell"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{W}");
+        assert_eq!(raw.types, ["Sorcery"]);
+        assert_eq!(raw.mana_cost.colors(), [Color::White]);
+        assert_eq!(
+            raw.spell_effect,
+            [
+                SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                },
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                },
+            ]
+        );
+        let targeting = raw
+            .targeting
+            .as_ref()
+            .expect("Honor must target a creature");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("Honor must own exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.prompt, "Choose target creature");
+        assert_eq!(group.effect_indices, [0]);
+        assert!(TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok());
+
+        // The untargeted draw clause and the authored counter target compose in either printed
+        // order: the later targeted clause shifts its authored index so the group is never orphaned.
+        let reversed = normal_card(
+            "Honor Reversed Fixture",
+            "{W}",
+            "Sorcery",
+            "Draw a card.\nPut a +1/+1 counter on target creature.",
+            None,
+        );
+        let generated = evaluate_fresh(&reversed).expect("reversed clauses still compose");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert!(matches!(
+            raw.spell_effect.as_slice(),
+            [
+                SpellEffectKind::Draw { .. },
+                SpellEffectKind::PutCounters { .. }
+            ]
+        ));
+        let targeting = raw
+            .targeting
+            .as_ref()
+            .expect("reversed clauses still target");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("reversed clauses must keep one authored group");
+        };
+        assert_eq!(group.effect_indices, [1]);
+        assert!(TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok());
+
+        // Two separately targeted clauses must never share one implicit group.
+        let double_target = normal_card(
+            "Double Target Fixture",
+            "{W}",
+            "Sorcery",
+            "Put a +1/+1 counter on target creature.\nTarget creature gets -4/-4 until end of turn.",
+            None,
+        );
+        assert!(
+            evaluate_fresh(&double_target).is_err(),
+            "two separately targeted clauses must fail closed instead of sharing a group"
+        );
+
+        let mut dragon = normal_card_with_oracle_id(
+            "711eea87-0fa3-46e0-a42b-fa5a86455f04",
+            "Shivan Dragon",
+            "{4}{R}{R}",
+            "Creature — Dragon",
+            "Flying\n{R}: This creature gets +1/+0 until end of turn.",
+            Some(("5", "5")),
+        );
+        dragon["colors"] = json!(["R"]);
+        let generated = evaluate_fresh(&dragon).expect("Shivan Dragon should qualify");
+        assert_eq!(generated.id, "shivan_dragon");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["single colored mana self-pump plus one zero"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{4}{R}{R}");
+        assert_eq!((raw.power, raw.toughness), (Some(5), Some(5)));
+        assert_eq!(raw.types, ["Creature", "Dragon"]);
+        assert_eq!(raw.keywords, [Keyword::Flying]);
+        let [ability] = raw.activated_abilities.as_slice() else {
+            panic!("Shivan Dragon must emit one activated ability");
+        };
+        assert_eq!(
+            ability.costs,
+            [AbilityCost::Mana(ManaCost::parse("{R}").unwrap())]
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::PumpTarget {
+                power: 1,
+                toughness: 0,
+                scale: None,
+                subject: EffectSubject::Source,
+            }]
+        );
+        assert!(ability.targeting.is_none());
+
+        let mut dark_deed = normal_card_with_oracle_id(
+            "e98cd00c-b812-4c6a-81d4-e3f94b64fc58",
+            "Dark Deed",
+            "{1}{B}",
+            "Instant",
+            "Target creature gets -4/-4 until end of turn.",
+            None,
+        );
+        dark_deed["colors"] = json!(["B"]);
+        let generated = evaluate_fresh(&dark_deed).expect("Dark Deed should qualify");
+        assert_eq!(generated.id, "dark_deed");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["target creature minus four minus four"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(
+            raw.spell_effect,
+            [SpellEffectKind::PumpTarget {
+                power: -4,
+                toughness: -4,
+                scale: None,
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            }]
+        );
+        assert!(raw.targeting.is_none());
+
+        let mut oriflamme = normal_card_with_oracle_id(
+            "836bd011-2da5-443a-a814-19a664b98a1a",
+            "Goblin Oriflamme",
+            "{1}{R}",
+            "Enchantment",
+            "Attacking creatures you control get +1/+0.",
+            None,
+        );
+        oriflamme["colors"] = json!(["R"]);
+        let generated = evaluate_fresh(&oriflamme).expect("Goblin Oriflamme should qualify");
+        assert_eq!(generated.id, "goblin_oriflamme");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["attacking creatures you control get plus one zero"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        let [ability] = raw.static_abilities.as_slice() else {
+            panic!("Goblin Oriflamme must emit one static ability");
+        };
+        assert_eq!(
+            ability.definition,
+            StaticAbilityDef::AnthemPt {
+                filter: CreatureScopeFilter {
+                    controller: Some(CreatureScopeController::YouControl),
+                    attacking: true,
+                    ..CreatureScopeFilter::default()
+                },
+                condition: None,
+                delta_power: 1,
+                delta_toughness: 0,
+            }
+        );
+
+        let mut ball = normal_card_with_oracle_id(
+            "7485cf25-eb41-4397-be13-7f0b8c10c70a",
+            "Ball Lightning",
+            "{R}{R}{R}",
+            "Creature — Elemental",
+            "Trample\nHaste\nAt the beginning of the end step, sacrifice this creature.",
+            Some(("6", "1")),
+        );
+        ball["colors"] = json!(["R"]);
+        let generated = evaluate_fresh(&ball).expect("Ball Lightning should qualify");
+        assert_eq!(generated.id, "ball_lightning");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["end step sacrifice this creature"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.keywords, [Keyword::Trample, Keyword::Haste]);
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("Ball Lightning must emit one triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::AtBeginningOfEndStep {
+                player: CastTriggerPlayer::AnyPlayer,
+            }
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Sacrifice {
+                subject: EffectSubject::Source,
+            }]
+        );
+
+        let mut knight = normal_card_with_oracle_id(
+            "b0b9a7c1-f515-4627-a050-b595d6641611",
+            "Charging Strifeknight",
+            "{2}{R}",
+            "Creature — Spirit Knight",
+            "Haste\n{T}, Discard a card: Draw a card.",
+            Some(("3", "3")),
+        );
+        knight["colors"] = json!(["R"]);
+        let generated = evaluate_fresh(&knight).expect("Charging Strifeknight should qualify");
+        assert_eq!(generated.id, "charging_strifeknight");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["tap and discard a card to draw a card"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.keywords, [Keyword::Haste]);
+        let [ability] = raw.activated_abilities.as_slice() else {
+            panic!("Charging Strifeknight must emit one activated ability");
+        };
+        assert_eq!(ability.costs, [AbilityCost::Tap, AbilityCost::Discard]);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }]
+        );
+
+        let mut web = normal_card_with_oracle_id(
+            "3b23e4f8-882d-4cce-9b61-171ae2cc3a18",
+            "Web-Warriors",
+            "{4}{G/W}",
+            "Creature — Spider Hero",
+            "When this creature enters, put a +1/+1 counter on each other creature you control.",
+            Some(("4", "3")),
+        );
+        web["colors"] = json!(["G", "W"]);
+        let generated = evaluate_fresh(&web).expect("Web-Warriors should qualify");
+        assert_eq!(generated.id, "web-warriors");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["creature ETB put a +1/+1 counter on each other controlled creature"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{4}{G/W}");
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("Web-Warriors must emit one ETB ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::PutCountersAll {
+                counter: CounterKind::PlusOnePlusOne,
+                count: Amount::Fixed(1),
+                filter: CreatureScopeFilter {
+                    controller: Some(CreatureScopeController::YouControl),
+                    exclude_self: true,
+                    ..CreatureScopeFilter::default()
+                },
+            }]
+        );
+        assert!(ability.targeting.is_none());
+
+        let mut vermin = normal_card_with_oracle_id(
+            "8d36d80e-9934-4b56-bf3c-2b18a6da3d2d",
+            "Voracious Vermin",
+            "{2}{B}",
+            "Creature — Rat",
+            "When this creature enters, create a 1/1 black Rat creature token with \"This token can't block.\"\nWhenever another creature you control dies, put a +1/+1 counter on this creature.",
+            Some(("2", "1")),
+        );
+        vermin["colors"] = json!(["B"]);
+        let generated = evaluate_fresh(&vermin).expect("Voracious Vermin should qualify");
+        assert_eq!(generated.id, "voracious_vermin");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            [
+                "creature ETB create one Rat token that can't block",
+                "another controlled creature dies put a +1/+1 counter on this creature"
+            ]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        let [etb, dies] = raw.triggered_abilities.as_slice() else {
+            panic!("Voracious Vermin must keep two triggered abilities");
+        };
+        assert_eq!(etb.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            etb.effect,
+            [SpellEffectKind::CreateTokens {
+                token: "rat_b_1_1_cant_block".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }]
+        );
+        assert_eq!(
+            dies.trigger,
+            TriggerCondition::WheneverCreatureDies {
+                controller: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    permanent_type: Some(PermanentTypeFilter::Creature),
+                    exclude_source: true,
+                    ..PermanentEventFilter::default()
+                },
+            }
+        );
+        assert_eq!(
+            dies.effect,
+            [SpellEffectKind::PutCounters {
+                counter: CounterKind::PlusOnePlusOne,
+                count: Amount::Fixed(1),
+                subject: EffectSubject::Source,
+            }]
+        );
+    }
+
     #[cfg(windows)]
     #[test]
     fn windows_card_data_wrappers_preserve_inputs_and_download_provenance() {

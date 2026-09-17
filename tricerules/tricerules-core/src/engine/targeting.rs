@@ -1485,6 +1485,7 @@ fn validate_effect_targets(
             ..
         }
         | SpellEffectKind::PumpAll { .. }
+        | SpellEffectKind::PutCountersAll { .. }
         | SpellEffectKind::GrantKeywordsAll { .. }
         | SpellEffectKind::RemoveAbilitiesAll { .. }
         | SpellEffectKind::GrantKeywordsAllPermanents { .. }

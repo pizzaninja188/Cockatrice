@@ -6664,6 +6664,225 @@ fn match_static_self_max_one_blocker(
     })
 }
 
+/// Issue #327 exact clause templates. Each template is a reusable typed surface with at least two
+/// real positive calibrations. Every clause is compared by the complete normalized Oracle line, so
+/// an appended, reordered, or additional-clause form remains unsupported, and source-kind gating
+/// stays on the recipes whose printed template requires it.
+const ISSUE_327_PUT_COUNTER_TARGET_CLAUSE: &str = "Put a +1/+1 counter on target creature.";
+const ISSUE_327_MINUS_FOUR_MINUS_FOUR_CLAUSE: &str =
+    "Target creature gets -4/-4 until end of turn.";
+const ISSUE_327_ATTACKING_ANTHEM_CLAUSE: &str = "Attacking creatures you control get +1/+0.";
+const ISSUE_327_END_STEP_SACRIFICE_CLAUSE: &str =
+    "At the beginning of the end step, sacrifice this creature.";
+const ISSUE_327_TAP_DISCARD_DRAW_CLAUSE: &str = "{T}, Discard a card: Draw a card.";
+const ISSUE_327_ETB_MASS_COUNTER_CLAUSE: &str =
+    "When this creature enters, put a +1/+1 counter on each other creature you control.";
+const ISSUE_327_DIES_COUNTER_CLAUSE: &str =
+    "Whenever another creature you control dies, put a +1/+1 counter on this creature.";
+
+/// A single colored mana symbol in Scryfall brace syntax, used by the parameterized self-pump
+/// template. Hybrid, generic, colorless, and multi-symbol costs stay unsupported.
+fn issue_327_single_colored_symbol(cost: &str) -> Option<ManaCost> {
+    let symbol = cost.strip_prefix('{')?.strip_suffix('}')?;
+    if symbol.len() != 1 || !matches!(symbol, "W" | "U" | "B" | "R" | "G") {
+        return None;
+    }
+    ManaCost::parse(cost).ok()
+}
+
+/// CR 122: "Put a +1/+1 counter on target creature" is one mandatory creature target bound to a
+/// single counter placement, the standalone-spell sibling of the modal counter payload. "Each",
+/// plural, controlled-only, up-to-one, and -1/-1 forms, and appended instructions stay unsupported.
+fn match_spell_put_plus_one_counter_target_creature(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_327_PUT_COUNTER_TARGET_CLAUSE).then(|| {
+        RecipeEmission::SpellEffectsWithTargeting {
+            effects: vec![SpellEffectKind::PutCounters {
+                counter: CounterKind::PlusOnePlusOne,
+                count: Amount::Fixed(1),
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            }],
+            targeting: exact_targeting(1, 1, "Choose target creature", vec![0]),
+        }
+    })
+}
+
+/// CR 602 / 611.2a: a single colored mana symbol buys one +1/+0 pump for the source creature until
+/// cleanup. Generic, multi-symbol, hybrid, colorless, and multicolor costs, other pump values,
+/// targeted subjects, tap riders, and timing restrictions stay unsupported.
+fn match_activated_creature_self_pump_plus_one_zero(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_creature {
+        return None;
+    }
+    let cost = text.strip_suffix(": This creature gets +1/+0 until end of turn.")?;
+    let mana = issue_327_single_colored_symbol(cost)?;
+    Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        ability_id: context.activated_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        cost_modifiers: Vec::new(),
+        source_zone: AbilitySourceZone::Battlefield,
+        costs: vec![AbilityCost::Mana(mana)],
+        effect: vec![SpellEffectKind::PumpTarget {
+            power: 1,
+            toughness: 0,
+            scale: None,
+            subject: EffectSubject::Source,
+        }],
+        targeting: None,
+        timing: ActivationTiming::Normal,
+        conditions: Vec::new(),
+        activation_limit: None,
+    }))
+}
+
+/// CR 611.2a: a -4/-4 until-cleanup pump on one mandatory creature target, mirroring the shipped
+/// -2/-2 recipe. Other values, asymmetric splits, positive pumps, riders, up-to-one, and
+/// controlled/opponent-restricted targets stay unsupported.
+fn match_spell_creature_minus_four_four(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == ISSUE_327_MINUS_FOUR_MINUS_FOUR_CLAUSE).then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::PumpTarget {
+            power: -4,
+            toughness: -4,
+            scale: None,
+            subject: chosen_creature(TargetController::Any),
+        })
+    })
+}
+
+/// CR 611.3 / 613.4c (attacking per CR 508.1k): an enchantment or creature anthem granting +1/+0 to
+/// each attacking creature its controller controls. The `attacking` scope re-evaluates
+/// continuously. Other values, nonattacking scopes, exclusion, opponent scope, temporary pumps, and
+/// other source kinds stay unsupported.
+fn match_static_attacking_creatures_anthem_plus_one_zero(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    ((context.source_is_enchantment || context.source_is_creature)
+        && text == ISSUE_327_ATTACKING_ANTHEM_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: StaticAbilityDef::AnthemPt {
+                    filter: CreatureScopeFilter {
+                        controller: Some(CreatureScopeController::YouControl),
+                        attacking: true,
+                        ..CreatureScopeFilter::default()
+                    },
+                    condition: None,
+                    delta_power: 1,
+                    delta_toughness: 0,
+                },
+            })
+        })
+}
+
+/// CR 603.2b / 513.2 / 701.21: "at the beginning of the end step" is an ordinary triggered ability
+/// whose trigger event is the beginning of an end step, so it triggers at the beginning of any end
+/// step while the source is on the battlefield (CR 603.2c); `AnyPlayer` is the faithful relative
+/// scope. "At the beginning of the next end step" is instead a delayed one-shot (CR 603.7b) and
+/// stays unsupported, as does "your end step"; the rules-equivalent wording "each end step" is also
+/// left unsupported rather than folded into this exact printed template. The source is sacrificed
+/// as a semantic action, and noncreature sources stay unsupported.
+fn match_triggered_end_step_sacrifice_self(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_327_END_STEP_SACRIFICE_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::AtBeginningOfEndStep {
+                player: CastTriggerPlayer::AnyPlayer,
+            },
+            vec![SpellEffectKind::Sacrifice {
+                subject: EffectSubject::Source,
+            }],
+        )
+    })
+}
+
+/// CR 107.5 / 701.9: the tap symbol plus discarding one chosen card as one atomic activation cost,
+/// drawing one card. Rummage-order, other draw/discard counts, other costs, sacrifice or mana
+/// variants, and timing restrictions stay unsupported.
+fn match_activated_tap_discard_draw_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_327_TAP_DISCARD_DRAW_CLAUSE).then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![AbilityCost::Tap, AbilityCost::Discard],
+            effect: vec![SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
+/// CR 122 / 603.6a: a creature ETB that puts one +1/+1 counter on every other creature its
+/// controller controls, excluding the source (CR 608.2h snapshot). "Each creature", any-player,
+/// targeted, plural, and noncreature-source forms stay unsupported.
+fn match_etb_put_counter_each_other_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_327_ETB_MASS_COUNTER_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WhenSelfEntersBattlefield,
+            vec![SpellEffectKind::PutCountersAll {
+                counter: CounterKind::PlusOnePlusOne,
+                count: Amount::Fixed(1),
+                filter: CreatureScopeFilter {
+                    controller: Some(CreatureScopeController::YouControl),
+                    exclude_self: true,
+                    ..CreatureScopeFilter::default()
+                },
+            }],
+        )
+    })
+}
+
+/// CR 603.6c / 700.4: whenever another creature the source's controller controls dies, put one
+/// +1/+1 counter on the source. Any-creature, self-inclusive, targeted, plural, noncreature
+/// sources, and token-creation bodies stay unsupported.
+fn match_triggered_another_creature_dies_put_counter_self(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_327_DIES_COUNTER_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverCreatureDies {
+                controller: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    permanent_type: Some(PermanentTypeFilter::Creature),
+                    exclude_source: true,
+                    ..PermanentEventFilter::default()
+                },
+            },
+            vec![SpellEffectKind::PutCounters {
+                counter: CounterKind::PlusOnePlusOne,
+                count: Amount::Fixed(1),
+                subject: EffectSubject::Source,
+            }],
+        )
+    })
+}
+
 macro_rules! calibrations {
     ($($positive_name:literal => $positive_clause:literal),+; $($negative:literal),+ $(,)?) => {
         RecipeCalibration {
@@ -7155,7 +7374,7 @@ pub(super) static CATALOG: &[Recipe] = &[
         calibration: calibrations!(
             "Disfigure" => "Target creature gets -2/-2 until end of turn.",
             "Stab" => "Target creature gets -2/-2 until end of turn.";
-            "Target creature gets -4/-4 until end of turn.",
+            "Target creature gets -5/-5 until end of turn.",
             "Target creature you control gets -2/-2 until end of turn.",
             "Up to one target creature gets -2/-2 until end of turn.",
             "Target creature gets -2/-2 until end of turn. You gain 2 life."
@@ -10543,6 +10762,150 @@ pub(super) static CATALOG: &[Recipe] = &[
             "This creature can't be blocked except by two or more creatures.",
             "This creature can block only creatures with power 2 or less.",
             "This creature can't be blocked by more than one creature"
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.put_counter.target_creature.one"),
+        label: "put a +1/+1 counter on target creature",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_put_plus_one_counter_target_creature,
+        calibration: calibrations!(
+            "Honor" => "Put a +1/+1 counter on target creature.",
+            "Battlegrowth" => "Put a +1/+1 counter on target creature.",
+            "Guiding Voice" => "Put a +1/+1 counter on target creature.";
+            "Put a +1/+1 counter on each creature you control.",
+            "Put two +1/+1 counters on target creature.",
+            "Put a +1/+1 counter on up to one target creature.",
+            "Put a +1/+1 counter on target creature you control.",
+            "Put a -1/-1 counter on target creature.",
+            "Put a +1/+1 counter on target creature. Draw a card.",
+            "Put a +1/+1 counter on target creature"
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.self_pump.plus_one_zero"),
+        label: "single colored mana self-pump plus one zero",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_creature_self_pump_plus_one_zero,
+        calibration: calibrations!(
+            "Shivan Dragon" => "{R}: This creature gets +1/+0 until end of turn.",
+            "Inferno Titan" => "{R}: This creature gets +1/+0 until end of turn.",
+            "Scourge of Valkas" => "{R}: This creature gets +1/+0 until end of turn.";
+            "{1}{R}: This creature gets +1/+0 until end of turn.",
+            "{R}: This creature gets +2/+0 until end of turn.",
+            "{R}: This creature gets +1/+1 until end of turn.",
+            "{R}: This creature gets +1/+0 until your next turn.",
+            "{R}: Target creature gets +1/+0 until end of turn.",
+            "{R}, {T}: This creature gets +1/+0 until end of turn.",
+            "{R}: This creature gets +1/+0 until end of turn. Activate only as a sorcery.",
+            "{R}: This creature gets +1/+0 until end of turn"
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump.creature.minus_four_minus_four"),
+        label: "target creature minus four minus four",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_creature_minus_four_four,
+        calibration: calibrations!(
+            "Dark Deed" => "Target creature gets -4/-4 until end of turn.",
+            "Grasp of Darkness" => "Target creature gets -4/-4 until end of turn.",
+            "Flatten" => "Target creature gets -4/-4 until end of turn.";
+            "Target creature gets -5/-5 until end of turn.",
+            "Target creature gets -4/-0 until end of turn.",
+            "Creatures you control get -4/-4 until end of turn.",
+            "Target creature gets -4/-4 until end of combat.",
+            "Target creature gets -4/-4 until end of turn. You gain 1 life.",
+            "Up to one target creature gets -4/-4 until end of turn.",
+            "Target creature an opponent controls gets -4/-4 until end of turn.",
+            "Target creature gets -4/-4 until end of turn"
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.anthem.attacking_creatures_you_control.plus_one_zero"),
+        label: "attacking creatures you control get plus one zero",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_attacking_creatures_anthem_plus_one_zero,
+        calibration: calibrations!(
+            "Goblin Oriflamme" => "Attacking creatures you control get +1/+0.",
+            "Orcish Oriflamme" => "Attacking creatures you control get +1/+0.",
+            "Warded Battlements" => "Attacking creatures you control get +1/+0.";
+            "Creatures you control get +1/+0.",
+            "Attacking creatures you control get +1/+1.",
+            "Attacking creatures you control get +2/+0.",
+            "Other attacking creatures you control get +1/+0.",
+            "Attacking creatures an opponent controls get +1/+0.",
+            "Attacking creatures you control get +1/+0 until end of turn.",
+            "Attacking creatures you control get +1/+0"
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.end_step.sacrifice_self"),
+        label: "end step sacrifice this creature",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_triggered_end_step_sacrifice_self,
+        calibration: calibrations!(
+            "Ball Lightning" => "At the beginning of the end step, sacrifice this creature.",
+            "Spark Elemental" => "At the beginning of the end step, sacrifice this creature.",
+            "Hell's Thunder" => "At the beginning of the end step, sacrifice this creature.";
+            "At the beginning of your end step, sacrifice this creature.",
+            "At the beginning of the next end step, sacrifice this creature.",
+            "At the beginning of each end step, sacrifice this creature.",
+            "At the beginning of your upkeep, sacrifice this creature.",
+            "At the beginning of the end step, sacrifice this artifact.",
+            "At the beginning of the end step, sacrifice another creature.",
+            "At the beginning of the end step, sacrifice this creature"
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.tap_discard.draw_one"),
+        label: "tap and discard a card to draw a card",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_tap_discard_draw_one,
+        calibration: calibrations!(
+            "Charging Strifeknight" => "{T}, Discard a card: Draw a card.",
+            "Rummaging Goblin" => "{T}, Discard a card: Draw a card.",
+            "Mad Prophet" => "{T}, Discard a card: Draw a card.";
+            "{T}: Draw a card, then discard a card.",
+            "{T}, Discard a card: Draw two cards.",
+            "{T}, Discard two cards: Draw a card.",
+            "{1}, Discard a card: Draw a card.",
+            "{T}, Discard a card: Draw a card. Activate only as a sorcery.",
+            "{T}, Sacrifice this creature: Draw a card.",
+            "{T}, Discard a card: Draw a card"
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.put_counter.each_other_creature"),
+        label: "creature ETB put a +1/+1 counter on each other controlled creature",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_put_counter_each_other_creature,
+        calibration: calibrations!(
+            "Web-Warriors" => "When this creature enters, put a +1/+1 counter on each other creature you control.",
+            "Ridgescale Tusker" => "When this creature enters, put a +1/+1 counter on each other creature you control.",
+            "Primeval Protector" => "When this creature enters, put a +1/+1 counter on each other creature you control.";
+            "When this creature enters, put a +1/+1 counter on each creature you control.",
+            "When this creature enters, put a +1/+1 counter on each other creature.",
+            "When this creature enters, put two +1/+1 counters on each other creature you control.",
+            "When this creature enters, put a +1/+1 counter on each other creature you don't control.",
+            "When another creature enters, put a +1/+1 counter on each other creature you control.",
+            "When this creature enters, put a +1/+1 counter on each other creature you control"
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.another_creature_you_control_dies.put_counter_self"),
+        label: "another controlled creature dies put a +1/+1 counter on this creature",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_triggered_another_creature_dies_put_counter_self,
+        calibration: calibrations!(
+            "Voracious Vermin" => "Whenever another creature you control dies, put a +1/+1 counter on this creature.",
+            "Rot Shambler" => "Whenever another creature you control dies, put a +1/+1 counter on this creature.",
+            "Unruly Mob" => "Whenever another creature you control dies, put a +1/+1 counter on this creature.";
+            "Whenever a creature you control dies, put a +1/+1 counter on this creature.",
+            "Whenever another creature dies, put a +1/+1 counter on this creature.",
+            "Whenever another creature you control dies, put two +1/+1 counters on this creature.",
+            "Whenever another creature you control dies, put a +1/+1 counter on target creature.",
+            r#"Whenever another creature you control dies, create a 1/1 black Rat creature token with "This token can't block.""#,
+            "Whenever another creature you control dies, put a +1/+1 counter on this creature"
         ),
     },
 ];
@@ -17964,6 +18327,478 @@ mod tests {
             "This creature can't be blocked except by two or more creatures.",
             "This creature can block only creatures with power 2 or less.",
             "This creature can't be blocked by more than one creature",
+        ] {
+            issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_327_recipes_have_stable_ids_and_surfaces() {
+        for (id, surface) in [
+            (
+                "spell.put_counter.target_creature.one",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "activated.self_pump.plus_one_zero",
+                RecipeSurface::ActivatedAbility,
+            ),
+            (
+                "spell.pump.creature.minus_four_minus_four",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "static.anthem.attacking_creatures_you_control.plus_one_zero",
+                RecipeSurface::StaticAbility,
+            ),
+            (
+                "triggered.end_step.sacrifice_self",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "activated.tap_discard.draw_one",
+                RecipeSurface::ActivatedAbility,
+            ),
+            (
+                "triggered.etb.put_counter.each_other_creature",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "triggered.another_creature_you_control_dies.put_counter_self",
+                RecipeSurface::TriggeredAbility,
+            ),
+        ] {
+            assert_eq!(
+                issue_318_recipe(id).surface,
+                surface,
+                "{id} surface drifted"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_327_put_counter_target_creature_is_exact_and_typed() {
+        for source_name in ["Honor", "Battlegrowth", "Guiding Voice"] {
+            let matched = issue_318_match_spell(ISSUE_327_PUT_COUNTER_TARGET_CLAUSE, source_name);
+            assert_eq!(matched.id.as_str(), "spell.put_counter.target_creature.one");
+            let RecipeEmission::SpellEffectsWithTargeting { effects, targeting } = matched.emission
+            else {
+                panic!("the counter placement must emit an explicitly targeted spell");
+            };
+            assert_eq!(
+                effects,
+                vec![SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                }]
+            );
+            let [group] = targeting.groups.as_slice() else {
+                panic!("the counter placement must own exactly one target group");
+            };
+            assert_eq!((group.min, group.max), (1, 1));
+            assert_eq!(group.prompt, "Choose target creature");
+            assert_eq!(group.effect_indices, vec![0]);
+            assert!(group.distinct_from.is_empty());
+        }
+        assert!(
+            match_clause(ISSUE_327_PUT_COUNTER_TARGET_CLAUSE, false, &context())
+                .expect("non-spell surface check must not be ambiguous")
+                .is_none(),
+            "the standalone counter placement is a spell clause, not the modal payload"
+        );
+    }
+
+    #[test]
+    fn issue_327_put_counter_target_creature_rejects_near_misses() {
+        for negative in [
+            "Put a +1/+1 counter on each creature you control.",
+            "Put two +1/+1 counters on target creature.",
+            "Put a +1/+1 counter on up to one target creature.",
+            "Put a +1/+1 counter on target creature you control.",
+            "Put a -1/-1 counter on target creature.",
+            "Put a +1/+1 counter on target creature. Draw a card.",
+            "Put a +1/+1 counter on target creature",
+        ] {
+            issue_318_assert_unmatched(negative, true);
+        }
+    }
+
+    #[test]
+    fn issue_327_self_pump_plus_one_zero_is_parameterized_and_creature_gated() {
+        for source_name in ["Shivan Dragon", "Inferno Titan", "Scourge of Valkas"] {
+            let matched = issue_318_match_non_spell(
+                "{R}: This creature gets +1/+0 until end of turn.",
+                source_name,
+            );
+            assert_eq!(matched.id.as_str(), "activated.self_pump.plus_one_zero");
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("the self-pump must emit an activated ability");
+            };
+            assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+            assert_eq!(
+                ability.costs,
+                vec![AbilityCost::Mana(ManaCost::parse("{R}").unwrap())]
+            );
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::PumpTarget {
+                    power: 1,
+                    toughness: 0,
+                    scale: None,
+                    subject: EffectSubject::Source,
+                }]
+            );
+            assert!(ability.targeting.is_none());
+            assert_eq!(ability.timing, ActivationTiming::Normal);
+            assert!(ability.activation_limit.is_none());
+        }
+
+        for color in ["W", "U", "B", "R", "G"] {
+            let clause = format!("{{{color}}}: This creature gets +1/+0 until end of turn.");
+            let matched = issue_318_match_non_spell(&clause, "Color Calibration");
+            assert_eq!(matched.id.as_str(), "activated.self_pump.plus_one_zero");
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("the self-pump must emit an activated ability");
+            };
+            assert_eq!(
+                ability.costs,
+                vec![AbilityCost::Mana(
+                    ManaCost::parse(&format!("{{{color}}}")).unwrap()
+                )]
+            );
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(
+                "{R}: This creature gets +1/+0 until end of turn.",
+                false,
+                &noncreature
+            )
+            .expect("noncreature source must not be ambiguous")
+            .is_none(),
+            "the self-pump recipe is creature-source-only"
+        );
+    }
+
+    #[test]
+    fn issue_327_self_pump_plus_one_zero_rejects_near_misses() {
+        for negative in [
+            "{1}{R}: This creature gets +1/+0 until end of turn.",
+            "{R}: This creature gets +2/+0 until end of turn.",
+            "{R}: This creature gets +1/+1 until end of turn.",
+            "{R}: This creature gets +1/+0 until your next turn.",
+            "{R}: Target creature gets +1/+0 until end of turn.",
+            "{R}, {T}: This creature gets +1/+0 until end of turn.",
+            "{R}: This creature gets +1/+0 until end of turn. Activate only as a sorcery.",
+            "{R}: This creature gets +1/+0 until end of turn",
+        ] {
+            issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_327_minus_four_minus_four_is_exact_and_typed() {
+        for source_name in ["Dark Deed", "Grasp of Darkness", "Flatten"] {
+            let matched =
+                issue_318_match_spell(ISSUE_327_MINUS_FOUR_MINUS_FOUR_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "spell.pump.creature.minus_four_minus_four"
+            );
+            assert_eq!(
+                matched.emission,
+                RecipeEmission::SpellEffect(SpellEffectKind::PumpTarget {
+                    power: -4,
+                    toughness: -4,
+                    scale: None,
+                    subject: chosen_creature(TargetController::Any),
+                })
+            );
+        }
+        assert!(
+            match_clause(ISSUE_327_MINUS_FOUR_MINUS_FOUR_CLAUSE, false, &context())
+                .expect("non-spell surface check must not be ambiguous")
+                .is_none(),
+            "the -4/-4 pump is a spell clause"
+        );
+    }
+
+    #[test]
+    fn issue_327_minus_four_minus_four_rejects_near_misses() {
+        for negative in [
+            "Target creature gets -5/-5 until end of turn.",
+            "Target creature gets -4/-0 until end of turn.",
+            "Creatures you control get -4/-4 until end of turn.",
+            "Target creature gets -4/-4 until end of combat.",
+            "Target creature gets -4/-4 until end of turn. You gain 1 life.",
+            "Up to one target creature gets -4/-4 until end of turn.",
+            "Target creature an opponent controls gets -4/-4 until end of turn.",
+            "Target creature gets -4/-4 until end of turn",
+        ] {
+            issue_318_assert_unmatched(negative, true);
+        }
+    }
+
+    #[test]
+    fn issue_327_attacking_anthem_is_enchantment_or_creature_gated() {
+        for source_name in ["Goblin Oriflamme", "Orcish Oriflamme", "Warded Battlements"] {
+            let matched = issue_318_match_non_spell(ISSUE_327_ATTACKING_ANTHEM_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "static.anthem.attacking_creatures_you_control.plus_one_zero"
+            );
+            let RecipeEmission::StaticAbility(ability) = matched.emission else {
+                panic!("the attacking anthem must emit a static ability");
+            };
+            assert_eq!(
+                ability.definition,
+                StaticAbilityDef::AnthemPt {
+                    filter: CreatureScopeFilter {
+                        controller: Some(CreatureScopeController::YouControl),
+                        attacking: true,
+                        ..CreatureScopeFilter::default()
+                    },
+                    condition: None,
+                    delta_power: 1,
+                    delta_toughness: 0,
+                }
+            );
+        }
+
+        let mut other_source = context();
+        other_source.source_is_enchantment = false;
+        other_source.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_327_ATTACKING_ANTHEM_CLAUSE, false, &other_source)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the attacking anthem is bound to enchantment or creature sources"
+        );
+        assert!(
+            match_clause(ISSUE_327_ATTACKING_ANTHEM_CLAUSE, true, &context())
+                .expect("spell surface check must not be ambiguous")
+                .is_none(),
+            "the attacking anthem must reject spell clauses"
+        );
+    }
+
+    #[test]
+    fn issue_327_attacking_anthem_rejects_near_misses() {
+        for negative in [
+            "Creatures you control get +1/+0.",
+            "Attacking creatures you control get +1/+1.",
+            "Attacking creatures you control get +2/+0.",
+            "Other attacking creatures you control get +1/+0.",
+            "Attacking creatures an opponent controls get +1/+0.",
+            "Attacking creatures you control get +1/+0 until end of turn.",
+            "Attacking creatures you control get +1/+0",
+        ] {
+            issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_327_end_step_sacrifice_is_creature_gated_and_typed() {
+        for source_name in ["Ball Lightning", "Spark Elemental", "Hell's Thunder"] {
+            let matched =
+                issue_318_match_non_spell(ISSUE_327_END_STEP_SACRIFICE_CLAUSE, source_name);
+            assert_eq!(matched.id.as_str(), "triggered.end_step.sacrifice_self");
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("the end-step sacrifice must emit a triggered ability");
+            };
+            assert_eq!(
+                ability.trigger,
+                TriggerCondition::AtBeginningOfEndStep {
+                    player: CastTriggerPlayer::AnyPlayer,
+                }
+            );
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::Sacrifice {
+                    subject: EffectSubject::Source,
+                }]
+            );
+            assert!(ability.targeting.is_none());
+            assert!(ability.intervening_if.is_none());
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_327_END_STEP_SACRIFICE_CLAUSE, false, &noncreature)
+                .expect("noncreature source must not be ambiguous")
+                .is_none(),
+            "the end-step sacrifice recipe is creature-source-only"
+        );
+    }
+
+    #[test]
+    fn issue_327_end_step_sacrifice_rejects_near_misses() {
+        for negative in [
+            "At the beginning of your end step, sacrifice this creature.",
+            "At the beginning of the next end step, sacrifice this creature.",
+            "At the beginning of each end step, sacrifice this creature.",
+            "At the beginning of your upkeep, sacrifice this creature.",
+            "At the beginning of the end step, sacrifice this artifact.",
+            "At the beginning of the end step, sacrifice another creature.",
+            "At the beginning of the end step, sacrifice this creature",
+        ] {
+            issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_327_tap_discard_draw_is_exact_and_typed() {
+        for source_name in ["Charging Strifeknight", "Rummaging Goblin", "Mad Prophet"] {
+            let matched = issue_318_match_non_spell(ISSUE_327_TAP_DISCARD_DRAW_CLAUSE, source_name);
+            assert_eq!(matched.id.as_str(), "activated.tap_discard.draw_one");
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("the loot activation must emit an activated ability");
+            };
+            assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+            assert_eq!(ability.costs, vec![AbilityCost::Tap, AbilityCost::Discard]);
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                }]
+            );
+            assert!(ability.targeting.is_none());
+            assert_eq!(ability.timing, ActivationTiming::Normal);
+            assert!(ability.activation_limit.is_none());
+        }
+    }
+
+    #[test]
+    fn issue_327_tap_discard_draw_rejects_near_misses() {
+        for negative in [
+            "{T}: Draw a card, then discard a card.",
+            "{T}, Discard a card: Draw two cards.",
+            "{T}, Discard two cards: Draw a card.",
+            "{1}, Discard a card: Draw a card.",
+            "{T}, Discard a card: Draw a card. Activate only as a sorcery.",
+            "{T}, Sacrifice this creature: Draw a card.",
+            "{T}, Discard a card: Draw a card",
+        ] {
+            issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_327_etb_mass_counter_is_creature_gated_and_excludes_self() {
+        for source_name in ["Web-Warriors", "Ridgescale Tusker", "Primeval Protector"] {
+            let matched = issue_318_match_non_spell(ISSUE_327_ETB_MASS_COUNTER_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "triggered.etb.put_counter.each_other_creature"
+            );
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("the mass counter ETB must emit a triggered ability");
+            };
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::PutCountersAll {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    filter: CreatureScopeFilter {
+                        controller: Some(CreatureScopeController::YouControl),
+                        exclude_self: true,
+                        ..CreatureScopeFilter::default()
+                    },
+                }]
+            );
+            assert!(ability.targeting.is_none());
+            assert!(!ability.may);
+            assert!(ability.intervening_if.is_none());
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_327_ETB_MASS_COUNTER_CLAUSE, false, &noncreature)
+                .expect("noncreature source must not be ambiguous")
+                .is_none(),
+            "the mass counter ETB recipe is creature-source-only"
+        );
+        assert!(
+            match_clause(ISSUE_327_ETB_MASS_COUNTER_CLAUSE, true, &context())
+                .expect("spell surface check must not be ambiguous")
+                .is_none(),
+            "the mass counter ETB must reject spell clauses"
+        );
+    }
+
+    #[test]
+    fn issue_327_etb_mass_counter_rejects_near_misses() {
+        for negative in [
+            "When this creature enters, put a +1/+1 counter on each creature you control.",
+            "When this creature enters, put a +1/+1 counter on each other creature.",
+            "When this creature enters, put two +1/+1 counters on each other creature you control.",
+            "When this creature enters, put a +1/+1 counter on each other creature you don't control.",
+            "When another creature enters, put a +1/+1 counter on each other creature you control.",
+            "When this creature enters, put a +1/+1 counter on each other creature you control",
+        ] {
+            issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_327_dies_counter_is_creature_gated_and_scoped() {
+        for source_name in ["Voracious Vermin", "Rot Shambler", "Unruly Mob"] {
+            let matched = issue_318_match_non_spell(ISSUE_327_DIES_COUNTER_CLAUSE, source_name);
+            assert_eq!(
+                matched.id.as_str(),
+                "triggered.another_creature_you_control_dies.put_counter_self"
+            );
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("the dies counter must emit a triggered ability");
+            };
+            assert_eq!(
+                ability.trigger,
+                TriggerCondition::WheneverCreatureDies {
+                    controller: CastTriggerPlayer::Controller,
+                    filter: PermanentEventFilter {
+                        permanent_type: Some(PermanentTypeFilter::Creature),
+                        exclude_source: true,
+                        ..PermanentEventFilter::default()
+                    },
+                }
+            );
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Source,
+                }]
+            );
+            assert!(ability.targeting.is_none());
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_327_DIES_COUNTER_CLAUSE, false, &noncreature)
+                .expect("noncreature source must not be ambiguous")
+                .is_none(),
+            "the dies counter recipe is creature-source-only"
+        );
+    }
+
+    #[test]
+    fn issue_327_dies_counter_rejects_near_misses() {
+        for negative in [
+            "Whenever a creature you control dies, put a +1/+1 counter on this creature.",
+            "Whenever another creature dies, put a +1/+1 counter on this creature.",
+            "Whenever another creature you control dies, put two +1/+1 counters on this creature.",
+            "Whenever another creature you control dies, put a +1/+1 counter on target creature.",
+            r#"Whenever another creature you control dies, create a 1/1 black Rat creature token with "This token can't block.""#,
+            "Whenever another creature you control dies, put a +1/+1 counter on this creature",
         ] {
             issue_318_assert_unmatched(negative, false);
         }

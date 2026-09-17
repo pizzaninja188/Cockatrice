@@ -479,3 +479,5 @@ mod issue_317_generated_six_clause_batch;
 mod issue_318_generated_placement_cost_trigger_batch;
 #[path = "scenario/issue_323_generated_eight_clause_batch.rs"]
 mod issue_323_generated_eight_clause_batch;
+#[path = "scenario/issue_327_generated_eight_clause_batch.rs"]
+mod issue_327_generated_eight_clause_batch;
