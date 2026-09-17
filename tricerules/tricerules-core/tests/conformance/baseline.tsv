@@ -318,6 +318,7 @@ burrog_banemaker	0	cast	exercised
 burst_lightning	0	cast	exercised
 bushwhack	0	cast	exercised
 buzz_bots	0	cast	exercised
+bygone_colossus	0	cast	exercised
 cabal_evangel	0	cast	exercised
 cackling_counterpart	0	cast	exercised
 cackling_fiend	0	cast	exercised
@@ -863,6 +864,7 @@ generator_servant	0	ability:0	exercised
 generator_servant	0	cast	exercised
 generous_stray	0	cast	exercised
 genghis_frog	0	cast	exercised
+germinating_wurm	0	cast	exercised
 gerrards_irregulars	0	cast	exercised
 gerrards_verdict	0	cast	exercised
 get_out	0	cast	exercised
@@ -1751,6 +1753,7 @@ rebellious_strike	0	cast	exercised
 reckless_air_strike	0	cast	exercised
 reckless_waif_merciless_predator	0	cast	exercised
 reckless_waif_merciless_predator	1	cast	intentional: face unavailable from hand
+red_tiger_mechan	0	cast	exercised
 redcap_thief	0	cast	exercised
 redwood_treefolk	0	cast	exercised
 regal_unicorn	0	cast	exercised
@@ -2105,6 +2108,7 @@ staggering_size	0	cast	exercised
 stampeding_rhino	0	cast	exercised
 standing_troops	0	cast	exercised
 star_charter	0	cast	exercised
+starbreach_whale	0	cast	exercised
 starfighter_pilot	0	cast	exercised
 stark_industries	0	ability:0	exercised
 stark_industries	0	land	exercised
@@ -2281,6 +2285,7 @@ the_whizzer,_classic_speedster	0	cast	exercised
 the_wondrous_wasp	0	cast	exercised
 thieving_magpie	0	cast	exercised
 thieving_otter	0	cast	exercised
+think_twice	0	cast	exercised
 thorin_oakenshield	0	cast	exercised
 thornhide_wolves	0	cast	exercised
 thornweald_archer	0	cast	exercised

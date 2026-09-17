@@ -49,6 +49,11 @@ pub(super) enum RecipeSurface {
     /// whether the card will become a permanent after resolving.
     SpellStaticAbility,
     CharacteristicAbility,
+    /// A printed alternative cast-method cost line (`Warp {cost}`, `Flashback {cost}`) that emits a
+    /// cost field on the containing face instead of an ability or resolution effect. Warp is
+    /// permanent-face-only (CR 702.185) and Flashback is instant/sorcery-face-only (CR 702.34), so
+    /// each matcher owns its own face-type gate rather than relying on [`Self::SpellClause`].
+    CastMethodClause,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -125,6 +130,10 @@ pub(super) enum RecipeEmission {
     ModalMode(ModalModeEmission),
     ModalAssembly(ModalAssemblyEmission),
     StationAssembly(StationAssemblyEmission),
+    /// CR 702.185: the face-level hand alternative cost printed as `Warp {cost}`.
+    WarpCost(ManaCost),
+    /// CR 702.34: the face-level graveyard alternative cost printed as `Flashback {cost}`.
+    FlashbackCost(ManaCost),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -7098,6 +7107,37 @@ fn match_spell_pump_first_strike_scry_one(text: &str, _: &RecipeContext) -> Opti
     })
 }
 
+/// CR 702.185 / 702.34: the shared strict parser for a printed alternative cast-method cost line.
+/// The whole remainder after `Keyword ` must be one canonical non-empty mana cost, so a rider,
+/// em-dash variant, malformed or non-canonical cost, remaining reminder text, or appended
+/// instruction never matches.
+fn parse_cast_method_cost(text: &str, keyword: &str) -> Option<ManaCost> {
+    let rest = text.strip_prefix(keyword)?.strip_prefix(' ')?;
+    if !rest.starts_with('{') {
+        return None;
+    }
+    let cost = ManaCost::parse(rest).ok()?;
+    (cost.to_string() == rest && !cost.is_empty()).then_some(cost)
+}
+
+/// CR 702.185: Warp is a hand alternative cost for a permanent spell face. The face-type gate is
+/// checked before the cost so an instant or sorcery line can never emit `warp_cost`; the registry
+/// separately rejects a land face.
+fn match_cast_method_warp(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    context
+        .source_is_permanent
+        .then(|| parse_cast_method_cost(text, "Warp"))?
+        .map(RecipeEmission::WarpCost)
+}
+
+/// CR 702.34: Flashback is a graveyard alternative cost for an instant or sorcery face. The
+/// face-type gate is checked before the cost so a permanent line can never emit `flashback_cost`.
+fn match_cast_method_flashback(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_instant || context.source_is_sorcery)
+        .then(|| parse_cast_method_cost(text, "Flashback"))?
+        .map(RecipeEmission::FlashbackCost)
+}
+
 macro_rules! calibrations {
     ($($positive_name:literal => $positive_clause:literal),+; $($negative:literal),+ $(,)?) => {
         RecipeCalibration {
@@ -11256,6 +11296,43 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Target creature gets +1/+0 and gains first strike until end of turn. Scry 1. Draw a card."
         ),
     },
+    Recipe {
+        id: RecipeId("cast_method.warp"),
+        label: "warp alternative cast cost",
+        surface: RecipeSurface::CastMethodClause,
+        matcher: match_cast_method_warp,
+        calibration: calibrations!(
+            "Bygone Colossus" => "Warp {3}",
+            "Germinating Wurm" => "Warp {1}{G}",
+            "Red Tiger Mechan" => "Warp {1}{R}",
+            "Starbreach Whale" => "Warp {1}{U}";
+            "Warp {1}{G} with a rider",
+            "Warp — {1}{G}",
+            "Warp  {1}{G}",
+            "Warp {1}{G}.",
+            "Warp {1}{G} and draw a card.",
+            "Warp {01}{G}",
+            "{G}: Warp this creature."
+        ),
+    },
+    Recipe {
+        id: RecipeId("cast_method.flashback"),
+        label: "flashback alternative cast cost",
+        surface: RecipeSurface::CastMethodClause,
+        matcher: match_cast_method_flashback,
+        calibration: calibrations!(
+            "Think Twice" => "Flashback {2}{U}",
+            "Auron's Inspiration" => "Flashback {2}{W}{W}",
+            "Daydream" => "Flashback {2}{W}";
+            "Flashback {2}{U} with a rider",
+            "Flashback — {2}{U}",
+            "Flashback  {2}{U}",
+            "Flashback {2}{U}.",
+            "Flashback {2}{U}. Draw a card.",
+            "Flashback 2",
+            "Flashback {02}{U}"
+        ),
+    },
 ];
 
 fn surface_applies(surface: RecipeSurface, is_spell: bool, context: &RecipeContext) -> bool {
@@ -11269,6 +11346,9 @@ fn surface_applies(surface: RecipeSurface, is_spell: bool, context: &RecipeConte
         RecipeSurface::ZoneActivatedAbility
         | RecipeSurface::SpellStaticAbility
         | RecipeSurface::CharacteristicAbility => true,
+        // Warp and Flashback print on permanent or instant/sorcery faces respectively; each matcher
+        // performs its own face-type gate so a wrong-type line always fails closed.
+        RecipeSurface::CastMethodClause => true,
         RecipeSurface::EtbAbility
         | RecipeSurface::TriggeredAbility
         | RecipeSurface::ActivatedAbility
@@ -19743,5 +19823,197 @@ mod tests {
                 .unwrap_or_else(|| panic!("{clause} should stay consumed by its shipped recipe"));
             assert_eq!(matched.id.as_str(), expected, "{clause}");
         }
+    }
+
+    #[test]
+    fn issue_329_warp_and_flashback_clauses_match_their_exact_recipes() {
+        for (clause, is_spell, expected) in [
+            ("Warp {3}", false, "cast_method.warp"),
+            ("Warp {1}{G}", false, "cast_method.warp"),
+            ("Warp {1}{R}", false, "cast_method.warp"),
+            ("Flashback {2}{U}", true, "cast_method.flashback"),
+            ("Flashback {2}{W}{W}", true, "cast_method.flashback"),
+        ] {
+            let matched = match_clause(clause, is_spell, &context())
+                .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{clause} should match exactly one recipe"));
+            assert_eq!(matched.id.as_str(), expected, "{clause}");
+        }
+    }
+
+    #[test]
+    fn issue_329_recipes_have_stable_ids_and_surfaces() {
+        for id in ["cast_method.warp", "cast_method.flashback"] {
+            assert_eq!(
+                issue_318_recipe(id).surface,
+                RecipeSurface::CastMethodClause,
+                "{id} surface drifted"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_329_warp_emits_the_printed_cost_on_permanent_faces_only() {
+        for (source_name, clause, expected) in [
+            ("Bygone Colossus", "Warp {3}", "{3}"),
+            ("Germinating Wurm", "Warp {1}{G}", "{1}{G}"),
+            ("Red Tiger Mechan", "Warp {1}{R}", "{1}{R}"),
+            ("Starbreach Whale", "Warp {1}{U}", "{1}{U}"),
+        ] {
+            let matched = issue_318_match_non_spell(clause, source_name);
+            assert_eq!(matched.id.as_str(), "cast_method.warp");
+            let RecipeEmission::WarpCost(cost) = matched.emission else {
+                panic!("Warp must emit the first-class face cost emission");
+            };
+            assert_eq!(cost.to_string(), expected, "{source_name}");
+        }
+
+        let mut spell_face = context();
+        spell_face.source_is_permanent = false;
+        assert!(
+            match_clause("Warp {1}{G}", true, &spell_face)
+                .expect("spell-face check must not be ambiguous")
+                .is_none(),
+            "Warp must fail closed on a non-permanent face"
+        );
+        assert!(match_cast_method_warp("Warp {1}{G}", &spell_face).is_none());
+    }
+
+    #[test]
+    fn issue_329_flashback_emits_the_printed_cost_on_instant_or_sorcery_faces_only() {
+        for (source_name, clause, expected) in [
+            ("Think Twice", "Flashback {2}{U}", "{2}{U}"),
+            ("Auron's Inspiration", "Flashback {2}{W}{W}", "{2}{W}{W}"),
+            ("Daydream", "Flashback {2}{W}", "{2}{W}"),
+        ] {
+            let matched = issue_318_match_spell(clause, source_name);
+            assert_eq!(matched.id.as_str(), "cast_method.flashback");
+            let RecipeEmission::FlashbackCost(cost) = matched.emission else {
+                panic!("Flashback must emit the first-class face cost emission");
+            };
+            assert_eq!(cost.to_string(), expected, "{source_name}");
+        }
+
+        for (instant, sorcery) in [(true, false), (false, true)] {
+            let mut spell_face = context();
+            spell_face.source_is_instant = instant;
+            spell_face.source_is_sorcery = sorcery;
+            assert!(
+                match_cast_method_flashback("Flashback {2}{U}", &spell_face).is_some(),
+                "Flashback must accept an instant/sorcery face"
+            );
+        }
+        let mut permanent = context();
+        permanent.source_is_instant = false;
+        permanent.source_is_sorcery = false;
+        assert!(
+            match_clause("Flashback {2}{U}", false, &permanent)
+                .expect("permanent-face check must not be ambiguous")
+                .is_none(),
+            "Flashback must fail closed on a permanent face"
+        );
+        assert!(match_cast_method_flashback("Flashback {2}{U}", &permanent).is_none());
+    }
+
+    #[test]
+    fn issue_329_cast_method_recipes_reject_near_misses() {
+        for negative in [
+            "Warp {1}{G} with a rider",
+            "Warp — {1}{G}",
+            "Warp  {1}{G}",
+            "Warp {1}{G}.",
+            "Warp {1}{G} and draw a card.",
+            "Warp {01}{G}",
+            "Warp {1}{G",
+            "{1}{G}: Warp this creature.",
+        ] {
+            assert!(
+                match_cast_method_warp(negative, &context()).is_none(),
+                "Warp accepted near-miss {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, false);
+        }
+
+        for negative in [
+            "Flashback {2}{U} with a rider",
+            "Flashback — {2}{U}",
+            "Flashback  {2}{U}",
+            "Flashback {2}{U}.",
+            "Flashback {2}{U}. Draw a card.",
+            "Flashback 2",
+            "Flashback {02}{U}",
+            "Flashback {2}{U",
+        ] {
+            assert!(
+                match_cast_method_flashback(negative, &context()).is_none(),
+                "Flashback accepted near-miss {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, true);
+        }
+
+        // Each cast-method line must be claimed only by its own recipe.
+        assert!(match_cast_method_warp("Flashback {1}{G}", &context()).is_none());
+        assert!(match_cast_method_flashback("Warp {1}{G}", &context()).is_none());
+        assert_eq!(
+            match_clause("Flashback {1}{G}", false, &context())
+                .expect("cross-method check must not be ambiguous")
+                .expect("the Flashback line matches its own recipe")
+                .id
+                .as_str(),
+            "cast_method.flashback"
+        );
+        assert_eq!(
+            match_clause("Warp {1}{G}", true, &context())
+                .expect("cross-method check must not be ambiguous")
+                .expect("the Warp line matches its own recipe")
+                .id
+                .as_str(),
+            "cast_method.warp"
+        );
+    }
+
+    #[test]
+    fn issue_329_cast_method_clauses_do_not_disturb_shipped_recipes() {
+        for (clause, is_spell, expected) in [
+            ("Draw a card.", true, "spell.draw.fixed"),
+            ("Flying", false, "keyword.supported_set"),
+            ("Haste", false, "keyword.supported_set"),
+            (
+                "When this creature enters, you gain 2 life.",
+                false,
+                "etb.gain_life.fixed",
+            ),
+            (
+                "When this creature enters, surveil 2.",
+                false,
+                "etb.surveil.two",
+            ),
+        ] {
+            let matched = match_clause(clause, is_spell, &context())
+                .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{clause} should stay consumed by its shipped recipe"));
+            assert_eq!(matched.id.as_str(), expected, "{clause}");
+        }
+    }
+
+    // Adjudicated deviation from the issue text: the printed grammar is `{<mana cost>}`, and
+    // `{2}` is a well-formed generic mana cost exactly like the accepted `Warp {3}` positive.
+    // The issue's negative list wrongly named `Flashback {2}`; it is not a near-miss and must
+    // keep matching. `Flashback 2` (no braces) and `Flashback {02}` remain the real negatives.
+    #[test]
+    fn issue_329_generic_only_cast_method_costs_are_accepted() {
+        let warp = match_cast_method_warp("Warp {3}", &context())
+            .expect("generic-only Warp cost must match");
+        let RecipeEmission::WarpCost(warp_cost) = warp else {
+            panic!("Warp must emit the first-class face cost emission");
+        };
+        assert_eq!(warp_cost.to_string(), "{3}");
+
+        let flashback = match_cast_method_flashback("Flashback {2}", &context())
+            .expect("generic-only Flashback cost must match");
+        let RecipeEmission::FlashbackCost(flashback_cost) = flashback else {
+            panic!("Flashback must emit the first-class face cost emission");
+        };
+        assert_eq!(flashback_cost.to_string(), "{2}");
     }
 }

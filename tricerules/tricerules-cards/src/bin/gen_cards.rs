@@ -596,6 +596,8 @@ fn strip_reminder(text: &str) -> String {
 struct ParsedRules {
     keywords: Vec<Keyword>,
     cost_modifiers: Vec<SpellCostModifier>,
+    warp_cost: Option<ManaCost>,
+    flashback_cost: Option<ManaCost>,
     spell_effect: Vec<SpellEffectKind>,
     targeting: Option<TargetingDef>,
     modal_spell: Option<ModalDef>,
@@ -842,6 +844,18 @@ fn parse_rules_text(
                 }
                 parsed.cost_modifiers.push(modifier);
             }
+            RecipeEmission::WarpCost(cost) => {
+                if parsed.warp_cost.is_some() {
+                    return Err(RulesParseError::Unsupported);
+                }
+                parsed.warp_cost = Some(cost);
+            }
+            RecipeEmission::FlashbackCost(cost) => {
+                if parsed.flashback_cost.is_some() {
+                    return Err(RulesParseError::Unsupported);
+                }
+                parsed.flashback_cost = Some(cost);
+            }
             RecipeEmission::ModalAssembly(_)
             | RecipeEmission::ModalMode(_)
             | RecipeEmission::StationAssembly(_) => {
@@ -993,6 +1007,8 @@ struct GenFace {
     characteristic_defining_abilities: Vec<IdentifiedAbility<CharacteristicDefiningAbility>>,
     keywords: Vec<Keyword>,
     cost_modifiers: Vec<SpellCostModifier>,
+    warp_cost: Option<ManaCost>,
+    flashback_cost: Option<ManaCost>,
     spell_effect: Vec<SpellEffectKind>,
     targeting: Option<TargetingDef>,
     modal_spell: Option<ModalDef>,
@@ -1025,6 +1041,18 @@ fn push_face_fields(s: &mut String, face: &GenFace, indent: &str, include_name: 
     }
     s.push_str(&format!("{indent}face_id: {:?},\n", face.face_id.as_str()));
     s.push_str(&format!("{indent}mana_cost: {:?},\n", face.mana_cost));
+    if let Some(cost) = &face.flashback_cost {
+        s.push_str(&format!(
+            "{indent}flashback_cost: Some({:?}),\n",
+            cost.to_string()
+        ));
+    }
+    if let Some(cost) = &face.warp_cost {
+        s.push_str(&format!(
+            "{indent}warp_cost: Some({:?}),\n",
+            cost.to_string()
+        ));
+    }
     s.push_str(&format!("{indent}types: [{}],\n", quoted_list(&face.types)));
     if !face.supertypes.is_empty() {
         s.push_str(&format!(
@@ -1713,6 +1741,8 @@ fn parse_multiface_face(
         characteristic_defining_abilities: rules.characteristic_defining_abilities,
         keywords: rules.keywords,
         cost_modifiers: rules.cost_modifiers,
+        warp_cost: rules.warp_cost,
+        flashback_cost: rules.flashback_cost,
         spell_effect: rules.spell_effect,
         targeting: rules.targeting,
         modal_spell: rules.modal_spell,
@@ -1903,6 +1933,8 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
             characteristic_defining_abilities: rules.characteristic_defining_abilities,
             keywords: rules.keywords,
             cost_modifiers: rules.cost_modifiers,
+            warp_cost: rules.warp_cost,
+            flashback_cost: rules.flashback_cost,
             spell_effect: rules.spell_effect,
             targeting: rules.targeting,
             modal_spell: rules.modal_spell,
@@ -11879,6 +11911,373 @@ mod tests {
             ],
         );
         assert!(evaluate_fresh(&adventure_near_miss).is_err());
+    }
+
+    #[test]
+    fn issue_329_cohort_generates_the_exact_reviewed_definitions() {
+        let mut colossus = normal_card_with_oracle_id(
+            "1bd584d5-4e11-428c-b51e-462e4292b07f",
+            "Bygone Colossus",
+            "{9}",
+            "Artifact Creature — Robot Giant",
+            "Warp {3} (You may cast this card from your hand for its warp cost. Exile this creature at the beginning of the next end step, then you may cast it from exile on a later turn.)",
+            Some(("9", "9")),
+        );
+        colossus["colors"] = json!([]);
+        let generated = evaluate_fresh(&colossus).expect("Bygone Colossus should qualify");
+        assert_eq!(generated.id, "bygone_colossus");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["warp alternative cast cost"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{9}");
+        assert_eq!(
+            raw.warp_cost.as_ref().map(ToString::to_string),
+            Some("{3}".to_string())
+        );
+        assert!(raw.flashback_cost.is_none());
+        assert!(raw.types.iter().any(|card_type| card_type == "Artifact"));
+        assert_eq!((raw.power, raw.toughness), (Some(9), Some(9)));
+
+        let mut wurm = normal_card_with_oracle_id(
+            "8735c62d-1508-4bdc-a5d0-f7c68d892a5e",
+            "Germinating Wurm",
+            "{4}{G}",
+            "Creature — Plant Wurm",
+            "When this creature enters, you gain 2 life.\nWarp {1}{G} (You may cast this card from your hand for its warp cost. Exile this creature at the beginning of the next end step, then you may cast it from exile on a later turn.)",
+            Some(("5", "5")),
+        );
+        wurm["colors"] = json!(["G"]);
+        let generated = evaluate_fresh(&wurm).expect("Germinating Wurm should qualify");
+        assert_eq!(generated.id, "germinating_wurm");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["ETB gain life", "warp alternative cast cost"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{4}{G}");
+        assert_eq!(
+            raw.warp_cost.as_ref().map(ToString::to_string),
+            Some("{1}{G}".to_string())
+        );
+        assert_eq!((raw.power, raw.toughness), (Some(5), Some(5)));
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("Germinating Wurm must keep its ETB trigger");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2),
+            }]
+        );
+        assert!(ability.targeting.is_none());
+
+        let mut mechan = normal_card_with_oracle_id(
+            "94c9aea7-564d-4fc8-ae14-7b22cba18b95",
+            "Red Tiger Mechan",
+            "{3}{R}",
+            "Artifact Creature — Robot Cat",
+            "Haste\nWarp {1}{R} (You may cast this card from your hand for its warp cost. Exile this creature at the beginning of the next end step, then you may cast it from exile on a later turn.)",
+            Some(("3", "3")),
+        );
+        mechan["colors"] = json!(["R"]);
+        let generated = evaluate_fresh(&mechan).expect("Red Tiger Mechan should qualify");
+        assert_eq!(generated.id, "red_tiger_mechan");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["warp alternative cast cost"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{3}{R}");
+        assert_eq!(raw.keywords, [Keyword::Haste]);
+        assert_eq!(
+            raw.warp_cost.as_ref().map(ToString::to_string),
+            Some("{1}{R}".to_string())
+        );
+
+        let mut whale = normal_card_with_oracle_id(
+            "076865e9-ee10-4a87-9180-4274202d37c1",
+            "Starbreach Whale",
+            "{4}{U}",
+            "Creature — Whale",
+            "Flying\nWhen this creature enters, surveil 2. (Look at the top two cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)\nWarp {1}{U} (You may cast this card from your hand for its warp cost. Exile this creature at the beginning of the next end step, then you may cast it from exile on a later turn.)",
+            Some(("3", "5")),
+        );
+        whale["colors"] = json!(["U"]);
+        let generated = evaluate_fresh(&whale).expect("Starbreach Whale should qualify");
+        assert_eq!(generated.id, "starbreach_whale");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["ETB surveil 2", "warp alternative cast cost"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{4}{U}");
+        assert_eq!(raw.keywords, [Keyword::Flying]);
+        assert_eq!(
+            raw.warp_cost.as_ref().map(ToString::to_string),
+            Some("{1}{U}".to_string())
+        );
+        assert_eq!((raw.power, raw.toughness), (Some(3), Some(5)));
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("Starbreach Whale must keep its ETB trigger");
+        };
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::LibraryPartition {
+                count: 2,
+                top_min: 0,
+                top_max: None,
+                kind: LibraryPartitionKind::Surveil,
+            }]
+        );
+
+        let mut think_twice = normal_card_with_oracle_id(
+            "fa85c5a2-8e83-4624-a35a-a0bbf17ecbb4",
+            "Think Twice",
+            "{1}{U}",
+            "Instant",
+            "Draw a card.\nFlashback {2}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+            None,
+        );
+        think_twice["colors"] = json!(["U"]);
+        let generated = evaluate_fresh(&think_twice).expect("Think Twice should qualify");
+        assert_eq!(generated.id, "think_twice");
+        assert_eq!(
+            generated.faces[0].recipe_labels,
+            ["draw spell", "flashback alternative cast cost"]
+        );
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.mana_cost.to_string(), "{1}{U}");
+        assert_eq!(
+            raw.flashback_cost.as_ref().map(ToString::to_string),
+            Some("{2}{U}".to_string())
+        );
+        assert!(raw.warp_cost.is_none());
+        assert_eq!(
+            raw.spell_effect,
+            [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }]
+        );
+        assert!(raw.targeting.is_none());
+    }
+
+    #[test]
+    fn issue_329_generator_is_fail_closed_for_cast_method_near_misses() {
+        for (oracle_id, name, mana_cost, type_line, oracle_text, power_toughness) in [
+            (
+                "11111111-0000-0000-0000-000000000001",
+                "Near Miss Warp Spell",
+                "{1}{U}",
+                "Instant",
+                "Draw a card.\nWarp {1}{U}",
+                None,
+            ),
+            (
+                "11111111-0000-0000-0000-000000000002",
+                "Near Miss Flashback Permanent",
+                "{1}{G}",
+                "Creature — Bear",
+                "Flashback {2}{U}",
+                Some(("2", "2")),
+            ),
+            (
+                "11111111-0000-0000-0000-000000000003",
+                "Near Miss Warp Rider",
+                "{1}{G}",
+                "Creature — Bear",
+                "Warp {1}{G} with a rider",
+                Some(("2", "2")),
+            ),
+            (
+                "11111111-0000-0000-0000-000000000004",
+                "Near Miss Warp Em Dash",
+                "{1}{G}",
+                "Creature — Bear",
+                "Warp — {1}{G}",
+                Some(("2", "2")),
+            ),
+            (
+                "11111111-0000-0000-0000-000000000005",
+                "Near Miss Warp Append",
+                "{1}{G}",
+                "Creature — Bear",
+                "Warp {1}{G}. Draw a card.",
+                Some(("2", "2")),
+            ),
+            (
+                "11111111-0000-0000-0000-000000000006",
+                "Near Miss Flashback Append",
+                "{2}{U}",
+                "Sorcery",
+                "Draw a card.\nFlashback {2}{U}. Draw a card.",
+                None,
+            ),
+        ] {
+            let card = normal_card_with_oracle_id(
+                oracle_id,
+                name,
+                mana_cost,
+                type_line,
+                oracle_text,
+                power_toughness,
+            );
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "cast-method near-miss must not qualify: {oracle_text}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_329_cast_method_assembly_is_order_independent() {
+        let mut haste_first = normal_card(
+            "Warp Order Probe",
+            "{3}{R}",
+            "Creature — Cat",
+            "Haste\nWarp {1}{R}",
+            Some(("3", "3")),
+        );
+        haste_first["colors"] = json!(["R"]);
+        let mut warp_first = normal_card(
+            "Warp Order Probe",
+            "{3}{R}",
+            "Creature — Cat",
+            "Warp {1}{R}\nHaste",
+            Some(("3", "3")),
+        );
+        warp_first["colors"] = json!(["R"]);
+
+        let first = evaluate_fresh(&haste_first).expect("haste-before-warp probe should qualify");
+        let second = evaluate_fresh(&warp_first).expect("warp-before-haste probe should qualify");
+        let first = parse_generated(&first.to_ron("fixture"));
+        let second = parse_generated(&second.to_ron("fixture"));
+        assert_eq!(first.keywords, second.keywords);
+        assert_eq!(first.keywords, [Keyword::Haste]);
+        assert_eq!(
+            first.warp_cost.as_ref().map(ToString::to_string),
+            Some("{1}{R}".to_string())
+        );
+        assert_eq!(first.warp_cost, second.warp_cost);
+    }
+
+    #[test]
+    fn issue_329_targeted_clause_contract_survives_cast_method_lines() {
+        for text in [
+            "Flashback {3}{U}\nTarget creature gets +1/+0 and gains first strike until end of turn.",
+            "Target creature gets +1/+0 and gains first strike until end of turn.\nFlashback {3}{U}",
+        ] {
+            let mut card = normal_card(
+                "Flashback Target Probe",
+                "{2}{U}",
+                "Instant",
+                text,
+                None,
+            );
+            card["colors"] = json!(["U"]);
+            let generated =
+                evaluate_fresh(&card).expect("targeted flashback probe should qualify");
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert_eq!(
+                raw.flashback_cost.as_ref().map(ToString::to_string),
+                Some("{3}{U}".to_string())
+            );
+            assert_eq!(raw.spell_effect.len(), 2);
+            let targeting = raw.targeting.as_ref().expect("the probe targets a creature");
+            let [group] = targeting.groups.as_slice() else {
+                panic!("the probe must own exactly one target group");
+            };
+            assert_eq!((group.min, group.max), (1, 1));
+            assert_eq!(group.effect_indices, [0, 1]);
+            assert!(
+                TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref()).is_ok(),
+                "no orphaned or shared target group for: {text}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_329_second_targeted_clause_stays_fail_closed() {
+        let mut card = normal_card(
+            "Double Target Probe",
+            "{2}{U}",
+            "Instant",
+            "Target creature gets +1/+0 and gains first strike until end of turn.\nTarget creature gets +2/+0 and gains first strike until end of turn.",
+            None,
+        );
+        card["colors"] = json!(["U"]);
+        assert!(
+            evaluate_fresh(&card).is_err(),
+            "two separately targeted clauses must fail closed instead of sharing or orphaning a group"
+        );
+    }
+
+    #[test]
+    fn issue_329_duplicate_cast_method_fields_fail_closed() {
+        let mut duplicate_warp = normal_card(
+            "Duplicate Warp Probe",
+            "{1}{G}",
+            "Creature — Bear",
+            "Warp {1}{G}\nWarp {2}{G}",
+            Some(("2", "2")),
+        );
+        duplicate_warp["colors"] = json!(["G"]);
+        assert!(
+            evaluate_fresh(&duplicate_warp).is_err(),
+            "a second Warp line must fail closed instead of overwriting the face cost"
+        );
+
+        let mut duplicate_flashback = normal_card(
+            "Duplicate Flashback Probe",
+            "{1}{U}",
+            "Instant",
+            "Draw a card.\nFlashback {2}{U}\nFlashback {3}{U}",
+            None,
+        );
+        duplicate_flashback["colors"] = json!(["U"]);
+        assert!(
+            evaluate_fresh(&duplicate_flashback).is_err(),
+            "a second Flashback line must fail closed instead of overwriting the face cost"
+        );
+    }
+
+    #[test]
+    fn issue_329_cast_method_composes_with_triggered_abilities_in_either_order() {
+        for text in [
+            "When this creature enters, you gain 2 life.\nWarp {1}{G}",
+            "Warp {1}{G}\nWhen this creature enters, you gain 2 life.",
+        ] {
+            let mut card = normal_card(
+                "Warp Ability Order Probe",
+                "{4}{G}",
+                "Creature — Plant Wurm",
+                text,
+                Some(("5", "5")),
+            );
+            card["colors"] = json!(["G"]);
+            let generated =
+                evaluate_fresh(&card).expect("the probe should qualify in either order");
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert_eq!(
+                raw.warp_cost.as_ref().map(ToString::to_string),
+                Some("{1}{G}".to_string()),
+                "the warp cost must survive assembly in either order: {text}"
+            );
+            let [ability] = raw.triggered_abilities.as_slice() else {
+                panic!("the probe must keep exactly one triggered ability: {text}");
+            };
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(2),
+                }]
+            );
+            assert!(ability.targeting.is_none());
+        }
     }
 
     #[cfg(windows)]
