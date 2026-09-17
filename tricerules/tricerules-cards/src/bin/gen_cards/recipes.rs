@@ -1,17 +1,18 @@
 use tricerules_cards::primitives::{
-    ActivationLimit, BattlefieldAggregate, BattlefieldPermanentFilter, CardResultAction,
-    CardResultFilter, CardResultSource, CardTypeFilter, CombatRestriction, CombatRestrictionScope,
-    CombatRole, CountExpression, CreatureScopeController, CreatureScopeFilter, DiscardQuantity,
-    DrawDiscardOrder, EffectSubject, EntersTappedAffected, EntryCost, GameCondition,
-    GraveyardDestination, GraveyardFilter, GraveyardOwner, HandCardAction, HandCardChooser,
-    HandChoiceVisibility, LibraryPlacement, LifeAmount, ObjectContributionKind,
-    ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate,
-    PlayerRecipient, PowerComparison, PowerToughnessCharacteristic, RelativePlayerSet,
-    ResolutionBranchDef, ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost,
-    SearchDestination, SearchZoneSelection, SpellCastFilter, SpellCostModifier,
-    SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter,
-    TargetGroupDef, TargetKind, TargetMatchFilter, TargetObjectExclusion, TargetingDef,
-    TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
+    ActivationLimit, BattlefieldAggregate, BattlefieldCreatureCountFilter,
+    BattlefieldPermanentFilter, CardResultAction, CardResultFilter, CardResultSource,
+    CardTypeFilter, CombatRestriction, CombatRestrictionScope, CombatRole, CountExpression,
+    CreatureScopeController, CreatureScopeFilter, DiscardQuantity, DrawDiscardOrder, EffectSubject,
+    EntersTappedAffected, EntryCost, GameCondition, GraveyardDestination, GraveyardFilter,
+    GraveyardOwner, HandCardAction, HandCardChooser, HandChoiceVisibility, LibraryPlacement,
+    LifeAmount, ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter,
+    PermanentTypeFilter, PlayerLifeAggregate, PlayerRecipient, PowerComparison,
+    PowerToughnessCharacteristic, RelativePlayerSet, ResolutionBranchDef,
+    ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SearchDestination,
+    SearchZoneSelection, SpellCastFilter, SpellCostModifier, SpellManaSpentComparison,
+    StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
+    TargetMatchFilter, TargetObjectExclusion, TargetingDef, TargetingSourceFilter,
+    TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{
     external_oracle_lines, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
@@ -7521,6 +7522,224 @@ fn match_tap_loot_draw_discard(text: &str, context: &RecipeContext) -> Option<Re
     })
 }
 
+/// Issue #336 exact clause templates. Each template is a reusable typed surface with at least two
+/// real positive calibrations. Every clause is compared by the complete normalized Oracle line, so
+/// an appended, reordered, or additional-clause form remains unsupported, and source-kind gating
+/// stays on the recipes whose printed template requires it (the creature and Equipment ETBs); the
+/// spell and activated-mana templates are not source-gated.
+const ISSUE_336_MINUS_FOUR_MINUS_ZERO_CLAUSE: &str =
+    "Target creature gets -4/-0 until end of turn.";
+const ISSUE_336_WIZARD_REDUCTION_CLAUSE: &str =
+    "This spell costs {1} less to cast if you control a Wizard.";
+/// The printed activation mana cost is captured before this literal suffix.
+const ISSUE_336_ACTIVATED_DRAW_ONE_SUFFIX: &str = ": Draw a card.";
+const ISSUE_336_EXILE_GRAVEYARD_CARD_CLAUSE: &str = "{2}, {T}: Exile target card from a graveyard.";
+const ISSUE_336_MAY_FIGHT_CLAUSE: &str =
+    "When this creature enters, you may have it fight target creature you don't control.";
+const ISSUE_336_MAY_RETURN_CREATURE_CARD_CLAUSE: &str =
+    "When this creature enters, you may return target creature card from your graveyard to your hand.";
+const ISSUE_336_MAY_DESTROY_ARTIFACT_OR_ENCHANTMENT_CLAUSE: &str =
+    "When this creature enters, you may destroy target artifact or enchantment.";
+const ISSUE_336_EQUIPMENT_TREASURE_CLAUSE: &str =
+    "When this Equipment enters, create a Treasure token.";
+
+/// CR 611.2a / 514.2: a -4/-0 until-cleanup pump on one mandatory creature target, the asymmetric
+/// sibling of the shipped -4/-4 recipe. Other values, positive pumps, riders, up-to-one, and
+/// appended instructions stay unsupported.
+fn match_spell_creature_minus_four_zero(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == ISSUE_336_MINUS_FOUR_MINUS_ZERO_CLAUSE).then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::PumpTarget {
+            power: -4,
+            toughness: 0,
+            scale: None,
+            subject: chosen_creature(TargetController::Any),
+        })
+    })
+}
+
+/// CR 601.2f / 118.7a: "This spell costs {1} less to cast if you control a Wizard" reduces only
+/// the generic component once while the controller controls at least one Wizard creature, reusing
+/// the shipped `BattlefieldCreatureCount` condition vocabulary (Winged Words). Other amounts,
+/// other subtypes, counted bounds, opponent scopes, and riders stay unsupported.
+fn match_spell_cost_reduction_control_wizard_one(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_336_WIZARD_REDUCTION_CLAUSE).then(|| {
+        RecipeEmission::SpellCostModifier(SpellCostModifier::ConditionalGenericReduction {
+            amount: 1,
+            condition: GameCondition::BattlefieldCreatureCount {
+                filter: BattlefieldCreatureCountFilter {
+                    controllers: RelativePlayerSet::Controller,
+                    subtype: Some("Wizard".into()),
+                    ..BattlefieldCreatureCountFilter::default()
+                },
+                min: Some(1),
+                max: None,
+            },
+        })
+    })
+}
+
+/// CR 602.2 / 601.2h: an activated ability whose only cost is the printed mana cost and whose
+/// effect is the controller drawing one card. The cost is captured verbatim and must round-trip as
+/// a fixed (non-X) mana cost; tap, sacrifice, discard, life, timing, and plural/targeted forms stay
+/// unsupported because the exact suffix and the mana-only parse reject them.
+fn match_activated_mana_draw_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    let cost = exact_mana_cost(text.strip_suffix(ISSUE_336_ACTIVATED_DRAW_ONE_SUFFIX)?)?;
+    Some(utility_activated_ability(
+        context,
+        vec![AbilityCost::Mana(cost)],
+        vec![SpellEffectKind::Draw {
+            who: PlayerRecipient::Controller,
+            count: Amount::Fixed(1),
+        }],
+        None,
+    ))
+}
+
+/// CR 404 / 701.13: "{2}, {T}" pays a fixed generic mana plus the tap symbol to exile one mandatory
+/// target card from any graveyard, reusing the shipped `MoveGraveyardCards` exile shape. Other
+/// costs, controller-only or typed filters, up-to-one, and riders stay unsupported.
+fn match_activated_exile_target_graveyard_card(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_336_EXILE_GRAVEYARD_CARD_CLAUSE).then(|| {
+        utility_activated_ability(
+            context,
+            vec![fixed_mana_cost("{2}"), AbilityCost::Tap],
+            vec![SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    owner: GraveyardOwner::AnyPlayer,
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::Exile,
+                linked_exile_id: None,
+            }],
+            single_targeting("Choose target card from a graveyard"),
+        )
+    })
+}
+
+/// CR 603.6 / 701.14: a may ETB trigger whose source fights one mandatory creature target the
+/// controller does not control. The source is a non-targeting `Source` reference; only the second
+/// creature is a CR 115 target. The trigger's target is chosen as it goes on the stack while the
+/// fight itself is optional on resolution, so `may` is set with an explicit target group. The
+/// non-optional, unrestricted-target, opponent-controls, two-chosen-creature, and "Whenever"
+/// forms stay unsupported.
+fn match_etb_may_fight_creature_you_dont_control(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_336_MAY_FIGHT_CLAUSE).then(|| {
+        let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+            context,
+            TriggerCondition::WhenSelfEntersBattlefield,
+            vec![SpellEffectKind::Fight {
+                first: EffectSubject::Source,
+                second: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::NotYou,
+                    ..TargetFilter::default()
+                })),
+            }],
+        ) else {
+            unreachable!("triggered_ability_with always returns a triggered ability")
+        };
+        ability.may = true;
+        ability.targeting = Some(exact_targeting(
+            1,
+            1,
+            "Choose target creature you don't control",
+            vec![0],
+        ));
+        RecipeEmission::TriggeredAbility(ability)
+    })
+}
+
+/// CR 603.6 / 404.2: a may ETB trigger that returns one mandatory target creature card from the
+/// controller's own graveyard to its owner's hand, reusing the shipped creature graveyard predicate
+/// with an explicit target group and `may`. Other destinations, permanent cards, any-graveyard and
+/// opponent-graveyard scopes, non-may, dies wording, and riders stay unsupported.
+fn match_etb_may_return_creature_card_to_hand(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_336_MAY_RETURN_CREATURE_CARD_CLAUSE).then(|| {
+        let RecipeEmission::TriggeredAbility(mut ability) =
+            triggered_ability(context, creature_graveyard_card_to_hand_effect())
+        else {
+            unreachable!("triggered_ability always returns a triggered ability")
+        };
+        ability.may = true;
+        ability.targeting = Some(exact_targeting(
+            1,
+            1,
+            "Choose target creature card from your graveyard",
+            vec![0],
+        ));
+        RecipeEmission::TriggeredAbility(ability)
+    })
+}
+
+/// CR 603.6 / 701.8: a may ETB trigger that destroys one mandatory target artifact or enchantment,
+/// reusing the shipped artifact-or-enchantment union predicate with an explicit target group and
+/// `may`. Single-type, up-to-one, non-may, non-creature sources, and riders stay unsupported.
+fn match_etb_may_destroy_artifact_or_enchantment(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_336_MAY_DESTROY_ARTIFACT_OR_ENCHANTMENT_CLAUSE)
+        .then(|| {
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability(
+                context,
+                SpellEffectKind::Destroy {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        permanent_types: vec![
+                            PermanentTypeFilter::Artifact,
+                            PermanentTypeFilter::Enchantment,
+                        ],
+                        ..TargetFilter::default()
+                    })),
+                },
+            ) else {
+                unreachable!("triggered_ability always returns a triggered ability")
+            };
+            ability.may = true;
+            ability.targeting = Some(exact_targeting(
+                1,
+                1,
+                "Choose target artifact or enchantment",
+                vec![0],
+            ));
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
+/// CR 111.10a / 603.6: an Equipment's own entry trigger creates one registered Treasure token.
+/// The subtype gate keeps the printed "this Equipment" wording bound to Equipment sources; the
+/// artifact/creature wordings, plural/tapped tokens, and riders stay with their own recipes or
+/// unsupported.
+fn match_etb_equipment_create_treasure(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_equipment && text == ISSUE_336_EQUIPMENT_TREASURE_CLAUSE).then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::CreateTokens {
+                token: "treasure".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            },
+        )
+    })
+}
+
 macro_rules! calibrations {
     ($($positive_name:literal => $positive_clause:literal),+; $($negative:literal),+ $(,)?) => {
         RecipeCalibration {
@@ -11446,7 +11665,7 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Grasp of Darkness" => "Target creature gets -4/-4 until end of turn.",
             "Flatten" => "Target creature gets -4/-4 until end of turn.";
             "Target creature gets -5/-5 until end of turn.",
-            "Target creature gets -4/-0 until end of turn.",
+            "Target creature gets -4/-2 until end of turn.",
             "Creatures you control get -4/-4 until end of turn.",
             "Target creature gets -4/-4 until end of combat.",
             "Target creature gets -4/-4 until end of turn. You gain 1 life.",
@@ -11962,6 +12181,151 @@ pub(super) static CATALOG: &[Recipe] = &[
             "{1}{U}, {T}: Draw a card, then discard a card. Activate only as a sorcery.",
             "{1}{U}: Draw a card, then discard a card.",
             "{1}{U}, {T}: Discard a card, then draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump.creature.minus_four_minus_zero"),
+        label: "fixed asymmetric creature debuff -4/-0",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_creature_minus_four_zero,
+        // Reviewed deviation from the issue text: "Target creature gets +4/+0 until end of turn."
+        // is deliberately omitted because the shipped `spell.pump.creature.fixed` recipe already
+        // claims every `+P/+T` form; a positive-pump near-miss is asserted directly on this matcher
+        // in the catalog tests instead. The controller-restricted form replaces it here.
+        calibration: calibrations!(
+            "Obyra's Attendants // Desperate Parry" => "Target creature gets -4/-0 until end of turn.",
+            "Depower" => "Target creature gets -4/-0 until end of turn.",
+            "Arcane Subtraction" => "Target creature gets -4/-0 until end of turn.";
+            "Target creature gets -3/-0 until end of turn.",
+            "Target creature gets -4/-1 until end of turn.",
+            "Target creature gets -4/+0 until end of turn.",
+            "Target creature gets -4/-0 until end of turn. Draw a card.",
+            "Up to one target creature gets -4/-0 until end of turn.",
+            "Target creature you control gets -4/-0 until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.cost_reduction.control_wizard.one"),
+        label: "spell costs one less with a controlled Wizard",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_cost_reduction_control_wizard_one,
+        calibration: calibrations!(
+            "Arcane Epiphany" => "This spell costs {1} less to cast if you control a Wizard.",
+            "Academy Journeymage" => "This spell costs {1} less to cast if you control a Wizard.",
+            "Wizard's Retort" => "This spell costs {1} less to cast if you control a Wizard.";
+            "This spell costs {2} less to cast if you control a Wizard.",
+            "This spell costs {1} less to cast if you control two or more Wizards.",
+            "This spell costs {1} less to cast if you control a Human.",
+            "This spell costs {1} less to cast if you control a Wizard. Draw a card.",
+            "This spell costs {1} less to cast if an opponent controls a Wizard.",
+            "This spell costs {1} less to cast if you control a Wizard. You gain 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.mana.draw_one"),
+        label: "activated mana cost draw one",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_mana_draw_one,
+        calibration: calibrations!(
+            "Spectral Sailor" => "{3}{U}: Draw a card.",
+            "Azure Mage" => "{3}{U}: Draw a card.",
+            "Triskaidekaphile" => "{1}{U}: Draw a card.";
+            "{3}{U}: Draw two cards.",
+            "{3}{U}: Draw a card. Activate only as a sorcery.",
+            "{3}{U}, {T}: Draw a card.",
+            "{3}{U}, Sacrifice this creature: Draw a card.",
+            "{3}{U}: Target player draws a card.",
+            "{3}{U}: Draw a card, then discard a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.mana.exile_target_graveyard_card"),
+        label: "pay two and tap to exile a target graveyard card",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_exile_target_graveyard_card,
+        calibration: calibrations!(
+            "Magic Pot" => "{2}, {T}: Exile target card from a graveyard.",
+            "Honored Heirloom" => "{2}, {T}: Exile target card from a graveyard.",
+            "Moratorium Stone" => "{2}, {T}: Exile target card from a graveyard.";
+            "{2}, {T}: Exile target creature card from a graveyard.",
+            "{2}, {T}: Exile target card from your graveyard.",
+            "{1}, {T}: Exile target card from a graveyard.",
+            "{2}: Exile target card from a graveyard.",
+            "{2}, {T}: Exile target card from a graveyard. Draw a card.",
+            "{2}, {T}, Sacrifice this artifact: Exile target card from a graveyard."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.may_fight_creature_you_dont_control"),
+        label: "creature ETB may fight a creature you don't control",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_may_fight_creature_you_dont_control,
+        calibration: calibrations!(
+            "Affectionate Indrik" => "When this creature enters, you may have it fight target creature you don't control.",
+            "Somberwald Stag" => "When this creature enters, you may have it fight target creature you don't control.",
+            "Foe-Razer Regent" => "When this creature enters, you may have it fight target creature you don't control.";
+            "When this creature enters, you may have it fight target creature.",
+            "When this creature enters, it fights target creature you don't control.",
+            "When this creature enters, you may have it fight target creature an opponent controls.",
+            "When this creature enters, you may have target creature you control fight target creature you don't control.",
+            "Whenever this creature enters, you may have it fight target creature you don't control.",
+            "When this creature enters, you may have it fight target creature you don't control. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.may_return_creature_card_to_hand"),
+        label: "creature ETB may return a creature card from your graveyard to hand",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_may_return_creature_card_to_hand,
+        // Reviewed deviation from the issue text: the non-optional wording
+        // "When this creature enters, return target creature card from your graveyard to your hand."
+        // is deliberately omitted because the shipped `triggered.etb.return_creature_card_from_graveyard.hand`
+        // recipe already claims it; the catalog rejects a near-miss that another exact recipe owns.
+        // The optional return is asserted directly not to widen that shipped matcher in the tests.
+        calibration: calibrations!(
+            "Graveshifter" => "When this creature enters, you may return target creature card from your graveyard to your hand.",
+            "Gravedigger" => "When this creature enters, you may return target creature card from your graveyard to your hand.",
+            "Cadaver Imp" => "When this creature enters, you may return target creature card from your graveyard to your hand.";
+            "When this creature enters, you may return target permanent card from your graveyard to your hand.",
+            "When this creature enters, you may return target creature card from your graveyard to the battlefield.",
+            "When this creature enters, you may return target creature card from a graveyard to your hand.",
+            "When this creature dies, you may return target creature card from your graveyard to your hand.",
+            "When this creature enters, you may return up to one target creature card from your graveyard to your hand.",
+            "When this creature enters, you may return target creature card from your graveyard to your hand. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.may_destroy_artifact_or_enchantment"),
+        label: "creature ETB may destroy an artifact or enchantment",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_may_destroy_artifact_or_enchantment,
+        calibration: calibrations!(
+            "Reclamation Sage" => "When this creature enters, you may destroy target artifact or enchantment.",
+            "Foundation Breaker" => "When this creature enters, you may destroy target artifact or enchantment.",
+            "Conclave Naturalists" => "When this creature enters, you may destroy target artifact or enchantment.";
+            "When this creature enters, destroy target artifact or enchantment.",
+            "When this creature enters, you may destroy target artifact.",
+            "When this creature enters, you may destroy up to one target artifact or enchantment.",
+            "When this artifact enters, you may destroy target artifact or enchantment.",
+            "When this creature enters, you may exile target artifact or enchantment.",
+            "When this creature enters, you may destroy target artifact or enchantment. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.equipment.create_treasure"),
+        label: "Equipment ETB create Treasure",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_equipment_create_treasure,
+        calibration: calibrations!(
+            "Gold Pan" => "When this Equipment enters, create a Treasure token.",
+            "Thieves' Tools" => "When this Equipment enters, create a Treasure token.",
+            "Gilded Pinions" => "When this Equipment enters, create a Treasure token.";
+            "When this artifact enters, create a Treasure token.",
+            "When this Equipment enters, create two Treasure tokens.",
+            "When this Equipment enters, create a tapped Treasure token.",
+            "When this Equipment enters, create a Treasure token. Draw a card.",
+            "Whenever this Equipment enters, create a Treasure token.",
+            "When this Equipment enters, create a Treasure token, then draw a card."
         ),
     },
 ];
@@ -19587,7 +19951,7 @@ mod tests {
     fn issue_327_minus_four_minus_four_rejects_near_misses() {
         for negative in [
             "Target creature gets -5/-5 until end of turn.",
-            "Target creature gets -4/-0 until end of turn.",
+            "Target creature gets -4/-2 until end of turn.",
             "Creatures you control get -4/-4 until end of turn.",
             "Target creature gets -4/-4 until end of combat.",
             "Target creature gets -4/-4 until end of turn. You gain 1 life.",
@@ -21797,6 +22161,284 @@ mod tests {
         assert!(
             match_self_dies_gain_life_two("When this creature dies, draw a card.", &context())
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn issue_336_exact_clauses_match_their_recipes() {
+        for (clause, is_spell, expected) in [
+            (
+                "Target creature gets -4/-0 until end of turn.",
+                true,
+                "spell.pump.creature.minus_four_minus_zero",
+            ),
+            (
+                "This spell costs {1} less to cast if you control a Wizard.",
+                true,
+                "spell.cost_reduction.control_wizard.one",
+            ),
+            ("{3}{U}: Draw a card.", false, "activated.mana.draw_one"),
+            (
+                "{2}, {T}: Exile target card from a graveyard.",
+                false,
+                "activated.mana.exile_target_graveyard_card",
+            ),
+            (
+                "When this creature enters, you may have it fight target creature you don't control.",
+                false,
+                "triggered.etb.may_fight_creature_you_dont_control",
+            ),
+            (
+                "When this creature enters, you may return target creature card from your graveyard to your hand.",
+                false,
+                "triggered.etb.may_return_creature_card_to_hand",
+            ),
+            (
+                "When this creature enters, you may destroy target artifact or enchantment.",
+                false,
+                "triggered.etb.may_destroy_artifact_or_enchantment",
+            ),
+            (
+                "When this Equipment enters, create a Treasure token.",
+                false,
+                "triggered.etb.equipment.create_treasure",
+            ),
+        ] {
+            let matched = match_clause(clause, is_spell, &context())
+                .expect("clause should not be ambiguous")
+                .unwrap_or_else(|| panic!("clause should match a recipe: {clause}"));
+            assert_eq!(matched.id.as_str(), expected, "{clause}");
+        }
+    }
+
+    #[test]
+    fn issue_336_matchers_emit_typed_payloads_and_stay_source_gated() {
+        let RecipeEmission::SpellEffect(SpellEffectKind::PumpTarget {
+            power,
+            toughness,
+            scale,
+            subject,
+        }) = match_spell_creature_minus_four_zero(
+            ISSUE_336_MINUS_FOUR_MINUS_ZERO_CLAUSE,
+            &context(),
+        )
+        .expect("the -4/-0 clause should match")
+        else {
+            panic!("the -4/-0 clause must emit a fixed pump");
+        };
+        assert_eq!((power, toughness, scale), (-4, 0, None));
+        assert_eq!(subject, chosen_creature(TargetController::Any));
+        assert!(
+            match_spell_creature_minus_four_zero(
+                "Target creature gets +4/+0 until end of turn.",
+                &context()
+            )
+            .is_none(),
+            "the asymmetric debuff must not accept the shipped positive-pump surface"
+        );
+
+        let RecipeEmission::SpellCostModifier(SpellCostModifier::ConditionalGenericReduction {
+            amount,
+            condition,
+        }) = match_spell_cost_reduction_control_wizard_one(
+            ISSUE_336_WIZARD_REDUCTION_CLAUSE,
+            &context(),
+        )
+        .expect("the Wizard reduction clause should match")
+        else {
+            panic!("the Wizard clause must emit a conditional generic reduction");
+        };
+        assert_eq!(amount, 1);
+        assert_eq!(
+            condition,
+            GameCondition::BattlefieldCreatureCount {
+                filter: BattlefieldCreatureCountFilter {
+                    controllers: RelativePlayerSet::Controller,
+                    subtype: Some("Wizard".into()),
+                    ..BattlefieldCreatureCountFilter::default()
+                },
+                min: Some(1),
+                max: None,
+            }
+        );
+
+        let RecipeEmission::ActivatedAbility(draw) =
+            match_activated_mana_draw_one("{3}{U}: Draw a card.", &context())
+                .expect("the printed-cost draw clause should match")
+        else {
+            panic!("the printed-cost draw must emit an activated ability");
+        };
+        assert_eq!(
+            draw.costs,
+            [AbilityCost::Mana(
+                ManaCost::parse("{3}{U}").expect("fixed mana cost")
+            )]
+        );
+        assert_eq!(
+            draw.effect,
+            [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }]
+        );
+        for near_miss in [
+            "{3}{U}: Draw two cards.",
+            "{3}{U}, {T}: Draw a card.",
+            "{3}{U}, Sacrifice this creature: Draw a card.",
+            "{3}{U}: Draw a card, then discard a card.",
+            "Draw a card.",
+        ] {
+            assert!(
+                match_activated_mana_draw_one(near_miss, &context()).is_none(),
+                "the printed-cost draw accepted {near_miss}"
+            );
+        }
+
+        let RecipeEmission::ActivatedAbility(exile) = match_activated_exile_target_graveyard_card(
+            ISSUE_336_EXILE_GRAVEYARD_CARD_CLAUSE,
+            &context(),
+        )
+        .expect("the graveyard exile clause should match") else {
+            panic!("the graveyard exile must emit an activated ability");
+        };
+        assert_eq!(
+            exile.costs,
+            [
+                AbilityCost::Mana(ManaCost::parse("{2}").expect("fixed mana cost")),
+                AbilityCost::Tap,
+            ]
+        );
+        assert_eq!(
+            exile.effect,
+            [SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    owner: GraveyardOwner::AnyPlayer,
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::Exile,
+                linked_exile_id: None,
+            }]
+        );
+        let targeting = exile.targeting.as_ref().expect("exile target group");
+        assert_eq!((targeting.groups[0].min, targeting.groups[0].max), (1, 1));
+
+        let RecipeEmission::TriggeredAbility(fight) =
+            match_etb_may_fight_creature_you_dont_control(ISSUE_336_MAY_FIGHT_CLAUSE, &context())
+                .expect("the may-fight clause should match")
+        else {
+            panic!("the may-fight must emit a triggered ability");
+        };
+        assert!(fight.may);
+        assert_eq!(fight.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            fight.effect,
+            [SpellEffectKind::Fight {
+                first: EffectSubject::Source,
+                second: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::NotYou,
+                    ..TargetFilter::default()
+                })),
+            }]
+        );
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_etb_may_fight_creature_you_dont_control(ISSUE_336_MAY_FIGHT_CLAUSE, &noncreature)
+                .is_none(),
+            "the may-fight ETB stays bound to creature sources"
+        );
+
+        let RecipeEmission::TriggeredAbility(returned) =
+            match_etb_may_return_creature_card_to_hand(
+                ISSUE_336_MAY_RETURN_CREATURE_CARD_CLAUSE,
+                &context(),
+            )
+            .expect("the may-return clause should match")
+        else {
+            panic!("the may-return must emit a triggered ability");
+        };
+        assert!(returned.may);
+        assert_eq!(
+            returned.effect,
+            [creature_graveyard_card_to_hand_effect()],
+            "the optional return reuses the shipped creature-card predicate"
+        );
+        assert!(
+            match_etb_may_return_creature_card_to_hand(
+                ISSUE_336_MAY_RETURN_CREATURE_CARD_CLAUSE,
+                &noncreature,
+            )
+            .is_none(),
+            "the may-return ETB stays bound to creature sources"
+        );
+
+        let RecipeEmission::TriggeredAbility(destroy) =
+            match_etb_may_destroy_artifact_or_enchantment(
+                ISSUE_336_MAY_DESTROY_ARTIFACT_OR_ENCHANTMENT_CLAUSE,
+                &context(),
+            )
+            .expect("the may-destroy clause should match")
+        else {
+            panic!("the may-destroy must emit a triggered ability");
+        };
+        assert!(destroy.may);
+        assert_eq!(
+            destroy.effect,
+            [SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![
+                        PermanentTypeFilter::Artifact,
+                        PermanentTypeFilter::Enchantment,
+                    ],
+                    ..TargetFilter::default()
+                })),
+            }]
+        );
+        assert!(
+            match_etb_may_destroy_artifact_or_enchantment(
+                ISSUE_336_MAY_DESTROY_ARTIFACT_OR_ENCHANTMENT_CLAUSE,
+                &noncreature,
+            )
+            .is_none(),
+            "the may-destroy ETB stays bound to creature sources"
+        );
+
+        let RecipeEmission::TriggeredAbility(treasure) =
+            match_etb_equipment_create_treasure(ISSUE_336_EQUIPMENT_TREASURE_CLAUSE, &context())
+                .expect("the Equipment Treasure clause should match")
+        else {
+            panic!("the Equipment Treasure must emit a triggered ability");
+        };
+        assert_eq!(
+            treasure.effect,
+            [SpellEffectKind::CreateTokens {
+                token: "treasure".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }]
+        );
+        assert!(!treasure.may);
+        let mut non_equipment = context();
+        non_equipment.source_is_equipment = false;
+        assert!(
+            match_etb_equipment_create_treasure(
+                ISSUE_336_EQUIPMENT_TREASURE_CLAUSE,
+                &non_equipment
+            )
+            .is_none(),
+            "the Treasure ETB stays bound to Equipment sources"
+        );
+        assert!(
+            match_etb_equipment_create_treasure(
+                "When this artifact enters, create a Treasure token.",
+                &context()
+            )
+            .is_none(),
+            "the artifact wording stays with the existing artifact recipes"
         );
     }
 }

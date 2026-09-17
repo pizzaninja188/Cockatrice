@@ -27,6 +27,7 @@ aegis_turtle	0	cast	exercised
 aerial_assault	0	cast	unsupported: target group 0 needs a richer fixture
 aerial_responder	0	cast	exercised
 affa_protector	0	cast	exercised
+affectionate_indrik	0	cast	exercised
 ageless_guardian	0	cast	exercised
 agent_maria_hill	0	cast	exercised
 agent_of_atlas	0	cast	exercised
@@ -92,6 +93,7 @@ arashin_cleric	0	cast	exercised
 arashin_sunshield	0	ability:0	exercised
 arashin_sunshield	0	cast	exercised
 arborback_stomper	0	cast	exercised
+arcane_epiphany	0	cast	exercised
 archangel	0	cast	exercised
 archers_of_qarsi	0	cast	exercised
 archweaver	0	cast	exercised
@@ -957,6 +959,8 @@ gohn,_town_of_ruin	0	land	exercised
 gold-forged_sentinel	0	cast	exercised
 gold_myr	0	ability:0	exercised
 gold_myr	0	cast	exercised
+gold_pan	0	ability:0	exercised
+gold_pan	0	cast	exercised
 gold_rush	0	cast	exercised
 golden-tail_disciple	0	cast	exercised
 golden_bear	0	cast	exercised
@@ -983,6 +987,7 @@ grappler_spider	0	cast	exercised
 grasping_longneck	0	cast	exercised
 gravedigger	0	cast	exercised
 gravelgill_scoundrel	0	cast	exercised
+graveshifter	0	cast	exercised
 gravpack_monoist	0	cast	exercised
 gray_ogre	0	cast	exercised
 grazing_whiptail	0	cast	exercised
@@ -1364,6 +1369,8 @@ lys_alana_informant	0	cast	exercised
 macabre_waltz	0	cast	exercised
 magebane_lizard	0	cast	exercised
 magic_damper	0	cast	exercised
+magic_pot	0	ability:0	exercised
+magic_pot	0	cast	exercised
 magnigoth_sentry	0	cast	exercised
 mahamoti_djinn	0	cast	exercised
 make_obsolete	0	cast	exercised
@@ -1555,6 +1562,8 @@ oakgnarl_warrior	0	cast	exercised
 oasis_gardener	0	ability:0	exercised
 oasis_gardener	0	cast	exercised
 obsidian_giant	0	cast	exercised
+obyras_attendants_desperate_parry	0	cast	exercised
+obyras_attendants_desperate_parry	1	cast	exercised
 octopus_form	0	cast	exercised
 offer_immortality	0	cast	exercised
 ogre_berserker	0	cast	exercised
@@ -1767,6 +1776,7 @@ rebellious_strike	0	cast	exercised
 reckless_air_strike	0	cast	exercised
 reckless_waif_merciless_predator	0	cast	exercised
 reckless_waif_merciless_predator	1	cast	intentional: face unavailable from hand
+reclamation_sage	0	cast	exercised
 red_tiger_mechan	0	cast	exercised
 redcap_thief	0	cast	exercised
 redwood_treefolk	0	cast	exercised
@@ -2082,6 +2092,8 @@ soured_springs	0	ability:0	exercised
 soured_springs	0	land	exercised
 sparktongue_dragon	0	cast	exercised
 spectral_rider	0	cast	exercised
+spectral_sailor	0	ability:0	exercised
+spectral_sailor	0	cast	exercised
 spectral_snatcher	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 spectral_snatcher	0	cast	exercised
 spell_pierce	0	cast	unsupported: target group 0 needs a richer fixture
