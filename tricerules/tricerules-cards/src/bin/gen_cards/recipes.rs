@@ -9075,6 +9075,161 @@ fn match_triggered_self_or_creature_or_artifact_dies_drain(
         })
 }
 
+/// Issue #363 exact clause templates for the four-card Standard Dragonstorm cohort. These five
+/// templates reuse only shipped typed vocabulary. The Dragon-return clause prints on all five
+/// Dragonstorm cards in the pinned corpus, so it keeps two named positive calibrations; each ETB
+/// clause prints on exactly one corpus card, so it uses a documented singleton rather than a
+/// fabricated second example (verified across the full pinned `oracle_cards` bulk corpus).
+const ISSUE_363_DRAGON_RETURN_CLAUSE: &str =
+    "When a Dragon you control enters, return this enchantment to its owner's hand.";
+const ISSUE_363_DRAIN_SURVEIL_CLAUSE: &str =
+    "When this enchantment enters, each opponent loses 2 life and you gain 2 life. Surveil 2.";
+const ISSUE_363_SEARCH_TWO_BASIC_TAPPED_CLAUSE: &str =
+    "When this enchantment enters, search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.";
+const ISSUE_363_DRAW_TWO_DISCARD_ONE_CLAUSE: &str =
+    "When this enchantment enters, draw two cards, then discard a card.";
+const ISSUE_363_TWO_SOLDIER_CLAUSE: &str =
+    "When this enchantment enters, create two 2/2 white Soldier creature tokens.";
+
+/// CR 603.6a / 400.3: "When a Dragon you control enters, return this enchantment to its owner's
+/// hand" watches only the controller's Dragon entries and returns the source object to its owner's
+/// hand (CR 400.3 keeps the card in its owner's hand even when another player controls the
+/// source). This exact line prints on all five Dragonstorm cards in the pinned corpus; only an
+/// enchantment face carries it. "Whenever", an optional "you may", "another Dragon", a non-Dragon
+/// subtype, an opponent scope, and riders stay unsupported.
+fn match_triggered_dragon_you_control_enters_return_self(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_enchantment && text == ISSUE_363_DRAGON_RETURN_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverPermanentEntersBattlefield {
+                controller: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    required_subtypes: vec!["Dragon".into()],
+                    ..PermanentEventFilter::default()
+                },
+                creature_filter: None,
+            },
+            vec![SpellEffectKind::ReturnToOwnersHand {
+                subject: EffectSubject::Source,
+            }],
+        )
+    })
+}
+
+/// CR 603.6a / 119.3 / 701.25: the enchantment's own entry trigger drains each opponent for two,
+/// gains its controller two life (CR 119.3 adjusts the life total for both), then surveils two
+/// (CR 701.25), in printed order. A controller-only or target-opponent loss, another drain amount,
+/// a missing or different surveil count, a reordered drain, and riders stay unsupported.
+fn match_etb_enchantment_drain_two_surveil_two(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_enchantment && text == ISSUE_363_DRAIN_SURVEIL_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WhenSelfEntersBattlefield,
+            vec![
+                SpellEffectKind::LoseLife {
+                    amount: LifeAmount::Fixed(2),
+                    who: PlayerRecipient::EachOpponent,
+                },
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(2),
+                },
+                SpellEffectKind::LibraryPartition {
+                    count: 2,
+                    top_min: 0,
+                    top_max: None,
+                    kind: LibraryPartitionKind::Surveil,
+                },
+            ],
+        )
+    })
+}
+
+/// CR 603.6a / 701.23 / 614.1d: the enchantment's own entry trigger searches the controller's
+/// library for up to two basic land cards (CR 701.23), puts them onto the battlefield tapped (the
+/// "enters the battlefield ... tapped" replacement, CR 614.1d), then shuffles. `count: 2` is the
+/// up-to bound the search resolution publishes as min 0 / max 2. No targeting. A mandatory single
+/// land, three lands, an untapped destination, "you may search", a reveal-to-hand destination, and
+/// riders stay unsupported.
+fn match_etb_enchantment_search_two_basic_lands_tapped(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_enchantment && text == ISSUE_363_SEARCH_TWO_BASIC_TAPPED_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WhenSelfEntersBattlefield,
+            vec![SpellEffectKind::SearchLibrary {
+                who: PlayerRecipient::Controller,
+                optional: false,
+                count: 2,
+                count_by_cast_cost: None,
+                filter: Some(ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::BasicLand),
+                    ..ZoneCardFilter::default()
+                }),
+                slots: Vec::new(),
+                zones: SearchZoneSelection::default(),
+                destination: SearchDestination::Battlefield { tapped: true },
+                conditional_destination: None,
+                shuffle: true,
+                reveal: false,
+                result_id: None,
+            }],
+        )
+    })
+}
+
+/// CR 603.6a / 121.1 / 701.9: the enchantment's own entry trigger draws two cards (CR 121.1),
+/// then the controller privately discards one (CR 701.9), in printed order, through the shipped
+/// `DrawDiscard` loot shape. Draw one, discard two, discard-then-draw, "you may discard", and
+/// riders stay unsupported.
+fn match_etb_enchantment_draw_two_then_discard_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_enchantment && text == ISSUE_363_DRAW_TWO_DISCARD_ONE_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WhenSelfEntersBattlefield,
+            vec![SpellEffectKind::DrawDiscard {
+                who: PlayerRecipient::Controller,
+                draw_count: 2,
+                discard_count: 1,
+                order: DrawDiscardOrder::DrawThenDiscard,
+                optional: false,
+            }],
+        )
+    })
+}
+
+/// CR 603.6a / 111.1: the enchantment's own entry trigger creates two registered 2/2 white
+/// Soldier creature tokens (CR 111.1). One token, tapped tokens, another size or color, and riders
+/// stay unsupported.
+fn match_etb_enchantment_two_soldier_tokens(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_enchantment && text == ISSUE_363_TWO_SOLDIER_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WhenSelfEntersBattlefield,
+            vec![SpellEffectKind::CreateTokens {
+                token: "soldier_w_2_2".into(),
+                count: Amount::Fixed(2),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }],
+        )
+    })
+}
+
 macro_rules! calibrations {
     ($($positive_name:literal => $positive_clause:literal),+; $($negative:literal),+ $(,)?) => {
         RecipeCalibration {
@@ -14490,6 +14645,97 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Whenever this creature or another creature or artifact you control dies, target opponent loses 2 life and you gain 2 life.",
             "Whenever another creature or artifact you control dies, target opponent loses 1 life and you gain 1 life.",
             "Whenever this creature or another creature or artifact you control dies, target opponent loses 1 life and you gain 1 life. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.dragon_you_control_enters.return_self_to_hand"),
+        label: "a controlled Dragon enters and returns this enchantment to its owner's hand",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_triggered_dragon_you_control_enters_return_self,
+        calibration: calibrations!(
+            "Corroding Dragonstorm" => "When a Dragon you control enters, return this enchantment to its owner's hand.",
+            "Encroaching Dragonstorm" => "When a Dragon you control enters, return this enchantment to its owner's hand.";
+            // Every Dragonstorm card in the pinned full Oracle corpus prints this exact line
+            // (Corroding, Encroaching, Roiling, Teeming, Breaching); only enchantment faces carry
+            // it. The unprefixed "Whenever", optional, self-excluding, non-Dragon, artifact-source,
+            // and rider forms stay unsupported.
+            "When a Dragon enters, return this enchantment to its owner's hand.",
+            "When a Dragon you control enters, return this artifact to its owner's hand.",
+            "When a Dragon you control enters, return this enchantment to its owner's hand. Draw a card.",
+            "Whenever a Dragon you control enters, you may return this enchantment to its owner's hand.",
+            "When another Dragon you control enters, return this enchantment to its owner's hand."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.enchantment.each_opponent_loses_two_you_gain_two.surveil_two"),
+        label: "enchantment ETB drain two then surveil two",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_enchantment_drain_two_surveil_two,
+        // Corroding Dragonstorm is the only card in the pinned full Oracle `oracle_cards` corpus
+        // that prints this exact clause; the singleton is deliberate, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Corroding Dragonstorm" => "When this enchantment enters, each opponent loses 2 life and you gain 2 life. Surveil 2.";
+            // Another drain amount, a controller-only loss, a different or missing surveil, a
+            // reordered drain, and riders stay unsupported.
+            "When this enchantment enters, each opponent loses 1 life and you gain 1 life. Surveil 2.",
+            "When this enchantment enters, you lose 2 life and you gain 2 life. Surveil 2.",
+            "When this enchantment enters, each opponent loses 2 life and you gain 2 life. Surveil 1.",
+            "When this enchantment enters, each opponent loses 2 life and you gain 2 life.",
+            "When this enchantment enters, you gain 2 life and each opponent loses 2 life. Surveil 2.",
+            "When this enchantment enters, each opponent loses 2 life and you gain 2 life. Surveil 2. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.enchantment.search_up_to_two_basic_lands.tapped"),
+        label: "enchantment ETB search up to two basic lands onto the battlefield tapped",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_enchantment_search_two_basic_lands_tapped,
+        // Encroaching Dragonstorm is the only card in the pinned full Oracle corpus that prints
+        // this exact clause; the singleton is deliberate, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Encroaching Dragonstorm" => "When this enchantment enters, search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.";
+            // One or three lands, an untapped destination, an optional search, a reveal-to-hand
+            // destination, and riders stay unsupported.
+            "When this enchantment enters, search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            "When this enchantment enters, search your library for up to three basic land cards, put them onto the battlefield tapped, then shuffle.",
+            "When this enchantment enters, search your library for up to two basic land cards, put them onto the battlefield, then shuffle.",
+            "When this enchantment enters, you may search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.",
+            "When this enchantment enters, search your library for up to two basic land cards, reveal them, put them into your hand, then shuffle.",
+            "When this enchantment enters, search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.enchantment.draw_two_then_discard_one"),
+        label: "enchantment ETB draw two then discard one",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_enchantment_draw_two_then_discard_one,
+        // Roiling Dragonstorm is the only card in the pinned full Oracle corpus that prints this
+        // exact clause; the singleton is deliberate, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Roiling Dragonstorm" => "When this enchantment enters, draw two cards, then discard a card.";
+            // Draw one, discard two, discard-then-draw order, an optional discard, and riders stay
+            // unsupported.
+            "When this enchantment enters, draw a card, then discard a card.",
+            "When this enchantment enters, draw two cards, then discard two cards.",
+            "When this enchantment enters, discard a card, then draw two cards.",
+            "When this enchantment enters, draw two cards, then you may discard a card.",
+            "When this enchantment enters, draw two cards, then discard a card. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.enchantment.create_two_soldier_tokens"),
+        label: "enchantment ETB create two 2/2 white Soldier tokens",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_enchantment_two_soldier_tokens,
+        // Teeming Dragonstorm is the only card in the pinned full Oracle corpus that prints this
+        // exact clause; the singleton is deliberate, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Teeming Dragonstorm" => "When this enchantment enters, create two 2/2 white Soldier creature tokens.";
+            // One token, tapped tokens, another size, and riders stay unsupported.
+            "When this enchantment enters, create a 2/2 white Soldier creature token.",
+            "When this enchantment enters, create two tapped 2/2 white Soldier creature tokens.",
+            "When this enchantment enters, create two 1/1 white Soldier creature tokens.",
+            "When this enchantment enters, create two 2/2 white Soldier creature tokens. Draw a card."
         ),
     },
 ];
@@ -27806,6 +28052,280 @@ mod tests {
                     .expect("unambiguous")
                     .is_some(),
                 "non-creature-source template must still match: {clause}"
+            );
+        }
+    }
+
+    const ISSUE_363_DRAGON_RETURN_CLAUSE: &str =
+        "When a Dragon you control enters, return this enchantment to its owner's hand.";
+    const ISSUE_363_DRAIN_SURVEIL_CLAUSE: &str =
+        "When this enchantment enters, each opponent loses 2 life and you gain 2 life. Surveil 2.";
+    const ISSUE_363_SEARCH_TWO_BASIC_TAPPED_CLAUSE: &str =
+        "When this enchantment enters, search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.";
+    const ISSUE_363_DRAW_TWO_DISCARD_ONE_CLAUSE: &str =
+        "When this enchantment enters, draw two cards, then discard a card.";
+    const ISSUE_363_TWO_SOLDIER_CLAUSE: &str =
+        "When this enchantment enters, create two 2/2 white Soldier creature tokens.";
+
+    fn issue_363_exact_id(clause: &str, is_spell: bool, context: &RecipeContext) -> &'static str {
+        match_clause(clause, is_spell, context)
+            .expect("issue #363 clause must not be ambiguous")
+            .unwrap_or_else(|| panic!("issue #363 clause must be supported: {clause}"))
+            .id
+            .as_str()
+    }
+
+    fn issue_363_recipe(id: &str) -> &'static Recipe {
+        CATALOG
+            .iter()
+            .find(|recipe| recipe.id.as_str() == id)
+            .unwrap_or_else(|| panic!("missing recipe {id}"))
+    }
+
+    #[test]
+    fn issue_363_exact_clauses_match_their_recipes() {
+        for (clause, expected) in [
+            (
+                ISSUE_363_DRAGON_RETURN_CLAUSE,
+                "triggered.dragon_you_control_enters.return_self_to_hand",
+            ),
+            (
+                ISSUE_363_DRAIN_SURVEIL_CLAUSE,
+                "triggered.etb.enchantment.each_opponent_loses_two_you_gain_two.surveil_two",
+            ),
+            (
+                ISSUE_363_SEARCH_TWO_BASIC_TAPPED_CLAUSE,
+                "triggered.etb.enchantment.search_up_to_two_basic_lands.tapped",
+            ),
+            (
+                ISSUE_363_DRAW_TWO_DISCARD_ONE_CLAUSE,
+                "triggered.etb.enchantment.draw_two_then_discard_one",
+            ),
+            (
+                ISSUE_363_TWO_SOLDIER_CLAUSE,
+                "triggered.etb.enchantment.create_two_soldier_tokens",
+            ),
+        ] {
+            assert_eq!(
+                issue_363_exact_id(clause, false, &context()),
+                expected,
+                "{clause}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_363_recipes_have_stable_ids_and_surfaces() {
+        for (id, surface) in [
+            (
+                "triggered.dragon_you_control_enters.return_self_to_hand",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "triggered.etb.enchantment.each_opponent_loses_two_you_gain_two.surveil_two",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "triggered.etb.enchantment.search_up_to_two_basic_lands.tapped",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "triggered.etb.enchantment.draw_two_then_discard_one",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "triggered.etb.enchantment.create_two_soldier_tokens",
+                RecipeSurface::EtbAbility,
+            ),
+        ] {
+            assert_eq!(issue_363_recipe(id).surface, surface, "{id}");
+            assert!(
+                !issue_363_recipe(id)
+                    .calibration
+                    .negative_near_misses
+                    .is_empty(),
+                "{id} needs reviewed negatives"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_363_dragon_return_trigger_uses_controller_dragon_filter_and_source_bounce() {
+        let Some(RecipeEmission::TriggeredAbility(ability)) =
+            match_clause(ISSUE_363_DRAGON_RETURN_CLAUSE, false, &context())
+                .expect("unambiguous")
+                .map(|matched| matched.emission)
+        else {
+            panic!("the Dragon-return clause must emit a triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverPermanentEntersBattlefield {
+                controller: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    required_subtypes: vec!["Dragon".into()],
+                    ..PermanentEventFilter::default()
+                },
+                creature_filter: None,
+            }
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::ReturnToOwnersHand {
+                subject: EffectSubject::Source,
+            }]
+        );
+        assert!(ability.targeting.is_none());
+        assert!(!ability.may);
+    }
+
+    #[test]
+    fn issue_363_drain_surveil_orders_each_opponent_then_controller_then_surveil() {
+        let Some(RecipeEmission::TriggeredAbility(ability)) =
+            match_clause(ISSUE_363_DRAIN_SURVEIL_CLAUSE, false, &context())
+                .expect("unambiguous")
+                .map(|matched| matched.emission)
+        else {
+            panic!("the drain-plus-surveil clause must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.effect,
+            [
+                SpellEffectKind::LoseLife {
+                    amount: LifeAmount::Fixed(2),
+                    who: PlayerRecipient::EachOpponent,
+                },
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(2),
+                },
+                SpellEffectKind::LibraryPartition {
+                    count: 2,
+                    top_min: 0,
+                    top_max: None,
+                    kind: LibraryPartitionKind::Surveil,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn issue_363_search_reaches_up_to_two_basic_lands_onto_the_battlefield_tapped() {
+        let Some(RecipeEmission::TriggeredAbility(ability)) =
+            match_clause(ISSUE_363_SEARCH_TWO_BASIC_TAPPED_CLAUSE, false, &context())
+                .expect("unambiguous")
+                .map(|matched| matched.emission)
+        else {
+            panic!("the two-basic-land search clause must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::SearchLibrary {
+                who: PlayerRecipient::Controller,
+                optional: false,
+                count: 2,
+                count_by_cast_cost: None,
+                filter: Some(ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::BasicLand),
+                    ..ZoneCardFilter::default()
+                }),
+                slots: Vec::new(),
+                zones: SearchZoneSelection::default(),
+                destination: SearchDestination::Battlefield { tapped: true },
+                conditional_destination: None,
+                shuffle: true,
+                reveal: false,
+                result_id: None,
+            }]
+        );
+        assert!(ability.targeting.is_none());
+    }
+
+    #[test]
+    fn issue_363_draw_two_then_discard_one_uses_the_shipped_loot_shape() {
+        let Some(RecipeEmission::TriggeredAbility(ability)) =
+            match_clause(ISSUE_363_DRAW_TWO_DISCARD_ONE_CLAUSE, false, &context())
+                .expect("unambiguous")
+                .map(|matched| matched.emission)
+        else {
+            panic!("the draw-two-discard-one clause must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::DrawDiscard {
+                who: PlayerRecipient::Controller,
+                draw_count: 2,
+                discard_count: 1,
+                order: DrawDiscardOrder::DrawThenDiscard,
+                optional: false,
+            }]
+        );
+    }
+
+    #[test]
+    fn issue_363_two_soldier_tokens_use_the_registered_two_two_white_token() {
+        let Some(RecipeEmission::TriggeredAbility(ability)) =
+            match_clause(ISSUE_363_TWO_SOLDIER_CLAUSE, false, &context())
+                .expect("unambiguous")
+                .map(|matched| matched.emission)
+        else {
+            panic!("the two-Soldier clause must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::CreateTokens {
+                token: "soldier_w_2_2".into(),
+                count: Amount::Fixed(2),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }]
+        );
+    }
+
+    #[test]
+    fn issue_363_near_misses_stay_unowned() {
+        for id in [
+            "triggered.dragon_you_control_enters.return_self_to_hand",
+            "triggered.etb.enchantment.each_opponent_loses_two_you_gain_two.surveil_two",
+            "triggered.etb.enchantment.search_up_to_two_basic_lands.tapped",
+            "triggered.etb.enchantment.draw_two_then_discard_one",
+            "triggered.etb.enchantment.create_two_soldier_tokens",
+        ] {
+            let recipe = issue_363_recipe(id);
+            for near_miss in recipe.calibration.negative_near_misses {
+                assert!(
+                    (recipe.matcher)(near_miss, &context()).is_none(),
+                    "{id} accepted near-miss {near_miss:?}"
+                );
+                assert!(
+                    match_clause(near_miss, false, &context())
+                        .expect("unambiguous")
+                        .is_none(),
+                    "the catalog unexpectedly owns {id} near-miss {near_miss:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn issue_363_source_kind_gating_stays_on_each_template() {
+        let mut nonenchantment = context();
+        nonenchantment.source_is_enchantment = false;
+        for clause in [
+            ISSUE_363_DRAGON_RETURN_CLAUSE,
+            ISSUE_363_DRAIN_SURVEIL_CLAUSE,
+            ISSUE_363_SEARCH_TWO_BASIC_TAPPED_CLAUSE,
+            ISSUE_363_DRAW_TWO_DISCARD_ONE_CLAUSE,
+            ISSUE_363_TWO_SOLDIER_CLAUSE,
+        ] {
+            assert_eq!(
+                match_clause(clause, false, &nonenchantment).expect("unambiguous"),
+                None,
+                "enchantment-source template must stay gated: {clause}"
             );
         }
     }

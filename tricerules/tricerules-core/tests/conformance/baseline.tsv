@@ -472,6 +472,7 @@ coral_eel	0	cast	exercised
 coral_merfolk	0	cast	exercised
 coral_sword	0	ability:0	exercised
 coral_sword	0	cast	exercised
+corroding_dragonstorm	0	cast	exercised
 corrupt_court_official	0	cast	exercised
 council_of_advisors	0	cast	exercised
 counsel_of_the_soratami	0	cast	exercised
@@ -698,6 +699,7 @@ elvish_regrower	0	cast	exercised
 elvish_visionary	0	cast	exercised
 elvish_warrior	0	cast	exercised
 embermouth_sentinel	0	cast	exercised
+encroaching_dragonstorm	0	cast	exercised
 endless_one	0	cast	exercised
 enduring_curiosity	0	cast	exercised
 enforcer_griffin	0	cast	exercised
@@ -1878,6 +1880,7 @@ riverwalk_technique	0	cast	exercised
 roamers_routine	0	cast	exercised
 roc_hunter	0	cast	exercised
 rocky_rebuke	0	cast	exercised
+roiling_dragonstorm	0	cast	exercised
 romantic_rendezvous	0	cast	exercised
 rooftop_assassin	0	cast	exercised
 rooftop_percher	0	cast	exercised
@@ -2318,6 +2321,7 @@ tatterkite	0	cast	exercised
 tcri_building	0	ability:0	exercised
 tcri_building	0	land	exercised
 teapot_slinger	0	cast	exercised
+teeming_dragonstorm	0	cast	exercised
 teferis_protege	0	ability:0	exercised
 teferis_protege	0	cast	exercised
 tempest_angler	0	cast	exercised
