@@ -22,7 +22,8 @@
 //! to memoize later without changing callers.
 
 use super::history::{
-    graveyard_aggregate_value, player_life_aggregate_value, relative_player_set_contains,
+    battlefield_quantity_value, graveyard_aggregate_value, graveyard_named_card_count,
+    player_life_aggregate_value, relative_player_set_contains,
 };
 use super::*;
 
@@ -176,6 +177,56 @@ impl CharacteristicsEvaluator<'_> {
         self.apply_layer_6_abilities(object, &mut result, &ordered_effects);
         self.apply_layer_7_power_toughness(oid, object, &mut result, &ordered_effects);
         Some(result)
+    }
+
+    /// Evaluate a public, dependency-free count for a static P/T scaling modifier inside the
+    /// layer pipeline. Battlefield counts use pre-layer-7 derived characteristics, so a layer-7
+    /// effect cannot recurse into itself; graveyard counts use printed public card data
+    /// (CR 404.2, 613.8). Mirrors `CountExpression::validate_static_count`.
+    fn static_scaling_count(
+        &self,
+        expression: &CountExpression,
+        context: ConditionContext<'_>,
+    ) -> Option<i64> {
+        match expression {
+            CountExpression::BattlefieldPermanents { .. }
+            | CountExpression::BattlefieldCreatures { .. }
+            | CountExpression::BattlefieldMaximum { .. } => {
+                battlefield_quantity_value(self.state, expression, context, |oid| {
+                    self.characteristics_through_layer_5(oid)
+                })
+            }
+            CountExpression::GraveyardCards { owners, filter } => {
+                Some(i64::from(graveyard_aggregate_value(
+                    self.state,
+                    self.registry,
+                    *owners,
+                    GraveyardAggregate::CardCount,
+                    filter.as_ref(),
+                    context.controller,
+                    context.resolving_spell_id,
+                )))
+            }
+            CountExpression::GraveyardCardsNamed { owners, name } => {
+                Some(i64::from(graveyard_named_card_count(
+                    self.state,
+                    self.registry,
+                    *owners,
+                    name,
+                    context.controller,
+                    context.resolving_spell_id,
+                )))
+            }
+            CountExpression::Affine { constant, terms } => {
+                let mut total = i64::from(*constant);
+                for term in terms {
+                    let value = self.static_scaling_count(&term.quantity, context)?;
+                    total = total.saturating_add(i64::from(term.coefficient).saturating_mul(value));
+                }
+                Some(total)
+            }
+            _ => None,
+        }
     }
 
     /// Snapshot through CR 613 layer 5. Conditional layer-6/7 effects may inspect controller,
@@ -1383,13 +1434,7 @@ impl CharacteristicsEvaluator<'_> {
                         stack_item: None,
                         previous_effect_result: None,
                     };
-                    let matches = super::history::battlefield_quantity_value(
-                        self.state,
-                        count,
-                        context,
-                        |candidate| self.characteristics_through_layer_5(candidate),
-                    )
-                    .unwrap_or(0);
+                    let matches = self.static_scaling_count(count, context).unwrap_or(0);
                     if *power_per_match != 0 {
                         power = Some(i64::from(*power_per_match).saturating_mul(matches));
                     }
@@ -1448,11 +1493,7 @@ impl CharacteristicsEvaluator<'_> {
                     stack_item: None,
                     previous_effect_result: None,
                 };
-                let count =
-                    super::history::battlefield_quantity_value(self.state, count, context, |oid| {
-                        self.characteristics_through_layer_5(oid)
-                    })
-                    .unwrap_or(0);
+                let count = self.static_scaling_count(count, context).unwrap_or(0);
                 if let Some(value) = &mut power {
                     *value = value.saturating_add((power_per_match as i64).saturating_mul(count));
                 }
@@ -2102,5 +2143,159 @@ mod tests {
         );
         assert_eq!(engine.effective_power(theirs), Some(2));
         assert_eq!(engine.effective_power(late), Some(2));
+    }
+
+    /// Issue #342: a registry whose only cards are fixtures for public graveyard counts.
+    fn graveyard_scaling_engine(seed: u64) -> GameEngine {
+        let mut engine = GameEngine::new_with_default_decks(seed, &[0, 1], 20).expect("new engine");
+        engine.registry = Box::leak(Box::new(
+            CardRegistry::from_chunks_and_tokens(
+                &[
+                    r#"(id: "gy_source", name: "Gy Source", face_id: "gy_source", types: ["Creature"], power: 1, toughness: 1,
+                        static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                            definition: CountScaledSelfPt(count: GraveyardCards(owners: Controller, filter: Some((card_type: Some(Creature)))), power_per_match: 1, toughness_per_match: 1))])"#,
+                    r#"(id: "gy_affine", name: "Gy Affine", face_id: "gy_affine", types: ["Creature"], power: 1, toughness: 1,
+                        static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                            definition: CountScaledSelfPt(count: Affine(constant: 0, terms: [(coefficient: 1, quantity: BattlefieldCreatures(filter: (controllers: Controller))), (coefficient: 1, quantity: GraveyardCards(owners: Controller, filter: Some((card_type: Some(Creature)))))]), power_per_match: 1, toughness_per_match: 1))])"#,
+                    r#"(id: "gy_aura", name: "Gy Aura", face_id: "gy_aura", types: ["Enchantment", "Aura"],
+                        spell_effect: [AuraAttach(target: (kind: Creature))],
+                        static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                            definition: AttachedModifier(count: GraveyardCards(owners: Controller, filter: Some((card_type: Some(Creature)))), power_per_match: 1, toughness_per_match: 1))])"#,
+                    r#"(id: "gy_creature", name: "Gy Creature", face_id: "gy_creature", types: ["Creature"], power: 1, toughness: 1)"#,
+                    r#"(id: "gy_land", name: "Gy Land", face_id: "gy_land", types: ["Land"])"#,
+                ],
+                &[],
+            )
+            .expect("graveyard-scaling fixtures"),
+        ));
+        engine
+    }
+
+    fn insert_fixture(
+        engine: &mut GameEngine,
+        controller: PlayerId,
+        card_id: &str,
+        zone: Zone,
+    ) -> ObjectId {
+        let oid = engine.state.next_object_id;
+        engine.state.next_object_id += 1;
+        engine.state.objects.insert(
+            oid,
+            GameObject {
+                id: oid,
+                owner: controller,
+                base_controller: controller,
+                controller,
+                card_id: card_id.to_string(),
+                token_origin: None,
+                token_faces: None,
+                copiable_values: None,
+                copy_revision: 0,
+                zone,
+                tapped: false,
+                summoning_sick: false,
+                power: Some(1),
+                toughness: Some(1),
+                damage: 0,
+                deathtouch_damage: false,
+                counters: BTreeMap::new(),
+                counter_timestamps: BTreeMap::new(),
+                attached_to: None,
+                regeneration_shields: 0,
+                must_attack_if_able: false,
+                must_block_if_able: false,
+                face_up_index: 0,
+                face_down: false,
+            },
+        );
+        match zone {
+            Zone::Battlefield => engine.state.players[controller as usize]
+                .battlefield
+                .push(oid),
+            Zone::Graveyard => engine.state.players[controller as usize]
+                .graveyard
+                .push(oid),
+            _ => {}
+        }
+        oid
+    }
+
+    #[test]
+    fn issue_342_graveyard_counts_scale_static_and_attached_pt() {
+        let mut engine = graveyard_scaling_engine(342_001);
+        let source = insert_fixture(&mut engine, 0, "gy_source", Zone::Battlefield);
+        engine.emit_static_abilities_on_enter(source);
+        assert_eq!(
+            (
+                engine.effective_power(source),
+                engine.effective_toughness(source)
+            ),
+            (Some(1), Some(1)),
+            "an empty graveyard contributes nothing"
+        );
+
+        insert_fixture(&mut engine, 0, "gy_creature", Zone::Graveyard);
+        insert_fixture(&mut engine, 0, "gy_land", Zone::Graveyard);
+        insert_fixture(&mut engine, 1, "gy_creature", Zone::Graveyard);
+        assert_eq!(
+            (
+                engine.effective_power(source),
+                engine.effective_toughness(source)
+            ),
+            (Some(2), Some(2)),
+            "only the controller's graveyard creature cards count"
+        );
+
+        let aura = insert_fixture(&mut engine, 0, "gy_aura", Zone::Battlefield);
+        engine.emit_static_abilities_on_enter(aura);
+        assert_eq!(
+            (
+                engine.effective_power(source),
+                engine.effective_toughness(source)
+            ),
+            (Some(2), Some(2)),
+            "an unattached Aura contributes nothing"
+        );
+        engine
+            .state
+            .objects
+            .get_mut(&aura)
+            .expect("aura")
+            .attached_to = Some(AttachmentRecipient::Object(source));
+        assert_eq!(
+            (
+                engine.effective_power(source),
+                engine.effective_toughness(source)
+            ),
+            (Some(3), Some(3)),
+            "the attached graveyard count scaling adds a second point"
+        );
+    }
+
+    #[test]
+    fn issue_342_affine_static_scaling_combines_battlefield_and_graveyard() {
+        let mut engine = graveyard_scaling_engine(342_002);
+        let source = insert_fixture(&mut engine, 0, "gy_affine", Zone::Battlefield);
+        engine.emit_static_abilities_on_enter(source);
+        assert_eq!(
+            engine.effective_power(source),
+            Some(2),
+            "the source counts itself as one battlefield creature"
+        );
+
+        insert_fixture(&mut engine, 0, "gy_creature", Zone::Battlefield);
+        insert_fixture(&mut engine, 0, "gy_creature", Zone::Graveyard);
+        assert_eq!(
+            engine.effective_power(source),
+            Some(4),
+            "battlefield and graveyard terms both add"
+        );
+
+        insert_fixture(&mut engine, 1, "gy_creature", Zone::Battlefield);
+        assert_eq!(
+            engine.effective_power(source),
+            Some(4),
+            "opponents' permanents do not count"
+        );
     }
 }

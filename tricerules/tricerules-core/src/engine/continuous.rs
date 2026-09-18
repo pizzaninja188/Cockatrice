@@ -511,6 +511,9 @@ impl GameEngine {
                     set_colors,
                     delta_power,
                     delta_toughness,
+                    count,
+                    power_per_match,
+                    toughness_per_match,
                     set_power,
                     set_toughness,
                     remove_all_abilities,
@@ -574,6 +577,21 @@ impl GameEngine {
                             kind: ContinuousEffectKind::PtModify {
                                 delta_power,
                                 delta_toughness,
+                            },
+                            condition: condition.clone(),
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    if let Some(count) = count {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::PtModifyByCount {
+                                count: count.clone(),
+                                power_per_match,
+                                toughness_per_match,
                             },
                             condition: condition.clone(),
                             duration: EffectDuration::WhileSourceOnBattlefield,

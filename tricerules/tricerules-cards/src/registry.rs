@@ -771,6 +771,9 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             set_colors,
             delta_power,
             delta_toughness,
+            count,
+            power_per_match,
+            toughness_per_match,
             set_power,
             set_toughness,
             remove_all_abilities,
@@ -790,6 +793,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             }
             if *delta_power == 0
                 && *delta_toughness == 0
+                && count.is_none()
                 && set_power.is_none()
                 && set_toughness.is_none()
                 && !remove_all_abilities
@@ -814,6 +818,21 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     id: card.id.clone(),
                     reason: "AttachedModifier must set both power and toughness".into(),
                 });
+            }
+            if let Some(expression) = count {
+                expression.validate_static_count().map_err(|reason| {
+                    RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    }
+                })?;
+                if *power_per_match == 0 && *toughness_per_match == 0 {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "AttachedModifier count scaling must modify power or toughness"
+                            .into(),
+                    });
+                }
             }
             if !add_types.is_empty() && set_types.is_some() {
                 return Err(RegistryError::InvalidCard {
@@ -874,6 +893,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 }
                 if (*delta_power != 0
                     || *delta_toughness != 0
+                    || count.is_some()
                     || set_power.is_some()
                     || *remove_all_abilities
                     || !keywords.is_empty())

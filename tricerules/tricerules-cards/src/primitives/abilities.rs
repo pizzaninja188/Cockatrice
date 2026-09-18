@@ -1806,6 +1806,16 @@ pub enum StaticAbilityDef {
         delta_power: i32,
         #[serde(default)]
         delta_toughness: i32,
+        /// CR 613.4c: the attached object gets `power_per_match`/`toughness_per_match` for each
+        /// element of a dependency-free public count (graveyard cards, battlefield permanents).
+        /// Avatar Destiny and Song of Stupefaction use the attached-scope counterpart of
+        /// [`Self::CountScaledSelfPt`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        count: Option<super::CountExpression>,
+        #[serde(default, skip_serializing_if = "is_zero_i32")]
+        power_per_match: i32,
+        #[serde(default, skip_serializing_if = "is_zero_i32")]
+        toughness_per_match: i32,
         #[serde(default)]
         set_power: Option<u32>,
         #[serde(default)]
@@ -1925,8 +1935,9 @@ pub enum StaticAbilityDef {
         #[serde(default)]
         can_attack_as_though_without_defender: bool,
     },
-    /// CR 613 layer 7c: this permanent gets a signed amount for each matching battlefield
-    /// permanent. The count uses pre-layer-7 type/subtype and physical-state facts.
+    /// CR 613 layer 7c: this permanent gets a signed amount for each element of a dependency-free
+    /// public count. Battlefield counts use pre-layer-7 type/subtype and physical-state facts;
+    /// graveyard card counts use printed public card data (CR 404.2).
     CountScaledSelfPt {
         count: super::CountExpression,
         power_per_match: i32,
@@ -1938,6 +1949,10 @@ pub enum StaticAbilityDef {
     /// CR 305.1 / 611.3: the controller may play lands from their own graveyard while this
     /// permanent is on the battlefield. Icetill Explorer, Crucible of Worlds.
     PlayLandsFromOwnGraveyard,
+}
+
+fn is_zero_i32(value: &i32) -> bool {
+    *value == 0
 }
 
 #[cfg(test)]

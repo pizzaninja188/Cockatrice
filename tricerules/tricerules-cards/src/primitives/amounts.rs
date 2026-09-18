@@ -118,10 +118,27 @@ impl CountExpression {
     }
     pub(crate) fn validate_static_count(&self) -> Result<(), String> {
         self.validate()?;
+        if self.is_static_scaling_safe() {
+            Ok(())
+        } else {
+            Err("static P/T scaling requires a public pre-layer-7 count of battlefield permanents/creatures or graveyard cards; other quantities require CR 613.8 dependency ordering".into())
+        }
+    }
+
+    /// Whether a static P/T modifier can evaluate this count while computing characteristics.
+    /// Battlefield counts read pre-layer-7 derived characteristics; graveyard counts read printed
+    /// public card data (CR 404.2, 613.8). Event, result, and source-relative quantities are
+    /// excluded because they are undefined outside a resolving event or need layer-7 ordering.
+    fn is_static_scaling_safe(&self) -> bool {
         match self {
-            Self::BattlefieldPermanents { .. } => Ok(()),
-            Self::BattlefieldCreatures { filter } if filter.required_keywords.is_empty() => Ok(()),
-            _ => Err("static P/T scaling requires a pre-layer-7 battlefield count; other quantities require CR 613.8 dependency ordering".into()),
+            Self::BattlefieldPermanents { .. } => true,
+            // A keyword-dependent creature scope would need CR 613 dependency ordering in layer 6.
+            Self::BattlefieldCreatures { filter } => filter.required_keywords.is_empty(),
+            Self::GraveyardCards { .. } | Self::GraveyardCardsNamed { .. } => true,
+            Self::Affine { terms, .. } => terms
+                .iter()
+                .all(|term| term.quantity.is_static_scaling_safe()),
+            _ => false,
         }
     }
     pub(crate) fn validate(&self) -> Result<(), String> {

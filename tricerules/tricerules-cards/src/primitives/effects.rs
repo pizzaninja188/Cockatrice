@@ -5061,7 +5061,9 @@ pub enum ContinuousEffectKind {
         delta_power: i32,
         delta_toughness: i32,
     },
-    /// CR 613 layer 7c dynamic self modifier from a safe pre-layer-7 battlefield count.
+    /// CR 613 layer 7c dynamic P/T modifier from a dependency-free public count. Battlefield
+    /// counts use pre-layer-7 type/subtype and physical-state facts; graveyard counts use printed
+    /// public card data (CR 404.2). Emitted for both self scaling and attached scopes.
     PtModifyByCount {
         count: CountExpression,
         power_per_match: i32,

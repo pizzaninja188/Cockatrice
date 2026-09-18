@@ -404,6 +404,36 @@ pub(super) fn player_life_aggregate_value(
     }
 }
 
+/// Count nontoken card objects with `name` in the selected players' public graveyards. Shared by
+/// [`CountExpression::GraveyardCardsNamed`] and the static-scaling evaluator, so both agree on
+/// public graveyard visibility and the resolving spell's own exclusion (CR 404.2, 608.2n).
+pub(super) fn graveyard_named_card_count(
+    state: &GameState,
+    registry: &CardRegistry,
+    owners: RelativePlayerSet,
+    name: &str,
+    controller: PlayerId,
+    resolving_spell_id: Option<ObjectId>,
+) -> u32 {
+    clamp_public_count(
+        state
+            .players
+            .iter()
+            .filter(|player| relative_player_set_contains(state, owners, controller, player.id))
+            .flat_map(|player| player.graveyard.iter().copied())
+            .filter(|oid| Some(*oid) != resolving_spell_id)
+            .filter_map(|oid| state.objects.get(&oid))
+            .filter(|object| {
+                object.zone == Zone::Graveyard
+                    && state.is_card_object(object.id)
+                    && registry
+                        .get(&object.card_id)
+                        .is_some_and(|definition| definition.has_name_outside_stack(name))
+            })
+            .count(),
+    )
+}
+
 pub(super) fn graveyard_aggregate_value(
     state: &GameState,
     registry: &'static CardRegistry,
@@ -1635,31 +1665,14 @@ impl GameEngine {
                 })
             }
             CountExpression::GraveyardCardsNamed { owners, name } => {
-                let count = self
-                    .state
-                    .players
-                    .iter()
-                    .filter(|player| {
-                        relative_player_set_contains(
-                            &self.state,
-                            *owners,
-                            context.controller,
-                            player.id,
-                        )
-                    })
-                    .flat_map(|player| player.graveyard.iter().copied())
-                    .filter(|oid| Some(*oid) != context.resolving_spell_id)
-                    .filter_map(|oid| self.state.objects.get(&oid))
-                    .filter(|object| {
-                        object.zone == Zone::Graveyard
-                            && self.state.is_card_object(object.id)
-                            && self
-                                .registry
-                                .get(&object.card_id)
-                                .is_some_and(|definition| definition.has_name_outside_stack(name))
-                    })
-                    .count();
-                clamp_public_count(count) as i64
+                i64::from(graveyard_named_card_count(
+                    &self.state,
+                    self.registry,
+                    *owners,
+                    name,
+                    context.controller,
+                    context.resolving_spell_id,
+                ))
             }
             CountExpression::CreatureDeathsThisTurn => {
                 self.state.turn_history.current.creatures_died as i64

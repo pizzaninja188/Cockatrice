@@ -138,9 +138,10 @@ pub enum Layout {
 pub enum CharacteristicDefiningAbility {
     /// CR 702.73: this object is every creature type in every zone.
     Changeling,
-    /// CR 208.2a / 604.3 / 613.4a: define one or both P/T components from a live public
-    /// battlefield count in every zone. Lumbering Worldwagon defines only power; Zendikar
-    /// Incarnate defines both power and toughness.
+    /// CR 208.2a / 604.3 / 613.4a: define one or both P/T components from a live public count in
+    /// every zone. Battlefield counts use pre-layer-7 derived characteristics; graveyard card
+    /// counts use printed public card data (CR 404.2). Lumbering Worldwagon defines only power;
+    /// Zendikar Incarnate defines both power and toughness.
     CountScaledPowerToughness {
         count: CountExpression,
         power_per_match: i32,
