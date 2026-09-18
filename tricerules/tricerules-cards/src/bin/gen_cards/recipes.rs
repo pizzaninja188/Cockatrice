@@ -8666,6 +8666,226 @@ fn match_static_control_artifact_plus_one_zero_deathtouch(
         })
 }
 
+/// Issue #352 exact clause templates. Each template is a reusable typed surface with two real
+/// named positive calibrations verified to print the exact clause in the full pinned Oracle bulk
+/// corpus (via the post-#351 candidate report clusters). Every clause is compared by the complete
+/// normalized Oracle line, so an appended, reordered, or additional-clause form remains
+/// unsupported, and source-kind gating stays on the recipes whose printed template requires it.
+const ISSUE_352_PLUS_TWO_PLUS_TWO_FIRST_STRIKE_CLAUSE: &str =
+    "Target creature gets +2/+2 and gains first strike until end of turn.";
+const ISSUE_352_DESTROY_CREATURE_OR_VEHICLE_CLAUSE: &str = "Destroy target creature or Vehicle.";
+const ISSUE_352_ACTIVATED_UNBLOCKABLE_CLAUSE: &str =
+    "{4}{U}: Target creature can't be blocked this turn.";
+const ISSUE_352_SELF_ATTACKS_GAIN_ONE_CLAUSE: &str =
+    "Whenever this creature attacks, you gain 1 life.";
+const ISSUE_352_DISCARD_SACRIFICE_DRAW_CLAUSE: &str =
+    "Discard a card, Sacrifice this creature: Draw a card.";
+const ISSUE_352_DISCARD_INDESTRUCTIBLE_TAP_CLAUSE: &str =
+    "Discard a card: This creature gains indestructible until end of turn. Tap it.";
+const ISSUE_352_ALLIANCE_PUMP_ONE_ZERO_CLAUSE: &str =
+    "Alliance — Whenever another creature you control enters, this creature gets +1/+0 until end of turn.";
+const ISSUE_352_ENTERS_COUNTER_CREATURE_DIED_CLAUSE: &str =
+    "This creature enters with a +1/+1 counter on it if a creature died this turn.";
+
+/// CR 611.2a / 514.2 / 702.7: a fixed +2/+2 pump and a first-strike grant to the same one mandatory
+/// creature target until cleanup. Another pump value, another keyword, a controller restriction, a
+/// missing duration, and riders stay unsupported. The +2/+2 form was previously an interned negative
+/// of the parametric `+N/+0` first-strike recipe; it is now owned here.
+fn match_spell_creature_plus_two_plus_two_first_strike(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_352_PLUS_TWO_PLUS_TWO_FIRST_STRIKE_CLAUSE)
+        .then(|| combat_trick(TargetController::Any, 2, 2, &[Keyword::FirstStrike], false))
+}
+
+/// CR 701.8 / 115.1 / 301.7: "Destroy target creature or Vehicle" is one mandatory permanent
+/// target whose shipped pure-OR `any_of` union is a creature leaf and a Vehicle-subtype leaf; the
+/// Vehicle subtype is an artifact type (CR 205.3g), not a card type, so the union cannot use
+/// `permanent_types`. Single-type destroy, other unions, up-to-one, and riders stay unsupported.
+fn match_spell_destroy_creature_or_vehicle(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_352_DESTROY_CREATURE_OR_VEHICLE_CLAUSE).then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::Destroy {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                any_of: Some(vec![
+                    TargetFilter {
+                        kind: TargetKind::Creature,
+                        ..TargetFilter::default()
+                    },
+                    TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        required_subtypes: vec!["Vehicle".into()],
+                        ..TargetFilter::default()
+                    },
+                ]),
+                ..TargetFilter::default()
+            })),
+        })
+    })
+}
+
+/// CR 602.2 / 509.1b: the printed `{4}{U}` activation binds one mandatory creature target that
+/// can't be blocked until cleanup through the shared combat-restriction path. The cost is captured
+/// as the exact printed symbols (the reviewed template prints `{4}{U}`), so a different cost, a
+/// compound cost, a power restriction, "can't block", an up-to-one target, and riders stay
+/// unsupported.
+fn match_activated_mana_target_creature_cant_be_blocked_this_turn(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_permanent {
+        return None;
+    }
+    (text == ISSUE_352_ACTIVATED_UNBLOCKABLE_CLAUSE).then(|| {
+        utility_activated_ability(
+            context,
+            vec![fixed_mana_cost("{4}{U}")],
+            vec![SpellEffectKind::ApplyCombatRestriction {
+                scope: CombatRestrictionScope::Chosen(TargetFilter {
+                    kind: TargetKind::Creature,
+                    ..TargetFilter::default()
+                }),
+                restriction: CombatRestriction {
+                    cant_be_blocked: true,
+                    ..CombatRestriction::default()
+                },
+            }],
+            single_targeting("Choose target creature"),
+        )
+    })
+}
+
+/// CR 508.1 / 603.2 / 119.3: a mandatory self-attack trigger makes its controller gain one life.
+/// The unprefixed `Whenever this creature attacks` witness, another amount, an opponent-drain
+/// rider, a targeted recipient, a blocks or combat-damage witness, and riders stay unsupported.
+fn match_self_attacks_gain_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_352_SELF_ATTACKS_GAIN_ONE_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0,
+            },
+            vec![SpellEffectKind::GainLife {
+                amount: Amount::Fixed(1),
+            }],
+        )
+    })
+}
+
+/// CR 602.2 / 701.9 / 701.21: the activation pays the discard then the self-sacrifice in printed
+/// cost order and draws one card with no targeting. The printed "this creature" bounds the source
+/// to a creature. Another draw count, a different discard cost, an appended instruction, and either
+/// single-cost form stay unsupported.
+fn match_activated_discard_sacrifice_self_draw_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_352_DISCARD_SACRIFICE_DRAW_CLAUSE).then(|| {
+        utility_activated_ability(
+            context,
+            vec![AbilityCost::Discard, AbilityCost::SacrificeSelf],
+            vec![SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }],
+            None,
+        )
+    })
+}
+
+/// CR 602.2 / 701.9 / 702.12 / 701.26: the activation discards one card as its only cost, then the
+/// source gains indestructible and taps in printed order, both bound to the source without
+/// targeting. Another keyword, a missing tap, another or compound cost, a targeted subject, and
+/// riders stay unsupported.
+fn match_activated_discard_gain_indestructible_tap_self(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_creature {
+        return None;
+    }
+    (text == ISSUE_352_DISCARD_INDESTRUCTIBLE_TAP_CLAUSE).then(|| {
+        utility_activated_ability(
+            context,
+            vec![AbilityCost::Discard],
+            vec![
+                SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::Source,
+                    keywords: vec![Keyword::Indestructible],
+                },
+                SpellEffectKind::Tap {
+                    subject: EffectSubject::Source,
+                },
+            ],
+            None,
+        )
+    })
+}
+
+/// CR 603.6a / 611.2a / 608.2h: the Alliance ability word (matched exactly, em dash included)
+/// gates another creature the controller controls entering and pumps the source +1/+0 until
+/// cleanup. `exclude_source: true` is the printed "another"; the unprefixed wording, a self-
+/// inclusive or any-player trigger, another pump size, a counter, and riders stay unsupported.
+fn match_alliance_other_creature_enters_pump_self_plus_one_zero(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_352_ALLIANCE_PUMP_ONE_ZERO_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverPermanentEntersBattlefield {
+                controller: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    permanent_type: Some(PermanentTypeFilter::Creature),
+                    exclude_source: true,
+                    ..PermanentEventFilter::default()
+                },
+                creature_filter: None,
+            },
+            vec![SpellEffectKind::PumpTarget {
+                power: 1,
+                toughness: 0,
+                scale: None,
+                subject: EffectSubject::Source,
+            }],
+        )
+    })
+}
+
+/// CR 614.1c / 122.6: the source's own entry replacement puts one +1/+1 counter on it only when a
+/// creature died earlier this turn, reusing the shipped `EntersWithCounters` conditional amount
+/// over `CreatureDeathsThisTurn`. Two counters, a conditionless entry counter, an opponent-only or
+/// permanent-departure condition, and riders stay unsupported.
+fn match_static_enters_with_counter_creature_died(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_352_ENTERS_COUNTER_CREATURE_DIED_CLAUSE).then(
+        || {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: StaticAbilityDef::EntersWithCounters {
+                    affected: EntersWithCountersAffected::Self_,
+                    counter: CounterKind::PlusOnePlusOne,
+                    amount: Amount::Conditional {
+                        condition: GameCondition::CreatureDeathsThisTurn {
+                            min: Some(1),
+                            max: None,
+                        },
+                        when_true: 1,
+                        otherwise: 0,
+                    },
+                    cast_cost_condition: None,
+                },
+            })
+        },
+    )
+}
+
 macro_rules! calibrations {
     ($($positive_name:literal => $positive_clause:literal),+; $($negative:literal),+ $(,)?) => {
         RecipeCalibration {
@@ -10568,7 +10788,8 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Herald of Faith" => "Whenever this creature attacks, you gain 2 life.",
             "Shopkeeper's Bane" => "Whenever this creature attacks, you gain 2 life.";
             "Whenever this creature attacks, you may gain 2 life.",
-            "Whenever this creature attacks, you gain 1 life.",
+            // The one-life attack trigger is now owned by its own exact recipe.
+            "Whenever this creature attacks, you gain 1 life and draw a card.",
             "Whenever this creature attacks, you gain 3 life.",
             "Whenever another creature attacks, you gain 2 life.",
             "Whenever one or more creatures you control attack, you gain 2 life.",
@@ -12163,7 +12384,7 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Target creature gets +0/+0 and gains first strike until end of turn.",
             "Target creature gets +0/+1 and gains first strike until end of turn.",
             "Target creature gets +1/+1 and gains first strike until end of turn.",
-            "Target creature gets +2/+2 and gains first strike until end of turn.",
+            // The dedicated exact +2/+2 first-strike recipe now owns this clause.
             "Target creature gets +1/+0 and gains trample until end of turn.",
             "Target creature gets +1/+0 and gains double strike until end of turn.",
             "Target creature gets +1/+0 and gains first strike until end of combat.",
@@ -13849,6 +14070,145 @@ pub(super) static CATALOG: &[Recipe] = &[
             "As long as you control an artifact, this creature has deathtouch.",
             "As long as you control a creature, this creature gets +1/+0 and has deathtouch.",
             "As long as you control an artifact, this creature gets +2/+0 and has deathtouch."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump.creature.plus_two_plus_two.first_strike"),
+        label: "creature +2/+2 and first strike",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_creature_plus_two_plus_two_first_strike,
+        calibration: calibrations!(
+            "Interjection" => "Target creature gets +2/+2 and gains first strike until end of turn.",
+            "Zealous Strike" => "Target creature gets +2/+2 and gains first strike until end of turn.";
+            // The parametric `+N/+0` first-strike recipe owns the +2/+0 form, so it is not a
+            // negative here; the value, keyword, controller, missing-duration, and rider forms
+            // below stay unsupported.
+            "Target creature gets +2/+2 and gains first strike.",
+            "Target creature gets +2/+2 and gains double strike until end of turn.",
+            "Target creature gets +3/+3 and gains first strike until end of turn.",
+            "Target creature you control gets +2/+2 and gains first strike until end of turn.",
+            "Target creature gets +2/+2 and gains first strike until end of turn. Untap it."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.destroy.target_creature_or_vehicle"),
+        label: "destroy target creature or Vehicle",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_destroy_creature_or_vehicle,
+        calibration: calibrations!(
+            "Daring Demolition" => "Destroy target creature or Vehicle.",
+            "Spin Out" => "Destroy target creature or Vehicle.";
+            // The shipped single-type destroy recipe owns "Destroy target creature.", so the union,
+            // other-type, Vehicle-only, and rider forms below stay reviewed negatives.
+            "Destroy target creature or artifact.",
+            "Destroy target creature or enchantment.",
+            "Destroy target Vehicle.",
+            "Destroy target creature or Spacecraft.",
+            "Destroy target artifact or creature.",
+            "Destroy target creature or Vehicle. It can't be regenerated."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.mana.target_creature_cant_be_blocked_this_turn"),
+        label: "mana buys a creature can't be blocked this turn",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_mana_target_creature_cant_be_blocked_this_turn,
+        calibration: calibrations!(
+            "Elvenking's Harper" => "{4}{U}: Target creature can't be blocked this turn.",
+            "Coralhelm Guide" => "{4}{U}: Target creature can't be blocked this turn.";
+            // The template captures the exact printed {4}{U} cost, so other costs, the
+            // can't-block and this-combat forms, the up-to-one wording, and riders stay negatives.
+            "{3}{U}: Target creature can't be blocked this turn.",
+            "{4}{U}: Target creature can't block this turn.",
+            "{4}{U}: Target creature can't be blocked this combat.",
+            "{4}{U}: Up to one target creature can't be blocked this turn.",
+            "{4}{U}, {T}: Target creature can't be blocked this turn.",
+            "{4}{U}: Target creature can't be blocked this turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.self_attacks.gain_life_one"),
+        label: "self attacks gain one life",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_self_attacks_gain_one,
+        calibration: calibrations!(
+            "Moonrise Cleric" => "Whenever this creature attacks, you gain 1 life.",
+            "Teacher's Pest" => "Whenever this creature attacks, you gain 1 life.";
+            // The shipped gain-two attack trigger owns "you gain 2 life.", so the drain, targeted,
+            // witness, and rider forms below stay reviewed negatives.
+            "Whenever this creature attacks, each opponent loses 1 life and you gain 1 life.",
+            "Whenever this creature attacks, target player gains 1 life.",
+            "Whenever this creature deals combat damage to a player, you gain 1 life.",
+            "Whenever another creature attacks, you gain 1 life.",
+            "Whenever this creature attacks, you gain 1 life. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.discard_sacrifice_self.draw_one"),
+        label: "discard and sacrifice this creature to draw one",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_discard_sacrifice_self_draw_one,
+        calibration: calibrations!(
+            "Masked Meower" => "Discard a card, Sacrifice this creature: Draw a card.",
+            "Insolent Neonate" => "Discard a card, Sacrifice this creature: Draw a card.";
+            // Another draw count, a larger or plural discard, an appended instruction, and either
+            // single-cost form stay unsupported.
+            "Discard a card, Sacrifice this creature: Draw two cards.",
+            "Discard two cards, Sacrifice this creature: Draw a card.",
+            "Discard a card, Sacrifice this creature: Draw a card, then discard a card.",
+            "Sacrifice this creature: Draw a card.",
+            "Discard a card: Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.discard.gain_indestructible_tap_self"),
+        label: "discard a card to grant indestructible and tap this creature",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_discard_gain_indestructible_tap_self,
+        calibration: calibrations!(
+            "Iron-Shield Elf" => "Discard a card: This creature gains indestructible until end of turn. Tap it.",
+            "Guardian of New Benalia" => "Discard a card: This creature gains indestructible until end of turn. Tap it.";
+            // Another keyword, a missing or separate tap, another or compound cost, a targeted
+            // subject, and riders stay unsupported.
+            "Discard a card: This creature gains indestructible until end of turn.",
+            "Discard a card: This creature gains hexproof until end of turn. Tap it.",
+            "Discard a card: Tap this creature.",
+            "{1}{B}, Discard a card: This creature gains indestructible until end of turn. Tap it.",
+            "Discard a card: Target creature gains indestructible until end of turn. Tap it."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.other_creature_enters.pump_self_plus_one_zero"),
+        label: "Alliance another creature enters and pumps the source plus one plus zero",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_alliance_other_creature_enters_pump_self_plus_one_zero,
+        calibration: calibrations!(
+            "East Wind Avatar" => "Alliance — Whenever another creature you control enters, this creature gets +1/+0 until end of turn.",
+            "Mutant Town Musicians" => "Alliance — Whenever another creature you control enters, this creature gets +1/+0 until end of turn.";
+            // The ability word is matched exactly, so the unprefixed wording and every other
+            // trigger scope, pump size, or payoff stay unsupported here.
+            "Whenever another creature you control enters, this creature gets +1/+0 until end of turn.",
+            "Alliance — Whenever another creature you control enters, this creature gets +1/+1 until end of turn.",
+            "Alliance — Whenever another creature enters, this creature gets +1/+0 until end of turn.",
+            "Alliance — Whenever another creature you control enters, put a +1/+1 counter on this creature.",
+            "Alliance — Whenever another creature you control enters, this creature gets +2/+0 until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.enters_with_counter.creature_died_this_turn"),
+        label: "enters with a +1/+1 counter if a creature died this turn",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_enters_with_counter_creature_died,
+        calibration: calibrations!(
+            "Cackling Slasher" => "This creature enters with a +1/+1 counter on it if a creature died this turn.",
+            "Blacksnag Buzzard" => "This creature enters with a +1/+1 counter on it if a creature died this turn.";
+            // The Raid-prefixed entry counter is a different condition, and the count, conditionless,
+            // opponent-only, and permanent-departure forms stay unsupported.
+            "This creature enters with two +1/+1 counters on it if a creature died this turn.",
+            "This creature enters with a +1/+1 counter on it if a creature died this turn. Draw a card.",
+            "This creature enters with a +1/+1 counter on it.",
+            "This creature enters with a +1/+1 counter on it if an opponent's creature died this turn.",
+            "This creature enters with a +1/+1 counter on it if a permanent left the battlefield this turn."
         ),
     },
 ];
@@ -19930,7 +20290,7 @@ mod tests {
             "Target creature gets +0/+0 and gains first strike until end of turn.",
             "Target creature gets +0/+1 and gains first strike until end of turn.",
             "Target creature gets +1/+1 and gains first strike until end of turn.",
-            "Target creature gets +2/+2 and gains first strike until end of turn.",
+            // The dedicated exact +2/+2 first-strike recipe now owns this clause.
             "Target creature gets +1/+0 and gains trample until end of turn.",
             "Target creature gets +1/+0 and gains double strike until end of turn.",
             "Target creature gets +1/+0 and gains first strike until end of combat.",
@@ -26247,6 +26607,603 @@ mod tests {
             )
             .is_some(),
             "the exact {{2}} template stays supported"
+        );
+    }
+
+    #[test]
+    fn issue_352_exact_clauses_match_their_recipes() {
+        for (clause, is_spell, expected) in [
+            (
+                "Target creature gets +2/+2 and gains first strike until end of turn.",
+                true,
+                "spell.pump.creature.plus_two_plus_two.first_strike",
+            ),
+            (
+                "Destroy target creature or Vehicle.",
+                true,
+                "spell.destroy.target_creature_or_vehicle",
+            ),
+            (
+                "{4}{U}: Target creature can't be blocked this turn.",
+                false,
+                "activated.mana.target_creature_cant_be_blocked_this_turn",
+            ),
+            (
+                "Whenever this creature attacks, you gain 1 life.",
+                false,
+                "triggered.self_attacks.gain_life_one",
+            ),
+            (
+                "Discard a card, Sacrifice this creature: Draw a card.",
+                false,
+                "activated.discard_sacrifice_self.draw_one",
+            ),
+            (
+                "Discard a card: This creature gains indestructible until end of turn. Tap it.",
+                false,
+                "activated.discard.gain_indestructible_tap_self",
+            ),
+            (
+                "Alliance — Whenever another creature you control enters, this creature gets +1/+0 until end of turn.",
+                false,
+                "triggered.other_creature_enters.pump_self_plus_one_zero",
+            ),
+            (
+                "This creature enters with a +1/+1 counter on it if a creature died this turn.",
+                false,
+                "static.enters_with_counter.creature_died_this_turn",
+            ),
+        ] {
+            let matched = match_clause(clause, is_spell, &context())
+                .expect("unambiguous")
+                .map(|matched| matched.id.as_str());
+            assert_eq!(matched, Some(expected), "{clause}");
+        }
+    }
+
+    fn issue_352_exact_id(clause: &str, is_spell: bool, context: &RecipeContext) -> &'static str {
+        match_clause(clause, is_spell, context)
+            .expect("issue #352 clause must not be ambiguous")
+            .unwrap_or_else(|| panic!("issue #352 clause must be supported: {clause}"))
+            .id
+            .as_str()
+    }
+
+    fn issue_352_recipe(id: &str) -> &'static Recipe {
+        CATALOG
+            .iter()
+            .find(|recipe| recipe.id.as_str() == id)
+            .unwrap_or_else(|| panic!("missing recipe {id}"))
+    }
+
+    #[test]
+    fn issue_352_recipes_have_stable_ids_and_surfaces() {
+        for (id, surface) in [
+            (
+                "spell.pump.creature.plus_two_plus_two.first_strike",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "spell.destroy.target_creature_or_vehicle",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "activated.mana.target_creature_cant_be_blocked_this_turn",
+                RecipeSurface::ActivatedAbility,
+            ),
+            (
+                "triggered.self_attacks.gain_life_one",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "activated.discard_sacrifice_self.draw_one",
+                RecipeSurface::ActivatedAbility,
+            ),
+            (
+                "activated.discard.gain_indestructible_tap_self",
+                RecipeSurface::ActivatedAbility,
+            ),
+            (
+                "triggered.other_creature_enters.pump_self_plus_one_zero",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "static.enters_with_counter.creature_died_this_turn",
+                RecipeSurface::StaticAbility,
+            ),
+        ] {
+            assert_eq!(issue_352_recipe(id).surface, surface, "{id}");
+            assert!(
+                !issue_352_recipe(id)
+                    .calibration
+                    .negative_near_misses
+                    .is_empty(),
+                "{id} needs reviewed negatives"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_352_pump_and_destroy_spells_are_exact() {
+        let chosen = || EffectSubject::Chosen(Box::new(TargetFilter::default_creature()));
+        assert_eq!(
+            issue_352_exact_id(
+                "Target creature gets +2/+2 and gains first strike until end of turn.",
+                true,
+                &context()
+            ),
+            "spell.pump.creature.plus_two_plus_two.first_strike"
+        );
+        let Some(RecipeEmission::SpellEffects(effects)) =
+            match_spell_creature_plus_two_plus_two_first_strike(
+                "Target creature gets +2/+2 and gains first strike until end of turn.",
+                &context(),
+            )
+        else {
+            panic!("the +2/+2 first-strike pump must emit one pump and one grant");
+        };
+        assert_eq!(
+            effects,
+            vec![
+                SpellEffectKind::PumpTarget {
+                    power: 2,
+                    toughness: 2,
+                    scale: None,
+                    subject: chosen(),
+                },
+                SpellEffectKind::GrantKeywords {
+                    subject: chosen(),
+                    keywords: vec![Keyword::FirstStrike],
+                },
+            ]
+        );
+
+        assert_eq!(
+            issue_352_exact_id("Destroy target creature or Vehicle.", true, &context()),
+            "spell.destroy.target_creature_or_vehicle"
+        );
+        let Some(RecipeEmission::SpellEffect(SpellEffectKind::Destroy { subject })) =
+            match_spell_destroy_creature_or_vehicle(
+                "Destroy target creature or Vehicle.",
+                &context(),
+            )
+        else {
+            panic!("the creature-or-Vehicle destroy must emit one Destroy");
+        };
+        assert_eq!(
+            subject,
+            EffectSubject::Chosen(Box::new(TargetFilter {
+                any_of: Some(vec![
+                    TargetFilter {
+                        kind: TargetKind::Creature,
+                        ..TargetFilter::default()
+                    },
+                    TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        required_subtypes: vec!["Vehicle".into()],
+                        ..TargetFilter::default()
+                    },
+                ]),
+                ..TargetFilter::default()
+            }))
+        );
+
+        for clause in [
+            "Target creature gets +2/+2 and gains first strike until end of turn.",
+            "Destroy target creature or Vehicle.",
+        ] {
+            assert_eq!(
+                match_clause(clause, false, &context()).expect("unambiguous"),
+                None,
+                "SpellClause templates match only on the spell surface: {clause}"
+            );
+        }
+
+        for near_miss in [
+            "Target creature gets +2/+2 and gains first strike.",
+            "Target creature gets +2/+2 and gains double strike until end of turn.",
+            "Target creature gets +3/+3 and gains first strike until end of turn.",
+            "Target creature you control gets +2/+2 and gains first strike until end of turn.",
+            "Target creature gets +2/+2 and gains first strike until end of turn. Untap it.",
+        ] {
+            assert!(
+                match_spell_creature_plus_two_plus_two_first_strike(near_miss, &context())
+                    .is_none(),
+                "the +2/+2 first-strike matcher accepted {near_miss}"
+            );
+            assert!(
+                match_clause(near_miss, true, &context())
+                    .expect("unambiguous")
+                    .is_none(),
+                "the catalog unexpectedly owns the first-strike near-miss {near_miss}"
+            );
+        }
+        for near_miss in [
+            "Destroy target creature or artifact.",
+            "Destroy target creature or enchantment.",
+            "Destroy target Vehicle.",
+            "Destroy target creature or Spacecraft.",
+            "Destroy target artifact or creature.",
+            "Destroy target creature or Vehicle. It can't be regenerated.",
+        ] {
+            assert!(
+                match_spell_destroy_creature_or_vehicle(near_miss, &context()).is_none(),
+                "the creature-or-Vehicle destroy accepted {near_miss}"
+            );
+            assert!(
+                match_clause(near_miss, true, &context())
+                    .expect("unambiguous")
+                    .is_none(),
+                "the catalog unexpectedly owns the destroy near-miss {near_miss}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_352_combat_and_cost_activations_are_exact() {
+        assert_eq!(
+            issue_352_exact_id(
+                "{4}{U}: Target creature can't be blocked this turn.",
+                false,
+                &context()
+            ),
+            "activated.mana.target_creature_cant_be_blocked_this_turn"
+        );
+        let Some(RecipeEmission::ActivatedAbility(ability)) =
+            match_activated_mana_target_creature_cant_be_blocked_this_turn(
+                "{4}{U}: Target creature can't be blocked this turn.",
+                &context(),
+            )
+        else {
+            panic!("the unblockable activation must emit an activated ability");
+        };
+        assert_eq!(
+            ability.costs,
+            [AbilityCost::Mana(
+                ManaCost::parse("{4}{U}").expect("valid cost")
+            )]
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::ApplyCombatRestriction {
+                scope: CombatRestrictionScope::Chosen(TargetFilter {
+                    kind: TargetKind::Creature,
+                    ..TargetFilter::default()
+                }),
+                restriction: CombatRestriction {
+                    cant_be_blocked: true,
+                    ..CombatRestriction::default()
+                },
+            }]
+        );
+        let targeting = ability.targeting.as_ref().expect("one target group");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("the unblockable activation needs exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.effect_indices, [0]);
+        assert_eq!(group.prompt, "Choose target creature");
+
+        assert_eq!(
+            issue_352_exact_id(
+                "Discard a card, Sacrifice this creature: Draw a card.",
+                false,
+                &context()
+            ),
+            "activated.discard_sacrifice_self.draw_one"
+        );
+        let Some(RecipeEmission::ActivatedAbility(ability)) =
+            match_activated_discard_sacrifice_self_draw_one(
+                "Discard a card, Sacrifice this creature: Draw a card.",
+                &context(),
+            )
+        else {
+            panic!("the discard/sacrifice ability must emit an activated ability");
+        };
+        assert_eq!(
+            ability.costs,
+            [AbilityCost::Discard, AbilityCost::SacrificeSelf]
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }]
+        );
+        assert!(ability.targeting.is_none());
+
+        assert_eq!(
+            issue_352_exact_id(
+                "Discard a card: This creature gains indestructible until end of turn. Tap it.",
+                false,
+                &context()
+            ),
+            "activated.discard.gain_indestructible_tap_self"
+        );
+        let Some(RecipeEmission::ActivatedAbility(ability)) =
+            match_activated_discard_gain_indestructible_tap_self(
+                "Discard a card: This creature gains indestructible until end of turn. Tap it.",
+                &context(),
+            )
+        else {
+            panic!("the discard/indestructible ability must emit an activated ability");
+        };
+        assert_eq!(ability.costs, [AbilityCost::Discard]);
+        assert_eq!(
+            ability.effect,
+            [
+                SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::Source,
+                    keywords: vec![Keyword::Indestructible],
+                },
+                SpellEffectKind::Tap {
+                    subject: EffectSubject::Source,
+                },
+            ]
+        );
+        assert!(ability.targeting.is_none());
+
+        for near_miss in [
+            "{3}{U}: Target creature can't be blocked this turn.",
+            "{4}{U}: Target creature can't block this turn.",
+            "{4}{U}: Target creature can't be blocked this combat.",
+            "{4}{U}: Up to one target creature can't be blocked this turn.",
+            "{4}{U}, {T}: Target creature can't be blocked this turn.",
+            "{4}{U}: Target creature can't be blocked this turn. Draw a card.",
+        ] {
+            assert!(
+                match_activated_mana_target_creature_cant_be_blocked_this_turn(
+                    near_miss,
+                    &context()
+                )
+                .is_none(),
+                "the unblockable matcher accepted {near_miss}"
+            );
+            assert!(
+                match_clause(near_miss, false, &context())
+                    .expect("unambiguous")
+                    .is_none(),
+                "the catalog unexpectedly owns the unblockable near-miss {near_miss}"
+            );
+        }
+        for near_miss in [
+            "Discard a card, Sacrifice this creature: Draw two cards.",
+            "Discard two cards, Sacrifice this creature: Draw a card.",
+            "Discard a card, Sacrifice this creature: Draw a card, then discard a card.",
+            "Sacrifice this creature: Draw a card.",
+            "Discard a card: Draw a card.",
+        ] {
+            assert!(
+                match_activated_discard_sacrifice_self_draw_one(near_miss, &context()).is_none(),
+                "the discard/sacrifice matcher accepted {near_miss}"
+            );
+            assert!(
+                match_clause(near_miss, false, &context())
+                    .expect("unambiguous")
+                    .is_none(),
+                "the catalog unexpectedly owns the discard/sacrifice near-miss {near_miss}"
+            );
+        }
+        for near_miss in [
+            "Discard a card: This creature gains indestructible until end of turn.",
+            "Discard a card: This creature gains hexproof until end of turn. Tap it.",
+            "Discard a card: Tap this creature.",
+            "{1}{B}, Discard a card: This creature gains indestructible until end of turn. Tap it.",
+            "Discard a card: Target creature gains indestructible until end of turn. Tap it.",
+        ] {
+            assert!(
+                match_activated_discard_gain_indestructible_tap_self(near_miss, &context())
+                    .is_none(),
+                "the discard/indestructible matcher accepted {near_miss}"
+            );
+            assert!(
+                match_clause(near_miss, false, &context())
+                    .expect("unambiguous")
+                    .is_none(),
+                "the catalog unexpectedly owns the discard/indestructible near-miss {near_miss}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_352_triggers_and_conditional_replacement_are_exact() {
+        assert_eq!(
+            issue_352_exact_id(
+                "Whenever this creature attacks, you gain 1 life.",
+                false,
+                &context()
+            ),
+            "triggered.self_attacks.gain_life_one"
+        );
+        let Some(RecipeEmission::TriggeredAbility(ability)) = match_self_attacks_gain_one(
+            "Whenever this creature attacks, you gain 1 life.",
+            &context(),
+        ) else {
+            panic!("the attack lifegain must emit a triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0
+            }
+        );
+        assert!(!ability.may);
+        assert!(ability.targeting.is_none());
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::GainLife {
+                amount: Amount::Fixed(1),
+            }]
+        );
+
+        assert_eq!(
+            issue_352_exact_id(
+                "Alliance — Whenever another creature you control enters, this creature gets +1/+0 until end of turn.",
+                false,
+                &context()
+            ),
+            "triggered.other_creature_enters.pump_self_plus_one_zero"
+        );
+        let Some(RecipeEmission::TriggeredAbility(ability)) =
+            match_alliance_other_creature_enters_pump_self_plus_one_zero(
+                "Alliance — Whenever another creature you control enters, this creature gets +1/+0 until end of turn.",
+                &context(),
+            )
+        else {
+            panic!("the Alliance pump must emit a triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverPermanentEntersBattlefield {
+                controller: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    permanent_type: Some(PermanentTypeFilter::Creature),
+                    exclude_source: true,
+                    ..PermanentEventFilter::default()
+                },
+                creature_filter: None,
+            }
+        );
+        assert!(ability.targeting.is_none());
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::PumpTarget {
+                power: 1,
+                toughness: 0,
+                scale: None,
+                subject: EffectSubject::Source,
+            }]
+        );
+
+        assert_eq!(
+            issue_352_exact_id(
+                "This creature enters with a +1/+1 counter on it if a creature died this turn.",
+                false,
+                &context()
+            ),
+            "static.enters_with_counter.creature_died_this_turn"
+        );
+        let Some(RecipeEmission::StaticAbility(ability)) =
+            match_static_enters_with_counter_creature_died(
+                "This creature enters with a +1/+1 counter on it if a creature died this turn.",
+                &context(),
+            )
+        else {
+            panic!("the conditional entry counter must emit a static ability");
+        };
+        assert_eq!(
+            ability.definition,
+            StaticAbilityDef::EntersWithCounters {
+                affected: EntersWithCountersAffected::Self_,
+                counter: CounterKind::PlusOnePlusOne,
+                amount: Amount::Conditional {
+                    condition: GameCondition::CreatureDeathsThisTurn {
+                        min: Some(1),
+                        max: None,
+                    },
+                    when_true: 1,
+                    otherwise: 0,
+                },
+                cast_cost_condition: None,
+            }
+        );
+
+        for near_miss in [
+            "Whenever this creature attacks, each opponent loses 1 life and you gain 1 life.",
+            "Whenever this creature attacks, target player gains 1 life.",
+            "Whenever this creature deals combat damage to a player, you gain 1 life.",
+            "Whenever another creature attacks, you gain 1 life.",
+            "Whenever this creature attacks, you gain 1 life. Draw a card.",
+        ] {
+            assert!(
+                match_self_attacks_gain_one(near_miss, &context()).is_none(),
+                "the attack lifegain matcher accepted {near_miss}"
+            );
+            assert!(
+                match_clause(near_miss, false, &context())
+                    .expect("unambiguous")
+                    .is_none(),
+                "the catalog unexpectedly owns the attack lifegain near-miss {near_miss}"
+            );
+        }
+        for near_miss in [
+            "Whenever another creature you control enters, this creature gets +1/+0 until end of turn.",
+            "Alliance — Whenever another creature you control enters, this creature gets +1/+1 until end of turn.",
+            "Alliance — Whenever another creature enters, this creature gets +1/+0 until end of turn.",
+            "Alliance — Whenever another creature you control enters, put a +1/+1 counter on this creature.",
+            "Alliance — Whenever another creature you control enters, this creature gets +2/+0 until end of turn.",
+        ] {
+            assert!(
+                match_alliance_other_creature_enters_pump_self_plus_one_zero(
+                    near_miss,
+                    &context()
+                )
+                .is_none(),
+                "the Alliance pump matcher accepted {near_miss}"
+            );
+            assert!(
+                match_clause(near_miss, false, &context())
+                    .expect("unambiguous")
+                    .is_none(),
+                "the catalog unexpectedly owns the Alliance near-miss {near_miss}"
+            );
+        }
+        for near_miss in [
+            "This creature enters with two +1/+1 counters on it if a creature died this turn.",
+            "This creature enters with a +1/+1 counter on it if a creature died this turn. Draw a card.",
+            "This creature enters with a +1/+1 counter on it.",
+            "This creature enters with a +1/+1 counter on it if an opponent's creature died this turn.",
+            "This creature enters with a +1/+1 counter on it if a permanent left the battlefield this turn.",
+        ] {
+            assert!(
+                match_static_enters_with_counter_creature_died(near_miss, &context()).is_none(),
+                "the conditional entry counter matcher accepted {near_miss}"
+            );
+            assert!(
+                match_clause(near_miss, false, &context())
+                    .expect("unambiguous")
+                    .is_none(),
+                "the catalog unexpectedly owns the entry-counter near-miss {near_miss}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_352_source_kind_gating_stays_on_each_template() {
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        for clause in [
+            "Whenever this creature attacks, you gain 1 life.",
+            "Discard a card, Sacrifice this creature: Draw a card.",
+            "Discard a card: This creature gains indestructible until end of turn. Tap it.",
+            "Alliance — Whenever another creature you control enters, this creature gets +1/+0 until end of turn.",
+            "This creature enters with a +1/+1 counter on it if a creature died this turn.",
+        ] {
+            assert_eq!(
+                match_clause(clause, false, &noncreature).expect("unambiguous"),
+                None,
+                "creature-source template must stay gated: {clause}"
+            );
+        }
+        assert!(
+            match_activated_discard_sacrifice_self_draw_one(
+                "Discard a card, Sacrifice this creature: Draw a card.",
+                &noncreature,
+            )
+            .is_none(),
+            "the discard/sacrifice matcher must reject a noncreature source"
+        );
+        let mut nonpermanent = context();
+        nonpermanent.source_is_permanent = false;
+        assert_eq!(
+            match_clause(
+                "{4}{U}: Target creature can't be blocked this turn.",
+                false,
+                &nonpermanent
+            )
+            .expect("unambiguous"),
+            None
         );
     }
 }

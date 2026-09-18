@@ -336,6 +336,7 @@ cabal_evangel	0	cast	exercised
 cackling_counterpart	0	cast	exercised
 cackling_fiend	0	cast	exercised
 cackling_prowler	0	cast	exercised
+cackling_slasher	0	cast	exercised
 caelorna,_coral_tyrant	0	cast	exercised
 caged_zombie	0	ability:0	unsupported: nonmana costs need additional fixture resources
 caged_zombie	0	cast	exercised
@@ -668,6 +669,7 @@ eagle_of_the_watch	0	cast	exercised
 earth_elemental	0	cast	exercised
 earthbender_ascension	0	cast	exercised
 earthshaking_si	0	cast	exercised
+east_wind_avatar	0	cast	exercised
 eddymurk_crab	0	cast	exercised
 edgewall_pack	0	cast	exercised
 ekundu_griffin	0	cast	exercised
@@ -683,6 +685,8 @@ elite_interceptor_rejoinder	1	cast	intentional: face unavailable from hand
 elite_vanguard	0	cast	exercised
 elven_passage	0	ability:0	exercised
 elven_passage	0	land	exercised
+elvenkings_harper	0	ability:0	exercised
+elvenkings_harper	0	cast	exercised
 elvish_archers	0	cast	exercised
 elvish_lookout	0	cast	exercised
 elvish_mystic	0	ability:0	exercised
@@ -1200,12 +1204,15 @@ inspiring_vantage	0	land	exercised
 instant_ramen	0	ability:0	exercised
 instant_ramen	0	cast	exercised
 instill_infection	0	cast	exercised
+interjection	0	cast	exercised
 into_the_fae_court	0	cast	exercised
 invasion_of_ulgrotha_grandmother_ravi_sengir	0	cast	exercised
 invasion_of_ulgrotha_grandmother_ravi_sengir	1	cast	intentional: face unavailable from hand
 invasion_reinforcements	0	cast	exercised
 iroass_champion	0	cast	exercised
 irohs_demonstration	0	cast	exercised
+iron-shield_elf	0	ability:0	exercised
+iron-shield_elf	0	cast	exercised
 iron_giant	0	cast	exercised
 iron_myr	0	ability:0	exercised
 iron_myr	0	cast	exercised
@@ -1427,6 +1434,8 @@ mardu_devotee	0	cast	exercised
 marisis_twinclaws	0	cast	exercised
 maritime_guard	0	cast	exercised
 markov_patrician	0	cast	exercised
+masked_meower	0	ability:0	exercised
+masked_meower	0	cast	exercised
 mass_of_ghouls	0	cast	exercised
 meandering_river	0	ability:0	exercised
 meandering_river	0	land	exercised
@@ -1499,6 +1508,7 @@ monstrous_growth	0	cast	exercised
 moon_heron	0	cast	exercised
 moon_sprite	0	cast	exercised
 moonglove_winnower	0	cast	exercised
+moonrise_cleric	0	cast	exercised
 moorish_cavalry	0	cast	exercised
 moriok_reaver	0	cast	exercised
 moss_kami	0	cast	exercised
@@ -2142,6 +2152,7 @@ spider-bot	0	cast	exercised
 spider-rex,_daring_dino	0	cast	exercised
 spike_jester	0	cast	exercised
 spiked_baloth	0	cast	exercised
+spin_out	0	cast	exercised
 spined_karok	0	cast	exercised
 spined_megalodon	0	cast	exercised
 spined_thopter	0	cast	exercised
