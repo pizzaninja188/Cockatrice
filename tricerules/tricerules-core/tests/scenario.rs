@@ -503,3 +503,5 @@ mod issue_350_generated_harmonize;
 mod issue_351_generated_eight_clause_batch;
 #[path = "scenario/issue_352_generated_eight_clause_batch.rs"]
 mod issue_352_generated_eight_clause_batch;
+#[path = "scenario/issue_358_generated_five_clause_batch.rs"]
+mod issue_358_generated_five_clause_batch;

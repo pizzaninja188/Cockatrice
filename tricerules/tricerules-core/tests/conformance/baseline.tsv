@@ -588,6 +588,8 @@ derelict_attic_widows_walk	0	cast	exercised
 derelict_attic_widows_walk	1	cast	exercised
 desert_drake	0	cast	exercised
 deserts_due	0	cast	exercised
+desolation_prowler	0	ability:0	exercised
+desolation_prowler	0	cast	exercised
 destructive_tampering	0	cast	exercised
 devilthorn_fox	0	cast	exercised
 devoted_hero	0	cast	exercised
@@ -630,6 +632,7 @@ dragons_eye_sentry	0	cast	exercised
 dragonstorm_globe	0	ability:0	exercised
 dragonstorm_globe	0	cast	exercised
 drakewing_krasis	0	cast	exercised
+dreaded_bat-cloud	0	cast	exercised
 dream_beavers	0	cast	exercised
 dream_seizer	0	cast	exercised
 dreamroot_cascade	0	ability:0	exercised
@@ -734,6 +737,8 @@ eyeblights_ending	0	cast	exercised
 fabled_passage	0	ability:0	exercised
 fabled_passage	0	land	exercised
 fae_flight	0	cast	exercised
+faerie_dreamthief	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+faerie_dreamthief	0	cast	exercised
 faerie_fencing	0	cast	exercised
 faerie_invaders	0	cast	exercised
 faerie_miscreant	0	cast	exercised
@@ -850,6 +855,7 @@ fresh_volunteers	0	cast	exercised
 friendly_teddy	0	cast	exercised
 frilled_sea_serpent	0	ability:0	exercised
 frilled_sea_serpent	0	cast	exercised
+frilled_sparkshooter	0	cast	exercised
 frog-squirrels	0	cast	exercised
 frog_butler	0	ability:0	exercised
 frog_butler	0	ability:1	exercised
@@ -2276,6 +2282,7 @@ surrak,_elusive_hunter	0	cast	exercised
 surveillance_room	0	ability:0	exercised
 surveillance_room	0	ability:1	exercised
 surveillance_room	0	land	exercised
+susurian_voidborn	0	cast	exercised
 swab_goblin	0	cast	exercised
 swamp	0	ability:0	exercised
 swamp	0	land	exercised

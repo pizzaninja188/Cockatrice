@@ -1,18 +1,19 @@
 use tricerules_cards::primitives::{
     ActivationLimit, BattlefieldAggregate, BattlefieldCreatureCountFilter,
     BattlefieldPermanentFilter, CardResultAction, CardResultFilter, CardResultSource,
-    CardTypeFilter, CombatRestriction, CombatRestrictionScope, CombatRole, CountExpression,
-    CreatureScopeController, CreatureScopeFilter, DiscardQuantity, DrawDiscardOrder, EffectSubject,
-    EntersTappedAffected, EntersWithCountersAffected, EntryCost, GameCondition,
-    GraveyardDestination, GraveyardFilter, GraveyardOwner, HandCardAction, HandCardChooser,
-    HandChoiceVisibility, LibraryPlacement, LifeAmount, ObjectContributionKind,
-    ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate,
-    PlayerRecipient, PowerComparison, PowerToughnessCharacteristic, RelativePlayerSet,
-    ResolutionBranchDef, ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost,
-    SearchDestination, SearchZoneSelection, SpellCastFilter, SpellCostModifier,
-    SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter,
-    TargetGroupDef, TargetKind, TargetMatchFilter, TargetObjectExclusion, TargetingDef,
-    TargetingSourceFilter, TypeLineAddition, ZoneCardFilter,
+    CardTypeFilter, CombatRestriction, CombatRestrictionScope, CombatRole, ConditionPlayerSet,
+    CountExpression, CreatureScopeController, CreatureScopeFilter, DiscardQuantity,
+    DrawDiscardOrder, EffectSubject, EntersTappedAffected, EntersWithCountersAffected, EntryCost,
+    EventZone, GameCondition, GraveyardDestination, GraveyardFilter, GraveyardOwner,
+    HandCardAction, HandCardChooser, HandChoiceVisibility, LibraryPlacement, LifeAmount,
+    LifeChangeKind, ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter,
+    PermanentTypeFilter, PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient, PowerComparison,
+    PowerToughnessCharacteristic, RelativePlayerSet, ResolutionBranchDef,
+    ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SearchDestination,
+    SearchZoneSelection, SpellCastFilter, SpellCostModifier, SpellManaSpentComparison,
+    StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
+    TargetMatchFilter, TargetObjectExclusion, TargetingDef, TargetingSourceFilter,
+    TypeLineAddition, ZoneCardFilter, ZoneEventCardinality, ZoneEventDestination,
 };
 use tricerules_cards::{
     external_oracle_lines, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
@@ -8886,6 +8887,194 @@ fn match_static_enters_with_counter_creature_died(
     )
 }
 
+/// Issue #358 exact clause templates. Every template is a reusable typed surface with at least two
+/// positive calibration cards verified against the full pinned Oracle bulk corpus; clauses are
+/// compared by the complete normalized Oracle line so appended, reordered, weakened, or
+/// additional-clause forms stay unsupported.
+const ISSUE_358_ENTERS_COUNTER_OPPONENT_LOST_LIFE_CLAUSE: &str =
+    "This creature enters with a +1/+1 counter on it if an opponent lost life this turn.";
+const ISSUE_358_PAY_LIFE_PUMP_ONCE_PER_TURN_CLAUSE: &str =
+    "Pay 2 life: This creature gets +2/+2 until end of turn. Activate only once each turn.";
+const ISSUE_358_COST_REDUCTION_CREATURE_DIED_CLAUSE: &str =
+    "This spell costs {3} less to cast if a creature died this turn.";
+const ISSUE_358_GRAVEYARD_EXILE_SELF_DRAW_ONE_LOSE_ONE_CLAUSE: &str =
+    "{2}{B}, Exile this card from your graveyard: You draw a card and you lose 1 life.";
+const ISSUE_358_SELF_OR_CREATURE_OR_ARTIFACT_DIES_DRAIN_CLAUSE: &str =
+    "Whenever this creature or another creature or artifact you control dies, target opponent loses 1 life and you gain 1 life.";
+
+/// CR 614.1c / 122.6: the source's own entry replacement puts one +1/+1 counter on it only when an
+/// opponent lost life earlier this turn, reusing the shipped `EntersWithCounters` conditional
+/// amount over `LifeChangedThisTurn` (CR 119.3). Two counters, the controller's own loss, a
+/// counted amount, the creature-death condition (owned by `creature_died_this_turn`), the
+/// conditionless form, and riders stay unsupported.
+fn match_static_enters_with_counter_opponent_lost_life(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_358_ENTERS_COUNTER_OPPONENT_LOST_LIFE_CLAUSE).then(
+        || {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: StaticAbilityDef::EntersWithCounters {
+                    affected: EntersWithCountersAffected::Self_,
+                    counter: CounterKind::PlusOnePlusOne,
+                    amount: Amount::Conditional {
+                        condition: GameCondition::LifeChangedThisTurn {
+                            players: ConditionPlayerSet::Relative(RelativePlayerSet::Opponents),
+                            change: LifeChangeKind::Loss,
+                            quantifier: PlayerQuantifier::Any,
+                        },
+                        when_true: 1,
+                        otherwise: 0,
+                    },
+                    cast_cost_condition: None,
+                },
+            })
+        },
+    )
+}
+
+/// CR 119.4 / 602.2b: paying two life as the whole activation cost pumps the source +2/+2 until
+/// cleanup; CR 602.5b records the printed "Activate only once each turn" restriction through the
+/// shipped `PerTurn` activation limit. No targeting. Another life amount, another pump, the
+/// costless-limitation phrasing, a sorcery-speed-only restriction, a chosen creature subject, a
+/// noncreature source, and riders stay unsupported.
+fn match_activated_pay_life_pump_self_once_per_turn(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_358_PAY_LIFE_PUMP_ONCE_PER_TURN_CLAUSE).then(
+        || {
+            RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+                ability_id: context.activated_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                cost_modifiers: Vec::new(),
+                source_zone: AbilitySourceZone::Battlefield,
+                costs: vec![AbilityCost::PayLife { amount: 2 }],
+                effect: vec![SpellEffectKind::PumpTarget {
+                    power: 2,
+                    toughness: 2,
+                    scale: None,
+                    subject: EffectSubject::Source,
+                }],
+                targeting: None,
+                timing: ActivationTiming::Normal,
+                conditions: Vec::new(),
+                activation_limit: Some(ActivationLimit::PerTurn { max_activations: 1 }),
+            })
+        },
+    )
+}
+
+/// CR 601.2f / 700.4: "This spell costs {3} less to cast if a creature died this turn" reduces the
+/// generic component of the source spell's cost while a creature died earlier this turn, reusing
+/// the shipped `ConditionalGenericReduction` over `CreatureDeathsThisTurn`. This is a
+/// while-on-the-stack characteristic that applies to permanents as well as instants and sorceries,
+/// so it uses the `SpellStaticAbility` surface (the same shape as `static.spell.cannot_be_countered`).
+/// Other amounts, the Morbid-prefixed form, counted or combat-scoped deaths, the departure-instead
+/// condition, the conditionless form, and riders stay unsupported.
+fn match_spell_cost_reduction_creature_died_three(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_358_COST_REDUCTION_CREATURE_DIED_CLAUSE).then(|| {
+        RecipeEmission::SpellCostModifier(SpellCostModifier::ConditionalGenericReduction {
+            amount: 3,
+            condition: GameCondition::CreatureDeathsThisTurn {
+                min: Some(1),
+                max: None,
+            },
+        })
+    })
+}
+
+/// CR 113.6b / 602.2 / 701.13: an activated ability that functions only from its owner's
+/// graveyard. It pays a printed {2}{B} and exiles the source card itself, then draws a card and
+/// loses 1 life in printed order (CR 121.2 / 119.3), matching Merchant of Many Hats' zone shape.
+/// No targeting. Other mana costs, other draw or life amounts, a target player, and riders stay
+/// unsupported.
+fn match_activated_graveyard_exile_self_draw_one_lose_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_358_GRAVEYARD_EXILE_SELF_DRAW_ONE_LOSE_ONE_CLAUSE).then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Graveyard,
+            costs: vec![fixed_mana_cost("{2}{B}"), AbilityCost::ExileSelf],
+            effect: vec![
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                },
+                SpellEffectKind::LoseLife {
+                    amount: LifeAmount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                },
+            ],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
+/// CR 603.6c / 603.10a / 700.4: a leaves-the-battlefield trigger that looks back at the departing
+/// permanent's event-time characteristics. The `any_of` creature-or-artifact branches include the
+/// source because "another" only qualifies the other permanents; ownership is restricted to the
+/// trigger's controller. The whole drain is one mandatory target opponent losing 1 life and the
+/// controller gaining 1 life in printed order (CR 115.1 / 119.3). Self exclusion, single-type,
+/// each-opponent, other amounts, noncreature sources, and riders stay unsupported.
+fn match_triggered_self_or_creature_or_artifact_dies_drain(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_358_SELF_OR_CREATURE_OR_ARTIFACT_DIES_DRAIN_CLAUSE)
+        .then(|| {
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+                context,
+                TriggerCondition::WheneverPermanentLeavesBattlefield {
+                    controller: CastTriggerPlayer::Controller,
+                    filter: PermanentEventFilter {
+                        any_of: Some(vec![
+                            PermanentEventFilter {
+                                permanent_type: Some(PermanentTypeFilter::Creature),
+                                ..PermanentEventFilter::default()
+                            },
+                            PermanentEventFilter {
+                                permanent_type: Some(PermanentTypeFilter::Artifact),
+                                ..PermanentEventFilter::default()
+                            },
+                        ]),
+                        ..PermanentEventFilter::default()
+                    },
+                    destination: ZoneEventDestination::OneOf(vec![EventZone::Graveyard]),
+                    cardinality: ZoneEventCardinality::EachObject,
+                },
+                vec![
+                    SpellEffectKind::TargetPlayerLosesLife {
+                        amount: 1,
+                        target: TargetFilter {
+                            kind: TargetKind::OpponentPlayer,
+                            ..TargetFilter::default()
+                        },
+                    },
+                    SpellEffectKind::GainLife {
+                        amount: Amount::Fixed(1),
+                    },
+                ],
+            ) else {
+                unreachable!("triggered_ability_with always returns a triggered ability")
+            };
+            ability.targeting = Some(exact_targeting(1, 1, "Choose target opponent", vec![0]));
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
 macro_rules! calibrations {
     ($($positive_name:literal => $positive_clause:literal),+; $($negative:literal),+ $(,)?) => {
         RecipeCalibration {
@@ -14209,6 +14398,98 @@ pub(super) static CATALOG: &[Recipe] = &[
             "This creature enters with a +1/+1 counter on it.",
             "This creature enters with a +1/+1 counter on it if an opponent's creature died this turn.",
             "This creature enters with a +1/+1 counter on it if a permanent left the battlefield this turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.enters_with_counter.opponent_lost_life_this_turn"),
+        label: "enters with a +1/+1 counter if an opponent lost life this turn",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_enters_with_counter_opponent_lost_life,
+        calibration: calibrations!(
+            "Frilled Sparkshooter" => "This creature enters with a +1/+1 counter on it if an opponent lost life this turn.",
+            "Cindering Cutthroat" => "This creature enters with a +1/+1 counter on it if an opponent lost life this turn.",
+            "Mounted Dreadknight" => "This creature enters with a +1/+1 counter on it if an opponent lost life this turn.";
+            // The shipped `creature_died_this_turn` entry-counter recipe owns the
+            // "if a creature died this turn" form, so it stays with its own recipe and is asserted
+            // in a focused test instead of colliding here.
+            "This creature enters with two +1/+1 counters on it if an opponent lost life this turn.",
+            "This creature enters with a +1/+1 counter on it if you lost life this turn.",
+            "This creature enters with a +1/+1 counter on it if an opponent lost 2 or more life this turn.",
+            "This creature enters with a +1/+1 counter on it.",
+            "This creature enters with a +1/+1 counter on it if an opponent lost life this turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.pay_life.pump_self_plus_two_plus_two.once_per_turn"),
+        label: "pay two life to pump this creature and activate only once each turn",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_pay_life_pump_self_once_per_turn,
+        calibration: calibrations!(
+            "Desolation Prowler" => "Pay 2 life: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+            "Putrid Leech" => "Pay 2 life: This creature gets +2/+2 until end of turn. Activate only once each turn.";
+            // The missing or different limit, another life amount, another pump, the
+            // sorcery-speed restriction, a chosen subject, and riders stay unsupported.
+            "Pay 2 life: This creature gets +2/+2 until end of turn.",
+            "Pay 2 life: This creature gets +1/+1 until end of turn. Activate only once each turn.",
+            "Pay 3 life: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+            "Pay 2 life: This creature gets +2/+2 until end of turn. Activate only as a sorcery.",
+            "Pay 2 life: Target creature gets +2/+2 until end of turn. Activate only once each turn.",
+            "Pay 2 life: This creature gets +2/+2 until end of turn. Activate only once each turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.cost_reduction.creature_died_this_turn.three"),
+        label: "spell costs three less to cast if a creature died this turn",
+        surface: RecipeSurface::SpellStaticAbility,
+        matcher: match_spell_cost_reduction_creature_died_three,
+        calibration: calibrations!(
+            "Dreaded Bat-Cloud" => "This spell costs {3} less to cast if a creature died this turn.",
+            "Bone Picker" => "This spell costs {3} less to cast if a creature died this turn.";
+            // Another amount, the Morbid-prefixed and Morbid-appended forms, a combat-scoped or
+            // departure condition, the conditionless form, and riders stay unsupported.
+            "This spell costs {2} less to cast if a creature died this turn.",
+            "Morbid — This spell costs {3} less to cast if a creature died this turn.",
+            "This spell costs {3} less to cast if a creature died this turn. Morbid — Draw a card.",
+            "This spell costs {3} less to cast if a creature died this combat.",
+            "This spell costs {3} less to cast if a permanent left the battlefield this turn.",
+            "This spell costs {3} less to cast.",
+            "This spell costs {3} less to cast if a creature died this turn. You gain 1 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.graveyard.exile_self.draw_one_lose_one"),
+        label: "exile this card from your graveyard to draw one and lose one",
+        surface: RecipeSurface::ZoneActivatedAbility,
+        matcher: match_activated_graveyard_exile_self_draw_one_lose_one,
+        calibration: calibrations!(
+            "Faerie Dreamthief" => "{2}{B}, Exile this card from your graveyard: You draw a card and you lose 1 life.",
+            "Unwilling Ingredient" => "{2}{B}, Exile this card from your graveyard: You draw a card and you lose 1 life.";
+            // A missing or different mana cost, another draw or life count, a target player, and
+            // an appended activation restriction stay unsupported.
+            "{2}{B}, Exile this card from your graveyard: You draw a card.",
+            "{1}{B}, Exile this card from your graveyard: You draw a card and you lose 1 life.",
+            "{2}{B}, Exile this card from your graveyard: You draw two cards and you lose 1 life.",
+            "{2}{B}, Exile this card from your graveyard: You draw a card and you lose 2 life.",
+            "{2}{B}, Exile this card from your graveyard: Target player draws a card and loses 1 life.",
+            "{2}{B}, Exile this card from your graveyard: You draw a card and you lose 1 life. Activate only as a sorcery."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.self_or_creature_or_artifact_dies.target_opponent_drain_one"),
+        label: "this creature or another creature or artifact you control dies drains a target opponent",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_triggered_self_or_creature_or_artifact_dies_drain,
+        calibration: calibrations!(
+            "Susurian Voidborn" => "Whenever this creature or another creature or artifact you control dies, target opponent loses 1 life and you gain 1 life.",
+            "Al Bhed Salvagers" => "Whenever this creature or another creature or artifact you control dies, target opponent loses 1 life and you gain 1 life.";
+            // A single-type or self-excluding observation, an each-opponent or other-amount payoff,
+            // and appended instructions stay unsupported.
+            "Whenever this creature or another creature you control dies, target opponent loses 1 life and you gain 1 life.",
+            "Whenever this creature or another artifact you control dies, target opponent loses 1 life and you gain 1 life.",
+            "Whenever this creature or another creature or artifact you control dies, each opponent loses 1 life and you gain 1 life.",
+            "Whenever this creature or another creature or artifact you control dies, target opponent loses 2 life and you gain 2 life.",
+            "Whenever another creature or artifact you control dies, target opponent loses 1 life and you gain 1 life.",
+            "Whenever this creature or another creature or artifact you control dies, target opponent loses 1 life and you gain 1 life. Draw a card."
         ),
     },
 ];
@@ -27205,5 +27486,327 @@ mod tests {
             .expect("unambiguous"),
             None
         );
+    }
+
+    #[test]
+    fn issue_358_exact_clauses_match_their_recipes() {
+        for (clause, is_spell, expected) in [
+            (
+                "This creature enters with a +1/+1 counter on it if an opponent lost life this turn.",
+                false,
+                "static.enters_with_counter.opponent_lost_life_this_turn",
+            ),
+            (
+                "Pay 2 life: This creature gets +2/+2 until end of turn. Activate only once each turn.",
+                false,
+                "activated.pay_life.pump_self_plus_two_plus_two.once_per_turn",
+            ),
+            (
+                "This spell costs {3} less to cast if a creature died this turn.",
+                false,
+                "spell.cost_reduction.creature_died_this_turn.three",
+            ),
+            (
+                "{2}{B}, Exile this card from your graveyard: You draw a card and you lose 1 life.",
+                false,
+                "activated.graveyard.exile_self.draw_one_lose_one",
+            ),
+            (
+                "Whenever this creature or another creature or artifact you control dies, target opponent loses 1 life and you gain 1 life.",
+                false,
+                "triggered.self_or_creature_or_artifact_dies.target_opponent_drain_one",
+            ),
+        ] {
+            let matched = match_clause(clause, is_spell, &context())
+                .expect("unambiguous")
+                .map(|matched| matched.id.as_str());
+            assert_eq!(matched, Some(expected), "{clause}");
+        }
+    }
+
+    fn issue_358_exact_id(clause: &str, is_spell: bool, context: &RecipeContext) -> &'static str {
+        match_clause(clause, is_spell, context)
+            .expect("issue #358 clause must not be ambiguous")
+            .unwrap_or_else(|| panic!("issue #358 clause must be supported: {clause}"))
+            .id
+            .as_str()
+    }
+
+    fn issue_358_recipe(id: &str) -> &'static Recipe {
+        CATALOG
+            .iter()
+            .find(|recipe| recipe.id.as_str() == id)
+            .unwrap_or_else(|| panic!("missing recipe {id}"))
+    }
+
+    #[test]
+    fn issue_358_recipes_have_stable_ids_and_surfaces() {
+        for (id, surface) in [
+            (
+                "static.enters_with_counter.opponent_lost_life_this_turn",
+                RecipeSurface::StaticAbility,
+            ),
+            (
+                "activated.pay_life.pump_self_plus_two_plus_two.once_per_turn",
+                RecipeSurface::ActivatedAbility,
+            ),
+            (
+                "spell.cost_reduction.creature_died_this_turn.three",
+                RecipeSurface::SpellStaticAbility,
+            ),
+            (
+                "activated.graveyard.exile_self.draw_one_lose_one",
+                RecipeSurface::ZoneActivatedAbility,
+            ),
+            (
+                "triggered.self_or_creature_or_artifact_dies.target_opponent_drain_one",
+                RecipeSurface::TriggeredAbility,
+            ),
+        ] {
+            assert_eq!(issue_358_recipe(id).surface, surface, "{id}");
+            assert!(
+                !issue_358_recipe(id)
+                    .calibration
+                    .negative_near_misses
+                    .is_empty(),
+                "{id} needs reviewed negatives"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_358_entry_counter_uses_opponent_life_loss_only() {
+        const CLAUSE: &str =
+            "This creature enters with a +1/+1 counter on it if an opponent lost life this turn.";
+        let Some(RecipeEmission::StaticAbility(ability)) =
+            match_static_enters_with_counter_opponent_lost_life(CLAUSE, &context())
+        else {
+            panic!("the opponent-life entry counter must emit a static ability");
+        };
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(
+            ability.definition,
+            StaticAbilityDef::EntersWithCounters {
+                affected: EntersWithCountersAffected::Self_,
+                counter: CounterKind::PlusOnePlusOne,
+                amount: Amount::Conditional {
+                    condition: GameCondition::LifeChangedThisTurn {
+                        players: ConditionPlayerSet::Relative(RelativePlayerSet::Opponents),
+                        change: LifeChangeKind::Loss,
+                        quantifier: PlayerQuantifier::Any,
+                    },
+                    when_true: 1,
+                    otherwise: 0,
+                },
+                cast_cost_condition: None,
+            }
+        );
+
+        // The shipped creature-death entry counter keeps its own clause and condition; the new
+        // recipe must not steal it.
+        assert!(match_static_enters_with_counter_opponent_lost_life(
+            "This creature enters with a +1/+1 counter on it if a creature died this turn.",
+            &context()
+        )
+        .is_none());
+        assert_eq!(
+            issue_358_exact_id(
+                "This creature enters with a +1/+1 counter on it if a creature died this turn.",
+                false,
+                &context()
+            ),
+            "static.enters_with_counter.creature_died_this_turn"
+        );
+    }
+
+    #[test]
+    fn issue_358_pay_life_pump_has_the_once_per_turn_limit() {
+        const CLAUSE: &str =
+            "Pay 2 life: This creature gets +2/+2 until end of turn. Activate only once each turn.";
+        let Some(RecipeEmission::ActivatedAbility(ability)) =
+            match_activated_pay_life_pump_self_once_per_turn(CLAUSE, &context())
+        else {
+            panic!("the pay-life pump must emit an activated ability");
+        };
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(ability.costs, [AbilityCost::PayLife { amount: 2 }]);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::PumpTarget {
+                power: 2,
+                toughness: 2,
+                scale: None,
+                subject: EffectSubject::Source,
+            }]
+        );
+        assert_eq!(
+            ability.activation_limit,
+            Some(ActivationLimit::PerTurn { max_activations: 1 })
+        );
+        assert_eq!(ability.timing, ActivationTiming::Normal);
+        assert!(ability.targeting.is_none());
+        assert!(ability.conditions.is_empty());
+    }
+
+    #[test]
+    fn issue_358_conditional_cost_reduction_is_exact() {
+        const CLAUSE: &str = "This spell costs {3} less to cast if a creature died this turn.";
+        let Some(RecipeEmission::SpellCostModifier(
+            SpellCostModifier::ConditionalGenericReduction { amount, condition },
+        )) = match_spell_cost_reduction_creature_died_three(CLAUSE, &context())
+        else {
+            panic!("the creature-death reduction must emit a conditional cost modifier");
+        };
+        assert_eq!(amount, 3);
+        assert_eq!(
+            condition,
+            GameCondition::CreatureDeathsThisTurn {
+                min: Some(1),
+                max: None,
+            }
+        );
+    }
+
+    #[test]
+    fn issue_358_graveyard_activation_exiles_self_and_orders_draw_then_loss() {
+        const CLAUSE: &str =
+            "{2}{B}, Exile this card from your graveyard: You draw a card and you lose 1 life.";
+        let Some(RecipeEmission::ActivatedAbility(ability)) =
+            match_activated_graveyard_exile_self_draw_one_lose_one(CLAUSE, &context())
+        else {
+            panic!("the graveyard activation must emit an activated ability");
+        };
+        assert_eq!(ability.source_zone, AbilitySourceZone::Graveyard);
+        assert_eq!(
+            ability.costs,
+            [
+                AbilityCost::Mana(ManaCost::parse("{2}{B}").expect("valid cost")),
+                AbilityCost::ExileSelf,
+            ]
+        );
+        assert_eq!(
+            ability.effect,
+            [
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                },
+                SpellEffectKind::LoseLife {
+                    amount: LifeAmount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                },
+            ]
+        );
+        assert_eq!(ability.timing, ActivationTiming::Normal);
+        assert!(ability.targeting.is_none());
+    }
+
+    #[test]
+    fn issue_358_dies_drain_observes_self_creature_and_artifact() {
+        const CLAUSE: &str = "Whenever this creature or another creature or artifact you control dies, target opponent loses 1 life and you gain 1 life.";
+        let Some(RecipeEmission::TriggeredAbility(ability)) =
+            match_triggered_self_or_creature_or_artifact_dies_drain(CLAUSE, &context())
+        else {
+            panic!("the self-inclusive dies drain must emit a triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverPermanentLeavesBattlefield {
+                controller: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    any_of: Some(vec![
+                        PermanentEventFilter {
+                            permanent_type: Some(PermanentTypeFilter::Creature),
+                            ..PermanentEventFilter::default()
+                        },
+                        PermanentEventFilter {
+                            permanent_type: Some(PermanentTypeFilter::Artifact),
+                            ..PermanentEventFilter::default()
+                        },
+                    ]),
+                    ..PermanentEventFilter::default()
+                },
+                destination: ZoneEventDestination::OneOf(vec![EventZone::Graveyard]),
+                cardinality: ZoneEventCardinality::EachObject,
+            }
+        );
+        assert_eq!(
+            ability.effect,
+            [
+                SpellEffectKind::TargetPlayerLosesLife {
+                    amount: 1,
+                    target: TargetFilter {
+                        kind: TargetKind::OpponentPlayer,
+                        ..TargetFilter::default()
+                    },
+                },
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(1),
+                },
+            ]
+        );
+        let targeting = ability.targeting.as_ref().expect("one target group");
+        assert_eq!(targeting.groups.len(), 1);
+        assert_eq!((targeting.groups[0].min, targeting.groups[0].max), (1, 1));
+        assert_eq!(targeting.groups[0].effect_indices, [0]);
+        assert_eq!(targeting.groups[0].prompt, "Choose target opponent");
+    }
+
+    #[test]
+    fn issue_358_near_misses_stay_unowned() {
+        for id in [
+            "static.enters_with_counter.opponent_lost_life_this_turn",
+            "activated.pay_life.pump_self_plus_two_plus_two.once_per_turn",
+            "spell.cost_reduction.creature_died_this_turn.three",
+            "activated.graveyard.exile_self.draw_one_lose_one",
+            "triggered.self_or_creature_or_artifact_dies.target_opponent_drain_one",
+        ] {
+            let recipe = issue_358_recipe(id);
+            for near_miss in recipe.calibration.negative_near_misses {
+                assert!(
+                    (recipe.matcher)(near_miss, &context()).is_none(),
+                    "{id} accepted near-miss {near_miss:?}"
+                );
+                assert!(
+                    match_clause(near_miss, false, &context())
+                        .expect("unambiguous")
+                        .is_none(),
+                    "the catalog unexpectedly owns {id} near-miss {near_miss:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn issue_358_source_kind_gating_stays_on_each_template() {
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        for clause in [
+            ISSUE_358_ENTERS_COUNTER_OPPONENT_LOST_LIFE_CLAUSE,
+            ISSUE_358_PAY_LIFE_PUMP_ONCE_PER_TURN_CLAUSE,
+            ISSUE_358_SELF_OR_CREATURE_OR_ARTIFACT_DIES_DRAIN_CLAUSE,
+        ] {
+            assert_eq!(
+                match_clause(clause, false, &noncreature).expect("unambiguous"),
+                None,
+                "creature-source template must stay gated: {clause}"
+            );
+        }
+        // The permanent/spell while-on-the-stack and graveyard-zone templates are not
+        // creature-gated by their printed wording.
+        for clause in [
+            ISSUE_358_COST_REDUCTION_CREATURE_DIED_CLAUSE,
+            ISSUE_358_GRAVEYARD_EXILE_SELF_DRAW_ONE_LOSE_ONE_CLAUSE,
+        ] {
+            assert!(
+                match_clause(clause, false, &noncreature)
+                    .expect("unambiguous")
+                    .is_some(),
+                "non-creature-source template must still match: {clause}"
+            );
+        }
     }
 }
