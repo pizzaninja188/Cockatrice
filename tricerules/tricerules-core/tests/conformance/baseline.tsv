@@ -47,6 +47,7 @@ airship_engine_room	0	land	exercised
 ajanis_pridemate	0	cast	exercised
 ajanis_response	0	cast	exercised
 ajanis_sunstriker	0	cast	exercised
+akawalli,_the_seething_tower	0	cast	exercised
 akki_lavarunner_tok-tok,_volcano_born	0	cast	exercised
 akki_lavarunner_tok-tok,_volcano_born	1	cast	intentional: face unavailable from hand
 alabaster_host_sanctifier	0	cast	exercised
@@ -187,6 +188,7 @@ bartizan_bats	0	cast	exercised
 bashful_beastie	0	cast	exercised
 basilisk_collar	0	ability:0	exercised
 basilisk_collar	0	cast	exercised
+basking_capybara	0	cast	exercised
 bassara_tower_archer	0	cast	exercised
 bastion_enforcer	0	cast	exercised
 battle_hurda	0	cast	exercised
@@ -216,6 +218,7 @@ bestial_menace	0	cast	exercised
 bestow_greatness	0	cast	exercised
 bifur,_melodic_rider	0	cast	exercised
 bigfin_bouncer	0	cast	exercised
+billowing_shriekmass	0	cast	exercised
 biosynthic_burst	0	cast	exercised
 birnin_zana_plaza	0	ability:0	exercised
 birnin_zana_plaza	0	land	exercised
@@ -382,6 +385,7 @@ celestial_enforcer	0	cast	exercised
 cenote_scout	0	cast	exercised
 centaur_courser	0	cast	exercised
 centaur_healer	0	cast	exercised
+cephalid_inkmage	0	cast	exercised
 cerodon_yearling	0	cast	exercised
 champion_of_arashin	0	cast	exercised
 champion_of_dusan	0	ability:0	unsupported: ability not offered by generic battlefield fixture
@@ -599,6 +603,7 @@ devilthorn_fox	0	cast	exercised
 devoted_hero	0	cast	exercised
 devout_monk	0	cast	exercised
 diabolic_edict	0	cast	exercised
+didact_echo	0	cast	exercised
 dimension_x	0	ability:0	exercised
 dimension_x	0	land	exercised
 dimir_guildgate	0	ability:0	exercised
@@ -622,6 +627,7 @@ divination	0	cast	exercised
 divine_verdict	0	cast	unsupported: target group 0 needs a richer fixture
 diving_griffin	0	cast	exercised
 djinn_of_the_lamp	0	cast	exercised
+doc_ock,_sinister_scientist	0	cast	exercised
 dockworker_drone	0	cast	exercised
 donatello,_turtle_techie	0	cast	exercised
 donatellos_technique	0	cast	exercised
@@ -637,6 +643,7 @@ dragonstorm_globe	0	ability:0	exercised
 dragonstorm_globe	0	cast	exercised
 drakewing_krasis	0	cast	exercised
 dreaded_bat-cloud	0	cast	exercised
+dreadwing_scavenger	0	cast	exercised
 dream_beavers	0	cast	exercised
 dream_seizer	0	cast	exercised
 dreamroot_cascade	0	ability:0	exercised
@@ -677,6 +684,7 @@ earth_elemental	0	cast	exercised
 earthbender_ascension	0	cast	exercised
 earthshaking_si	0	cast	exercised
 east_wind_avatar	0	cast	exercised
+echo_of_dusk	0	cast	exercised
 eddymurk_crab	0	cast	exercised
 edgewall_pack	0	cast	exercised
 ekundu_griffin	0	cast	exercised
@@ -801,6 +809,7 @@ fireball	0	cast	exercised
 firebrand_archer	0	cast	exercised
 fireshrieker	0	ability:0	exercised
 fireshrieker	0	cast	exercised
+first-time_flyer	0	cast	exercised
 fisk_tower	0	ability:0	exercised
 fisk_tower	0	land	exercised
 fists_of_the_anvil	0	cast	exercised
@@ -859,6 +868,7 @@ frantic_strength	0	cast	exercised
 frenzied_raptor	0	cast	exercised
 fresh_volunteers	0	cast	exercised
 friendly_teddy	0	cast	exercised
+frilled_cave-wurm	0	cast	exercised
 frilled_sea_serpent	0	ability:0	exercised
 frilled_sea_serpent	0	cast	exercised
 frilled_sparkshooter	0	cast	exercised
@@ -906,6 +916,7 @@ gerrards_irregulars	0	cast	exercised
 gerrards_verdict	0	cast	exercised
 get_out	0	cast	exercised
 ghirapur_osprey	0	cast	exercised
+ghitu_lavarunner	0	cast	exercised
 ghost_vacuum	0	ability:0	exercised
 ghost_vacuum	0	ability:1	exercised
 ghost_vacuum	0	cast	exercised
@@ -1492,11 +1503,14 @@ migrating_ketradon	0	ability:0	unsupported: ability not offered by generic battl
 migrating_ketradon	0	cast	exercised
 millennial_gargoyle	0	cast	exercised
 mind_control	0	cast	exercised
+mind_drill_assailant	0	ability:0	exercised
+mind_drill_assailant	0	cast	exercised
 mind_rot	0	cast	exercised
 mind_sculpt	0	cast	exercised
 mind_transfer_protocol	0	cast	exercised
 mindful_biomancer	0	ability:0	exercised
 mindful_biomancer	0	cast	exercised
+mindwhisker	0	cast	exercised
 mineshaft_spider	0	cast	exercised
 minotaur_abomination	0	cast	exercised
 minotaur_aggressor	0	cast	exercised
@@ -1671,6 +1685,7 @@ pack_mastiff	0	ability:0	exercised
 pack_mastiff	0	cast	exercised
 panther_warriors	0	cast	exercised
 pardic_wanderer	0	cast	exercised
+patchwork_beastie	0	cast	exercised
 path_to_redemption	0	ability:0	exercised
 path_to_redemption	0	cast	exercised
 pathfinding_axejaw	0	cast	exercised
@@ -2382,7 +2397,10 @@ thawbringer	0	cast	exercised
 the_arkenstone_seek_the_heart	0	cast	exercised
 the_arkenstone_seek_the_heart	1	cast	exercised
 the_fabulous_frog-man	0	cast	exercised
+the_lion-turtle	0	ability:0	exercised
+the_lion-turtle	0	cast	exercised
 the_mountain-kings_return	0	cast	exercised
+the_swarmweaver	0	cast	exercised
 the_terror_of_serpents_pass	0	cast	exercised
 the_whizzer,_classic_speedster	0	cast	exercised
 the_wondrous_wasp	0	cast	exercised
@@ -2688,6 +2706,7 @@ wild_elephant	0	cast	exercised
 wild_griffin	0	cast	exercised
 wild_jhovall	0	cast	exercised
 wild_unraveling	0	cast	unsupported: target group 0 needs a richer fixture
+wildfire_wickerfolk	0	cast	exercised
 wildwood_patrol	0	cast	exercised
 willow_elf	0	cast	exercised
 willow_faerie	0	cast	exercised

@@ -892,6 +892,18 @@ fn parse_rules_text(
             }
             RecipeEmission::ActivatedAbility(ability) => parsed.activated_abilities.push(ability),
             RecipeEmission::StaticAbility(ability) => parsed.static_abilities.push(ability),
+            RecipeEmission::StaticAbilities(definitions) => {
+                for definition in definitions {
+                    let static_id =
+                        AbilityId::new(format!("static_{:02}", parsed.static_abilities.len() + 1))
+                            .map_err(|_| RulesParseError::Unsupported)?;
+                    parsed.static_abilities.push(IdentifiedAbility {
+                        ability_id: static_id,
+                        presentation: context.presentation.clone(),
+                        definition,
+                    });
+                }
+            }
             RecipeEmission::CharacteristicAbility(ability) => {
                 parsed.characteristic_defining_abilities.push(ability)
             }

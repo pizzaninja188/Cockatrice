@@ -130,6 +130,10 @@ pub(super) enum RecipeEmission {
     TriggeredAbilities(Vec<TriggeredAbilityDef>),
     ActivatedAbility(ActivatedAbilityDef),
     StaticAbility(IdentifiedAbility<StaticAbilityDef>),
+    /// One clause that is authored as more than one typed static ability (Akawalli's Descend 8
+    /// line and The Swarmweaver's subtype-pair anthem). The generator assigns sequential stable
+    /// ability IDs and the clause's Oracle-line presentation to each definition in order.
+    StaticAbilities(Vec<StaticAbilityDef>),
     CharacteristicAbility(IdentifiedAbility<CharacteristicDefiningAbility>),
     ModalMode(ModalModeEmission),
     ModalAssembly(ModalAssemblyEmission),
@@ -10189,6 +10193,1056 @@ fn match_spell_beastie_beatdown_aggregate(
         })
 }
 
+// ---------------------------------------------------------------------------
+// Issue #377 — static conditional characteristics keyed on public graveyard state.
+// ---------------------------------------------------------------------------
+
+const ISSUE_377_DESCEND4_PLUS_2_2_TRAMPLE_CLAUSE: &str =
+    "Descend 4 — As long as there are four or more permanent cards in your graveyard, this creature gets +2/+2 and has trample.";
+const ISSUE_377_DESCEND8_PLUS_2_2_MAX_ONE_BLOCKER_CLAUSE: &str =
+    "Descend 8 — As long as there are eight or more permanent cards in your graveyard, this creature gets an additional +2/+2 and can't be blocked by more than one creature.";
+const ISSUE_377_DESCEND4_PLUS_3_0_CLAUSE: &str =
+    "Descend 4 — This creature gets +3/+0 as long as there are four or more permanent cards in your graveyard.";
+const ISSUE_377_DESCEND4_PLUS_2_0_CLAUSE: &str =
+    "Descend 4 — This creature gets +2/+0 as long as there are four or more permanent cards in your graveyard.";
+const ISSUE_377_DESCEND4_FLYING_CLAUSE: &str =
+    "Descend 4 — This creature has flying as long as there are four or more permanent cards in your graveyard.";
+const ISSUE_377_DESCEND4_LIFELINK_CLAUSE: &str =
+    "Descend 4 — As long as there are four or more permanent cards in your graveyard, this creature gets +1/+1 and has lifelink.";
+const ISSUE_377_THRESHOLD_PLUS_2_1_CLAUSE: &str =
+    "Threshold — This creature gets +2/+1 as long as there are seven or more cards in your graveyard.";
+const ISSUE_377_THRESHOLD_PLUS_3_0_CLAUSE: &str =
+    "Threshold — As long as there are seven or more cards in your graveyard, this creature gets +3/+0.";
+const ISSUE_377_THRESHOLD_PLUS_1_1_CLAUSE: &str =
+    "Threshold — This creature gets +1/+1 as long as there are seven or more cards in your graveyard.";
+const ISSUE_377_THRESHOLD_DEATHTOUCH_CLAUSE: &str =
+    "Threshold — This creature gets +1/+1 and has deathtouch as long as there are seven or more cards in your graveyard.";
+const ISSUE_377_THRESHOLD_CANT_BE_BLOCKED_CLAUSE: &str =
+    "Threshold — This creature can't be blocked as long as there are seven or more cards in your graveyard.";
+const ISSUE_377_THRESHOLD_OPPONENTS_MINUS_1_0_CLAUSE: &str =
+    "Threshold — As long as there are seven or more cards in your graveyard, creatures your opponents control get -1/-0.";
+const ISSUE_377_GRAVEYARD_EIGHT_BASE_8_8_CLAUSE: &str =
+    "As long as there are eight or more cards in your graveyard, this creature has base power and toughness 8/8.";
+const ISSUE_377_LESSON_PLUS_1_1_CLAUSE: &str =
+    "This creature gets +1/+1 as long as there's a Lesson card in your graveyard.";
+const ISSUE_377_TWO_CREATURE_CARDS_PLUS_2_1_CLAUSE: &str =
+    "As long as there are two or more creature cards in your graveyard, this creature gets +2/+1.";
+const ISSUE_377_TWO_SPELLS_HASTE_CLAUSE: &str =
+    "As long as there are two or more instant and/or sorcery cards in your graveyard, this creature gets +1/+0 and has haste.";
+const ISSUE_377_DELIRIUM_PLUS_1_1_TRAMPLE_CLAUSE: &str =
+    "Delirium — This creature gets +1/+1 and has trample as long as there are four or more card types among cards in your graveyard.";
+const ISSUE_377_DELIRIUM_UNLESS_ATTACK_OR_BLOCK_CLAUSE: &str =
+    "Delirium — This creature can't attack or block unless there are four or more card types among cards in your graveyard.";
+const ISSUE_377_DESCEND8_UNLESS_ATTACK_OR_BLOCK_CLAUSE: &str =
+    "Descend 8 — This creature can't attack or block unless there are eight or more permanent cards in your graveyard.";
+const ISSUE_377_LESSON_UNLESS_ATTACK_OR_BLOCK_CLAUSE: &str =
+    "This creature can't attack or block unless there are three or more Lesson cards in your graveyard.";
+const ISSUE_377_DELIRIUM_INSECTS_SPIDERS_CLAUSE: &str =
+    "Delirium — As long as there are four or more card types among cards in your graveyard, Insects and Spiders you control get +1/+1 and have deathtouch.";
+const ISSUE_377_DESCEND8_VEHICLE_CANT_BE_BLOCKED_CLAUSE: &str =
+    "Descend 8 — This Vehicle can't be blocked as long as there are eight or more permanent cards in your graveyard.";
+
+/// CR 201.5c: Oracle text may refer to a card by a shortened version of its name (for a legendary
+/// permanent, the part before the first comma). Normalize that printed self-reference to
+/// `this creature` so the cohort's exact templates are printing-independent. A self-reference
+/// that opens a sentence (after the string start, a period, or an ability-word em dash) keeps
+/// sentence capitalization.
+fn issue_377_self_name_normalized(text: &str, context: &RecipeContext) -> String {
+    let short_name = context
+        .source_name
+        .split(',')
+        .next()
+        .unwrap_or(context.source_name.as_str())
+        .trim();
+    if short_name.is_empty() {
+        return text.to_string();
+    }
+    let mut normalized = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(index) = rest.find(short_name) {
+        normalized.push_str(&rest[..index]);
+        let sentence_start =
+            normalized.is_empty() || normalized.ends_with(". ") || normalized.ends_with("— ");
+        normalized.push_str(if sentence_start {
+            "This creature"
+        } else {
+            "this creature"
+        });
+        rest = &rest[index + short_name.len()..];
+    }
+    normalized.push_str(rest);
+    normalized
+}
+
+/// CR 110.4a: the six permanent card types. Nonbattlefield zone filters have no single permanent
+/// predicate, so the printed "permanent card" cohort is the explicit six-way OR.
+fn issue_377_permanent_card_filter() -> ZoneCardFilter {
+    ZoneCardFilter {
+        any_of: Some(
+            [
+                CardTypeFilter::Artifact,
+                CardTypeFilter::Battle,
+                CardTypeFilter::Creature,
+                CardTypeFilter::Enchantment,
+                CardTypeFilter::Land,
+                CardTypeFilter::Planeswalker,
+            ]
+            .into_iter()
+            .map(|card_type| ZoneCardFilter {
+                card_type: Some(card_type),
+                ..ZoneCardFilter::default()
+            })
+            .collect(),
+        ),
+        ..ZoneCardFilter::default()
+    }
+}
+
+fn issue_377_graveyard_condition(
+    aggregate: GraveyardAggregate,
+    filter: Option<ZoneCardFilter>,
+    min: Option<u32>,
+    max: Option<u32>,
+) -> GameCondition {
+    GameCondition::GraveyardAggregate {
+        owners: RelativePlayerSet::Controller,
+        aggregate,
+        filter,
+        min,
+        max,
+    }
+}
+
+fn issue_377_conditional_self_modifier(
+    condition: GameCondition,
+    delta_power: i32,
+    delta_toughness: i32,
+    keywords: Vec<Keyword>,
+) -> StaticAbilityDef {
+    StaticAbilityDef::ConditionalSelfModifier {
+        condition,
+        set_types: None,
+        add_types: TypeLineAddition::default(),
+        base_power: None,
+        base_toughness: None,
+        delta_power,
+        delta_toughness,
+        keywords,
+        activated_abilities: Vec::new(),
+        triggered_abilities: Vec::new(),
+        can_attack_as_though_without_defender: false,
+    }
+}
+
+fn issue_377_self_restriction(
+    restriction: CombatRestriction,
+    condition: Option<GameCondition>,
+) -> StaticAbilityDef {
+    StaticAbilityDef::SelfCombatRestriction {
+        restriction,
+        condition,
+    }
+}
+
+fn issue_377_cant_attack_or_block() -> CombatRestriction {
+    CombatRestriction {
+        cant_attack: true,
+        cant_block: true,
+        ..CombatRestriction::default()
+    }
+}
+
+/// 1. `static.descend4.self_pt_plus_2_2_trample` — Akawalli's Descend 4 line.
+fn match_static_descend4_self_pt_plus_2_2_trample(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context)
+            == ISSUE_377_DESCEND4_PLUS_2_2_TRAMPLE_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: issue_377_conditional_self_modifier(
+                    issue_377_graveyard_condition(
+                        GraveyardAggregate::CardCount,
+                        Some(issue_377_permanent_card_filter()),
+                        Some(4),
+                        None,
+                    ),
+                    2,
+                    2,
+                    vec![Keyword::Trample],
+                ),
+            })
+        })
+}
+
+/// 2. `static.descend8.self_pt_additional_and_max_one_blocker` — Akawalli's Descend 8 line authors
+/// two typed static abilities: the additional self pump and the gated blocker limit.
+fn match_static_descend8_self_pt_additional_max_one_blocker(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context)
+            == ISSUE_377_DESCEND8_PLUS_2_2_MAX_ONE_BLOCKER_CLAUSE)
+        .then(|| {
+            let condition = issue_377_graveyard_condition(
+                GraveyardAggregate::CardCount,
+                Some(issue_377_permanent_card_filter()),
+                Some(8),
+                None,
+            );
+            RecipeEmission::StaticAbilities(vec![
+                issue_377_conditional_self_modifier(condition.clone(), 2, 2, Vec::new()),
+                issue_377_self_restriction(
+                    CombatRestriction {
+                        maximum_blockers: Some(1),
+                        ..CombatRestriction::default()
+                    },
+                    Some(condition),
+                ),
+            ])
+        })
+}
+
+/// 3. `static.descend4.self_pt_plus_3_0` — Basking Capybara.
+fn match_static_descend4_self_pt_plus_3_0(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context) == ISSUE_377_DESCEND4_PLUS_3_0_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: issue_377_conditional_self_modifier(
+                    issue_377_graveyard_condition(
+                        GraveyardAggregate::CardCount,
+                        Some(issue_377_permanent_card_filter()),
+                        Some(4),
+                        None,
+                    ),
+                    3,
+                    0,
+                    Vec::new(),
+                ),
+            })
+        })
+}
+
+/// 4. `static.descend4.self_pt_plus_2_0` — Frilled Cave-Wurm.
+fn match_static_descend4_self_pt_plus_2_0(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context) == ISSUE_377_DESCEND4_PLUS_2_0_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: issue_377_conditional_self_modifier(
+                    issue_377_graveyard_condition(
+                        GraveyardAggregate::CardCount,
+                        Some(issue_377_permanent_card_filter()),
+                        Some(4),
+                        None,
+                    ),
+                    2,
+                    0,
+                    Vec::new(),
+                ),
+            })
+        })
+}
+
+/// 5. `static.descend4.self_keyword_flying` — Didact Echo.
+fn match_static_descend4_self_keyword_flying(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context) == ISSUE_377_DESCEND4_FLYING_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: issue_377_conditional_self_modifier(
+                    issue_377_graveyard_condition(
+                        GraveyardAggregate::CardCount,
+                        Some(issue_377_permanent_card_filter()),
+                        Some(4),
+                        None,
+                    ),
+                    0,
+                    0,
+                    vec![Keyword::Flying],
+                ),
+            })
+        })
+}
+
+/// 6. `static.descend4.self_pt_lifelink` — Echo of Dusk.
+fn match_static_descend4_self_pt_lifelink(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context) == ISSUE_377_DESCEND4_LIFELINK_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: issue_377_conditional_self_modifier(
+                    issue_377_graveyard_condition(
+                        GraveyardAggregate::CardCount,
+                        Some(issue_377_permanent_card_filter()),
+                        Some(4),
+                        None,
+                    ),
+                    1,
+                    1,
+                    vec![Keyword::Lifelink],
+                ),
+            })
+        })
+}
+
+/// 7. `static.threshold.self_pt_plus_2_1` — Billowing Shriekmass.
+fn match_static_threshold_self_pt_plus_2_1(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context) == ISSUE_377_THRESHOLD_PLUS_2_1_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: issue_377_conditional_self_modifier(
+                    issue_377_graveyard_condition(
+                        GraveyardAggregate::CardCount,
+                        None,
+                        Some(7),
+                        None,
+                    ),
+                    2,
+                    1,
+                    Vec::new(),
+                ),
+            })
+        })
+}
+
+/// 8. `static.threshold.self_pt_plus_3_0` — Mind Drill Assailant. The issue's named peer
+/// Kamahl's Desire prints the Aura-scoped `Enchanted creature` form with the reversed order and
+/// Otarian Juggernaut appends `and attacks each combat if able`; the full pinned corpus has no
+/// second exact printing, so this is a documented singleton.
+fn match_static_threshold_self_pt_plus_3_0(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context) == ISSUE_377_THRESHOLD_PLUS_3_0_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: issue_377_conditional_self_modifier(
+                    issue_377_graveyard_condition(
+                        GraveyardAggregate::CardCount,
+                        None,
+                        Some(7),
+                        None,
+                    ),
+                    3,
+                    0,
+                    Vec::new(),
+                ),
+            })
+        })
+}
+
+/// 9. `static.threshold.self_pt_plus_1_1` — Most Decrepit Old Bird and Nantuko Calmer.
+fn match_static_threshold_self_pt_plus_1_1(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context) == ISSUE_377_THRESHOLD_PLUS_1_1_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: issue_377_conditional_self_modifier(
+                    issue_377_graveyard_condition(
+                        GraveyardAggregate::CardCount,
+                        None,
+                        Some(7),
+                        None,
+                    ),
+                    1,
+                    1,
+                    Vec::new(),
+                ),
+            })
+        })
+}
+
+/// 10. `static.threshold.self_pt_deathtouch` — Dreadwing Scavenger.
+fn match_static_threshold_self_pt_deathtouch(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context) == ISSUE_377_THRESHOLD_DEATHTOUCH_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: issue_377_conditional_self_modifier(
+                    issue_377_graveyard_condition(
+                        GraveyardAggregate::CardCount,
+                        None,
+                        Some(7),
+                        None,
+                    ),
+                    1,
+                    1,
+                    vec![Keyword::Deathtouch],
+                ),
+            })
+        })
+}
+
+/// 11. `static.threshold.self_cant_be_blocked` — Cephalid Inkmage.
+fn match_static_threshold_self_cant_be_blocked(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context)
+            == ISSUE_377_THRESHOLD_CANT_BE_BLOCKED_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: issue_377_self_restriction(
+                    CombatRestriction {
+                        cant_be_blocked: true,
+                        ..CombatRestriction::default()
+                    },
+                    Some(issue_377_graveyard_condition(
+                        GraveyardAggregate::CardCount,
+                        None,
+                        Some(7),
+                        None,
+                    )),
+                ),
+            })
+        })
+}
+
+/// 12. `static.threshold.opponents_pt_minus_1_0` — Mindwhisker's opponent-scoped debuff anthem.
+fn match_static_threshold_opponents_minus_1_0(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context)
+            == ISSUE_377_THRESHOLD_OPPONENTS_MINUS_1_0_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: StaticAbilityDef::AnthemPt {
+                    filter: CreatureScopeFilter {
+                        controller: Some(CreatureScopeController::Opponents),
+                        ..CreatureScopeFilter::default()
+                    },
+                    condition: Some(issue_377_graveyard_condition(
+                        GraveyardAggregate::CardCount,
+                        None,
+                        Some(7),
+                        None,
+                    )),
+                    delta_power: -1,
+                    delta_toughness: 0,
+                },
+            })
+        })
+}
+
+/// 13. `static.graveyard_eight.self_base_pt_8_8` — Doc Ock, Sinister Scientist. Base P/T is
+/// layer 7b (CR 613.4b), not a modifier.
+fn match_static_graveyard_eight_self_base_pt_8_8(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context)
+            == ISSUE_377_GRAVEYARD_EIGHT_BASE_8_8_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: StaticAbilityDef::ConditionalSelfModifier {
+                    condition: issue_377_graveyard_condition(
+                        GraveyardAggregate::CardCount,
+                        None,
+                        Some(8),
+                        None,
+                    ),
+                    set_types: None,
+                    add_types: TypeLineAddition::default(),
+                    base_power: Some(8),
+                    base_toughness: Some(8),
+                    delta_power: 0,
+                    delta_toughness: 0,
+                    keywords: Vec::new(),
+                    activated_abilities: Vec::new(),
+                    triggered_abilities: Vec::new(),
+                    can_attack_as_though_without_defender: false,
+                },
+            })
+        })
+}
+
+/// 14. `static.graveyard_lesson.self_pt_plus_1_1` — First-Time Flyer.
+fn match_static_graveyard_lesson_self_pt_plus_1_1(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context) == ISSUE_377_LESSON_PLUS_1_1_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: issue_377_conditional_self_modifier(
+                    issue_377_graveyard_condition(
+                        GraveyardAggregate::CardCount,
+                        Some(ZoneCardFilter {
+                            required_subtypes: vec!["Lesson".into()],
+                            ..ZoneCardFilter::default()
+                        }),
+                        Some(1),
+                        None,
+                    ),
+                    1,
+                    1,
+                    Vec::new(),
+                ),
+            })
+        })
+}
+
+/// 15. `static.graveyard_two_creature_cards.self_pt_plus_2_1` — Killmonger, Scourge of Wakanda.
+fn match_static_graveyard_two_creature_cards_self_pt_plus_2_1(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context)
+            == ISSUE_377_TWO_CREATURE_CARDS_PLUS_2_1_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: issue_377_conditional_self_modifier(
+                    issue_377_graveyard_condition(
+                        GraveyardAggregate::CardCount,
+                        Some(ZoneCardFilter {
+                            card_type: Some(CardTypeFilter::Creature),
+                            ..ZoneCardFilter::default()
+                        }),
+                        Some(2),
+                        None,
+                    ),
+                    2,
+                    1,
+                    Vec::new(),
+                ),
+            })
+        })
+}
+
+/// 16. `static.graveyard_two_spells.self_pt_haste` — Ghitu Lavarunner.
+fn match_static_graveyard_two_spells_self_pt_haste(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context) == ISSUE_377_TWO_SPELLS_HASTE_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: issue_377_conditional_self_modifier(
+                    issue_377_graveyard_condition(
+                        GraveyardAggregate::CardCount,
+                        Some(ZoneCardFilter {
+                            any_of: Some(vec![
+                                ZoneCardFilter {
+                                    card_type: Some(CardTypeFilter::Instant),
+                                    ..ZoneCardFilter::default()
+                                },
+                                ZoneCardFilter {
+                                    card_type: Some(CardTypeFilter::Sorcery),
+                                    ..ZoneCardFilter::default()
+                                },
+                            ]),
+                            ..ZoneCardFilter::default()
+                        }),
+                        Some(2),
+                        None,
+                    ),
+                    1,
+                    0,
+                    vec![Keyword::Haste],
+                ),
+            })
+        })
+}
+
+/// 17. `static.delirium.self_pt_trample` — Wildfire Wickerfolk and Backwoods Survivalists.
+fn match_static_delirium_self_pt_trample(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context)
+            == ISSUE_377_DELIRIUM_PLUS_1_1_TRAMPLE_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: issue_377_conditional_self_modifier(
+                    issue_377_graveyard_condition(
+                        GraveyardAggregate::DistinctCardTypes,
+                        None,
+                        Some(4),
+                        None,
+                    ),
+                    1,
+                    1,
+                    vec![Keyword::Trample],
+                ),
+            })
+        })
+}
+
+/// 18. `static.delirium.self_cant_attack_or_block_unless` — Patchwork Beastie. The restriction
+/// applies while the printed condition is false, so the gate is the complementary `max: 3`.
+fn match_static_delirium_self_cant_attack_or_block_unless(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context)
+            == ISSUE_377_DELIRIUM_UNLESS_ATTACK_OR_BLOCK_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: issue_377_self_restriction(
+                    issue_377_cant_attack_or_block(),
+                    Some(issue_377_graveyard_condition(
+                        GraveyardAggregate::DistinctCardTypes,
+                        None,
+                        None,
+                        Some(3),
+                    )),
+                ),
+            })
+        })
+}
+
+/// 19. `static.descend8.self_cant_attack_or_block_unless` — The Ancient One. Complementary
+/// `max: 7` gate.
+fn match_static_descend8_self_cant_attack_or_block_unless(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context)
+            == ISSUE_377_DESCEND8_UNLESS_ATTACK_OR_BLOCK_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: issue_377_self_restriction(
+                    issue_377_cant_attack_or_block(),
+                    Some(issue_377_graveyard_condition(
+                        GraveyardAggregate::CardCount,
+                        Some(issue_377_permanent_card_filter()),
+                        None,
+                        Some(7),
+                    )),
+                ),
+            })
+        })
+}
+
+/// 20. `static.graveyard_lesson.self_cant_attack_or_block_unless` — The Lion-Turtle.
+/// Complementary `max: 2` gate.
+fn match_static_graveyard_lesson_self_cant_attack_or_block_unless(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context)
+            == ISSUE_377_LESSON_UNLESS_ATTACK_OR_BLOCK_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: issue_377_self_restriction(
+                    issue_377_cant_attack_or_block(),
+                    Some(issue_377_graveyard_condition(
+                        GraveyardAggregate::CardCount,
+                        Some(ZoneCardFilter {
+                            required_subtypes: vec!["Lesson".into()],
+                            ..ZoneCardFilter::default()
+                        }),
+                        None,
+                        Some(2),
+                    )),
+                ),
+            })
+        })
+}
+
+/// 21. `static.delirium.anthem_insects_spiders_pt_deathtouch` — The Swarmweaver. One printed
+/// line becomes four typed static abilities because `CreatureScopeFilter.subtype` is a single
+/// `Option<String>`.
+fn match_static_delirium_anthem_insects_spiders(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_creature
+        || issue_377_self_name_normalized(text, context)
+            != ISSUE_377_DELIRIUM_INSECTS_SPIDERS_CLAUSE
+    {
+        return None;
+    }
+    let condition =
+        issue_377_graveyard_condition(GraveyardAggregate::DistinctCardTypes, None, Some(4), None);
+    let scope = |subtype: &str| CreatureScopeFilter {
+        controller: Some(CreatureScopeController::YouControl),
+        subtype: Some(subtype.into()),
+        ..CreatureScopeFilter::default()
+    };
+    Some(RecipeEmission::StaticAbilities(vec![
+        StaticAbilityDef::AnthemPt {
+            filter: scope("Insect"),
+            condition: Some(condition.clone()),
+            delta_power: 1,
+            delta_toughness: 1,
+        },
+        StaticAbilityDef::AnthemPt {
+            filter: scope("Spider"),
+            condition: Some(condition.clone()),
+            delta_power: 1,
+            delta_toughness: 1,
+        },
+        StaticAbilityDef::AnthemKeyword {
+            filter: scope("Insect"),
+            condition: Some(condition.clone()),
+            keyword: Keyword::Deathtouch,
+        },
+        StaticAbilityDef::AnthemKeyword {
+            filter: scope("Spider"),
+            condition: Some(condition),
+            keyword: Keyword::Deathtouch,
+        },
+    ]))
+}
+
+/// 22. `static.descend8.self_cant_be_blocked` — Watertight Gondola (Vehicle).
+fn match_static_descend8_self_cant_be_blocked(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_vehicle
+        && issue_377_self_name_normalized(text, context)
+            == ISSUE_377_DESCEND8_VEHICLE_CANT_BE_BLOCKED_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: issue_377_self_restriction(
+                    CombatRestriction {
+                        cant_be_blocked: true,
+                        ..CombatRestriction::default()
+                    },
+                    Some(issue_377_graveyard_condition(
+                        GraveyardAggregate::CardCount,
+                        Some(issue_377_permanent_card_filter()),
+                        Some(8),
+                        None,
+                    )),
+                ),
+            })
+        })
+}
+
+// ---------------------------------------------------------------------------
+// Issue #377 cohort control clauses — the ordinary content printed alongside each cohort
+// identity's graveyard-condition clause. A card may generate only when every printed clause
+// matches, so these exact templates turn the affected identities from blocked into complete
+// cards. Each template binds the complete normalized Oracle line; widened, reordered, optional,
+// or rider forms stay unsupported and no existing matcher is broadened.
+// ---------------------------------------------------------------------------
+
+const ISSUE_377_ETB_MILL_THREE_CLAUSE: &str = "When this creature enters, mill three cards.";
+const ISSUE_377_ETB_SURVEIL_THREE_CLAUSE: &str = "When this creature enters, surveil 3.";
+const ISSUE_377_UPKEEP_SURVEIL_ONE_CLAUSE: &str = "At the beginning of your upkeep, surveil 1.";
+const ISSUE_377_UPKEEP_MAY_MILL_ONE_CLAUSE: &str =
+    "At the beginning of your upkeep, you may mill a card.";
+const ISSUE_377_ETB_GAIN_THREE_LIFE_CLAUSE: &str = "When this creature enters, you gain 3 life.";
+const ISSUE_377_ENTERS_OR_ATTACKS_DRAW_DISCARD_CLAUSE: &str =
+    "Whenever this creature enters or attacks, draw a card, then discard a card.";
+const ISSUE_377_HYBRID_MANA_SURVEIL_ONE_CLAUSE: &str = "{2}{U/B}: Surveil 1.";
+const ISSUE_377_CONTROL_ANOTHER_VILLAIN_HEXPROOF_CLAUSE: &str =
+    "As long as you control another Villain, this creature has hexproof.";
+const ISSUE_377_ETB_CREATE_TWO_INSECTS_CLAUSE: &str =
+    "When this creature enters, create two 1/1 black and green Insect creature tokens with flying.";
+
+/// CR 701.13: the source's own entry trigger mills exactly three cards into its controller's
+/// public graveyard. Another count, the optional wording, another recipient, and riders stay
+/// unsupported.
+fn match_etb_mill_three(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_377_ETB_MILL_THREE_CLAUSE).then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::Mill {
+                count: Amount::Fixed(3),
+                who: PlayerRecipient::Controller,
+            },
+        )
+    })
+}
+
+/// CR 701.25: the source's own entry trigger surveils exactly three cards. Another count, a
+/// non-surveil partition, and riders stay unsupported.
+fn match_etb_surveil_three(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_377_ETB_SURVEIL_THREE_CLAUSE).then(|| {
+        triggered_ability(
+            context,
+            SpellEffectKind::LibraryPartition {
+                count: 3,
+                top_min: 0,
+                top_max: None,
+                kind: LibraryPartitionKind::Surveil,
+            },
+        )
+    })
+}
+
+/// CR 503.1 / 701.25: the source's controller surveils one at the beginning of their own
+/// upkeep. Another player scope, another count, and riders stay unsupported.
+fn match_upkeep_surveil_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_377_UPKEEP_SURVEIL_ONE_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::AtBeginningOfUpkeep {
+                player: CastTriggerPlayer::Controller,
+            },
+            vec![SpellEffectKind::LibraryPartition {
+                count: 1,
+                top_min: 0,
+                top_max: None,
+                kind: LibraryPartitionKind::Surveil,
+            }],
+        )
+    })
+}
+
+/// CR 503.1 / 603.5 / 701.13: the controller may mill one card at the beginning of their own
+/// upkeep. The mandatory wording, another count, another player scope, and riders stay
+/// unsupported.
+fn match_upkeep_may_mill_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_377_UPKEEP_MAY_MILL_ONE_CLAUSE).then(|| {
+        let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+            context,
+            TriggerCondition::AtBeginningOfUpkeep {
+                player: CastTriggerPlayer::Controller,
+            },
+            vec![SpellEffectKind::Mill {
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+            }],
+        ) else {
+            unreachable!("triggered_ability_with always returns a triggered ability")
+        };
+        ability.may = true;
+        RecipeEmission::TriggeredAbility(ability)
+    })
+}
+
+/// CR 603.6a / 119.3: the source's own entry trigger gains exactly three life for its
+/// controller. Another amount, another recipient, and riders stay unsupported.
+fn match_etb_gain_three_life(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    if !context.source_is_creature {
+        return None;
+    }
+    // The planar "When this creature enters, you gain N life." form is owned by the parametric
+    // `etb.gain_life.fixed` recipe. This exact template covers only the printed CR 201.5c
+    // self-name form on a legendary permanent, so the two recipes stay disjoint.
+    let normalized = issue_377_self_name_normalized(text, context);
+    if normalized == text || normalized != ISSUE_377_ETB_GAIN_THREE_LIFE_CLAUSE {
+        return None;
+    }
+    Some(triggered_ability(
+        context,
+        SpellEffectKind::GainLife {
+            amount: Amount::Fixed(3),
+        },
+    ))
+}
+
+/// CR 603.6a / 508.3a / 121 / 701.9: one printed "enters or attacks" line authors two triggers
+/// that share one draw-then-discard instruction, matching the shipped `enters or dies` reuse.
+/// A reordered union, optional wording, another draw or discard count, and riders stay
+/// unsupported.
+fn match_enters_or_attacks_draw_discard(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_creature
+        || issue_377_self_name_normalized(text, context)
+            != ISSUE_377_ENTERS_OR_ATTACKS_DRAW_DISCARD_CLAUSE
+    {
+        return None;
+    }
+    let effect = vec![SpellEffectKind::DrawDiscard {
+        who: PlayerRecipient::Controller,
+        draw_count: 1,
+        discard_count: 1,
+        order: DrawDiscardOrder::DrawThenDiscard,
+        optional: false,
+    }];
+    let RecipeEmission::TriggeredAbility(enters) =
+        triggered_ability_with(context, TriggerCondition::WhenSelfEntersBattlefield, effect)
+    else {
+        unreachable!("triggered_ability_with always returns a triggered ability")
+    };
+    let suffix = context
+        .triggered_ability_id
+        .as_str()
+        .strip_prefix("triggered_")?
+        .parse::<u32>()
+        .ok()?;
+    let mut attacks = enters.clone();
+    attacks.ability_id = AbilityId::new(format!("triggered_{:02}", suffix + 1)).ok()?;
+    attacks.trigger = TriggerCondition::WheneverSelfAttacks {
+        minimum_other_attackers: 0,
+    };
+    Some(RecipeEmission::TriggeredAbilities(vec![enters, attacks]))
+}
+
+/// CR 602.1 / 701.25: a battlefield-only activated ability whose whole cost is the printed
+/// hybrid mana cost buys Surveil 1. Another cost, another surveil count, and riders stay
+/// unsupported.
+fn match_hybrid_mana_surveil_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_377_HYBRID_MANA_SURVEIL_ONE_CLAUSE).then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![AbilityCost::Mana(
+                ManaCost::parse("{2}{U/B}").expect("printed hybrid mana cost"),
+            )],
+            effect: vec![SpellEffectKind::LibraryPartition {
+                count: 1,
+                top_min: 0,
+                top_max: None,
+                kind: LibraryPartitionKind::Surveil,
+            }],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
+/// CR 604.1 / 611.3 / 613.1f: a continuously reevaluated self modifier grants hexproof while
+/// the controller controls at least one other permanent with the printed Villain subtype. The
+/// count reuses the shipped `BattlefieldAggregate` condition with source exclusion; an
+/// inclusive "a Villain", another subtype, a different granted keyword, and riders stay
+/// unsupported.
+fn match_control_another_villain_hexproof(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context)
+            == ISSUE_377_CONTROL_ANOTHER_VILLAIN_HEXPROOF_CLAUSE)
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: StaticAbilityDef::ConditionalSelfModifier {
+                    condition: GameCondition::BattlefieldAggregate {
+                        filter: BattlefieldPermanentFilter {
+                            token: None,
+                            any_of: None,
+                            controllers: RelativePlayerSet::Controller,
+                            card_type: None,
+                            color: None,
+                            name: None,
+                            required_subtypes: vec!["Villain".into()],
+                            exclude_source: true,
+                        },
+                        aggregate: BattlefieldAggregate::Count,
+                        min: Some(1),
+                        max: None,
+                    },
+                    set_types: None,
+                    add_types: TypeLineAddition::default(),
+                    base_power: None,
+                    base_toughness: None,
+                    delta_power: 0,
+                    delta_toughness: 0,
+                    keywords: vec![Keyword::Hexproof],
+                    activated_abilities: Vec::new(),
+                    triggered_abilities: Vec::new(),
+                    can_attack_as_though_without_defender: false,
+                },
+            })
+        })
+}
+
+/// CR 603.6a / 111.1: the source's own entry trigger creates two registered 1/1 black and green
+/// Insect creature tokens with flying. Another token identity, another count, and riders stay
+/// unsupported.
+fn match_etb_create_two_insect_tokens(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context) == ISSUE_377_ETB_CREATE_TWO_INSECTS_CLAUSE)
+        .then(|| {
+            triggered_ability(
+                context,
+                SpellEffectKind::CreateTokens {
+                    token: "insect_bg_1_1_flying".into(),
+                    count: Amount::Fixed(2),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                },
+            )
+        })
+}
+
 pub(super) static CATALOG: &[Recipe] = &[
     Recipe {
         id: RecipeId("static.cost_reduction.affinity_artifacts"),
@@ -11607,7 +12661,7 @@ pub(super) static CATALOG: &[Recipe] = &[
             "A.I.M. Synthoids" => "When this creature enters, surveil 2.",
             "Imperious Inkmage" => "When this creature enters, surveil 2.";
             "When this creature enters, you may surveil 2.",
-            "When this creature enters, surveil 3.",
+            "When this creature enters, surveil 4.",
             "When this creature enters, target player surveils 2.",
             "When this creature enters, surveil 2, then draw a card."
         ),
@@ -11628,7 +12682,7 @@ pub(super) static CATALOG: &[Recipe] = &[
             "When this creature enters, look at the top three cards of your library. You may put one of those cards into exile. Put the rest into your graveyard.",
             "When this creature enters, look at the top three cards of your library. You may put one of those cards into your hand. Put the rest into your graveyard.",
             "When this creature enters, reveal the top three cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard.",
-            "When this creature enters, surveil 3.",
+            "When this creature enters, surveil 4.",
             "When this creature enters, look at the top three cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard. Draw a card."
         ),
     },
@@ -11795,7 +12849,7 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Shore Lurker" => "When this creature enters, surveil 1.",
             "Sanitation Automaton" => "When this creature enters, surveil 1.";
             "When this creature enters, you may surveil 1.",
-            "When this creature enters, surveil 3.",
+            "When this creature enters, surveil 4.",
             "When this creature enters, target player surveils 1.",
             "When this creature enters, surveil 1, then draw a card.",
             "Whenever another creature enters, surveil 1."
@@ -11942,7 +12996,7 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Venomized Cat" => "When this creature enters, mill two cards.",
             "Scarblade Scout" => "When this creature enters, mill two cards.";
             "When this creature enters, you may mill up to two cards.",
-            "When this creature enters, mill three cards.",
+            "When this creature enters, mill five cards.",
             "When this creature enters, target player mills two cards.",
             "When this creature enters, each player mills two cards.",
             "Whenever another creature enters, mill two cards.",
@@ -15975,6 +17029,532 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Choose target creature you control and target creature an opponent controls.\nDelirium — If there are four or more card types among cards in your graveyard, put two +1/+1 counters on the creature you control.\nThe creature you control deals damage equal to its power to the creature an opponent controls. Draw a card."
         ),
     },
+    Recipe {
+        id: RecipeId("static.descend4.self_pt_plus_2_2_trample"),
+        label: "Descend 4 self +2/+2 and trample",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_descend4_self_pt_plus_2_2_trample,
+        // The exact Akawalli clause is a full-corpus singleton; the shared Descend-4 permanent
+        // condition is exercised by the sibling Descend-4 recipes below.
+        calibration: singleton_calibrations!(
+            "Akawalli, the Seething Tower" => "Descend 4 — As long as there are four or more permanent cards in your graveyard, Akawalli gets +2/+2 and has trample.";
+            // Missing keyword, wrong pump, the additional-clause form, a creature-card predicate,
+            // card types, wrong thresholds, the opponent's graveyard, and riders stay unsupported.
+            "Descend 4 — As long as there are four or more permanent cards in your graveyard, Akawalli gets +2/+2.",
+            "Descend 4 — As long as there are four or more permanent cards in your graveyard, Akawalli gets +2/+1 and has trample.",
+            "Descend 4 — As long as there are four or more permanent cards in your graveyard, Akawalli gets an additional +2/+2 and has trample.",
+            "Descend 4 — As long as there are four or more creature cards in your graveyard, Akawalli gets +2/+2 and has trample.",
+            "Descend 4 — As long as there are four or more card types among cards in your graveyard, Akawalli gets +2/+2 and has trample.",
+            "Descend 4 — As long as there are three or more permanent cards in your graveyard, Akawalli gets +2/+2 and has trample.",
+            "Descend 4 — As long as there are seven or more cards in your graveyard, Akawalli gets +2/+2 and has trample.",
+            "Descend 4 — As long as there are four or more permanent cards in an opponent's graveyard, Akawalli gets +2/+2 and has trample.",
+            "Descend 4 — As long as there are four or more permanent cards in your graveyard, Akawalli gets +2/+2 and has trample. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.descend8.self_pt_additional_and_max_one_blocker"),
+        label: "Descend 8 additional self +2/+2 and blocker limit",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_descend8_self_pt_additional_max_one_blocker,
+        // Full-corpus singleton for the two-ability line.
+        calibration: singleton_calibrations!(
+            "Akawalli, the Seething Tower" => "Descend 8 — As long as there are eight or more permanent cards in your graveyard, Akawalli gets an additional +2/+2 and can't be blocked by more than one creature.";
+            // A bare pump, total unblockability, wrong blocker limits, wrong thresholds, a gate
+            // without the pump, and riders stay unsupported.
+            "Descend 8 — As long as there are eight or more permanent cards in your graveyard, Akawalli gets +2/+2 and can't be blocked by more than one creature.",
+            "Descend 8 — As long as there are eight or more permanent cards in your graveyard, Akawalli gets an additional +2/+2 and is unblockable.",
+            "Descend 8 — As long as there are eight or more permanent cards in your graveyard, Akawalli gets an additional +2/+2 and can't be blocked.",
+            "Descend 8 — As long as there are eight or more permanent cards in your graveyard, Akawalli gets an additional +2/+2 and can't be blocked by more than two creatures.",
+            "Descend 8 — As long as there are seven or more permanent cards in your graveyard, Akawalli gets an additional +2/+2 and can't be blocked by more than one creature.",
+            "Descend 8 — As long as there are nine or more permanent cards in your graveyard, Akawalli gets an additional +2/+2 and can't be blocked by more than one creature.",
+            "Descend 8 — As long as there are eight or more permanent cards in your graveyard, Akawalli can't be blocked by more than one creature.",
+            "Descend 8 — As long as there are eight or more permanent cards in your graveyard, Akawalli gets an additional +2/+2 and can't be blocked by more than one creature. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.descend4.self_pt_plus_3_0"),
+        label: "Descend 4 self +3/+0",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_descend4_self_pt_plus_3_0,
+        // Full-corpus singleton; the sibling +2/+0 recipe owns the other printed value.
+        calibration: singleton_calibrations!(
+            "Basking Capybara" => "Descend 4 — This creature gets +3/+0 as long as there are four or more permanent cards in your graveyard.";
+            "Descend 4 — This creature gets +3/+3 as long as there are four or more permanent cards in your graveyard.",
+            "Descend 4 — This creature gets +4/+0 as long as there are four or more permanent cards in your graveyard.",
+            "Descend 4 — This creature gets +3/+0 as long as there are four or more creature cards in your graveyard.",
+            "Descend 4 — This creature gets +3/+0 as long as there are four or more card types among cards in your graveyard.",
+            "Descend 4 — This creature gets +3/+0 as long as there are three or more permanent cards in your graveyard.",
+            "Descend 4 — This creature gets +3/+0 as long as there are seven or more cards in your graveyard.",
+            "Descend 4 — This creature gets +3/+0 as long as there are four or more permanent cards in an opponent's graveyard.",
+            "Descend 4 — This creature gets +3/+0 as long as there are four or more permanent cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.descend4.self_pt_plus_2_0"),
+        label: "Descend 4 self +2/+0",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_descend4_self_pt_plus_2_0,
+        calibration: singleton_calibrations!(
+            "Frilled Cave-Wurm" => "Descend 4 — This creature gets +2/+0 as long as there are four or more permanent cards in your graveyard.";
+            "Descend 4 — This creature gets +2/+2 as long as there are four or more permanent cards in your graveyard.",
+            "Descend 4 — This creature gets +4/+0 as long as there are four or more permanent cards in your graveyard.",
+            "Descend 4 — This creature gets +2/+0 as long as there are four or more creature cards in your graveyard.",
+            "Descend 4 — This creature gets +2/+0 as long as there are four or more card types among cards in your graveyard.",
+            "Descend 4 — This creature gets +2/+0 as long as there are three or more permanent cards in your graveyard.",
+            "Descend 4 — This creature gets +2/+0 as long as there are seven or more cards in your graveyard.",
+            "Descend 4 — This creature gets +2/+0 as long as there are four or more permanent cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.descend4.self_keyword_flying"),
+        label: "Descend 4 self flying",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_descend4_self_keyword_flying,
+        calibration: singleton_calibrations!(
+            "Didact Echo" => "Descend 4 — This creature has flying as long as there are four or more permanent cards in your graveyard.";
+            "Descend 4 — This creature has flying and gets +1/+1 as long as there are four or more permanent cards in your graveyard.",
+            "Descend 4 — This creature has reach as long as there are four or more permanent cards in your graveyard.",
+            "Descend 4 — This creature has flying as long as there are four or more creature cards in your graveyard.",
+            "Descend 4 — This creature has flying as long as there are four or more card types among cards in your graveyard.",
+            "Descend 4 — This creature has flying as long as there are three or more permanent cards in your graveyard.",
+            "Descend 4 — This creature has flying as long as there are seven or more cards in your graveyard.",
+            "Descend 4 — This creature has flying as long as there are four or more permanent cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.descend4.self_pt_lifelink"),
+        label: "Descend 4 self +1/+1 and lifelink",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_descend4_self_pt_lifelink,
+        calibration: singleton_calibrations!(
+            "Echo of Dusk" => "Descend 4 — As long as there are four or more permanent cards in your graveyard, this creature gets +1/+1 and has lifelink.";
+            "Descend 4 — As long as there are four or more permanent cards in your graveyard, this creature gets +1/+1.",
+            "Descend 4 — As long as there are four or more permanent cards in your graveyard, this creature gets +2/+2 and has lifelink.",
+            "Descend 4 — As long as there are four or more permanent cards in your graveyard, this creature gets +1/+1 and has deathtouch.",
+            "Descend 4 — As long as there are four or more creature cards in your graveyard, this creature gets +1/+1 and has lifelink.",
+            "Descend 4 — As long as there are four or more card types among cards in your graveyard, this creature gets +1/+1 and has lifelink.",
+            "Descend 4 — As long as there are three or more permanent cards in your graveyard, this creature gets +1/+1 and has lifelink.",
+            "Descend 4 — As long as there are four or more permanent cards in your graveyard, this creature gets +1/+1 and has lifelink. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.threshold.self_pt_plus_2_1"),
+        label: "Threshold self +2/+1",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_threshold_self_pt_plus_2_1,
+        calibration: singleton_calibrations!(
+            "Billowing Shriekmass" => "Threshold — This creature gets +2/+1 as long as there are seven or more cards in your graveyard.";
+            "Threshold — This creature gets +1/+2 as long as there are seven or more cards in your graveyard.",
+            "Threshold — This creature gets +2/+2 as long as there are seven or more cards in your graveyard.",
+            "Threshold — This creature gets +2/+1 as long as there are six or more cards in your graveyard.",
+            "Threshold — This creature gets +2/+1 as long as there are eight or more cards in your graveyard.",
+            "Threshold — This creature gets +2/+1 as long as there are seven or more creature cards in your graveyard.",
+            "Threshold — This creature gets +2/+1 as long as there are seven or more permanent cards in your graveyard.",
+            "Threshold — This creature gets +2/+1 as long as there are several card types among cards in your graveyard.",
+            "Threshold — This creature gets +2/+1 as long as there are seven or more cards in an opponent's graveyard.",
+            "Threshold — This creature gets +2/+1 as long as there are seven or more cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.threshold.self_pt_plus_3_0"),
+        label: "Threshold self +3/+0",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_threshold_self_pt_plus_3_0,
+        // Mind Drill Assailant is the only exact full-corpus printing: Kamahl's Desire is the Aura
+        // "Enchanted creature" form with the reversed order and Otarian Juggernaut appends
+        // "and attacks each combat if able".
+        calibration: singleton_calibrations!(
+            "Mind Drill Assailant" => "Threshold — As long as there are seven or more cards in your graveyard, this creature gets +3/+0.";
+            "Threshold — As long as there are seven or more cards in your graveyard, this creature gets +3/+3.",
+            "Threshold — As long as there are seven or more cards in your graveyard, this creature gets +0/+3.",
+            "Threshold — As long as there are six or more cards in your graveyard, this creature gets +3/+0.",
+            "Threshold — As long as there are eight or more cards in your graveyard, this creature gets +3/+0.",
+            "Threshold — As long as there are seven or more permanent cards in your graveyard, this creature gets +3/+0.",
+            "Threshold — As long as there are several card types among cards in your graveyard, this creature gets +3/+0.",
+            "Threshold — As long as there are seven or more cards in your graveyard, this creature gets +3/+0. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.threshold.self_pt_plus_1_1"),
+        label: "Threshold self +1/+1",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_threshold_self_pt_plus_1_1,
+        calibration: calibrations!(
+            "Most Decrepit Old Bird" => "Threshold — This creature gets +1/+1 as long as there are seven or more cards in your graveyard.",
+            "Nantuko Calmer" => "Threshold — This creature gets +1/+1 as long as there are seven or more cards in your graveyard.";
+            "Threshold — This creature gets +1/+1 and has flying as long as there are seven or more cards in your graveyard.",
+            "Threshold — This creature gets +1/+2 as long as there are seven or more cards in your graveyard.",
+            "Threshold — This creature gets +1/+1 as long as there are six or more cards in your graveyard.",
+            "Threshold — This creature gets +1/+1 as long as there are eight or more cards in your graveyard.",
+            "Threshold — This creature gets +1/+1 as long as there are seven or more permanent cards in your graveyard.",
+            "Threshold — This creature gets +1/+1 as long as there are several card types among cards in your graveyard.",
+            "Threshold — This creature gets +1/+1 as long as there are seven or more cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.threshold.self_pt_deathtouch"),
+        label: "Threshold self +1/+1 and deathtouch",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_threshold_self_pt_deathtouch,
+        calibration: singleton_calibrations!(
+            "Dreadwing Scavenger" => "Threshold — This creature gets +1/+1 and has deathtouch as long as there are seven or more cards in your graveyard.";
+            "Threshold — This creature gets +2/+2 and has deathtouch as long as there are seven or more cards in your graveyard.",
+            "Threshold — This creature gets +1/+1 and has lifelink as long as there are seven or more cards in your graveyard.",
+            "Threshold — This creature gets +2/+1 and has deathtouch as long as there are seven or more cards in your graveyard.",
+            "Threshold — This creature gets +1/+1 and has deathtouch as long as there are six or more cards in your graveyard.",
+            "Threshold — This creature gets +1/+1 and has deathtouch as long as there are seven or more permanent cards in your graveyard.",
+            "Threshold — This creature gets +1/+1 and has deathtouch as long as there are several card types among cards in your graveyard.",
+            "Threshold — This creature gets +1/+1 and has deathtouch as long as there are seven or more cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.threshold.self_cant_be_blocked"),
+        label: "Threshold self can't be blocked",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_threshold_self_cant_be_blocked,
+        calibration: singleton_calibrations!(
+            "Cephalid Inkmage" => "Threshold — This creature can't be blocked as long as there are seven or more cards in your graveyard.";
+            "Threshold — This creature can't be blocked by creatures with flying as long as there are seven or more cards in your graveyard.",
+            "Threshold — This creature can't be blocked except by two or more creatures as long as there are seven or more cards in your graveyard.",
+            "Threshold — This creature can't be blocked as long as there are six or more cards in your graveyard.",
+            "Threshold — This creature can't be blocked as long as there are eight or more cards in your graveyard.",
+            "Threshold — This creature can't be blocked as long as there are seven or more permanent cards in your graveyard.",
+            "Threshold — This creature can't be blocked as long as there are four or more card types among cards in your graveyard.",
+            "This creature can't be blocked.",
+            "Threshold — This creature can't be blocked as long as there are seven or more cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.threshold.opponents_pt_minus_1_0"),
+        label: "Threshold opponents' creatures -1/-0",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_threshold_opponents_minus_1_0,
+        calibration: singleton_calibrations!(
+            "Mindwhisker" => "Threshold — As long as there are seven or more cards in your graveyard, creatures your opponents control get -1/-0.";
+            "Threshold — As long as there are seven or more cards in your graveyard, creatures you control get -1/-0.",
+            "Threshold — As long as there are seven or more cards in your graveyard, creatures your opponents control get -1/-1.",
+            "Threshold — As long as there are seven or more cards in your graveyard, creatures your opponents control get +1/+0.",
+            "Threshold — As long as there are six or more cards in your graveyard, creatures your opponents control get -1/-0.",
+            "Threshold — As long as there are eight or more cards in your graveyard, creatures your opponents control get -1/-0.",
+            "Threshold — As long as there are seven or more permanent cards in your graveyard, creatures your opponents control get -1/-0.",
+            "Threshold — As long as there are seven or more card types among cards in your graveyard, creatures your opponents control get -1/-0.",
+            "Threshold — As long as there are seven or more cards in your graveyard, all creatures get -1/-0.",
+            "Threshold — As long as there are seven or more cards in your graveyard, creatures your opponents control get -1/-0. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.graveyard_eight.self_base_pt_8_8"),
+        label: "eight cards in graveyard set base P/T 8/8",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_graveyard_eight_self_base_pt_8_8,
+        calibration: singleton_calibrations!(
+            "Doc Ock, Sinister Scientist" => "As long as there are eight or more cards in your graveyard, Doc Ock has base power and toughness 8/8.";
+            "As long as there are eight or more cards in your graveyard, this creature has base power and toughness 4/4.",
+            "As long as there are eight or more cards in your graveyard, this creature gets +8/+8.",
+            "As long as there are seven or more cards in your graveyard, this creature has base power and toughness 8/8.",
+            "As long as there are nine or more cards in your graveyard, this creature has base power and toughness 8/8.",
+            "As long as there are eight or more permanent cards in your graveyard, this creature has base power and toughness 8/8.",
+            "As long as there are eight or more card types among cards in your graveyard, this creature has base power and toughness 8/8.",
+            "As long as there are eight or more cards in your graveyard, this creature has base power 8.",
+            "As long as there are eight or more cards in your graveyard, this creature has base power and toughness 8/8. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.graveyard_lesson.self_pt_plus_1_1"),
+        label: "Lesson card in graveyard self +1/+1",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_graveyard_lesson_self_pt_plus_1_1,
+        calibration: singleton_calibrations!(
+            "First-Time Flyer" => "This creature gets +1/+1 as long as there's a Lesson card in your graveyard.";
+            "This creature gets +1/+1 as long as there are two or more Lesson cards in your graveyard.",
+            "This creature gets +1/+1 as long as there's a Lesson or Lesson card in your graveyard.",
+            "This creature gets +1/+1 as long as there's a Cave card in your graveyard.",
+            "This creature gets +1/+1 as long as there's a Lesson card in target player's graveyard.",
+            "This creature gets +2/+2 as long as there's a Lesson card in your graveyard.",
+            "This creature gets +1/+1 as long as there's a Lesson card in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.graveyard_two_creature_cards.self_pt_plus_2_1"),
+        label: "two creature cards in graveyard self +2/+1",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_graveyard_two_creature_cards_self_pt_plus_2_1,
+        calibration: singleton_calibrations!(
+            "Killmonger, Scourge of Wakanda" => "As long as there are two or more creature cards in your graveyard, Killmonger gets +2/+1.";
+            "As long as there are two or more creature cards in your graveyard, Killmonger gets +2/+2.",
+            "As long as there are two or more creature cards in your graveyard, Killmonger gets +1/+1.",
+            "As long as there is one or more creature cards in your graveyard, Killmonger gets +2/+1.",
+            "As long as there are three or more creature cards in your graveyard, Killmonger gets +2/+1.",
+            "As long as there are two or more creature cards or permanent cards in your graveyard, Killmonger gets +2/+1.",
+            "As long as there are two or more creature cards in target player's graveyard, Killmonger gets +2/+1.",
+            "As long as there are two or more creature cards in your graveyard, Killmonger gets +2/+1 and is all creature types.",
+            "As long as there are two or more creature cards in your graveyard, Killmonger gets +2/+1. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.graveyard_two_spells.self_pt_haste"),
+        label: "two instant and/or sorcery graveyard cards self +1/+0 and haste",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_graveyard_two_spells_self_pt_haste,
+        calibration: singleton_calibrations!(
+            "Ghitu Lavarunner" => "As long as there are two or more instant and/or sorcery cards in your graveyard, this creature gets +1/+0 and has haste.";
+            "As long as there are two or more instant or sorcery cards in your graveyard, this creature gets +1/+0 and has haste.",
+            "As long as there are two or more instant and/or sorcery cards in your graveyard, this creature gets +1/+0.",
+            "As long as there are two or more instant and/or sorcery cards in your graveyard, this creature gets +0/+1 and has haste.",
+            "As long as there is one or more instant and/or sorcery cards in your graveyard, this creature gets +1/+0 and has haste.",
+            "As long as there are three or more instant and/or sorcery cards in your graveyard, this creature gets +1/+0 and has haste.",
+            "As long as there are two or more creature cards in your graveyard, this creature gets +1/+0 and has haste.",
+            "As long as there are two or more permanent cards in your graveyard, this creature gets +1/+0 and has haste.",
+            "As long as there are two or more instant and/or sorcery cards in your graveyard, this creature gets +1/+0 and has haste. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.delirium.self_pt_trample"),
+        label: "Delirium self +1/+1 and trample",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_delirium_self_pt_trample,
+        calibration: calibrations!(
+            "Wildfire Wickerfolk" => "Delirium — This creature gets +1/+1 and has trample as long as there are four or more card types among cards in your graveyard.",
+            "Backwoods Survivalists" => "Delirium — This creature gets +1/+1 and has trample as long as there are four or more card types among cards in your graveyard.";
+            "Delirium — This creature gets +1/+1 as long as there are four or more card types among cards in your graveyard.",
+            "Delirium — This creature gets +1/+0 and has vigilance as long as there are four or more card types among cards in your graveyard.",
+            "Delirium — This creature gets +1/+1 and has menace as long as there are four or more card types among cards in your graveyard.",
+            "Delirium — This creature gets +1/+1 and has trample as long as there are three or more card types among cards in your graveyard.",
+            "Delirium — This creature gets +1/+1 and has trample as long as there are five or more card types among cards in your graveyard.",
+            "Delirium — This creature gets +1/+1 and has trample as long as there are four or more permanent cards in your graveyard.",
+            "Delirium — This creature gets +1/+1 and has trample as long as there are four or more card types among cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.delirium.self_cant_attack_or_block_unless"),
+        label: "Delirium complement attack and block prohibition",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_delirium_self_cant_attack_or_block_unless,
+        calibration: singleton_calibrations!(
+            "Patchwork Beastie" => "Delirium — This creature can't attack or block unless there are four or more card types among cards in your graveyard.";
+            "Delirium — This creature can't attack unless there are four or more card types among cards in your graveyard.",
+            "Delirium — This creature can't block unless there are four or more card types among cards in your graveyard.",
+            "Delirium — This creature can't attack or block unless there are five or more card types among cards in your graveyard.",
+            "Delirium — This creature can't attack or block unless there are four or more permanent cards in your graveyard.",
+            "Delirium — This creature can't attack or block unless there are four or more card types among cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.descend8.self_cant_attack_or_block_unless"),
+        label: "Descend 8 complement attack and block prohibition",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_descend8_self_cant_attack_or_block_unless,
+        calibration: singleton_calibrations!(
+            "The Ancient One" => "Descend 8 — The Ancient One can't attack or block unless there are eight or more permanent cards in your graveyard.";
+            "Descend 8 — This creature can't attack or block unless there are seven or more permanent cards in your graveyard.",
+            "Descend 8 — This creature can't block unless there are eight or more permanent cards in your graveyard.",
+            "Descend 8 — This creature can't attack or block unless there are eight or more cards in your graveyard.",
+            "Descend 8 — This creature can't attack or block unless there are eight or more permanent cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.graveyard_lesson.self_cant_attack_or_block_unless"),
+        label: "Lesson-card graveyard complement attack and block prohibition",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_graveyard_lesson_self_cant_attack_or_block_unless,
+        calibration: singleton_calibrations!(
+            "The Lion-Turtle" => "The Lion-Turtle can't attack or block unless there are three or more Lesson cards in your graveyard.";
+            "This creature can't attack or block unless there are two or more Lesson cards in your graveyard.",
+            "This creature can't attack or block unless there are four or more Lesson cards in your graveyard.",
+            "This creature can't attack or block unless there's a Lesson card in your graveyard.",
+            "This creature can't attack or block unless there are three or more Lesson cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.delirium.anthem_insects_spiders_pt_deathtouch"),
+        label: "Delirium Insects and Spiders anthem and deathtouch",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_delirium_anthem_insects_spiders,
+        calibration: singleton_calibrations!(
+            "The Swarmweaver" => "Delirium — As long as there are four or more card types among cards in your graveyard, Insects and Spiders you control get +1/+1 and have deathtouch.";
+            "Delirium — As long as there are four or more card types among cards in your graveyard, Insects you control get +1/+1 and have deathtouch.",
+            "Delirium — As long as there are four or more card types among cards in your graveyard, Spiders you control get +1/+1 and have deathtouch.",
+            "Delirium — As long as there are four or more card types among cards in your graveyard, Insects and Spiders you control get +1/+1.",
+            "Delirium — As long as there are four or more card types among cards in your graveyard, Insects and Spiders you control get +1/+1 and have flying.",
+            "Delirium — As long as there are three or more card types among cards in your graveyard, Insects and Spiders you control get +1/+1 and have deathtouch.",
+            "Delirium — As long as there are five or more card types among cards in your graveyard, Insects and Spiders you control get +1/+1 and have deathtouch.",
+            "Delirium — As long as there are four or more card types among cards in your graveyard, creatures you control get +1/+1 and have deathtouch.",
+            "Delirium — As long as there are four or more card types among cards in your graveyard, Insects and Spiders your opponents control get +1/+1 and have deathtouch.",
+            "Delirium — As long as there are four or more card types among cards in your graveyard, Insects and Spiders you control get +1/+1 and have deathtouch. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.descend8.self_cant_be_blocked"),
+        label: "Descend 8 Vehicle can't be blocked",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_descend8_self_cant_be_blocked,
+        calibration: singleton_calibrations!(
+            "Watertight Gondola" => "Descend 8 — This Vehicle can't be blocked as long as there are eight or more permanent cards in your graveyard.";
+            "Descend 8 — This Vehicle can't be blocked by creatures with flying as long as there are eight or more permanent cards in your graveyard.",
+            "Descend 8 — This Vehicle can't block as long as there are eight or more permanent cards in your graveyard.",
+            "Descend 8 — This Vehicle can't be blocked as long as there are seven or more permanent cards in your graveyard.",
+            "Descend 8 — This Vehicle can't be blocked as long as there are nine or more permanent cards in your graveyard.",
+            "Descend 8 — This Vehicle can't be blocked as long as there are eight or more cards in your graveyard.",
+            "Descend 8 — This Vehicle can't be blocked as long as there are four or more card types among cards in your graveyard.",
+            "Descend 8 — This Vehicle can't be blocked as long as there are eight or more permanent cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.mill.three"),
+        label: "ETB mill three cards",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_mill_three,
+        // Two exact full-corpus printings share the clause: Billowing Shriekmass (the cohort
+        // identity) and Venomous Hierophant. Other mill counts stay separate recipes.
+        calibration: calibrations!(
+            "Billowing Shriekmass" => "When this creature enters, mill three cards.",
+            "Venomous Hierophant" => "When this creature enters, mill three cards.";
+            // A rider, a dies trigger, an attacks trigger, another count, and another recipient
+            // stay unsupported.
+            "When this creature enters, mill three cards. Draw a card.",
+            "When this creature dies, mill three cards.",
+            "Whenever this creature attacks, mill three cards.",
+            "When this creature enters, mill five cards.",
+            "When this creature enters, each player mills three cards."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.surveil.three"),
+        label: "ETB surveil three",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_surveil_three,
+        // Two exact full-corpus printings share the clause: Cephalid Inkmage (the cohort
+        // identity) and Naga Oracle.
+        calibration: calibrations!(
+            "Cephalid Inkmage" => "When this creature enters, surveil 3.",
+            "Naga Oracle" => "When this creature enters, surveil 3.";
+            // Another count, a rider, a dies trigger, and an attacks trigger stay unsupported.
+            "When this creature enters, surveil 4.",
+            "When this creature enters, surveil 3, then draw a card.",
+            "When this creature dies, surveil 3.",
+            "Whenever this creature attacks, surveil 3."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.upkeep.surveil.one"),
+        label: "upkeep surveil one",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_upkeep_surveil_one,
+        // Mindwhisker is the cohort identity; Uurg, Spawn of Turg prints the same upkeep clause
+        // in the full corpus.
+        calibration: calibrations!(
+            "Mindwhisker" => "At the beginning of your upkeep, surveil 1.",
+            "Uurg, Spawn of Turg" => "At the beginning of your upkeep, surveil 1.";
+            // Another count, another step, a rider, and the each-upkeep scope stay unsupported.
+            "At the beginning of your upkeep, surveil 2.",
+            "At the beginning of your end step, surveil 1.",
+            "At the beginning of your upkeep, surveil 1, then draw a card.",
+            "At the beginning of each upkeep, surveil 1."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.upkeep.may_mill.one"),
+        label: "upkeep optional mill one",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_upkeep_may_mill_one,
+        // Patchwork Beastie is the only creature-gated exact printing (the cohort identity).
+        // The mandatory wording, Crop Sigil's artifact surface, another count, another upkeep
+        // scope, and riders stay unsupported.
+        calibration: singleton_calibrations!(
+            "Patchwork Beastie" => "At the beginning of your upkeep, you may mill a card.";
+            "At the beginning of your upkeep, mill a card.",
+            "At the beginning of each upkeep, you may mill a card.",
+            "At the beginning of your upkeep, you may mill two cards.",
+            "At the beginning of your upkeep, you may mill a card, then draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.gain_life.three"),
+        label: "ETB gain three life",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_gain_three_life,
+        // The Lion-Turtle is the cohort identity and the only exact full-corpus printing of the
+        // 201.5c self-name form; the plain "this creature" form with any amount stays with the
+        // existing parametric `etb.gain_life.fixed` recipe, so the two never overlap.
+        calibration: singleton_calibrations!(
+            "The Lion-Turtle" => "When The Lion-Turtle enters, you gain 3 life.";
+            // A rider, a dies trigger, an enters trigger, and an appended instruction stay
+            // unsupported.
+            "When this creature enters, you gain 3 life. Draw a card.",
+            "When this creature dies, you gain 3 life.",
+            "Whenever this creature enters, you gain 3 life.",
+            "When this creature enters, you gain 3 life, then draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.enters_or_attacks.draw_discard.one"),
+        label: "enters or attacks draw then discard",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_enters_or_attacks_draw_discard,
+        // Dreadwing Scavenger is the cohort identity; Emet-Selch, Unsundered prints the same
+        // union line in the full corpus. One printed line authors the two typed triggers.
+        calibration: calibrations!(
+            "Dreadwing Scavenger" => "Whenever this creature enters or attacks, draw a card, then discard a card.",
+            "Emet-Selch, Unsundered" => "Whenever Emet-Selch enters or attacks, draw a card, then discard a card.";
+            // A missing discard, a reordered union, another draw or discard count, and the
+            // optional wording stay unsupported.
+            "Whenever this creature enters or attacks, draw a card.",
+            "Whenever this creature attacks or enters, draw a card, then discard a card.",
+            "Whenever this creature enters or attacks, draw two cards, then discard a card.",
+            "Whenever this creature enters or attacks, draw a card, then discard two cards.",
+            "Whenever this creature enters or attacks, you may draw a card, then discard a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.mana.hybrid_surveil.one"),
+        label: "hybrid mana activated surveil one",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_hybrid_mana_surveil_one,
+        // Mind Drill Assailant is the only exact full-corpus printing of this cost plus effect;
+        // the activated surveil surface is exercised by the shipped tap- and mana-cost recipes.
+        calibration: singleton_calibrations!(
+            "Mind Drill Assailant" => "{2}{U/B}: Surveil 1.";
+            // Another surveil count, a two-color cost, a rider, and a timing instruction stay
+            // unsupported.
+            "{2}{U/B}: Surveil 2.",
+            "{2}{U}{B}: Surveil 1.",
+            "{2}{U/B}: Surveil 1. Draw a card.",
+            "{2}{U/B}: Surveil 1. Activate only as a sorcery."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.control_another_villain.self_hexproof"),
+        label: "control another Villain self hexproof",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_control_another_villain_hexproof,
+        // Doc Ock, Sinister Scientist is the only exact full-corpus printing of the "another
+        // Villain" hexproof condition. The shipped BattlefieldAggregate self-exclusion and the
+        // layer-6 keyword-grant surface are exercised by existing conditional modifiers.
+        calibration: singleton_calibrations!(
+            "Doc Ock, Sinister Scientist" => "As long as you control another Villain, Doc Ock has hexproof.";
+            "As long as you control another Villain, this creature has hexproof and indestructible.",
+            "As long as you control a Villain, this creature has hexproof.",
+            "As long as you control another Villain, this creature has ward.",
+            "As long as you control another Villain, this creature gains hexproof.",
+            "As long as you control another Villain, this creature has hexproof. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.create_two_insect_tokens"),
+        label: "ETB create two flying Insect tokens",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_create_two_insect_tokens,
+        // The Swarmweaver is the only exact full-corpus printing. The registered
+        // `insect_bg_1_1_flying` token identity is shared with the existing token consumers.
+        calibration: singleton_calibrations!(
+            "The Swarmweaver" => "When The Swarmweaver enters, create two 1/1 black and green Insect creature tokens with flying.";
+            "When this creature enters, create two 1/1 black and green Insect creature tokens.",
+            "When this creature enters, create a 1/1 black and green Insect creature token with flying.",
+            "When this creature enters, create three 1/1 black and green Insect creature tokens with flying.",
+            "When this creature enters, create two 1/1 black Insect creature tokens with flying.",
+            "When this creature enters, create two 1/1 black and green Insect creature tokens with deathtouch."
+        ),
+    },
 ];
 
 fn surface_applies(surface: RecipeSurface, is_spell: bool, context: &RecipeContext) -> bool {
@@ -16571,7 +18151,7 @@ mod tests {
             "When this creature enters, look at the top three cards of your library. You may put one of those cards into exile. Put the rest into your graveyard.",
             "When this creature enters, look at the top three cards of your library. You may put one of those cards into your hand. Put the rest into your graveyard.",
             "When this creature enters, reveal the top three cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard.",
-            "When this creature enters, surveil 3.",
+            "When this creature enters, surveil 4.",
             "When this creature enters, look at the top three cards of your library. You may put one of those cards back on top of your library. Put the rest into your graveyard. Draw a card.",
         ] {
             assert!(
@@ -30515,6 +32095,684 @@ mod tests {
                 .expect("unambiguous"),
             None,
             "an identical unreviewed face must stay unsupported"
+        );
+    }
+
+    fn issue_377_context(source_name: &str, source_is_creature: bool) -> RecipeContext {
+        let mut context = context();
+        context.source_name = source_name.into();
+        context.source_is_creature = source_is_creature;
+        context.source_is_vehicle = !source_is_creature;
+        context
+    }
+
+    /// Issue #377 catalog gate: every cohort clause matches exactly one reviewed recipe with the
+    /// stable RecipeId the issue specifies. Fail-closed behavior for every negative near-miss is
+    /// asserted by `validate_catalog` through the recipe calibration metadata.
+    #[test]
+    fn issue_377_catalog_matches_the_twenty_two_exact_clauses() {
+        for (source_name, clause, recipe_id) in [
+            (
+                "Akawalli, the Seething Tower",
+                "Descend 4 — As long as there are four or more permanent cards in your graveyard, Akawalli gets +2/+2 and has trample.",
+                "static.descend4.self_pt_plus_2_2_trample",
+            ),
+            (
+                "Akawalli, the Seething Tower",
+                "Descend 8 — As long as there are eight or more permanent cards in your graveyard, Akawalli gets an additional +2/+2 and can't be blocked by more than one creature.",
+                "static.descend8.self_pt_additional_and_max_one_blocker",
+            ),
+            (
+                "Basking Capybara",
+                "Descend 4 — This creature gets +3/+0 as long as there are four or more permanent cards in your graveyard.",
+                "static.descend4.self_pt_plus_3_0",
+            ),
+            (
+                "Frilled Cave-Wurm",
+                "Descend 4 — This creature gets +2/+0 as long as there are four or more permanent cards in your graveyard.",
+                "static.descend4.self_pt_plus_2_0",
+            ),
+            (
+                "Didact Echo",
+                "Descend 4 — This creature has flying as long as there are four or more permanent cards in your graveyard.",
+                "static.descend4.self_keyword_flying",
+            ),
+            (
+                "Echo of Dusk",
+                "Descend 4 — As long as there are four or more permanent cards in your graveyard, this creature gets +1/+1 and has lifelink.",
+                "static.descend4.self_pt_lifelink",
+            ),
+            (
+                "Billowing Shriekmass",
+                "Threshold — This creature gets +2/+1 as long as there are seven or more cards in your graveyard.",
+                "static.threshold.self_pt_plus_2_1",
+            ),
+            (
+                "Mind Drill Assailant",
+                "Threshold — As long as there are seven or more cards in your graveyard, this creature gets +3/+0.",
+                "static.threshold.self_pt_plus_3_0",
+            ),
+            (
+                "Most Decrepit Old Bird",
+                "Threshold — This creature gets +1/+1 as long as there are seven or more cards in your graveyard.",
+                "static.threshold.self_pt_plus_1_1",
+            ),
+            (
+                "Dreadwing Scavenger",
+                "Threshold — This creature gets +1/+1 and has deathtouch as long as there are seven or more cards in your graveyard.",
+                "static.threshold.self_pt_deathtouch",
+            ),
+            (
+                "Cephalid Inkmage",
+                "Threshold — This creature can't be blocked as long as there are seven or more cards in your graveyard.",
+                "static.threshold.self_cant_be_blocked",
+            ),
+            (
+                "Mindwhisker",
+                "Threshold — As long as there are seven or more cards in your graveyard, creatures your opponents control get -1/-0.",
+                "static.threshold.opponents_pt_minus_1_0",
+            ),
+            (
+                "Doc Ock, Sinister Scientist",
+                "As long as there are eight or more cards in your graveyard, Doc Ock has base power and toughness 8/8.",
+                "static.graveyard_eight.self_base_pt_8_8",
+            ),
+            (
+                "First-Time Flyer",
+                "This creature gets +1/+1 as long as there's a Lesson card in your graveyard.",
+                "static.graveyard_lesson.self_pt_plus_1_1",
+            ),
+            (
+                "Killmonger, Scourge of Wakanda",
+                "As long as there are two or more creature cards in your graveyard, Killmonger gets +2/+1.",
+                "static.graveyard_two_creature_cards.self_pt_plus_2_1",
+            ),
+            (
+                "Ghitu Lavarunner",
+                "As long as there are two or more instant and/or sorcery cards in your graveyard, this creature gets +1/+0 and has haste.",
+                "static.graveyard_two_spells.self_pt_haste",
+            ),
+            (
+                "Wildfire Wickerfolk",
+                "Delirium — This creature gets +1/+1 and has trample as long as there are four or more card types among cards in your graveyard.",
+                "static.delirium.self_pt_trample",
+            ),
+            (
+                "Patchwork Beastie",
+                "Delirium — This creature can't attack or block unless there are four or more card types among cards in your graveyard.",
+                "static.delirium.self_cant_attack_or_block_unless",
+            ),
+            (
+                "The Ancient One",
+                "Descend 8 — The Ancient One can't attack or block unless there are eight or more permanent cards in your graveyard.",
+                "static.descend8.self_cant_attack_or_block_unless",
+            ),
+            (
+                "The Lion-Turtle",
+                "The Lion-Turtle can't attack or block unless there are three or more Lesson cards in your graveyard.",
+                "static.graveyard_lesson.self_cant_attack_or_block_unless",
+            ),
+            (
+                "The Swarmweaver",
+                "Delirium — As long as there are four or more card types among cards in your graveyard, Insects and Spiders you control get +1/+1 and have deathtouch.",
+                "static.delirium.anthem_insects_spiders_pt_deathtouch",
+            ),
+            (
+                "Watertight Gondola",
+                "Descend 8 — This Vehicle can't be blocked as long as there are eight or more permanent cards in your graveyard.",
+                "static.descend8.self_cant_be_blocked",
+            ),
+        ] {
+            let is_vehicle = recipe_id == "static.descend8.self_cant_be_blocked";
+            let context = issue_377_context(source_name, !is_vehicle);
+            let matched = match_clause(clause, false, &context)
+                .unwrap_or_else(|ambiguity| panic!("{recipe_id} clause is ambiguous: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{recipe_id} clause must match exactly one recipe"));
+            assert_eq!(
+                matched.id.as_str(),
+                recipe_id,
+                "unexpected recipe for clause {clause:?}"
+            );
+        }
+    }
+
+    fn issue_377_permanent_branches(filter: &ZoneCardFilter) -> Vec<CardTypeFilter> {
+        filter
+            .any_of
+            .as_ref()
+            .expect("permanent predicate is a six-way OR")
+            .iter()
+            .map(|branch| branch.card_type.expect("permanent predicate leaf"))
+            .collect()
+    }
+
+    fn issue_377_static_ability(
+        source_name: &str,
+        clause: &str,
+        is_vehicle: bool,
+    ) -> IdentifiedAbility<StaticAbilityDef> {
+        let context = issue_377_context(source_name, !is_vehicle);
+        let matched = match_clause(clause, false, &context)
+            .unwrap_or_else(|ambiguity| panic!("{source_name} clause is ambiguous: {ambiguity}"))
+            .unwrap_or_else(|| panic!("{source_name} clause must match"));
+        let RecipeEmission::StaticAbility(ability) = matched.emission else {
+            panic!("{source_name} must emit one static ability");
+        };
+        ability
+    }
+
+    /// The cohort's `PERMANENT` predicate is the explicit six-way card-type OR, and the threshold
+    /// aggregate choices are `CardCount` (Descend/Threshold) versus `DistinctCardTypes`
+    /// (Delirium). The "unless" restrictions carry the complementary `max` bound, never `min`.
+    #[test]
+    fn issue_377_payloads_use_the_typed_permanent_filter_and_complementary_gates() {
+        let capybara = issue_377_static_ability(
+            "Basking Capybara",
+            ISSUE_377_DESCEND4_PLUS_3_0_CLAUSE,
+            false,
+        );
+        let StaticAbilityDef::ConditionalSelfModifier {
+            condition,
+            delta_power,
+            delta_toughness,
+            ..
+        } = &capybara.definition
+        else {
+            panic!("Basking Capybara must emit a conditional self modifier");
+        };
+        assert_eq!((*delta_power, *delta_toughness), (3, 0));
+        let GameCondition::GraveyardAggregate {
+            owners,
+            aggregate,
+            filter,
+            min,
+            max,
+        } = condition
+        else {
+            panic!("Basking Capybara must gate on a graveyard aggregate");
+        };
+        assert_eq!(*owners, RelativePlayerSet::Controller);
+        assert_eq!(*aggregate, GraveyardAggregate::CardCount);
+        assert_eq!((*min, *max), (Some(4), None));
+        assert_eq!(
+            issue_377_permanent_branches(filter.as_ref().expect("permanent predicate")),
+            [
+                CardTypeFilter::Artifact,
+                CardTypeFilter::Battle,
+                CardTypeFilter::Creature,
+                CardTypeFilter::Enchantment,
+                CardTypeFilter::Land,
+                CardTypeFilter::Planeswalker,
+            ]
+        );
+
+        let wickerfolk = issue_377_static_ability(
+            "Wildfire Wickerfolk",
+            ISSUE_377_DELIRIUM_PLUS_1_1_TRAMPLE_CLAUSE,
+            false,
+        );
+        let StaticAbilityDef::ConditionalSelfModifier {
+            condition,
+            keywords,
+            ..
+        } = &wickerfolk.definition
+        else {
+            panic!("Wildfire Wickerfolk must emit a conditional self modifier");
+        };
+        assert_eq!(keywords, &[Keyword::Trample]);
+        assert_eq!(
+            condition,
+            &GameCondition::GraveyardAggregate {
+                owners: RelativePlayerSet::Controller,
+                aggregate: GraveyardAggregate::DistinctCardTypes,
+                filter: None,
+                min: Some(4),
+                max: None,
+            }
+        );
+
+        let beastie = issue_377_static_ability(
+            "Patchwork Beastie",
+            ISSUE_377_DELIRIUM_UNLESS_ATTACK_OR_BLOCK_CLAUSE,
+            false,
+        );
+        let StaticAbilityDef::SelfCombatRestriction {
+            restriction,
+            condition,
+        } = &beastie.definition
+        else {
+            panic!("Patchwork Beastie must emit a self combat restriction");
+        };
+        assert!(restriction.cant_attack && restriction.cant_block);
+        assert_eq!(
+            condition,
+            &Some(GameCondition::GraveyardAggregate {
+                owners: RelativePlayerSet::Controller,
+                aggregate: GraveyardAggregate::DistinctCardTypes,
+                filter: None,
+                min: None,
+                max: Some(3),
+            })
+        );
+
+        let ancient_one = issue_377_static_ability(
+            "The Ancient One",
+            ISSUE_377_DESCEND8_UNLESS_ATTACK_OR_BLOCK_CLAUSE,
+            false,
+        );
+        let StaticAbilityDef::SelfCombatRestriction { condition, .. } = &ancient_one.definition
+        else {
+            panic!("The Ancient One must emit a self combat restriction");
+        };
+        assert!(
+            matches!(
+                condition,
+                Some(GameCondition::GraveyardAggregate {
+                    aggregate: GraveyardAggregate::CardCount,
+                    filter: Some(filter),
+                    min: None,
+                    max: Some(7),
+                    ..
+                }) if filter.any_of.is_some()
+            ),
+            "The Ancient One must use the complementary Descend-8 maximum: {condition:?}"
+        );
+
+        let lion_turtle = issue_377_static_ability(
+            "The Lion-Turtle",
+            ISSUE_377_LESSON_UNLESS_ATTACK_OR_BLOCK_CLAUSE,
+            false,
+        );
+        let StaticAbilityDef::SelfCombatRestriction { condition, .. } = &lion_turtle.definition
+        else {
+            panic!("The Lion-Turtle must emit a self combat restriction");
+        };
+        assert_eq!(
+            condition,
+            &Some(GameCondition::GraveyardAggregate {
+                owners: RelativePlayerSet::Controller,
+                aggregate: GraveyardAggregate::CardCount,
+                filter: Some(ZoneCardFilter {
+                    required_subtypes: vec!["Lesson".into()],
+                    ..ZoneCardFilter::default()
+                }),
+                min: None,
+                max: Some(2),
+            })
+        );
+
+        let gondola = issue_377_static_ability(
+            "Watertight Gondola",
+            ISSUE_377_DESCEND8_VEHICLE_CANT_BE_BLOCKED_CLAUSE,
+            true,
+        );
+        let StaticAbilityDef::SelfCombatRestriction {
+            restriction,
+            condition,
+        } = &gondola.definition
+        else {
+            panic!("Watertight Gondola must emit a self combat restriction");
+        };
+        assert!(restriction.cant_be_blocked);
+        assert_eq!(
+            condition,
+            &Some(GameCondition::GraveyardAggregate {
+                owners: RelativePlayerSet::Controller,
+                aggregate: GraveyardAggregate::CardCount,
+                filter: Some(issue_377_permanent_card_filter()),
+                min: Some(8),
+                max: None,
+            })
+        );
+    }
+
+    /// Akawalli's Descend 8 line and The Swarmweaver's subtype-pair anthem expand to multiple
+    /// typed static abilities, and both keep the stable recipe surfaces.
+    #[test]
+    fn issue_377_multi_ability_emissions_are_exact() {
+        let akawalli_context = issue_377_context("Akawalli, the Seething Tower", true);
+        let matched = match_clause(
+            ISSUE_377_DESCEND8_PLUS_2_2_MAX_ONE_BLOCKER_CLAUSE,
+            false,
+            &akawalli_context,
+        )
+        .expect("Akawalli must not be ambiguous")
+        .expect("Akawalli's Descend 8 line must match");
+        let RecipeEmission::StaticAbilities(definitions) = matched.emission else {
+            panic!("Akawalli's Descend 8 line must emit two static abilities");
+        };
+        let [StaticAbilityDef::ConditionalSelfModifier {
+            condition: pump_condition,
+            delta_power: 2,
+            delta_toughness: 2,
+            ..
+        }, StaticAbilityDef::SelfCombatRestriction {
+            restriction,
+            condition: restriction_condition,
+        }] = definitions.as_slice()
+        else {
+            panic!("unexpected Akawalli payload: {definitions:?}");
+        };
+        assert_eq!(restriction.maximum_blockers, Some(1));
+        assert_eq!(restriction_condition.as_ref(), Some(pump_condition));
+        assert!(matches!(
+            pump_condition,
+            GameCondition::GraveyardAggregate {
+                aggregate: GraveyardAggregate::CardCount,
+                min: Some(8),
+                max: None,
+                filter: Some(filter),
+                ..
+            } if filter.any_of.as_ref().is_some_and(|branches| branches.len() == 6)
+        ));
+
+        let swarmweaver_context = issue_377_context("The Swarmweaver", true);
+        let matched = match_clause(
+            ISSUE_377_DELIRIUM_INSECTS_SPIDERS_CLAUSE,
+            false,
+            &swarmweaver_context,
+        )
+        .expect("The Swarmweaver must not be ambiguous")
+        .expect("The Swarmweaver must match");
+        let RecipeEmission::StaticAbilities(definitions) = matched.emission else {
+            panic!("The Swarmweaver must emit four static abilities");
+        };
+        let pumps = definitions
+            .iter()
+            .filter_map(|definition| match definition {
+                StaticAbilityDef::AnthemPt {
+                    filter,
+                    condition:
+                        Some(GameCondition::GraveyardAggregate {
+                            aggregate: GraveyardAggregate::DistinctCardTypes,
+                            min: Some(4),
+                            max: None,
+                            ..
+                        }),
+                    delta_power: 1,
+                    delta_toughness: 1,
+                } => Some(filter.subtype.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let keywords = definitions
+            .iter()
+            .filter_map(|definition| match definition {
+                StaticAbilityDef::AnthemKeyword {
+                    filter,
+                    keyword: Keyword::Deathtouch,
+                    condition: Some(..),
+                } => Some(filter.subtype.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(definitions.len(), 4, "{definitions:?}");
+        assert_eq!(
+            pumps,
+            [Some("Insect".to_string()), Some("Spider".to_string())]
+        );
+        assert_eq!(
+            keywords,
+            [Some("Insect".to_string()), Some("Spider".to_string())]
+        );
+        for definition in &definitions {
+            let filter = match definition {
+                StaticAbilityDef::AnthemPt { filter, .. }
+                | StaticAbilityDef::AnthemKeyword { filter, .. } => filter,
+                other => panic!("unexpected Swarmweaver ability: {other:?}"),
+            };
+            assert_eq!(filter.controller, Some(CreatureScopeController::YouControl));
+        }
+    }
+
+    fn issue_377_emission(source_name: &str, clause: &str) -> RecipeEmission {
+        let context = issue_377_context(source_name, true);
+        match_clause(clause, false, &context)
+            .unwrap_or_else(|ambiguity| panic!("{source_name} clause is ambiguous: {ambiguity}"))
+            .unwrap_or_else(|| panic!("{source_name} clause must match"))
+            .emission
+    }
+
+    /// The cohort's ordinary non-graveyard clauses each match exactly one reviewed recipe, so a
+    /// retained identity is a complete card rather than a partial one.
+    #[test]
+    fn issue_377_control_clauses_match_their_exact_recipes() {
+        for (source_name, clause, recipe_id) in [
+            (
+                "Billowing Shriekmass",
+                "When this creature enters, mill three cards.",
+                "triggered.etb.mill.three",
+            ),
+            (
+                "Cephalid Inkmage",
+                "When this creature enters, surveil 3.",
+                "triggered.etb.surveil.three",
+            ),
+            (
+                "Mindwhisker",
+                "At the beginning of your upkeep, surveil 1.",
+                "triggered.upkeep.surveil.one",
+            ),
+            (
+                "Patchwork Beastie",
+                "At the beginning of your upkeep, you may mill a card.",
+                "triggered.upkeep.may_mill.one",
+            ),
+            (
+                "The Lion-Turtle",
+                "When The Lion-Turtle enters, you gain 3 life.",
+                "triggered.etb.gain_life.three",
+            ),
+            (
+                "Dreadwing Scavenger",
+                "Whenever this creature enters or attacks, draw a card, then discard a card.",
+                "triggered.enters_or_attacks.draw_discard.one",
+            ),
+            (
+                "Mind Drill Assailant",
+                "{2}{U/B}: Surveil 1.",
+                "activated.mana.hybrid_surveil.one",
+            ),
+            (
+                "Doc Ock, Sinister Scientist",
+                "As long as you control another Villain, Doc Ock has hexproof.",
+                "static.control_another_villain.self_hexproof",
+            ),
+            (
+                "The Swarmweaver",
+                "When The Swarmweaver enters, create two 1/1 black and green Insect creature tokens with flying.",
+                "triggered.etb.create_two_insect_tokens",
+            ),
+        ] {
+            let matched = match_clause(clause, false, &issue_377_context(source_name, true))
+                .unwrap_or_else(|ambiguity| panic!("{recipe_id} clause is ambiguous: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{recipe_id} clause must match exactly one recipe"));
+            assert_eq!(
+                matched.id.as_str(),
+                recipe_id,
+                "unexpected recipe for clause {clause:?}"
+            );
+        }
+    }
+
+    /// The control-clause payloads use the shipped typed surfaces: fixed mill/surveil/life
+    /// amounts, the upkeep trigger with the optional flag, the split enters-or-attacks trigger
+    /// pair, the hybrid activated cost, the self-excluding Villain count, and the registered
+    /// token identity.
+    #[test]
+    fn issue_377_control_clause_payloads_are_exact() {
+        let RecipeEmission::TriggeredAbility(mill) =
+            issue_377_emission("Billowing Shriekmass", ISSUE_377_ETB_MILL_THREE_CLAUSE)
+        else {
+            panic!("Billowing Shriekmass must emit one triggered ability");
+        };
+        assert_eq!(mill.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            mill.effect,
+            [SpellEffectKind::Mill {
+                count: Amount::Fixed(3),
+                who: PlayerRecipient::Controller,
+            }]
+        );
+
+        let RecipeEmission::TriggeredAbility(surveil) =
+            issue_377_emission("Cephalid Inkmage", ISSUE_377_ETB_SURVEIL_THREE_CLAUSE)
+        else {
+            panic!("Cephalid Inkmage must emit one triggered ability");
+        };
+        assert_eq!(
+            surveil.effect,
+            [SpellEffectKind::LibraryPartition {
+                count: 3,
+                top_min: 0,
+                top_max: None,
+                kind: LibraryPartitionKind::Surveil,
+            }]
+        );
+
+        let RecipeEmission::TriggeredAbility(upkeep_surveil) =
+            issue_377_emission("Mindwhisker", ISSUE_377_UPKEEP_SURVEIL_ONE_CLAUSE)
+        else {
+            panic!("Mindwhisker must emit one triggered ability");
+        };
+        assert_eq!(
+            upkeep_surveil.trigger,
+            TriggerCondition::AtBeginningOfUpkeep {
+                player: CastTriggerPlayer::Controller,
+            }
+        );
+        assert!(!upkeep_surveil.may);
+
+        let RecipeEmission::TriggeredAbility(upkeep_mill) =
+            issue_377_emission("Patchwork Beastie", ISSUE_377_UPKEEP_MAY_MILL_ONE_CLAUSE)
+        else {
+            panic!("Patchwork Beastie must emit one triggered ability");
+        };
+        assert!(upkeep_mill.may, "the printed mill is optional");
+        assert_eq!(
+            upkeep_mill.effect,
+            [SpellEffectKind::Mill {
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+            }]
+        );
+
+        let RecipeEmission::TriggeredAbility(gain_life) = issue_377_emission(
+            "The Lion-Turtle",
+            "When The Lion-Turtle enters, you gain 3 life.",
+        ) else {
+            panic!("The Lion-Turtle must emit one triggered ability");
+        };
+        assert_eq!(
+            gain_life.effect,
+            [SpellEffectKind::GainLife {
+                amount: Amount::Fixed(3),
+            }]
+        );
+
+        let RecipeEmission::TriggeredAbilities(loot) = issue_377_emission(
+            "Dreadwing Scavenger",
+            ISSUE_377_ENTERS_OR_ATTACKS_DRAW_DISCARD_CLAUSE,
+        ) else {
+            panic!("Dreadwing Scavenger must emit two triggered abilities");
+        };
+        assert_eq!(loot.len(), 2, "the union authors one trigger per event");
+        assert_eq!(loot[0].trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            loot[1].trigger,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0,
+            }
+        );
+        assert_eq!(loot[0].ability_id.as_str(), "triggered_01");
+        assert_eq!(loot[1].ability_id.as_str(), "triggered_02");
+        for ability in &loot {
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::DrawDiscard {
+                    who: PlayerRecipient::Controller,
+                    draw_count: 1,
+                    discard_count: 1,
+                    order: DrawDiscardOrder::DrawThenDiscard,
+                    optional: false,
+                }]
+            );
+        }
+
+        let RecipeEmission::ActivatedAbility(surveil_activation) = issue_377_emission(
+            "Mind Drill Assailant",
+            ISSUE_377_HYBRID_MANA_SURVEIL_ONE_CLAUSE,
+        ) else {
+            panic!("Mind Drill Assailant must emit one activated ability");
+        };
+        assert_eq!(
+            surveil_activation.source_zone,
+            AbilitySourceZone::Battlefield
+        );
+        assert_eq!(
+            surveil_activation.costs,
+            [AbilityCost::Mana(
+                ManaCost::parse("{2}{U/B}").expect("printed hybrid cost")
+            )]
+        );
+        assert_eq!(
+            surveil_activation.effect,
+            [SpellEffectKind::LibraryPartition {
+                count: 1,
+                top_min: 0,
+                top_max: None,
+                kind: LibraryPartitionKind::Surveil,
+            }]
+        );
+
+        let RecipeEmission::StaticAbility(hexproof) = issue_377_emission(
+            "Doc Ock, Sinister Scientist",
+            "As long as you control another Villain, Doc Ock has hexproof.",
+        ) else {
+            panic!("Doc Ock must emit one static ability");
+        };
+        let StaticAbilityDef::ConditionalSelfModifier {
+            condition,
+            keywords,
+            ..
+        } = &hexproof.definition
+        else {
+            panic!("Doc Ock must emit a conditional self modifier");
+        };
+        assert_eq!(keywords, &[Keyword::Hexproof]);
+        let GameCondition::BattlefieldAggregate {
+            filter,
+            aggregate,
+            min,
+            max,
+        } = condition
+        else {
+            panic!("Doc Ock must gate on a battlefield aggregate");
+        };
+        assert_eq!(*aggregate, BattlefieldAggregate::Count);
+        assert_eq!((*min, *max), (Some(1), None));
+        assert_eq!(filter.controllers, RelativePlayerSet::Controller);
+        assert_eq!(filter.required_subtypes, ["Villain"]);
+        assert!(
+            filter.exclude_source,
+            "the printed wording is another Villain"
+        );
+
+        let RecipeEmission::TriggeredAbility(insects) = issue_377_emission(
+            "The Swarmweaver",
+            "When The Swarmweaver enters, create two 1/1 black and green Insect creature tokens with flying.",
+        ) else {
+            panic!("The Swarmweaver must emit one triggered ability");
+        };
+        assert_eq!(
+            insects.effect,
+            [SpellEffectKind::CreateTokens {
+                token: "insect_bg_1_1_flying".into(),
+                count: Amount::Fixed(2),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }]
         );
     }
 }
