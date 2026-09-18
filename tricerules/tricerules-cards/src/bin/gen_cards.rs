@@ -29,7 +29,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tricerules_cards::primitives::{
     EffectSubject, EntersTappedAffected, EntryCost, PlayerRecipient, StaticAbilityDef,
-    TargetController, TargetFilter, TargetingDef,
+    TargetController, TargetFilter, TargetSchema, TargetingDef,
 };
 use tricerules_cards::{
     external_oracle_lines, slugify, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
@@ -59,13 +59,14 @@ use recipes::{
     issue_311_oracle_id_is_reviewed, issue_313_card_surface_is_exact,
     issue_313_oracle_id_is_reviewed, issue_314_card_surface_is_exact,
     issue_314_oracle_id_is_reviewed, issue_315_card_surface_is_exact,
-    issue_315_oracle_id_is_reviewed, match_clause, match_modal_assembly, match_modal_mode,
+    issue_315_oracle_id_is_reviewed, issue_373_card_surface_is_exact,
+    issue_373_oracle_id_is_reviewed, match_clause, match_modal_assembly, match_modal_mode,
     match_station_assembly, reviewed_modal_mode_pair, validate_catalog, RecipeAmbiguity,
     RecipeContext, RecipeEmission,
 };
 #[cfg(test)]
 use tricerules_cards::primitives::{
-    GraveyardDestination, LifeAmount, PermanentEventFilter, TargetSchema, ZoneCardFilter,
+    GraveyardDestination, LifeAmount, PermanentEventFilter, ZoneCardFilter,
 };
 #[cfg(test)]
 use tricerules_cards::LibraryPartitionKind;
@@ -723,10 +724,27 @@ fn parse_rules_text(
             if let Some(matched) =
                 match_clause(&aggregate, true, &base_context).map_err(RulesParseError::Ambiguous)?
             {
-                if let RecipeEmission::SpellEffects(effects) = matched.emission {
-                    parsed.spell_effect = effects;
-                    parsed.recipe_labels.push(matched.label);
-                    return Ok(parsed);
+                match matched.emission {
+                    RecipeEmission::SpellEffects(effects) => {
+                        parsed.spell_effect = effects;
+                        parsed.recipe_labels.push(matched.label);
+                        return Ok(parsed);
+                    }
+                    // A whole-face exact recipe may author its own target groups for a multi-line
+                    // spell. This is the same single-authored-group contract the per-line path
+                    // enforces in `assemble_spell_effects_with_targeting`; the aggregate surface is
+                    // only reachable for an exact, identity-gated multi-line recipe, so the
+                    // per-line fail-closed rules are unchanged. Join the Dead, Violent Urge, and
+                    // Beastie Beatdown are the first consumers.
+                    RecipeEmission::SpellEffectsWithTargeting { effects, targeting } => {
+                        TargetSchema::compile(&effects, Some(&targeting))
+                            .map_err(|_| RulesParseError::Unsupported)?;
+                        parsed.spell_effect = effects;
+                        parsed.targeting = Some(targeting);
+                        parsed.recipe_labels.push(matched.label);
+                        return Ok(parsed);
+                    }
+                    _ => {}
                 }
             }
         }
@@ -1901,6 +1919,17 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     ) {
         return Err(Skip::NonKeywordText.into());
     }
+    if !issue_373_card_surface_is_exact(
+        str_field(card, "oracle_id"),
+        &name,
+        &mana_cost,
+        type_line,
+        oracle_text,
+        card.get("power").and_then(Value::as_str),
+        card.get("toughness").and_then(Value::as_str),
+    ) {
+        return Err(Skip::NonKeywordText.into());
+    }
     let mut rules = parse_rules_text(
         &name,
         str_field(card, "oracle_id"),
@@ -2040,7 +2069,8 @@ fn evaluate(
         || issue_311_oracle_id_is_reviewed(str_field(card, "oracle_id"))
         || issue_313_oracle_id_is_reviewed(str_field(card, "oracle_id"))
         || issue_314_oracle_id_is_reviewed(str_field(card, "oracle_id"))
-        || issue_315_oracle_id_is_reviewed(str_field(card, "oracle_id")))
+        || issue_315_oracle_id_is_reviewed(str_field(card, "oracle_id"))
+        || issue_373_oracle_id_is_reviewed(str_field(card, "oracle_id")))
         && layout != GenLayout::Normal
     {
         return Err(Skip::NonKeywordText.into());
@@ -12510,6 +12540,91 @@ mod tests {
         assert!(
             evaluate_fresh(&duplicate_harmonize).is_err(),
             "a second Harmonize line must fail closed instead of overwriting the face cost"
+        );
+    }
+
+    #[test]
+    fn issue_373_aggregate_recipes_author_target_groups_for_multiline_faces() {
+        let violent = normal_card_with_oracle_id(
+            "0ef80a38-f464-4d1f-9e81-d4087d6ecc9b",
+            "Violent Urge",
+            "{R}",
+            "Instant",
+            "Target creature gets +1/+0 and gains first strike until end of turn.\nDelirium — If there are four or more card types among cards in your graveyard, that creature gains double strike until end of turn.",
+            None,
+        );
+        let generated = evaluate_fresh(&violent).expect("Violent Urge should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.spell_effect.len(), 3);
+        let targeting = raw
+            .targeting
+            .as_ref()
+            .expect("Violent Urge authors a group");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("Violent Urge must keep exactly one authored group");
+        };
+        assert_eq!(group.effect_indices, [0, 1, 2]);
+        TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref())
+            .expect("the authored group must cover every target role");
+
+        let beastie = normal_card_with_oracle_id(
+            "3da5fbe2-e47b-4a1d-9e73-393f37314fa3",
+            "Beastie Beatdown",
+            "{R}{G}",
+            "Sorcery",
+            "Choose target creature you control and target creature an opponent controls.\nDelirium — If there are four or more card types among cards in your graveyard, put two +1/+1 counters on the creature you control.\nThe creature you control deals damage equal to its power to the creature an opponent controls.",
+            None,
+        );
+        let generated = evaluate_fresh(&beastie).expect("Beastie Beatdown should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        let targeting = raw
+            .targeting
+            .as_ref()
+            .expect("Beastie Beatdown authors groups");
+        assert_eq!(targeting.groups.len(), 2);
+        TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref())
+            .expect("both authored groups must cover the two damage roles");
+    }
+
+    #[test]
+    fn issue_373_join_the_dead_and_lasyd_prowler_generate_their_typed_faces() {
+        let join = normal_card_with_oracle_id(
+            "b153fc70-0312-4856-befd-bb6b9a04a26e",
+            "Join the Dead",
+            "{1}{B}{B}",
+            "Instant",
+            "Target creature gets -5/-5 until end of turn.\nDescend 4 — That creature gets -10/-10 until end of turn instead if there are four or more permanent cards in your graveyard.",
+            None,
+        );
+        let generated = evaluate_fresh(&join).expect("Join the Dead should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert!(
+            raw.targeting.is_none(),
+            "the single replacement pump uses the implicit target contract"
+        );
+        TargetSchema::compile(&raw.spell_effect, raw.targeting.as_ref())
+            .expect("the implicit target contract must compile");
+
+        let lasyd = normal_card_with_oracle_id(
+            "f780d6f6-540b-4773-8a48-e56e95c2d39e",
+            "Lasyd Prowler",
+            "{2}{G}{G}",
+            "Creature — Snake Ranger",
+            "When this creature enters, you may mill cards equal to the number of lands you control.\nRenew — {1}{G}, Exile this card from your graveyard: Put X +1/+1 counters on target creature, where X is the number of land cards in your graveyard. Activate only as a sorcery.",
+            Some(("5", "5")),
+        );
+        let generated = evaluate_fresh(&lasyd).expect("Lasyd Prowler should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.triggered_abilities.len(), 1);
+        assert!(raw.triggered_abilities[0].may);
+        assert_eq!(
+            raw.triggered_abilities[0].trigger,
+            TriggerCondition::WhenSelfEntersBattlefield
+        );
+        assert_eq!(raw.activated_abilities.len(), 1);
+        assert_eq!(
+            raw.activated_abilities[0].source_zone,
+            AbilitySourceZone::Graveyard
         );
     }
 

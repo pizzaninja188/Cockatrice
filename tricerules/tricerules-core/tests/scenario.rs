@@ -507,3 +507,5 @@ mod issue_352_generated_eight_clause_batch;
 mod issue_358_generated_five_clause_batch;
 #[path = "scenario/issue_363_generated_dragonstorm_cohort.rs"]
 mod issue_363_generated_dragonstorm_cohort;
+#[path = "scenario/issue_373_graveyard_count_resolution.rs"]
+mod issue_373_graveyard_count_resolution;

@@ -201,6 +201,7 @@ bear_trap	0	cast	exercised
 bearer_of_glory	0	ability:0	exercised
 bearer_of_glory	0	cast	exercised
 beast-kin_ranger	0	cast	exercised
+beastie_beatdown	0	cast	exercised
 bedhead_beastie	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 bedhead_beastie	0	cast	exercised
 bellowing_bruiser_beat_a_path	0	cast	exercised
@@ -424,6 +425,7 @@ clockwork_percussionist	0	cast	exercised
 clone	0	cast	exercised
 cloud_crusader	0	cast	exercised
 cloud_manta	0	cast	exercised
+cloud_of_darkness	0	cast	exercised
 cloudbound_moogle	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 cloudbound_moogle	0	cast	exercised
 cloudcrown_oak	0	cast	exercised
@@ -444,6 +446,7 @@ colossal_dreadmaw	0	cast	exercised
 colossapede	0	cast	exercised
 colossification	0	cast	exercised
 colossodon_yearling	0	cast	exercised
+combustion_technique	0	cast	exercised
 command_bridge	0	ability:0	exercised
 command_bridge	0	land	exercised
 commercial_district	0	land	exercised
@@ -851,6 +854,7 @@ fortress_crab	0	cast	exercised
 forum_necroscribe	0	cast	exercised
 foul_orchard	0	ability:0	exercised
 foul_orchard	0	land	exercised
+frantic_firebolt	0	cast	exercised
 frantic_strength	0	cast	exercised
 frenzied_raptor	0	cast	exercised
 fresh_volunteers	0	cast	exercised
@@ -942,6 +946,7 @@ glidedive_duo	0	cast	exercised
 glider_kids	0	cast	exercised
 glimpse_the_core	0	cast	exercised
 gloom_pangolin	0	cast	exercised
+gloom_ripper	0	cast	exercised
 gloom_sower	0	cast	exercised
 gloomhunter	0	cast	exercised
 gloomlake_verge	0	ability:0	exercised
@@ -1010,6 +1015,8 @@ gorging_vulture	0	cast	exercised
 gorilla_warrior	0	cast	exercised
 grab_the_prize	0	cast	exercised
 graduation_day	0	cast	exercised
+gran_pulse_ochu	0	ability:0	exercised
+gran_pulse_ochu	0	cast	exercised
 grappler_spider	0	cast	exercised
 grasping_longneck	0	cast	exercised
 gravblade_heavy	0	cast	exercised
@@ -1259,6 +1266,7 @@ jhessian_lookout	0	cast	exercised
 jhovall_queen	0	cast	exercised
 jhovall_rider	0	cast	exercised
 jibbirik_omnivore	0	cast	exercised
+join_the_dead	0	cast	exercised
 joraga_visionary	0	cast	exercised
 juggernaut	0	cast	exercised
 jungle_barrier	0	cast	exercised
@@ -1335,6 +1343,8 @@ lakeside_shack	0	land	exercised
 land_leeches	0	cast	exercised
 lantern_kami	0	cast	exercised
 last_gasp	0	cast	exercised
+lasyd_prowler	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+lasyd_prowler	0	cast	exercised
 lathnu_sailback	0	cast	exercised
 lava_coil	0	cast	exercised
 lavakin_brawler	0	cast	exercised
@@ -1420,6 +1430,7 @@ makindi_aeronaut	0	cast	exercised
 makindi_griffin	0	cast	exercised
 malamet_scythe	0	ability:0	exercised
 malamet_scythe	0	cast	exercised
+malamet_veteran	0	cast	exercised
 malevolent_chandelier	0	ability:0	exercised
 malevolent_chandelier	0	cast	exercised
 mammoth_bellow	0	cast	exercised
@@ -1628,6 +1639,7 @@ omni-cheese_pizza	0	ability:0	exercised
 omni-cheese_pizza	0	ability:1	exercised
 omni-cheese_pizza	0	cast	exercised
 onakke_ogre	0	cast	exercised
+ooze_patrol	0	cast	exercised
 ooze_spill	0	cast	unsupported: target group 0 needs a richer fixture
 opt	0	cast	exercised
 opulent_palace	0	ability:0	exercised
@@ -2287,6 +2299,7 @@ surveillance_room	0	ability:1	exercised
 surveillance_room	0	land	exercised
 susurian_voidborn	0	cast	exercised
 swab_goblin	0	cast	exercised
+swallowed_by_leviathan	0	cast	unsupported: target group 0 needs a richer fixture
 swamp	0	ability:0	exercised
 swamp	0	land	exercised
 swift_spinner	0	cast	exercised
@@ -2382,6 +2395,8 @@ thornweald_archer	0	cast	exercised
 thornwood_falls	0	ability:0	exercised
 thornwood_falls	0	land	exercised
 those_who_serve	0	cast	exercised
+thought_shucker	0	ability:0	unsupported: nonmana costs need additional fixture resources
+thought_shucker	0	cast	exercised
 thoughtseize	0	cast	exercised
 thraben_purebloods	0	cast	exercised
 thraben_valiant	0	cast	exercised
@@ -2559,6 +2574,7 @@ vindictive_warden	0	ability:0	exercised
 vindictive_warden	0	cast	exercised
 vine_trellis	0	ability:0	exercised
 vine_trellis	0	cast	exercised
+violent_urge	0	cast	exercised
 virulent_emissary	0	cast	exercised
 virus_beetle	0	cast	exercised
 vitalize	0	cast	exercised

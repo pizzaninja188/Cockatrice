@@ -4,14 +4,15 @@ use tricerules_cards::primitives::{
     CardTypeFilter, CombatRestriction, CombatRestrictionScope, CombatRole, ConditionPlayerSet,
     CountExpression, CreatureScopeController, CreatureScopeFilter, DiscardQuantity,
     DrawDiscardOrder, EffectSubject, EntersTappedAffected, EntersWithCountersAffected, EntryCost,
-    EventZone, GameCondition, GraveyardDestination, GraveyardFilter, GraveyardOwner,
-    HandCardAction, HandCardChooser, HandChoiceVisibility, LibraryPlacement, LifeAmount,
-    LifeChangeKind, ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter,
-    PermanentTypeFilter, PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient, PowerComparison,
-    PowerToughnessCharacteristic, RelativePlayerSet, ResolutionBranchDef,
-    ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SearchDestination,
-    SearchZoneSelection, SpellCastFilter, SpellCostModifier, SpellManaSpentComparison,
-    StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
+    EventZone, GameCondition, GraveyardAggregate, GraveyardDestination, GraveyardFilter,
+    GraveyardOwner, HandCardAction, HandCardChooser, HandChoiceVisibility, LibraryPlacement,
+    LifeAmount, LifeChangeKind, ObjectContributionKind, ObjectPaymentConstraint,
+    PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerQuantifier,
+    PlayerRecipient, PowerComparison, PowerToughnessCharacteristic, PtScale, PtScaleBasis,
+    QuantityTerm, RelativePlayerSet, ResolutionBranchDef, ResolutionBranchRequirement,
+    ResolutionBranchSelection, ResolutionCost, SearchDestination, SearchZoneSelection,
+    SpellCastFilter, SpellCostModifier, SpellManaSpentComparison, StackSpellFilter,
+    StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
     TargetMatchFilter, TargetObjectExclusion, TargetingDef, TargetingSourceFilter,
     TypeLineAddition, ZoneCardFilter, ZoneEventCardinality, ZoneEventDestination,
 };
@@ -2863,6 +2864,91 @@ pub(super) fn issue_315_card_surface_is_exact(
         _ => return true,
     };
     (name, mana_cost, type_line, power, toughness, oracle_text) == expected
+}
+
+/// Issue #373 reviewed full-card surfaces. Only reviewed Oracle identities may be emitted; every
+/// other card returns true so the unreviewed path stays governed by the exact recipes' identity
+/// gates.
+pub(super) fn issue_373_card_surface_is_exact(
+    oracle_id: &str,
+    name: &str,
+    mana_cost: &str,
+    type_line: &str,
+    oracle_text: &str,
+    power: Option<&str>,
+    toughness: Option<&str>,
+) -> bool {
+    let expected = match oracle_id {
+        // Wail of the Forgotten
+        "030b5408-f216-43e4-8593-f78d22821876" => ("Wail of the Forgotten", "{U}{B}", "Sorcery", "Descend 8 — Choose one. If there are eight or more permanent cards in your graveyard as you cast this spell, choose one or more instead.\n• Return target nonland permanent to its owner's hand.\n• Target opponent discards a card.\n• Look at the top three cards of your library. Put one of them into your hand and the rest into your graveyard.", None, None),
+        // The Emperor of Palamecia // The Lord Master of Hell
+        "042c01ec-9f1f-432b-bea9-d64d822cd91e" => ("The Emperor of Palamecia // The Lord Master of Hell", "", "Legendary Creature — Human Noble Wizard // Legendary Creature — Demon Noble Wizard", "", None, None),
+        // Gran Pulse Ochu
+        "09b71c95-7b5d-4cee-a505-e0dda72715b7" => ("Gran Pulse Ochu", "{G}", "Creature — Plant Beast", "Deathtouch\n{8}: Until end of turn, this creature gets +1/+1 for each permanent card in your graveyard.", Some("1"), Some("1")),
+        // Omnivorous Flytrap
+        "0aa2ab46-c5ad-462b-b441-dbbc4b2c3532" => ("Omnivorous Flytrap", "{2}{G}", "Creature — Plant", "Delirium — Whenever this creature enters or attacks, if there are four or more card types among cards in your graveyard, distribute two +1/+1 counters among one or two target creatures. Then if there are six or more card types among cards in your graveyard, double the number of +1/+1 counters on those creatures.", Some("2"), Some("4")),
+        // Violent Urge
+        "0ef80a38-f464-4d1f-9e81-d4087d6ecc9b" => ("Violent Urge", "{R}", "Instant", "Target creature gets +1/+0 and gains first strike until end of turn.\nDelirium — If there are four or more card types among cards in your graveyard, that creature gains double strike until end of turn.", None, None),
+        // Terror Tide
+        "12be58f4-1c12-4bca-8069-1f049cd8a90c" => ("Terror Tide", "{2}{B}{B}", "Sorcery", "Fathomless descent — All creatures get -X/-X until end of turn, where X is the number of permanent cards in your graveyard.", None, None),
+        // Swallowed by Leviathan
+        "1a8185ed-636b-49ad-bf24-2ab02c7fb91e" => ("Swallowed by Leviathan", "{2}{U}", "Instant", "Choose target spell. Surveil 2, then counter the chosen spell unless its controller pays {1} for each card in your graveyard. (To surveil 2, look at the top two cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)", None, None),
+        // Klaw, Sonic Subjugator
+        "1c233e08-d5a3-48d7-9074-20393896a480" => ("Klaw, Sonic Subjugator", "{2}{B}", "Legendary Creature — Human Rogue Villain", "Sonic Attack — When Klaw enters, target player reveals a number of cards from their hand equal to one plus the number of creature cards in your graveyard. You choose one of them. That player discards that card.", Some("2"), Some("2")),
+        // Malamet Veteran
+        "25a9c864-59c6-4230-a234-bf78bf1ef24c" => ("Malamet Veteran", "{4}{G}", "Creature — Cat Warrior", "Trample\nDescend 4 — Whenever this creature attacks, if there are four or more permanent cards in your graveyard, put a +1/+1 counter on target creature.", Some("5"), Some("4")),
+        // Wick's Patrol
+        "29423a9a-31a6-4605-8b49-a75895038a3a" => ("Wick's Patrol", "{4}{B}{B}", "Creature — Rat Warlock", "When this creature enters, mill three cards. When you do, target creature an opponent controls gets -X/-X until end of turn, where X is the greatest mana value among cards in your graveyard.", Some("5"), Some("3")),
+        // Season of Loss
+        "31b5d0ad-3a4d-4f43-b0a9-c9f7a362680f" => ("Season of Loss", "{3}{B}{B}", "Sorcery", "Choose up to five {P} worth of modes. You may choose the same mode more than once.\n{P} — Each player sacrifices a creature of their choice.\n{P}{P} — Draw a card for each creature that died under your control this turn.\n{P}{P}{P} — Each opponent loses X life, where X is the number of creature cards in your graveyard.", None, None),
+        // Thought Shucker
+        "33f4fcd5-4eea-4146-a564-da5511a8ee0a" => ("Thought Shucker", "{1}{U}", "Creature — Rat Rogue", "Threshold — {1}{U}: Put a +1/+1 counter on this creature and draw a card. Activate only if there are seven or more cards in your graveyard and only once.", Some("1"), Some("3")),
+        // Beastie Beatdown
+        "3da5fbe2-e47b-4a1d-9e73-393f37314fa3" => ("Beastie Beatdown", "{R}{G}", "Sorcery", "Choose target creature you control and target creature an opponent controls.\nDelirium — If there are four or more card types among cards in your graveyard, put two +1/+1 counters on the creature you control.\nThe creature you control deals damage equal to its power to the creature an opponent controls.", None, None),
+        // Combustion Technique
+        "522a04ff-cbfe-47b0-bd29-ef6fc27a6905" => ("Combustion Technique", "{1}{R}", "Instant — Lesson", "Combustion Technique deals damage equal to 2 plus the number of Lesson cards in your graveyard to target creature. If that creature would die this turn, exile it instead.", None, None),
+        // Cloud of Darkness
+        "525f57df-7d4d-4089-9003-4b01005558dc" => ("Cloud of Darkness", "{2}{B}{G}{G}", "Legendary Creature — Avatar", "Flying\nParticle Beam — When Cloud of Darkness enters, target creature an opponent controls gets -X/-X until end of turn, where X is the number of permanent cards in your graveyard.", Some("3"), Some("3")),
+        // Demonic Counsel
+        "712e3479-722c-40a1-9b61-d5bdde93042b" => ("Demonic Counsel", "{1}{B}", "Sorcery", "Search your library for a Demon card, reveal it, put it into your hand, then shuffle.\nDelirium — If there are four or more card types among cards in your graveyard, instead search your library for any card, put it into your hand, then shuffle.", None, None),
+        // Quag Feast
+        "78957246-4092-4f4a-80e3-142e24226962" => ("Quag Feast", "{1}{B}", "Sorcery", "Choose target creature, planeswalker, or Vehicle. Mill two cards, then destroy the chosen permanent if its mana value is less than or equal to the number of cards in your graveyard.", None, None),
+        // Gloom Ripper
+        "78e1beca-840d-47b2-8759-cc31454fdf5a" => ("Gloom Ripper", "{3}{B}{B}", "Creature — Elf Assassin", "When this creature enters, target creature you control gets +X/+0 until end of turn and up to one target creature an opponent controls gets -0/-X until end of turn, where X is the number of Elves you control plus the number of Elf cards in your graveyard.", Some("4"), Some("4")),
+        // Peer Past the Veil
+        "8fb7ad08-9bb2-49f1-8ed0-8cc8abca4fe0" => ("Peer Past the Veil", "{2}{R}{G}", "Instant", "Discard your hand. Then draw X cards, where X is the number of card types among cards in your graveyard.", None, None),
+        // Tersa Lightshatter
+        "9918eb7b-054e-4b1c-afc7-1163ab642d50" => ("Tersa Lightshatter", "{2}{R}", "Legendary Creature — Orc Wizard", "Haste\nWhen Tersa Lightshatter enters, discard up to two cards, then draw that many cards.\nWhenever Tersa Lightshatter attacks, if there are seven or more cards in your graveyard, exile a card at random from your graveyard. You may play that card this turn.", Some("3"), Some("3")),
+        // Accumulate Wisdom
+        "a63eb744-71c4-447d-9372-c3a734f022c5" => ("Accumulate Wisdom", "{1}{U}", "Instant — Lesson", "Look at the top three cards of your library. Put one of those cards into your hand and the rest on the bottom of your library in any order. Put each of those cards into your hand instead if there are three or more Lesson cards in your graveyard.", None, None),
+        // Ooze Patrol
+        "a9e3e8b0-4276-419d-9326-be56af3c41be" => ("Ooze Patrol", "{3}{G}", "Creature — Ooze", "When this creature enters, mill two cards, then put a +1/+1 counter on this creature for each artifact and/or creature card in your graveyard. (To mill two cards, put the top two cards of your library into your graveyard.)", Some("2"), Some("2")),
+        // Join the Dead
+        "b153fc70-0312-4856-befd-bb6b9a04a26e" => ("Join the Dead", "{1}{B}{B}", "Instant", "Target creature gets -5/-5 until end of turn.\nDescend 4 — That creature gets -10/-10 until end of turn instead if there are four or more permanent cards in your graveyard.", None, None),
+        // Master Pakku
+        "b1727c07-c829-4d64-a1c5-8b53c743888a" => ("Master Pakku", "{1}{U}", "Legendary Creature — Human Advisor Ally", "Prowess (Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn.)\nWhenever Master Pakku becomes tapped, target player mills X cards, where X is the number of Lesson cards in your graveyard. (They put the top X cards of their library into their graveyard.)", Some("1"), Some("3")),
+        // Shoreline Looter
+        "c15cad77-e70f-42cc-a9f5-50e1fd8c9c96" => ("Shoreline Looter", "{1}{U}", "Creature — Rat Rogue", "This creature can't be blocked.\nThreshold — Whenever this creature deals combat damage to a player, draw a card. Then discard a card unless there are seven or more cards in your graveyard.", Some("1"), Some("1")),
+        // Sinuous Benthisaur
+        "d3cad867-142c-4e9d-bcd8-0e7ed1fd2f77" => ("Sinuous Benthisaur", "{5}{U}", "Creature — Dinosaur", "When this creature enters, look at the top X cards of your library, where X is the number of Caves you control plus the number of Cave cards in your graveyard. Put two of those cards into your hand and the rest on the bottom of your library in a random order.", Some("4"), Some("4")),
+        // Let's Play a Game
+        "dd893746-e8bd-49fa-a1ce-755d5bd4f513" => ("Let's Play a Game", "{3}{B}", "Sorcery", "Delirium — Choose one. If there are four or more card types among cards in your graveyard, choose one or more instead.\n• Creatures your opponents control get -1/-1 until end of turn.\n• Each opponent discards two cards.\n• Each opponent loses 3 life and you gain 3 life.", None, None),
+        // Steal the Show
+        "de403543-e61a-44fc-85e1-1e621d90ca8b" => ("Steal the Show", "{2}{R}", "Sorcery", "Choose one or both —\n• Target player discards any number of cards, then draws that many cards.\n• Steal the Show deals damage equal to the number of instant and sorcery cards in your graveyard to target creature or planeswalker.", None, None),
+        // Frantic Firebolt
+        "f1882cc8-c81a-4131-b639-1bd6e083f8ba" => ("Frantic Firebolt", "{2}{R}", "Instant", "Frantic Firebolt deals X damage to target creature, where X is 2 plus the number of cards in your graveyard that are instant cards, sorcery cards, and/or have an Adventure.", None, None),
+        // Bumi, King of Three Trials
+        "f7493bcf-5c17-4562-a759-37082ec49ff8" => ("Bumi, King of Three Trials", "{5}{G}", "Legendary Creature — Human Noble Ally", "When Bumi enters, choose up to X, where X is the number of Lesson cards in your graveyard —\n• Put three +1/+1 counters on Bumi.\n• Target player scries 3.\n• Earthbend 3. (Target land you control becomes a 0/0 creature with haste that's still a land. Put three +1/+1 counters on it. When it dies or is exiled, return it to the battlefield tapped.)", Some("4"), Some("4")),
+        // Lasyd Prowler
+        "f780d6f6-540b-4773-8a48-e56e95c2d39e" => ("Lasyd Prowler", "{2}{G}{G}", "Creature — Snake Ranger", "When this creature enters, you may mill cards equal to the number of lands you control.\nRenew — {1}{G}, Exile this card from your graveyard: Put X +1/+1 counters on target creature, where X is the number of land cards in your graveyard. Activate only as a sorcery.", Some("5"), Some("5")),
+        // Wickerfolk Thresher
+        "fa6d7d68-34e3-4ff6-ae6c-36848974555a" => ("Wickerfolk Thresher", "{3}{G}", "Artifact Creature — Scarecrow", "Delirium — Whenever this creature attacks, if there are four or more card types among cards in your graveyard, look at the top card of your library. If it's a land card, you may put it onto the battlefield. If you don't put the card onto the battlefield, put it into your hand.", Some("5"), Some("4")),
+        _ => return true,
+    };
+    (name, mana_cost, type_line, oracle_text, power, toughness)
+        == (
+            expected.0, expected.1, expected.2, expected.3, expected.4, expected.5,
+        )
 }
 
 const ISSUE_287_LONG_LAKE_NUISANCE_ORACLE_ID: &str = "a833fdf1-db0c-4846-8452-d3b2059c2355";
@@ -9255,6 +9341,854 @@ macro_rules! singleton_calibrations {
     };
 }
 
+/// Issue #373 reviewed Standard identities. Exact-recipe matchers bind to this printing-independent
+/// identity set so identical Oracle text on an unreviewed card stays unsupported. The two
+/// identities blocked by the cohort description (Peer Past the Veil, Wick's Patrol) are
+/// deliberately absent: no recipe is authored for them.
+const ISSUE_373_REVIEWED_ORACLE_IDS: &[&str] = &[
+    "a63eb744-71c4-447d-9372-c3a734f022c5", // Accumulate Wisdom
+    "3da5fbe2-e47b-4a1d-9e73-393f37314fa3", // Beastie Beatdown
+    "f7493bcf-5c17-4562-a759-37082ec49ff8", // Bumi, King of Three Trials
+    "525f57df-7d4d-4089-9003-4b01005558dc", // Cloud of Darkness
+    "522a04ff-cbfe-47b0-bd29-ef6fc27a6905", // Combustion Technique
+    "712e3479-722c-40a1-9b61-d5bdde93042b", // Demonic Counsel
+    "f1882cc8-c81a-4131-b639-1bd6e083f8ba", // Frantic Firebolt
+    "78e1beca-840d-47b2-8759-cc31454fdf5a", // Gloom Ripper
+    "09b71c95-7b5d-4cee-a505-e0dda72715b7", // Gran Pulse Ochu
+    "b153fc70-0312-4856-befd-bb6b9a04a26e", // Join the Dead
+    "1c233e08-d5a3-48d7-9074-20393896a480", // Klaw, Sonic Subjugator
+    "f780d6f6-540b-4773-8a48-e56e95c2d39e", // Lasyd Prowler
+    "dd893746-e8bd-49fa-a1ce-755d5bd4f513", // Let's Play a Game
+    "25a9c864-59c6-4230-a234-bf78bf1ef24c", // Malamet Veteran
+    "b1727c07-c829-4d64-a1c5-8b53c743888a", // Master Pakku
+    "0aa2ab46-c5ad-462b-b441-dbbc4b2c3532", // Omnivorous Flytrap
+    "a9e3e8b0-4276-419d-9326-be56af3c41be", // Ooze Patrol
+    "78957246-4092-4f4a-80e3-142e24226962", // Quag Feast
+    "31b5d0ad-3a4d-4f43-b0a9-c9f7a362680f", // Season of Loss
+    "c15cad77-e70f-42cc-a9f5-50e1fd8c9c96", // Shoreline Looter
+    "d3cad867-142c-4e9d-bcd8-0e7ed1fd2f77", // Sinuous Benthisaur
+    "de403543-e61a-44fc-85e1-1e621d90ca8b", // Steal the Show
+    "1a8185ed-636b-49ad-bf24-2ab02c7fb91e", // Swallowed by Leviathan
+    "12be58f4-1c12-4bca-8069-1f049cd8a90c", // Terror Tide
+    "9918eb7b-054e-4b1c-afc7-1163ab642d50", // Tersa Lightshatter
+    "042c01ec-9f1f-432b-bea9-d64d822cd91e", // The Emperor of Palamecia // The Lord Master of Hell
+    "33f4fcd5-4eea-4146-a564-da5511a8ee0a", // Thought Shucker
+    "0ef80a38-f464-4d1f-9e81-d4087d6ecc9b", // Violent Urge
+    "030b5408-f216-43e4-8593-f78d22821876", // Wail of the Forgotten
+    "fa6d7d68-34e3-4ff6-ae6c-36848974555a", // Wickerfolk Thresher
+];
+
+const ISSUE_373_JOIN_THE_DEAD_ORACLE_ID: &str = "b153fc70-0312-4856-befd-bb6b9a04a26e";
+const ISSUE_373_LASYD_PROWLER_ORACLE_ID: &str = "f780d6f6-540b-4773-8a48-e56e95c2d39e";
+const ISSUE_373_VIOLENT_URGE_ORACLE_ID: &str = "0ef80a38-f464-4d1f-9e81-d4087d6ecc9b";
+const ISSUE_373_BEASTIE_BEATDOWN_ORACLE_ID: &str = "3da5fbe2-e47b-4a1d-9e73-393f37314fa3";
+
+/// Join the Dead's complete Oracle face. The printed "instead" replacement is one exhaustive
+/// conditional amount, so both lines must match as one face rather than two additive clauses.
+const ISSUE_373_JOIN_THE_DEAD_CLAUSE: &str = "Target creature gets -5/-5 until end of turn.\nDescend 4 — That creature gets -10/-10 until end of turn instead if there are four or more permanent cards in your graveyard.";
+const ISSUE_373_LASYD_PROWLER_ETB_CLAUSE: &str =
+    "When this creature enters, you may mill cards equal to the number of lands you control.";
+const ISSUE_373_VIOLENT_URGE_FACE: &str = "Target creature gets +1/+0 and gains first strike until end of turn.\nDelirium — If there are four or more card types among cards in your graveyard, that creature gains double strike until end of turn.";
+const ISSUE_373_BEASTIE_BEATDOWN_CLAUSE: &str = "Choose target creature you control and target creature an opponent controls.\nDelirium — If there are four or more card types among cards in your graveyard, put two +1/+1 counters on the creature you control.\nThe creature you control deals damage equal to its power to the creature an opponent controls.";
+
+fn issue_373_identity_or_calibration(context: &RecipeContext, oracle_id: &str) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        .is_none_or(|id| id == oracle_id)
+}
+
+fn issue_373_context_is_reviewed(context: &RecipeContext) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        .is_none_or(|oracle_id| ISSUE_373_REVIEWED_ORACLE_IDS.contains(&oracle_id))
+}
+
+pub(super) fn issue_373_oracle_id_is_reviewed(oracle_id: &str) -> bool {
+    ISSUE_373_REVIEWED_ORACLE_IDS.contains(&oracle_id)
+}
+
+/// Strips one printed ability word ("Delirium — ", "Descend 4 — ", "Threshold — ") from a clause.
+/// The prefix must not contain a sentence terminator, so an ordinary sentence containing an em
+/// dash can never be mistaken for an ability word.
+fn issue_373_strip_ability_word(text: &str) -> &str {
+    match text.split_once(" — ") {
+        Some((prefix, rest)) if !prefix.contains('.') => rest,
+        _ => text,
+    }
+}
+
+/// CR 110.4a: the engine has no single `Permanent` card-type predicate; the established encoding
+/// (issue #328) excludes the two nonpermanent card types.
+fn issue_373_permanent_card_filter() -> ZoneCardFilter {
+    ZoneCardFilter {
+        excluded_card_types: vec![CardTypeFilter::Instant, CardTypeFilter::Sorcery],
+        ..ZoneCardFilter::default()
+    }
+}
+
+fn issue_373_graveyard_count(filter: Option<ZoneCardFilter>) -> Amount {
+    Amount::Count(CountExpression::GraveyardCards {
+        owners: RelativePlayerSet::Controller,
+        filter,
+    })
+}
+
+fn issue_373_graveyard_threshold(
+    aggregate: GraveyardAggregate,
+    filter: Option<ZoneCardFilter>,
+    min: u32,
+) -> GameCondition {
+    GameCondition::GraveyardAggregate {
+        owners: RelativePlayerSet::Controller,
+        aggregate,
+        filter,
+        min: Some(min),
+        max: None,
+    }
+}
+
+fn issue_373_creature_or_planeswalker() -> TargetFilter {
+    TargetFilter {
+        any_of: Some(vec![
+            TargetFilter::default_creature(),
+            TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                permanent_types: vec![PermanentTypeFilter::Planeswalker],
+                ..TargetFilter::default()
+            },
+        ]),
+        ..TargetFilter::default()
+    }
+}
+
+/// T1.1 — "deals damage equal to the number of instant and sorcery cards in your graveyard to
+/// target creature or planeswalker". Steal the Show is the only card in the pinned full Oracle
+/// corpus printing this template (Summon: Esper Ramuh prints a different saga-chapter form with a
+/// different target), so the calibration is a documented singleton.
+fn match_spell_damage_count_graveyard_instant_or_sorcery(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_373_context_is_reviewed(context)
+        && text
+            == format!(
+                "{} deals damage equal to the number of instant and sorcery cards in your graveyard to target creature or planeswalker.",
+                context.source_name
+            ))
+    .then(|| RecipeEmission::SpellEffectsWithTargeting {
+        effects: vec![SpellEffectKind::DamageTarget {
+            amount: issue_373_graveyard_count(Some(ZoneCardFilter {
+                card_type: Some(CardTypeFilter::InstantOrSorcery),
+                ..ZoneCardFilter::default()
+            })),
+            target: issue_373_creature_or_planeswalker(),
+        }],
+        targeting: exact_targeting(1, 1, "Choose target creature or planeswalker", vec![0]),
+    })
+}
+
+/// T1.2 — "N damage equal to 2 plus the number of [Lesson | instant/sorcery/Adventure] cards in
+/// your graveyard". Each printed template is a corpus singleton; the recipe owns both named
+/// positives so the shared `Affine { constant: 2 }` shape stays one recipe.
+fn match_spell_damage_affine_constant_plus_graveyard_cards(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !issue_373_context_is_reviewed(context) {
+        return None;
+    }
+    let combustion = text
+        == format!(
+            "{} deals damage equal to 2 plus the number of Lesson cards in your graveyard to target creature. If that creature would die this turn, exile it instead.",
+            context.source_name
+        );
+    let frantic = text
+        == format!(
+            "{} deals X damage to target creature, where X is 2 plus the number of cards in your graveyard that are instant cards, sorcery cards, and/or have an Adventure.",
+            context.source_name
+        );
+    if !combustion && !frantic {
+        return None;
+    }
+    let filter = if combustion {
+        ZoneCardFilter {
+            required_subtypes: vec!["Lesson".into()],
+            ..ZoneCardFilter::default()
+        }
+    } else {
+        ZoneCardFilter {
+            any_of: Some(vec![
+                ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::Instant),
+                    ..ZoneCardFilter::default()
+                },
+                ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::Sorcery),
+                    ..ZoneCardFilter::default()
+                },
+                ZoneCardFilter {
+                    has_adventure: Some(true),
+                    ..ZoneCardFilter::default()
+                },
+            ]),
+            ..ZoneCardFilter::default()
+        }
+    };
+    let amount = Amount::Count(CountExpression::Affine {
+        constant: 2,
+        terms: vec![QuantityTerm {
+            coefficient: 1,
+            quantity: CountExpression::GraveyardCards {
+                owners: RelativePlayerSet::Controller,
+                filter: Some(filter),
+            },
+        }],
+    });
+    let mut effects = vec![SpellEffectKind::DamageTarget {
+        amount,
+        target: TargetFilter::default_creature(),
+    }];
+    let mut effect_indices = vec![0];
+    if combustion {
+        effects.push(SpellEffectKind::ExileIfWouldDieThisTurn {
+            target: TargetFilter::default_creature(),
+        });
+        effect_indices.push(1);
+    }
+    Some(RecipeEmission::SpellEffectsWithTargeting {
+        effects,
+        targeting: exact_targeting(1, 1, "Choose target creature", effect_indices),
+    })
+}
+
+/// T1.3 — the back-face Starfall attack trigger damages each opponent for the number of
+/// noncreature, nonland cards in the controller's graveyard. Identical clauses outside the
+/// reviewed identity stay unsupported.
+fn match_triggered_attack_damage_each_opponent_count_graveyard_cards(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !issue_373_context_is_reviewed(context) || !context.source_is_creature {
+        return None;
+    }
+    let body = issue_373_strip_ability_word(text);
+    if body
+        != format!(
+            "Whenever {} attacks, it deals X damage to each opponent, where X is the number of noncreature, nonland cards in your graveyard.",
+            context.source_name
+        )
+    {
+        return None;
+    }
+    Some(triggered_ability_with(
+        context,
+        TriggerCondition::WheneverSelfAttacks {
+            minimum_other_attackers: 0,
+        },
+        vec![SpellEffectKind::DamagePlayer {
+            amount: issue_373_graveyard_count(Some(ZoneCardFilter {
+                excluded_card_types: vec![CardTypeFilter::Creature, CardTypeFilter::Land],
+                ..ZoneCardFilter::default()
+            })),
+            who: PlayerRecipient::EachOpponent,
+        }],
+    ))
+}
+
+/// T3.5 — "target creature an opponent controls gets -X/-X until end of turn, where X is the
+/// number of permanent cards in your graveyard". Cloud of Darkness and Chupacabra Echo are the
+/// only two corpus printings; both are named positives.
+fn match_triggered_etb_pump_negative_count_graveyard_permanent_cards(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !issue_373_context_is_reviewed(context) || !context.source_is_creature {
+        return None;
+    }
+    let body = issue_373_strip_ability_word(text);
+    let named = format!(
+        "When {} enters, target creature an opponent controls gets -X/-X until end of turn, where X is the number of permanent cards in your graveyard.",
+        context.source_name
+    );
+    let anonymous = "When this creature enters, target creature an opponent controls gets -X/-X until end of turn, where X is the number of permanent cards in your graveyard.";
+    if body != named && body != anonymous {
+        return None;
+    }
+    let target = TargetFilter {
+        kind: TargetKind::Creature,
+        controller: TargetController::Opponent,
+        ..TargetFilter::default()
+    };
+    let scale = PtScale {
+        basis: PtScaleBasis::Amount(issue_373_graveyard_count(Some(
+            issue_373_permanent_card_filter(),
+        ))),
+        power_per_unit: -1,
+        toughness_per_unit: -1,
+    };
+    let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+        context,
+        TriggerCondition::WhenSelfEntersBattlefield,
+        vec![SpellEffectKind::PumpTarget {
+            power: 0,
+            toughness: 0,
+            scale: Some(scale),
+            subject: EffectSubject::Chosen(Box::new(target)),
+        }],
+    ) else {
+        unreachable!("triggered_ability_with always returns a triggered ability")
+    };
+    ability.targeting = Some(exact_targeting(
+        1,
+        1,
+        "Choose target creature an opponent controls",
+        vec![0],
+    ));
+    Some(RecipeEmission::TriggeredAbility(ability))
+}
+
+/// T3.6 — "{8}: Until end of turn, this creature gets +1/+1 for each permanent card in your
+/// graveyard." Gran Pulse Ochu is the only corpus printing, so the calibration is a documented
+/// singleton.
+fn match_activated_pump_count_graveyard_permanent_cards(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_373_context_is_reviewed(context)
+        && context.source_is_creature
+        && text
+            == "{8}: Until end of turn, this creature gets +1/+1 for each permanent card in your graveyard.")
+    .then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![AbilityCost::Mana(
+                ManaCost::parse("{8}").expect("printed mana cost"),
+            )],
+            effect: vec![SpellEffectKind::PumpTarget {
+                power: 0,
+                toughness: 0,
+                scale: Some(PtScale {
+                    basis: PtScaleBasis::Amount(issue_373_graveyard_count(Some(
+                        issue_373_permanent_card_filter(),
+                    ))),
+                    power_per_unit: 1,
+                    toughness_per_unit: 1,
+                }),
+                subject: EffectSubject::Source,
+            }],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
+/// T3.7 — the Gloom Ripper ETB shares one `Affine` count between a +X/+0 pump on a controlled
+/// creature and an -0/-X pump on up to one opposing creature. Gloom Ripper is the only corpus
+/// printing of this exact clause (Abomination of Llanowar prints the quantity in a different
+/// characteristic-defining ability), so the calibration is a documented singleton.
+fn match_triggered_etb_pump_affine_battlefield_and_graveyard_counts(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_373_context_is_reviewed(context)
+        && context.source_is_creature
+        && text
+            == "When this creature enters, target creature you control gets +X/+0 until end of turn and up to one target creature an opponent controls gets -0/-X until end of turn, where X is the number of Elves you control plus the number of Elf cards in your graveyard.")
+    .then(|| {
+        let count = CountExpression::Affine {
+            constant: 0,
+            terms: vec![
+                QuantityTerm {
+                    coefficient: 1,
+                    quantity: CountExpression::BattlefieldCreatures {
+                        filter: BattlefieldCreatureCountFilter {
+                            controllers: RelativePlayerSet::Controller,
+                            subtype: Some("Elf".into()),
+                            ..BattlefieldCreatureCountFilter::default()
+                        },
+                    },
+                },
+                QuantityTerm {
+                    coefficient: 1,
+                    quantity: CountExpression::GraveyardCards {
+                        owners: RelativePlayerSet::Controller,
+                        filter: Some(ZoneCardFilter {
+                            required_subtypes: vec!["Elf".into()],
+                            ..ZoneCardFilter::default()
+                        }),
+                    },
+                },
+            ],
+        };
+        let you_control = TargetFilter {
+            kind: TargetKind::Creature,
+            controller: TargetController::You,
+            ..TargetFilter::default()
+        };
+        let opponent = TargetFilter {
+            kind: TargetKind::Creature,
+            controller: TargetController::Opponent,
+            ..TargetFilter::default()
+        };
+        let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+            context,
+            TriggerCondition::WhenSelfEntersBattlefield,
+            vec![
+                SpellEffectKind::PumpTarget {
+                    power: 0,
+                    toughness: 0,
+                    scale: Some(PtScale {
+                        basis: PtScaleBasis::Amount(Amount::Count(count.clone())),
+                        power_per_unit: 1,
+                        toughness_per_unit: 0,
+                    }),
+                    subject: EffectSubject::Chosen(Box::new(you_control)),
+                },
+                SpellEffectKind::PumpTarget {
+                    power: 0,
+                    toughness: 0,
+                    scale: Some(PtScale {
+                        basis: PtScaleBasis::Amount(Amount::Count(count)),
+                        power_per_unit: 0,
+                        toughness_per_unit: -1,
+                    }),
+                    subject: EffectSubject::Chosen(Box::new(opponent)),
+                },
+            ],
+        ) else {
+            unreachable!("triggered_ability_with always returns a triggered ability")
+        };
+        ability.targeting = Some(TargetingDef {
+            groups: vec![
+                TargetGroupDef {
+                    min: 1,
+                    max: 1,
+                    prompt: "Choose target creature you control".into(),
+                    effect_indices: vec![0],
+                    distinct_from: Vec::new(),
+                    same_graveyard: false,
+                    cast_cost_expansion: None,
+                },
+                TargetGroupDef {
+                    min: 0,
+                    max: 1,
+                    prompt: "Choose up to one target creature an opponent controls".into(),
+                    effect_indices: vec![1],
+                    distinct_from: Vec::new(),
+                    same_graveyard: false,
+                    cast_cost_expansion: None,
+                },
+            ],
+        });
+        RecipeEmission::TriggeredAbility(ability)
+    })
+}
+
+/// T3.10 — Delirium grants double strike to the already-targeted creature. Violent Urge is the
+/// only corpus printing, so the calibration is a documented singleton.
+fn match_spell_conditional_grant_keywords_graveyard_card_types_threshold(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_373_context_is_reviewed(context)
+        && text
+            == "Delirium — If there are four or more card types among cards in your graveyard, that creature gains double strike until end of turn.")
+    .then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::Conditional {
+            condition: issue_373_graveyard_threshold(
+                GraveyardAggregate::DistinctCardTypes,
+                None,
+                4,
+            ),
+            effect: Box::new(SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                keywords: vec![Keyword::DoubleStrike],
+            }),
+        })
+    })
+}
+
+/// T4.12 — the Renew graveyard activated ability puts X +1/+1 counters on a target creature. The
+/// printed line includes the "Renew — " ability word and the sorcery-timing instruction; Lasyd
+/// Prowler is the only corpus printing, so the calibration is a documented singleton.
+fn match_activated_graveyard_put_counters_count_graveyard_land_cards(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_373_context_is_reviewed(context)
+        && text
+            == "Renew — {1}{G}, Exile this card from your graveyard: Put X +1/+1 counters on target creature, where X is the number of land cards in your graveyard. Activate only as a sorcery.")
+    .then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Graveyard,
+            costs: vec![
+                AbilityCost::Mana(ManaCost::parse("{1}{G}").expect("printed mana cost")),
+                AbilityCost::ExileSelf,
+            ],
+            effect: vec![SpellEffectKind::PutCounters {
+                counter: CounterKind::PlusOnePlusOne,
+                count: issue_373_graveyard_count(Some(ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::Land),
+                    ..ZoneCardFilter::default()
+                })),
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            }],
+            targeting: Some(exact_targeting(1, 1, "Choose target creature", vec![0])),
+            timing: ActivationTiming::SorcerySpeed,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
+/// T4.13 — Descend 4 intervening-if on the attack trigger places one +1/+1 counter. Malamet
+/// Veteran is the only corpus printing of this exact clause, so the calibration is a documented
+/// singleton.
+fn match_triggered_attack_put_counters_graveyard_permanent_threshold(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_373_context_is_reviewed(context)
+        && context.source_is_creature
+        && text
+            == "Descend 4 — Whenever this creature attacks, if there are four or more permanent cards in your graveyard, put a +1/+1 counter on target creature.")
+    .then(|| {
+        let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+            context,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0,
+            },
+            vec![SpellEffectKind::PutCounters {
+                counter: CounterKind::PlusOnePlusOne,
+                count: Amount::Fixed(1),
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            }],
+        ) else {
+            unreachable!("triggered_ability_with always returns a triggered ability")
+        };
+        ability.intervening_if = Some(issue_373_graveyard_threshold(
+            GraveyardAggregate::CardCount,
+            Some(issue_373_permanent_card_filter()),
+            4,
+        ));
+        ability.targeting = Some(exact_targeting(1, 1, "Choose target creature", vec![0]));
+        RecipeEmission::TriggeredAbility(ability)
+    })
+}
+
+/// T4.15 — ETB mill two, then one +1/+1 counter per artifact and/or creature card in the
+/// controller's graveyard. Ooze Patrol and Ceti Eel are both named positives.
+fn match_triggered_etb_mill_then_put_counters_graveyard_artifact_or_creature_cards(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_373_context_is_reviewed(context)
+        && context.source_is_creature
+        && text
+            == "When this creature enters, mill two cards, then put a +1/+1 counter on this creature for each artifact and/or creature card in your graveyard.")
+    .then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WhenSelfEntersBattlefield,
+            vec![
+                SpellEffectKind::Mill {
+                    count: Amount::Fixed(2),
+                    who: PlayerRecipient::Controller,
+                },
+                SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: issue_373_graveyard_count(Some(ZoneCardFilter {
+                        any_of: Some(vec![
+                            ZoneCardFilter {
+                                card_type: Some(CardTypeFilter::Artifact),
+                                ..ZoneCardFilter::default()
+                            },
+                            ZoneCardFilter {
+                                card_type: Some(CardTypeFilter::Creature),
+                                ..ZoneCardFilter::default()
+                            },
+                        ]),
+                        ..ZoneCardFilter::default()
+                    })),
+                    subject: EffectSubject::Source,
+                },
+            ],
+        )
+    })
+}
+
+/// T4.16 — Threshold once-per-object activation places a counter then draws. Thought Shucker is
+/// the only corpus printing, so the calibration is a documented singleton.
+fn match_activated_put_counter_and_draw_graveyard_threshold_once(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_373_context_is_reviewed(context)
+        && context.source_is_creature
+        && text
+            == "Threshold — {1}{U}: Put a +1/+1 counter on this creature and draw a card. Activate only if there are seven or more cards in your graveyard and only once.")
+    .then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![AbilityCost::Mana(
+                ManaCost::parse("{1}{U}").expect("printed mana cost"),
+            )],
+            effect: vec![
+                SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Source,
+                },
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                },
+            ],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: vec![issue_373_graveyard_threshold(
+                GraveyardAggregate::CardCount,
+                None,
+                7,
+            )],
+            activation_limit: Some(ActivationLimit::PerObject { max_activations: 1 }),
+        })
+    })
+}
+
+/// T6.22 — "Surveil 2, then counter the chosen spell unless its controller pays {1} for each card
+/// in your graveyard" targets the stack spell and feeds the graveyard card count into the
+/// shipped counter-unless payment amount. Swallowed by Leviathan is the only corpus printing, so
+/// the calibration is a documented singleton.
+fn match_spell_surveil_then_counter_unless_pays_count_graveyard_cards(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_373_context_is_reviewed(context)
+        && text
+            == "Choose target spell. Surveil 2, then counter the chosen spell unless its controller pays {1} for each card in your graveyard.")
+    .then(|| RecipeEmission::SpellEffectsWithTargeting {
+        effects: vec![
+            SpellEffectKind::LibraryPartition {
+                count: 2,
+                top_min: 0,
+                top_max: None,
+                kind: LibraryPartitionKind::Surveil,
+            },
+            SpellEffectKind::CounterTargetSpell {
+                spell_filter: StackSpellFilter::default(),
+                unless_controller_pays: Some(issue_373_graveyard_count(None)),
+                unless_controller_pays_by_cast_cost: None,
+            },
+        ],
+        targeting: exact_targeting(1, 1, "Choose target spell", vec![1]),
+    })
+}
+
+/// T3.9 — Join the Dead prints "Target creature gets -5/-5 until end of turn." followed by
+/// "Descend 4 — That creature gets -10/-10 until end of turn instead if there are four or more
+/// permanent cards in your graveyard." The replacement is the second of two exhaustive branches,
+/// not an additional instruction, so the whole face emits one `-X/-X` pump whose basis is the
+/// shipped `Amount::Conditional` (CR 608.2h: the amount is chosen as the instruction resolves).
+/// Join the Dead is the only card in the pinned full Oracle corpus printing this pair (verified).
+fn match_spell_join_the_dead_conditional_pump(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_373_identity_or_calibration(context, ISSUE_373_JOIN_THE_DEAD_ORACLE_ID)
+        && text == ISSUE_373_JOIN_THE_DEAD_CLAUSE)
+        .then(|| {
+            RecipeEmission::SpellEffects(vec![SpellEffectKind::PumpTarget {
+                power: 0,
+                toughness: 0,
+                scale: Some(PtScale {
+                    basis: PtScaleBasis::Amount(Amount::Conditional {
+                        condition: issue_373_graveyard_threshold(
+                            GraveyardAggregate::CardCount,
+                            Some(issue_373_permanent_card_filter()),
+                            4,
+                        ),
+                        when_true: 10,
+                        otherwise: 5,
+                    }),
+                    power_per_unit: -1,
+                    toughness_per_unit: -1,
+                }),
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            }])
+        })
+}
+
+/// The Lasyd Prowler entry trigger is an optional mill whose quantity is the public battlefield
+/// land count, an unrelated clause the cohort description assumed was already supported. The
+/// count is re-evaluated as the optional mill resolves. Lasyd Prowler is the only card in the
+/// pinned full Oracle corpus printing this ETB (verified).
+fn match_triggered_etb_may_mill_count_lands_you_control(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_373_identity_or_calibration(context, ISSUE_373_LASYD_PROWLER_ORACLE_ID)
+        && context.source_is_creature
+        && text == ISSUE_373_LASYD_PROWLER_ETB_CLAUSE)
+        .then(|| {
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability(
+                context,
+                SpellEffectKind::Mill {
+                    count: Amount::Count(CountExpression::BattlefieldPermanents {
+                        filter: BattlefieldPermanentFilter {
+                            token: None,
+                            any_of: None,
+                            controllers: RelativePlayerSet::Controller,
+                            card_type: Some(CardTypeFilter::Land),
+                            color: None,
+                            name: None,
+                            required_subtypes: Vec::new(),
+                            exclude_source: false,
+                        },
+                    }),
+                    who: PlayerRecipient::Controller,
+                },
+            ) else {
+                unreachable!("triggered_ability always returns a triggered ability")
+            };
+            ability.may = true;
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
+/// T3.10 — both printed instructions target the same creature: a `+1/+0` pump with first strike,
+/// then a Delirium replacement grant of double strike. The two clauses must be authored as one
+/// face so a single group binds all three targeted effects in printed order. Violent Urge is the
+/// only card in the pinned full Oracle corpus printing this pair (verified).
+fn match_spell_violent_urge_aggregate(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_373_identity_or_calibration(context, ISSUE_373_VIOLENT_URGE_ORACLE_ID)
+        && text == ISSUE_373_VIOLENT_URGE_FACE)
+        .then(|| {
+            let target = || Box::new(TargetFilter::default_creature());
+            RecipeEmission::SpellEffectsWithTargeting {
+                effects: vec![
+                    SpellEffectKind::PumpTarget {
+                        power: 1,
+                        toughness: 0,
+                        scale: None,
+                        subject: EffectSubject::Chosen(target()),
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: EffectSubject::Chosen(target()),
+                        keywords: vec![Keyword::FirstStrike],
+                    },
+                    SpellEffectKind::Conditional {
+                        condition: issue_373_graveyard_threshold(
+                            GraveyardAggregate::DistinctCardTypes,
+                            None,
+                            4,
+                        ),
+                        effect: Box::new(SpellEffectKind::GrantKeywords {
+                            subject: EffectSubject::Chosen(target()),
+                            keywords: vec![Keyword::DoubleStrike],
+                        }),
+                    },
+                ],
+                targeting: TargetingDef {
+                    groups: vec![TargetGroupDef {
+                        min: 1,
+                        max: 1,
+                        prompt: "Choose target creature".into(),
+                        effect_indices: vec![0, 1, 2],
+                        distinct_from: Vec::new(),
+                        same_graveyard: false,
+                        cast_cost_expansion: None,
+                    }],
+                },
+            }
+        })
+}
+
+/// T4.11 — Beastie Beatdown's printed face chooses one creature you control and one an opponent
+/// controls, conditionally places two +1/+1 counters on the controlled creature, then has that
+/// exact creature deal damage equal to its power to the other. One whole-face recipe authors both
+/// target groups; `Amount::Conditional` makes the Delirium counter instruction exact without a
+/// `Conditional` wrapper (the shipped allowlist rejects `PutCounters` there). Beastie Beatdown is
+/// the only card in the pinned full Oracle corpus printing this triple (verified).
+fn match_spell_beastie_beatdown_aggregate(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_373_identity_or_calibration(context, ISSUE_373_BEASTIE_BEATDOWN_ORACLE_ID)
+        && text == ISSUE_373_BEASTIE_BEATDOWN_CLAUSE)
+        .then(|| {
+            let you_control = TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..TargetFilter::default()
+            };
+            let opponent_controls = TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::Opponent,
+                ..TargetFilter::default()
+            };
+            RecipeEmission::SpellEffectsWithTargeting {
+                effects: vec![
+                    SpellEffectKind::PutCounters {
+                        counter: CounterKind::PlusOnePlusOne,
+                        count: Amount::Conditional {
+                            condition: issue_373_graveyard_threshold(
+                                GraveyardAggregate::DistinctCardTypes,
+                                None,
+                                4,
+                            ),
+                            when_true: 2,
+                            otherwise: 0,
+                        },
+                        subject: EffectSubject::Chosen(Box::new(you_control.clone())),
+                    },
+                    SpellEffectKind::CreatureDealsDamageEqualToPower {
+                        source: you_control,
+                        target: opponent_controls,
+                    },
+                ],
+                targeting: TargetingDef {
+                    groups: vec![
+                        TargetGroupDef {
+                            min: 1,
+                            max: 1,
+                            prompt: "Choose target creature you control".into(),
+                            effect_indices: vec![0, 1],
+                            distinct_from: Vec::new(),
+                            same_graveyard: false,
+                            cast_cost_expansion: None,
+                        },
+                        TargetGroupDef {
+                            min: 1,
+                            max: 1,
+                            prompt: "Choose target creature an opponent controls".into(),
+                            effect_indices: vec![1],
+                            distinct_from: vec![0],
+                            same_graveyard: false,
+                            cast_cost_expansion: None,
+                        },
+                    ],
+                },
+            }
+        })
+}
+
 pub(super) static CATALOG: &[Recipe] = &[
     Recipe {
         id: RecipeId("static.cost_reduction.affinity_artifacts"),
@@ -14739,6 +15673,306 @@ pub(super) static CATALOG: &[Recipe] = &[
             "When this enchantment enters, create two tapped 2/2 white Soldier creature tokens.",
             "When this enchantment enters, create two 1/1 white Soldier creature tokens.",
             "When this enchantment enters, create two 2/2 white Soldier creature tokens. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.damage.count.graveyard_cards"),
+        label: "damage equal to graveyard instant-or-sorcery count",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_damage_count_graveyard_instant_or_sorcery,
+        // Steal the Show is the only card in the pinned full Oracle corpus printing this exact
+        // template; the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Steal the Show" => "Steal the Show deals damage equal to the number of instant and sorcery cards in your graveyard to target creature or planeswalker.";
+            // A constant amount, an affine amount, a battlefield count, an opponent-graveyard
+            // count, an each-opponent recipient, and riders stay unsupported.
+            "Steal the Show deals 3 damage to target creature or planeswalker.",
+            "Steal the Show deals damage equal to 2 plus the number of instant and sorcery cards in your graveyard to target creature or planeswalker.",
+            "Steal the Show deals damage equal to the number of instant and sorcery cards you own in exile to target creature or planeswalker.",
+            "Steal the Show deals damage equal to the number of instant and sorcery cards in target player's graveyard to target creature or planeswalker.",
+            "Steal the Show deals damage equal to the number of instant and sorcery cards in your graveyard to each opponent.",
+            "Steal the Show deals damage equal to the number of instant and sorcery cards in your graveyard to target creature or planeswalker. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.damage.affine_constant_plus_graveyard_cards"),
+        label: "damage equal to two plus a graveyard card count",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_damage_affine_constant_plus_graveyard_cards,
+        calibration: calibrations!(
+            "Combustion Technique" => "Combustion Technique deals damage equal to 2 plus the number of Lesson cards in your graveyard to target creature. If that creature would die this turn, exile it instead.",
+            "Frantic Firebolt" => "Frantic Firebolt deals X damage to target creature, where X is 2 plus the number of cards in your graveyard that are instant cards, sorcery cards, and/or have an Adventure.";
+            // A bare count with no constant, another constant, a non-graveyard quantity, a
+            // mana-value bound instead of the Adventure union, and riders stay unsupported.
+            "Combustion Technique deals damage equal to the number of Lesson cards in your graveyard to target creature. If that creature would die this turn, exile it instead.",
+            "Combustion Technique deals damage equal to 3 plus the number of Lesson cards in your graveyard to target creature. If that creature would die this turn, exile it instead.",
+            "Combustion Technique deals damage equal to 2 plus the number of Lesson cards in your library to target creature. If that creature would die this turn, exile it instead.",
+            "Frantic Firebolt deals X damage to target creature, where X is 2 plus the number of cards in your graveyard with mana value 2 or less.",
+            "Frantic Firebolt deals X damage to target creature, where X is 2 plus the number of cards in your graveyard that are instant cards, sorcery cards, and/or have an Adventure. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.attack.damage_each_opponent.count.graveyard_cards"),
+        label: "attack damage each opponent from graveyard noncreature nonland count",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_triggered_attack_damage_each_opponent_count_graveyard_cards,
+        // The back face of The Emperor of Palamecia // The Lord Master of Hell is the only card in
+        // the pinned full Oracle corpus printing this exact clause; the singleton is verified.
+        calibration: singleton_calibrations!(
+            "The Lord Master of Hell" => "Starfall — Whenever The Lord Master of Hell attacks, it deals X damage to each opponent, where X is the number of noncreature, nonland cards in your graveyard.";
+            // A target opponent, an each-creature recipient, a fixed amount, a creature-only
+            // filter, a land-only filter, and riders stay unsupported.
+            "Starfall — Whenever The Lord Master of Hell attacks, it deals X damage to target opponent, where X is the number of noncreature, nonland cards in your graveyard.",
+            "Starfall — Whenever The Lord Master of Hell attacks, it deals X damage to each creature, where X is the number of noncreature, nonland cards in your graveyard.",
+            "Starfall — Whenever The Lord Master of Hell attacks, it deals 3 damage to each opponent.",
+            "Starfall — Whenever The Lord Master of Hell attacks, it deals X damage to each opponent, where X is the number of creature cards in your graveyard.",
+            "Starfall — Whenever The Lord Master of Hell attacks, it deals X damage to each opponent, where X is the number of nonland cards in your graveyard.",
+            "Starfall — Whenever The Lord Master of Hell attacks, it deals X damage to each opponent, where X is the number of noncreature, nonland cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump.negative.count.graveyard_permanent_cards"),
+        label: "ETB -X/-X from graveyard permanent count",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_triggered_etb_pump_negative_count_graveyard_permanent_cards,
+        calibration: calibrations!(
+            "Cloud of Darkness" => "Particle Beam — When Cloud of Darkness enters, target creature an opponent controls gets -X/-X until end of turn, where X is the number of permanent cards in your graveyard.",
+            "Chupacabra Echo" => "Fathomless descent — When this creature enters, target creature an opponent controls gets -X/-X until end of turn, where X is the number of permanent cards in your graveyard.";
+            // A positive pump, a -1/-0 split, a -0/-1 split, a battlefield count, a fixed amount,
+            // a controlled target, and riders stay unsupported.
+            "Particle Beam — When Cloud of Darkness enters, target creature an opponent controls gets +X/+X until end of turn, where X is the number of permanent cards in your graveyard.",
+            "Particle Beam — When Cloud of Darkness enters, target creature an opponent controls gets -X/-0 until end of turn, where X is the number of permanent cards in your graveyard.",
+            "Particle Beam — When Cloud of Darkness enters, target creature an opponent controls gets -0/-X until end of turn, where X is the number of permanent cards in your graveyard.",
+            "Particle Beam — When Cloud of Darkness enters, target creature an opponent controls gets -X/-X until end of turn, where X is the number of permanents you control.",
+            "Particle Beam — When Cloud of Darkness enters, target creature an opponent controls gets -3/-3 until end of turn.",
+            "Particle Beam — When Cloud of Darkness enters, target creature you control gets -X/-X until end of turn, where X is the number of permanent cards in your graveyard.",
+            "Particle Beam — When Cloud of Darkness enters, target creature an opponent controls gets -X/-X until end of turn, where X is the number of permanent cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.pump.count.graveyard_permanent_cards"),
+        label: "activated +1/+1 per graveyard permanent card",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_pump_count_graveyard_permanent_cards,
+        // Gran Pulse Ochu is the only card in the pinned full Oracle corpus printing this exact
+        // clause; the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Gran Pulse Ochu" => "{8}: Until end of turn, this creature gets +1/+1 for each permanent card in your graveyard.";
+            // Fixed pumps, a battlefield count, another creature, and riders stay unsupported.
+            "{8}: Until end of turn, this creature gets +1/+1.",
+            "{8}: Until end of turn, this creature gets +2/+2.",
+            "{8}: Until end of turn, this creature gets +1/+1 for each permanent you control.",
+            "{8}: Until end of turn, target creature gets +1/+1 for each permanent card in your graveyard.",
+            "{8}: Until end of turn, this creature gets +1/+1 for each permanent card in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.pump_affine.battlefield_and_graveyard_counts"),
+        label: "ETB shared +X/+0 and -0/-X from Elves plus graveyard Elf cards",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_triggered_etb_pump_affine_battlefield_and_graveyard_counts,
+        // Gloom Ripper is the only card in the pinned full Oracle corpus printing this exact
+        // clause; Abomination of Llanowar prints the quantity in a different ability. The
+        // singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Gloom Ripper" => "When this creature enters, target creature you control gets +X/+0 until end of turn and up to one target creature an opponent controls gets -0/-X until end of turn, where X is the number of Elves you control plus the number of Elf cards in your graveyard.";
+            // Single-target forms, one-sided counts, +X/+X, swapped signs, and riders stay
+            // unsupported.
+            "When this creature enters, target creature you control gets +X/+0 until end of turn, where X is the number of Elves you control plus the number of Elf cards in your graveyard.",
+            "When this creature enters, target creature you control gets +X/+0 until end of turn and target creature an opponent controls gets -0/-X until end of turn, where X is the number of Elves you control plus the number of Elf cards in your graveyard.",
+            "When this creature enters, target creature you control gets +X/+0 until end of turn and up to one target creature an opponent controls gets -0/-X until end of turn, where X is the number of Elves you control.",
+            "When this creature enters, target creature you control gets +X/+0 until end of turn and up to one target creature an opponent controls gets -0/-X until end of turn, where X is the number of Elf cards in your graveyard.",
+            "When this creature enters, target creature you control gets +X/+X until end of turn and up to one target creature an opponent controls gets -X/-X until end of turn, where X is the number of Elves you control plus the number of Elf cards in your graveyard.",
+            "When this creature enters, target creature you control gets -X/-0 until end of turn and up to one target creature an opponent controls gets +0/+X until end of turn, where X is the number of Elves you control plus the number of Elf cards in your graveyard.",
+            "When this creature enters, target creature you control gets +X/+0 until end of turn and up to one target creature an opponent controls gets -0/-X until end of turn, where X is the number of Elves you control plus the number of Elf cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("conditional.grant_keywords.graveyard_card_types_threshold"),
+        label: "Delirium double strike on the targeted creature",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_conditional_grant_keywords_graveyard_card_types_threshold,
+        // Violent Urge is the only card in the pinned full Oracle corpus printing this exact
+        // clause; the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Violent Urge" => "Delirium — If there are four or more card types among cards in your graveyard, that creature gains double strike until end of turn.";
+            // Other thresholds, a permanent-card gate, an unconditional grant, a mass grant, and
+            // riders stay unsupported.
+            "Delirium — If there are three or more card types among cards in your graveyard, that creature gains double strike until end of turn.",
+            "Delirium — If there are five or more card types among cards in your graveyard, that creature gains double strike until end of turn.",
+            "Delirium — If there are four or more permanent cards in your graveyard, that creature gains double strike until end of turn.",
+            "That creature gains double strike until end of turn.",
+            "Delirium — If there are four or more card types among cards in your graveyard, creatures you control gain double strike until end of turn.",
+            "Delirium — If there are four or more card types among cards in your graveyard, that creature gains double strike until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.graveyard.put_counters.count.graveyard_land_cards"),
+        label: "Renew graveyard activation puts graveyard-land-count counters",
+        surface: RecipeSurface::ZoneActivatedAbility,
+        matcher: match_activated_graveyard_put_counters_count_graveyard_land_cards,
+        // Lasyd Prowler is the only card in the pinned full Oracle corpus printing this exact
+        // clause; the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Lasyd Prowler" => "Renew — {1}{G}, Exile this card from your graveyard: Put X +1/+1 counters on target creature, where X is the number of land cards in your graveyard. Activate only as a sorcery.";
+            // Fixed counters, instant timing, a battlefield source zone, another mana cost, a
+            // battlefield land count, and riders stay unsupported.
+            "Renew — {1}{G}, Exile this card from your graveyard: Put two +1/+1 counters on target creature. Activate only as a sorcery.",
+            "Renew — {1}{G}, Exile this card from your graveyard: Put X +1/+1 counters on target creature, where X is the number of land cards in your graveyard.",
+            "Renew — {1}{G}: Put X +1/+1 counters on target creature, where X is the number of land cards in your graveyard. Activate only as a sorcery.",
+            "Renew — {2}{G}, Exile this card from your graveyard: Put X +1/+1 counters on target creature, where X is the number of land cards in your graveyard. Activate only as a sorcery.",
+            "Renew — {1}{G}, Exile this card from your graveyard: Put X +1/+1 counters on target creature, where X is the number of lands you control. Activate only as a sorcery.",
+            "Renew — {1}{G}, Exile this card from your graveyard: Put X +1/+1 counters on target creature, where X is the number of land cards in your graveyard. Activate only as a sorcery. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.attack.put_counters.graveyard_permanent_threshold"),
+        label: "Descend 4 attack trigger places one +1/+1 counter",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_triggered_attack_put_counters_graveyard_permanent_threshold,
+        // Malamet Veteran is the only card in the pinned full Oracle corpus printing this exact
+        // clause; the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Malamet Veteran" => "Descend 4 — Whenever this creature attacks, if there are four or more permanent cards in your graveyard, put a +1/+1 counter on target creature.";
+            // Other thresholds, a card-type gate, a fixed pump, a self-only subject, another
+            // creature, and riders stay unsupported.
+            "Descend 4 — Whenever this creature attacks, if there are three or more permanent cards in your graveyard, put a +1/+1 counter on target creature.",
+            "Descend 4 — Whenever this creature attacks, if there are five or more permanent cards in your graveyard, put a +1/+1 counter on target creature.",
+            "Descend 4 — Whenever this creature attacks, if there are four or more card types among cards in your graveyard, put a +1/+1 counter on target creature.",
+            "Descend 4 — Whenever this creature attacks, if there are four or more permanent cards in your graveyard, target creature gets +2/+2 until end of turn.",
+            "Descend 4 — Whenever this creature attacks, if there are four or more permanent cards in your graveyard, put a +1/+1 counter on this creature.",
+            "Descend 4 — Whenever this creature attacks, if there are four or more permanent cards in your graveyard, put a +1/+1 counter on another target creature.",
+            "Descend 4 — Whenever this creature attacks, if there are four or more permanent cards in your graveyard, put a +1/+1 counter on target creature. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.mill_then_put_counters.count.graveyard_artifact_or_creature_cards"),
+        label: "ETB mill two then a counter per graveyard artifact-or-creature card",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_triggered_etb_mill_then_put_counters_graveyard_artifact_or_creature_cards,
+        calibration: calibrations!(
+            "Ooze Patrol" => "When this creature enters, mill two cards, then put a +1/+1 counter on this creature for each artifact and/or creature card in your graveyard.",
+            "Ceti Eel" => "When this creature enters, mill two cards, then put a +1/+1 counter on this creature for each artifact and/or creature card in your graveyard.";
+            // One milled card, a fixed counter, artifact-only, creature-only, a chosen counter
+            // recipient, and riders stay unsupported.
+            "When this creature enters, mill a card, then put a +1/+1 counter on this creature for each artifact and/or creature card in your graveyard.",
+            "When this creature enters, mill two cards, then put a +1/+1 counter on this creature.",
+            "When this creature enters, mill two cards, then put a +1/+1 counter on this creature for each artifact card in your graveyard.",
+            "When this creature enters, mill two cards, then put a +1/+1 counter on this creature for each creature card in your graveyard.",
+            "When this creature enters, mill two cards, then put a +1/+1 counter on target creature for each artifact and/or creature card in your graveyard.",
+            "When this creature enters, mill two cards, then put a +1/+1 counter on this creature for each artifact and/or creature card in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.put_counter_and_draw.graveyard_threshold_once"),
+        label: "Threshold once-per-object counter and draw activation",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_put_counter_and_draw_graveyard_threshold_once,
+        // Thought Shucker is the only card in the pinned full Oracle corpus printing this exact
+        // clause; the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Thought Shucker" => "Threshold — {1}{U}: Put a +1/+1 counter on this creature and draw a card. Activate only if there are seven or more cards in your graveyard and only once.";
+            // Other thresholds, no once limit, reversed order, a card-type gate, a target
+            // creature counter, and riders stay unsupported.
+            "Threshold — {1}{U}: Put a +1/+1 counter on this creature and draw a card. Activate only if there are six or more cards in your graveyard and only once.",
+            "Threshold — {1}{U}: Put a +1/+1 counter on this creature and draw a card. Activate only if there are eight or more cards in your graveyard and only once.",
+            "Threshold — {1}{U}: Put a +1/+1 counter on this creature and draw a card. Activate only if there are seven or more cards in your graveyard.",
+            "Threshold — {1}{U}: Draw a card, then put a +1/+1 counter on this creature. Activate only if there are seven or more cards in your graveyard and only once.",
+            "Threshold — {1}{U}: Put a +1/+1 counter on this creature and draw a card. Activate only if there are seven or more card types among cards in your graveyard and only once.",
+            "Threshold — {1}{U}: Put a +1/+1 counter on target creature and draw a card. Activate only if there are seven or more cards in your graveyard and only once.",
+            "Threshold — {1}{U}: Put a +1/+1 counter on this creature and draw a card. Activate only if there are seven or more cards in your graveyard and only once. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.surveil_then_counter_unless_pays.count.graveyard_cards"),
+        label: "surveil then counter unless the controller pays per graveyard card",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_surveil_then_counter_unless_pays_count_graveyard_cards,
+        // Swallowed by Leviathan is the only card in the pinned full Oracle corpus printing this
+        // exact clause; the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Swallowed by Leviathan" => "Choose target spell. Surveil 2, then counter the chosen spell unless its controller pays {1} for each card in your graveyard.";
+            // A fixed payment, a battlefield-permanent payment, an unconditional counter, a
+            // different surveil count, an opponent's graveyard, and riders stay unsupported.
+            "Choose target spell. Surveil 2, then counter the chosen spell unless its controller pays {2}.",
+            "Choose target spell. Surveil 2, then counter the chosen spell unless its controller pays {1} for each permanent you control.",
+            "Choose target spell. Surveil 2, then counter the chosen spell.",
+            "Choose target spell. Surveil 1, then counter the chosen spell unless its controller pays {1} for each card in your graveyard.",
+            "Choose target spell. Surveil 2, then counter the chosen spell unless its controller pays {1} for each card in their graveyard.",
+            "Choose target spell. Surveil 2, then counter the chosen spell unless its controller pays {1} for each card in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("conditional.pump.minus_ten.minus_ten.graveyard_permanent_threshold"),
+        label: "Descend 4 replaces the base -5/-5 with one conditional -10/-10",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_join_the_dead_conditional_pump,
+        // Join the Dead is the only card in the pinned full Oracle corpus printing this face; the
+        // singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Join the Dead" => "Target creature gets -5/-5 until end of turn.\nDescend 4 — That creature gets -10/-10 until end of turn instead if there are four or more permanent cards in your graveyard.";
+            // A missing "instead", another threshold, a card-type gate, another base value, a
+            // split pump, and riders stay unsupported.
+            "Target creature gets -5/-5 until end of turn.\nDescend 4 — That creature gets -10/-10 until end of turn if there are four or more permanent cards in your graveyard.",
+            "Target creature gets -5/-5 until end of turn.\nDescend 4 — That creature gets -10/-10 until end of turn instead if there are five or more permanent cards in your graveyard.",
+            "Target creature gets -5/-5 until end of turn.\nDescend 4 — That creature gets -10/-10 until end of turn instead if there are four or more card types among cards in your graveyard.",
+            "Target creature gets -6/-6 until end of turn.\nDescend 4 — That creature gets -10/-10 until end of turn instead if there are four or more permanent cards in your graveyard.",
+            "Target creature gets -5/-5 until end of turn.\nDescend 4 — That creature gets -10/-0 until end of turn instead if there are four or more permanent cards in your graveyard.",
+            "Target creature gets -5/-5 until end of turn.\nDescend 4 — That creature gets -10/-10 until end of turn instead if there are four or more permanent cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.may_mill.count.lands_you_control"),
+        label: "optional ETB mill per land its controller controls",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_triggered_etb_may_mill_count_lands_you_control,
+        // Lasyd Prowler is the only card in the pinned full Oracle corpus printing this exact ETB;
+        // the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Lasyd Prowler" => "When this creature enters, you may mill cards equal to the number of lands you control.";
+            // A mandatory mill, a permanent count instead of lands, another controller's lands,
+            // and riders stay unsupported.
+            "When this creature enters, mill cards equal to the number of lands you control.",
+            "When this creature enters, you may mill cards equal to the number of permanents you control.",
+            "When this creature enters, you may mill cards equal to the number of lands target player controls.",
+            "When this creature enters, you may mill cards equal to the number of lands you control. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump_and_keyword.graveyard_card_types_threshold"),
+        label: "targeted pump and Delirium grant of double strike",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_violent_urge_aggregate,
+        // Violent Urge is the only card in the pinned full Oracle corpus printing this pair; the
+        // singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Violent Urge" => "Target creature gets +1/+0 and gains first strike until end of turn.\nDelirium — If there are four or more card types among cards in your graveyard, that creature gains double strike until end of turn.";
+            // Another pump, another first keyword, another threshold, a card-count gate, a mass
+            // grant, and riders stay unsupported.
+            "Target creature gets +2/+0 and gains first strike until end of turn.\nDelirium — If there are four or more card types among cards in your graveyard, that creature gains double strike until end of turn.",
+            "Target creature gets +1/+0 and gains trample until end of turn.\nDelirium — If there are four or more card types among cards in your graveyard, that creature gains double strike until end of turn.",
+            "Target creature gets +1/+0 and gains first strike until end of turn.\nDelirium — If there are five or more card types among cards in your graveyard, that creature gains double strike until end of turn.",
+            "Target creature gets +1/+0 and gains first strike until end of turn.\nDelirium — If there are four or more permanent cards in your graveyard, that creature gains double strike until end of turn.",
+            "Target creature gets +1/+0 and gains first strike until end of turn.\nDelirium — If there are four or more card types among cards in your graveyard, creatures you control gain double strike until end of turn.",
+            "Target creature gets +1/+0 and gains first strike until end of turn.\nDelirium — If there are four or more card types among cards in your graveyard, that creature gains double strike until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.beastie_beatdown.conditional_counters_and_power_damage"),
+        label: "Delirium counters on the controlled creature then power damage",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_beastie_beatdown_aggregate,
+        // Beastie Beatdown is the only card in the pinned full Oracle corpus printing this triple;
+        // the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Beastie Beatdown" => "Choose target creature you control and target creature an opponent controls.\nDelirium — If there are four or more card types among cards in your graveyard, put two +1/+1 counters on the creature you control.\nThe creature you control deals damage equal to its power to the creature an opponent controls.";
+            // Missing targets, a swapped controller scope, a fixed counter instruction, the
+            // Delirium line absent, and riders stay unsupported.
+            "Delirium — If there are four or more card types among cards in your graveyard, put two +1/+1 counters on the creature you control.\nThe creature you control deals damage equal to its power to the creature an opponent controls.",
+            "Choose target creature you control and target creature an opponent controls.\nDelirium — If there are four or more card types among cards in your graveyard, put two +1/+1 counters on the creature an opponent controls.\nThe creature you control deals damage equal to its power to the creature an opponent controls.",
+            "Choose target creature you control and target creature an opponent controls.\nDelirium — If there are four or more card types among cards in your graveyard, put a +1/+1 counter on the creature you control.\nThe creature you control deals damage equal to its power to the creature an opponent controls.",
+            "Choose target creature you control and target creature an opponent controls.\nThe creature you control deals damage equal to its power to the creature an opponent controls.\nDelirium — If there are four or more card types among cards in your graveyard, put two +1/+1 counters on the creature you control.",
+            "Choose target creature you control and target creature an opponent controls.\nDelirium — If there are four or more card types among cards in your graveyard, put two +1/+1 counters on the creature you control.\nThe creature you control deals damage equal to its power to the creature an opponent controls. Draw a card."
         ),
     },
 ];
@@ -28331,5 +29565,956 @@ mod tests {
                 "enchantment-source template must stay gated: {clause}"
             );
         }
+    }
+
+    const ISSUE_373_STEAL_THE_SHOW_CLAUSE: &str = "Steal the Show deals damage equal to the number of instant and sorcery cards in your graveyard to target creature or planeswalker.";
+    const ISSUE_373_COMBUSTION_CLAUSE: &str = "Combustion Technique deals damage equal to 2 plus the number of Lesson cards in your graveyard to target creature. If that creature would die this turn, exile it instead.";
+    const ISSUE_373_FRANTIC_CLAUSE: &str = "Frantic Firebolt deals X damage to target creature, where X is 2 plus the number of cards in your graveyard that are instant cards, sorcery cards, and/or have an Adventure.";
+    const ISSUE_373_EMPEROR_STARFALL_CLAUSE: &str = "Starfall — Whenever The Lord Master of Hell attacks, it deals X damage to each opponent, where X is the number of noncreature, nonland cards in your graveyard.";
+    const ISSUE_373_CLOUD_CLAUSE: &str = "Particle Beam — When Cloud of Darkness enters, target creature an opponent controls gets -X/-X until end of turn, where X is the number of permanent cards in your graveyard.";
+    const ISSUE_373_CHUPACABRA_CLAUSE: &str = "Fathomless descent — When this creature enters, target creature an opponent controls gets -X/-X until end of turn, where X is the number of permanent cards in your graveyard.";
+    const ISSUE_373_GRAN_PULSE_CLAUSE: &str = "{8}: Until end of turn, this creature gets +1/+1 for each permanent card in your graveyard.";
+    const ISSUE_373_GLOOM_RIPPER_CLAUSE: &str = "When this creature enters, target creature you control gets +X/+0 until end of turn and up to one target creature an opponent controls gets -0/-X until end of turn, where X is the number of Elves you control plus the number of Elf cards in your graveyard.";
+    const ISSUE_373_VIOLENT_URGE_CLAUSE: &str = "Delirium — If there are four or more card types among cards in your graveyard, that creature gains double strike until end of turn.";
+    const ISSUE_373_LASYD_CLAUSE: &str = "Renew — {1}{G}, Exile this card from your graveyard: Put X +1/+1 counters on target creature, where X is the number of land cards in your graveyard. Activate only as a sorcery.";
+    const ISSUE_373_MALAMET_CLAUSE: &str = "Descend 4 — Whenever this creature attacks, if there are four or more permanent cards in your graveyard, put a +1/+1 counter on target creature.";
+    const ISSUE_373_OOZE_CLAUSE: &str = "When this creature enters, mill two cards, then put a +1/+1 counter on this creature for each artifact and/or creature card in your graveyard.";
+    const ISSUE_373_THOUGHT_SHUCKER_CLAUSE: &str = "Threshold — {1}{U}: Put a +1/+1 counter on this creature and draw a card. Activate only if there are seven or more cards in your graveyard and only once.";
+    const ISSUE_373_SWALLOWED_CLAUSE: &str = "Choose target spell. Surveil 2, then counter the chosen spell unless its controller pays {1} for each card in your graveyard.";
+
+    fn issue_373_context(source_name: &str) -> RecipeContext {
+        RecipeContext {
+            source_name: source_name.into(),
+            ..context()
+        }
+    }
+
+    fn issue_373_match(clause: &str, is_spell: bool, source_name: &str) -> RecipeMatch {
+        match_clause(clause, is_spell, &issue_373_context(source_name))
+            .expect("issue #373 clause must not be ambiguous")
+            .unwrap_or_else(|| panic!("issue #373 clause must be supported: {clause}"))
+    }
+
+    fn issue_373_recipe(id: &str) -> &'static Recipe {
+        CATALOG
+            .iter()
+            .find(|recipe| recipe.id.as_str() == id)
+            .unwrap_or_else(|| panic!("missing recipe {id}"))
+    }
+
+    #[test]
+    fn issue_373_exact_clauses_match_their_recipes() {
+        for (clause, is_spell, source_name, expected) in [
+            (
+                ISSUE_373_STEAL_THE_SHOW_CLAUSE,
+                true,
+                "Steal the Show",
+                "spell.damage.count.graveyard_cards",
+            ),
+            (
+                ISSUE_373_COMBUSTION_CLAUSE,
+                true,
+                "Combustion Technique",
+                "spell.damage.affine_constant_plus_graveyard_cards",
+            ),
+            (
+                ISSUE_373_FRANTIC_CLAUSE,
+                true,
+                "Frantic Firebolt",
+                "spell.damage.affine_constant_plus_graveyard_cards",
+            ),
+            (
+                ISSUE_373_EMPEROR_STARFALL_CLAUSE,
+                false,
+                "The Lord Master of Hell",
+                "triggered.attack.damage_each_opponent.count.graveyard_cards",
+            ),
+            (
+                ISSUE_373_CLOUD_CLAUSE,
+                false,
+                "Cloud of Darkness",
+                "spell.pump.negative.count.graveyard_permanent_cards",
+            ),
+            (
+                ISSUE_373_CHUPACABRA_CLAUSE,
+                false,
+                "Chupacabra Echo",
+                "spell.pump.negative.count.graveyard_permanent_cards",
+            ),
+            (
+                ISSUE_373_GRAN_PULSE_CLAUSE,
+                false,
+                "Gran Pulse Ochu",
+                "activated.pump.count.graveyard_permanent_cards",
+            ),
+            (
+                ISSUE_373_GLOOM_RIPPER_CLAUSE,
+                false,
+                "Gloom Ripper",
+                "triggered.etb.pump_affine.battlefield_and_graveyard_counts",
+            ),
+            (
+                ISSUE_373_VIOLENT_URGE_CLAUSE,
+                true,
+                "Test Card",
+                "conditional.grant_keywords.graveyard_card_types_threshold",
+            ),
+            (
+                ISSUE_373_LASYD_CLAUSE,
+                false,
+                "Lasyd Prowler",
+                "activated.graveyard.put_counters.count.graveyard_land_cards",
+            ),
+            (
+                ISSUE_373_MALAMET_CLAUSE,
+                false,
+                "Malamet Veteran",
+                "triggered.attack.put_counters.graveyard_permanent_threshold",
+            ),
+            (
+                ISSUE_373_OOZE_CLAUSE,
+                false,
+                "Ooze Patrol",
+                "triggered.etb.mill_then_put_counters.count.graveyard_artifact_or_creature_cards",
+            ),
+            (
+                ISSUE_373_THOUGHT_SHUCKER_CLAUSE,
+                false,
+                "Thought Shucker",
+                "activated.put_counter_and_draw.graveyard_threshold_once",
+            ),
+            (
+                ISSUE_373_SWALLOWED_CLAUSE,
+                true,
+                "Swallowed by Leviathan",
+                "spell.surveil_then_counter_unless_pays.count.graveyard_cards",
+            ),
+        ] {
+            assert_eq!(
+                issue_373_match(clause, is_spell, source_name).id.as_str(),
+                expected,
+                "{clause}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_373_recipes_have_stable_ids_and_surfaces() {
+        for (id, surface) in [
+            (
+                "spell.damage.count.graveyard_cards",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "spell.damage.affine_constant_plus_graveyard_cards",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "triggered.attack.damage_each_opponent.count.graveyard_cards",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "spell.pump.negative.count.graveyard_permanent_cards",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "activated.pump.count.graveyard_permanent_cards",
+                RecipeSurface::ActivatedAbility,
+            ),
+            (
+                "triggered.etb.pump_affine.battlefield_and_graveyard_counts",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "conditional.grant_keywords.graveyard_card_types_threshold",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "activated.graveyard.put_counters.count.graveyard_land_cards",
+                RecipeSurface::ZoneActivatedAbility,
+            ),
+            (
+                "triggered.attack.put_counters.graveyard_permanent_threshold",
+                RecipeSurface::TriggeredAbility,
+            ),
+            (
+                "triggered.etb.mill_then_put_counters.count.graveyard_artifact_or_creature_cards",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "activated.put_counter_and_draw.graveyard_threshold_once",
+                RecipeSurface::ActivatedAbility,
+            ),
+            (
+                "spell.surveil_then_counter_unless_pays.count.graveyard_cards",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "conditional.pump.minus_ten.minus_ten.graveyard_permanent_threshold",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "triggered.etb.may_mill.count.lands_you_control",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "spell.pump_and_keyword.graveyard_card_types_threshold",
+                RecipeSurface::SpellClause,
+            ),
+            (
+                "spell.beastie_beatdown.conditional_counters_and_power_damage",
+                RecipeSurface::SpellClause,
+            ),
+        ] {
+            assert_eq!(issue_373_recipe(id).surface, surface, "{id}");
+        }
+    }
+
+    fn issue_373_graveyard_filter_of(
+        amount: &Amount,
+    ) -> (RelativePlayerSet, Option<&ZoneCardFilter>) {
+        let Amount::Count(CountExpression::GraveyardCards { owners, filter }) = amount else {
+            panic!("expected a graveyard card count, got {amount:?}");
+        };
+        (*owners, filter.as_ref())
+    }
+
+    #[test]
+    fn issue_373_damage_and_pump_counts_use_printed_filters() {
+        // T1.1: instant-or-sorcery graveyard count on a creature/planeswalker damage target.
+        let Some(RecipeEmission::SpellEffectsWithTargeting { effects, targeting }) =
+            Some(issue_373_match(ISSUE_373_STEAL_THE_SHOW_CLAUSE, true, "Steal the Show").emission)
+        else {
+            panic!("Steal the Show must emit explicit effects with targeting");
+        };
+        let [SpellEffectKind::DamageTarget { amount, target }] = effects.as_slice() else {
+            panic!("Steal the Show must damage one creature or planeswalker");
+        };
+        let (owners, filter) = issue_373_graveyard_filter_of(amount);
+        assert_eq!(owners, RelativePlayerSet::Controller);
+        assert_eq!(
+            filter.expect("instant-or-sorcery filter").card_type,
+            Some(CardTypeFilter::InstantOrSorcery)
+        );
+        assert!(target
+            .any_of
+            .as_ref()
+            .is_some_and(|branches| branches.len() == 2));
+        assert_eq!(targeting.groups[0].effect_indices, [0]);
+
+        // T1.2 Combustion: Affine constant 2 over Lesson cards plus the exile rider on one target.
+        let RecipeEmission::SpellEffectsWithTargeting { effects, targeting } =
+            issue_373_match(ISSUE_373_COMBUSTION_CLAUSE, true, "Combustion Technique").emission
+        else {
+            panic!("Combustion Technique must author one target group");
+        };
+        assert_eq!(targeting.groups[0].effect_indices, [0, 1]);
+        assert!(matches!(
+            effects[1],
+            SpellEffectKind::ExileIfWouldDieThisTurn { .. }
+        ));
+        let SpellEffectKind::DamageTarget { amount, .. } = &effects[0] else {
+            panic!("Combustion Technique must deal damage");
+        };
+        let Amount::Count(CountExpression::Affine { constant, terms }) = amount else {
+            panic!("Combustion Technique must use an affine count");
+        };
+        assert_eq!(*constant, 2);
+        assert_eq!(terms.len(), 1);
+        assert_eq!(terms[0].coefficient, 1);
+        let CountExpression::GraveyardCards { filter, .. } = &terms[0].quantity else {
+            panic!("Combustion Technique must count graveyard cards");
+        };
+        assert_eq!(
+            filter.as_ref().expect("Lesson filter").required_subtypes,
+            ["Lesson"]
+        );
+
+        // T1.2 Frantic: the union filter uses the shipped Adventure characteristic, not a
+        // mana-value bound.
+        let RecipeEmission::SpellEffectsWithTargeting { effects, .. } =
+            issue_373_match(ISSUE_373_FRANTIC_CLAUSE, true, "Frantic Firebolt").emission
+        else {
+            panic!("Frantic Firebolt must author one target group");
+        };
+        let SpellEffectKind::DamageTarget { amount, .. } = &effects[0] else {
+            panic!("Frantic Firebolt must deal damage");
+        };
+        let Amount::Count(CountExpression::Affine { constant, terms }) = amount else {
+            panic!("Frantic Firebolt must use an affine count");
+        };
+        assert_eq!(*constant, 2);
+        let CountExpression::GraveyardCards {
+            filter: Some(filter),
+            ..
+        } = &terms[0].quantity
+        else {
+            panic!("Frantic Firebolt must count graveyard cards");
+        };
+        let branches = filter.any_of.as_ref().expect("union filter");
+        assert_eq!(branches.len(), 3);
+        assert_eq!(branches[2].has_adventure, Some(true));
+
+        // T1.3: noncreature, nonland public graveyard damage to each opponent.
+        let RecipeEmission::TriggeredAbility(ability) = issue_373_match(
+            ISSUE_373_EMPEROR_STARFALL_CLAUSE,
+            false,
+            "The Lord Master of Hell",
+        )
+        .emission
+        else {
+            panic!("Starfall must emit a triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0
+            }
+        );
+        let [SpellEffectKind::DamagePlayer { amount, who }] = ability.effect.as_slice() else {
+            panic!("Starfall must damage each opponent");
+        };
+        assert_eq!(*who, PlayerRecipient::EachOpponent);
+        let (_, filter) = issue_373_graveyard_filter_of(amount);
+        assert_eq!(
+            filter
+                .expect("noncreature nonland filter")
+                .excluded_card_types,
+            [CardTypeFilter::Creature, CardTypeFilter::Land]
+        );
+
+        // T3.5: one shared -1/-1-per-permanent scaled pump on the opposing target.
+        let RecipeEmission::TriggeredAbility(ability) =
+            issue_373_match(ISSUE_373_CLOUD_CLAUSE, false, "Cloud of Darkness").emission
+        else {
+            panic!("Particle Beam must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        let [SpellEffectKind::PumpTarget {
+            power,
+            toughness,
+            scale: Some(scale),
+            subject,
+        }] = ability.effect.as_slice()
+        else {
+            panic!("Particle Beam must scale one pump");
+        };
+        assert_eq!((*power, *toughness), (0, 0));
+        assert_eq!((scale.power_per_unit, scale.toughness_per_unit), (-1, -1));
+        let PtScaleBasis::Amount(amount) = &scale.basis else {
+            panic!("Particle Beam scale must read an amount");
+        };
+        let (_, filter) = issue_373_graveyard_filter_of(amount);
+        assert_eq!(
+            filter.expect("permanent filter").excluded_card_types,
+            [CardTypeFilter::Instant, CardTypeFilter::Sorcery]
+        );
+        let EffectSubject::Chosen(target) = subject else {
+            panic!("Particle Beam targets a creature");
+        };
+        assert_eq!(target.controller, TargetController::Opponent);
+        assert_eq!(
+            ability.targeting.as_ref().expect("targeting").groups[0].effect_indices,
+            [0]
+        );
+
+        // T3.6: the activated self pump reverses both per-unit signs.
+        let RecipeEmission::ActivatedAbility(ability) =
+            issue_373_match(ISSUE_373_GRAN_PULSE_CLAUSE, false, "Gran Pulse Ochu").emission
+        else {
+            panic!("Gran Pulse Ochu must emit an activated ability");
+        };
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(ability.timing, ActivationTiming::Normal);
+        assert_eq!(
+            ability.costs,
+            [AbilityCost::Mana(ManaCost::parse("{8}").expect("cost"))]
+        );
+        let [SpellEffectKind::PumpTarget {
+            scale: Some(scale),
+            subject: EffectSubject::Source,
+            ..
+        }] = ability.effect.as_slice()
+        else {
+            panic!("Gran Pulse Ochu must pump its own source");
+        };
+        assert_eq!((scale.power_per_unit, scale.toughness_per_unit), (1, 1));
+
+        // T3.7: one affine battlefield-plus-graveyard Elf count feeding both pumps.
+        let RecipeEmission::TriggeredAbility(ability) =
+            issue_373_match(ISSUE_373_GLOOM_RIPPER_CLAUSE, false, "Gloom Ripper").emission
+        else {
+            panic!("Gloom Ripper must emit a triggered ability");
+        };
+        let [SpellEffectKind::PumpTarget {
+            scale: Some(first), ..
+        }, SpellEffectKind::PumpTarget {
+            scale: Some(second),
+            ..
+        }] = ability.effect.as_slice()
+        else {
+            panic!("Gloom Ripper must scale two pumps");
+        };
+        assert_eq!((first.power_per_unit, first.toughness_per_unit), (1, 0));
+        assert_eq!((second.power_per_unit, second.toughness_per_unit), (0, -1));
+        let PtScaleBasis::Amount(amount) = &first.basis else {
+            panic!("the first scale must read the shared amount");
+        };
+        let Amount::Count(CountExpression::Affine { constant, terms }) = amount else {
+            panic!("Gloom Ripper must use an affine count");
+        };
+        assert_eq!(*constant, 0);
+        assert_eq!(terms.len(), 2);
+        let CountExpression::BattlefieldCreatures { filter } = &terms[0].quantity else {
+            panic!("the first term must count battlefield creatures");
+        };
+        assert_eq!(filter.subtype.as_deref(), Some("Elf"));
+        assert_eq!(filter.controllers, RelativePlayerSet::Controller);
+        let CountExpression::GraveyardCards { filter, .. } = &terms[1].quantity else {
+            panic!("the second term must count graveyard cards");
+        };
+        assert_eq!(
+            filter.as_ref().expect("Elf filter").required_subtypes,
+            ["Elf"]
+        );
+        let groups = &ability.targeting.as_ref().expect("targeting").groups;
+        assert_eq!((groups[0].min, groups[0].max), (1, 1));
+        assert_eq!((groups[1].min, groups[1].max), (0, 1));
+        assert_eq!(groups[0].effect_indices, [0]);
+        assert_eq!(groups[1].effect_indices, [1]);
+    }
+
+    #[test]
+    fn issue_373_threshold_gates_pick_the_printed_aggregate_and_timing() {
+        // T3.10: a resolution-time DistinctCardTypes conditional, not an intervening-if or a
+        // card-count gate.
+        let RecipeEmission::SpellEffect(SpellEffectKind::Conditional { condition, effect }) =
+            issue_373_match(ISSUE_373_VIOLENT_URGE_CLAUSE, true, "Test Card").emission
+        else {
+            panic!("Violent Urge must emit a conditional spell effect");
+        };
+        assert_eq!(
+            condition,
+            GameCondition::GraveyardAggregate {
+                owners: RelativePlayerSet::Controller,
+                aggregate: GraveyardAggregate::DistinctCardTypes,
+                filter: None,
+                min: Some(4),
+                max: None,
+            }
+        );
+        assert!(matches!(
+            effect.as_ref(),
+            SpellEffectKind::GrantKeywords { keywords, .. } if keywords == &[Keyword::DoubleStrike]
+        ));
+
+        // T4.13: the permanent-card count is the intervening-if on the attack trigger.
+        let RecipeEmission::TriggeredAbility(ability) =
+            issue_373_match(ISSUE_373_MALAMET_CLAUSE, false, "Malamet Veteran").emission
+        else {
+            panic!("Malamet Veteran must emit a triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0
+            }
+        );
+        assert_eq!(
+            ability.intervening_if,
+            Some(GameCondition::GraveyardAggregate {
+                owners: RelativePlayerSet::Controller,
+                aggregate: GraveyardAggregate::CardCount,
+                filter: Some(issue_373_permanent_card_filter()),
+                min: Some(4),
+                max: None,
+            })
+        );
+
+        // T4.16: the seven-card card-count gate is an activation condition with a per-object
+        // once limit.
+        let RecipeEmission::ActivatedAbility(ability) =
+            issue_373_match(ISSUE_373_THOUGHT_SHUCKER_CLAUSE, false, "Thought Shucker").emission
+        else {
+            panic!("Thought Shucker must emit an activated ability");
+        };
+        assert_eq!(
+            ability.conditions,
+            [issue_373_graveyard_threshold(
+                GraveyardAggregate::CardCount,
+                None,
+                7
+            )]
+        );
+        assert_eq!(
+            ability.activation_limit,
+            Some(ActivationLimit::PerObject { max_activations: 1 })
+        );
+        assert_eq!(
+            ability.effect,
+            [
+                SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Source,
+                },
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn issue_373_remaining_payloads_match_the_printed_instructions() {
+        // T4.12: graveyard-zone Renew activation with a land-card count.
+        let RecipeEmission::ActivatedAbility(ability) =
+            issue_373_match(ISSUE_373_LASYD_CLAUSE, false, "Lasyd Prowler").emission
+        else {
+            panic!("Lasyd Prowler must emit an activated ability");
+        };
+        assert_eq!(ability.source_zone, AbilitySourceZone::Graveyard);
+        assert_eq!(ability.timing, ActivationTiming::SorcerySpeed);
+        assert_eq!(
+            ability.costs,
+            [
+                AbilityCost::Mana(ManaCost::parse("{1}{G}").expect("cost")),
+                AbilityCost::ExileSelf,
+            ]
+        );
+        let [SpellEffectKind::PutCounters { count, subject, .. }] = ability.effect.as_slice()
+        else {
+            panic!("Renew must place counters");
+        };
+        assert!(matches!(subject, EffectSubject::Chosen(_)));
+        let (_, filter) = issue_373_graveyard_filter_of(count);
+        assert_eq!(
+            filter.expect("land filter").card_type,
+            Some(CardTypeFilter::Land)
+        );
+
+        // T4.15: mill first, then a counter per artifact-or-creature card.
+        let RecipeEmission::TriggeredAbility(ability) =
+            issue_373_match(ISSUE_373_OOZE_CLAUSE, false, "Ooze Patrol").emission
+        else {
+            panic!("Ooze Patrol must emit a triggered ability");
+        };
+        let [SpellEffectKind::Mill {
+            count: Amount::Fixed(2),
+            who: PlayerRecipient::Controller,
+        }, SpellEffectKind::PutCounters { count, subject, .. }] = ability.effect.as_slice()
+        else {
+            panic!("Ooze Patrol must mill two then place counters");
+        };
+        assert_eq!(*subject, EffectSubject::Source);
+        let (_, filter) = issue_373_graveyard_filter_of(count);
+        assert_eq!(
+            filter
+                .expect("artifact-or-creature filter")
+                .any_of
+                .as_ref()
+                .map(Vec::len),
+            Some(2)
+        );
+
+        // T6.22: surveil first, then the counter-unless payment reads the graveyard count.
+        let RecipeEmission::SpellEffectsWithTargeting { effects, targeting } =
+            issue_373_match(ISSUE_373_SWALLOWED_CLAUSE, true, "Swallowed by Leviathan").emission
+        else {
+            panic!("Swallowed by Leviathan must author one target group");
+        };
+        assert_eq!(
+            effects[0],
+            SpellEffectKind::LibraryPartition {
+                count: 2,
+                top_min: 0,
+                top_max: None,
+                kind: LibraryPartitionKind::Surveil,
+            }
+        );
+        let SpellEffectKind::CounterTargetSpell {
+            unless_controller_pays: Some(amount),
+            spell_filter,
+            ..
+        } = &effects[1]
+        else {
+            panic!("Swallowed by Leviathan must soft-counter the chosen spell");
+        };
+        assert!(spell_filter.is_unrestricted());
+        let (owners, filter) = issue_373_graveyard_filter_of(amount);
+        assert_eq!(owners, RelativePlayerSet::Controller);
+        assert!(filter.is_none());
+        // The surveil is not a target; only the counter effect references the stack spell.
+        let group = &targeting.groups[0];
+        assert_eq!(group.effect_indices, [1]);
+        assert_eq!(group.prompt, "Choose target spell");
+    }
+
+    #[test]
+    fn issue_373_unreviewed_identities_stay_unsupported() {
+        const UNREVIEWED: &str = "00000000-0000-0000-0000-000000000000";
+        for (clause, is_spell, source_name) in [
+            (ISSUE_373_STEAL_THE_SHOW_CLAUSE, true, "Steal the Show"),
+            (ISSUE_373_COMBUSTION_CLAUSE, true, "Combustion Technique"),
+            (ISSUE_373_FRANTIC_CLAUSE, true, "Frantic Firebolt"),
+            (
+                ISSUE_373_EMPEROR_STARFALL_CLAUSE,
+                false,
+                "The Lord Master of Hell",
+            ),
+            (ISSUE_373_CLOUD_CLAUSE, false, "Cloud of Darkness"),
+            (ISSUE_373_GRAN_PULSE_CLAUSE, false, "Gran Pulse Ochu"),
+            (ISSUE_373_GLOOM_RIPPER_CLAUSE, false, "Gloom Ripper"),
+            (ISSUE_373_VIOLENT_URGE_CLAUSE, true, "Test Card"),
+            (ISSUE_373_LASYD_CLAUSE, false, "Lasyd Prowler"),
+            (ISSUE_373_THOUGHT_SHUCKER_CLAUSE, false, "Thought Shucker"),
+            (ISSUE_373_SWALLOWED_CLAUSE, true, "Swallowed by Leviathan"),
+        ] {
+            let mut unreviewed = issue_373_context(source_name);
+            unreviewed.oracle_id = Some(UNREVIEWED.into());
+            assert_eq!(
+                match_clause(clause, is_spell, &unreviewed).expect("unambiguous"),
+                None,
+                "identical text must stay unsupported for an unreviewed identity: {clause}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_373_near_misses_stay_unowned() {
+        for (id, is_spell) in [
+            ("spell.damage.count.graveyard_cards", true),
+            ("spell.damage.affine_constant_plus_graveyard_cards", true),
+            (
+                "triggered.attack.damage_each_opponent.count.graveyard_cards",
+                false,
+            ),
+            ("spell.pump.negative.count.graveyard_permanent_cards", false),
+            ("activated.pump.count.graveyard_permanent_cards", false),
+            (
+                "triggered.etb.pump_affine.battlefield_and_graveyard_counts",
+                false,
+            ),
+            (
+                "conditional.grant_keywords.graveyard_card_types_threshold",
+                true,
+            ),
+            (
+                "activated.graveyard.put_counters.count.graveyard_land_cards",
+                false,
+            ),
+            (
+                "triggered.attack.put_counters.graveyard_permanent_threshold",
+                false,
+            ),
+            (
+                "triggered.etb.mill_then_put_counters.count.graveyard_artifact_or_creature_cards",
+                false,
+            ),
+            (
+                "activated.put_counter_and_draw.graveyard_threshold_once",
+                false,
+            ),
+            (
+                "spell.surveil_then_counter_unless_pays.count.graveyard_cards",
+                true,
+            ),
+        ] {
+            let recipe = issue_373_recipe(id);
+            let source_name = recipe.calibration.positive_cards[0].name;
+            let near_miss_context = issue_373_context(source_name);
+            for near_miss in recipe.calibration.negative_near_misses {
+                assert!(
+                    (recipe.matcher)(near_miss, &near_miss_context).is_none(),
+                    "{id} accepted near-miss {near_miss:?}"
+                );
+                assert!(
+                    match_clause(near_miss, is_spell, &near_miss_context)
+                        .expect("unambiguous")
+                        .is_none(),
+                    "the catalog unexpectedly owns {id} near-miss {near_miss:?}"
+                );
+            }
+        }
+    }
+
+    fn issue_373_card_context(source_name: &str, oracle_id: &str) -> RecipeContext {
+        let mut context = issue_373_context(source_name);
+        context.oracle_id = Some(oracle_id.into());
+        context
+    }
+
+    const ISSUE_373_UNREVIEWED: &str = "00000000-0000-0000-0000-000000000000";
+
+    #[test]
+    fn issue_373_join_the_dead_replaces_the_base_pump_with_one_exhaustive_scale() {
+        let context = issue_373_card_context("Join the Dead", ISSUE_373_JOIN_THE_DEAD_ORACLE_ID);
+        let matched = match_clause(ISSUE_373_JOIN_THE_DEAD_CLAUSE, true, &context)
+            .expect("Join the Dead must not be ambiguous")
+            .expect("Join the Dead must be supported");
+        assert_eq!(
+            matched.id.as_str(),
+            "conditional.pump.minus_ten.minus_ten.graveyard_permanent_threshold"
+        );
+        let RecipeEmission::SpellEffects(effects) = matched.emission else {
+            panic!("Join the Dead must emit one effect list under the implicit target contract");
+        };
+        let [SpellEffectKind::PumpTarget {
+            power,
+            toughness,
+            scale: Some(scale),
+            ..
+        }] = effects.as_slice()
+        else {
+            panic!("Join the Dead must emit one -X/-X pump");
+        };
+        assert_eq!((*power, *toughness), (0, 0));
+        assert_eq!((scale.power_per_unit, scale.toughness_per_unit), (-1, -1));
+        let PtScaleBasis::Amount(Amount::Conditional {
+            condition,
+            when_true,
+            otherwise,
+        }) = &scale.basis
+        else {
+            panic!("Join the Dead must select one printed value, not stack both");
+        };
+        assert_eq!(
+            condition,
+            &GameCondition::GraveyardAggregate {
+                owners: RelativePlayerSet::Controller,
+                aggregate: GraveyardAggregate::CardCount,
+                filter: Some(issue_373_permanent_card_filter()),
+                min: Some(4),
+                max: None,
+            }
+        );
+        assert_eq!(
+            (*when_true, *otherwise),
+            (10, 5),
+            "the Descend 4 branch is -10/-10 and the base is -5/-5"
+        );
+
+        for near_miss in [
+            "Target creature gets -5/-5 until end of turn.\nDescend 4 — That creature gets -10/-10 until end of turn if there are four or more permanent cards in your graveyard.",
+            "Target creature gets -5/-5 until end of turn.\nDescend 4 — That creature gets -10/-10 until end of turn instead if there are five or more permanent cards in your graveyard.",
+            "Target creature gets -5/-5 until end of turn.\nDescend 4 — That creature gets -10/-10 until end of turn instead if there are four or more card types among cards in your graveyard.",
+            "Target creature gets -6/-6 until end of turn.\nDescend 4 — That creature gets -10/-10 until end of turn instead if there are four or more permanent cards in your graveyard.",
+            "Target creature gets -5/-5 until end of turn.\nDescend 4 — That creature gets -10/-0 until end of turn instead if there are four or more permanent cards in your graveyard.",
+            "Target creature gets -5/-5 until end of turn.\nDescend 4 — That creature gets -10/-10 until end of turn instead if there are four or more permanent cards in your graveyard. Draw a card.",
+        ] {
+            assert_eq!(
+                match_clause(near_miss, true, &context).expect("unambiguous"),
+                None,
+                "near-miss must stay unsupported: {near_miss}"
+            );
+        }
+
+        let mut unreviewed = context.clone();
+        unreviewed.oracle_id = Some(ISSUE_373_UNREVIEWED.into());
+        assert_eq!(
+            match_clause(ISSUE_373_JOIN_THE_DEAD_CLAUSE, true, &unreviewed).expect("unambiguous"),
+            None,
+            "an identical unreviewed face must stay unsupported"
+        );
+    }
+
+    #[test]
+    fn issue_373_lasyd_prowler_etb_mills_per_land_its_controller_controls() {
+        let context = issue_373_card_context("Lasyd Prowler", ISSUE_373_LASYD_PROWLER_ORACLE_ID);
+        let matched = match_clause(ISSUE_373_LASYD_PROWLER_ETB_CLAUSE, false, &context)
+            .expect("Lasyd Prowler must not be ambiguous")
+            .expect("Lasyd Prowler's ETB must be supported");
+        assert_eq!(
+            matched.id.as_str(),
+            "triggered.etb.may_mill.count.lands_you_control"
+        );
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("Lasyd Prowler must emit a triggered ability");
+        };
+        assert!(
+            ability.may,
+            "the printed mill is optional for the controller"
+        );
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        let [SpellEffectKind::Mill { count, who }] = ability.effect.as_slice() else {
+            panic!("Lasyd Prowler must mill once");
+        };
+        assert_eq!(*who, PlayerRecipient::Controller);
+        assert_eq!(
+            *count,
+            Amount::Count(CountExpression::BattlefieldPermanents {
+                filter: BattlefieldPermanentFilter {
+                    token: None,
+                    any_of: None,
+                    controllers: RelativePlayerSet::Controller,
+                    card_type: Some(CardTypeFilter::Land),
+                    color: None,
+                    name: None,
+                    required_subtypes: Vec::new(),
+                    exclude_source: false,
+                },
+            })
+        );
+
+        for near_miss in [
+            "When this creature enters, mill cards equal to the number of lands you control.",
+            "When this creature enters, you may mill cards equal to the number of permanents you control.",
+            "When this creature enters, you may mill cards equal to the number of lands target player controls.",
+            "When this creature enters, you may mill cards equal to the number of lands you control. Draw a card.",
+        ] {
+            assert_eq!(
+                match_clause(near_miss, false, &context).expect("unambiguous"),
+                None,
+                "near-miss must stay unsupported: {near_miss}"
+            );
+        }
+
+        let mut unreviewed = context.clone();
+        unreviewed.oracle_id = Some(ISSUE_373_UNREVIEWED.into());
+        assert_eq!(
+            match_clause(ISSUE_373_LASYD_PROWLER_ETB_CLAUSE, false, &unreviewed)
+                .expect("unambiguous"),
+            None,
+            "an identical unreviewed ETB must stay unsupported"
+        );
+    }
+
+    #[test]
+    fn issue_373_violent_urge_authors_both_targeted_instructions_in_printed_order() {
+        let context = issue_373_card_context("Violent Urge", ISSUE_373_VIOLENT_URGE_ORACLE_ID);
+        let matched = match_clause(ISSUE_373_VIOLENT_URGE_FACE, true, &context)
+            .expect("Violent Urge must not be ambiguous")
+            .expect("Violent Urge must be supported");
+        assert_eq!(
+            matched.id.as_str(),
+            "spell.pump_and_keyword.graveyard_card_types_threshold"
+        );
+        let RecipeEmission::SpellEffectsWithTargeting { effects, targeting } = matched.emission
+        else {
+            panic!("Violent Urge must author one shared target group");
+        };
+        assert!(
+            matches!(
+                effects.as_slice(),
+                [
+                    SpellEffectKind::PumpTarget { power: 1, toughness: 0, .. },
+                    SpellEffectKind::GrantKeywords { keywords, .. },
+                    SpellEffectKind::Conditional { condition, .. },
+                ] if keywords == &[Keyword::FirstStrike]
+                    && condition
+                        == &GameCondition::GraveyardAggregate {
+                            owners: RelativePlayerSet::Controller,
+                            aggregate: GraveyardAggregate::DistinctCardTypes,
+                            filter: None,
+                            min: Some(4),
+                            max: None,
+                        }
+            ),
+            "unexpected Violent Urge payload: {effects:?}"
+        );
+        let [group] = targeting.groups.as_slice() else {
+            panic!("Violent Urge must keep exactly one authored group");
+        };
+        assert_eq!(group.effect_indices, [0, 1, 2]);
+        assert_eq!(group.prompt, "Choose target creature");
+
+        for near_miss in [
+            "Target creature gets +2/+0 and gains first strike until end of turn.\nDelirium — If there are four or more card types among cards in your graveyard, that creature gains double strike until end of turn.",
+            "Target creature gets +1/+0 and gains trample until end of turn.\nDelirium — If there are four or more card types among cards in your graveyard, that creature gains double strike until end of turn.",
+            "Target creature gets +1/+0 and gains first strike until end of turn.\nDelirium — If there are five or more card types among cards in your graveyard, that creature gains double strike until end of turn.",
+            "Target creature gets +1/+0 and gains first strike until end of turn.\nDelirium — If there are four or more permanent cards in your graveyard, that creature gains double strike until end of turn.",
+            "Target creature gets +1/+0 and gains first strike until end of turn.\nDelirium — If there are four or more card types among cards in your graveyard, creatures you control gain double strike until end of turn.",
+            "Target creature gets +1/+0 and gains first strike until end of turn.\nDelirium — If there are four or more card types among cards in your graveyard, that creature gains double strike until end of turn. Draw a card.",
+        ] {
+            assert_eq!(
+                match_clause(near_miss, true, &context).expect("unambiguous"),
+                None,
+                "near-miss must stay unsupported: {near_miss}"
+            );
+        }
+
+        let mut unreviewed = context.clone();
+        unreviewed.oracle_id = Some(ISSUE_373_UNREVIEWED.into());
+        assert_eq!(
+            match_clause(ISSUE_373_VIOLENT_URGE_FACE, true, &unreviewed).expect("unambiguous"),
+            None,
+            "an identical unreviewed face must stay unsupported"
+        );
+    }
+
+    #[test]
+    fn issue_373_beastie_beatdown_authors_two_distinct_target_groups() {
+        let context =
+            issue_373_card_context("Beastie Beatdown", ISSUE_373_BEASTIE_BEATDOWN_ORACLE_ID);
+        let matched = match_clause(ISSUE_373_BEASTIE_BEATDOWN_CLAUSE, true, &context)
+            .expect("Beastie Beatdown must not be ambiguous")
+            .expect("Beastie Beatdown must be supported");
+        assert_eq!(
+            matched.id.as_str(),
+            "spell.beastie_beatdown.conditional_counters_and_power_damage"
+        );
+        let RecipeEmission::SpellEffectsWithTargeting { effects, targeting } = matched.emission
+        else {
+            panic!("Beastie Beatdown must author two target groups");
+        };
+        let [SpellEffectKind::PutCounters {
+            counter,
+            count,
+            subject,
+        }, SpellEffectKind::CreatureDealsDamageEqualToPower { source, target }] =
+            effects.as_slice()
+        else {
+            panic!("unexpected Beastie Beatdown payload: {effects:?}");
+        };
+        assert_eq!(*counter, CounterKind::PlusOnePlusOne);
+        assert_eq!(
+            *count,
+            Amount::Conditional {
+                condition: GameCondition::GraveyardAggregate {
+                    owners: RelativePlayerSet::Controller,
+                    aggregate: GraveyardAggregate::DistinctCardTypes,
+                    filter: None,
+                    min: Some(4),
+                    max: None,
+                },
+                when_true: 2,
+                otherwise: 0,
+            }
+        );
+        let EffectSubject::Chosen(counter_target) = subject else {
+            panic!("the counters target the chosen controlled creature");
+        };
+        assert_eq!(counter_target.controller, TargetController::You);
+        assert_eq!(source.controller, TargetController::You);
+        assert_eq!(target.controller, TargetController::Opponent);
+        let groups = &targeting.groups;
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].effect_indices, [0, 1]);
+        assert_eq!(groups[1].effect_indices, [1]);
+        assert_eq!(groups[1].distinct_from, [0]);
+
+        for near_miss in [
+            "Delirium — If there are four or more card types among cards in your graveyard, put two +1/+1 counters on the creature you control.\nThe creature you control deals damage equal to its power to the creature an opponent controls.",
+            "Choose target creature you control and target creature an opponent controls.\nDelirium — If there are four or more card types among cards in your graveyard, put two +1/+1 counters on the creature an opponent controls.\nThe creature you control deals damage equal to its power to the creature an opponent controls.",
+            "Choose target creature you control and target creature an opponent controls.\nDelirium — If there are four or more card types among cards in your graveyard, put a +1/+1 counter on the creature you control.\nThe creature you control deals damage equal to its power to the creature an opponent controls.",
+            "Choose target creature you control and target creature an opponent controls.\nThe creature you control deals damage equal to its power to the creature an opponent controls.\nDelirium — If there are four or more card types among cards in your graveyard, put two +1/+1 counters on the creature you control.",
+            "Choose target creature you control and target creature an opponent controls.\nDelirium — If there are four or more card types among cards in your graveyard, put two +1/+1 counters on the creature you control.\nThe creature you control deals damage equal to its power to the creature an opponent controls. Draw a card.",
+        ] {
+            assert_eq!(
+                match_clause(near_miss, true, &context).expect("unambiguous"),
+                None,
+                "near-miss must stay unsupported: {near_miss}"
+            );
+        }
+
+        let mut unreviewed = context.clone();
+        unreviewed.oracle_id = Some(ISSUE_373_UNREVIEWED.into());
+        assert_eq!(
+            match_clause(ISSUE_373_BEASTIE_BEATDOWN_CLAUSE, true, &unreviewed)
+                .expect("unambiguous"),
+            None,
+            "an identical unreviewed face must stay unsupported"
+        );
     }
 }
