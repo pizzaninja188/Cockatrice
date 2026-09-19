@@ -399,6 +399,7 @@ cenote_scout	0	cast	exercised
 centaur_courser	0	cast	exercised
 centaur_healer	0	cast	exercised
 cephalid_inkmage	0	cast	exercised
+cerebral_confiscation	0	cast	exercised
 cerodon_yearling	0	cast	exercised
 champion_of_arashin	0	cast	exercised
 champion_of_dusan	0	ability:0	unsupported: ability not offered by generic battlefield fixture
@@ -460,6 +461,7 @@ cold-water_snapper	0	cast	exercised
 coliseum_behemoth	0	cast	exercised
 collectors_vault	0	ability:0	exercised
 collectors_vault	0	cast	exercised
+collision_course	0	cast	exercised
 colorful_feiyi_sparrow	0	cast	exercised
 colorstorm_stallion	0	cast	exercised
 colossadactyl	0	cast	exercised
@@ -488,6 +490,7 @@ confusticate_and_bebother	0	cast	exercised
 conifer_strider	0	cast	exercised
 consulate_skygate	0	cast	exercised
 convolute	0	cast	unsupported: target group 0 needs a richer fixture
+coordinated_maneuver	0	cast	exercised
 copper_host_crusher	0	cast	exercised
 copper_myr	0	ability:0	exercised
 copper_myr	0	cast	exercised
@@ -510,6 +513,7 @@ cragcrown_pathway_timbercrown_pathway	0	ability:0	exercised
 cragcrown_pathway_timbercrown_pathway	0	land	exercised
 cragcrown_pathway_timbercrown_pathway	1	ability:0	exercised
 cragcrown_pathway_timbercrown_pathway	1	land	exercised
+crash_and_burn	0	cast	exercised
 crash_of_rhinos	0	cast	exercised
 craw_wurm	0	cast	exercised
 crazed_goblin	0	cast	exercised
@@ -904,6 +908,7 @@ frog_butler	0	cast	exercised
 front_porch_sentries	0	cast	exercised
 frontier_bivouac	0	ability:0	exercised
 frontier_bivouac	0	land	exercised
+frontline_rush	0	cast	exercised
 frost_breath	0	cast	exercised
 frost_ogre	0	cast	exercised
 frostbridge_guard	0	ability:0	exercised
@@ -1351,6 +1356,7 @@ kavaron,_memorial_world	0	land	exercised
 kavu_climber	0	cast	exercised
 kederekt_creeper	0	cast	exercised
 keen-eyed_archers	0	cast	exercised
+keep_out	0	cast	unsupported: face not offered by generic hand fixture
 keepers_of_the_faith	0	cast	exercised
 keldon_raider	0	cast	exercised
 kelinore_bat	0	cast	exercised
@@ -1595,6 +1601,7 @@ moaning_spirit	0	cast	exercised
 moat_piranhas	0	cast	exercised
 mocking_sprite	0	cast	exercised
 moldering_karok	0	cast	exercised
+moment_of_valor	0	cast	exercised
 monastery_messenger	0	cast	exercised
 mongoose_lizard	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 mongoose_lizard	0	cast	exercised
@@ -1745,6 +1752,7 @@ osseous_exhale	0	cast	unsupported: target group 0 needs a richer fixture
 otter-penguin	0	cast	exercised
 outcaster_greenblade	0	cast	exercised
 outlaw_medic	0	cast	exercised
+over_the_edge	0	cast	exercised
 overgrown_tomb	0	ability:0	exercised
 overgrown_tomb	0	land	exercised
 overrun	0	cast	exercised
@@ -2258,6 +2266,7 @@ soured_springs	0	land	exercised
 sparktongue_dragon	0	cast	exercised
 specimen_freighter	0	ability:0	exercised
 specimen_freighter	0	cast	exercised
+spectacular_tactics	0	cast	exercised
 spectral_rider	0	cast	exercised
 spectral_sailor	0	ability:0	exercised
 spectral_sailor	0	cast	exercised
@@ -2336,6 +2345,7 @@ stomper_cub	0	cast	exercised
 stomping_ground	0	ability:0	exercised
 stomping_ground	0	land	exercised
 stone-throwing_devils	0	cast	exercised
+stone_by_sunlight	0	cast	exercised
 stone_golem	0	cast	exercised
 stonework_puma	0	cast	exercised
 storm_crow	0	cast	exercised

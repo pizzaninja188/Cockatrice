@@ -2523,6 +2523,328 @@ fn match_modal_create_elf_token(text: &str, _: &RecipeContext) -> Option<RecipeE
     })
 }
 
+/// Issue #426 / CR 701.9 / 701.20: the modal reveal/choose/discard bullet shares the shipped
+/// non-modal `spell.target_opponent_reveal.discard_nonland` typed payload — one mandatory
+/// opponent player target, controller-chosen, publicly revealed, nonland-only, count one, no
+/// optional decline, and no rider. Scope swaps, any-card forms, exile/plural/optional wording,
+/// and appended instructions stay unsupported.
+fn match_modal_reveal_hand_choose_nonland_discard(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text
+        == "Target opponent reveals their hand. You choose a nonland card from it. That player discards that card.")
+        .then(|| {
+            modal_mode(
+                vec![SpellEffectKind::ChooseHandCards {
+                    action: HandCardAction::Discard,
+                    count: 1,
+                    target: TargetFilter {
+                        kind: TargetKind::OpponentPlayer,
+                        ..TargetFilter::default()
+                    },
+                    chooser: HandCardChooser::Controller,
+                    card_filter: Some(CardTypeFilter::Nonland),
+                    optional: false,
+                    visibility: HandChoiceVisibility::PublicReveal,
+                }],
+                modal_targeting("Choose target opponent", 0),
+            )
+        })
+}
+
+/// Issue #426 / CR 202.3 / 120: the creature-and/or-Vehicle count uses the shipped
+/// `BattlefieldPermanents` recursive `any_of` union with one creature leaf and one Vehicle
+/// subtype leaf; a permanent matching both branches is counted once. Other quantities, another
+/// target, and riders stay unsupported.
+fn match_modal_damage_count_creatures_and_vehicles(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    let creature = BattlefieldPermanentFilter {
+        token: None,
+        any_of: None,
+        controllers: RelativePlayerSet::Controller,
+        card_type: Some(CardTypeFilter::Creature),
+        color: None,
+        name: None,
+        required_subtypes: Vec::new(),
+        exclude_source: false,
+    };
+    let vehicle = BattlefieldPermanentFilter {
+        token: None,
+        any_of: None,
+        controllers: RelativePlayerSet::Controller,
+        card_type: None,
+        color: None,
+        name: None,
+        required_subtypes: vec!["Vehicle".into()],
+        exclude_source: false,
+    };
+    (text
+        == format!(
+            "{} deals X damage to target creature, where X is the number of permanents you control that are creatures and/or Vehicles.",
+            context.source_name
+        ))
+    .then(|| {
+        modal_mode(
+            vec![SpellEffectKind::DamageTarget {
+                amount: Amount::Count(CountExpression::BattlefieldPermanents {
+                    filter: BattlefieldPermanentFilter {
+                        token: None,
+                        any_of: Some(vec![creature, vehicle]),
+                        controllers: RelativePlayerSet::Controller,
+                        card_type: None,
+                        color: None,
+                        name: None,
+                        required_subtypes: Vec::new(),
+                        exclude_source: false,
+                    },
+                }),
+                target: TargetFilter::default_creature(),
+            }],
+            modal_targeting("Choose target creature", 0),
+        )
+    })
+}
+
+/// Issue #426 / CR 120: the controlled-creature count damages one creature-or-planeswalker
+/// target through the shipped `BattlefieldCreatures` count and the pure type union. Other
+/// quantities, a creature-only or opponent-scoped target, and riders stay unsupported.
+fn match_modal_damage_count_creatures_to_creature_or_planeswalker(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text
+        == format!(
+            "{} deals damage equal to the number of creatures you control to target creature or planeswalker.",
+            context.source_name
+        ))
+    .then(|| {
+        modal_mode(
+            vec![SpellEffectKind::DamageTarget {
+                amount: Amount::Count(CountExpression::BattlefieldCreatures {
+                    filter: BattlefieldCreatureCountFilter::default(),
+                }),
+                target: TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![
+                        PermanentTypeFilter::Creature,
+                        PermanentTypeFilter::Planeswalker,
+                    ],
+                    ..TargetFilter::default()
+                },
+            }],
+            modal_targeting("Choose target creature or planeswalker", 0),
+        )
+    })
+}
+
+/// Issue #426 / CR 120: the fixed six-damage sibling of `modal_mode.damage.creature.four.source`
+/// targets one creature or planeswalker. Other amounts, creature-only or any-target forms, and
+/// riders stay unsupported.
+fn match_modal_damage_six_creature_or_planeswalker(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text
+        == format!(
+            "{} deals 6 damage to target creature or planeswalker.",
+            context.source_name
+        ))
+    .then(|| {
+        modal_mode(
+            vec![SpellEffectKind::DamageTarget {
+                amount: Amount::Fixed(6),
+                target: TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![
+                        PermanentTypeFilter::Creature,
+                        PermanentTypeFilter::Planeswalker,
+                    ],
+                    ..TargetFilter::default()
+                },
+            }],
+            modal_targeting("Choose target creature or planeswalker", 0),
+        )
+    })
+}
+
+/// Issue #426 / CR 613.4c: the counted pump reuses the affine `PtScale` vocabulary with a
+/// controlled-creature `BattlefieldCreatures` basis; the fixed P/T remain zero. Another
+/// quantity or scope, a one-sided pump, an optional target, and riders stay unsupported.
+fn match_modal_pump_x_creatures_you_control(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text
+        == "Target creature gets +X/+X until end of turn, where X is the number of creatures you control.")
+        .then(|| {
+            modal_mode(
+                vec![SpellEffectKind::PumpTarget {
+                    power: 0,
+                    toughness: 0,
+                    scale: Some(PtScale {
+                        basis: PtScaleBasis::Amount(Amount::Count(
+                            CountExpression::BattlefieldCreatures {
+                                filter: BattlefieldCreatureCountFilter::default(),
+                            },
+                        )),
+                        power_per_unit: 1,
+                        toughness_per_unit: 1,
+                    }),
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                }],
+                modal_targeting("Choose target creature", 0),
+            )
+        })
+}
+
+/// Issue #426: `deals 4 damage to target tapped creature` is the fixed-amount sibling of the
+/// shipped two-damage tapped-creature bullet. Other amounts, untapped or creature-only targets,
+/// controller scopes, and riders stay unsupported.
+fn match_modal_source_damage_four_tapped_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text
+        == format!(
+            "{} deals 4 damage to target tapped creature.",
+            context.source_name
+        ))
+    .then(|| {
+        modal_mode(
+            vec![SpellEffectKind::DamageTarget {
+                amount: Amount::Fixed(4),
+                target: TargetFilter {
+                    kind: TargetKind::Creature,
+                    tapped: Some(true),
+                    ..TargetFilter::default()
+                },
+            }],
+            modal_targeting("Choose target tapped creature", 0),
+        )
+    })
+}
+
+/// Issue #426 / CR 701.26 / 613.4c / 702.12b: one chosen creature is untapped, pumped +1/+0,
+/// and granted indestructible until end of turn as three instructions on the same target. A
+/// different pump or keyword, a split clause, and an untargeted or tapped form stay unsupported.
+fn match_modal_untap_pump_indestructible(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Untap target creature. It gets +1/+0 and gains indestructible until end of turn.")
+        .then(|| {
+            let target = TargetFilter::default_creature();
+            modal_mode(
+                vec![
+                    SpellEffectKind::Untap {
+                        subject: EffectSubject::Chosen(Box::new(target.clone())),
+                    },
+                    SpellEffectKind::PumpTarget {
+                        power: 1,
+                        toughness: 0,
+                        scale: None,
+                        subject: EffectSubject::Chosen(Box::new(target.clone())),
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: EffectSubject::Chosen(Box::new(target)),
+                        keywords: vec![Keyword::Indestructible],
+                    },
+                ],
+                modal_targeting_groups(vec![("Choose target creature", vec![0, 1, 2])]),
+            )
+        })
+}
+
+/// Issue #426 / CR 701.44: the printed explore reminder is part of this exact template's
+/// contract, so the complete Oracle bullet — not the reminder-stripped form — must match. The
+/// same chosen creature explores twice; another subject, a single explore, a "twice" rewrite,
+/// and riders stay unsupported.
+const ISSUE_426_OVER_THE_EDGE_CLAUSE: &str = r#"Target creature you control explores, then it explores again. (Reveal the top card of your library. Put that card into your hand if it's a land. Otherwise, put a +1/+1 counter on that creature, then put the card back or put it into your graveyard. Then repeat this process.)"#;
+
+fn match_modal_explore_target_controlled_twice(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_426_OVER_THE_EDGE_CLAUSE).then(|| {
+        let target = TargetFilter {
+            kind: TargetKind::Creature,
+            controller: TargetController::You,
+            ..TargetFilter::default()
+        };
+        modal_mode(
+            vec![
+                SpellEffectKind::Explore {
+                    subject: EffectSubject::Chosen(Box::new(target.clone())),
+                },
+                SpellEffectKind::Explore {
+                    subject: EffectSubject::Chosen(Box::new(target)),
+                },
+            ],
+            modal_targeting_groups(vec![("Choose target creature you control", vec![0, 1])]),
+        )
+    })
+}
+
+/// Issue #426 / CR 122.1: the counter-and-hexproof bullet is the hexproof sibling of the
+/// shipped counter-and-indestructible and counter-and-trample-hexproof modes. Another counter
+/// count, controller scope, keyword set, optional target, and rider stay unsupported.
+fn match_modal_counter_and_hexproof(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text
+        == "Put a +1/+1 counter on target creature you control. It gains hexproof until end of turn.")
+        .then(|| {
+            let target = TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..TargetFilter::default()
+            };
+            modal_mode(
+                vec![
+                    SpellEffectKind::PutCounters {
+                        counter: CounterKind::PlusOnePlusOne,
+                        count: Amount::Fixed(1),
+                        subject: EffectSubject::Chosen(Box::new(target.clone())),
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: EffectSubject::Chosen(Box::new(target)),
+                        keywords: vec![Keyword::Hexproof],
+                    },
+                ],
+                modal_targeting_groups(vec![("Choose target creature you control", vec![0, 1])]),
+            )
+        })
+}
+
+/// Issue #426 / CR 613.1d / 702.12b: the printed reminder is part of this exact template's
+/// contract. The type addition uses the additive artifact card type only — not an artifact
+/// creature — and the same target also gains indestructible. Other type words, another keyword,
+/// a missing/reminder-only form, and riders stay unsupported.
+const ISSUE_426_STONE_BY_SUNLIGHT_CLAUSE: &str = r#"Until end of turn, target creature becomes an artifact in addition to its other types and gains indestructible. (Damage and effects that say "destroy" don't destroy it.)"#;
+
+fn match_modal_becomes_artifact_indestructible(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_426_STONE_BY_SUNLIGHT_CLAUSE).then(|| {
+        let target = TargetFilter::default_creature();
+        modal_mode(
+            vec![
+                SpellEffectKind::AddTypes {
+                    subject: EffectSubject::Chosen(Box::new(target.clone())),
+                    addition: TypeLineAddition {
+                        card_types: vec![PermanentTypeFilter::Artifact],
+                        creature_types: Vec::new(),
+                    },
+                },
+                SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::Chosen(Box::new(target)),
+                    keywords: vec![Keyword::Indestructible],
+                },
+            ],
+            modal_targeting_groups(vec![("Choose target creature", vec![0, 1])]),
+        )
+    })
+}
+
 fn triggered_ability(context: &RecipeContext, effect: SpellEffectKind) -> RecipeEmission {
     triggered_ability_with(
         context,
@@ -16484,7 +16806,9 @@ pub(super) static CATALOG: &[Recipe] = &[
         calibration: singleton_calibrations!(
             "Origin of Metalbending" => "Put a +1/+1 counter on target creature you control. It gains indestructible until end of turn.";
             "Put a +1/+1 counter on target creature you control.",
-            "Put a +1/+1 counter on target creature you control. It gains hexproof until end of turn.",
+            // The hexproof-only variant is owned by modal_mode.put_counter.plus_one.hexproof and
+            // asserted directly in the issue #426 tests; this catalog near-miss stays disjoint.
+            "Put a +1/+1 counter on target creature you control. It gains hexproof and indestructible until end of turn.",
             "Put a +1/+1 counter on target creature you control. It gains indestructible until end of turn. Untap it."
         ),
     },
@@ -16839,6 +17163,181 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Create two 2/2 black and green Elf creature tokens.",
             "Create a tapped 2/2 black and green Elf creature token.",
             "Create a 2/2 black and green Elf creature token. Draw a card."
+        ),
+    },
+    // Issue #426 — one-mode-away `Choose one —` modal-mode bodies. Each entry owns exactly one
+    // printed modal bullet; its reviewed two-mode set lives in `reviewed_modal_mode_pair`.
+    Recipe {
+        id: RecipeId("modal_mode.reveal_hand_choose_nonland_discard"),
+        label: "target opponent reveals, choose a nonland card, discard it mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_reveal_hand_choose_nonland_discard,
+        // Pilfer, Render Speechless, Temporal Intervention, and the cohort's Cerebral
+        // Confiscation are the pinned-corpus printings of this exact clause (verified).
+        calibration: calibrations!(
+            "Pilfer" => "Target opponent reveals their hand. You choose a nonland card from it. That player discards that card.",
+            "Render Speechless" => "Target opponent reveals their hand. You choose a nonland card from it. That player discards that card.",
+            "Temporal Intervention" => "Target opponent reveals their hand. You choose a nonland card from it. That player discards that card.";
+            // Scope, filter, action, count, optionality, and rider forms stay unsupported.
+            "Target player reveals their hand. You choose a nonland card from it. That player discards that card.",
+            "Target opponent reveals their hand. You choose a card from it. That player discards that card.",
+            "Target opponent reveals their hand. You choose a nonland card from it. That player exiles that card.",
+            "Target opponent reveals their hand. You choose two nonland cards from it. That player discards those cards.",
+            "Target opponent reveals their hand. You may choose a nonland card from it. That player discards that card.",
+            "Target opponent reveals their hand. You choose a nonland card from it. That player discards that card. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.damage.creature.count_creatures_and_vehicles_you_control"),
+        label: "source deals X to target creature where X counts controlled creatures and/or Vehicles mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_damage_count_creatures_and_vehicles,
+        // Collision Course is the only pinned-corpus printing of this exact quantity (verified);
+        // the documented singleton shares the shipped `BattlefieldPermanents` count shape.
+        calibration: singleton_calibrations!(
+            "Collision Course" => "Collision Course deals X damage to target creature, where X is the number of permanents you control that are creatures and/or Vehicles.";
+            // Another conjunction, cohort, scope, or rider stays unsupported.
+            "Collision Course deals X damage to target creature, where X is the number of permanents you control that are creatures or Vehicles.",
+            "Collision Course deals X damage to target creature, where X is the number of creatures you control.",
+            "Collision Course deals X damage to target creature, where X is the number of permanents you control that are artifacts and/or Vehicles.",
+            "Collision Course deals X damage to target creature, where X is the number of permanents you control that are creatures and/or Vehicles. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.damage.creature_or_planeswalker.count_creatures_you_control"),
+        label: "damage equal to controlled creature count to target creature or planeswalker mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_damage_count_creatures_to_creature_or_planeswalker,
+        // Coordinated Maneuver is the only pinned-corpus printing of this exact clause (verified);
+        // the documented singleton shares the shipped `BattlefieldCreatures` count shape.
+        calibration: singleton_calibrations!(
+            "Coordinated Maneuver" => "Coordinated Maneuver deals damage equal to the number of creatures you control to target creature or planeswalker.";
+            // Creature-only targets, other scopes, fixed amounts, and riders stay unsupported.
+            "Coordinated Maneuver deals damage equal to the number of creatures you control to target creature.",
+            "Coordinated Maneuver deals damage equal to the number of creatures you control to target creature an opponent controls.",
+            "Coordinated Maneuver deals damage equal to the number of creatures your opponents control to target creature or planeswalker.",
+            "Coordinated Maneuver deals 3 damage to target creature or planeswalker."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.damage.creature_or_planeswalker.six.source"),
+        label: "source deals six damage to target creature or planeswalker mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_damage_six_creature_or_planeswalker,
+        // Crash and Burn is the only pinned-corpus printing of the six-damage form (verified);
+        // the documented singleton mirrors `modal_mode.damage.creature.four.source`.
+        calibration: singleton_calibrations!(
+            "Crash and Burn" => "Crash and Burn deals 6 damage to target creature or planeswalker.";
+            // Another amount, creature-only and any-target forms, and riders stay unsupported.
+            "Crash and Burn deals 5 damage to target creature or planeswalker.",
+            "Crash and Burn deals 6 damage to target creature.",
+            "Crash and Burn deals 6 damage to any target.",
+            "Crash and Burn deals 6 damage to target creature or planeswalker. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.pump.target.x_creatures_you_control"),
+        label: "target creature gets plus X plus X where X counts controlled creatures mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_pump_x_creatures_you_control,
+        // Frontline Rush is the only pinned-corpus printing of this exact clause (verified); the
+        // documented singleton shares the shipped affine `PtScale`/`BattlefieldCreatures` shape.
+        calibration: singleton_calibrations!(
+            "Frontline Rush" => "Target creature gets +X/+X until end of turn, where X is the number of creatures you control.";
+            // Another quantity, a one-sided pump, an optional target, and scope swaps stay unsupported.
+            "Target creature gets +X/+X until end of turn, where X is the number of creatures your opponents control.",
+            "Target creature you control gets +X/+X until end of turn, where X is the number of creatures you control.",
+            "Target creature gets +X/+0 until end of turn, where X is the number of creatures you control.",
+            "Up to one target creature gets +X/+X until end of turn, where X is the number of creatures you control.",
+            "Target creature gets +X/+X until end of turn, where X is the number of artifacts you control."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.damage.tapped_creature.four.source"),
+        label: "source deals four damage to tapped creature mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_source_damage_four_tapped_creature,
+        // Keep Out is the only pinned-corpus printing of the four-damage tapped form (verified);
+        // the documented singleton mirrors the shipped two-damage tapped-creature bullet.
+        calibration: singleton_calibrations!(
+            "Keep Out" => "Keep Out deals 4 damage to target tapped creature.";
+            // Another amount, an untapped or restricted target, and riders stay unsupported.
+            "Keep Out deals 3 damage to target tapped creature.",
+            "Keep Out deals 4 damage to target untapped creature.",
+            "Keep Out deals 4 damage to target tapped creature you control.",
+            "Keep Out deals 4 damage to target tapped creature. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.untap.pump.plus_one_power.indestructible"),
+        label: "untap target creature, +1/+0 and indestructible mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_untap_pump_indestructible,
+        // Moment of Valor is the only pinned-corpus printing of this exact clause (verified); the
+        // documented singleton reuses the shipped Untap/PumpTarget/GrantKeywords instructions.
+        calibration: singleton_calibrations!(
+            "Moment of Valor" => "Untap target creature. It gets +1/+0 and gains indestructible until end of turn.";
+            // Another pump or keyword, a split clause, another controller, and a tapped form stay unsupported.
+            "Untap target creature. It gets +1/+1 and gains indestructible until end of turn.",
+            "Untap target creature. It gets +1/+0 and gains hexproof until end of turn.",
+            "Untap target creature. It gets +1/+0 until end of turn and gains indestructible.",
+            "Untap target creature you control. It gets +1/+0 and gains indestructible until end of turn.",
+            "Tap target creature. It gets +1/+0 and gains indestructible until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.explore.target_controlled.twice"),
+        label: "target controlled creature explores twice mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_explore_target_controlled_twice,
+        // Over the Edge is the only pinned-corpus printing of this exact reminder-bearing clause
+        // (verified); the documented singleton emits two shipped Explore instructions.
+        calibration: singleton_calibrations!(
+            "Over the Edge" => r#"Target creature you control explores, then it explores again. (Reveal the top card of your library. Put that card into your hand if it's a land. Otherwise, put a +1/+1 counter on that creature, then put the card back or put it into your graveyard. Then repeat this process.)"#;
+            // Dropped reminder, phrase rewrites, another controller, and riders stay unsupported.
+            "Target creature you control explores, then it explores again.",
+            "Target creature you control explores twice.",
+            "Target creature explores, then it explores again. (Reveal the top card of your library. Put that card into your hand if it's a land. Otherwise, put a +1/+1 counter on that creature, then put the card back or put it into your graveyard. Then repeat this process.)",
+            "Target creature you control explores, then it explores again. (Reveal the top card of your library.)",
+            "Target creature you control explores, then it explores again. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.put_counter.plus_one.hexproof"),
+        label: "target controlled creature counter and hexproof mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_counter_and_hexproof,
+        // Spectacular Tactics is the cohort identity; Snakeskin Veil prints the same exact
+        // sentence as a non-modal spell and is the second pinned-corpus calibration (verified).
+        calibration: calibrations!(
+            "Spectacular Tactics" => "Put a +1/+1 counter on target creature you control. It gains hexproof until end of turn.",
+            "Snakeskin Veil" => "Put a +1/+1 counter on target creature you control. It gains hexproof until end of turn.";
+            // Another counter count, scope, keyword set, optional target, and reminder form stay unsupported.
+            "Put two +1/+1 counters on target creature you control. It gains hexproof until end of turn.",
+            "Put a +1/+1 counter on target creature. It gains hexproof until end of turn.",
+            // The trample-and-hexproof and hexproof-and-indestructible keyword sets are owned by
+            // their shipped recipes or asserted directly in the issue #426 tests; this catalog
+            // near-miss stays disjoint.
+            "Put a +1/+1 counter on target creature you control. It gains hexproof and flying until end of turn.",
+            "Put a +1/+1 counter on up to one target creature you control. It gains hexproof until end of turn.",
+            "Put a +1/+1 counter on target creature you control. It gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)"
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.becomes_artifact.indestructible"),
+        label: "target creature becomes an artifact and gains indestructible mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_becomes_artifact_indestructible,
+        // Stone by Sunlight is the only pinned-corpus printing of this exact reminder-bearing
+        // clause (verified); the documented singleton emits AddTypes plus GrantKeywords.
+        calibration: singleton_calibrations!(
+            "Stone by Sunlight" => r#"Until end of turn, target creature becomes an artifact in addition to its other types and gains indestructible. (Damage and effects that say "destroy" don't destroy it.)"#;
+            // Artifact-creature wording, dropped or altered reminders, another controller, and riders stay unsupported.
+            "Until end of turn, target creature becomes an artifact creature in addition to its other types and gains indestructible. (Damage and effects that say \"destroy\" don't destroy it.)",
+            "Until end of turn, target creature becomes an artifact in addition to its other types and gains indestructible.",
+            "Until end of turn, target creature becomes an artifact in addition to its other types and gains hexproof. (Damage and effects that say \"destroy\" don't destroy it.)",
+            "Until end of turn, target creature you control becomes an artifact in addition to its other types and gains indestructible. (Damage and effects that say \"destroy\" don't destroy it.)",
+            "Until end of turn, target creature becomes an artifact in addition to its other types and gains indestructible. (Damage and effects that say \"destroy\" don't destroy it. If its toughness is 0 or less, it still dies.)"
         ),
     },
     Recipe {
@@ -23229,6 +23728,38 @@ pub(super) fn reviewed_modal_mode_pair(
             Some((1, 2))
         }
         ["modal_mode.fight.controlled_vs_opponent", "modal_mode.destroy.vehicle"] => Some((1, 1)),
+        // Issue #426 exact one-mode-away sets, in printed bullet order. Confounding Riddle is
+        // deliberately absent: its look-four mode has no shipped destination shape.
+        ["modal_mode.discard.target_opponent.two", "modal_mode.reveal_hand_choose_nonland_discard"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.damage.creature.count_creatures_and_vehicles_you_control", "modal_mode.destroy.artifact"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.damage.creature_or_planeswalker.count_creatures_you_control", "modal_mode.destroy.enchantment"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.destroy.vehicle", "modal_mode.damage.creature_or_planeswalker.six.source"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.create_tokens.goblin_red_one_one.two", "modal_mode.pump.target.x_creatures_you_control"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.damage.tapped_creature.four.source", "modal_mode.destroy.enchantment"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.untap.pump.plus_one_power.indestructible", "modal_mode.destroy.creature.power_at_least_four"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.destroy.artifact_or_enchantment", "modal_mode.explore.target_controlled.twice"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.put_counter.plus_one.hexproof", "modal_mode.destroy.creature.power_at_least_four"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.destroy.creature.power_at_least_four", "modal_mode.becomes_artifact.indestructible"] => {
+            Some((1, 1))
+        }
         _ => None,
     };
     expected_bounds == Some((min_modes, max_modes))
@@ -43848,5 +44379,843 @@ mod tests {
             assert!(issue_423_oracle_id_is_reviewed(oracle_id));
         }
         assert_eq!(ISSUE_423_REVIEWED_ORACLE_IDS.len(), 9);
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #426 — one-mode-away `Choose one —` modal identities.
+    // -----------------------------------------------------------------------
+
+    fn issue_426_context(source_name: &str) -> RecipeContext {
+        let mut context = context();
+        context.source_name = source_name.into();
+        context
+    }
+
+    fn issue_426_modal_mode(
+        source_name: &str,
+        clause: &str,
+        expected_id: &str,
+    ) -> ModalModeEmission {
+        let matched = match_modal_mode(clause, &issue_426_context(source_name))
+            .unwrap_or_else(|error| panic!("{clause}: {error}"))
+            .unwrap_or_else(|| panic!("missing modal_mode recipe for {clause}"));
+        assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+        let RecipeEmission::ModalMode(emission) = matched.emission else {
+            panic!("{expected_id} must emit a modal mode");
+        };
+        emission
+    }
+
+    const ISSUE_426_REVEAL_DISCARD_CLAUSE: &str =
+        "Target opponent reveals their hand. You choose a nonland card from it. That player discards that card.";
+    const ISSUE_426_COLLISION_COURSE_CLAUSE: &str =
+        "Collision Course deals X damage to target creature, where X is the number of permanents you control that are creatures and/or Vehicles.";
+    const ISSUE_426_CONFOUNDING_RIDDLE_CLAUSE: &str =
+        "Look at the top four cards of your library. Put one of them into your hand and the rest into your graveyard.";
+    const ISSUE_426_COORDINATED_MANEUVER_CLAUSE: &str =
+        "Coordinated Maneuver deals damage equal to the number of creatures you control to target creature or planeswalker.";
+    const ISSUE_426_CRASH_AND_BURN_CLAUSE: &str =
+        "Crash and Burn deals 6 damage to target creature or planeswalker.";
+    const ISSUE_426_FRONTLINE_RUSH_CLAUSE: &str =
+        "Target creature gets +X/+X until end of turn, where X is the number of creatures you control.";
+    const ISSUE_426_KEEP_OUT_CLAUSE: &str = "Keep Out deals 4 damage to target tapped creature.";
+    const ISSUE_426_MOMENT_OF_VALOR_CLAUSE: &str =
+        "Untap target creature. It gets +1/+0 and gains indestructible until end of turn.";
+    const ISSUE_426_OVER_THE_EDGE_CLAUSE: &str = r#"Target creature you control explores, then it explores again. (Reveal the top card of your library. Put that card into your hand if it's a land. Otherwise, put a +1/+1 counter on that creature, then put the card back or put it into your graveyard. Then repeat this process.)"#;
+    const ISSUE_426_SPECTACULAR_TACTICS_CLAUSE: &str =
+        "Put a +1/+1 counter on target creature you control. It gains hexproof until end of turn.";
+    const ISSUE_426_STONE_BY_SUNLIGHT_CLAUSE: &str = r#"Until end of turn, target creature becomes an artifact in addition to its other types and gains indestructible. (Damage and effects that say "destroy" don't destroy it.)"#;
+
+    fn issue_426_creature_or_planeswalker() -> TargetFilter {
+        TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            permanent_types: vec![
+                PermanentTypeFilter::Creature,
+                PermanentTypeFilter::Planeswalker,
+            ],
+            ..TargetFilter::default()
+        }
+    }
+
+    fn issue_426_creature_you_control() -> TargetFilter {
+        TargetFilter {
+            kind: TargetKind::Creature,
+            controller: TargetController::You,
+            ..TargetFilter::default()
+        }
+    }
+
+    #[test]
+    fn issue_426_modal_mode_recipes_match_their_exact_clauses() {
+        for (source_name, clause, expected_id) in [
+            (
+                "Cerebral Confiscation",
+                ISSUE_426_REVEAL_DISCARD_CLAUSE,
+                "modal_mode.reveal_hand_choose_nonland_discard",
+            ),
+            (
+                "Collision Course",
+                ISSUE_426_COLLISION_COURSE_CLAUSE,
+                "modal_mode.damage.creature.count_creatures_and_vehicles_you_control",
+            ),
+            (
+                "Coordinated Maneuver",
+                ISSUE_426_COORDINATED_MANEUVER_CLAUSE,
+                "modal_mode.damage.creature_or_planeswalker.count_creatures_you_control",
+            ),
+            (
+                "Crash and Burn",
+                ISSUE_426_CRASH_AND_BURN_CLAUSE,
+                "modal_mode.damage.creature_or_planeswalker.six.source",
+            ),
+            (
+                "Frontline Rush",
+                ISSUE_426_FRONTLINE_RUSH_CLAUSE,
+                "modal_mode.pump.target.x_creatures_you_control",
+            ),
+            (
+                "Keep Out",
+                ISSUE_426_KEEP_OUT_CLAUSE,
+                "modal_mode.damage.tapped_creature.four.source",
+            ),
+            (
+                "Moment of Valor",
+                ISSUE_426_MOMENT_OF_VALOR_CLAUSE,
+                "modal_mode.untap.pump.plus_one_power.indestructible",
+            ),
+            (
+                "Over the Edge",
+                ISSUE_426_OVER_THE_EDGE_CLAUSE,
+                "modal_mode.explore.target_controlled.twice",
+            ),
+            (
+                "Spectacular Tactics",
+                ISSUE_426_SPECTACULAR_TACTICS_CLAUSE,
+                "modal_mode.put_counter.plus_one.hexproof",
+            ),
+            (
+                "Stone by Sunlight",
+                ISSUE_426_STONE_BY_SUNLIGHT_CLAUSE,
+                "modal_mode.becomes_artifact.indestructible",
+            ),
+        ] {
+            let matched = match_modal_mode(clause, &issue_426_context(source_name))
+                .unwrap_or_else(|error| panic!("{clause}: {error}"))
+                .unwrap_or_else(|| panic!("missing modal_mode recipe for {clause}"));
+            assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+        }
+
+        for recipe_id in [
+            "modal_mode.reveal_hand_choose_nonland_discard",
+            "modal_mode.damage.creature.count_creatures_and_vehicles_you_control",
+            "modal_mode.damage.creature_or_planeswalker.count_creatures_you_control",
+            "modal_mode.damage.creature_or_planeswalker.six.source",
+            "modal_mode.pump.target.x_creatures_you_control",
+            "modal_mode.damage.tapped_creature.four.source",
+            "modal_mode.untap.pump.plus_one_power.indestructible",
+            "modal_mode.explore.target_controlled.twice",
+            "modal_mode.put_counter.plus_one.hexproof",
+            "modal_mode.becomes_artifact.indestructible",
+        ] {
+            let recipe = CATALOG
+                .iter()
+                .find(|recipe| recipe.id.as_str() == recipe_id)
+                .unwrap_or_else(|| panic!("missing issue #426 recipe {recipe_id}"));
+            assert_eq!(recipe.surface, RecipeSurface::ModalMode, "{recipe_id}");
+        }
+
+        // Confounding Riddle stays unmapped: no shipped instruction puts one looked-at card into
+        // hand and the remainder into the graveyard. `LibraryPartition` keeps its retained cohort
+        // on top (`recipes.rs` matcher docs / `primitives/effects.rs:1031`), and
+        // `LookChooseToHand` sends the remainder to the bottom (`effects.rs:1055`).
+        assert!(
+            match_modal_mode(
+                ISSUE_426_CONFOUNDING_RIDDLE_CLAUSE,
+                &issue_426_context("Confounding Riddle"),
+            )
+            .expect("the look-four mode must not be ambiguous")
+            .is_none(),
+            "Confounding Riddle's look-four mode has no shipped destination shape"
+        );
+    }
+
+    #[test]
+    fn issue_426_modal_mode_recipes_emit_typed_payloads() {
+        assert_eq!(
+            issue_426_modal_mode(
+                "Cerebral Confiscation",
+                ISSUE_426_REVEAL_DISCARD_CLAUSE,
+                "modal_mode.reveal_hand_choose_nonland_discard",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::ChooseHandCards {
+                    action: HandCardAction::Discard,
+                    count: 1,
+                    target: TargetFilter {
+                        kind: TargetKind::OpponentPlayer,
+                        ..TargetFilter::default()
+                    },
+                    chooser: HandCardChooser::Controller,
+                    card_filter: Some(CardTypeFilter::Nonland),
+                    optional: false,
+                    visibility: HandChoiceVisibility::PublicReveal,
+                }],
+                targeting: modal_targeting("Choose target opponent", 0),
+            }
+        );
+
+        let creature = BattlefieldPermanentFilter {
+            token: None,
+            any_of: None,
+            controllers: RelativePlayerSet::Controller,
+            card_type: Some(CardTypeFilter::Creature),
+            color: None,
+            name: None,
+            required_subtypes: Vec::new(),
+            exclude_source: false,
+        };
+        let vehicle = BattlefieldPermanentFilter {
+            token: None,
+            any_of: None,
+            controllers: RelativePlayerSet::Controller,
+            card_type: None,
+            color: None,
+            name: None,
+            required_subtypes: vec!["Vehicle".into()],
+            exclude_source: false,
+        };
+        assert_eq!(
+            issue_426_modal_mode(
+                "Collision Course",
+                ISSUE_426_COLLISION_COURSE_CLAUSE,
+                "modal_mode.damage.creature.count_creatures_and_vehicles_you_control",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::DamageTarget {
+                    amount: Amount::Count(CountExpression::BattlefieldPermanents {
+                        filter: BattlefieldPermanentFilter {
+                            token: None,
+                            any_of: Some(vec![creature, vehicle]),
+                            controllers: RelativePlayerSet::Controller,
+                            card_type: None,
+                            color: None,
+                            name: None,
+                            required_subtypes: Vec::new(),
+                            exclude_source: false,
+                        },
+                    }),
+                    target: TargetFilter::default_creature(),
+                }],
+                targeting: modal_targeting("Choose target creature", 0),
+            }
+        );
+
+        assert_eq!(
+            issue_426_modal_mode(
+                "Coordinated Maneuver",
+                ISSUE_426_COORDINATED_MANEUVER_CLAUSE,
+                "modal_mode.damage.creature_or_planeswalker.count_creatures_you_control",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::DamageTarget {
+                    amount: Amount::Count(CountExpression::BattlefieldCreatures {
+                        filter: BattlefieldCreatureCountFilter::default(),
+                    }),
+                    target: issue_426_creature_or_planeswalker(),
+                }],
+                targeting: modal_targeting("Choose target creature or planeswalker", 0),
+            }
+        );
+
+        assert_eq!(
+            issue_426_modal_mode(
+                "Crash and Burn",
+                ISSUE_426_CRASH_AND_BURN_CLAUSE,
+                "modal_mode.damage.creature_or_planeswalker.six.source",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::DamageTarget {
+                    amount: Amount::Fixed(6),
+                    target: issue_426_creature_or_planeswalker(),
+                }],
+                targeting: modal_targeting("Choose target creature or planeswalker", 0),
+            }
+        );
+
+        assert_eq!(
+            issue_426_modal_mode(
+                "Frontline Rush",
+                ISSUE_426_FRONTLINE_RUSH_CLAUSE,
+                "modal_mode.pump.target.x_creatures_you_control",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::PumpTarget {
+                    power: 0,
+                    toughness: 0,
+                    scale: Some(PtScale {
+                        basis: PtScaleBasis::Amount(Amount::Count(
+                            CountExpression::BattlefieldCreatures {
+                                filter: BattlefieldCreatureCountFilter::default(),
+                            },
+                        )),
+                        power_per_unit: 1,
+                        toughness_per_unit: 1,
+                    }),
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                }],
+                targeting: modal_targeting("Choose target creature", 0),
+            }
+        );
+
+        assert_eq!(
+            issue_426_modal_mode(
+                "Keep Out",
+                ISSUE_426_KEEP_OUT_CLAUSE,
+                "modal_mode.damage.tapped_creature.four.source",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::DamageTarget {
+                    amount: Amount::Fixed(4),
+                    target: TargetFilter {
+                        kind: TargetKind::Creature,
+                        tapped: Some(true),
+                        ..TargetFilter::default()
+                    },
+                }],
+                targeting: modal_targeting("Choose target tapped creature", 0),
+            }
+        );
+
+        let moment_target = TargetFilter::default_creature();
+        assert_eq!(
+            issue_426_modal_mode(
+                "Moment of Valor",
+                ISSUE_426_MOMENT_OF_VALOR_CLAUSE,
+                "modal_mode.untap.pump.plus_one_power.indestructible",
+            ),
+            ModalModeEmission {
+                effects: vec![
+                    SpellEffectKind::Untap {
+                        subject: EffectSubject::Chosen(Box::new(moment_target.clone())),
+                    },
+                    SpellEffectKind::PumpTarget {
+                        power: 1,
+                        toughness: 0,
+                        scale: None,
+                        subject: EffectSubject::Chosen(Box::new(moment_target.clone())),
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: EffectSubject::Chosen(Box::new(moment_target)),
+                        keywords: vec![Keyword::Indestructible],
+                    },
+                ],
+                targeting: modal_targeting_groups(vec![("Choose target creature", vec![0, 1, 2])]),
+            }
+        );
+
+        let explore_target = issue_426_creature_you_control();
+        assert_eq!(
+            issue_426_modal_mode(
+                "Over the Edge",
+                ISSUE_426_OVER_THE_EDGE_CLAUSE,
+                "modal_mode.explore.target_controlled.twice",
+            ),
+            ModalModeEmission {
+                effects: vec![
+                    SpellEffectKind::Explore {
+                        subject: EffectSubject::Chosen(Box::new(explore_target.clone())),
+                    },
+                    SpellEffectKind::Explore {
+                        subject: EffectSubject::Chosen(Box::new(explore_target)),
+                    },
+                ],
+                targeting: modal_targeting_groups(vec![(
+                    "Choose target creature you control",
+                    vec![0, 1]
+                )]),
+            }
+        );
+
+        let counter_target = issue_426_creature_you_control();
+        assert_eq!(
+            issue_426_modal_mode(
+                "Spectacular Tactics",
+                ISSUE_426_SPECTACULAR_TACTICS_CLAUSE,
+                "modal_mode.put_counter.plus_one.hexproof",
+            ),
+            ModalModeEmission {
+                effects: vec![
+                    SpellEffectKind::PutCounters {
+                        counter: CounterKind::PlusOnePlusOne,
+                        count: Amount::Fixed(1),
+                        subject: EffectSubject::Chosen(Box::new(counter_target.clone())),
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: EffectSubject::Chosen(Box::new(counter_target)),
+                        keywords: vec![Keyword::Hexproof],
+                    },
+                ],
+                targeting: modal_targeting_groups(vec![(
+                    "Choose target creature you control",
+                    vec![0, 1]
+                )]),
+            }
+        );
+
+        let artifact_target = TargetFilter::default_creature();
+        assert_eq!(
+            issue_426_modal_mode(
+                "Stone by Sunlight",
+                ISSUE_426_STONE_BY_SUNLIGHT_CLAUSE,
+                "modal_mode.becomes_artifact.indestructible",
+            ),
+            ModalModeEmission {
+                effects: vec![
+                    SpellEffectKind::AddTypes {
+                        subject: EffectSubject::Chosen(Box::new(artifact_target.clone())),
+                        addition: TypeLineAddition {
+                            card_types: vec![PermanentTypeFilter::Artifact],
+                            creature_types: Vec::new(),
+                        },
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: EffectSubject::Chosen(Box::new(artifact_target)),
+                        keywords: vec![Keyword::Indestructible],
+                    },
+                ],
+                targeting: modal_targeting_groups(vec![("Choose target creature", vec![0, 1])]),
+            }
+        );
+    }
+
+    #[test]
+    fn issue_426_modal_mode_recipes_reject_near_misses() {
+        for (source_name, clause) in [
+            // Scope and count swaps on the reveal/discard mode.
+            (
+                "Cerebral Confiscation",
+                "Target player reveals their hand. You choose a nonland card from it. That player discards that card.",
+            ),
+            (
+                "Cerebral Confiscation",
+                "Target opponent reveals their hand. You choose a card from it. That player discards that card.",
+            ),
+            (
+                "Cerebral Confiscation",
+                "Target opponent reveals their hand. You choose a nonland card from it. That player exiles that card.",
+            ),
+            (
+                "Cerebral Confiscation",
+                "Target opponent reveals their hand. You choose two nonland cards from it. That player discards those cards.",
+            ),
+            (
+                "Cerebral Confiscation",
+                "Target opponent reveals their hand. You may choose a nonland card from it. That player discards that card.",
+            ),
+            (
+                "Cerebral Confiscation",
+                "Target opponent reveals their hand. You choose a nonland card from it. That player discards that card. Draw a card.",
+            ),
+            // Another count or receipt on the creature/Vehicle count damage.
+            (
+                "Collision Course",
+                "Collision Course deals X damage to target creature, where X is the number of permanents you control that are creatures or Vehicles.",
+            ),
+            (
+                "Collision Course",
+                "Collision Course deals X damage to target creature, where X is the number of creatures you control.",
+            ),
+            (
+                "Collision Course",
+                "Collision Course deals X damage to target creature, where X is the number of permanents you control that are artifacts and/or Vehicles.",
+            ),
+            (
+                "Collision Course",
+                "Collision Course deals X damage to target creature, where X is the number of permanents you control that are creatures and/or Vehicles. Draw a card.",
+            ),
+            // Amount and target swaps on the count-based damage.
+            (
+                "Coordinated Maneuver",
+                "Coordinated Maneuver deals damage equal to the number of creatures you control to target creature.",
+            ),
+            (
+                "Coordinated Maneuver",
+                "Coordinated Maneuver deals damage equal to the number of creatures you control to target creature an opponent controls.",
+            ),
+            (
+                "Coordinated Maneuver",
+                "Coordinated Maneuver deals damage equal to the number of creatures your opponents control to target creature or planeswalker.",
+            ),
+            (
+                "Coordinated Maneuver",
+                "Coordinated Maneuver deals 3 damage to target creature or planeswalker.",
+            ),
+            // Another amount or a creature-only target on the six-damage mode.
+            (
+                "Crash and Burn",
+                "Crash and Burn deals 5 damage to target creature or planeswalker.",
+            ),
+            (
+                "Crash and Burn",
+                "Crash and Burn deals 6 damage to target creature.",
+            ),
+            (
+                "Crash and Burn",
+                "Crash and Burn deals 6 damage to any target.",
+            ),
+            (
+                "Crash and Burn",
+                "Crash and Burn deals 6 damage to target creature or planeswalker. Draw a card.",
+            ),
+            // Another quantity, scope, or target form on the X pump.
+            (
+                "Frontline Rush",
+                "Target creature gets +X/+X until end of turn, where X is the number of creatures your opponents control.",
+            ),
+            (
+                "Frontline Rush",
+                "Target creature you control gets +X/+X until end of turn, where X is the number of creatures you control.",
+            ),
+            (
+                "Frontline Rush",
+                "Target creature gets +X/+0 until end of turn, where X is the number of creatures you control.",
+            ),
+            (
+                "Frontline Rush",
+                "Up to one target creature gets +X/+X until end of turn, where X is the number of creatures you control.",
+            ),
+            (
+                "Frontline Rush",
+                "Target creature gets +X/+X until end of turn, where X is the number of artifacts you control.",
+            ),
+            // Another amount or tapped scope on the tapped-creature damage.
+            (
+                "Keep Out",
+                "Keep Out deals 3 damage to target tapped creature.",
+            ),
+            (
+                "Keep Out",
+                "Keep Out deals 4 damage to target untapped creature.",
+            ),
+            (
+                "Keep Out",
+                "Keep Out deals 4 damage to target tapped creature you control.",
+            ),
+            (
+                "Keep Out",
+                "Keep Out deals 4 damage to target tapped creature. Draw a card.",
+            ),
+            // Clause splits, ordering, and keyword swaps on the untap mode.
+            (
+                "Moment of Valor",
+                "Untap target creature. It gets +1/+1 and gains indestructible until end of turn.",
+            ),
+            (
+                "Moment of Valor",
+                "Untap target creature you control. It gets +1/+0 and gains indestructible until end of turn.",
+            ),
+            (
+                "Moment of Valor",
+                "Untap target creature. It gets +1/+0 and gains hexproof until end of turn.",
+            ),
+            (
+                "Moment of Valor",
+                "Untap target creature. It gets +1/+0 until end of turn and gains indestructible.",
+            ),
+            (
+                "Moment of Valor",
+                "Untap target creature. It gains indestructible until end of turn, then it gets +1/+0 until end of turn.",
+            ),
+            (
+                "Moment of Valor",
+                "Tap target creature. It gets +1/+0 and gains indestructible until end of turn.",
+            ),
+            // Printed reminder is part of the explore mode contract.
+            (
+                "Over the Edge",
+                "Target creature you control explores, then it explores again.",
+            ),
+            (
+                "Over the Edge",
+                "Target creature you control explores twice.",
+            ),
+            (
+                "Over the Edge",
+                "Target creature explores, then it explores again. (Reveal the top card of your library. Put that card into your hand if it's a land. Otherwise, put a +1/+1 counter on that creature, then put the card back or put it into your graveyard. Then repeat this process.)",
+            ),
+            (
+                "Over the Edge",
+                "Target creature you control explores, then it explores again. (Reveal the top card of your library.)",
+            ),
+            (
+                "Over the Edge",
+                "Target creature you control explores, then it explores again. Draw a card.",
+            ),
+            // Reminder text added where the modal bullet does not print it.
+            (
+                "Spectacular Tactics",
+                "Put a +1/+1 counter on target creature you control. It gains hexproof until end of turn. (It can't be the target of spells or abilities your opponents control.)",
+            ),
+            (
+                "Spectacular Tactics",
+                "Put a +1/+1 counter on target creature you control. It gains hexproof until end of turn. Draw a card.",
+            ),
+            (
+                "Spectacular Tactics",
+                "Put a +1/+1 counter on target creature. It gains hexproof until end of turn.",
+            ),
+            (
+                "Spectacular Tactics",
+                "Put a +1/+1 counter on up to one target creature you control. It gains hexproof until end of turn.",
+            ),
+            (
+                "Spectacular Tactics",
+                "Put two +1/+1 counters on target creature you control. It gains hexproof until end of turn.",
+            ),
+            // The trample-and-hexproof form keeps its shipped owner instead of collapsing into
+            // the new hexproof-only recipe; that cross-owner route is asserted below.
+            // Type-addition contract: artifact creature and reminder forms stay exact.
+            (
+                "Stone by Sunlight",
+                "Until end of turn, target creature becomes an artifact creature in addition to its other types and gains indestructible. (Damage and effects that say \"destroy\" don't destroy it.)",
+            ),
+            (
+                "Stone by Sunlight",
+                "Until end of turn, target creature becomes an artifact in addition to its other types and gains indestructible.",
+            ),
+            (
+                "Stone by Sunlight",
+                "Until end of turn, target creature becomes an artifact in addition to its other types and gains hexproof. (Damage and effects that say \"destroy\" don't destroy it.)",
+            ),
+            (
+                "Stone by Sunlight",
+                "Target creature becomes an artifact in addition to its other types and gains indestructible. (Damage and effects that say \"destroy\" don't destroy it.)",
+            ),
+            (
+                "Stone by Sunlight",
+                "Until end of turn, target creature you control becomes an artifact in addition to its other types and gains indestructible. (Damage and effects that say \"destroy\" don't destroy it.)",
+            ),
+            (
+                "Stone by Sunlight",
+                "Until end of turn, target creature becomes an artifact in addition to its other types and gains indestructible. (Damage and effects that say \"destroy\" don't destroy it. If its toughness is 0 or less, it still dies.)",
+            ),
+        ] {
+            assert!(
+                match_modal_mode(clause, &issue_426_context(source_name))
+                    .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                    .is_none(),
+                "{source_name} near-miss was accepted: {clause}"
+            );
+        }
+
+        // Cross-owner checks: the shipped non-modal reveal/discard clause keeps its own surface,
+        // and the existing four-damage creature and two-damage tapped-creature modes keep owning
+        // their own forms.
+        assert_eq!(
+            match_modal_mode(
+                "Reroute Systems deals 2 damage to target tapped creature.",
+                &issue_426_context("Reroute Systems"),
+            )
+            .expect("the two-damage mode must not be ambiguous")
+            .expect("the shipped tapped-creature mode should match")
+            .id
+            .as_str(),
+            "modal_mode.damage.tapped_creature.two.source"
+        );
+        assert_eq!(
+            match_modal_mode(
+                "Keep Out deals 4 damage to target creature.",
+                &issue_426_context("Keep Out"),
+            )
+            .expect("the four-damage creature mode must not be ambiguous")
+            .expect("the shipped creature-damage mode keeps its owner")
+            .id
+            .as_str(),
+            "modal_mode.damage.creature.four.source"
+        );
+        assert_eq!(
+            match_modal_mode(
+                "Put a +1/+1 counter on target creature you control. It gains trample and hexproof until end of turn.",
+                &issue_426_context("Warg Tactics"),
+            )
+            .expect("the trample-and-hexproof mode must not be ambiguous")
+            .expect("the shipped trample-and-hexproof mode keeps its owner")
+            .id
+            .as_str(),
+            "modal_mode.put_counter.creature.plus_one_plus_one.trample_hexproof"
+        );
+        assert_eq!(
+            match_modal_mode("Destroy target enchantment.", &context())
+                .expect("the enchantment mode must not be ambiguous")
+                .expect("the shipped enchantment mode should match")
+                .id
+                .as_str(),
+            "modal_mode.destroy.enchantment"
+        );
+    }
+
+    #[test]
+    fn issue_426_reviewed_modal_mode_sets_bind_exactly() {
+        for (ids, bounds) in [
+            (
+                &[
+                    "modal_mode.discard.target_opponent.two",
+                    "modal_mode.reveal_hand_choose_nonland_discard",
+                ][..],
+                (1u32, 1u32),
+            ),
+            (
+                &[
+                    "modal_mode.damage.creature.count_creatures_and_vehicles_you_control",
+                    "modal_mode.destroy.artifact",
+                ][..],
+                (1, 1),
+            ),
+            (
+                &[
+                    "modal_mode.damage.creature_or_planeswalker.count_creatures_you_control",
+                    "modal_mode.destroy.enchantment",
+                ][..],
+                (1, 1),
+            ),
+            (
+                &[
+                    "modal_mode.destroy.vehicle",
+                    "modal_mode.damage.creature_or_planeswalker.six.source",
+                ][..],
+                (1, 1),
+            ),
+            (
+                &[
+                    "modal_mode.create_tokens.goblin_red_one_one.two",
+                    "modal_mode.pump.target.x_creatures_you_control",
+                ][..],
+                (1, 1),
+            ),
+            (
+                &[
+                    "modal_mode.damage.tapped_creature.four.source",
+                    "modal_mode.destroy.enchantment",
+                ][..],
+                (1, 1),
+            ),
+            (
+                &[
+                    "modal_mode.untap.pump.plus_one_power.indestructible",
+                    "modal_mode.destroy.creature.power_at_least_four",
+                ][..],
+                (1, 1),
+            ),
+            (
+                &[
+                    "modal_mode.destroy.artifact_or_enchantment",
+                    "modal_mode.explore.target_controlled.twice",
+                ][..],
+                (1, 1),
+            ),
+            (
+                &[
+                    "modal_mode.put_counter.plus_one.hexproof",
+                    "modal_mode.destroy.creature.power_at_least_four",
+                ][..],
+                (1, 1),
+            ),
+            (
+                &[
+                    "modal_mode.destroy.creature.power_at_least_four",
+                    "modal_mode.becomes_artifact.indestructible",
+                ][..],
+                (1, 1),
+            ),
+        ] {
+            let recipe_ids = ids.iter().map(|id| RecipeId(id)).collect::<Vec<_>>();
+            assert!(
+                reviewed_modal_mode_pair(&recipe_ids, bounds.0, bounds.1),
+                "{ids:?} must be reviewed at {bounds:?}"
+            );
+            assert!(
+                !reviewed_modal_mode_pair(&recipe_ids, bounds.0, bounds.1 + 1),
+                "{ids:?} must not accept widened bounds"
+            );
+        }
+
+        // Reversed or partial sets stay fail-closed.
+        for ids in [
+            &[
+                "modal_mode.reveal_hand_choose_nonland_discard",
+                "modal_mode.discard.target_opponent.two",
+            ][..],
+            &["modal_mode.reveal_hand_choose_nonland_discard"][..],
+            &[
+                "modal_mode.discard.target_opponent.two",
+                "modal_mode.reveal_hand_choose_nonland_discard",
+                "modal_mode.destroy.enchantment",
+            ][..],
+            &[
+                "modal_mode.look_top_four.one_hand_rest_graveyard",
+                "modal_mode.counter.spell.unless_four",
+            ][..],
+            &[
+                "modal_mode.counter.spell.unless_four",
+                "modal_mode.look_top_four.one_hand_rest_graveyard",
+            ][..],
+        ] {
+            let recipe_ids = ids.iter().map(|id| RecipeId(id)).collect::<Vec<_>>();
+            assert!(
+                !reviewed_modal_mode_pair(&recipe_ids, 1, 1),
+                "{ids:?} must not be a reviewed mode set"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_426_reminder_bearing_modes_assemble_from_the_raw_bullet() {
+        // Over the Edge's explore reminder is part of the matching contract, so the generation
+        // path must try the complete bullet before the reminder-stripped fallback.
+        let bullets = vec![
+            "• Destroy target artifact or enchantment.".to_string(),
+            format!("• {ISSUE_426_OVER_THE_EDGE_CLAUSE}"),
+        ];
+        let mut labels = Vec::new();
+        let (modes, recipe_ids) = crate::assemble_modal_modes(&bullets, 2, &context(), &mut labels)
+            .expect("Over the Edge bullets should assemble");
+        assert_eq!(
+            recipe_ids,
+            [
+                RecipeId("modal_mode.destroy.artifact_or_enchantment"),
+                RecipeId("modal_mode.explore.target_controlled.twice"),
+            ]
+        );
+        assert_eq!(modes.len(), 2);
+        assert_eq!(modes[1].effects.len(), 2);
+        assert!(matches!(
+            modes[1].effects.as_slice(),
+            [
+                SpellEffectKind::Explore {
+                    subject: EffectSubject::Chosen(_)
+                },
+                SpellEffectKind::Explore {
+                    subject: EffectSubject::Chosen(_)
+                }
+            ]
+        ));
+
+        // The reminder-stripped bullet still resolves through the fallback for ordinary recipes.
+        let stripped = vec![
+            "• Draw a card.".to_string(),
+            "• Target opponent discards two cards.".to_string(),
+        ];
+        let mut labels = Vec::new();
+        let (modes, recipe_ids) =
+            crate::assemble_modal_modes(&stripped, 2, &context(), &mut labels)
+                .expect("ordinary bullets should assemble");
+        assert_eq!(
+            recipe_ids,
+            [
+                RecipeId("modal_mode.draw.one"),
+                RecipeId("modal_mode.discard.target_opponent.two"),
+            ]
+        );
+        assert_eq!(modes.len(), 2);
     }
 }

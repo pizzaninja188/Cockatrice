@@ -535,3 +535,5 @@ mod issue_416_roads_entry;
 mod issue_417_self_sacrifice_mana;
 #[path = "scenario/issue_423_station_thresholds.rs"]
 mod issue_423_station_thresholds;
+#[path = "scenario/issue_426_one_mode_modal.rs"]
+mod issue_426_one_mode_modal;

@@ -624,6 +624,10 @@ enum RulesParseError {
 /// Match every printed bullet from an exact modal aggregate against its own `ModalMode` recipe
 /// and build the stable per-mode definitions. `first_line_number` is the one-based Oracle line of
 /// `mode_lines[0]`, so the caller owns whether the aggregate started at line 1 or later.
+///
+/// Like the ordinary clause path, each bullet is matched against the complete printed line first
+/// and the reminder-stripped form second, so a recipe whose contract includes printed reminder
+/// text stays exact while an ordinary recipe keeps matching its stripped instruction.
 fn assemble_modal_modes(
     mode_lines: &[String],
     first_line_number: u16,
@@ -637,8 +641,12 @@ fn assemble_modal_modes(
         let line_number = first_line_number
             .checked_add(line_offset)
             .ok_or(RulesParseError::Unsupported)?;
-        let cleaned_mode = strip_reminder(external_line);
-        let mode_text = cleaned_mode
+        let raw_mode_text = external_line
+            .trim()
+            .strip_prefix("• ")
+            .ok_or(RulesParseError::Unsupported)?;
+        let stripped_mode = strip_reminder(external_line);
+        let stripped_mode_text = stripped_mode
             .trim()
             .strip_prefix("• ")
             .ok_or(RulesParseError::Unsupported)?;
@@ -646,9 +654,15 @@ fn assemble_modal_modes(
             presentation: AbilityPresentation::OracleLines(vec![line_number]),
             ..base_context.clone()
         };
-        let matched = match_modal_mode(mode_text, &context)
-            .map_err(RulesParseError::Ambiguous)?
-            .ok_or(RulesParseError::Unsupported)?;
+        // A reminder-bearing recipe must match the complete bullet; otherwise dropping or
+        // mutating its reminder would collapse the supported clause into the bare instruction.
+        let matched =
+            match match_modal_mode(raw_mode_text, &context).map_err(RulesParseError::Ambiguous)? {
+                Some(matched) => matched,
+                None => match_modal_mode(stripped_mode_text, &context)
+                    .map_err(RulesParseError::Ambiguous)?
+                    .ok_or(RulesParseError::Unsupported)?,
+            };
         let RecipeEmission::ModalMode(emission) = matched.emission else {
             return Err(RulesParseError::Unsupported);
         };
