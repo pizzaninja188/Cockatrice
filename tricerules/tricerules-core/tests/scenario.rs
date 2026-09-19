@@ -525,3 +525,5 @@ mod issue_377_graveyard_static_conditions;
 mod issue_412_modal_modes;
 #[path = "scenario/issue_414_enters_with_minus_counters.rs"]
 mod issue_414_enters_with_minus_counters;
+#[path = "scenario/issue_415_clue_equipment.rs"]
+mod issue_415_clue_equipment;

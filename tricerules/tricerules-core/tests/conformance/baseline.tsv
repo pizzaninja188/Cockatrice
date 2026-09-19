@@ -355,6 +355,9 @@ call_the_cavalry	0	cast	exercised
 campus_guide	0	cast	exercised
 canal_monitor	0	cast	exercised
 cancel	0	cast	unsupported: target group 0 needs a richer fixture
+candlestick	0	ability:0	exercised
+candlestick	0	ability:1	exercised
+candlestick	0	cast	exercised
 candy_trail	0	ability:0	exercised
 candy_trail	0	cast	exercised
 canonized_in_blood	0	ability:0	exercised
@@ -1343,6 +1346,9 @@ kinjallis_dawnrunner	0	cast	exercised
 kiora,_the_rising_tide	0	cast	exercised
 kitesail_scout	0	cast	exercised
 kithkin_billyrider	0	cast	exercised
+knife	0	ability:0	exercised
+knife	0	ability:1	exercised
+knife	0	cast	exercised
 knight_errant	0	cast	exercised
 knight_luminary	0	cast	exercised
 knight_of_meadowgrain	0	cast	exercised
@@ -1387,6 +1393,9 @@ lathnu_sailback	0	cast	exercised
 lava_coil	0	cast	exercised
 lavakin_brawler	0	cast	exercised
 lazotep_behemoth	0	cast	exercised
+lead_pipe	0	ability:0	exercised
+lead_pipe	0	ability:1	exercised
+lead_pipe	0	cast	exercised
 leaden_myr	0	ability:0	exercised
 leaden_myr	0	cast	exercised
 leaf_gilder	0	ability:0	exercised
@@ -1953,6 +1962,9 @@ rooftop_percher	0	cast	exercised
 rootrider_faun	0	ability:0	exercised
 rootrider_faun	0	ability:1	exercised
 rootrider_faun	0	cast	exercised
+rope	0	ability:0	exercised
+rope	0	ability:1	exercised
+rope	0	cast	exercised
 rorix_bladewing	0	cast	exercised
 rotted_hulk	0	cast	exercised
 rotted_hystrix	0	cast	exercised
@@ -2785,6 +2797,9 @@ woolly_thoctar	0	cast	exercised
 wrath_of_god	0	cast	exercised
 wreckage_wickerfolk	0	cast	exercised
 wrecking_crew	0	cast	exercised
+wrench	0	ability:0	exercised
+wrench	0	ability:1	exercised
+wrench	0	cast	exercised
 wu_infantry	0	cast	exercised
 wurmwall_sweeper	0	ability:0	exercised
 wurmwall_sweeper	0	cast	exercised

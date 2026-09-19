@@ -1059,6 +1059,263 @@ fn match_fixed_generic_equip(text: &str, context: &RecipeContext) -> Option<Reci
     }))
 }
 
+/// Issue #415: the printed Clue Equipment cohort shares one ordered mana-then-sacrifice activation
+/// (CR 602.2b / 601.2h / 701.21a) and one exact drawing effect (CR 121.1). Every clause is bound to
+/// the exact printed template; another mana amount, an artifact-generic sacrifice, a second draw,
+/// a rider, or a missing mana component stays unsupported.
+const ISSUE_415_CLUE_SACRIFICE_DRAW: &str = "{2}, Sacrifice this Equipment: Draw a card.";
+const ISSUE_415_CANDLESTICK_GRANT: &str =
+    "Equipped creature gets +1/+1 and has \"Whenever this creature attacks, surveil 2.\"";
+const ISSUE_415_KNIFE_CONDITION: &str =
+    "During your turn, equipped creature gets +1/+0 and has first strike.";
+const ISSUE_415_LEAD_PIPE_DIES: &str =
+    "Whenever equipped creature dies, each opponent loses 1 life.";
+const ISSUE_415_ROPE_MODIFIER: &str =
+    "Equipped creature gets +1/+2, has reach, and can't be blocked by more than one creature.";
+const ISSUE_415_WRENCH_GRANT: &str =
+    "Equipped creature gets +1/+1 and has vigilance and \"{3}, {T}: Tap target creature.\"";
+
+/// CR 602.2b / 601.2h / 701.21a / 121.1: exactly `{2}, Sacrifice this Equipment: Draw a card.`
+/// pays {2} and sacrifices the source as ordered activation costs; the controller draws one only
+/// when the ability resolves. Equipment subtype gating keeps the printed "this Equipment" wording
+/// bound to an actual Equipment.
+fn match_equipment_clue_sacrifice_self_draw(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_equipment && text == ISSUE_415_CLUE_SACRIFICE_DRAW).then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![
+                AbilityCost::Mana(ManaCost::parse("{2}").expect("static recipe mana cost")),
+                AbilityCost::SacrificeSelf,
+            ],
+            effect: vec![SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
+fn issue_415_nested_ability_id(value: &str) -> AbilityId {
+    AbilityId::new(value).expect("static issue #415 nested ability id")
+}
+
+/// CR 113.10 / 611.3 / 613.1f: Candlestick's
+/// `Equipped creature gets +1/+1 and has "Whenever this creature attacks, surveil 2."` is one
+/// attached modifier whose granted trigger surveils through the shipped private library partition
+/// (CR 701.25). Another surveil count, another bonus, another quoted ability, or a rider fails.
+fn match_equipment_granted_attack_surveil_two(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_equipment && text == ISSUE_415_CANDLESTICK_GRANT).then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::AttachedModifier {
+                condition: None,
+                add_types: TypeLineAddition::default(),
+                set_types: None,
+                set_name: None,
+                set_colors: None,
+                delta_power: 1,
+                delta_toughness: 1,
+                count: None,
+                power_per_match: 0,
+                toughness_per_match: 0,
+                set_power: None,
+                set_toughness: None,
+                remove_all_abilities: false,
+                keywords: Vec::new(),
+                triggered_abilities: vec![TriggeredAbilityDef {
+                    ability_id: issue_415_nested_ability_id("triggered_01"),
+                    presentation: AbilityPresentation::Fallback,
+                    trigger: TriggerCondition::WheneverSelfAttacks {
+                        minimum_other_attackers: 0,
+                    },
+                    effect: vec![SpellEffectKind::LibraryPartition {
+                        count: 2,
+                        top_min: 0,
+                        top_max: None,
+                        kind: LibraryPartitionKind::Surveil,
+                    }],
+                    modal: None,
+                    targeting: None,
+                    may: false,
+                    intervening_if: None,
+                    max_triggers_per_turn: None,
+                    triggers_only_once: false,
+                }],
+                activated_abilities: Vec::new(),
+                restriction: CombatRestriction::default(),
+                doesnt_untap_during_untap_step: false,
+                cant_untap: false,
+            },
+        })
+    })
+}
+
+/// CR 611.3 / 613.4c / 613.1f: Knife's `During your turn, equipped creature gets +1/+0 and has
+/// first strike.` is one live-conditioned attached modifier. Another bonus, keyword, or turn scope
+/// fails.
+fn match_equipment_controller_turn_first_strike(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_equipment && text == ISSUE_415_KNIFE_CONDITION).then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::AttachedModifier {
+                condition: Some(controller_turn_condition()),
+                add_types: TypeLineAddition::default(),
+                set_types: None,
+                set_name: None,
+                set_colors: None,
+                delta_power: 1,
+                delta_toughness: 0,
+                count: None,
+                power_per_match: 0,
+                toughness_per_match: 0,
+                set_power: None,
+                set_toughness: None,
+                remove_all_abilities: false,
+                keywords: vec![Keyword::FirstStrike],
+                triggered_abilities: Vec::new(),
+                activated_abilities: Vec::new(),
+                restriction: CombatRestriction::default(),
+                doesnt_untap_during_untap_step: false,
+                cant_untap: false,
+            },
+        })
+    })
+}
+
+/// CR 603.6c / 603.10a / 603.2: Lead Pipe's look-back `Whenever equipped creature dies, each
+/// opponent loses 1 life.` uses the shipped event-time attachment observer. Another drain amount,
+/// recipient, event, or rider fails.
+fn match_equipment_equipped_creature_dies_drain(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_equipment && text == ISSUE_415_LEAD_PIPE_DIES).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverAttachedObjectDies,
+            vec![SpellEffectKind::LoseLife {
+                amount: LifeAmount::Fixed(1),
+                who: PlayerRecipient::EachOpponent,
+            }],
+        )
+    })
+}
+
+/// CR 611.3 / 613.4c / 613.1f / 509.1b: Rope's `Equipped creature gets +1/+2, has reach, and
+/// can't be blocked by more than one creature.` is one attached modifier carrying the P/T bonus,
+/// the keyword, and the maximum-blocker restriction. Another bonus, keyword, or blocker count
+/// fails.
+fn match_equipment_reach_max_blockers_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_equipment && text == ISSUE_415_ROPE_MODIFIER).then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::AttachedModifier {
+                condition: None,
+                add_types: TypeLineAddition::default(),
+                set_types: None,
+                set_name: None,
+                set_colors: None,
+                delta_power: 1,
+                delta_toughness: 2,
+                count: None,
+                power_per_match: 0,
+                toughness_per_match: 0,
+                set_power: None,
+                set_toughness: None,
+                remove_all_abilities: false,
+                keywords: vec![Keyword::Reach],
+                triggered_abilities: Vec::new(),
+                activated_abilities: Vec::new(),
+                restriction: CombatRestriction {
+                    maximum_blockers: Some(1),
+                    ..CombatRestriction::default()
+                },
+                doesnt_untap_during_untap_step: false,
+                cant_untap: false,
+            },
+        })
+    })
+}
+
+/// CR 113.10 / 611.3 / 613.4c / 613.1f: Wrench's `Equipped creature gets +1/+1 and has vigilance
+/// and "{3}, {T}: Tap target creature."` is one attached modifier whose granted activated ability
+/// (CR 602.2b) taps a chosen creature on resolution. Another bonus, keyword, cost, or effect fails.
+fn match_equipment_vigilance_granted_tap_target_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_equipment && text == ISSUE_415_WRENCH_GRANT).then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::AttachedModifier {
+                condition: None,
+                add_types: TypeLineAddition::default(),
+                set_types: None,
+                set_name: None,
+                set_colors: None,
+                delta_power: 1,
+                delta_toughness: 1,
+                count: None,
+                power_per_match: 0,
+                toughness_per_match: 0,
+                set_power: None,
+                set_toughness: None,
+                remove_all_abilities: false,
+                keywords: vec![Keyword::Vigilance],
+                triggered_abilities: Vec::new(),
+                activated_abilities: vec![ActivatedAbilityDef {
+                    ability_id: issue_415_nested_ability_id("activated_01"),
+                    presentation: AbilityPresentation::Fallback,
+                    cost_modifiers: Vec::new(),
+                    source_zone: AbilitySourceZone::Battlefield,
+                    costs: vec![
+                        AbilityCost::Mana(
+                            ManaCost::parse("{3}").expect("static granted mana cost"),
+                        ),
+                        AbilityCost::Tap,
+                    ],
+                    effect: vec![SpellEffectKind::Tap {
+                        subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                            kind: TargetKind::Creature,
+                            ..TargetFilter::default()
+                        })),
+                    }],
+                    targeting: Some(exact_targeting(1, 1, "Choose target creature", vec![0])),
+                    timing: ActivationTiming::Normal,
+                    conditions: Vec::new(),
+                    activation_limit: None,
+                }],
+                restriction: CombatRestriction::default(),
+                doesnt_untap_during_untap_step: false,
+                cant_untap: false,
+            },
+        })
+    })
+}
+
 fn parse_signed_delta(value: &str) -> Option<i32> {
     let parsed = value.parse::<i32>().ok()?;
     let canonical = if parsed >= 0 {
@@ -14439,6 +14696,134 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Enchanted creature gets +2/+2 and gains trample.",
             "Equipped creature has protection from red.",
             "Equipped creature has flying. It attacks each combat if able."
+        ),
+    },
+    Recipe {
+        id: RecipeId("ability.equipment.sacrifice_self.draw_one"),
+        label: "sacrifice this Equipment to draw a card",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_equipment_clue_sacrifice_self_draw,
+        calibration: calibrations!(
+            "Candlestick" => "{2}, Sacrifice this Equipment: Draw a card.",
+            "Knife" => "{2}, Sacrifice this Equipment: Draw a card.",
+            "Lead Pipe" => "{2}, Sacrifice this Equipment: Draw a card.",
+            "Rope" => "{2}, Sacrifice this Equipment: Draw a card.",
+            "Wrench" => "{2}, Sacrifice this Equipment: Draw a card.";
+            // Another draw count, an artifact-generic sacrifice, appended riders, a missing mana
+            // component, another mana amount, a reordered instruction, and a delayed draw stay
+            // unsupported.
+            "{2}, Sacrifice this Equipment: Draw two cards.",
+            "{2}, Sacrifice this artifact: Draw a card.",
+            "{2}, Sacrifice this Equipment: Draw a card. You gain 1 life.",
+            "{2}, Sacrifice this Equipment: Draw a card. Create a Treasure token.",
+            "Sacrifice this Equipment: Draw a card.",
+            "{3}, Sacrifice this Equipment: Draw a card.",
+            "{2}, Sacrifice this Equipment: Draw a card, then discard a card.",
+            "{2}, Sacrifice this Equipment: Draw a card at the beginning of the next end step."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.equipment.equipped.plus_one_plus_one.granted_attack_surveil_two"),
+        label: "attached +1/+1 with a granted attack surveil two",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_equipment_granted_attack_surveil_two,
+        // Candlestick is the only card in the pinned full Oracle corpus printing this exact clause;
+        // the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Candlestick" => "Equipped creature gets +1/+1 and has \"Whenever this creature attacks, surveil 2.\"";
+            // Another surveil count or bonus, an equipped-creature trigger wording change, another
+            // granted ability, Aura wording, and riders stay unsupported.
+            "Equipped creature gets +1/+1 and has \"Whenever this creature attacks, surveil 3.\"",
+            "Equipped creature gets +2/+1 and has \"Whenever this creature attacks, surveil 2.\"",
+            "Equipped creature gets +1/+1 and has \"Whenever equipped creature attacks, surveil 2.\"",
+            "Equipped creature gets +1/+1 and has \"Whenever this creature attacks, draw a card.\"",
+            "Equipped creature gets +1/+1 and has \"Whenever this creature attacks, surveil two.\"",
+            "Enchanted creature gets +1/+1 and has \"Whenever this creature attacks, surveil 2.\"",
+            "Equipped creature gets +1/+1 and has \"Whenever this creature attacks, surveil 2.\" Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.equipment.equipped.controller_turn.plus_one_zero_first_strike"),
+        label: "attached +1/+0 and first strike during the controller's turn",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_equipment_controller_turn_first_strike,
+        // Knife is the only card in the pinned full Oracle corpus printing this exact clause; the
+        // singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Knife" => "During your turn, equipped creature gets +1/+0 and has first strike.";
+            // Another bonus or keyword, a gains wording, another turn scope, Aura wording, and
+            // riders stay unsupported.
+            "During your turn, equipped creature gets +1/+1 and has first strike.",
+            "During your turn, equipped creature gets +1/+0 and has trample.",
+            "During your turn, equipped creature gets +1/+0 and gains first strike.",
+            "During your turn, equipped creature gets +1/+0 and has double strike.",
+            "During each player's turn, equipped creature gets +1/+0 and has first strike.",
+            "During your turn, enchanted creature gets +1/+0 and has first strike.",
+            "During your turn, equipped creature gets +1/+0 and has first strike. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.equipment.equipped_creature_dies.each_opponent_loses_one"),
+        label: "equipped creature dies drains each opponent one",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_equipment_equipped_creature_dies_drain,
+        // Lead Pipe is the only card in the pinned full Oracle corpus printing this exact clause;
+        // the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Lead Pipe" => "Whenever equipped creature dies, each opponent loses 1 life.";
+            // Another drain amount or recipient, another wording or event, Aura wording, and
+            // riders stay unsupported.
+            "Whenever equipped creature dies, each opponent loses 2 life.",
+            "Whenever equipped creature dies, you lose 1 life.",
+            "Whenever equipped creature dies, target opponent loses 1 life.",
+            "Whenever equipped creature dies, each player loses 1 life.",
+            "Whenever enchanted creature dies, each opponent loses 1 life.",
+            "Whenever equipped creature leaves the battlefield, each opponent loses 1 life.",
+            "When equipped creature dies, each opponent loses 1 life.",
+            "Whenever equipped creature dies, each opponent loses 1 life. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.equipment.equipped.plus_one_plus_two_reach_max_blockers_one"),
+        label: "attached +1/+2, reach, and a one-blocker cap",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_equipment_reach_max_blockers_one,
+        // Rope is the only card in the pinned full Oracle corpus printing this exact clause; the
+        // singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Rope" => "Equipped creature gets +1/+2, has reach, and can't be blocked by more than one creature.";
+            // Another blocker cap or keyword, an unblockable wording, another bonus, Aura wording,
+            // a different conjunction, and riders stay unsupported.
+            "Equipped creature gets +1/+2, has reach, and can't be blocked.",
+            "Equipped creature gets +1/+2, has reach, and can't be blocked by more than two creatures.",
+            "Equipped creature gets +1/+1, has reach, and can't be blocked by more than one creature.",
+            "Equipped creature gets +1/+2, has vigilance, and can't be blocked by more than one creature.",
+            "Equipped creature gets +1/+2, has reach, and can't block.",
+            "Enchanted creature gets +1/+2, has reach, and can't be blocked by more than one creature.",
+            "Equipped creature gets +1/+2, has reach and can't be blocked by more than one creature.",
+            "Equipped creature gets +1/+2, has reach, and can't be blocked by more than one creature. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId(
+            "static.equipment.equipped.vigilance.granted_tap_target_creature.plus_one_plus_one",
+        ),
+        label: "attached +1/+1, vigilance, and a granted tap ability",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_equipment_vigilance_granted_tap_target_creature,
+        // Wrench is the only card in the pinned full Oracle corpus printing this exact clause; the
+        // singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Wrench" => "Equipped creature gets +1/+1 and has vigilance and \"{3}, {T}: Tap target creature.\"";
+            // Another cost, keyword, target, or effect, another bonus, and riders stay unsupported.
+            "Equipped creature gets +1/+1 and has vigilance and \"{3}, {T}: Tap target player.\"",
+            "Equipped creature gets +1/+1 and has vigilance and \"{3}: Tap target creature.\"",
+            "Equipped creature gets +1/+1 and has vigilance and \"{2}, {T}: Tap target creature.\"",
+            "Equipped creature gets +1/+1 and has first strike and \"{3}, {T}: Tap target creature.\"",
+            "Equipped creature gets +1/+2 and has vigilance and \"{3}, {T}: Tap target creature.\"",
+            "Equipped creature gets +1/+1 and has vigilance and \"{3}, {T}: Tap up to one target creature.\"",
+            "Equipped creature gets +1/+1 and has vigilance and \"{3}, {T}: Untap target creature.\"",
+            "Equipped creature gets +1/+1 and has vigilance and \"{3}, {T}: Tap target creature.\" Draw a card."
         ),
     },
     Recipe {
@@ -39584,6 +39969,429 @@ mod tests {
                     .is_none(),
                 "remove-counter activation near-miss must stay unmatched ({source_name}): {clause}"
             );
+        }
+    }
+
+    const ISSUE_415_SHARED_CLAUSE: &str = "{2}, Sacrifice this Equipment: Draw a card.";
+    const ISSUE_415_CANDLESTICK_CLAUSE: &str =
+        "Equipped creature gets +1/+1 and has \"Whenever this creature attacks, surveil 2.\"";
+    const ISSUE_415_KNIFE_CLAUSE: &str =
+        "During your turn, equipped creature gets +1/+0 and has first strike.";
+    const ISSUE_415_LEAD_PIPE_CLAUSE: &str =
+        "Whenever equipped creature dies, each opponent loses 1 life.";
+    const ISSUE_415_ROPE_CLAUSE: &str =
+        "Equipped creature gets +1/+2, has reach, and can't be blocked by more than one creature.";
+    const ISSUE_415_WRENCH_CLAUSE: &str =
+        "Equipped creature gets +1/+1 and has vigilance and \"{3}, {T}: Tap target creature.\"";
+
+    /// An Artifact — Clue Equipment source: artifact and permanent, not a creature, land, Aura,
+    /// Vehicle, enchantment, or spell. This is the exact printed surface of the issue #415 cohort.
+    fn issue_415_equipment_context() -> RecipeContext {
+        RecipeContext {
+            source_is_creature: false,
+            source_is_land: false,
+            source_is_aura: false,
+            source_is_instant: false,
+            source_is_sorcery: false,
+            source_is_vehicle: false,
+            source_is_spacecraft_or_planet: false,
+            source_is_enchantment: false,
+            source_is_artifact: true,
+            source_is_equipment: true,
+            source_is_permanent: true,
+            ..context()
+        }
+    }
+
+    fn issue_415_only_static_definition(matched: &RecipeMatch) -> &StaticAbilityDef {
+        let RecipeEmission::StaticAbility(ability) = &matched.emission else {
+            panic!("issue #415 clause must emit exactly one static ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "static_01");
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        &ability.definition
+    }
+
+    fn issue_415_assert_unmatched(negative: &str) {
+        assert!(
+            match_clause(negative, false, &issue_415_equipment_context())
+                .unwrap_or_else(|ambiguity| panic!("{negative}: {ambiguity}"))
+                .is_none(),
+            "issue #415 near-miss must stay unmatched: {negative}"
+        );
+    }
+
+    #[test]
+    fn issue_415_shared_equipment_sacrifice_draw_recipe_is_exact_and_typed() {
+        for name in ["Candlestick", "Knife", "Lead Pipe", "Rope", "Wrench"] {
+            let mut matched_context = issue_415_equipment_context();
+            matched_context.source_name = name.into();
+            let matched = match_clause(ISSUE_415_SHARED_CLAUSE, false, &matched_context)
+                .unwrap_or_else(|ambiguity| panic!("{name}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{name} must match the shared sacrifice recipe"));
+            assert_eq!(
+                matched.id.as_str(),
+                "ability.equipment.sacrifice_self.draw_one"
+            );
+            assert_eq!(matched.label, "sacrifice this Equipment to draw a card");
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("{name} must emit one activated ability");
+            };
+            assert_eq!(
+                ability.costs,
+                [
+                    AbilityCost::Mana(ManaCost::parse("{2}").expect("printed mana cost")),
+                    AbilityCost::SacrificeSelf,
+                ]
+            );
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                }]
+            );
+            assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+            assert_eq!(ability.timing, ActivationTiming::Normal);
+            assert!(ability.targeting.is_none());
+            assert!(ability.conditions.is_empty());
+            assert!(ability.cost_modifiers.is_empty());
+            assert!(ability.activation_limit.is_none());
+        }
+
+        for negative in [
+            "{2}, Sacrifice this Equipment: Draw two cards.",
+            "{2}, Sacrifice this artifact: Draw a card.",
+            "{2}, Sacrifice this Equipment: Draw a card. You gain 1 life.",
+            "{2}, Sacrifice this Equipment: Draw a card. Create a Treasure token.",
+            "Sacrifice this Equipment: Draw a card.",
+            "{1}, Sacrifice this Equipment: Draw a card.",
+            "{3}, Sacrifice this Equipment: Draw a card.",
+            "{2}, Sacrifice this permanent: Draw a card.",
+            "{2}, Sacrifice this Equipment: Draw a card",
+            "{2}, Sacrifice this Equipment: Draw a card at the beginning of the next end step.",
+            "{2}, Sacrifice this Equipment: Draw a card, then discard a card.",
+        ] {
+            issue_415_assert_unmatched(negative);
+        }
+
+        let mut hand_source = issue_415_equipment_context();
+        hand_source.source_is_equipment = false;
+        assert!(
+            match_clause(ISSUE_415_SHARED_CLAUSE, false, &hand_source)
+                .expect("non-Equipment source check must not be ambiguous")
+                .is_none(),
+            "the exact Equipment clause must stay bound to Equipment sources"
+        );
+        assert!(
+            match_clause(
+                ISSUE_415_SHARED_CLAUSE,
+                true,
+                &issue_415_equipment_context()
+            )
+            .expect("spell surface check must not be ambiguous")
+            .is_none(),
+            "the shared ability must remain an activated-ability-only clause"
+        );
+    }
+
+    #[test]
+    fn issue_415_candlestick_granted_attack_surveil_is_exact_and_typed() {
+        let matched = match_clause(
+            ISSUE_415_CANDLESTICK_CLAUSE,
+            false,
+            &issue_415_equipment_context(),
+        )
+        .expect("Candlestick clause must not be ambiguous")
+        .expect("Candlestick clause must match its granted-trigger recipe");
+        assert_eq!(
+            matched.id.as_str(),
+            "static.equipment.equipped.plus_one_plus_one.granted_attack_surveil_two"
+        );
+        assert_eq!(
+            issue_415_only_static_definition(&matched),
+            &StaticAbilityDef::AttachedModifier {
+                condition: None,
+                add_types: TypeLineAddition::default(),
+                set_types: None,
+                set_name: None,
+                set_colors: None,
+                delta_power: 1,
+                delta_toughness: 1,
+                count: None,
+                power_per_match: 0,
+                toughness_per_match: 0,
+                set_power: None,
+                set_toughness: None,
+                remove_all_abilities: false,
+                keywords: Vec::new(),
+                triggered_abilities: vec![TriggeredAbilityDef {
+                    ability_id: AbilityId::new("triggered_01").expect("static nested ability id"),
+                    presentation: AbilityPresentation::Fallback,
+                    trigger: TriggerCondition::WheneverSelfAttacks {
+                        minimum_other_attackers: 0,
+                    },
+                    effect: vec![SpellEffectKind::LibraryPartition {
+                        count: 2,
+                        top_min: 0,
+                        top_max: None,
+                        kind: LibraryPartitionKind::Surveil,
+                    }],
+                    modal: None,
+                    targeting: None,
+                    may: false,
+                    intervening_if: None,
+                    max_triggers_per_turn: None,
+                    triggers_only_once: false,
+                }],
+                activated_abilities: Vec::new(),
+                restriction: CombatRestriction::default(),
+                doesnt_untap_during_untap_step: false,
+                cant_untap: false,
+            }
+        );
+
+        for negative in [
+            "Equipped creature gets +1/+1 and has \"Whenever this creature attacks, surveil 3.\"",
+            "Equipped creature gets +2/+1 and has \"Whenever this creature attacks, surveil 2.\"",
+            "Equipped creature gets +1/+1 and has \"Whenever equipped creature attacks, surveil 2.\"",
+            "Equipped creature gets +1/+1 and has \"Whenever this creature attacks, draw a card.\"",
+            "Equipped creature gets +1/+1 and has \"Whenever this creature attacks, surveil two.\"",
+            "Enchanted creature gets +1/+1 and has \"Whenever this creature attacks, surveil 2.\"",
+            "Equipped creature gets +1/+1 and has \"Whenever this creature attacks, surveil 2.\" Draw a card.",
+            "Equipped creature gets +1/+1 and has \"Whenever this creature attacks, surveil 2.\"\nEquip {2}",
+        ] {
+            issue_415_assert_unmatched(negative);
+        }
+    }
+
+    #[test]
+    fn issue_415_knife_controller_turn_first_strike_is_exact_and_typed() {
+        let matched = match_clause(
+            ISSUE_415_KNIFE_CLAUSE,
+            false,
+            &issue_415_equipment_context(),
+        )
+        .expect("Knife clause must not be ambiguous")
+        .expect("Knife clause must match its conditioned static recipe");
+        assert_eq!(
+            matched.id.as_str(),
+            "static.equipment.equipped.controller_turn.plus_one_zero_first_strike"
+        );
+        assert_eq!(
+            issue_415_only_static_definition(&matched),
+            &StaticAbilityDef::AttachedModifier {
+                condition: Some(GameCondition::ActivePlayer {
+                    players: RelativePlayerSet::Controller,
+                }),
+                add_types: TypeLineAddition::default(),
+                set_types: None,
+                set_name: None,
+                set_colors: None,
+                delta_power: 1,
+                delta_toughness: 0,
+                count: None,
+                power_per_match: 0,
+                toughness_per_match: 0,
+                set_power: None,
+                set_toughness: None,
+                remove_all_abilities: false,
+                keywords: vec![Keyword::FirstStrike],
+                triggered_abilities: Vec::new(),
+                activated_abilities: Vec::new(),
+                restriction: CombatRestriction::default(),
+                doesnt_untap_during_untap_step: false,
+                cant_untap: false,
+            }
+        );
+
+        for negative in [
+            "During your turn, equipped creature gets +1/+1 and has first strike.",
+            "During your turn, equipped creature gets +1/+0 and has trample.",
+            "During your turn, equipped creature gets +1/+0 and gains first strike.",
+            "During your turn, equipped creature gets +1/+0 and has double strike.",
+            "During each player's turn, equipped creature gets +1/+0 and has first strike.",
+            "During your turn, enchanted creature gets +1/+0 and has first strike.",
+            "During your turn, equipped creature gets +0/+1 and has first strike.",
+            "During your turn, equipped creature gets +1/+0 and has first strike. Draw a card.",
+        ] {
+            issue_415_assert_unmatched(negative);
+        }
+    }
+
+    #[test]
+    fn issue_415_lead_pipe_equipped_creature_dies_drain_is_exact_and_typed() {
+        let matched = match_clause(
+            ISSUE_415_LEAD_PIPE_CLAUSE,
+            false,
+            &issue_415_equipment_context(),
+        )
+        .expect("Lead Pipe clause must not be ambiguous")
+        .expect("Lead Pipe clause must match its equipped-creature-dies recipe");
+        assert_eq!(
+            matched.id.as_str(),
+            "triggered.equipment.equipped_creature_dies.each_opponent_loses_one"
+        );
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("Lead Pipe clause must emit one triggered ability");
+        };
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverAttachedObjectDies
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::LoseLife {
+                amount: LifeAmount::Fixed(1),
+                who: PlayerRecipient::EachOpponent,
+            }]
+        );
+        assert!(!ability.may);
+        assert!(ability.modal.is_none());
+        assert!(ability.targeting.is_none());
+        assert!(ability.intervening_if.is_none());
+
+        for negative in [
+            "Whenever equipped creature dies, each opponent loses 2 life.",
+            "Whenever equipped creature dies, you lose 1 life.",
+            "Whenever equipped creature dies, target opponent loses 1 life.",
+            "Whenever equipped creature dies, each player loses 1 life.",
+            "Whenever enchanted creature dies, each opponent loses 1 life.",
+            "Whenever equipped creature leaves the battlefield, each opponent loses 1 life.",
+            "When equipped creature dies, each opponent loses 1 life.",
+            "Whenever equipped creature dies, each opponent loses 1 life. Draw a card.",
+            "Whenever equipped creature dies, each opponent loses 1 life and you gain 1 life.",
+        ] {
+            issue_415_assert_unmatched(negative);
+        }
+    }
+
+    #[test]
+    fn issue_415_rope_reach_and_single_blocker_cap_is_exact_and_typed() {
+        let matched = match_clause(ISSUE_415_ROPE_CLAUSE, false, &issue_415_equipment_context())
+            .expect("Rope clause must not be ambiguous")
+            .expect("Rope clause must match its reach/blocker-cap recipe");
+        assert_eq!(
+            matched.id.as_str(),
+            "static.equipment.equipped.plus_one_plus_two_reach_max_blockers_one"
+        );
+        assert_eq!(
+            issue_415_only_static_definition(&matched),
+            &StaticAbilityDef::AttachedModifier {
+                condition: None,
+                add_types: TypeLineAddition::default(),
+                set_types: None,
+                set_name: None,
+                set_colors: None,
+                delta_power: 1,
+                delta_toughness: 2,
+                count: None,
+                power_per_match: 0,
+                toughness_per_match: 0,
+                set_power: None,
+                set_toughness: None,
+                remove_all_abilities: false,
+                keywords: vec![Keyword::Reach],
+                triggered_abilities: Vec::new(),
+                activated_abilities: Vec::new(),
+                restriction: CombatRestriction {
+                    maximum_blockers: Some(1),
+                    ..CombatRestriction::default()
+                },
+                doesnt_untap_during_untap_step: false,
+                cant_untap: false,
+            }
+        );
+
+        for negative in [
+            "Equipped creature gets +1/+2, has reach, and can't be blocked.",
+            "Equipped creature gets +1/+2, has reach, and can't be blocked by more than two creatures.",
+            "Equipped creature gets +1/+1, has reach, and can't be blocked by more than one creature.",
+            "Equipped creature gets +1/+2, has vigilance, and can't be blocked by more than one creature.",
+            "Equipped creature gets +1/+2, has reach, and can't block.",
+            "Enchanted creature gets +1/+2, has reach, and can't be blocked by more than one creature.",
+            "Equipped creature gets +1/+2, has reach, and can't be blocked by more than one creature. Draw a card.",
+            "Equipped creature gets +1/+2, has reach and can't be blocked by more than one creature.",
+        ] {
+            issue_415_assert_unmatched(negative);
+        }
+    }
+
+    #[test]
+    fn issue_415_wrench_vigilance_and_granted_tap_ability_is_exact_and_typed() {
+        let matched = match_clause(
+            ISSUE_415_WRENCH_CLAUSE,
+            false,
+            &issue_415_equipment_context(),
+        )
+        .expect("Wrench clause must not be ambiguous")
+        .expect("Wrench clause must match its vigilance/granted-tap recipe");
+        assert_eq!(
+            matched.id.as_str(),
+            "static.equipment.equipped.vigilance.granted_tap_target_creature.plus_one_plus_one"
+        );
+        assert_eq!(
+            issue_415_only_static_definition(&matched),
+            &StaticAbilityDef::AttachedModifier {
+                condition: None,
+                add_types: TypeLineAddition::default(),
+                set_types: None,
+                set_name: None,
+                set_colors: None,
+                delta_power: 1,
+                delta_toughness: 1,
+                count: None,
+                power_per_match: 0,
+                toughness_per_match: 0,
+                set_power: None,
+                set_toughness: None,
+                remove_all_abilities: false,
+                keywords: vec![Keyword::Vigilance],
+                triggered_abilities: Vec::new(),
+                activated_abilities: vec![ActivatedAbilityDef {
+                    ability_id: AbilityId::new("activated_01").expect("static nested ability id"),
+                    presentation: AbilityPresentation::Fallback,
+                    cost_modifiers: Vec::new(),
+                    source_zone: AbilitySourceZone::Battlefield,
+                    costs: vec![
+                        AbilityCost::Mana(ManaCost::parse("{3}").expect("granted mana cost")),
+                        AbilityCost::Tap,
+                    ],
+                    effect: vec![SpellEffectKind::Tap {
+                        subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                            kind: TargetKind::Creature,
+                            ..TargetFilter::default()
+                        })),
+                    }],
+                    targeting: Some(exact_targeting(1, 1, "Choose target creature", vec![0])),
+                    timing: ActivationTiming::Normal,
+                    conditions: Vec::new(),
+                    activation_limit: None,
+                }],
+                restriction: CombatRestriction::default(),
+                doesnt_untap_during_untap_step: false,
+                cant_untap: false,
+            }
+        );
+
+        for negative in [
+            "Equipped creature gets +1/+1 and has vigilance and \"{3}, {T}: Tap target player.\"",
+            "Equipped creature gets +1/+1 and has vigilance and \"{3}: Tap target creature.\"",
+            "Equipped creature gets +1/+1 and has vigilance and \"{2}, {T}: Tap target creature.\"",
+            "Equipped creature gets +1/+1 and has first strike and \"{3}, {T}: Tap target creature.\"",
+            "Equipped creature gets +1/+2 and has vigilance and \"{3}, {T}: Tap target creature.\"",
+            "Equipped creature gets +1/+1 and has vigilance and \"{3}, {T}: Tap up to one target creature.\"",
+            "Equipped creature gets +1/+1 and has vigilance and \"{3}, {T}: Tap target creature.\" Draw a card.",
+            "Equipped creature gets +1/+1 and has vigilance and \"{3}, {T}: Untap target creature.\"",
+        ] {
+            issue_415_assert_unmatched(negative);
         }
     }
 }
