@@ -541,3 +541,5 @@ mod issue_424_triggered_modal_etb;
 mod issue_425_choose_one_or_both;
 #[path = "scenario/issue_426_one_mode_modal.rs"]
 mod issue_426_one_mode_modal;
+#[path = "scenario/issue_427_firebending.rs"]
+mod issue_427_firebending;

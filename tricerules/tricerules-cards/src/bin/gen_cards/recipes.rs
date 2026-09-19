@@ -7,7 +7,7 @@ use tricerules_cards::primitives::{
     EffectSubject, EntersTappedAffected, EntersWithCountersAffected, EntryCost, EventZone,
     FaceChangeAction, GameCondition, GraveyardAggregate, GraveyardDestination, GraveyardFilter,
     GraveyardOwner, HandCardAction, HandCardChooser, HandChoiceVisibility, LibraryPlacement,
-    LifeAmount, LifeChangeKind, ObjectContributionKind, ObjectPaymentConstraint,
+    LifeAmount, LifeChangeKind, ManaRetention, ObjectContributionKind, ObjectPaymentConstraint,
     PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerQuantifier,
     PlayerRecipient, PowerComparison, PowerToughnessCharacteristic, PtScale, PtScaleBasis,
     QuantityTerm, RelativePlayerSet, ResolutionBranchDef, ResolutionBranchRequirement,
@@ -16023,6 +16023,138 @@ fn match_spell_cost_reduction_graveyard_caves_you_control_and_graveyard_one(
     })
 }
 
+// ---------------------------------------------------------------------------
+// Issue #427 Firebending cohort
+// ---------------------------------------------------------------------------
+//
+// CR 702.189: Firebending N is a triggered ability that adds N red mana as it resolves and keeps
+// that mana through the end of combat (the CR 106.4 firebending exception). The printed reminder
+// is the keyword's definition, so the complete source line is matched exactly; a bare
+// `Firebending N`, a mismatched reminder amount, another subject, and every rider stay
+// unsupported. The shared emission is the shipped `AddMana { retention: EndOfCombat }` pair used
+// by the hand-authored Fire Nation Cadets, Rough Rhino Cavalry, and Vindictive Warden definitions.
+
+/// One exact printed `Firebending N` reminder. `count` is the recipe's fixed N; the reminder must
+/// carry exactly that many `{R}` symbols and the canonical firebending subject.
+fn match_firebending_reminder(
+    text: &str,
+    context: &RecipeContext,
+    count: u32,
+) -> Option<RecipeEmission> {
+    let expected = format!(
+        "Firebending {count} (Whenever this creature attacks, add {}. This mana lasts until end of combat.)",
+        "{R}".repeat(count as usize)
+    );
+    (text == expected).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0,
+            },
+            vec![SpellEffectKind::AddMana {
+                amount: ManaAmount {
+                    r: count,
+                    ..ManaAmount::default()
+                },
+                retention: ManaRetention::EndOfCombat,
+            }],
+        )
+    })
+}
+
+fn match_firebending_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    match_firebending_reminder(text, context, 1)
+}
+
+fn match_firebending_two(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    match_firebending_reminder(text, context, 2)
+}
+
+/// CR 201.5 / 603.2: Azula, On the Hunt's printed attack trigger uses the legendary short name.
+/// Only the exact template is accepted; the Clue token definition ships in `data/tokens/clue.ron`.
+fn match_firebending_azula_on_the_hunt_attack(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    let short_name = context.source_name.split(',').next()?.trim();
+    let expected =
+        format!("Whenever {short_name} attacks, you lose 1 life and create a Clue token.");
+    (text == expected).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0,
+            },
+            vec![
+                SpellEffectKind::LoseLife {
+                    amount: LifeAmount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                },
+                SpellEffectKind::CreateTokens {
+                    token: "clue".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                },
+            ],
+        )
+    })
+}
+
+/// CR 603.6a / 611.2a / 613.1f: Tundra Tank's entry trigger grants one keyword to one mandatory
+/// controlled creature target. The printed "this Vehicle" subject is gated on the source
+/// subtype; another keyword, target scope, or rider stays unsupported.
+fn match_firebending_tundra_tank_etb_indestructible(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_vehicle
+        && text
+            == "When this Vehicle enters, target creature you control gains indestructible until end of turn.")
+        .then(|| {
+            targeted_trigger(
+                context,
+                vec![SpellEffectKind::GrantKeywords {
+                    subject: chosen_creature(TargetController::You),
+                    keywords: vec![Keyword::Indestructible],
+                }],
+                1,
+                1,
+                "Choose target creature you control",
+            )
+        })
+}
+
+/// CR 603.2 / 611.2c: Zhao, Ruthless Admiral observes each committed sacrifice by its controller,
+/// excluding its own object generation ("another"), then pumps the controller's creatures +1/+0
+/// until end of turn through the shared untargeted mass-pump primitive.
+fn match_firebending_zhao_sacrifice_trigger(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == "Whenever you sacrifice another permanent, creatures you control get +1/+0 until end of turn.")
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverPlayerSacrificesPermanent {
+                    player: CastTriggerPlayer::Controller,
+                    filter: PermanentEventFilter {
+                        exclude_source: true,
+                        ..PermanentEventFilter::default()
+                    },
+                },
+                vec![SpellEffectKind::PumpAll {
+                    filter: creatures_you_control(),
+                    power: 1,
+                    toughness: 0,
+                }],
+            )
+        })
+}
+
 pub(super) static CATALOG: &[Recipe] = &[
     Recipe {
         id: RecipeId("spell.cost_reduction.graveyard_creature_cards.one"),
@@ -24636,6 +24768,129 @@ pub(super) static CATALOG: &[Recipe] = &[
             "{2}{G}: Until end of turn, target noncreature artifact an opponent controls becomes a 4/4 artifact creature.",
             "{2}{G}: Target noncreature artifact you control becomes a 4/4 artifact creature.",
             "{2}{G}: Until end of turn, target noncreature artifact you control becomes a 4/4 artifact creature with trample."
+        ),
+    },
+    Recipe {
+        id: RecipeId("keyword.firebending.one"),
+        label: "Firebending 1",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_firebending_one,
+        calibration: calibrations!(
+            "Fire Sages" => "Firebending 1 (Whenever this creature attacks, add {R}. This mana lasts until end of combat.)",
+            "Tundra Tank" => "Firebending 1 (Whenever this creature attacks, add {R}. This mana lasts until end of combat.)";
+            // A mismatched reminder amount, another subject or duration, an appended rider, a
+            // parameterless or numeric-brace keyword, and appended riders stay unsupported.
+            "Firebending 2 (Whenever this creature attacks, add {R}. This mana lasts until end of combat.)",
+            "Firebending 1 (Whenever this creature attacks, add {R}{R}. This mana lasts until end of combat.)",
+            "Firebending 1 (Whenever this creature attacks, add {R}{R} to your mana pool. This mana lasts until end of combat.)",
+            "Firebending 1 (Whenever this creature attacks, add {R}. This mana doesn't empty from your mana pool as steps and phases end.)",
+            "Firebending 1 (Whenever this creature attacks, add one mana of any color. This mana lasts until end of combat.)",
+            "Firebending 1 (Whenever it attacks, add {R}. This mana lasts until end of combat.)",
+            "Firebending 1 (Whenever this creature attacks, add {R}. This mana lasts until end of turn.)",
+            "Firebending 1 (Whenever this creature attacks, add {R}. This mana lasts until end of combat. Untap it.)",
+            "Firebending {1} (Whenever this creature attacks, add {R}. This mana lasts until end of combat.)",
+            "Firebending 01 (Whenever this creature attacks, add {R}. This mana lasts until end of combat.)",
+            "Firebending 0 (Whenever this creature attacks, add {R}. This mana lasts until end of combat.)",
+            "Firebending 1",
+            "Whenever this creature attacks, add {R}. This mana lasts until end of combat.",
+            "Firebending 1. Whenever this creature attacks, add {R}. This mana lasts until end of combat."
+        ),
+    },
+    Recipe {
+        id: RecipeId("keyword.firebending.two"),
+        label: "Firebending 2",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_firebending_two,
+        calibration: calibrations!(
+            "Zhao, Ruthless Admiral" => "Firebending 2 (Whenever this creature attacks, add {R}{R}. This mana lasts until end of combat.)",
+            "Azula, On the Hunt" => "Firebending 2 (Whenever this creature attacks, add {R}{R}. This mana lasts until end of combat.)";
+            // A mismatched reminder amount, another subject or duration, an appended rider, a
+            // parameterless or numeric-brace keyword, and appended riders stay unsupported.
+            "Firebending 1 (Whenever this creature attacks, add {R}{R}. This mana lasts until end of combat.)",
+            "Firebending 2 (Whenever this creature attacks, add {R}. This mana lasts until end of combat.)",
+            "Firebending 2 (Whenever this creature attacks, add {R}{R} to your mana pool. This mana lasts until end of combat.)",
+            "Firebending 2 (Whenever this creature attacks, add {R}{R}. This mana doesn't empty from your mana pool as steps and phases end.)",
+            "Firebending 2 (Whenever it attacks, add {R}{R}. This mana lasts until end of combat.)",
+            "Firebending 2 (Whenever this creature attacks, add {R}{R}. This mana lasts until end of turn.)",
+            "Firebending 2 (Whenever this creature attacks, add {R}{R}. This mana lasts until end of combat. Untap it.)",
+            "Firebending {2} (Whenever this creature attacks, add {R}{R}. This mana lasts until end of combat.)",
+            "Firebending 02 (Whenever this creature attacks, add {R}{R}. This mana lasts until end of combat.)",
+            "Firebending 0 (Whenever this creature attacks, add {R}{R}. This mana lasts until end of combat.)",
+            "Firebending 2",
+            "Whenever this creature attacks, add {R}{R}. This mana lasts until end of combat.",
+            "Firebending 2. Whenever this creature attacks, add {R}{R}. This mana lasts until end of combat."
+        ),
+    },
+    Recipe {
+        id: RecipeId("firebending.azula_on_the_hunt.attack"),
+        label: "Azula lose 1 life and create a Clue",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_firebending_azula_on_the_hunt_attack,
+        // Azula, On the Hunt is the only pinned-corpus printing of this exact named attack
+        // template (verified). The trigger's lose-life-plus-Clue body reuses the shipped
+        // `LoseLife` and registered `clue` token primitives; the sibling "When this enchantment
+        // enters and at the beginning of your upkeep" form on Obsessive Pursuit belongs to a
+        // different event boundary and is not this template.
+        calibration: singleton_calibrations!(
+            "Azula, On the Hunt" => "Whenever Azula attacks, you lose 1 life and create a Clue token.";
+            // Another life amount or token count, a missing life-loss or token instruction, an
+            // optional or full-name trigger, and an appended rider stay unsupported.
+            "Whenever Azula attacks, you lose 2 life and create a Clue token.",
+            "Whenever Azula attacks, you lose 1 life.",
+            "Whenever Azula attacks, you lose 1 life and create two Clue tokens.",
+            "Whenever Azula attacks, you may lose 1 life and create a Clue token.",
+            "Whenever Azula, On the Hunt attacks, you lose 1 life and create a Clue token.",
+            "Whenever another creature attacks, you lose 1 life and create a Clue token.",
+            "Whenever Azula attacks, you lose 1 life and create a Treasure token.",
+            "Whenever Azula attacks, you gain 1 life and create a Clue token.",
+            "Whenever Azula attacks, you lose 1 life and create a Clue token. Draw a card.",
+            "When Azula enters, you lose 1 life and create a Clue token."
+        ),
+    },
+    Recipe {
+        id: RecipeId("firebending.tundra_tank.etb_indestructible"),
+        label: "Vehicle ETB grant controlled creature indestructible",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_firebending_tundra_tank_etb_indestructible,
+        // Tundra Tank is the only pinned-corpus printing of this exact Vehicle entry template
+        // (verified). The one-target controlled-creature keyword grant reuses the shipped
+        // `GrantKeywords` primitive; Crew 1 is owned by `activated.crew.aggregate_power`.
+        calibration: singleton_calibrations!(
+            "Tundra Tank" => "When this Vehicle enters, target creature you control gains indestructible until end of turn.";
+            // The generic non-Vehicle subject, another keyword or target scope, a missing or
+            // different duration, an optional target, and an appended rider stay unsupported.
+            "When this creature enters, target creature you control gains indestructible until end of turn.",
+            "When this Vehicle enters, target creature gains indestructible until end of turn.",
+            "When this Vehicle enters, target creature you control gains hexproof until end of turn.",
+            "When this Vehicle enters, target creature you control gains indestructible.",
+            "When this Vehicle enters, target creature you control gets +1/+0 and gains indestructible until end of turn.",
+            "When this Vehicle enters, another target creature you control gains indestructible until end of turn.",
+            "When this Vehicle enters, up to one target creature you control gains indestructible until end of turn.",
+            "When this Vehicle enters, target creature an opponent controls gains indestructible until end of turn.",
+            "When this Vehicle enters, target creature you control gains indestructible until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("firebending.zhao.sacrifice_trigger"),
+        label: "sacrifice another permanent team pump",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_firebending_zhao_sacrifice_trigger,
+        // Zhao, Ruthless Admiral is the only pinned-corpus printing of this exact sacrifice
+        // template (verified). The observer reuses `WheneverPlayerSacrificesPermanent` with the
+        // shared "another" exclusion; the pump reuses the untargeted `PumpAll` primitive.
+        calibration: singleton_calibrations!(
+            "Zhao, Ruthless Admiral" => "Whenever you sacrifice another permanent, creatures you control get +1/+0 until end of turn.";
+            // A missing "another" exclusion, another bonus, a missing or different duration,
+            // another observer or scope, and an appended rider stay unsupported.
+            "Whenever you sacrifice a permanent, creatures you control get +1/+0 until end of turn.",
+            "Whenever you sacrifice another permanent, creatures you control get +1/+1 until end of turn.",
+            "Whenever you sacrifice another permanent, creatures you control get +2/+0 until end of turn.",
+            "Whenever you sacrifice another permanent, creatures you control get +1/+0.",
+            "Whenever you sacrifice another permanent, other creatures you control get +1/+0 until end of turn.",
+            "Whenever an opponent sacrifices a permanent, creatures you control get +1/+0 until end of turn.",
+            "Whenever you sacrifice another permanent, target creature you control gets +1/+0 until end of turn.",
+            "Whenever you sacrifice another creature, creatures you control get +1/+0 until end of turn.",
+            "Whenever you sacrifice another permanent, creatures you control get +1/+0 until end of turn. Draw a card."
         ),
     },
 ];
@@ -47950,5 +48205,268 @@ mod tests {
                 AbilityPresentation::OracleLines(vec![3]),
             ]
         );
+    }
+
+    const ISSUE_427_FIREBENDING_ONE: &str = "Firebending 1 (Whenever this creature attacks, add {R}. This mana lasts until end of combat.)";
+    const ISSUE_427_FIREBENDING_TWO: &str = "Firebending 2 (Whenever this creature attacks, add {R}{R}. This mana lasts until end of combat.)";
+    const ISSUE_427_AZULA_ON_THE_HUNT_ATTACK: &str =
+        "Whenever Azula attacks, you lose 1 life and create a Clue token.";
+    const ISSUE_427_ZHAO_SACRIFICE: &str =
+        "Whenever you sacrifice another permanent, creatures you control get +1/+0 until end of turn.";
+    const ISSUE_427_TUNDRA_TANK_ETB: &str =
+        "When this Vehicle enters, target creature you control gains indestructible until end of turn.";
+
+    fn issue_427_match(clause: &str, source_name: &str) -> Option<RecipeMatch> {
+        let mut test_context = context();
+        test_context.source_name = source_name.into();
+        match_clause(clause, false, &test_context)
+            .unwrap_or_else(|ambiguity| panic!("{clause:?} is ambiguous: {ambiguity}"))
+    }
+
+    fn issue_427_firebending_emission(
+        clause: &str,
+        expected_id: &str,
+        expected_red: u32,
+    ) -> RecipeEmission {
+        let matched = issue_427_match(clause, "Fire Sages")
+            .unwrap_or_else(|| panic!("{clause:?} should match exactly one recipe"));
+        assert_eq!(matched.id.as_str(), expected_id);
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("firebending must emit one triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0,
+            }
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::AddMana {
+                amount: ManaAmount {
+                    r: expected_red,
+                    ..ManaAmount::default()
+                },
+                retention: ManaRetention::EndOfCombat,
+            }]
+        );
+        assert!(ability.targeting.is_none());
+        assert!(!ability.may);
+        RecipeEmission::TriggeredAbility(ability)
+    }
+
+    #[test]
+    fn issue_427_firebending_reminders_match_once_and_emit_combat_retained_red_mana() {
+        issue_427_firebending_emission(ISSUE_427_FIREBENDING_ONE, "keyword.firebending.one", 1);
+        issue_427_firebending_emission(ISSUE_427_FIREBENDING_TWO, "keyword.firebending.two", 2);
+    }
+
+    #[test]
+    fn issue_427_firebending_reminders_reject_every_reviewed_near_miss() {
+        for near_miss in [
+            "Firebending 2 (Whenever this creature attacks, add {R}. This mana lasts until end of combat.)",
+            "Firebending 1 (Whenever this creature attacks, add {R}{R}. This mana lasts until end of combat.)",
+            "Firebending 1 (Whenever this creature attacks, add {R}. This mana doesn't empty from your mana pool as steps and phases end.)",
+            "Firebending 1 (Whenever this creature attacks, add {R}{R} to your mana pool. This mana lasts until end of combat.)",
+            "Firebending 1 (Whenever this creature attacks, add {R}. This mana lasts until end of combat. Untap it.)",
+            "Firebending 1 (Whenever this creature attacks, add {R}. This mana lasts until end of turn.)",
+            "Firebending {1} (Whenever this creature attacks, add {R}. This mana lasts until end of combat.)",
+            "Firebending X (Whenever this creature attacks, add {R}. This mana lasts until end of combat.)",
+            "Firebending 01 (Whenever this creature attacks, add {R}. This mana lasts until end of combat.)",
+            "Firebending 0 (Whenever this creature attacks, add {R}. This mana lasts until end of combat.)",
+            "Firebending 3 (Whenever this creature attacks, add {R}{R}{R}. This mana lasts until end of combat.)",
+            "Firebending 1",
+            "Firebending 2",
+            "Firebending 1. Whenever this creature attacks, add {R}. This mana lasts until end of combat.",
+            "Firebending 1 (Whenever this creature attacks, add {R}. This mana lasts until end of combat.)\nWhenever this creature attacks, draw a card.",
+            "Whenever this creature attacks, add {R}. This mana lasts until end of combat.",
+            "Firebending 1 (Whenever this creature attacks, add one mana of any color. This mana lasts until end of combat.)",
+        ] {
+            assert!(
+                issue_427_match(near_miss, "Fire Sages").is_none(),
+                "firebending near-miss must stay unsupported: {near_miss:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_427_second_attack_trigger_lines_do_not_match_the_firebending_recipe() {
+        let mut test_context = context();
+        test_context.source_name = "Fire Sages".into();
+        for clause in [
+            "Whenever this creature attacks, add {R}. This mana lasts until end of combat.",
+            "Whenever this creature attacks, add {R}{R}. This mana lasts until end of combat.",
+            "Whenever Azula attacks, you lose 1 life and create a Clue token.",
+        ] {
+            let matched = match_clause(clause, false, &test_context)
+                .expect("unrelated attack trigger should not be ambiguous");
+            assert!(
+                matched
+                    .as_ref()
+                    .is_none_or(|matched| !matched.id.as_str().starts_with("keyword.firebending.")),
+                "line must never route to a firebending recipe: {clause:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_427_companion_recipes_match_once_and_emit_typed_payloads() {
+        let azula = issue_427_match(ISSUE_427_AZULA_ON_THE_HUNT_ATTACK, "Azula, On the Hunt")
+            .expect("Azula's attack trigger should match");
+        assert_eq!(azula.id.as_str(), "firebending.azula_on_the_hunt.attack");
+        let RecipeEmission::TriggeredAbility(azula_ability) = azula.emission else {
+            panic!("Azula's attack trigger must emit one triggered ability");
+        };
+        assert_eq!(
+            azula_ability.trigger,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0,
+            }
+        );
+        assert_eq!(
+            azula_ability.effect,
+            [
+                SpellEffectKind::LoseLife {
+                    amount: LifeAmount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                },
+                SpellEffectKind::CreateTokens {
+                    token: "clue".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                },
+            ]
+        );
+
+        let tundra = issue_427_match(ISSUE_427_TUNDRA_TANK_ETB, "Tundra Tank")
+            .expect("Tundra Tank's ETB should match");
+        assert_eq!(
+            tundra.id.as_str(),
+            "firebending.tundra_tank.etb_indestructible"
+        );
+        let RecipeEmission::TriggeredAbility(tundra_ability) = tundra.emission else {
+            panic!("Tundra Tank's ETB must emit one triggered ability");
+        };
+        assert_eq!(
+            tundra_ability.trigger,
+            TriggerCondition::WhenSelfEntersBattlefield
+        );
+        assert_eq!(
+            tundra_ability.effect,
+            [SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    ..TargetFilter::default()
+                })),
+                keywords: vec![Keyword::Indestructible],
+            }]
+        );
+        assert_eq!(
+            tundra_ability.targeting,
+            Some(exact_targeting(
+                1,
+                1,
+                "Choose target creature you control",
+                vec![0],
+            ))
+        );
+
+        let zhao = issue_427_match(ISSUE_427_ZHAO_SACRIFICE, "Zhao, Ruthless Admiral")
+            .expect("Zhao's sacrifice trigger should match");
+        assert_eq!(zhao.id.as_str(), "firebending.zhao.sacrifice_trigger");
+        let RecipeEmission::TriggeredAbility(zhao_ability) = zhao.emission else {
+            panic!("Zhao's sacrifice trigger must emit one triggered ability");
+        };
+        assert_eq!(
+            zhao_ability.trigger,
+            TriggerCondition::WheneverPlayerSacrificesPermanent {
+                player: CastTriggerPlayer::Controller,
+                filter: PermanentEventFilter {
+                    exclude_source: true,
+                    ..PermanentEventFilter::default()
+                },
+            }
+        );
+        assert_eq!(
+            zhao_ability.effect,
+            [SpellEffectKind::PumpAll {
+                filter: creatures_you_control(),
+                power: 1,
+                toughness: 0,
+            }]
+        );
+    }
+
+    #[test]
+    fn issue_427_companion_recipes_reject_near_misses() {
+        for near_miss in [
+            "Whenever Azula attacks, you lose 2 life and create a Clue token.",
+            "Whenever Azula attacks, you lose 1 life.",
+            "Whenever Azula attacks, you lose 1 life and create two Clue tokens.",
+            "Whenever Azula attacks, you may lose 1 life and create a Clue token.",
+            "Whenever Azula, On the Hunt attacks, you lose 1 life and create a Clue token.",
+            "Whenever another creature attacks, you lose 1 life and create a Clue token.",
+            "Whenever Azula attacks, you lose 1 life and create a Treasure token.",
+            "Whenever Azula attacks, you lose 1 life and create a Clue token. Draw a card.",
+        ] {
+            assert!(
+                issue_427_match(near_miss, "Azula, On the Hunt").is_none(),
+                "Azula near-miss must stay unsupported: {near_miss:?}"
+            );
+        }
+
+        for near_miss in [
+            "When this Vehicle enters, target creature gains indestructible until end of turn.",
+            "When this Vehicle enters, target creature you control gains hexproof until end of turn.",
+            "When this Vehicle enters, target creature you control gains indestructible.",
+            "When this Vehicle enters, target creature you control gets +1/+0 and gains indestructible until end of turn.",
+            "When this creature enters, target creature you control gains indestructible until end of turn.",
+            "When this Vehicle enters, another target creature you control gains indestructible until end of turn.",
+            "When this Vehicle enters, up to one target creature you control gains indestructible until end of turn.",
+            "When this Vehicle enters, target creature an opponent controls gains indestructible until end of turn.",
+            "When this Vehicle enters, target creature you control gains indestructible until end of turn. Draw a card.",
+        ] {
+            assert!(
+                issue_427_match(near_miss, "Tundra Tank").is_none(),
+                "Tundra Tank near-miss must stay unsupported: {near_miss:?}"
+            );
+        }
+
+        for near_miss in [
+            "Whenever you sacrifice a permanent, creatures you control get +1/+0 until end of turn.",
+            "Whenever you sacrifice another permanent, creatures you control get +1/+1 until end of turn.",
+            "Whenever you sacrifice another permanent, creatures you control get +2/+0 until end of turn.",
+            "Whenever you sacrifice another permanent, creatures you control get +1/+0.",
+            "Whenever you sacrifice another permanent, other creatures you control get +1/+0 until end of turn.",
+            "Whenever an opponent sacrifices a permanent, creatures you control get +1/+0 until end of turn.",
+            "Whenever you sacrifice another permanent, target creature you control gets +1/+0 until end of turn.",
+            "Whenever you sacrifice another permanent, creatures you control get +1/+0 until end of turn. Draw a card.",
+            "Whenever you sacrifice another permanent, creatures your opponents control get -1/-0 until end of turn.",
+        ] {
+            assert!(
+                issue_427_match(near_miss, "Zhao, Ruthless Admiral").is_none(),
+                "Zhao near-miss must stay unsupported: {near_miss:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_427_unreviewed_cohort_companions_remain_unsupported() {
+        for clause in [
+            "Tap an untapped Ally you control: Exile target card from a graveyard.",
+            "Whenever this creature attacks, you may cast an Ally spell from among cards you own exiled with this creature.",
+            "Exhaust — {3}: Put a +1/+1 counter on Jeong Jeong. When you next cast a Lesson spell this turn, copy it and you may choose new targets for the copy.",
+            "When Azula enters, target opponent exiles a nontoken creature they control, then they exile a nonland card from their graveyard.",
+            "During your turn, you may cast cards exiled with Azula and you may cast them as though they had flash. Mana of any type can be spent to cast those spells.",
+            "Whenever you cast a spell while Fire Lord Azula is attacking, copy that spell. You may choose new targets for the copy.",
+        ] {
+            assert!(
+                issue_427_match(clause, "Boiling Rock Rioter").is_none(),
+                "excluded cohort clause must stay unsupported: {clause:?}"
+            );
+        }
     }
 }

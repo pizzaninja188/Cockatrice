@@ -160,6 +160,7 @@ axgard_cavalry	0	ability:0	exercised
 axgard_cavalry	0	cast	exercised
 azorius_guildgate	0	ability:0	exercised
 azorius_guildgate	0	land	exercised
+azula,_on_the_hunt	0	cast	exercised
 azula_always_lies	0	cast	exercised
 azure_drake	0	cast	exercised
 ba_sing_se	0	ability:0	exercised
@@ -840,6 +841,8 @@ fire_nation_cadets	0	ability:0	exercised
 fire_nation_cadets	0	cast	exercised
 fire_nation_soldier	0	cast	exercised
 fire_prophecy	0	cast	exercised
+fire_sages	0	ability:0	exercised
+fire_sages	0	cast	exercised
 fireball	0	cast	exercised
 firebrand_archer	0	cast	exercised
 fireshrieker	0	ability:0	exercised
@@ -2610,6 +2613,8 @@ trumpet_blast	0	cast	exercised
 trusty_packbeast	0	cast	exercised
 tundra	0	ability:0	exercised
 tundra	0	land	exercised
+tundra_tank	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+tundra_tank	0	cast	exercised
 tundra_wall	0	cast	exercised
 tundra_wolves	0	cast	exercised
 turn_inside_out	0	cast	exercised
@@ -2886,6 +2891,7 @@ zephid	0	cast	exercised
 zephyr_falcon	0	cast	exercised
 zephyr_sprite	0	cast	exercised
 zetalpa,_primal_dawn	0	cast	exercised
+zhao,_ruthless_admiral	0	cast	exercised
 zhao,_the_seething_flame	0	cast	exercised
 zog,_triceraton_castaway	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 zog,_triceraton_castaway	0	cast	exercised
