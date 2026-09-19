@@ -7182,6 +7182,48 @@ fn match_player_life_threshold_entry(
         })
 }
 
+/// The exact printing-independent Oracle line shared by the five Aetherdrift Roads lands.
+const ISSUE_416_MOUNT_OR_VEHICLE_ENTRY_CLAUSE: &str =
+    "This land enters tapped unless you control a Mount or Vehicle.";
+
+/// CR 614.1d: the Roads cycle taps only when its controller controls no Mount and no Vehicle.
+/// The printed text has no "other", so the entering land is not excluded from its own condition
+/// (`exclude_source: false`, matching the hand-authored Ba Sing Se). The condition is the inverse
+/// of the printed "unless" clause because [`conditional_tapped_entry`] applies its replacement
+/// when the condition holds, exactly as the fast/slow land conditions do.
+fn mount_or_vehicle_entry_condition() -> GameCondition {
+    let subtype = |value: &str| BattlefieldPermanentFilter {
+        token: None,
+        any_of: None,
+        controllers: RelativePlayerSet::Controller,
+        card_type: None,
+        color: None,
+        name: None,
+        required_subtypes: vec![value.to_string()],
+        exclude_source: false,
+    };
+    GameCondition::BattlefieldAggregate {
+        filter: BattlefieldPermanentFilter {
+            token: None,
+            any_of: Some(vec![subtype("Mount"), subtype("Vehicle")]),
+            controllers: RelativePlayerSet::Controller,
+            card_type: None,
+            color: None,
+            name: None,
+            required_subtypes: Vec::new(),
+            exclude_source: false,
+        },
+        aggregate: BattlefieldAggregate::Count,
+        min: None,
+        max: Some(0),
+    }
+}
+
+fn match_mount_or_vehicle_entry(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_land && text == ISSUE_416_MOUNT_OR_VEHICLE_ENTRY_CLAUSE)
+        .then(|| conditional_tapped_entry(context, mount_or_vehicle_entry_condition()))
+}
+
 const ISSUE_289_SKYRAY_ORACLE_ID: &str = "3a46d85b-ce1a-4842-a342-92a5bddb1053";
 const ISSUE_289_MAKO_ORACLE_ID: &str = "e349be42-5f14-44a9-9608-281985c10e2d";
 const ISSUE_289_REVIEWED_ORACLE_IDS: &[&str] =
@@ -17533,6 +17575,37 @@ pub(super) static CATALOG: &[Recipe] = &[
             "As this land enters, you may pay 2 life. If you don't, it enters tapped. When this land enters, draw a card."
         ),
     },
+    Recipe {
+        id: RecipeId("static.enters_tapped.unless_control_mount_or_vehicle"),
+        label: "Roads Mount-or-Vehicle tapped entry",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_mount_or_vehicle_entry,
+        calibration: calibrations!(
+            "Country Roads" => "This land enters tapped unless you control a Mount or Vehicle.",
+            "Foul Roads" => "This land enters tapped unless you control a Mount or Vehicle.",
+            "Reef Roads" => "This land enters tapped unless you control a Mount or Vehicle.",
+            "Rocky Roads" => "This land enters tapped unless you control a Mount or Vehicle.",
+            "Wild Roads" => "This land enters tapped unless you control a Mount or Vehicle.";
+            "This land enters tapped unless you control a Mount.",
+            "This land enters tapped unless you control a Vehicle.",
+            "This land enters tapped unless you control a Mount and a Vehicle.",
+            "This land enters tapped unless you control two or more Mounts or Vehicles.",
+            "This land enters tapped unless you control a basic land.",
+            "This land enters the battlefield tapped unless you control a Mount or Vehicle.",
+            "This artifact enters tapped unless you control a Mount or Vehicle.",
+            "This land enters tapped unless an opponent controls a Mount or Vehicle.",
+            "This land enters tapped unless you control a Mount or a Vehicle.",
+            "This land enters tapped unless you control a Mount and/or Vehicle.",
+            "This land enters tapped unless you control a creature or Vehicle.",
+            "This land enters tapped unless you control a Mount or Vehicle. When it enters, draw a card."
+        ),
+    },
+    // Held: `ability.roads.sacrifice_self.create_pilot` (issue #416) must not register until the
+    // typed Crew/Saddle contribution modifier and `data/tokens/pilot_c_1_1.ron` ship in blocker
+    // #422. Registering it now makes the five Roads qualify and emit RON that the registry
+    // rejects at load (`CreateTokens references unknown token 'pilot_c_1_1'`); the guard test
+    // `issue_416_roads_stay_ungenerated_until_the_pilot_token_exists` in gen_cards.rs enforces
+    // this. Re-register together with the token, not before.
     Recipe {
         id: RecipeId("station.spacecraft.threshold_6_7_flying"),
         label: "Station 6+/7+ Flying Spacecraft",
@@ -40392,6 +40465,120 @@ mod tests {
             "Equipped creature gets +1/+1 and has vigilance and \"{3}, {T}: Untap target creature.\"",
         ] {
             issue_415_assert_unmatched(negative);
+        }
+    }
+
+    const ISSUE_416_ENTRY_CLAUSE: &str =
+        "This land enters tapped unless you control a Mount or Vehicle.";
+    const ISSUE_416_ROADS: &[(&str, &str)] = &[
+        ("Country Roads", "{1}{W}"),
+        ("Foul Roads", "{1}{B}"),
+        ("Reef Roads", "{1}{U}"),
+        ("Rocky Roads", "{1}{R}"),
+        ("Wild Roads", "{1}{G}"),
+    ];
+
+    fn issue_416_mount_or_vehicle_condition() -> GameCondition {
+        let subtype = |value: &str| BattlefieldPermanentFilter {
+            token: None,
+            any_of: None,
+            controllers: RelativePlayerSet::Controller,
+            card_type: None,
+            color: None,
+            name: None,
+            required_subtypes: vec![value.to_string()],
+            exclude_source: false,
+        };
+        GameCondition::BattlefieldAggregate {
+            filter: BattlefieldPermanentFilter {
+                token: None,
+                any_of: Some(vec![subtype("Mount"), subtype("Vehicle")]),
+                controllers: RelativePlayerSet::Controller,
+                card_type: None,
+                color: None,
+                name: None,
+                required_subtypes: Vec::new(),
+                exclude_source: false,
+            },
+            aggregate: BattlefieldAggregate::Count,
+            min: None,
+            max: Some(0),
+        }
+    }
+
+    #[test]
+    fn issue_416_mount_or_vehicle_entry_condition_is_exact_and_typed() {
+        let matched = match_clause(ISSUE_416_ENTRY_CLAUSE, false, &context())
+            .expect("issue #416 entry clause must not be ambiguous")
+            .expect("issue #416 entry clause must match");
+        assert_eq!(
+            matched.id.as_str(),
+            "static.enters_tapped.unless_control_mount_or_vehicle"
+        );
+        let RecipeEmission::StaticAbility(ability) = matched.emission else {
+            panic!("issue #416 entry clause must emit one static ability");
+        };
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(
+            ability.definition,
+            StaticAbilityDef::EntersTapped {
+                affected: EntersTappedAffected::Self_,
+                condition: Some(issue_416_mount_or_vehicle_condition()),
+                unless_cost: None,
+            }
+        );
+
+        let mut nonland = context();
+        nonland.source_is_land = false;
+        assert!(
+            match_clause(ISSUE_416_ENTRY_CLAUSE, false, &nonland)
+                .expect("source-kind check should not be ambiguous")
+                .is_none(),
+            "the printed clause is bound to land sources"
+        );
+    }
+
+    #[test]
+    fn issue_416_mount_or_vehicle_entry_condition_rejects_near_misses() {
+        for negative in [
+            "This land enters tapped unless you control a Mount.",
+            "This land enters tapped unless you control a Vehicle.",
+            "This land enters tapped unless you control a Mount and a Vehicle.",
+            "This land enters tapped unless you control two or more Mounts or Vehicles.",
+            "This land enters tapped unless you control a basic land.",
+            "This land enters the battlefield tapped unless you control a Mount or Vehicle.",
+            "This artifact enters tapped unless you control a Mount or Vehicle.",
+            "This land enters tapped unless an opponent controls a Mount or Vehicle.",
+            "This land enters tapped unless you control a Mount or a Vehicle.",
+            "This land enters tapped unless you control a Mount and/or Vehicle.",
+            "This land enters tapped unless you control a creature or Vehicle.",
+            "This land enters tapped unless you control a Mount or Vehicle. When it enters, draw a card.",
+        ] {
+            assert!(
+                match_clause(negative, false, &context())
+                    .expect("near-miss should not be ambiguous")
+                    .is_none(),
+                "near-miss was accepted: {negative}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_416_roads_mana_abilities_use_the_shipped_single_color_recipe() {
+        for (_, mana_cost) in ISSUE_416_ROADS {
+            let color = mana_cost.trim_start_matches("{1}{").trim_end_matches('}');
+            let clause = format!("{{T}}: Add {{{color}}}.");
+            let matched = match_clause(&clause, false, &context())
+                .expect("issue #416 mana clause must not be ambiguous")
+                .expect("issue #416 mana clause must match");
+            assert_eq!(
+                matched.id.as_str(),
+                "activated.mana.tap_one",
+                "{clause} must reuse the shipped single-color mana recipe"
+            );
         }
     }
 }

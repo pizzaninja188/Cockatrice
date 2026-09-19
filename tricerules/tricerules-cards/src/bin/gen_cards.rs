@@ -14030,4 +14030,34 @@ mod tests {
             "a repeated cast-condition clause must fail closed"
         );
     }
+
+    /// Issue #416: the five Roads lands must not generate while the 1/1 colorless Pilot token is
+    /// unauthored. Re-registering `ability.roads.sacrifice_self.create_pilot` in the recipe
+    /// catalog without authoring `data/tokens/pilot_c_1_1.ron` makes these cards qualify and emit
+    /// RON that the registry rejects at load (`CreateTokens references unknown token`); this test
+    /// fails at that moment. Delete it together with the held catalog comment when blocker #422
+    /// ships the token and the typed Crew/Saddle contribution modifier.
+    #[test]
+    fn issue_416_roads_stay_ungenerated_until_the_pilot_token_exists() {
+        for (name, oracle_id, color) in [
+            ("Country Roads", "c5a39f76-dd1b-442c-9f52-08561ecb91ad", 'W'),
+            ("Foul Roads", "d4e4c8a5-e97b-4295-a403-d17834f73502", 'B'),
+            ("Reef Roads", "32438050-5ae7-4c19-bcaf-5a07a673e0e0", 'U'),
+            ("Rocky Roads", "a659c29f-aaca-44c5-8426-cdafcb195f86", 'R'),
+            ("Wild Roads", "36fbc8ba-bb4c-4e5e-9031-78c36e376851", 'G'),
+        ] {
+            let oracle_text = format!(
+                "This land enters tapped unless you control a Mount or Vehicle.\n{{T}}: Add {{{color}}}.\n{{1}}{{{color}}}, {{T}}, Sacrifice this land: Create a 1/1 colorless Pilot creature token with \"This token saddles Mounts and crews Vehicles as though its power were 2 greater.\" Activate only as a sorcery."
+            );
+            let card = normal_card_with_oracle_id(oracle_id, name, "", "Land", &oracle_text, None);
+            match evaluate_fresh(&card) {
+                Err(EvaluationError::Skip(Skip::NonKeywordText)) => {}
+                Ok(generated) => panic!(
+                    "{name} qualified and would emit a RON referencing the unauthored pilot_c_1_1 token: {:?}",
+                    generated.recipe_labels().collect::<Vec<_>>()
+                ),
+                Err(other) => panic!("{name} skipped for an unexpected reason: {other:?}"),
+            }
+        }
+    }
 }

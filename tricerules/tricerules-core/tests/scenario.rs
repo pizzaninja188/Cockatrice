@@ -527,3 +527,5 @@ mod issue_412_modal_modes;
 mod issue_414_enters_with_minus_counters;
 #[path = "scenario/issue_415_clue_equipment.rs"]
 mod issue_415_clue_equipment;
+#[path = "scenario/issue_416_roads_entry.rs"]
+mod issue_416_roads_entry;
