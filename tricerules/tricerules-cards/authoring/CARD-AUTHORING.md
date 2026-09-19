@@ -591,6 +591,65 @@ ambiguous names fail the command without writing the report. The stable JSON clu
 clauses by descending printing-independent card count, retains face and source-routing context,
 and keeps any optional Oracle Tags summary advisory and separate from the clause signatures.
 
+### Bounded typed recipe families
+
+`FixedSourceCreatureDamage` in `recipes.rs` is the first private parameterized family. It owns
+only the complete `<exact face rules name> deals N damage to target creature.` clause. It uses
+the existing `DamageTarget`, creature filter and modal targeting builder; the resolving spell
+remains the damage source. Exact formatted comparison rejects alternative numeric spellings,
+overflow, variables, other source names, qualifiers, optionality and appended instructions.
+Other damage grammars retain their own recipes.
+
+The reviewed initial catalog instances are **spell 4**, **modal 3**, and **modal 4**. The typed
+amount enum contains only Three and Four; that does not authorize the cross-product of amounts
+and surfaces. In particular spell 3 remains unsupported. Each instance retains its previous
+recipe ID, report label and calibration metadata. All instances participate in the ordinary
+exact-one matcher: identical emissions from overlapping owners are still an ambiguity error.
+The previous three bespoke recognizers were removed together. Modal assembly headers, bounds,
+ordered recipe sets, stable mode IDs and presentation mappings are unchanged.
+
+To add a future family, implement a private typed parameter domain and recognizer/emitter, then
+register explicitly reviewed instances through ordinary `Recipe` entries and their existing
+function-pointer matcher. No branch in the top-level card parser is needed. Keep per-instance
+source calibrations and stable metadata, but share the grammar, emitter and parameterized tests.
+Review observed corpus values before extending a parameter enum or admitting another surface;
+do not accept every integer just because the runtime primitive can store it. Run the complete
+definition, semantic evidence and admission workflow separately from clause recognition. A
+recognized modal bullet never authorizes a new aggregate or card combination.
+
+The #449 pilot scanned the pinned SHA-verified corpus
+(`9611b5d93b20478a0ee46bae8b20a9eb39ee980f0ef4f5f6f6aaa8f7ab010ab2`). Exact complete lines/bullets
+observed amounts 1, 2, 3, 4, 5, 6, 7 and 13 on respectively 3, 6, 10, 21, 18, 4, 2 and 1
+printing-independent identities. Those observations include unsupported cards and are not
+admission evidence. This structural pilot deliberately retains existing supported combinations:
+**zero newly recognized clauses, zero newly eligible complete cards, zero admitted identities**.
+Full dependency inventories compared all 38,626 identities with no classification, observation,
+recipe-label or eligibility changes. Canonical checks against the pre-extraction output proved
+byte equality for all 2,425 generated definitions and the fingerprint catalog both after the
+builder extraction and after enabling the family. No metadata migration is needed.
+
+Measured duplication: three authored grammar comparisons and three typed damage constructions
+become one of each, with three small catalog adapters. The two repeated modal wrappers become
+one. Existing calibration rows stay intact; one shared characterization matrix covers all three
+instances, and one shared negative matrix covers both surfaces. Test code grows to cover the
+failure boundary, full RON equality and Iroh's targeted mode; this is not a claim of fewer total
+lines or new card coverage. Session inventories and comparison evidence stay under `build/`,
+not in a persistent campaign tracker.
+
+Source review on 2026-09-19 fetched exact-name Scryfall records and `rulings_uri` for Bombard,
+Iroh's Demonstration, Abrade and Bathe in Dragonfire; all returned no rulings. The
+[official rules page](https://magic.wizards.com/en/rules) linked the 2026-09-25 rules text.
+CR 120.2b (damage source), 115.1a (spell targets), 608.2b (target revalidation), and 700.2a/c
+(modes and their targets) govern the preserved semantics.
+
+Interaction audit: compile-time source/face matching emits existing typed definitions; runtime
+state authority, physical source identity/generations, target legality, resolution order and
+damage processing are unchanged. Existing engine scenarios remain, with explicit targeted-mode
+acceptance/rejection and bounded completion added for Iroh. No new player assumptions, fields,
+visibility flows or public offers are introduced. Protobuf, relay, Qt, freeform and manual GUI
+acceptance are N/A because their contracts and generated inputs are unchanged. Generator tests,
+feature-enabled Clippy, conformance and the full Rust/card-data gate remain required.
+
 ### Scaffold source-backed authoring
 
 For complete-card dependencies and projected individual/pair unlocks, use the separate

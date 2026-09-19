@@ -3321,6 +3321,37 @@ mod tests {
     }
 
     #[test]
+    fn issue_449_fixed_damage_preserves_complete_ron_and_admission() {
+        for (name, cost, types, text, expected) in [
+            ("Bombard", "{2}{R}", "Instant", "Bombard deals 4 damage to target creature.",
+             include_str!("../../data/generated/b/bombard.ron")),
+            ("Iroh's Demonstration", "{1}{R}", "Sorcery — Lesson",
+             "Choose one —\n• Iroh's Demonstration deals 1 damage to each creature your opponents control.\n• Iroh's Demonstration deals 4 damage to target creature.",
+             include_str!("../../data/generated/i/irohs_demonstration.ron")),
+            ("Abrade", "{1}{R}", "Instant",
+             "Choose one —\n• Abrade deals 3 damage to target creature.\n• Destroy target artifact.",
+             include_str!("../../data/generated/a/abrade.ron")),
+        ] {
+            let card = normal_card(name, cost, types, text, None);
+            let generated = evaluate_fresh(&card).unwrap();
+            let expected = expected.replace("\r\n", "\n");
+            let provenance = expected.lines().next().unwrap().strip_prefix("// ").unwrap();
+            assert_eq!(generated.to_ron(provenance), expected, "{name}");
+        }
+
+        // A recognized clause is not complete-card evidence. Riders and new combinations
+        // retain their existing blockers even when every individual bullet is recognized.
+        for text in [
+            "Bombard deals 4 damage to target creature. If that creature would die this turn, exile it instead.",
+            "Bombard deals 4 damage to target creature.\nSpell mastery — If there are two or more instant and/or sorcery cards in your graveyard, Bombard deals 5 damage instead.",
+            "Choose one —\n• Bombard deals 4 damage to target creature.\n• Destroy target artifact.",
+            "Choose one —\n• Bombard deals 4 damage to target creature.\n• Bombard deals 1 damage to each creature your opponents control.",
+        ] {
+            assert!(evaluate_fresh(&normal_card("Bombard", "{2}{R}", "Instant", text, None)).is_err(), "{text}");
+        }
+    }
+
+    #[test]
     fn candidate_report_deduplicates_printings_and_normalizes_clause_signatures() {
         let mut first = normal_card(
             "Alpha Adept",

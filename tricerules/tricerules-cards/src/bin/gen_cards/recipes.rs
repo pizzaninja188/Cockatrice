@@ -839,16 +839,56 @@ fn match_spell_source_damage_each_opponent_three(
     })
 }
 
-fn match_spell_source_damage_creature_four(
-    text: &str,
-    context: &RecipeContext,
-) -> Option<RecipeEmission> {
-    (text == format!("{} deals 4 damage to target creature.", context.source_name)).then(|| {
-        RecipeEmission::SpellEffect(SpellEffectKind::DamageTarget {
-            amount: Amount::Fixed(4),
-            target: TargetFilter::default_creature(),
+// The resolving spell remains the damage source; no explicit alternate-source primitive.
+fn fixed_source_creature_damage(amount: u32) -> SpellEffectKind {
+    SpellEffectKind::DamageTarget {
+        amount: Amount::Fixed(amount),
+        target: TargetFilter::default_creature(),
+    }
+}
+
+/// Reviewed numeric parameters, not a parser for arbitrary Oracle integers.
+#[derive(Clone, Copy)]
+enum FixedDamageAmount {
+    Three = 3,
+    Four = 4,
+}
+
+#[derive(Clone, Copy)]
+enum FixedDamageSurface {
+    Spell,
+    ModalMode,
+}
+
+/// One private typed family owns the complete source-name/creature-target grammar.
+/// Catalog instances retain their historical IDs, labels and calibration metadata. Only
+/// (Spell, Four), (ModalMode, Three), and (ModalMode, Four) are admitted in this pilot;
+/// recognizing a bullet never bypasses the separate complete modal-assembly allowlist.
+struct FixedSourceCreatureDamage {
+    amount: FixedDamageAmount,
+    surface: FixedDamageSurface,
+}
+
+impl FixedSourceCreatureDamage {
+    fn recognize(&self, text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+        let amount = self.amount as u32;
+        // Exact comparison anchors both ends, the complete face rules name and the decimal
+        // spelling. Signs, leading zeros, overflow, variables and appended riders cannot match.
+        (text
+            == format!(
+                "{} deals {amount} damage to target creature.",
+                context.source_name
+            ))
+        .then(|| {
+            let effect = fixed_source_creature_damage(amount);
+            match self.surface {
+                FixedDamageSurface::Spell => RecipeEmission::SpellEffect(effect),
+                FixedDamageSurface::ModalMode => {
+                    modal_mode(vec![effect], modal_targeting("Choose target creature", 0))
+                }
+            }
         })
-    })
+    }
 }
 
 /// Issue #413 / CR 120 / 608.2h: the source deals a fixed two damage to every creature on the
@@ -2180,21 +2220,6 @@ fn match_modal_sacrifice_another_scry_two_draw_one(
     )
 }
 
-fn match_modal_damage_three_to_creature(
-    text: &str,
-    context: &RecipeContext,
-) -> Option<RecipeEmission> {
-    (text == format!("{} deals 3 damage to target creature.", context.source_name)).then(|| {
-        modal_mode(
-            vec![SpellEffectKind::DamageTarget {
-                amount: Amount::Fixed(3),
-                target: TargetFilter::default_creature(),
-            }],
-            modal_targeting("Choose target creature", 0),
-        )
-    })
-}
-
 fn match_modal_destroy_artifact(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
     (text == "Destroy target artifact.").then(|| {
         modal_mode(
@@ -2423,21 +2448,6 @@ fn match_modal_source_damage_each_opponent_one(
                 kind: TargetFilter::default_creature(),
             }],
             None,
-        )
-    })
-}
-
-fn match_modal_source_damage_four_creature(
-    text: &str,
-    context: &RecipeContext,
-) -> Option<RecipeEmission> {
-    (text == format!("{} deals 4 damage to target creature.", context.source_name)).then(|| {
-        modal_mode(
-            vec![SpellEffectKind::DamageTarget {
-                amount: Amount::Fixed(4),
-                target: TargetFilter::default_creature(),
-            }],
-            modal_targeting("Choose target creature", 0),
         )
     })
 }
@@ -17223,7 +17233,10 @@ pub(super) static CATALOG: &[Recipe] = &[
         id: RecipeId("spell.damage.creature.fixed_four.source"),
         label: "source deals four damage to target creature",
         surface: RecipeSurface::SpellClause,
-        matcher: match_spell_source_damage_creature_four,
+        matcher: |text, context| FixedSourceCreatureDamage {
+            amount: FixedDamageAmount::Four,
+            surface: FixedDamageSurface::Spell,
+        }.recognize(text, context),
         calibration: calibrations!(
             "Bombard" => "Bombard deals 4 damage to target creature.",
             "Bathe in Dragonfire" => "Bathe in Dragonfire deals 4 damage to target creature.";
@@ -17688,7 +17701,10 @@ pub(super) static CATALOG: &[Recipe] = &[
         id: RecipeId("modal_mode.damage.creature.three.source"),
         label: "source deals 3 damage to target creature mode",
         surface: RecipeSurface::ModalMode,
-        matcher: match_modal_damage_three_to_creature,
+        matcher: |text, context| FixedSourceCreatureDamage {
+            amount: FixedDamageAmount::Three,
+            surface: FixedDamageSurface::ModalMode,
+        }.recognize(text, context),
         calibration: calibrations!(
             "Abrade" => "Abrade deals 3 damage to target creature.",
             "Thunderclap" => "Thunderclap deals 3 damage to target creature.";
@@ -17914,7 +17930,10 @@ pub(super) static CATALOG: &[Recipe] = &[
         id: RecipeId("modal_mode.damage.creature.four.source"),
         label: "source deals four damage to target creature mode",
         surface: RecipeSurface::ModalMode,
-        matcher: match_modal_source_damage_four_creature,
+        matcher: |text, context| FixedSourceCreatureDamage {
+            amount: FixedDamageAmount::Four,
+            surface: FixedDamageSurface::ModalMode,
+        }.recognize(text, context),
         calibration: calibrations!(
             "Iroh's Demonstration" => "Iroh's Demonstration deals 4 damage to target creature.",
             "Bombard" => "Bombard deals 4 damage to target creature.";
@@ -25920,6 +25939,175 @@ mod tests {
             source_is_instant: true,
             source_is_sorcery: true,
         }
+    }
+
+    #[test]
+    fn issue_449_fixed_damage_characterization() {
+        for (name, amount, surface, id, label) in [
+            (
+                "Bombard",
+                4,
+                RecipeSurface::SpellClause,
+                "spell.damage.creature.fixed_four.source",
+                "source deals four damage to target creature",
+            ),
+            (
+                "Iroh's Demonstration",
+                4,
+                RecipeSurface::ModalMode,
+                "modal_mode.damage.creature.four.source",
+                "source deals four damage to target creature mode",
+            ),
+            (
+                "Abrade",
+                3,
+                RecipeSurface::ModalMode,
+                "modal_mode.damage.creature.three.source",
+                "source deals 3 damage to target creature mode",
+            ),
+        ] {
+            let mut context = context();
+            context.source_name = name.into();
+            let text = format!("{name} deals {amount} damage to target creature.");
+            let matched = match_surface_in(CATALOG, &text, surface, &context)
+                .unwrap()
+                .unwrap();
+            assert_eq!(matched.id.as_str(), id);
+            assert_eq!(matched.label, label);
+            let effect = SpellEffectKind::DamageTarget {
+                amount: Amount::Fixed(amount),
+                target: TargetFilter::default_creature(),
+            };
+            let expected = if surface == RecipeSurface::SpellClause {
+                RecipeEmission::SpellEffect(effect)
+            } else {
+                RecipeEmission::ModalMode(ModalModeEmission {
+                    effects: vec![effect],
+                    targeting: Some(TargetingDef {
+                        groups: vec![TargetGroupDef {
+                            min: 1,
+                            max: 1,
+                            prompt: "Choose target creature".into(),
+                            effect_indices: vec![0],
+                            distinct_from: vec![],
+                            same_graveyard: false,
+                            cast_cost_expansion: None,
+                        }],
+                    }),
+                })
+            };
+            assert_eq!(matched.emission, expected);
+            assert!(match_clause(&text, false, &context).unwrap().is_none());
+
+            // Duplicate ownership must fail even when both emit identical typed effects.
+            let original = CATALOG
+                .iter()
+                .find(|recipe| recipe.id == matched.id)
+                .unwrap();
+            let duplicate = |id| Recipe {
+                id: RecipeId(id),
+                label: "duplicate",
+                surface,
+                matcher: original.matcher,
+                calibration: calibrations!("One" => "unused", "Two" => "unused"; "unused"),
+            };
+            let error = match_surface_in(
+                &[duplicate("first"), duplicate("second")],
+                &text,
+                surface,
+                &context,
+            )
+            .unwrap_err();
+            assert_eq!(
+                error.recipe_ids,
+                vec![RecipeId("first"), RecipeId("second")]
+            );
+        }
+    }
+
+    #[test]
+    fn issue_449_fixed_damage_rejects_unreviewed_grammar_and_parameters() {
+        let mut context = context();
+        context.source_name = "Bombard".into();
+        let rejects_family = |text: &str, surface| {
+            CATALOG
+                .iter()
+                .filter(|recipe| {
+                    recipe.surface == surface
+                        && matches!(
+                            recipe.id.as_str(),
+                            "spell.damage.creature.fixed_four.source"
+                                | "modal_mode.damage.creature.three.source"
+                                | "modal_mode.damage.creature.four.source"
+                        )
+                })
+                .all(|recipe| (recipe.matcher)(text, &context).is_none())
+        };
+        for surface in [RecipeSurface::SpellClause, RecipeSurface::ModalMode] {
+            for amount in [
+                "0",
+                "1",
+                "2",
+                "5",
+                "6",
+                "7",
+                "13",
+                "4294967296",
+                "99999999999999999999999999999",
+                "-4",
+                "+4",
+                "04",
+                "4.0",
+                "X",
+                "four",
+                "４",
+            ] {
+                let text = format!("Bombard deals {amount} damage to target creature.");
+                assert!(rejects_family(&text, surface), "{surface:?}: {text}");
+            }
+            for text in [
+                "It deals 4 damage to target creature.",
+                "Bombardment deals 4 damage to target creature.",
+                "bombard deals 4 damage to target creature.",
+                "Bombard deals 4 damage to any target.",
+                "Bombard deals 4 damage to target player.",
+                "Bombard deals 4 damage to target planeswalker.",
+                "Bombard deals 4 damage to target creature or planeswalker.",
+                "Bombard deals 4 damage to target tapped creature.",
+                "Bombard deals 4 damage to target creature an opponent controls.",
+                "Bombard deals 4 damage to up to one target creature.",
+                "You may have Bombard deal 4 damage to target creature.",
+                "Bombard deals 4 damage to target creature. Draw a card.",
+                "Bombard deals 4 damage to target creature. If it would die this turn, exile it instead.",
+                "If you attacked this turn, Bombard deals 4 damage to target creature.",
+                "When this creature enters, Bombard deals 4 damage to target creature.",
+                "{R}: Bombard deals 4 damage to target creature.",
+                "Bombard deals  4 damage to target creature.",
+                "Bombard deals 4 damage to target creature",
+                " Bombard deals 4 damage to target creature.",
+                "Bombard deals 4 damage to target creature.\n",
+            ] {
+                assert!(rejects_family(text, surface), "{surface:?}: {text}");
+            }
+        }
+        assert!(
+            match_clause("Bombard deals 3 damage to target creature.", true, &context)
+                .unwrap()
+                .is_none()
+        );
+        context.source_name = "Cut".into();
+        assert!(
+            match_clause("Cut deals 4 damage to target creature.", true, &context)
+                .unwrap()
+                .is_some()
+        );
+        assert!(match_clause(
+            "Cut // Ribbons deals 4 damage to target creature.",
+            true,
+            &context
+        )
+        .unwrap()
+        .is_none());
     }
 
     #[test]

@@ -158,6 +158,51 @@ fn overwhelming_surge_supports_both_modes_with_local_targets_and_revalidation() 
 }
 
 #[test]
+fn issue_449_iroh_targeted_mode_preserves_source_and_creature_only_damage() {
+    use super::helpers::semantic;
+    use tricerules_proto::ruled::v1::ruled_event::Ev;
+
+    let mut engine = modal_engine(449_001);
+    let own = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    let target = inject_creature_with_stats(&mut engine, 1, "hill_giant", 5, 5);
+    let other = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    let artifact = inject_permanent_on_battlefield(&mut engine, 1, "short_sword");
+    let slot = prepare_spell(&mut engine, "irohs_demonstration");
+    let source = engine.state.players[0].hand[slot];
+    let generation = semantic::generation(&engine, source);
+    for illegal in [target_object(artifact), target_player(1)] {
+        assert!(engine
+            .apply_command(0, &cast_modal_spell(slot, vec![(1, illegal)]))
+            .is_err());
+    }
+    let cast = semantic::accepted(
+        &mut engine,
+        0,
+        &cast_modal_spell(slot, vec![(1, target_object(target))]),
+    );
+    assert!(cast.events.iter().any(|event| matches!(&event.ev,
+        Some(Ev::StackPushed(pushed)) if pushed.object_id == source && pushed.card_id == "irohs_demonstration")));
+    semantic::complete(&mut engine, 8, |_| None).require_exercised();
+    semantic::assert_object(
+        &engine,
+        source,
+        "irohs_demonstration",
+        0,
+        0,
+        Zone::Graveyard,
+        generation + 2,
+    );
+    assert_eq!(engine.state.objects[&target].zone, Zone::Battlefield);
+    assert_eq!(engine.state.objects[&target].damage, 4);
+    for untouched in [own, other, artifact] {
+        assert_eq!(engine.state.objects[&untouched].damage, 0);
+        assert_eq!(engine.state.objects[&untouched].zone, Zone::Battlefield);
+    }
+    assert_eq!(engine.state.players[0].life, 20);
+    assert_eq!(engine.state.players[1].life, 20);
+}
+
+#[test]
 fn irohs_demonstration_damage_is_limited_to_opponent_creatures() {
     let mut engine = modal_engine(269_002);
     let own = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
