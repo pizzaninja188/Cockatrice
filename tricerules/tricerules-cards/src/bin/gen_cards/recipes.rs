@@ -11347,8 +11347,9 @@ fn match_triggered_etb_create_insect_for_each_artifact_or_creature_graveyard_car
         })
 }
 
-/// Aatchik's non-cohort dies clause: the counter always lands on the source and the drain is
-/// untargeted (CR 119.3). Subtype-filtered death observers are shipped vocabulary
+/// Aatchik's non-cohort dies clause: the counter always lands on the source and the drain adjusts
+/// each opponent's life total without targeting (CR 119.3). Subtype-filtered death observers are
+/// shipped vocabulary
 /// (`WheneverCreatureDies` + `PermanentEventFilter`), so the card is complete rather than partial.
 fn match_triggered_insect_dies_counter_and_each_opponent_drain(
     text: &str,
@@ -11384,9 +11385,9 @@ fn match_triggered_insect_dies_counter_and_each_opponent_drain(
 }
 
 /// 2. Arnim Zola's activation gate is the shipped inclusive two-plus creature-card graveyard
-/// condition (CR 602.5b: checked before payment), and the Villain token is the registered #377
-/// identity. Untapped, other thresholds, another mana/tap shape, and timing restrictions stay
-/// unsupported.
+/// condition (CR 602.5: a prohibited activation can't begin), and the Villain token is the
+/// registered #377 identity. Untapped, other thresholds, another mana/tap shape, and timing
+/// restrictions stay unsupported.
 fn match_activated_create_villain_menace_only_two_creature_cards_graveyard(
     text: &str,
     context: &RecipeContext,

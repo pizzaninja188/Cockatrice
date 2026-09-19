@@ -2,10 +2,10 @@
 //!
 //! These drive the generated definitions through the authoritative command path. CR 404.2 keeps
 //! the counts on public printed graveyard card data; CR 608.2h re-reads a quantity as the
-//! instruction that consumes it resolves; CR 602.5b checks an activation condition before
-//! payment; CR 603.4 re-checks an intervening-if on resolution; CR 601.2 records the cast origin
-//! consumed by the resolving snapshot; and CR 111.1 keeps token entry status (tapped) part of the
-//! created cohort.
+//! instruction that consumes it resolves; CR 602.5 prohibits an activation whose condition is
+//! unmet before costs are paid; CR 603.4 re-checks an intervening-if on resolution; CR 601.2
+//! records the cast origin consumed by the resolving snapshot; and CR 111.1 keeps token entry
+//! status (tapped) part of the created cohort.
 
 use super::helpers::*;
 use tricerules_core::{TurnStep, Zone};
