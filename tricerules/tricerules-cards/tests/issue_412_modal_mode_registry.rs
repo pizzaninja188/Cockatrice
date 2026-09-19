@@ -5,6 +5,9 @@
 //! types, keywords, and mode structure; modal-only bullets never leak into ordinary
 //! `spell_effect`/`effect` slots.
 
+mod common;
+use common::FaceExpectation;
+
 use tricerules_cards::primitives::{
     CardTypeFilter, CastCostOptionDef, EffectSubject, GraveyardDestination, GraveyardFilter,
     GraveyardOwner, LibraryPartitionKind, ObjectCastCostKind, ObjectContributionKind,
@@ -76,7 +79,6 @@ fn artifact_destroy() -> SpellEffectKind {
 
 #[test]
 fn issue_412_registers_the_eight_modal_identities() {
-    let registry = CardRegistry::global();
     for (id, name, face_id, mana_cost, types, keywords, power_toughness) in [
         (
             "coliseum_behemoth",
@@ -151,27 +153,16 @@ fn issue_412_registers_the_eight_modal_identities() {
             None,
         ),
     ] {
-        let definition = registry.get(id).unwrap_or_else(|| panic!("missing {name}"));
-        assert_eq!(definition.name, name, "{id}");
-        let face = definition.primary_face();
-        assert_eq!(face.face_id.as_str(), face_id, "{id}");
-        assert_eq!(face.mana_cost.to_string(), mana_cost, "{id}");
-        assert_eq!(
-            face.types.iter().map(String::as_str).collect::<Vec<_>>(),
+        FaceExpectation {
+            id,
+            name,
+            face_id,
+            mana_cost,
             types,
-            "{id}"
-        );
-        assert_eq!(face.keywords, keywords, "{id}");
-        match power_toughness {
-            Some((power, toughness)) => {
-                assert_eq!(
-                    (face.power, face.toughness),
-                    (Some(power), Some(toughness)),
-                    "{id}"
-                );
-            }
-            None => assert_eq!((face.power, face.toughness), (None, None), "{id}"),
+            keywords,
+            power_toughness,
         }
+        .check();
     }
 }
 

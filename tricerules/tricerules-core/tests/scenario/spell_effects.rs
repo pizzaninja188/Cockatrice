@@ -223,71 +223,7 @@ use tricerules_core::{AffectedScope, ContinuousEffect, Zone};
 
 #[test]
 fn cast_divination_draws_two_cards() {
-    let decks = Some(vec![
-        vec![
-            "island".into(),
-            "divination".into(),
-            "island".into(),
-            "island".into(),
-            "island".into(),
-            "island".into(),
-            "island".into(),
-            "island".into(),
-            "island".into(),
-            "island".into(),
-        ],
-        vec![
-            "forest".into(),
-            "forest".into(),
-            "forest".into(),
-            "forest".into(),
-            "forest".into(),
-            "forest".into(),
-            "forest".into(),
-            "forest".into(),
-            "forest".into(),
-            "forest".into(),
-        ],
-    ]);
-    let mut e = GameEngine::new(901, &[0, 1], 20, decks, true).expect("new");
-    advance_to_main1_from_game_start(&mut e);
-
-    for _ in 0..2 {
-        let seeded_island_idx = hand_index_for_card(&e, 0, "island");
-        let seeded_island = e.state.players[0].hand.remove(seeded_island_idx);
-        e.state.players[0].battlefield.push(seeded_island);
-        e.state
-            .objects
-            .get_mut(&seeded_island)
-            .expect("seeded island")
-            .zone = tricerules_core::Zone::Battlefield;
-    }
-
-    let island_to_play_idx = hand_index_for_card(&e, 0, "island");
-    e.apply_command(0, &play_land(island_to_play_idx))
-        .expect("play third island");
-
-    let hand_before_cast = e.state.players[0].hand.len();
-    give_mana(
-        &mut e,
-        0,
-        ManaGift {
-            u: 1,
-            c: 2,
-            ..Default::default()
-        },
-    );
-    let div_idx = hand_index_for_card(&e, 0, "divination");
-    e.apply_command(0, &cast_spell(div_idx, vec![]))
-        .expect("cast divination");
-    e.apply_command(0, &pass()).expect("p0 pass");
-    e.apply_command(1, &pass()).expect("p1 pass");
-
-    assert_eq!(
-        e.state.players[0].hand.len(),
-        hand_before_cast + 1,
-        "cast consumes one card and draws two"
-    );
+    semantic::exercise_draw(semantic::divination()).require_exercised();
 }
 
 #[test]

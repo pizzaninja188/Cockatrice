@@ -149,6 +149,24 @@ If `Enter-VsDevShell` fails because both `Path` and `PATH` exist, invoke the VS 
 
 ## Affected-side matrix
 
+### Parameterized card evidence
+
+Follow the [semantic evidence contract](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#reusable-semantic-evidence)
+when reusing scenario fixtures. Every required card row must execute accepted commands, finish
+resolution and choices within an explicit bound, and assert independently reviewed results.
+Report exercised, N/A with a reason, or fixture-blocked; a skipped/rejected action or parked
+resolution is not passing semantic evidence. A drain result alone proves only completion.
+Keep primitive, composition, per-card mapping and dedicated interaction coverage distinct.
+Applicable illegal paths still need coverage; untargeted effects do not need artificial target
+tests. Complete-definition review and the existing conformance baseline are unchanged.
+
+For the reusable fixture pilot, run focused `scenario semantic_fixtures`, the ported Divination
+and Pawpatch scenarios, and the `issue_448_semantic_mapping` and `issue_412_modal_mode_registry`
+registry binaries through the quiet runner. Then run generator tests with
+`cargo test --features gencards -p tricerules-cards --bin gen-cards` and finish with
+`./scripts/verify.ps1 -Side Rust -CardData`. Generator implementation changes additionally need
+feature-enabled Clippy. Shared fixture reuse does not reduce the final affected-side gates.
+
 | Change touches | Iteration build | Focused tests | Final gate |
 |---|---|---|---|
 | `tricerules/**/*.rs` or card RON only | No C++ build | Matching scenario or `tricerules-cards` registry test | Full Rust test, clippy, fmt; checklist for card data |

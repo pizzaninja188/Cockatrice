@@ -665,6 +665,73 @@ Complete the ruled interaction checklist when adding or changing a substantive p
 protocol, relay, or client contract. Rust-only status is N/A for C++ testing only after confirming
 that presentation transport, visibility, physical identity, and client behavior did not change.
 
+### Reusable semantic evidence
+
+Keep four contracts separate: primitive behavior, composition (for example, an ETB draw or a
+selected modal effect), each card's reviewed semantic mapping, and unusual interaction regressions.
+Registry shape checks alone do not execute effects; successful command admission alone does not
+prove resolution. The conformance coverage classifications and reviewed baseline remain unchanged.
+
+Use [`scenario/helpers/semantic.rs`](../../tricerules-core/tests/scenario/helpers/semantic.rs)
+for deterministic main-phase setup, accepted commands, explicit object assertions, and bounded
+completion. `complete` counts individual commands, including priority passes and supplied choice
+answers. It consults the engine's blocking-choice state as well as the stack and pending cast.
+Supply explicit, reviewed choice commands through its callback; it never guesses an answer.
+Its result proves only completion. Check the expected state before reporting semantic evidence.
+`exercise_draw` demonstrates that sequence for the three registered pilot consumers.
+
+- **Exercised:** every listed card ran accepted commands, finished all relevant choices/effects,
+  and passed independent state expectations. Require `require_exercised()` for each required case.
+- **N/A:** name the inapplicable surface and reason (untargeted draw has no target-selection case).
+  This does not count as exercised behavior. Cast timing/payment can still have illegal cases.
+- **Fixture-blocked:** record the missing choice fixture or exhausted command bound. Do not skip
+  the row, count it as support, or alter the conformance baseline to make the test pass.
+  Rejected commands and incorrect assertions are failures, not fixture limitations.
+
+A parameterized happy/illegal scenario satisfies a card's evidence only when that card actually
+executes, all relevant clauses are asserted, and its inputs and expectations were independently
+reviewed against its complete definition, Oracle, and rulings. Do not derive expected recipients,
+counts, modes, or effects from the production recipe or registry. Capturing pre-command object IDs
+and library order is fixture input, not deriving the expected mechanic. The registry
+[`FaceExpectation`](../tests/common/mod.rs) checks reviewed face constants; effect mappings remain
+explicit assertions beside it. Neither helper replaces complete-definition review.
+
+Add a dedicated interaction scenario for new timing, replacement, trigger ordering, stale identity,
+control/ownership, target revalidation, visibility, or resumable-choice behavior that the shared
+fixture does not prove. Preserve existing unusual regressions. Internal state assertions do not
+prove public offers or privacy; test those surfaces separately. Do not manufacture behavioral
+tests for generated metadata, clerical edits, or illegal targeting of an untargeted effect.
+
+The #448 pilot retains these behavioral contracts:
+
+| Before | After | Retained or added evidence |
+|---|---|---|
+| `cast_divination_draws_two_cards` | Same test delegates to `exercise_draw(divination())` | Cast consumes one hand card and draws two; adds exact top-card identities, both players' hands/libraries, source graveyard/generation and completed resolution |
+| `pawpatch_formation_draws_and_creates_a_food_token` | Same test delegates to `exercise_draw(pawpatch())` | One draw and one Food; adds stable selected mode, source identity, recipient and completion checks |
+| Existing Visionary copy/populate/return interactions | Unchanged dedicated tests; shared pilot adds a normal cast | Real entry creates one trigger; no early draw; trigger resolution draws one and leaves the creature on the battlefield |
+| #412 eight-card registry identity loop | Same reviewed rows through `FaceExpectation` | Name, face ID, cost, types, keywords and printed P/T; all existing mode/effect/target-schema assertions remain |
+
+The two ported scenario bodies remove 75 lines of repeated setup/assertion code; their original
+hand/draw and token assertions are subsumed by stronger exact-state checks. Shared helpers and
+failure-detection tests add code overall. This is a reduction in repeated authoring, not evidence
+of correctness by line count. Authors now (1) review the full source/definition, (2) supply typed
+fixture inputs and independent expectations, (3) require each row to be exercised, and (4) add
+applicable illegal/interaction coverage. They no longer duplicate deck/setup/cast/pass bookkeeping.
+
+Pilot source review on 2026-09-19 fetched Scryfall's exact-name and `rulings_uri` endpoints for
+Divination, Elvish Visionary and Pawpatch Formation. The first two had no rulings; Pawpatch's Food
+rulings were reviewed. The [official rules page](https://magic.wizards.com/en/rules) then linked
+the 2026-09-25 text: CR 121.1 (draw), 603.6a (entry triggers), 700.2a (mode announcement),
+608.2c (instruction order), and 111.10b (Food) govern these unchanged expectations.
+
+Interaction audit: authority remains real engine commands; source/face/object/generation and
+owner/controller are asserted; spell, ETB and modal timing remain distinct; applicable rejected
+casts, activations, targets, mode indices and unauthorized choices have explicit failure tests.
+Visibility/public-offer proof is N/A for this internal fixture extraction, with existing tests
+retained. Runtime, protobuf, relay, Qt and freeform contracts are unchanged, so C++/GUI gates are
+N/A. Focused fixture/registry tests, existing conformance, generator tests and full Rust/card-data
+gates remain required. No new rules capability or card identity is introduced.
+
 ### Completion checklist
 
 - [ ] Exact Oracle data and `rulings_uri` were fetched; relevant official CR text was verified.

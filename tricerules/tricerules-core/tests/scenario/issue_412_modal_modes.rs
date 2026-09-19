@@ -220,18 +220,7 @@ fn heritage_reclamation_exiles_an_optional_graveyard_card_and_draws() {
 
 #[test]
 fn pawpatch_formation_draws_and_creates_a_food_token() {
-    let mut engine = modal_engine(412_005);
-    seat_on_top(&mut engine, 0, &["forest"]);
-    let hand_before = engine.state.players[0].hand.len();
-    let slot = prepare_spell(&mut engine, "pawpatch_formation");
-
-    engine
-        .apply_command(0, &cast_modal_spell(slot, vec![(2, Vec::new())]))
-        .expect("draw and create a Food");
-    resolve_entire_stack_two_player(&mut engine);
-
-    assert_eq!(engine.state.players[0].hand.len(), hand_before + 1);
-    assert_eq!(battlefield_token_oids(&engine, 0, "food").len(), 1);
+    semantic::exercise_draw(semantic::pawpatch()).require_exercised();
 }
 
 #[test]

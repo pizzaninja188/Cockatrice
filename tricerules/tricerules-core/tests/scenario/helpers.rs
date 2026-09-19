@@ -1,6 +1,9 @@
 //! Shared helpers for scenario tests.
 #![allow(dead_code)]
 
+#[path = "helpers/semantic.rs"]
+pub(crate) mod semantic;
+
 pub use tricerules_cards::primitives::HandCardAction;
 
 fn fixture_token_origin(card_id: &str) -> Option<tricerules_core::state::CopiableValues> {
