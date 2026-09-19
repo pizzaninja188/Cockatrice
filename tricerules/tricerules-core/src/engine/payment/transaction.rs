@@ -1835,6 +1835,17 @@ impl GameEngine {
                         .sacrifice_snapshot(oid)
                         .expect("prevalidated sacrifice source");
                     let card_name = object_display_name(&self.state, self.registry, oid);
+                    // Capture the receipt against the pre-departure incarnation. The
+                    // post-move generation has no last-known P/T entry, so a later
+                    // `CardResultCharacteristicSum { action: Sacrifice }` (Susur Secundi) would
+                    // otherwise read 0 instead of the sacrificed creature's power.
+                    let result = card_result_entry(
+                        &self.state,
+                        self.registry,
+                        CardResultAction::Sacrifice,
+                        owner,
+                        oid,
+                    );
                     snapshot.died = sacrifice_permanent(&mut self.state, self.registry, oid)
                         .expect("prevalidated sacrifice cost must commit");
                     payment.sacrificed.push(snapshot);
@@ -1847,13 +1858,7 @@ impl GameEngine {
                     let paid_cost = PaidCardCost::Sacrifice {
                         object_id: oid,
                         card_name,
-                        result: card_result_entry(
-                            &self.state,
-                            self.registry,
-                            CardResultAction::Sacrifice,
-                            owner,
-                            oid,
-                        ),
+                        result,
                     };
                     debug_assert_eq!(paid_cost.object_id(), oid);
                     payment.paid_card_costs.push(paid_cost);

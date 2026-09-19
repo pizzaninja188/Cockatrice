@@ -61,7 +61,8 @@ use recipes::{
     issue_313_oracle_id_is_reviewed, issue_314_card_surface_is_exact,
     issue_314_oracle_id_is_reviewed, issue_315_card_surface_is_exact,
     issue_315_oracle_id_is_reviewed, issue_373_card_surface_is_exact,
-    issue_373_oracle_id_is_reviewed, issue_375_card_surface_is_exact, match_clause,
+    issue_373_oracle_id_is_reviewed, issue_375_card_surface_is_exact,
+    issue_423_card_surface_is_exact, issue_423_oracle_id_is_reviewed, match_clause,
     match_modal_assembly, match_modal_mode, match_station_assembly, match_teamwork_modal_assembly,
     match_triggered_modal_assembly, reviewed_modal_mode_pair, validate_catalog, RecipeAmbiguity,
     RecipeContext, RecipeEmission, RecipeId,
@@ -702,6 +703,15 @@ fn teamwork_cast_cost_group(
     ))
 }
 
+/// True for a printed `N+ | ...` Station threshold striation line, where `N` is decimal digits.
+/// The station scan uses it to extend a header candidate across intervening striations.
+fn station_threshold_striation(line: &str) -> bool {
+    let Some((digits, rest)) = line.split_once("+ | ") else {
+        return false;
+    };
+    !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()) && !rest.is_empty()
+}
+
 fn parse_rules_text(
     source_name: &str,
     oracle_id: &str,
@@ -843,34 +853,51 @@ fn parse_rules_text(
     let mut consumed_station_lines = HashSet::new();
     if !is_spell {
         let mut station_matches = Vec::new();
-        for line_index in 0..external_lines.len().saturating_sub(1) {
-            let station_line =
-                u16::try_from(line_index + 1).map_err(|_| RulesParseError::Unsupported)?;
-            let context = RecipeContext {
-                presentation: AbilityPresentation::OracleLines(vec![station_line]),
-                ..base_context.clone()
-            };
-            let pair = format!(
-                "{}\n{}",
-                external_lines[line_index],
-                external_lines[line_index + 1]
-            );
-            if let Some(matched) =
-                match_station_assembly(&pair, &context).map_err(RulesParseError::Ambiguous)?
+        for line_index in 0..external_lines.len() {
+            // A Station header may be separated from its keyword striation by other printed
+            // threshold striations (Dawnsire, Lumen-Class Frigate, Synthesizer Labship). Try each
+            // contiguous striation in the run, so an orphaned striation, a reordered fragment, or
+            // an unreviewed (header, striation) pair still matches nothing.
+            let mut striation_index = line_index + 1;
+            while striation_index < external_lines.len()
+                && station_threshold_striation(&external_lines[striation_index])
             {
-                station_matches.push((line_index, matched));
+                let station_line =
+                    u16::try_from(line_index + 1).map_err(|_| RulesParseError::Unsupported)?;
+                let context = RecipeContext {
+                    presentation: AbilityPresentation::OracleLines(vec![station_line]),
+                    ..base_context.clone()
+                };
+                let pair = format!(
+                    "{}\n{}",
+                    external_lines[line_index], external_lines[striation_index]
+                );
+                if let Some(matched) =
+                    match_station_assembly(&pair, &context).map_err(RulesParseError::Ambiguous)?
+                {
+                    station_matches.push((line_index, striation_index, matched));
+                }
+                striation_index += 1;
             }
         }
         if station_matches.len() == 1 {
-            let (line_index, matched) = station_matches.pop().expect("one Station assembly match");
-            let RecipeEmission::StationAssembly(assembly) = matched.emission else {
+            let (line_index, striation_index, matched) =
+                station_matches.pop().expect("one Station assembly match");
+            let RecipeEmission::StationAssembly(mut assembly) = matched.emission else {
                 return Err(RulesParseError::Unsupported);
             };
+            // The matcher sees only the header line, so it can derive the keyword striation line
+            // only as "header + 1". A printed non-keyword striation may sit between them; the scan
+            // knows the real striation line and owns the presentation mapping for the threshold
+            // static. The nested ability mappings authored by the matcher are unchanged.
+            assembly.static_ability.presentation = AbilityPresentation::OracleLines(vec![
+                u16::try_from(striation_index + 1).map_err(|_| RulesParseError::Unsupported)?,
+            ]);
             parsed.activated_abilities.push(assembly.activated_ability);
             parsed.static_abilities.push(assembly.static_ability);
             parsed.recipe_labels.push(matched.label);
             consumed_station_lines.insert(line_index);
-            consumed_station_lines.insert(line_index + 1);
+            consumed_station_lines.insert(striation_index);
         }
     }
     let mut consumed_triggered_modal_lines = HashSet::new();
@@ -2140,6 +2167,17 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     ) {
         return Err(Skip::NonKeywordText.into());
     }
+    if !issue_423_card_surface_is_exact(
+        str_field(card, "oracle_id"),
+        &name,
+        &mana_cost,
+        type_line,
+        oracle_text,
+        power_text.as_deref(),
+        toughness_text.as_deref(),
+    ) {
+        return Err(Skip::NonKeywordText.into());
+    }
     if !issue_314_card_surface_is_exact(
         str_field(card, "oracle_id"),
         &name,
@@ -2362,7 +2400,8 @@ fn evaluate(
         || issue_313_oracle_id_is_reviewed(str_field(card, "oracle_id"))
         || issue_314_oracle_id_is_reviewed(str_field(card, "oracle_id"))
         || issue_315_oracle_id_is_reviewed(str_field(card, "oracle_id"))
-        || issue_373_oracle_id_is_reviewed(str_field(card, "oracle_id")))
+        || issue_373_oracle_id_is_reviewed(str_field(card, "oracle_id"))
+        || issue_423_oracle_id_is_reviewed(str_field(card, "oracle_id")))
         && layout != GenLayout::Normal
     {
         return Err(Skip::NonKeywordText.into());

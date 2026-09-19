@@ -94,11 +94,15 @@ fn issue_313_registry_contains_exactly_the_reviewed_station_cohort() {
                                     max: None,
                                 },
                                 add_types: TypeLineAddition { card_types, .. },
+                                base_power,
+                                base_toughness,
                                 keywords,
                                 ..
                             } if card_types == &[tricerules_cards::primitives::PermanentTypeFilter::Creature]
-                                && (keywords == &[Keyword::Flying, Keyword::Trample]
-                                    || keywords == &[Keyword::Flying, Keyword::Lifelink])
+                                && ((keywords == &[Keyword::Flying, Keyword::Trample]
+                                    && (base_power, base_toughness) == (&Some(10), &Some(10)))
+                                    || (keywords == &[Keyword::Flying, Keyword::Lifelink]
+                                        && (base_power, base_toughness) == (&Some(3), &Some(2))))
                         )
                     })
             })

@@ -1,16 +1,17 @@
 use tricerules_cards::primitives::{
     ActivationLimit, BasePowerToughnessValue, BattlefieldAggregate, BattlefieldCreatureCountFilter,
     BattlefieldPermanentFilter, CardResultAction, CardResultFilter, CardResultSource,
-    CardTypeFilter, CombatRestriction, CombatRestrictionScope, CombatRole, ConditionPlayerSet,
-    CountExpression, CounterRemovalPaymentSource, CreatureScopeController, CreatureScopeFilter,
-    DelayedTokenSacrificeTiming, DiscardQuantity, DrawDiscardOrder, EffectSubject,
-    EntersTappedAffected, EntersWithCountersAffected, EntryCost, EventZone, FaceChangeAction,
-    GameCondition, GraveyardAggregate, GraveyardDestination, GraveyardFilter, GraveyardOwner,
-    HandCardAction, HandCardChooser, HandChoiceVisibility, LibraryPlacement, LifeAmount,
-    LifeChangeKind, ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter,
-    PermanentTypeFilter, PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient, PowerComparison,
-    PowerToughnessCharacteristic, PtScale, PtScaleBasis, QuantityTerm, RelativePlayerSet,
-    ResolutionBranchDef, ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost,
+    CardSearchZone, CardTypeFilter, CombatRestriction, CombatRestrictionScope, CombatRole,
+    ConditionPlayerSet, CountExpression, CounterRemovalPaymentSource, CreatureScopeController,
+    CreatureScopeFilter, DelayedTokenSacrificeTiming, DiscardQuantity, DrawDiscardOrder,
+    EffectSubject, EntersTappedAffected, EntersWithCountersAffected, EntryCost, EventZone,
+    FaceChangeAction, GameCondition, GraveyardAggregate, GraveyardDestination, GraveyardFilter,
+    GraveyardOwner, HandCardAction, HandCardChooser, HandChoiceVisibility, LibraryPlacement,
+    LifeAmount, LifeChangeKind, ObjectContributionKind, ObjectPaymentConstraint,
+    PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerQuantifier,
+    PlayerRecipient, PowerComparison, PowerToughnessCharacteristic, PtScale, PtScaleBasis,
+    QuantityTerm, RelativePlayerSet, ResolutionBranchDef, ResolutionBranchRequirement,
+    ResolutionBranchSelection, ResolutionCost, ResolvingEffectDuration, ResolvingPermanentModifier,
     SearchDestination, SearchZoneSelection, SpellCastFilter, SpellCostModifier,
     SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter,
     TargetGroupDef, TargetKind, TargetMatchFilter, TargetObjectExclusion, TargetingDef,
@@ -5407,6 +5408,891 @@ fn match_debris_pump_two_power(text: &str, context: &RecipeContext) -> Option<Re
                 }],
                 None,
             )
+        })
+}
+
+// ---------------------------------------------------------------------------
+// Issue #423 Station threshold cohort (Spacecraft/Planet)
+// ---------------------------------------------------------------------------
+//
+// Station stays the same server-authoritative activated-ability plus threshold-static pair the
+// issue #309/#310/#311/#313 variants emit; this cohort adds the printed striation lines that sit
+// between a Station header and its keyword striation, the Planet 12+ activation striation, and
+// the reviewed companion clauses. Every matcher binds to the reviewed oracle-ID set so identical
+// Oracle text on an unreviewed card, or a reordered/orphaned fragment, still fails closed.
+
+const ISSUE_423_ATMOSPHERIC_GREENHOUSE_ORACLE_ID: &str = "52c6afc6-aff1-46a8-b1ea-b183facec1ae";
+const ISSUE_423_DAWNSIRE_ORACLE_ID: &str = "afc9436b-8cad-4916-929d-ff33a37b42d5";
+const ISSUE_423_KAVARON_ORACLE_ID: &str = "4fa826ca-d361-4391-ad0d-989ebcfa4a91";
+const ISSUE_423_LARVAL_SCOUTLANDER_ORACLE_ID: &str = "b3f3d55c-a3f6-441b-a380-60c0734dc514";
+const ISSUE_423_LUMEN_CLASS_FRIGATE_ORACLE_ID: &str = "3aa0cda4-fb2d-4fd4-84f6-482089a85547";
+const ISSUE_423_SLEDGE_CLASS_SEEDSHIP_ORACLE_ID: &str = "bcd086ce-de5c-4b34-92a1-ece22055e479";
+const ISSUE_423_SPECIMEN_FREIGHTER_ORACLE_ID: &str = "fb84b94c-dc8c-4182-9b96-abd092b20981";
+const ISSUE_423_SUSUR_SECUNDI_ORACLE_ID: &str = "50d6cadc-07e4-479e-90f4-e3a20f769bab";
+const ISSUE_423_SYNTHESIZER_LABSHIP_ORACLE_ID: &str = "a37314cf-bbbd-4003-b94d-0e6e60edfc15";
+
+const ISSUE_423_REVIEWED_ORACLE_IDS: &[&str] = &[
+    ISSUE_423_ATMOSPHERIC_GREENHOUSE_ORACLE_ID,
+    ISSUE_423_DAWNSIRE_ORACLE_ID,
+    ISSUE_423_KAVARON_ORACLE_ID,
+    ISSUE_423_LARVAL_SCOUTLANDER_ORACLE_ID,
+    ISSUE_423_LUMEN_CLASS_FRIGATE_ORACLE_ID,
+    ISSUE_423_SLEDGE_CLASS_SEEDSHIP_ORACLE_ID,
+    ISSUE_423_SPECIMEN_FREIGHTER_ORACLE_ID,
+    ISSUE_423_SUSUR_SECUNDI_ORACLE_ID,
+    ISSUE_423_SYNTHESIZER_LABSHIP_ORACLE_ID,
+];
+
+fn issue_423_context_is_reviewed(context: &RecipeContext) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        .is_none_or(|oracle_id| ISSUE_423_REVIEWED_ORACLE_IDS.contains(&oracle_id))
+}
+
+pub(super) fn issue_423_oracle_id_is_reviewed(oracle_id: &str) -> bool {
+    ISSUE_423_REVIEWED_ORACLE_IDS.contains(&oracle_id)
+}
+
+/// Reviewed whole-card surface for every retained issue #423 identity. Unknown Oracle IDs are
+/// unaffected; a reviewed ID whose printing changed in any field is skipped instead of being
+/// partially parsed. The excluded cohort identities (Adagia, Entropic Battlecruiser, Infinite
+/// Guideline Station, Susurian Dirgecraft, The Seriema) intentionally have no entry.
+pub(super) fn issue_423_card_surface_is_exact(
+    oracle_id: &str,
+    name: &str,
+    mana_cost: &str,
+    type_line: &str,
+    oracle_text: &str,
+    power: Option<&str>,
+    toughness: Option<&str>,
+) -> bool {
+    let expected = match oracle_id {
+        ISSUE_423_ATMOSPHERIC_GREENHOUSE_ORACLE_ID => (
+            "Atmospheric Greenhouse",
+            "{4}{G}",
+            "Artifact — Spacecraft",
+            Some("5"),
+            Some("4"),
+            "When this Spacecraft enters, put a +1/+1 counter on each creature you control.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying, trample",
+        ),
+        ISSUE_423_DAWNSIRE_ORACLE_ID => (
+            "Dawnsire, Sunstar Dreadnought",
+            "{5}",
+            "Legendary Artifact — Spacecraft",
+            Some("20"),
+            Some("20"),
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 20+.)\n10+ | Whenever you attack, Dawnsire deals 100 damage to up to one target creature or planeswalker.\n20+ | Flying",
+        ),
+        ISSUE_423_KAVARON_ORACLE_ID => (
+            "Kavaron, Memorial World",
+            "",
+            "Land — Planet",
+            None,
+            None,
+            "This land enters tapped.\n{T}: Add {R}.\nStation (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n12+ | {1}{R}, {T}, Sacrifice a land: Create a 2/2 colorless Robot artifact creature token, then creatures you control get +1/+0 and gain haste until end of turn.",
+        ),
+        ISSUE_423_LARVAL_SCOUTLANDER_ORACLE_ID => (
+            "Larval Scoutlander",
+            "{2}{G}",
+            "Artifact — Spacecraft",
+            Some("3"),
+            Some("3"),
+            "When this Spacecraft enters, you may sacrifice a land or Lander. If you do, search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying",
+        ),
+        ISSUE_423_LUMEN_CLASS_FRIGATE_ORACLE_ID => (
+            "Lumen-Class Frigate",
+            "{1}{W}",
+            "Artifact — Spacecraft",
+            Some("3"),
+            Some("5"),
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 12+.)\n2+ | Other creatures you control get +1/+1.\n12+ | Flying, lifelink",
+        ),
+        ISSUE_423_SLEDGE_CLASS_SEEDSHIP_ORACLE_ID => (
+            "Sledge-Class Seedship",
+            "{2}{G}",
+            "Artifact — Spacecraft",
+            Some("4"),
+            Some("5"),
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying\nWhenever this Spacecraft attacks, you may put a creature card from your hand onto the battlefield.",
+        ),
+        ISSUE_423_SPECIMEN_FREIGHTER_ORACLE_ID => (
+            "Specimen Freighter",
+            "{5}{U}",
+            "Artifact — Spacecraft",
+            Some("4"),
+            Some("7"),
+            "When this Spacecraft enters, return up to two target non-Spacecraft creatures to their owners' hands.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying\nWhenever this Spacecraft attacks, defending player mills four cards.",
+        ),
+        ISSUE_423_SUSUR_SECUNDI_ORACLE_ID => (
+            "Susur Secundi, Void Altar",
+            "",
+            "Land — Planet",
+            None,
+            None,
+            "This land enters tapped.\n{T}: Add {B}.\nStation (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n12+ | {1}{B}, {T}, Pay 2 life, Sacrifice a creature: Draw cards equal to the sacrificed creature's power. Activate only as a sorcery.",
+        ),
+        ISSUE_423_SYNTHESIZER_LABSHIP_ORACLE_ID => (
+            "Synthesizer Labship",
+            "{U}",
+            "Artifact — Spacecraft",
+            Some("4"),
+            Some("4"),
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n2+ | At the beginning of combat on your turn, up to one other target artifact you control becomes an artifact creature with base power and toughness 2/2 and gains flying until end of turn.\n9+ | Flying, vigilance",
+        ),
+        _ => return true,
+    };
+    (name, mana_cost, type_line, power, toughness, oracle_text) == expected
+}
+
+fn issue_423_spacecraft_context(context: &RecipeContext) -> bool {
+    context.source_is_artifact
+        && context.source_is_permanent
+        && context.source_is_spacecraft_or_planet
+        && issue_423_context_is_reviewed(context)
+}
+
+fn issue_423_station_line(context: &RecipeContext) -> Option<u16> {
+    match &context.presentation {
+        AbilityPresentation::OracleLines(lines) if lines.len() == 1 && lines[0] > 0 => {
+            Some(lines[0])
+        }
+        _ => None,
+    }
+}
+
+/// CR 702.184 / 122.1: the shared Station activated ability. The tapped creature's power is read
+/// from the committed activation payment, so the count stays generation-bound.
+fn issue_423_station_charge_activation(context: &RecipeContext) -> ActivatedAbilityDef {
+    ActivatedAbilityDef {
+        ability_id: context.activated_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        source_zone: AbilitySourceZone::Battlefield,
+        costs: vec![AbilityCost::TapPermanents {
+            constraint: ObjectPaymentConstraint::ExactCount(1),
+            filter: TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..TargetFilter::default()
+            },
+            exclude_source: true,
+        }],
+        cost_modifiers: Vec::new(),
+        effect: vec![SpellEffectKind::PutCounters {
+            counter: CounterKind::Charge,
+            count: Amount::Count(CountExpression::CardResultCharacteristicSum {
+                filter: CardResultFilter {
+                    source: CardResultSource::Payment,
+                    action: CardResultAction::Tap,
+                    players: RelativePlayerSet::Controller,
+                    card_type: Some(CardTypeFilter::Creature),
+                },
+                characteristic: PowerToughnessCharacteristic::Power,
+            }),
+            subject: EffectSubject::Source,
+        }],
+        targeting: None,
+        timing: ActivationTiming::SorcerySpeed,
+        conditions: Vec::new(),
+        activation_limit: None,
+    }
+}
+
+/// CR 611.3 / 613: one continuously reevaluated self threshold static. CR 721.2a Station uses it
+/// for the creature animation and keyword striations; the Planet variant instead grants the
+/// printed threshold activated ability.
+#[allow(clippy::too_many_arguments)]
+fn issue_423_conditional_static(
+    context: &RecipeContext,
+    threshold_line: u16,
+    threshold: u32,
+    add_types: TypeLineAddition,
+    base_power: Option<i64>,
+    base_toughness: Option<i64>,
+    keywords: Vec<Keyword>,
+    activated_abilities: Vec<ActivatedAbilityDef>,
+    triggered_abilities: Vec<TriggeredAbilityDef>,
+) -> IdentifiedAbility<StaticAbilityDef> {
+    IdentifiedAbility {
+        ability_id: context.static_ability_id.clone(),
+        presentation: AbilityPresentation::OracleLines(vec![threshold_line]),
+        definition: StaticAbilityDef::ConditionalSelfModifier {
+            condition: GameCondition::SourceCounterCount {
+                counter: CounterKind::Charge,
+                min: Some(threshold),
+                max: None,
+            },
+            set_types: None,
+            add_types,
+            base_power,
+            base_toughness,
+            delta_power: 0,
+            delta_toughness: 0,
+            keywords,
+            activated_abilities,
+            triggered_abilities,
+            can_attack_as_though_without_defender: false,
+        },
+    }
+}
+
+const ISSUE_423_FLYING: &[Keyword] = &[Keyword::Flying];
+const ISSUE_423_FLYING_TRAMPLE: &[Keyword] = &[Keyword::Flying, Keyword::Trample];
+const ISSUE_423_FLYING_LIFELINK: &[Keyword] = &[Keyword::Flying, Keyword::Lifelink];
+const ISSUE_423_FLYING_VIGILANCE: &[Keyword] = &[Keyword::Flying, Keyword::Vigilance];
+
+#[derive(Debug, Clone, Copy)]
+struct Issue423SpacecraftStationVariant {
+    oracle_id: &'static str,
+    name: &'static str,
+    threshold: u32,
+    base_power: i64,
+    base_toughness: i64,
+    keyword_line: &'static str,
+    keywords: &'static [Keyword],
+}
+
+const ISSUE_423_SPACECRAFT_STATION_VARIANTS: &[Issue423SpacecraftStationVariant] = &[
+    Issue423SpacecraftStationVariant {
+        oracle_id: ISSUE_423_ATMOSPHERIC_GREENHOUSE_ORACLE_ID,
+        name: "Atmospheric Greenhouse",
+        threshold: 8,
+        base_power: 5,
+        base_toughness: 4,
+        keyword_line: "Flying, trample",
+        keywords: ISSUE_423_FLYING_TRAMPLE,
+    },
+    Issue423SpacecraftStationVariant {
+        oracle_id: ISSUE_423_DAWNSIRE_ORACLE_ID,
+        name: "Dawnsire, Sunstar Dreadnought",
+        threshold: 20,
+        base_power: 20,
+        base_toughness: 20,
+        keyword_line: "Flying",
+        keywords: ISSUE_423_FLYING,
+    },
+    Issue423SpacecraftStationVariant {
+        oracle_id: ISSUE_423_LARVAL_SCOUTLANDER_ORACLE_ID,
+        name: "Larval Scoutlander",
+        threshold: 7,
+        base_power: 3,
+        base_toughness: 3,
+        keyword_line: "Flying",
+        keywords: ISSUE_423_FLYING,
+    },
+    Issue423SpacecraftStationVariant {
+        oracle_id: ISSUE_423_LUMEN_CLASS_FRIGATE_ORACLE_ID,
+        name: "Lumen-Class Frigate",
+        threshold: 12,
+        base_power: 3,
+        base_toughness: 5,
+        keyword_line: "Flying, lifelink",
+        keywords: ISSUE_423_FLYING_LIFELINK,
+    },
+    Issue423SpacecraftStationVariant {
+        oracle_id: ISSUE_423_SLEDGE_CLASS_SEEDSHIP_ORACLE_ID,
+        name: "Sledge-Class Seedship",
+        threshold: 7,
+        base_power: 4,
+        base_toughness: 5,
+        keyword_line: "Flying",
+        keywords: ISSUE_423_FLYING,
+    },
+    Issue423SpacecraftStationVariant {
+        oracle_id: ISSUE_423_SPECIMEN_FREIGHTER_ORACLE_ID,
+        name: "Specimen Freighter",
+        threshold: 9,
+        base_power: 4,
+        base_toughness: 7,
+        keyword_line: "Flying",
+        keywords: ISSUE_423_FLYING,
+    },
+    Issue423SpacecraftStationVariant {
+        oracle_id: ISSUE_423_SYNTHESIZER_LABSHIP_ORACLE_ID,
+        name: "Synthesizer Labship",
+        threshold: 9,
+        base_power: 4,
+        base_toughness: 4,
+        keyword_line: "Flying, vigilance",
+        keywords: ISSUE_423_FLYING_VIGILANCE,
+    },
+];
+
+fn issue_423_spacecraft_station_variant(
+    context: &RecipeContext,
+) -> Option<Issue423SpacecraftStationVariant> {
+    match context.oracle_id.as_deref() {
+        Some(oracle_id) => ISSUE_423_SPACECRAFT_STATION_VARIANTS
+            .iter()
+            .find(|variant| variant.oracle_id == oracle_id)
+            .copied(),
+        None => ISSUE_423_SPACECRAFT_STATION_VARIANTS
+            .iter()
+            .find(|variant| variant.name == context.source_name)
+            .copied(),
+    }
+}
+
+/// Issue #423 spacecraft Station header and keyword striation. The header threshold, the
+/// striation threshold, and the printed P/T all come from the reviewed per-identity variant, so
+/// an appended second striation, a wrong threshold digit, or a reordered pair cannot match.
+pub(super) fn match_station_spacecraft_thresholds(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !issue_423_spacecraft_context(context) {
+        return None;
+    }
+    let variant = issue_423_spacecraft_station_variant(context)?;
+    let lines = external_oracle_lines(text);
+    let [header, striation] = lines.as_slice() else {
+        return None;
+    };
+    if header
+        != &format!(
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at {}+.)",
+            variant.threshold
+        )
+        || striation != &format!("{}+ | {}", variant.threshold, variant.keyword_line)
+    {
+        return None;
+    }
+    let threshold_line = issue_423_station_line(context)?.checked_add(1)?;
+    Some(RecipeEmission::StationAssembly(StationAssemblyEmission {
+        activated_ability: issue_423_station_charge_activation(context),
+        static_ability: issue_423_conditional_static(
+            context,
+            threshold_line,
+            variant.threshold,
+            TypeLineAddition {
+                card_types: vec![PermanentTypeFilter::Creature],
+                creature_types: Vec::new(),
+            },
+            Some(variant.base_power),
+            Some(variant.base_toughness),
+            variant.keywords.to_vec(),
+            Vec::new(),
+            Vec::new(),
+        ),
+    }))
+}
+
+const ISSUE_423_PLANET_STATION_HEADER: &str = "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)";
+const ISSUE_423_KAVARON_STRIATION: &str = "12+ | {1}{R}, {T}, Sacrifice a land: Create a 2/2 colorless Robot artifact creature token, then creatures you control get +1/+0 and gain haste until end of turn.";
+const ISSUE_423_SUSUR_SECUNDI_STRIATION: &str = "12+ | {1}{B}, {T}, Pay 2 life, Sacrifice a creature: Draw cards equal to the sacrificed creature's power. Activate only as a sorcery.";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Issue423PlanetStriation {
+    Kavaron,
+    SusurSecundi,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Issue423PlanetStationVariant {
+    oracle_id: &'static str,
+    name: &'static str,
+    striation: &'static str,
+    kind: Issue423PlanetStriation,
+}
+
+const ISSUE_423_PLANET_STATION_VARIANTS: &[Issue423PlanetStationVariant] = &[
+    Issue423PlanetStationVariant {
+        oracle_id: ISSUE_423_KAVARON_ORACLE_ID,
+        name: "Kavaron, Memorial World",
+        striation: ISSUE_423_KAVARON_STRIATION,
+        kind: Issue423PlanetStriation::Kavaron,
+    },
+    Issue423PlanetStationVariant {
+        oracle_id: ISSUE_423_SUSUR_SECUNDI_ORACLE_ID,
+        name: "Susur Secundi, Void Altar",
+        striation: ISSUE_423_SUSUR_SECUNDI_STRIATION,
+        kind: Issue423PlanetStriation::SusurSecundi,
+    },
+];
+
+fn issue_423_planet_station_variant(
+    context: &RecipeContext,
+) -> Option<Issue423PlanetStationVariant> {
+    match context.oracle_id.as_deref() {
+        Some(oracle_id) => ISSUE_423_PLANET_STATION_VARIANTS
+            .iter()
+            .find(|variant| variant.oracle_id == oracle_id)
+            .copied(),
+        None => ISSUE_423_PLANET_STATION_VARIANTS
+            .iter()
+            .find(|variant| variant.name == context.source_name)
+            .copied(),
+    }
+}
+
+fn issue_423_kavaron_inner_activation(context: &RecipeContext, line: u16) -> ActivatedAbilityDef {
+    let team = CreatureScopeFilter {
+        controller: Some(CreatureScopeController::YouControl),
+        ..CreatureScopeFilter::default()
+    };
+    ActivatedAbilityDef {
+        ability_id: context.activated_ability_id.clone(),
+        presentation: AbilityPresentation::OracleLines(vec![line]),
+        source_zone: AbilitySourceZone::Battlefield,
+        costs: vec![
+            fixed_mana_cost("{1}{R}"),
+            AbilityCost::Tap,
+            AbilityCost::SacrificePermanent {
+                filter: TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    controller: TargetController::You,
+                    permanent_types: vec![PermanentTypeFilter::Land],
+                    ..TargetFilter::default()
+                },
+            },
+        ],
+        cost_modifiers: Vec::new(),
+        effect: vec![
+            SpellEffectKind::CreateTokens {
+                token: "robot_c_2_2".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            },
+            SpellEffectKind::PumpAll {
+                filter: team.clone(),
+                power: 1,
+                toughness: 0,
+            },
+            SpellEffectKind::GrantKeywordsAll {
+                filter: team,
+                keywords: vec![Keyword::Haste],
+            },
+        ],
+        targeting: None,
+        timing: ActivationTiming::SorcerySpeed,
+        conditions: Vec::new(),
+        activation_limit: None,
+    }
+}
+
+fn issue_423_susur_secundi_inner_activation(
+    context: &RecipeContext,
+    line: u16,
+) -> ActivatedAbilityDef {
+    ActivatedAbilityDef {
+        ability_id: context.activated_ability_id.clone(),
+        presentation: AbilityPresentation::OracleLines(vec![line]),
+        source_zone: AbilitySourceZone::Battlefield,
+        costs: vec![
+            fixed_mana_cost("{1}{B}"),
+            AbilityCost::Tap,
+            AbilityCost::PayLife { amount: 2 },
+            AbilityCost::SacrificePermanent {
+                filter: TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    ..TargetFilter::default()
+                },
+            },
+        ],
+        cost_modifiers: Vec::new(),
+        effect: vec![SpellEffectKind::Draw {
+            who: PlayerRecipient::Controller,
+            count: Amount::Count(CountExpression::CardResultCharacteristicSum {
+                filter: CardResultFilter {
+                    source: CardResultSource::Payment,
+                    action: CardResultAction::Sacrifice,
+                    players: RelativePlayerSet::Controller,
+                    card_type: Some(CardTypeFilter::Creature),
+                },
+                characteristic: PowerToughnessCharacteristic::Power,
+            }),
+        }],
+        targeting: None,
+        timing: ActivationTiming::SorcerySpeed,
+        conditions: Vec::new(),
+        activation_limit: None,
+    }
+}
+
+/// Issue #423 Planet Station pair. The 12+ striation is an activated ability gated by the charge
+/// threshold; the header carries no animated-creature line for Planets.
+pub(super) fn match_station_planets_12_activated(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_permanent
+        || !context.source_is_land
+        || !context.source_is_spacecraft_or_planet
+        || !issue_423_context_is_reviewed(context)
+    {
+        return None;
+    }
+    let variant = issue_423_planet_station_variant(context)?;
+    let lines = external_oracle_lines(text);
+    let [header, striation] = lines.as_slice() else {
+        return None;
+    };
+    if header != ISSUE_423_PLANET_STATION_HEADER || striation != variant.striation {
+        return None;
+    }
+    let threshold_line = issue_423_station_line(context)?.checked_add(1)?;
+    let inner = match variant.kind {
+        Issue423PlanetStriation::Kavaron => {
+            issue_423_kavaron_inner_activation(context, threshold_line)
+        }
+        Issue423PlanetStriation::SusurSecundi => {
+            issue_423_susur_secundi_inner_activation(context, threshold_line)
+        }
+    };
+    Some(RecipeEmission::StationAssembly(StationAssemblyEmission {
+        activated_ability: issue_423_station_charge_activation(context),
+        static_ability: issue_423_conditional_static(
+            context,
+            threshold_line,
+            12,
+            TypeLineAddition {
+                card_types: Vec::new(),
+                creature_types: Vec::new(),
+            },
+            None,
+            None,
+            Vec::new(),
+            vec![inner],
+            Vec::new(),
+        ),
+    }))
+}
+
+fn match_station_etb_counters_each_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_423_spacecraft_context(context)
+        && text == "When this Spacecraft enters, put a +1/+1 counter on each creature you control.")
+        .then(|| {
+            triggered_ability(
+                context,
+                SpellEffectKind::PutCountersAll {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    filter: CreatureScopeFilter {
+                        controller: Some(CreatureScopeController::YouControl),
+                        ..CreatureScopeFilter::default()
+                    },
+                },
+            )
+        })
+}
+
+fn match_station_etb_sac_land_search_two(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_423_spacecraft_context(context)
+        && text
+            == "When this Spacecraft enters, you may sacrifice a land or Lander. If you do, search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.")
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfEntersBattlefield,
+                vec![SpellEffectKind::ChooseResolutionBranch {
+                    chooser: PlayerRecipient::Controller,
+                    optional: true,
+                    selection: ResolutionBranchSelection::PlayerChoice,
+                    branches: vec![ResolutionBranchDef {
+                        branch_id: ChoiceId::new("sacrifice_a_land_or_lander")
+                            .expect("closed sacrifice branch uses a valid choice ID"),
+                        presentation: context.presentation.clone(),
+                        runtime_fallback: None,
+                        cost: ResolutionCost::SacrificePermanent {
+                            // A pure OR node owns both printed alternatives; the payer-scoped
+                            // permanent selection comes from the branch cost itself.
+                            filter: TargetFilter {
+                                any_of: Some(vec![
+                                    TargetFilter {
+                                        kind: TargetKind::AnyPermanent,
+                                        controller: TargetController::You,
+                                        permanent_types: vec![PermanentTypeFilter::Land],
+                                        ..TargetFilter::default()
+                                    },
+                                    TargetFilter {
+                                        kind: TargetKind::AnyPermanent,
+                                        controller: TargetController::You,
+                                        required_subtypes: vec!["Lander".into()],
+                                        ..TargetFilter::default()
+                                    },
+                                ]),
+                                ..TargetFilter::default()
+                            },
+                            source_only: false,
+                        },
+                        requirement: ResolutionBranchRequirement::Always,
+                        effects: vec![SpellEffectKind::SearchLibrary {
+                            who: PlayerRecipient::Controller,
+                            optional: false,
+                            count: 2,
+                            count_by_cast_cost: None,
+                            filter: Some(ZoneCardFilter {
+                                card_type: Some(CardTypeFilter::BasicLand),
+                                ..ZoneCardFilter::default()
+                            }),
+                            slots: Vec::new(),
+                            zones: SearchZoneSelection::default(),
+                            destination: SearchDestination::Battlefield { tapped: true },
+                            conditional_destination: None,
+                            shuffle: true,
+                            reveal: false,
+                            result_id: None,
+                        }],
+                    }],
+                    otherwise: Vec::new(),
+                }],
+            )
+        })
+}
+
+fn match_station_etb_bounce_two_nonspacecraft(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_423_spacecraft_context(context)
+        && text
+            == "When this Spacecraft enters, return up to two target non-Spacecraft creatures to their owners' hands.")
+        .then(|| {
+            let target = TargetFilter {
+                kind: TargetKind::Creature,
+                excluded_subtypes: vec!["Spacecraft".into()],
+                ..TargetFilter::default()
+            };
+            targeted_trigger(
+                context,
+                vec![SpellEffectKind::ReturnToOwnersHand {
+                    subject: EffectSubject::Chosen(Box::new(target)),
+                }],
+                0,
+                2,
+                "Choose up to two target non-Spacecraft creatures",
+            )
+        })
+}
+
+fn match_station_attack_put_creature_from_hand(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_423_spacecraft_context(context)
+        && text
+            == "Whenever this Spacecraft attacks, you may put a creature card from your hand onto the battlefield.")
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                },
+                vec![SpellEffectKind::SearchLibrary {
+                    who: PlayerRecipient::Controller,
+                    optional: true,
+                    count: 1,
+                    count_by_cast_cost: None,
+                    filter: Some(ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::Creature),
+                        ..ZoneCardFilter::default()
+                    }),
+                    slots: Vec::new(),
+                    zones: SearchZoneSelection::Fixed(vec![CardSearchZone::Hand]),
+                    destination: SearchDestination::Battlefield { tapped: false },
+                    conditional_destination: None,
+                    shuffle: false,
+                    reveal: false,
+                    result_id: None,
+                }],
+            )
+        })
+}
+
+fn match_station_attack_mill_four_defending(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_423_spacecraft_context(context)
+        && text == "Whenever this Spacecraft attacks, defending player mills four cards.")
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                },
+                vec![SpellEffectKind::Mill {
+                    count: Amount::Fixed(4),
+                    who: PlayerRecipient::DefendingPlayer,
+                }],
+            )
+        })
+}
+
+fn match_station_static_anthem_other_creatures(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_423_spacecraft_context(context) && text == "2+ | Other creatures you control get +1/+1.")
+        .then(|| {
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: StaticAbilityDef::AnthemPt {
+                    filter: CreatureScopeFilter {
+                        controller: Some(CreatureScopeController::YouControl),
+                        exclude_self: true,
+                        ..CreatureScopeFilter::default()
+                    },
+                    condition: Some(GameCondition::SourceCounterCount {
+                        counter: CounterKind::Charge,
+                        min: Some(2),
+                        max: None,
+                    }),
+                    delta_power: 1,
+                    delta_toughness: 1,
+                },
+            })
+        })
+}
+
+fn match_station_static_damage_100_attack(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_423_spacecraft_context(context)
+        && text
+            == "10+ | Whenever you attack, Dawnsire deals 100 damage to up to one target creature or planeswalker.")
+        .then(|| {
+            let damage = TriggeredAbilityDef {
+                ability_id: context.triggered_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                trigger: TriggerCondition::WheneverControllerAttacks {
+                    min_attackers: None,
+                    max_attackers: None,
+                },
+                effect: vec![SpellEffectKind::DamageTarget {
+                    amount: Amount::Fixed(100),
+                    target: TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        permanent_types: vec![
+                            PermanentTypeFilter::Creature,
+                            PermanentTypeFilter::Planeswalker,
+                        ],
+                        ..TargetFilter::default()
+                    },
+                }],
+                modal: None,
+                targeting: Some(exact_targeting(
+                    0,
+                    1,
+                    "Choose up to one target creature or planeswalker",
+                    vec![0],
+                )),
+                may: false,
+                intervening_if: None,
+                max_triggers_per_turn: None,
+                triggers_only_once: false,
+            };
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: StaticAbilityDef::ConditionalSelfModifier {
+                    condition: GameCondition::SourceCounterCount {
+                        counter: CounterKind::Charge,
+                        min: Some(10),
+                        max: None,
+                    },
+                    set_types: None,
+                    add_types: TypeLineAddition {
+                        card_types: Vec::new(),
+                        creature_types: Vec::new(),
+                    },
+                    base_power: None,
+                    base_toughness: None,
+                    delta_power: 0,
+                    delta_toughness: 0,
+                    keywords: Vec::new(),
+                    activated_abilities: Vec::new(),
+                    triggered_abilities: vec![damage],
+                    can_attack_as_though_without_defender: false,
+                },
+            })
+        })
+}
+
+fn match_station_static_combat_animation(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_423_spacecraft_context(context)
+        && text
+            == "2+ | At the beginning of combat on your turn, up to one other target artifact you control becomes an artifact creature with base power and toughness 2/2 and gains flying until end of turn.")
+        .then(|| {
+            let target = TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                permanent_types: vec![PermanentTypeFilter::Artifact],
+                controller: TargetController::You,
+                excluded_objects: vec![TargetObjectExclusion::Source],
+                ..TargetFilter::default()
+            };
+            let animate = |modifier: ResolvingPermanentModifier| SpellEffectKind::ApplyPermanentModifier {
+                subject: EffectSubject::Chosen(Box::new(target.clone())),
+                modifier,
+                duration: ResolvingEffectDuration::UntilEndOfTurn,
+            };
+            let ability = TriggeredAbilityDef {
+                ability_id: context.triggered_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                trigger: TriggerCondition::AtBeginningOfCombat {
+                    player: CastTriggerPlayer::Controller,
+                },
+                effect: vec![
+                    animate(ResolvingPermanentModifier::AddTypes(TypeLineAddition {
+                        card_types: vec![PermanentTypeFilter::Creature],
+                        creature_types: Vec::new(),
+                    })),
+                    animate(ResolvingPermanentModifier::SetBasePowerToughness {
+                        power: 2,
+                        toughness: 2,
+                    }),
+                    animate(ResolvingPermanentModifier::GrantKeywords(vec![Keyword::Flying])),
+                ],
+                modal: None,
+                targeting: Some(exact_targeting(
+                    0,
+                    1,
+                    "Choose up to one other target artifact you control",
+                    vec![0, 1, 2],
+                )),
+                may: false,
+                intervening_if: None,
+                max_triggers_per_turn: None,
+                triggers_only_once: false,
+            };
+            RecipeEmission::StaticAbility(IdentifiedAbility {
+                ability_id: context.static_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                definition: StaticAbilityDef::ConditionalSelfModifier {
+                    condition: GameCondition::SourceCounterCount {
+                        counter: CounterKind::Charge,
+                        min: Some(2),
+                        max: None,
+                    },
+                    set_types: None,
+                    add_types: TypeLineAddition {
+                        card_types: Vec::new(),
+                        creature_types: Vec::new(),
+                    },
+                    base_power: None,
+                    base_toughness: None,
+                    delta_power: 0,
+                    delta_toughness: 0,
+                    keywords: Vec::new(),
+                    activated_abilities: Vec::new(),
+                    triggered_abilities: vec![ability],
+                    can_attack_as_though_without_defender: false,
+                },
+            })
         })
 }
 
@@ -18384,6 +19270,205 @@ pub(super) static CATALOG: &[Recipe] = &[
             "{1}{R}: This Spacecraft gets +2/+0. Activate only as a sorcery.",
             "{R}: This Spacecraft gets +2/+0 until end of turn.",
             "{1}{R}: This Spacecraft gets +2/+0 until end of combat."
+        ),
+    },
+    Recipe {
+        id: RecipeId("station.spacecraft.thresholds"),
+        label: "Station threshold keyword Spacecraft",
+        surface: RecipeSurface::StationAssembly,
+        matcher: match_station_spacecraft_thresholds,
+        calibration: calibrations!(
+            "Atmospheric Greenhouse" => "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying, trample",
+            "Dawnsire, Sunstar Dreadnought" => "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 20+.)\n20+ | Flying",
+            "Larval Scoutlander" => "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying",
+            "Lumen-Class Frigate" => "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 12+.)\n12+ | Flying, lifelink",
+            "Sledge-Class Seedship" => "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 7+.)\n7+ | Flying",
+            "Specimen Freighter" => "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying",
+            "Synthesizer Labship" => "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, vigilance";
+            "Station",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)",
+            "8+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n9+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8.)\n8 | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8 or more.)\n8+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Trample, flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying, deathtouch",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying, trample\n8+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying, trample\nDraw a card.",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. It's an artifact creature at 8+.)\n8+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as an instant. It's an artifact creature at 8+.)\n8+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact Vehicle at 8+.)\n8+ | Flying, trample",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n8+ | Flying, trample",
+            "8+ | Flying, trample\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)",
+            "Station (Tap another creature you control: Put charge counters equal to its toughness on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying, trample"
+        ),
+    },
+    Recipe {
+        id: RecipeId("station.planets.12.activated"),
+        label: "Station 12+ activated Planet",
+        surface: RecipeSurface::StationAssembly,
+        matcher: match_station_planets_12_activated,
+        calibration: calibrations!(
+            "Kavaron, Memorial World" => "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n12+ | {1}{R}, {T}, Sacrifice a land: Create a 2/2 colorless Robot artifact creature token, then creatures you control get +1/+0 and gain haste until end of turn.",
+            "Susur Secundi, Void Altar" => "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n12+ | {1}{B}, {T}, Pay 2 life, Sacrifice a creature: Draw cards equal to the sacrificed creature's power. Activate only as a sorcery.";
+            "Station",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)",
+            "12+ | {1}{R}, {T}, Sacrifice a land: Create a 2/2 colorless Robot artifact creature token, then creatures you control get +1/+0 and gain haste until end of turn.",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n11+ | {1}{R}, {T}, Sacrifice a land: Create a 2/2 colorless Robot artifact creature token, then creatures you control get +1/+0 and gain haste until end of turn.",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n12 | {1}{R}, {T}, Sacrifice a land: Create a 2/2 colorless Robot artifact creature token, then creatures you control get +1/+0 and gain haste until end of turn.",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n12+ | {1}{R}, {T}, Sacrifice a land: Create a 2/2 colorless Robot artifact creature token, then creatures you control get +1/+0 and gain haste until end of turn. Activate only as a sorcery.",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n12+ | {1}{R}, {T}, Sacrifice a land: Create a 2/2 colorless Robot artifact creature token, then creatures you control get +1/+0 and gain haste until end of turn.\n12+ | Flying",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n12+ | {1}{R}, {T}, Sacrifice a land: Create a 2/2 colorless Robot artifact creature token, then creatures you control get +1/+0 and gain haste until end of turn. Draw a card.",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as an instant.)\n12+ | {1}{R}, {T}, Sacrifice a land: Create a 2/2 colorless Robot artifact creature token, then creatures you control get +1/+0 and gain haste until end of turn.",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Planet.)\n12+ | {1}{R}, {T}, Sacrifice a land: Create a 2/2 colorless Robot artifact creature token, then creatures you control get +1/+0 and gain haste until end of turn.",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 12+.)\n12+ | {1}{R}, {T}, Sacrifice a land: Create a 2/2 colorless Robot artifact creature token, then creatures you control get +1/+0 and gain haste until end of turn.",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n12+ | {1}{B}, {T}, Pay 2 life, Sacrifice a creature: Draw cards equal to the sacrificed creature's power. Activate only as a sorcery.",
+            "12+ | {1}{R}, {T}, Sacrifice a land: Create a 2/2 colorless Robot artifact creature token, then creatures you control get +1/+0 and gain haste until end of turn.\nStation (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)",
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n12+ | {1}{R}, {T}: Create a 2/2 colorless Robot artifact creature token, then creatures you control get +1/+0 and gain haste until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("station.static.anthem.2.creatures_you_control"),
+        label: "Station 2+ other creatures anthem",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_station_static_anthem_other_creatures,
+        calibration: singleton_calibrations!(
+            "Lumen-Class Frigate" => "2+ | Other creatures you control get +1/+1.";
+            "Other creatures you control get +1/+1.",
+            "2 | Other creatures you control get +1/+1.",
+            "2+ | Other creatures you control get +2/+2.",
+            "2+ | Other creatures you control get +1/+0.",
+            "3+ | Other creatures you control get +1/+1.",
+            "2+ | Creatures you control get +1/+1.",
+            "2+ | Other creatures you control gain +1/+1.",
+            "12+ | Other creatures you control get +1/+1.",
+            "2+ | Other creatures you control get +1/+1 until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("station.static.damage.100.attack"),
+        label: "Station 10+ attack damage 100",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_station_static_damage_100_attack,
+        calibration: singleton_calibrations!(
+            "Dawnsire, Sunstar Dreadnought" => "10+ | Whenever you attack, Dawnsire deals 100 damage to up to one target creature or planeswalker.";
+            "Whenever you attack, Dawnsire deals 100 damage to up to one target creature or planeswalker.",
+            "10 | Whenever you attack, Dawnsire deals 100 damage to up to one target creature or planeswalker.",
+            "10+ | Whenever you attack, Dawnsire deals 100 damage to target creature or planeswalker.",
+            "10+ | Whenever you attack, Dawnsire deals 100 damage to up to two target creatures or planeswalkers.",
+            "10+ | Whenever you attack, Dawnsire deals 99 damage to up to one target creature or planeswalker.",
+            "10+ | Whenever you attack, Dawnsire deals 100 damage to up to one target creature.",
+            "10+ | Whenever you attack, Dawnsire deals 100 damage to each creature or planeswalker.",
+            "9+ | Whenever you attack, Dawnsire deals 100 damage to up to one target creature or planeswalker.",
+            "20+ | Whenever you attack, Dawnsire deals 100 damage to up to one target creature or planeswalker.",
+            "10+ | Whenever you attack, Dawnsire deals 100 damage to up to one target creature or planeswalker. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("station.static.combat_animation"),
+        label: "Station 2+ combat animation",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_station_static_combat_animation,
+        calibration: singleton_calibrations!(
+            "Synthesizer Labship" => "2+ | At the beginning of combat on your turn, up to one other target artifact you control becomes an artifact creature with base power and toughness 2/2 and gains flying until end of turn.";
+            "At the beginning of combat on your turn, up to one other target artifact you control becomes an artifact creature with base power and toughness 2/2 and gains flying until end of turn.",
+            "2 | At the beginning of combat on your turn, up to one other target artifact you control becomes an artifact creature with base power and toughness 2/2 and gains flying until end of turn.",
+            "2+ | At the beginning of combat on your turn, up to one other target artifact you control becomes an artifact creature with base power and toughness 3/3 and gains flying until end of turn.",
+            "2+ | At the beginning of combat on your turn, up to one other target artifact you control becomes an artifact creature with base power and toughness 2/2 and gains flying.",
+            "2+ | At the beginning of combat on your turn, target artifact you control becomes an artifact creature with base power and toughness 2/2 and gains flying until end of turn.",
+            "2+ | At the beginning of combat on your turn, up to one other target artifact an opponent controls becomes an artifact creature with base power and toughness 2/2 and gains flying until end of turn.",
+            "2+ | At the beginning of combat on your turn, up to one other target artifact you control becomes a creature with base power and toughness 2/2 and gains flying until end of turn.",
+            "9+ | At the beginning of combat on your turn, up to one other target artifact you control becomes an artifact creature with base power and toughness 2/2 and gains flying until end of turn.",
+            "2+ | At the beginning of combat on your turn, up to one other target artifact you control becomes an artifact creature with base power and toughness 2/2 and gains flying until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("station.etb.counters_each_creature"),
+        label: "Spacecraft ETB counter on each creature you control",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_station_etb_counters_each_creature,
+        calibration: singleton_calibrations!(
+            "Atmospheric Greenhouse" => "When this Spacecraft enters, put a +1/+1 counter on each creature you control.";
+            "When this Spacecraft enters, put a +1/+1 counter on each other creature you control.",
+            "When this Spacecraft enters, put a +1/+1 counter on target creature you control.",
+            "When this Spacecraft enters, put a +1/+1 counter on each creature.",
+            "When this Spacecraft enters, put two +1/+1 counters on each creature you control.",
+            "When this artifact enters, put a +1/+1 counter on each creature you control.",
+            "Whenever this Spacecraft enters, put a +1/+1 counter on each creature you control.",
+            "When this Spacecraft enters, put a +1/+1 counter on each creature an opponent controls.",
+            "When this Spacecraft enters, put a +1/+1 counter on each creature you control. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("station.etb.sac_land_search_two"),
+        label: "Spacecraft ETB optional sacrifice for two basic lands",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_station_etb_sac_land_search_two,
+        calibration: singleton_calibrations!(
+            "Larval Scoutlander" => "When this Spacecraft enters, you may sacrifice a land or Lander. If you do, search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.";
+            "When this Spacecraft enters, you may sacrifice a land. If you do, search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.",
+            "When this Spacecraft enters, sacrifice a land or Lander. If you do, search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.",
+            "When this Spacecraft enters, you may sacrifice a land or Lander. If you do, search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            "When this Spacecraft enters, you may sacrifice a land or Lander. If you do, search your library for up to two basic land cards, put them into your hand, then shuffle.",
+            "When this Spacecraft enters, you may sacrifice a land or Lander. If you do, search your library for up to two land cards, put them onto the battlefield tapped, then shuffle.",
+            "When this artifact enters, you may sacrifice a land or Lander. If you do, search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.",
+            "Whenever this Spacecraft enters, you may sacrifice a land or Lander. If you do, search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.",
+            "When this Spacecraft enters, you may sacrifice a land or Lander. If you do, search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("station.etb.bounce_two_nonspacecraft"),
+        label: "Spacecraft ETB bounce up to two non-Spacecraft creatures",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_station_etb_bounce_two_nonspacecraft,
+        calibration: singleton_calibrations!(
+            "Specimen Freighter" => "When this Spacecraft enters, return up to two target non-Spacecraft creatures to their owners' hands.";
+            "When this Spacecraft enters, return up to two target creatures to their owners' hands.",
+            "When this Spacecraft enters, return target non-Spacecraft creature to its owner's hand.",
+            "When this Spacecraft enters, return up to one target non-Spacecraft creature to its owner's hand.",
+            "When this Spacecraft enters, return up to two target non-Spacecraft creatures to the battlefield.",
+            "When this Spacecraft enters, return up to two target non-Spacecraft creatures to their owners' libraries.",
+            "When this artifact enters, return up to two target non-Spacecraft creatures to their owners' hands.",
+            "Whenever this Spacecraft enters, return up to two target non-Spacecraft creatures to their owners' hands.",
+            "When this Spacecraft enters, you may return up to two target non-Spacecraft creatures to their owners' hands.",
+            "When this Spacecraft enters, return up to two target non-Spacecraft creatures to their owners' hands. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("station.attack.put_creature_from_hand"),
+        label: "Spacecraft attack put creature card from hand onto battlefield",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_station_attack_put_creature_from_hand,
+        calibration: singleton_calibrations!(
+            "Sledge-Class Seedship" => "Whenever this Spacecraft attacks, you may put a creature card from your hand onto the battlefield.";
+            "Whenever this Spacecraft attacks, put a creature card from your hand onto the battlefield.",
+            "Whenever this Spacecraft attacks, you may put a creature card from your graveyard onto the battlefield.",
+            "Whenever this Spacecraft attacks, you may put a permanent card from your hand onto the battlefield.",
+            "Whenever this Spacecraft attacks, you may put a creature card from your hand into your graveyard.",
+            "Whenever this Spacecraft attacks, you may put a creature card from your hand onto the battlefield tapped.",
+            "Whenever this artifact attacks, you may put a creature card from your hand onto the battlefield.",
+            "When this Spacecraft enters, you may put a creature card from your hand onto the battlefield.",
+            "Whenever this Spacecraft attacks, you may put up to two creature cards from your hand onto the battlefield.",
+            "Whenever this Spacecraft attacks, you may put a creature card from your hand onto the battlefield. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("station.attack.mill_four_defending"),
+        label: "Spacecraft attack defending player mills four",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_station_attack_mill_four_defending,
+        calibration: singleton_calibrations!(
+            "Specimen Freighter" => "Whenever this Spacecraft attacks, defending player mills four cards.";
+            "Whenever this Spacecraft attacks, defending player mills three cards.",
+            "Whenever this Spacecraft attacks, defending player mills five cards.",
+            "Whenever this Spacecraft attacks, target player mills four cards.",
+            "Whenever this Spacecraft attacks, each opponent mills four cards.",
+            "Whenever this Spacecraft attacks, you mill four cards.",
+            "Whenever this artifact attacks, defending player mills four cards.",
+            "When this Spacecraft enters, defending player mills four cards.",
+            "Whenever this Spacecraft attacks, defending player mills four cards, then draws a card.",
+            "Whenever this Spacecraft attacks, defending player mills four cards. You gain 1 life."
         ),
     },
     Recipe {
@@ -41993,5 +43078,775 @@ mod tests {
                 "near-miss was accepted by {expected_owner}: {clause}"
             );
         }
+    }
+
+    fn issue_423_context(oracle_id: &str, name: &str) -> RecipeContext {
+        let mut context = context();
+        context.oracle_id = Some(oracle_id.into());
+        context.source_name = name.into();
+        context
+    }
+
+    fn issue_423_station_pair(threshold: u32, keyword_line: &str) -> String {
+        format!(
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at {threshold}+.)\n{threshold}+ | {keyword_line}"
+        )
+    }
+
+    fn issue_423_station_activation(assembly: &StationAssemblyEmission) -> &ActivatedAbilityDef {
+        &assembly.activated_ability
+    }
+
+    fn issue_423_only_static_definition(matched: &RecipeMatch) -> &StaticAbilityDef {
+        let RecipeEmission::StaticAbility(ability) = &matched.emission else {
+            panic!("issue #423 striation must emit exactly one static ability");
+        };
+        assert_eq!(ability.ability_id.as_str(), "static_01");
+        &ability.definition
+    }
+
+    #[test]
+    fn issue_423_spacecraft_station_assembly_is_exact_and_typed() {
+        let greenhouse = issue_423_context(
+            ISSUE_423_ATMOSPHERIC_GREENHOUSE_ORACLE_ID,
+            "Atmospheric Greenhouse",
+        );
+        let pair = issue_423_station_pair(8, "Flying, trample");
+        let matched = match_station_assembly(&pair, &greenhouse)
+            .expect("Issue #423 Station pair must not be ambiguous")
+            .expect("reviewed Station pair should match");
+        assert_eq!(matched.id.as_str(), "station.spacecraft.thresholds");
+        let RecipeEmission::StationAssembly(assembly) = matched.emission else {
+            panic!("Station pair must emit the paired activated and static abilities")
+        };
+        let activation = issue_423_station_activation(&assembly);
+        assert_eq!(
+            activation.costs,
+            [AbilityCost::TapPermanents {
+                constraint: ObjectPaymentConstraint::ExactCount(1),
+                filter: TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    ..TargetFilter::default()
+                },
+                exclude_source: true,
+            }]
+        );
+        assert_eq!(activation.timing, ActivationTiming::SorcerySpeed);
+        assert_eq!(
+            activation.effect,
+            [SpellEffectKind::PutCounters {
+                counter: CounterKind::Charge,
+                count: Amount::Count(CountExpression::CardResultCharacteristicSum {
+                    filter: CardResultFilter {
+                        source: CardResultSource::Payment,
+                        action: CardResultAction::Tap,
+                        players: RelativePlayerSet::Controller,
+                        card_type: Some(CardTypeFilter::Creature),
+                    },
+                    characteristic: PowerToughnessCharacteristic::Power,
+                }),
+                subject: EffectSubject::Source,
+            }]
+        );
+        assert_eq!(
+            assembly.static_ability.definition,
+            StaticAbilityDef::ConditionalSelfModifier {
+                condition: GameCondition::SourceCounterCount {
+                    counter: CounterKind::Charge,
+                    min: Some(8),
+                    max: None,
+                },
+                set_types: None,
+                add_types: TypeLineAddition {
+                    card_types: vec![PermanentTypeFilter::Creature],
+                    creature_types: Vec::new(),
+                },
+                base_power: Some(5),
+                base_toughness: Some(4),
+                delta_power: 0,
+                delta_toughness: 0,
+                keywords: vec![Keyword::Flying, Keyword::Trample],
+                activated_abilities: Vec::new(),
+                triggered_abilities: Vec::new(),
+                can_attack_as_though_without_defender: false,
+            }
+        );
+
+        let dawnsire = issue_423_context(
+            ISSUE_423_DAWNSIRE_ORACLE_ID,
+            "Dawnsire, Sunstar Dreadnought",
+        );
+        let dawnsire_pair = issue_423_station_pair(20, "Flying");
+        let matched = match_station_assembly(&dawnsire_pair, &dawnsire)
+            .expect("Dawnsire pair must not be ambiguous")
+            .expect("Dawnsire's 20+ keyword striation should match");
+        let RecipeEmission::StationAssembly(assembly) = matched.emission else {
+            panic!("Dawnsire pair must emit the paired abilities")
+        };
+        assert_eq!(
+            assembly.static_ability.definition,
+            StaticAbilityDef::ConditionalSelfModifier {
+                condition: GameCondition::SourceCounterCount {
+                    counter: CounterKind::Charge,
+                    min: Some(20),
+                    max: None,
+                },
+                set_types: None,
+                add_types: TypeLineAddition {
+                    card_types: vec![PermanentTypeFilter::Creature],
+                    creature_types: Vec::new(),
+                },
+                base_power: Some(20),
+                base_toughness: Some(20),
+                delta_power: 0,
+                delta_toughness: 0,
+                keywords: vec![Keyword::Flying],
+                activated_abilities: Vec::new(),
+                triggered_abilities: Vec::new(),
+                can_attack_as_though_without_defender: false,
+            }
+        );
+
+        for near_miss in [
+            issue_423_station_pair(9, "Flying, trample"),
+            issue_423_station_pair(8, "Flying"),
+            issue_423_station_pair(8, "Trample, flying"),
+            issue_423_station_pair(8, "Flying, deathtouch"),
+            format!("{pair}\n8+ | Flying, trample"),
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Planet. Station only as a sorcery.)\n8+ | Flying, trample".to_string(),
+            issue_423_station_pair(8, "Flying, trample").replace(" at 8+.)", ".)"),
+        ] {
+            assert_eq!(
+                match_station_assembly(&near_miss, &greenhouse),
+                Ok(None),
+                "unreviewed Station near-miss must stay unsupported: {near_miss}"
+            );
+        }
+        let mut unreviewed = greenhouse.clone();
+        unreviewed.oracle_id = Some("00000000-0000-0000-0000-000000000000".into());
+        assert_eq!(match_station_assembly(&pair, &unreviewed), Ok(None));
+
+        let mut excluded = greenhouse.clone();
+        excluded.oracle_id = Some("90c5ea2b-d004-4219-b60c-d51bc1a5ee6b".into());
+        excluded.source_name = "Entropic Battlecruiser".into();
+        assert_eq!(
+            match_station_assembly(&issue_423_station_pair(8, "Flying, deathtouch"), &excluded),
+            Ok(None),
+            "an excluded cohort identity must not match the generic keyword striation"
+        );
+    }
+
+    #[test]
+    fn issue_423_spacecraft_station_variants_cover_every_reviewed_striation() {
+        for (oracle_id, name, threshold, keyword_line) in [
+            (
+                ISSUE_423_ATMOSPHERIC_GREENHOUSE_ORACLE_ID,
+                "Atmospheric Greenhouse",
+                8,
+                "Flying, trample",
+            ),
+            (
+                ISSUE_423_DAWNSIRE_ORACLE_ID,
+                "Dawnsire, Sunstar Dreadnought",
+                20,
+                "Flying",
+            ),
+            (
+                ISSUE_423_LARVAL_SCOUTLANDER_ORACLE_ID,
+                "Larval Scoutlander",
+                7,
+                "Flying",
+            ),
+            (
+                ISSUE_423_LUMEN_CLASS_FRIGATE_ORACLE_ID,
+                "Lumen-Class Frigate",
+                12,
+                "Flying, lifelink",
+            ),
+            (
+                ISSUE_423_SLEDGE_CLASS_SEEDSHIP_ORACLE_ID,
+                "Sledge-Class Seedship",
+                7,
+                "Flying",
+            ),
+            (
+                ISSUE_423_SPECIMEN_FREIGHTER_ORACLE_ID,
+                "Specimen Freighter",
+                9,
+                "Flying",
+            ),
+            (
+                ISSUE_423_SYNTHESIZER_LABSHIP_ORACLE_ID,
+                "Synthesizer Labship",
+                9,
+                "Flying, vigilance",
+            ),
+        ] {
+            let context = issue_423_context(oracle_id, name);
+            let pair = issue_423_station_pair(threshold, keyword_line);
+            let matched = match_station_assembly(&pair, &context)
+                .unwrap_or_else(|ambiguity| panic!("{name}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{name} must match its reviewed striation"));
+            assert_eq!(
+                matched.id.as_str(),
+                "station.spacecraft.thresholds",
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_423_planet_station_assembly_grants_the_threshold_activation() {
+        let kavaron = issue_423_context(ISSUE_423_KAVARON_ORACLE_ID, "Kavaron, Memorial World");
+        let pair = format!("{ISSUE_423_PLANET_STATION_HEADER}\n{ISSUE_423_KAVARON_STRIATION}");
+        let matched = match_station_assembly(&pair, &kavaron)
+            .expect("Kavaron pair must not be ambiguous")
+            .expect("Kavaron's reviewed pair should match");
+        assert_eq!(matched.id.as_str(), "station.planets.12.activated");
+        let RecipeEmission::StationAssembly(assembly) = matched.emission else {
+            panic!("Planet pair must emit the paired abilities")
+        };
+        let StaticAbilityDef::ConditionalSelfModifier {
+            condition,
+            activated_abilities,
+            triggered_abilities,
+            ..
+        } = assembly.static_ability.definition
+        else {
+            panic!("Planet threshold must be a conditional self modifier")
+        };
+        assert_eq!(
+            condition,
+            GameCondition::SourceCounterCount {
+                counter: CounterKind::Charge,
+                min: Some(12),
+                max: None,
+            }
+        );
+        assert!(triggered_abilities.is_empty());
+        let [inner] = activated_abilities.as_slice() else {
+            panic!("Kavaron's threshold grants exactly one activated ability")
+        };
+        assert_eq!(inner.timing, ActivationTiming::SorcerySpeed);
+        assert_eq!(
+            inner.costs,
+            [
+                fixed_mana_cost("{1}{R}"),
+                AbilityCost::Tap,
+                AbilityCost::SacrificePermanent {
+                    filter: TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        controller: TargetController::You,
+                        permanent_types: vec![PermanentTypeFilter::Land],
+                        ..TargetFilter::default()
+                    },
+                },
+            ]
+        );
+        assert_eq!(
+            inner.effect,
+            [
+                SpellEffectKind::CreateTokens {
+                    token: "robot_c_2_2".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                },
+                SpellEffectKind::PumpAll {
+                    filter: CreatureScopeFilter {
+                        controller: Some(CreatureScopeController::YouControl),
+                        ..CreatureScopeFilter::default()
+                    },
+                    power: 1,
+                    toughness: 0,
+                },
+                SpellEffectKind::GrantKeywordsAll {
+                    filter: CreatureScopeFilter {
+                        controller: Some(CreatureScopeController::YouControl),
+                        ..CreatureScopeFilter::default()
+                    },
+                    keywords: vec![Keyword::Haste],
+                },
+            ]
+        );
+
+        let susur = issue_423_context(
+            ISSUE_423_SUSUR_SECUNDI_ORACLE_ID,
+            "Susur Secundi, Void Altar",
+        );
+        let susur_pair =
+            format!("{ISSUE_423_PLANET_STATION_HEADER}\n{ISSUE_423_SUSUR_SECUNDI_STRIATION}");
+        let matched = match_station_assembly(&susur_pair, &susur)
+            .expect("Susur Secundi pair must not be ambiguous")
+            .expect("Susur Secundi's reviewed pair should match");
+        let RecipeEmission::StationAssembly(assembly) = matched.emission else {
+            panic!("Susur Secundi pair must emit the paired abilities")
+        };
+        let StaticAbilityDef::ConditionalSelfModifier {
+            activated_abilities,
+            ..
+        } = assembly.static_ability.definition
+        else {
+            panic!("Susur Secundi threshold must be a conditional self modifier")
+        };
+        let [inner] = activated_abilities.as_slice() else {
+            panic!("Susur Secundi's threshold grants exactly one activated ability")
+        };
+        assert_eq!(
+            inner.costs,
+            [
+                fixed_mana_cost("{1}{B}"),
+                AbilityCost::Tap,
+                AbilityCost::PayLife { amount: 2 },
+                AbilityCost::SacrificePermanent {
+                    filter: TargetFilter {
+                        kind: TargetKind::Creature,
+                        controller: TargetController::You,
+                        ..TargetFilter::default()
+                    },
+                },
+            ]
+        );
+        assert_eq!(
+            inner.effect,
+            [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Count(CountExpression::CardResultCharacteristicSum {
+                    filter: CardResultFilter {
+                        source: CardResultSource::Payment,
+                        action: CardResultAction::Sacrifice,
+                        players: RelativePlayerSet::Controller,
+                        card_type: Some(CardTypeFilter::Creature),
+                    },
+                    characteristic: PowerToughnessCharacteristic::Power,
+                }),
+            }]
+        );
+
+        for near_miss in [
+            format!("{ISSUE_423_PLANET_STATION_HEADER}\n{}", ISSUE_423_KAVARON_STRIATION.replace("12+ |", "11+ |")),
+            format!("{ISSUE_423_PLANET_STATION_HEADER}\n{}", ISSUE_423_KAVARON_STRIATION.replace("Sacrifice a land:", "Sacrifice a creature:")),
+            format!("{ISSUE_423_PLANET_STATION_HEADER}\n{ISSUE_423_KAVARON_STRIATION}\n{ISSUE_423_KAVARON_STRIATION}"),
+            format!("{ISSUE_423_KAVARON_STRIATION}\n{ISSUE_423_PLANET_STATION_HEADER}"),
+            format!("{ISSUE_423_PLANET_STATION_HEADER}\n{ISSUE_423_SUSUR_SECUNDI_STRIATION}"),
+        ] {
+            assert_eq!(
+                match_station_assembly(&near_miss, &kavaron),
+                Ok(None),
+                "reviewed Planet near-miss must stay unsupported: {near_miss}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_423_threshold_statics_are_exact_and_typed() {
+        let lumen = issue_423_context(
+            ISSUE_423_LUMEN_CLASS_FRIGATE_ORACLE_ID,
+            "Lumen-Class Frigate",
+        );
+        let matched = match_clause("2+ | Other creatures you control get +1/+1.", false, &lumen)
+            .expect("Lumen anthem must not be ambiguous")
+            .expect("Lumen's 2+ anthem should match");
+        assert_eq!(
+            matched.id.as_str(),
+            "station.static.anthem.2.creatures_you_control"
+        );
+        assert_eq!(
+            issue_423_only_static_definition(&matched),
+            &StaticAbilityDef::AnthemPt {
+                filter: CreatureScopeFilter {
+                    controller: Some(CreatureScopeController::YouControl),
+                    exclude_self: true,
+                    ..CreatureScopeFilter::default()
+                },
+                condition: Some(GameCondition::SourceCounterCount {
+                    counter: CounterKind::Charge,
+                    min: Some(2),
+                    max: None,
+                }),
+                delta_power: 1,
+                delta_toughness: 1,
+            }
+        );
+
+        let dawnsire = issue_423_context(
+            ISSUE_423_DAWNSIRE_ORACLE_ID,
+            "Dawnsire, Sunstar Dreadnought",
+        );
+        let clause = "10+ | Whenever you attack, Dawnsire deals 100 damage to up to one target creature or planeswalker.";
+        let matched = match_clause(clause, false, &dawnsire)
+            .expect("Dawnsire static must not be ambiguous")
+            .expect("Dawnsire's 10+ attack trigger should match");
+        assert_eq!(matched.id.as_str(), "station.static.damage.100.attack");
+        let StaticAbilityDef::ConditionalSelfModifier {
+            condition,
+            triggered_abilities,
+            ..
+        } = issue_423_only_static_definition(&matched)
+        else {
+            panic!("Dawnsire's striation must be a conditional self modifier")
+        };
+        assert_eq!(
+            condition,
+            &GameCondition::SourceCounterCount {
+                counter: CounterKind::Charge,
+                min: Some(10),
+                max: None,
+            }
+        );
+        let [trigger] = triggered_abilities.as_slice() else {
+            panic!("Dawnsire's striation grants exactly one triggered ability")
+        };
+        assert_eq!(
+            trigger.trigger,
+            TriggerCondition::WheneverControllerAttacks {
+                min_attackers: None,
+                max_attackers: None,
+            }
+        );
+        assert_eq!(
+            trigger.effect,
+            [SpellEffectKind::DamageTarget {
+                amount: Amount::Fixed(100),
+                target: TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![
+                        PermanentTypeFilter::Creature,
+                        PermanentTypeFilter::Planeswalker,
+                    ],
+                    ..TargetFilter::default()
+                },
+            }]
+        );
+        assert_eq!(
+            trigger.targeting,
+            Some(exact_targeting(
+                0,
+                1,
+                "Choose up to one target creature or planeswalker",
+                vec![0],
+            ))
+        );
+
+        let synthesizer = issue_423_context(
+            ISSUE_423_SYNTHESIZER_LABSHIP_ORACLE_ID,
+            "Synthesizer Labship",
+        );
+        let clause = "2+ | At the beginning of combat on your turn, up to one other target artifact you control becomes an artifact creature with base power and toughness 2/2 and gains flying until end of turn.";
+        let matched = match_clause(clause, false, &synthesizer)
+            .expect("Synthesizer static must not be ambiguous")
+            .expect("Synthesizer's 2+ animation should match");
+        assert_eq!(matched.id.as_str(), "station.static.combat_animation");
+        let StaticAbilityDef::ConditionalSelfModifier {
+            condition,
+            triggered_abilities,
+            ..
+        } = issue_423_only_static_definition(&matched)
+        else {
+            panic!("Synthesizer's striation must be a conditional self modifier")
+        };
+        assert_eq!(
+            condition,
+            &GameCondition::SourceCounterCount {
+                counter: CounterKind::Charge,
+                min: Some(2),
+                max: None,
+            }
+        );
+        let [trigger] = triggered_abilities.as_slice() else {
+            panic!("Synthesizer's striation grants exactly one triggered ability")
+        };
+        assert_eq!(
+            trigger.trigger,
+            TriggerCondition::AtBeginningOfCombat {
+                player: CastTriggerPlayer::Controller,
+            }
+        );
+        assert_eq!(trigger.effect.len(), 3);
+        assert_eq!(
+            trigger.targeting,
+            Some(exact_targeting(
+                0,
+                1,
+                "Choose up to one other target artifact you control",
+                vec![0, 1, 2],
+            ))
+        );
+        let SpellEffectKind::ApplyPermanentModifier {
+            modifier: ResolvingPermanentModifier::SetBasePowerToughness { power, toughness },
+            duration: ResolvingEffectDuration::UntilEndOfTurn,
+            ..
+        } = &trigger.effect[1]
+        else {
+            panic!("Synthesizer's second modifier sets base P/T until end of turn")
+        };
+        assert_eq!((*power, *toughness), (2, 2));
+
+        for clause in [
+            "2+ | Other creatures you control get +1/+1.",
+            "10+ | Whenever you attack, Dawnsire deals 100 damage to up to one target creature or planeswalker.",
+            "2+ | At the beginning of combat on your turn, up to one other target artifact you control becomes an artifact creature with base power and toughness 2/2 and gains flying until end of turn.",
+        ] {
+            let mut excluded = lumen.clone();
+            excluded.oracle_id = Some("a6bcec1f-f515-4e63-9e84-8eb04cc582ff".into());
+            excluded.source_name = "The Seriema".into();
+            assert_eq!(
+                match_clause(clause, false, &excluded),
+                Ok(None),
+                "an excluded identity must not inherit a reviewed striation: {clause}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_423_companion_clauses_are_exact_and_typed() {
+        let greenhouse = issue_423_context(
+            ISSUE_423_ATMOSPHERIC_GREENHOUSE_ORACLE_ID,
+            "Atmospheric Greenhouse",
+        );
+        let greenhouse_clause =
+            "When this Spacecraft enters, put a +1/+1 counter on each creature you control.";
+        let matched = match_clause(greenhouse_clause, false, &greenhouse)
+            .expect("Greenhouse ETB must not be ambiguous")
+            .expect("Greenhouse ETB should match");
+        assert_eq!(matched.id.as_str(), "station.etb.counters_each_creature");
+        assert_eq!(
+            matched.emission,
+            RecipeEmission::TriggeredAbility(TriggeredAbilityDef {
+                ability_id: AbilityId::new("triggered_01").unwrap(),
+                presentation: AbilityPresentation::OracleLines(vec![1]),
+                trigger: TriggerCondition::WhenSelfEntersBattlefield,
+                effect: vec![SpellEffectKind::PutCountersAll {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    filter: CreatureScopeFilter {
+                        controller: Some(CreatureScopeController::YouControl),
+                        ..CreatureScopeFilter::default()
+                    },
+                }],
+                modal: None,
+                targeting: None,
+                may: false,
+                intervening_if: None,
+                max_triggers_per_turn: None,
+                triggers_only_once: false,
+            })
+        );
+
+        let larval =
+            issue_423_context(ISSUE_423_LARVAL_SCOUTLANDER_ORACLE_ID, "Larval Scoutlander");
+        let larval_clause = "When this Spacecraft enters, you may sacrifice a land or Lander. If you do, search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.";
+        let matched = match_clause(larval_clause, false, &larval)
+            .expect("Larval ETB must not be ambiguous")
+            .expect("Larval ETB should match");
+        assert_eq!(matched.id.as_str(), "station.etb.sac_land_search_two");
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("Larval ETB must emit a triggered ability")
+        };
+        let [SpellEffectKind::ChooseResolutionBranch {
+            optional, branches, ..
+        }] = ability.effect.as_slice()
+        else {
+            panic!("Larval ETB must offer its printed optional branch")
+        };
+        assert!(optional);
+        let [branch] = branches.as_slice() else {
+            panic!("Larval ETB has exactly one printed branch")
+        };
+        assert_eq!(branch.branch_id.as_str(), "sacrifice_a_land_or_lander");
+        assert_eq!(
+            branch.cost,
+            ResolutionCost::SacrificePermanent {
+                filter: TargetFilter {
+                    any_of: Some(vec![
+                        TargetFilter {
+                            kind: TargetKind::AnyPermanent,
+                            controller: TargetController::You,
+                            permanent_types: vec![PermanentTypeFilter::Land],
+                            ..TargetFilter::default()
+                        },
+                        TargetFilter {
+                            kind: TargetKind::AnyPermanent,
+                            controller: TargetController::You,
+                            required_subtypes: vec!["Lander".into()],
+                            ..TargetFilter::default()
+                        },
+                    ]),
+                    ..TargetFilter::default()
+                },
+                source_only: false,
+            }
+        );
+        let [SpellEffectKind::SearchLibrary {
+            count,
+            filter,
+            zones,
+            destination,
+            shuffle,
+            optional,
+            ..
+        }] = branch.effects.as_slice()
+        else {
+            panic!("Larval's branch searches its library")
+        };
+        assert_eq!((*count, *optional, *shuffle), (2, false, true));
+        assert_eq!(
+            filter,
+            &Some(ZoneCardFilter {
+                card_type: Some(CardTypeFilter::BasicLand),
+                ..ZoneCardFilter::default()
+            })
+        );
+        assert_eq!(zones, &SearchZoneSelection::default());
+        assert_eq!(
+            destination,
+            &SearchDestination::Battlefield { tapped: true }
+        );
+
+        let sledge = issue_423_context(
+            ISSUE_423_SLEDGE_CLASS_SEEDSHIP_ORACLE_ID,
+            "Sledge-Class Seedship",
+        );
+        let sledge_clause = "Whenever this Spacecraft attacks, you may put a creature card from your hand onto the battlefield.";
+        let matched = match_clause(sledge_clause, false, &sledge)
+            .expect("Sledge attack must not be ambiguous")
+            .expect("Sledge attack should match");
+        assert_eq!(matched.id.as_str(), "station.attack.put_creature_from_hand");
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("Sledge attack must emit a triggered ability")
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0,
+            }
+        );
+        let [SpellEffectKind::SearchLibrary {
+            optional,
+            count,
+            filter,
+            zones,
+            destination,
+            shuffle,
+            ..
+        }] = ability.effect.as_slice()
+        else {
+            panic!("Sledge attack puts a hand card onto the battlefield")
+        };
+        assert_eq!((*optional, *count, *shuffle), (true, 1, false));
+        assert_eq!(
+            filter,
+            &Some(ZoneCardFilter {
+                card_type: Some(CardTypeFilter::Creature),
+                ..ZoneCardFilter::default()
+            })
+        );
+        assert_eq!(
+            zones,
+            &SearchZoneSelection::Fixed(vec![CardSearchZone::Hand])
+        );
+        assert_eq!(
+            destination,
+            &SearchDestination::Battlefield { tapped: false }
+        );
+
+        let specimen =
+            issue_423_context(ISSUE_423_SPECIMEN_FREIGHTER_ORACLE_ID, "Specimen Freighter");
+        let bounce_clause = "When this Spacecraft enters, return up to two target non-Spacecraft creatures to their owners' hands.";
+        let matched = match_clause(bounce_clause, false, &specimen)
+            .expect("Specimen ETB must not be ambiguous")
+            .expect("Specimen ETB should match");
+        assert_eq!(matched.id.as_str(), "station.etb.bounce_two_nonspacecraft");
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("Specimen ETB must emit a triggered ability")
+        };
+        assert_eq!(
+            ability.targeting,
+            Some(exact_targeting(
+                0,
+                2,
+                "Choose up to two target non-Spacecraft creatures",
+                vec![0],
+            ))
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::ReturnToOwnersHand {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    excluded_subtypes: vec!["Spacecraft".into()],
+                    ..TargetFilter::default()
+                })),
+            }]
+        );
+
+        let mill_clause = "Whenever this Spacecraft attacks, defending player mills four cards.";
+        let matched = match_clause(mill_clause, false, &specimen)
+            .expect("Specimen attack must not be ambiguous")
+            .expect("Specimen attack should match");
+        assert_eq!(matched.id.as_str(), "station.attack.mill_four_defending");
+        assert_eq!(
+            matched.emission,
+            RecipeEmission::TriggeredAbility(TriggeredAbilityDef {
+                ability_id: AbilityId::new("triggered_01").unwrap(),
+                presentation: AbilityPresentation::OracleLines(vec![1]),
+                trigger: TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                },
+                effect: vec![SpellEffectKind::Mill {
+                    count: Amount::Fixed(4),
+                    who: PlayerRecipient::DefendingPlayer,
+                }],
+                modal: None,
+                targeting: None,
+                may: false,
+                intervening_if: None,
+                max_triggers_per_turn: None,
+                triggers_only_once: false,
+            })
+        );
+    }
+
+    #[test]
+    fn issue_423_reviewed_surfaces_and_unreviewed_identity_fail_closed() {
+        assert!(issue_423_oracle_id_is_reviewed(
+            ISSUE_423_ATMOSPHERIC_GREENHOUSE_ORACLE_ID
+        ));
+        assert!(!issue_423_oracle_id_is_reviewed(
+            "70d35dbd-1d91-4a2a-a643-6870d168f4f5"
+        ));
+        assert!(issue_423_card_surface_is_exact(
+            ISSUE_423_ATMOSPHERIC_GREENHOUSE_ORACLE_ID,
+            "Atmospheric Greenhouse",
+            "{4}{G}",
+            "Artifact — Spacecraft",
+            "When this Spacecraft enters, put a +1/+1 counter on each creature you control.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8+.)\n8+ | Flying, trample",
+            Some("5"),
+            Some("4"),
+        ));
+        assert!(!issue_423_card_surface_is_exact(
+            ISSUE_423_ATMOSPHERIC_GREENHOUSE_ORACLE_ID,
+            "Atmospheric Greenhouse",
+            "{4}{G}",
+            "Artifact — Spacecraft",
+            "When this Spacecraft enters, put a +1/+1 counter on each creature you control.\nStation (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 9+.)\n9+ | Flying, trample",
+            Some("5"),
+            Some("4"),
+        ));
+        assert!(issue_423_card_surface_is_exact(
+            "00000000-0000-0000-0000-000000000000",
+            "Unknown",
+            "",
+            "",
+            "",
+            None,
+            None,
+        ));
+        for oracle_id in ISSUE_423_REVIEWED_ORACLE_IDS {
+            assert!(issue_423_oracle_id_is_reviewed(oracle_id));
+        }
+        assert_eq!(ISSUE_423_REVIEWED_ORACLE_IDS.len(), 9);
     }
 }

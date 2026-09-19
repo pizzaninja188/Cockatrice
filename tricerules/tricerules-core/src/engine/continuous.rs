@@ -1052,13 +1052,17 @@ impl GameEngine {
                 if removed_at.is_some_and(|timestamp| effect.timestamp <= timestamp) {
                     return None;
                 }
-                super::characteristics::effect_affects(
+                // CR 604.1 / 611.3: a granted activated ability exists only while the granting
+                // continuous effect applies. ConditionalSelfModifier and conditioned
+                // AttachedModifier grants must therefore honor their condition here, or a
+                // below-threshold Station ability would wrongly stay activatable.
+                (super::characteristics::effect_affects(
                     &self.state,
                     self.registry,
                     effect,
                     source_id,
                     &characteristics,
-                )
+                ) && self.continuous_effect_condition_holds(effect))
                 .then(|| {
                     let path = match effect.trigger_grant_origin.as_ref() {
                         Some(TriggerAbilityOrigin::StaticGrant { definition, .. }) => {

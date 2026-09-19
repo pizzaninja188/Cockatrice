@@ -533,3 +533,5 @@ mod issue_415_clue_equipment;
 mod issue_416_roads_entry;
 #[path = "scenario/issue_417_self_sacrifice_mana.rs"]
 mod issue_417_self_sacrifice_mana;
+#[path = "scenario/issue_423_station_thresholds.rs"]
+mod issue_423_station_thresholds;

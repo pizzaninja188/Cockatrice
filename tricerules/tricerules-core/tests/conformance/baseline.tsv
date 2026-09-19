@@ -129,6 +129,8 @@ assault_griffin	0	cast	exercised
 assault_zeppelid	0	cast	exercised
 assert_perfection	0	cast	exercised
 atlantean_cavalry	0	cast	exercised
+atmospheric_greenhouse	0	ability:0	exercised
+atmospheric_greenhouse	0	cast	exercised
 attentive_sunscribe	0	cast	exercised
 attercop	0	cast	exercised
 audacious_thief	0	cast	exercised
@@ -575,6 +577,8 @@ dawn_gryff	0	cast	exercised
 dawnhand_eulogist	0	cast	exercised
 dawning_angel	0	cast	exercised
 dawns_light_archer	0	cast	exercised
+dawnsire,_sunstar_dreadnought	0	ability:0	exercised
+dawnsire,_sunstar_dreadnought	0	cast	exercised
 dawnstrike_paladin	0	cast	exercised
 dawnwing_marshal	0	ability:0	exercised
 dawnwing_marshal	0	cast	exercised
@@ -1341,6 +1345,9 @@ kami_of_the_crescent_moon	0	cast	exercised
 karais_technique	0	cast	exercised
 kasimir_the_lone_wolf	0	cast	exercised
 kav_landseeker	0	cast	exercised
+kavaron,_memorial_world	0	ability:0	exercised
+kavaron,_memorial_world	0	ability:1	exercised
+kavaron,_memorial_world	0	land	exercised
 kavu_climber	0	cast	exercised
 kederekt_creeper	0	cast	exercised
 keen-eyed_archers	0	cast	exercised
@@ -1401,6 +1408,8 @@ lakeside_shack	0	ability:0	exercised
 lakeside_shack	0	land	exercised
 land_leeches	0	cast	exercised
 lantern_kami	0	cast	exercised
+larval_scoutlander	0	ability:0	exercised
+larval_scoutlander	0	cast	exercised
 last_gasp	0	cast	exercised
 lasyd_prowler	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 lasyd_prowler	0	cast	exercised
@@ -1472,6 +1481,8 @@ loxodon_wayfarer	0	cast	exercised
 lucent_liminid	0	cast	exercised
 lumbering_worldwagon	0	ability:0	unsupported: nonmana costs need additional fixture resources
 lumbering_worldwagon	0	cast	exercised
+lumen-class_frigate	0	ability:0	exercised
+lumen-class_frigate	0	cast	exercised
 lumengrid_gargoyle	0	cast	exercised
 lumengrid_warden	0	cast	exercised
 luminous_rebuke	0	cast	exercised
@@ -2207,6 +2218,8 @@ skyswirl_harrier	0	cast	exercised
 slash_panther	0	cast	exercised
 slavering_branchsnapper	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 slavering_branchsnapper	0	cast	exercised
+sledge-class_seedship	0	ability:0	exercised
+sledge-class_seedship	0	cast	exercised
 sleight_of_hand	0	cast	exercised
 slippery_bogle	0	cast	exercised
 slithering_cryptid	0	cast	exercised
@@ -2243,6 +2256,8 @@ soulstone_sanctuary	0	land	exercised
 soured_springs	0	ability:0	exercised
 soured_springs	0	land	exercised
 sparktongue_dragon	0	cast	exercised
+specimen_freighter	0	ability:0	exercised
+specimen_freighter	0	cast	exercised
 spectral_rider	0	cast	exercised
 spectral_sailor	0	ability:0	exercised
 spectral_sailor	0	cast	exercised
@@ -2385,6 +2400,9 @@ surrak,_elusive_hunter	0	cast	exercised
 surveillance_room	0	ability:0	exercised
 surveillance_room	0	ability:1	exercised
 surveillance_room	0	land	exercised
+susur_secundi,_void_altar	0	ability:0	exercised
+susur_secundi,_void_altar	0	ability:1	exercised
+susur_secundi,_void_altar	0	land	exercised
 susurian_voidborn	0	cast	exercised
 swab_goblin	0	cast	exercised
 swallowed_by_leviathan	0	cast	unsupported: target group 0 needs a richer fixture
@@ -2403,6 +2421,8 @@ swords_to_plowshares	0	cast	exercised
 swordwise_centaur	0	cast	exercised
 sworn_guardian	0	cast	exercised
 sylvan_brushstrider	0	cast	exercised
+synthesizer_labship	0	ability:0	exercised
+synthesizer_labship	0	cast	exercised
 tackle_artist	0	cast	exercised
 taiga	0	ability:0	exercised
 taiga	0	land	exercised
