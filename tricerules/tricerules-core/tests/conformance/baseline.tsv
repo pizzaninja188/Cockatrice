@@ -563,8 +563,10 @@ daggermaw_megalodon	0	ability:0	unsupported: ability not offered by generic batt
 daggermaw_megalodon	0	cast	exercised
 daggersail_aeronaut	0	cast	exercised
 dai_li_indoctrination	0	cast	exercised
+daily_bugle_reporters	0	cast	exercised
 dakmor_bat	0	cast	exercised
 dakmor_scorpion	0	cast	exercised
+damage_control_crew	0	cast	exercised
 dancing_scimitar	0	cast	exercised
 daring_thunder-thief	0	cast	exercised
 dark_deed	0	cast	exercised
@@ -937,6 +939,7 @@ gangly_stompling	0	cast	exercised
 gargantuan_leech	0	cast	exercised
 garruks_companion	0	cast	exercised
 garruks_gorehorn	0	cast	exercised
+gearbane_orangutan	0	cast	exercised
 gearsmith_guardian	0	cast	exercised
 gearsmith_prodigy	0	cast	exercised
 geist_of_the_moors	0	cast	exercised
@@ -957,6 +960,7 @@ ghost_vacuum	0	ability:1	exercised
 ghost_vacuum	0	cast	exercised
 ghostform	0	cast	exercised
 ghostly_sentinel	0	cast	exercised
+giant-sized_flying_ant	0	cast	exercised
 giant_cindermaw	0	cast	exercised
 giant_cockroach	0	cast	exercised
 giant_growth	0	cast	exercised
@@ -985,6 +989,7 @@ gingerbrute	0	cast	exercised
 give_in_to_violence	0	cast	exercised
 glacial_wall	0	cast	exercised
 gladecover_scout	0	cast	exercised
+glamermite	0	cast	exercised
 glamorous_grapplers	0	cast	exercised
 glaring_aegis	0	cast	exercised
 glass_golem	0	cast	exercised
@@ -1478,6 +1483,7 @@ long_lake_nuisance	0	cast	exercised
 longbow_archer	0	cast	exercised
 looming_altisaur	0	cast	exercised
 loporrit_scout	0	cast	exercised
+lord_skitters_butcher	0	cast	exercised
 los_diablos_missile_base	0	ability:0	exercised
 los_diablos_missile_base	0	land	exercised
 lost_days	0	cast	exercised
@@ -1718,6 +1724,7 @@ oin_the_brave	0	ability:0	exercised
 oin_the_brave	0	cast	exercised
 okos_accomplices	0	cast	exercised
 old_ghastbark	0	cast	exercised
+oltec_archaeologists	0	cast	exercised
 omashu_city	0	ability:0	exercised
 omashu_city	0	ability:1	exercised
 omashu_city	0	land	exercised
@@ -1877,6 +1884,7 @@ quicksilver,_pietro_maximoff	0	cast	exercised
 quill-blade_laureate_twofold_intent	0	cast	exercised
 quill-blade_laureate_twofold_intent	1	cast	intentional: face unavailable from hand
 quilled_slagwurm	0	cast	exercised
+qutrub_forayer	0	cast	exercised
 rabid_bite	0	cast	exercised
 radiant_strike	0	cast	exercised
 ragged_playmate	0	ability:0	exercised

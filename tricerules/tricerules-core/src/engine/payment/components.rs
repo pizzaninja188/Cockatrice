@@ -14,7 +14,10 @@ pub(in crate::engine) enum PermanentPaymentFilter {
         source: Option<ObjectId>,
         filter: Box<TargetFilter>,
     },
-    Resolution(Box<TargetFilter>),
+    Resolution {
+        source: rv1::CostObjectRef,
+        filter: Box<TargetFilter>,
+    },
 }
 
 #[derive(Clone)]
@@ -115,7 +118,10 @@ impl ObjectPaymentComponent {
                 filter,
                 source_only,
             } => Self::Sacrifice {
-                filter: PermanentPaymentFilter::Resolution(Box::new(filter.clone())),
+                filter: PermanentPaymentFilter::Resolution {
+                    source,
+                    filter: Box::new(filter.clone()),
+                },
                 only_source: source_only.then_some(source),
             },
             ResolutionCost::TapPermanents {
@@ -124,7 +130,10 @@ impl ObjectPaymentComponent {
                 exclude_source,
             } => Self::Tap {
                 constraint: ObjectPaymentConstraint::ExactCount(*count),
-                filter: PermanentPaymentFilter::Resolution(Box::new(filter.clone())),
+                filter: PermanentPaymentFilter::Resolution {
+                    source,
+                    filter: Box::new(filter.clone()),
+                },
                 excluded: exclude_source.then_some(source.object_id),
                 cast_cost_kind: None,
             },
@@ -273,9 +282,24 @@ impl PermanentPaymentFilter {
             Self::Announced { source, filter } => {
                 engine.ability_cost_permanent_matches(player, *source, oid, filter)
             }
-            Self::Resolution(filter) => super::super::targeting::object_matches_scoped_mass_filter(
-                engine, oid, filter, player,
-            ),
+            Self::Resolution { source, filter } => {
+                // CR 115.1 / 400.7: "another creature" is a source-relative exclusion, not a
+                // target. The announced-cost path already honors it through
+                // `ability_cost_permanent_matches`; resolution branches must share that check so
+                // the resolving source's own incarnation is never a legal payment.
+                !super::super::targeting::object_is_excluded(
+                    &engine.state,
+                    &filter.excluded_objects,
+                    oid,
+                    super::super::targeting::TargetSourceIdentity::captured(
+                        source.object_id,
+                        source.zone_change_generation,
+                    ),
+                    TriggerContext::default(),
+                ) && super::super::targeting::object_matches_scoped_mass_filter(
+                    engine, oid, filter, player,
+                )
+            }
         }
     }
 }

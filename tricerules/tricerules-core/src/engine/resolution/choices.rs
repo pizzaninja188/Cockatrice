@@ -94,7 +94,10 @@ pub(super) fn choose_resolution_branch(
             )));
             Ok(EffectOutcome::RestartResolutionBranch(None))
         }
-        (false, [(branch_index, branch)]) => {
+        // A mandatory branch may auto-resolve only when it has nothing left to pay. A costed
+        // branch still needs its payment (and, for object costs, the printed permanent choice),
+        // so it parks through the shared branch-payment path instead of skipping the cost.
+        (false, [(branch_index, branch)]) if branch.cost == ResolutionCost::None => {
             cx.events.push(ev_log(format!(
                 "P{} chooses: {}.",
                 deciding_player,

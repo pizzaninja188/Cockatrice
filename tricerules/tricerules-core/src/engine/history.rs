@@ -2838,6 +2838,40 @@ mod tests {
     }
 
     #[test]
+    fn issue_424_resolution_sacrifice_honors_another_creature_exclusion() {
+        let mut engine = GameEngine::new(
+            424_100,
+            &[0, 1],
+            20,
+            Some(vec![
+                deck_with_cards(&["grizzly_bears", "hill_giant"], "forest"),
+                deck_with_cards(&[], "island"),
+            ]),
+            true,
+        )
+        .unwrap();
+        let source = move_to_battlefield(&mut engine, 0, "grizzly_bears");
+        let other = move_to_battlefield(&mut engine, 0, "hill_giant");
+        let registry = CardRegistry::from_chunks_and_tokens(&[r#"(id: "test", name: "Test", face_id: "test", types: ["Creature"], power: 1, toughness: 1,
+            triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: WhenSelfEntersBattlefield, effect: [ChooseResolutionBranch(optional: true,
+                branches: [(branch_id: "sacrifice_another", presentation: Fallback, cost: SacrificePermanent(filter: (kind: Creature, controller: You, excluded_objects: [Source]), source_only: false), effects: [Draw(count: 1)])])])])"#], &[]).unwrap();
+        let SpellEffectKind::ChooseResolutionBranch { branches, .. } = &registry
+            .get("test")
+            .unwrap()
+            .primary_face()
+            .triggered_abilities[0]
+            .effect[0]
+        else {
+            panic!("branch")
+        };
+        assert_eq!(
+            engine.resolution_cost_candidates(0, source, 0, &branches[0].cost),
+            vec![other],
+            "another creature excludes the resolving source incarnation"
+        );
+    }
+
+    #[test]
     fn issue_171_classification_uses_target_kind_controller_and_graveyard_owner() {
         let mut e = GameEngine::new(
             171_020,

@@ -1636,6 +1636,29 @@ fn modal_targeting_groups(groups: Vec<(&str, Vec<u32>)>) -> Option<TargetingDef>
     })
 }
 
+/// Issue #424: one modal-mode target group with explicit bounds. The shipped
+/// [`modal_targeting_groups`] helper only builds exactly-one groups; "up to N" and
+/// single-graveyard bullets need their own reviewed bounds.
+fn modal_targeting_range(
+    prompt: &str,
+    min: u32,
+    max: u32,
+    effect_indices: Vec<u32>,
+    same_graveyard: bool,
+) -> Option<TargetingDef> {
+    Some(TargetingDef {
+        groups: vec![TargetGroupDef {
+            min,
+            max,
+            prompt: prompt.into(),
+            effect_indices,
+            distinct_from: Vec::new(),
+            same_graveyard,
+            cast_cost_expansion: None,
+        }],
+    })
+}
+
 fn modal_mode(effects: Vec<SpellEffectKind>, targeting: Option<TargetingDef>) -> RecipeEmission {
     RecipeEmission::ModalMode(ModalModeEmission { effects, targeting })
 }
@@ -1748,6 +1771,380 @@ fn match_modal_etb_choose_one(text: &str, context: &RecipeContext) -> Option<Rec
             max_modes: 1,
         },
     ))
+}
+
+/// Issue #424 / CR 122: the `Puff Piece` counter bullet. White Widow, Free Agent prints the
+/// bare body; Daily Bugle Reporters prints the same body under its ability word. Both exact
+/// forms are reviewed, and any other prefix, count, or target form stays unsupported.
+fn match_modal_put_counter_up_to_two_creatures(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Put a +1/+1 counter on each of up to two target creatures."
+        || text == "Puff Piece — Put a +1/+1 counter on each of up to two target creatures.")
+        .then(|| {
+            modal_mode(
+                vec![SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                }],
+                modal_targeting_range("Choose up to two target creatures", 0, 2, vec![0], false),
+            )
+        })
+}
+
+/// Issue #424 / CR 400.7 / 701.13: the `Investigative Journalism` typed graveyard return.
+fn match_modal_return_creature_card_mana_value_two(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text
+        == "Investigative Journalism — Return target creature card with mana value 2 or less from your graveyard to your hand.")
+    .then(|| {
+        modal_mode(
+            vec![SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    card: Some(ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::Creature),
+                        max_mana_value: Some(2),
+                        ..ZoneCardFilter::default()
+                    }),
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::Hand,
+                linked_exile_id: None,
+            }],
+            modal_targeting(
+                "Choose target creature card with mana value 2 or less from your graveyard",
+                0,
+            ),
+        )
+    })
+}
+
+/// Issue #424 / CR 400.7 / 701.13: the `Repair` typed graveyard return.
+fn match_modal_return_card_mana_value_four(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text
+        == "Repair — Return target card with mana value 4 or greater from your graveyard to your hand.")
+    .then(|| {
+        modal_mode(
+            vec![SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    card: Some(ZoneCardFilter {
+                        min_mana_value: Some(4),
+                        ..ZoneCardFilter::default()
+                    }),
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::Hand,
+                linked_exile_id: None,
+            }],
+            modal_targeting(
+                "Choose target card with mana value 4 or greater from your graveyard",
+                0,
+            ),
+        )
+    })
+}
+
+/// Issue #424 / CR 701.13: the `Impound` exile. Archdruid's Charm prints the bare body, so
+/// both exact forms are reviewed.
+fn match_modal_exile_artifact_or_enchantment(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Exile target artifact or enchantment."
+        || text == "Impound — Exile target artifact or enchantment.")
+        .then(|| {
+            modal_mode(
+                vec![SpellEffectKind::Exile {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        permanent_types: vec![
+                            PermanentTypeFilter::Artifact,
+                            PermanentTypeFilter::Enchantment,
+                        ],
+                        ..TargetFilter::default()
+                    })),
+                }],
+                modal_targeting("Choose target artifact or enchantment", 0),
+            )
+        })
+}
+
+/// Issue #424 / CR 701.7: the exact "up to one" artifact destruction. The exactly-one
+/// `modal_mode.destroy.artifact` recipe keeps its own form.
+fn match_modal_destroy_up_to_one_artifact(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Destroy up to one target artifact.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![PermanentTypeFilter::Artifact],
+                    ..TargetFilter::default()
+                })),
+            }],
+            modal_targeting_range("Choose up to one target artifact", 0, 1, vec![0], false),
+        )
+    })
+}
+
+/// Issue #424 / CR 118.12 / 701.17: the mandatory artifact sacrifice and its "if you do"
+/// counters. The branch is mandatory, so a legal artifact is sacrificed without a decline
+/// option; with no legal artifact the branch is skipped and no counters are placed.
+fn match_modal_sacrifice_artifact_two_counters(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Sacrifice an artifact. If you do, put two +1/+1 counters on this creature.").then(
+        || {
+            modal_mode(
+                vec![SpellEffectKind::ChooseResolutionBranch {
+                    chooser: PlayerRecipient::Controller,
+                    optional: false,
+                    selection: ResolutionBranchSelection::PlayerChoice,
+                    branches: vec![ResolutionBranchDef {
+                        branch_id: ChoiceId::new("sacrifice_an_artifact")
+                            .expect("closed sacrifice branch uses a valid choice ID"),
+                        presentation: context.presentation.clone(),
+                        runtime_fallback: None,
+                        cost: ResolutionCost::SacrificePermanent {
+                            filter: TargetFilter {
+                                kind: TargetKind::AnyPermanent,
+                                controller: TargetController::You,
+                                permanent_types: vec![PermanentTypeFilter::Artifact],
+                                ..TargetFilter::default()
+                            },
+                            source_only: false,
+                        },
+                        requirement: ResolutionBranchRequirement::Always,
+                        effects: vec![SpellEffectKind::PutCounters {
+                            counter: CounterKind::PlusOnePlusOne,
+                            count: Amount::Fixed(2),
+                            subject: EffectSubject::Source,
+                        }],
+                    }],
+                    otherwise: Vec::new(),
+                }],
+                None,
+            )
+        },
+    )
+}
+
+/// CR 110.4a: the engine's established nonland-permanent encoding excludes the Land card type.
+fn nonland_permanent_filter() -> TargetFilter {
+    TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        excluded_permanent_types: vec![PermanentTypeFilter::Land],
+        ..TargetFilter::default()
+    }
+}
+
+fn match_modal_tap_nonland_permanent(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Tap target nonland permanent.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::Tap {
+                subject: EffectSubject::Chosen(Box::new(nonland_permanent_filter())),
+            }],
+            modal_targeting("Choose target nonland permanent", 0),
+        )
+    })
+}
+
+fn match_modal_untap_nonland_permanent(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Untap target nonland permanent.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::Untap {
+                subject: EffectSubject::Chosen(Box::new(nonland_permanent_filter())),
+            }],
+            modal_targeting("Choose target nonland permanent", 0),
+        )
+    })
+}
+
+fn match_modal_tap_creature(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Tap target creature.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::Tap {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            }],
+            modal_targeting("Choose target creature", 0),
+        )
+    })
+}
+
+fn match_modal_untap_creature(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Untap target creature.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::Untap {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            }],
+            modal_targeting("Choose target creature", 0),
+        )
+    })
+}
+
+/// Issue #424 / CR 400.7 / 701.13: the artifact-card graveyard return.
+fn match_modal_return_artifact_card(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Return target artifact card from your graveyard to your hand.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    card: Some(ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::Artifact),
+                        ..ZoneCardFilter::default()
+                    }),
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::Hand,
+                linked_exile_id: None,
+            }],
+            modal_targeting("Choose target artifact card from your graveyard", 0),
+        )
+    })
+}
+
+/// Issue #424 / CR 701.18: the plain three-card scry bullet. Oltec Archaeologists prints the
+/// standard reminder, which the generation path strips before matching this exact instruction.
+fn match_modal_scry_three(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Scry 3.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::Scry {
+                count: Amount::Fixed(3),
+            }],
+            None,
+        )
+    })
+}
+
+/// Issue #424 / CR 608.2h: destruction restricted to creatures damaged this turn.
+fn match_modal_destroy_damaged_creature(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Destroy target creature that was dealt damage this turn.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    was_dealt_damage_this_turn: Some(true),
+                    ..TargetFilter::default()
+                })),
+            }],
+            modal_targeting("Choose target creature that was dealt damage this turn", 0),
+        )
+    })
+}
+
+/// Issue #424 / CR 701.13: exile up to two cards from one graveyard.
+fn match_modal_exile_up_to_two_single_graveyard(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Exile up to two target cards from a single graveyard.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    owner: GraveyardOwner::AnyPlayer,
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::Exile,
+                linked_exile_id: None,
+            }],
+            modal_targeting_range(
+                "Choose up to two target cards from a single graveyard",
+                0,
+                2,
+                vec![0],
+                true,
+            ),
+        )
+    })
+}
+
+/// Issue #424 / CR 111.1 / 701.6: Lord Skitter's Butcher's Rat token. The token definition ships
+/// at `data/tokens/rat_b_1_1_cant_block.ron`; Edgewall Pack and Voracious Vermin share the same
+/// printed token, but this bullet is its own modal body.
+fn match_modal_create_rat_token_cant_block(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Create a 1/1 black Rat creature token with \"This token can't block.\"").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::CreateTokens {
+                token: "rat_b_1_1_cant_block".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }],
+            None,
+        )
+    })
+}
+
+/// Issue #424 / CR 613.1f: Lord Skitter's Butcher's team menace grant. Mirrors the shipped
+/// `modal_mode.grant.team.hexproof` shape with the Menace keyword.
+fn match_modal_grant_team_menace(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Creatures you control gain menace until end of turn.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::GrantKeywordsAll {
+                filter: creatures_you_control(),
+                keywords: vec![Keyword::Menace],
+            }],
+            None,
+        )
+    })
+}
+
+/// Issue #424 / CR 118.12 / 701.18: Lord Skitter's Butcher's optional "another creature"
+/// sacrifice, then scry 2 and draw. The `excluded_objects: [Source]` binding keeps the entering
+/// Butcher itself out of the payment; the shared resolution-sacrifice candidate path honors the
+/// exclusion, and the scry/draw ride the branch's "if you do" effects.
+fn match_modal_sacrifice_another_scry_two_draw_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "You may sacrifice another creature. If you do, scry 2, then draw a card.").then(
+        || {
+            modal_mode(
+                vec![SpellEffectKind::ChooseResolutionBranch {
+                    chooser: PlayerRecipient::Controller,
+                    optional: true,
+                    selection: ResolutionBranchSelection::PlayerChoice,
+                    branches: vec![ResolutionBranchDef {
+                        branch_id: ChoiceId::new("sacrifice_another_creature")
+                            .expect("closed sacrifice branch uses a valid choice ID"),
+                        presentation: context.presentation.clone(),
+                        runtime_fallback: None,
+                        cost: ResolutionCost::SacrificePermanent {
+                            filter: TargetFilter {
+                                kind: TargetKind::Creature,
+                                controller: TargetController::You,
+                                excluded_objects: vec![TargetObjectExclusion::Source],
+                                ..TargetFilter::default()
+                            },
+                            source_only: false,
+                        },
+                        requirement: ResolutionBranchRequirement::Always,
+                        effects: vec![
+                            SpellEffectKind::Scry {
+                                count: Amount::Fixed(2),
+                            },
+                            SpellEffectKind::Draw {
+                                who: PlayerRecipient::Controller,
+                                count: Amount::Fixed(1),
+                            },
+                        ],
+                    }],
+                    otherwise: Vec::new(),
+                }],
+                None,
+            )
+        },
+    )
 }
 
 fn match_modal_damage_three_to_creature(
@@ -16624,7 +17021,8 @@ pub(super) static CATALOG: &[Recipe] = &[
         calibration: calibrations!(
             "Abrade" => "Destroy target artifact.",
             "Ancient Grudge" => "Destroy target artifact.";
-            "Destroy up to one target artifact.",
+            // The exact "up to one" form is owned by `modal_mode.destroy.up_to_one_artifact`.
+            "Destroy up to two target artifacts.",
             "Destroy target artifact or planeswalker.",
             "Destroy target artifact with mana value 3 or less.",
             "Destroy target artifact. You gain 2 life."
@@ -17338,6 +17736,297 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Until end of turn, target creature becomes an artifact in addition to its other types and gains hexproof. (Damage and effects that say \"destroy\" don't destroy it.)",
             "Until end of turn, target creature you control becomes an artifact in addition to its other types and gains indestructible. (Damage and effects that say \"destroy\" don't destroy it.)",
             "Until end of turn, target creature becomes an artifact in addition to its other types and gains indestructible. (Damage and effects that say \"destroy\" don't destroy it. If its toughness is 0 or less, it still dies.)"
+        ),
+    },
+    // Issue #424 — the triggered `When this creature enters, choose one —` modal-mode bodies.
+    // Each entry owns exactly one printed bullet; its reviewed two-mode set lives in
+    // `reviewed_modal_mode_pair`. Ability-word bullets match their exact printed form.
+    Recipe {
+        id: RecipeId("modal_mode.put_counter.up_to_two_creatures"),
+        label: "put a +1/+1 counter on each of up to two target creatures mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_put_counter_up_to_two_creatures,
+        calibration: calibrations!(
+            "White Widow, Free Agent" => "Put a +1/+1 counter on each of up to two target creatures.",
+            "Daily Bugle Reporters" => "Puff Piece — Put a +1/+1 counter on each of up to two target creatures.";
+            // Another count, the exactly-one form (owned by
+            // `modal_mode.put_counter.creature.plus_one_plus_one`), another controller, another
+            // ability word, a plural body swap, and riders stay unsupported.
+            "Put two +1/+1 counters on each of up to two target creatures.",
+            "Put a +1/+1 counter on up to two target creatures.",
+            "Put a +1/+1 counter on each of up to two target creatures you control.",
+            "Puff Piece — Put a +1/+1 counter on each of up to two target creatures you control.",
+            "Puff Piece — Put a +1/+1 counter on each of up to two target creature.",
+            "Put a +1/+1 counter on each of up to two target creatures. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.return.creature_mv_le_two.graveyard_to_hand"),
+        label: "return target creature card with mana value 2 or less from your graveyard to hand mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_return_creature_card_mana_value_two,
+        calibration: singleton_calibrations!(
+            "Daily Bugle Reporters" => "Investigative Journalism — Return target creature card with mana value 2 or less from your graveyard to your hand.";
+            // Another mana-value bound, a dropped ability word, another owner, another
+            // destination, and riders stay unsupported.
+            "Investigative Journalism — Return target creature card with mana value 3 or less from your graveyard to your hand.",
+            "Return target creature card with mana value 2 or less from your graveyard to your hand.",
+            "Investigative Journalism — Return target creature card from your graveyard to your hand.",
+            "Investigative Journalism — Return target creature card with mana value 2 or less from an opponent's graveyard to your hand.",
+            "Investigative Journalism — Return target creature card with mana value 2 or less from your graveyard to the battlefield.",
+            "Investigative Journalism — Return target card with mana value 2 or less from your graveyard to your hand.",
+            "Investigative Journalism — Return target creature card with mana value 2 or less from your graveyard to your hand. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.return.card_mv_ge_four.graveyard_to_hand"),
+        label: "return target card with mana value 4 or greater from your graveyard to hand mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_return_card_mana_value_four,
+        calibration: singleton_calibrations!(
+            "Damage Control Crew" => "Repair — Return target card with mana value 4 or greater from your graveyard to your hand.";
+            // Another mana-value bound, a dropped ability word, a creature-only predicate,
+            // another owner or destination, and riders stay unsupported.
+            "Repair — Return target card with mana value 3 or greater from your graveyard to your hand.",
+            "Return target card with mana value 4 or greater from your graveyard to your hand.",
+            "Repair — Return target creature card with mana value 4 or greater from your graveyard to your hand.",
+            "Repair — Return target card with mana value 4 or less from your graveyard to your hand.",
+            "Repair — Return target card with mana value 4 or greater from an opponent's graveyard to your hand.",
+            "Repair — Return target card with mana value 4 or greater from your graveyard to the battlefield.",
+            "Repair — Return target card with mana value 4 or greater from your graveyard to your hand. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.exile.artifact_or_enchantment"),
+        label: "exile target artifact or enchantment mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_exile_artifact_or_enchantment,
+        calibration: calibrations!(
+            "Archdruid's Charm" => "Exile target artifact or enchantment.",
+            "Damage Control Crew" => "Impound — Exile target artifact or enchantment.";
+            // The destroy form is owned by `modal_mode.destroy.artifact_or_enchantment`; a
+            // single artifact or enchantment, "up to one", another ability word, and riders
+            // stay unsupported.
+            "Exile target artifact.",
+            "Exile target enchantment.",
+            "Exile up to one target artifact or enchantment.",
+            "Exile target noncreature artifact or enchantment.",
+            "Impound — Exile up to one target artifact or enchantment.",
+            "Exile target artifact or enchantment. You gain 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.destroy.up_to_one_artifact"),
+        label: "destroy up to one target artifact mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_destroy_up_to_one_artifact,
+        calibration: singleton_calibrations!(
+            "Gearbane Orangutan" => "Destroy up to one target artifact.";
+            // The exactly-one form is owned by `modal_mode.destroy.artifact`; union, bound,
+            // controller, and rider forms stay unsupported.
+            "Destroy up to two target artifacts.",
+            "Destroy up to one target artifact or enchantment.",
+            "Destroy up to one target noncreature artifact.",
+            "Destroy up to one target artifact you control.",
+            "Destroy up to one target artifact. You gain 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.sacrifice_artifact.two_counters_source"),
+        label: "sacrifice an artifact to put two +1/+1 counters on this creature mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_sacrifice_artifact_two_counters,
+        calibration: singleton_calibrations!(
+            "Gearbane Orangutan" => "Sacrifice an artifact. If you do, put two +1/+1 counters on this creature.";
+            // An optional "may" sacrifice, another counters or count, a nonartifact
+            // permanent, the "another creature" form, and riders stay unsupported.
+            "You may sacrifice an artifact. If you do, put two +1/+1 counters on this creature.",
+            "Sacrifice an artifact. If you do, put a +1/+1 counter on this creature.",
+            "Sacrifice an artifact. If you do, put two +1/+1 counters on target creature.",
+            "Sacrifice a creature. If you do, put two +1/+1 counters on this creature.",
+            "Sacrifice an artifact.",
+            "Sacrifice an artifact. If you do, put two +1/+1 counters on this creature. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.tap.nonland_permanent"),
+        label: "tap target nonland permanent mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_tap_nonland_permanent,
+        calibration: singleton_calibrations!(
+            "Giant-Sized Flying Ant" => "Tap target nonland permanent.";
+            // The creature-only form is owned by `modal_mode.tap.creature`; land-inclusive,
+            // up-to-one, controller, and rider forms stay unsupported.
+            "Tap target permanent.",
+            "Tap up to one target nonland permanent.",
+            "Tap target nonland permanent you control.",
+            "Tap target nonland permanent. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.untap.nonland_permanent"),
+        label: "untap target nonland permanent mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_untap_nonland_permanent,
+        calibration: singleton_calibrations!(
+            "Giant-Sized Flying Ant" => "Untap target nonland permanent.";
+            // The creature-only form is owned by `modal_mode.untap.creature`; land-inclusive,
+            // up-to-one, controller, and rider forms stay unsupported.
+            "Untap target permanent.",
+            "Untap up to one target nonland permanent.",
+            "Untap target nonland permanent you control.",
+            "Untap target nonland permanent. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.tap.creature"),
+        label: "tap target creature mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_tap_creature,
+        calibration: singleton_calibrations!(
+            "Glamermite" => "Tap target creature.";
+            // The nonland-permanent form is owned by `modal_mode.tap.nonland_permanent`; the
+            // ability-word, up-to-one, noncreature, and rider forms stay unsupported.
+            "Heckle — Tap target creature.",
+            "Tap up to one target creature.",
+            "Tap target noncreature permanent.",
+            "Tap target creature you control.",
+            "Tap target creature. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.untap.creature"),
+        label: "untap target creature mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_untap_creature,
+        calibration: singleton_calibrations!(
+            "Glamermite" => "Untap target creature.";
+            // The nonland-permanent form is owned by `modal_mode.untap.nonland_permanent`; the
+            // ability-word, up-to-one, noncreature, and rider forms stay unsupported.
+            "Hero Worship — Untap target creature.",
+            "Untap up to one target creature.",
+            "Untap target noncreature permanent.",
+            "Untap target creature you control.",
+            "Untap target creature. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.return.artifact_card.graveyard_to_hand"),
+        label: "return target artifact card from your graveyard to hand mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_return_artifact_card,
+        calibration: calibrations!(
+            "Oltec Archaeologists" => "Return target artifact card from your graveyard to your hand.",
+            "Scour for Scrap" => "Return target artifact card from your graveyard to your hand.";
+            // A creature or card predicate, another owner, another destination, an up-to-one
+            // form, and riders stay unsupported.
+            "Return target creature card from your graveyard to your hand.",
+            "Return target card from your graveyard to your hand.",
+            "Return target artifact card from an opponent's graveyard to your hand.",
+            "Return target artifact card from your graveyard to the battlefield.",
+            "Return up to one target artifact card from your graveyard to your hand.",
+            "Return target artifact card from your graveyard to your hand. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.scry.three"),
+        label: "scry three mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_scry_three,
+        calibration: singleton_calibrations!(
+            "Oltec Archaeologists" => "Scry 3.";
+            // Another count, surveil, a missing or altered instruction, and riders stay unsupported.
+            "Scry 2.",
+            "Scry 3",
+            "Surveil 3.",
+            "Scry 4.",
+            "Scry 3, then draw a card.",
+            "Scry 3. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.destroy.damaged_creature"),
+        label: "destroy target creature that was dealt damage this turn mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_destroy_damaged_creature,
+        calibration: singleton_calibrations!(
+            "Qutrub Forayer" => "Destroy target creature that was dealt damage this turn.";
+            // An undamaged form, another controller or type, another damage window, an
+            // up-to-one form, and riders stay unsupported.
+            "Destroy target creature.",
+            "Destroy target creature that was dealt damage this combat.",
+            "Destroy target creature an opponent controls that was dealt damage this turn.",
+            "Destroy target permanent that was dealt damage this turn.",
+            "Destroy up to one target creature that was dealt damage this turn.",
+            "Destroy target creature that was dealt damage this turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.exile.up_to_two.single_graveyard"),
+        label: "exile up to two target cards from a single graveyard mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_exile_up_to_two_single_graveyard,
+        calibration: singleton_calibrations!(
+            "Qutrub Forayer" => "Exile up to two target cards from a single graveyard.";
+            // Another count or owner, the mixed-graveyards form, the one-card draw sibling's
+            // body, and riders stay unsupported.
+            "Exile up to two target cards from a graveyard.",
+            "Exile up to two target cards from target player's graveyard.",
+            "Exile up to one target card from a single graveyard.",
+            "Exile two target cards from a single graveyard.",
+            "Exile up to two target creature cards from a single graveyard.",
+            "Exile up to two target cards from a single graveyard. Draw a card."
+        ),
+    },
+    // Issue #424 — Lord Skitter's Butcher's three printed modal bodies. The first two are exact
+    // singleton bullet bodies; the sacrifice mode carries the source-relative "another" exclusion
+    // through the shared resolution branch payment path.
+    Recipe {
+        id: RecipeId("modal_mode.create_token.rat.cant_block"),
+        label: "create a 1/1 black Rat token that can't block mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_create_rat_token_cant_block,
+        calibration: singleton_calibrations!(
+            "Lord Skitter's Butcher" => "Create a 1/1 black Rat creature token with \"This token can't block.\"";
+            // Two tokens, tapped entry, another token identity or restriction, a missing
+            // restriction, and riders stay unsupported.
+            "Create two 1/1 black Rat creature tokens with \"This token can't block.\"",
+            "Create a tapped 1/1 black Rat creature token with \"This token can't block.\"",
+            "Create a 1/1 black Rat creature token.",
+            "Create a 1/1 black Rat creature token with \"This creature can't block.\"",
+            "Create a 1/1 black Rat creature token with \"This token can't block.\" Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.grant.team.menace"),
+        label: "team menace mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_grant_team_menace,
+        calibration: singleton_calibrations!(
+            "Lord Skitter's Butcher" => "Creatures you control gain menace until end of turn.";
+            // Another keyword or duration, a target scope, and riders stay unsupported; the
+            // hexproof and pump siblings keep their own shipped recipes.
+            "Creatures you control gain menace and deathtouch until end of turn.",
+            "Target creature you control gains menace until end of turn.",
+            "Creatures you control gain menace until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.sacrifice_another.scry_two_draw_one"),
+        label: "sacrifice another creature to scry two and draw a card mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_sacrifice_another_scry_two_draw_one,
+        calibration: singleton_calibrations!(
+            "Lord Skitter's Butcher" => "You may sacrifice another creature. If you do, scry 2, then draw a card.";
+            // A mandatory sacrifice, another creature scope, another scry or draw count, a
+            // reordered or partial receipt, and riders stay unsupported.
+            "Sacrifice another creature. If you do, scry 2, then draw a card.",
+            "You may sacrifice a creature. If you do, scry 2, then draw a card.",
+            "You may sacrifice another permanent. If you do, scry 2, then draw a card.",
+            "You may sacrifice another creature. If you do, scry 1, then draw a card.",
+            "You may sacrifice another creature. If you do, scry 2.",
+            "You may sacrifice another creature. If you do, draw a card, then scry 2.",
+            "You may sacrifice another creature. If you do, scry 2, then draw a card. Draw a card."
         ),
     },
     Recipe {
@@ -23758,6 +24447,29 @@ pub(super) fn reviewed_modal_mode_pair(
             Some((1, 1))
         }
         ["modal_mode.destroy.creature.power_at_least_four", "modal_mode.becomes_artifact.indestructible"] => {
+            Some((1, 1))
+        }
+        // Issue #424 exact triggered-modal sets, in printed bullet order. Every other order,
+        // partial set, or added bullet still fails closed even when each bullet matches a recipe.
+        ["modal_mode.put_counter.up_to_two_creatures", "modal_mode.return.creature_mv_le_two.graveyard_to_hand"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.return.card_mv_ge_four.graveyard_to_hand", "modal_mode.exile.artifact_or_enchantment"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.destroy.up_to_one_artifact", "modal_mode.sacrifice_artifact.two_counters_source"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.tap.nonland_permanent", "modal_mode.untap.nonland_permanent"] => Some((1, 1)),
+        ["modal_mode.tap.creature", "modal_mode.untap.creature"] => Some((1, 1)),
+        ["modal_mode.return.artifact_card.graveyard_to_hand", "modal_mode.scry.three"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.destroy.damaged_creature", "modal_mode.exile.up_to_two.single_graveyard"] => {
+            Some((1, 1))
+        }
+        // Lord Skitter's Butcher prints its three bodies in this exact order.
+        ["modal_mode.create_token.rat.cant_block", "modal_mode.sacrifice_another.scry_two_draw_one", "modal_mode.grant.team.menace"] => {
             Some((1, 1))
         }
         _ => None,
@@ -45217,5 +45929,1106 @@ mod tests {
             ]
         );
         assert_eq!(modes.len(), 2);
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #424 — the triggered `When this creature enters, choose one —` batch.
+    // -----------------------------------------------------------------------
+
+    fn issue_424_modal_mode(
+        source_name: &str,
+        clause: &str,
+        expected_id: &str,
+    ) -> ModalModeEmission {
+        let mut test_context = context();
+        test_context.source_name = source_name.into();
+        let matched = match_modal_mode(clause, &test_context)
+            .unwrap_or_else(|error| panic!("{clause}: {error}"))
+            .unwrap_or_else(|| panic!("missing modal_mode recipe for {clause}"));
+        assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+        let RecipeEmission::ModalMode(emission) = matched.emission else {
+            panic!("{expected_id} must emit a modal mode");
+        };
+        emission
+    }
+
+    const ISSUE_424_PUFF_PIECE: &str =
+        "Puff Piece — Put a +1/+1 counter on each of up to two target creatures.";
+    const ISSUE_424_INVESTIGATIVE: &str = "Investigative Journalism — Return target creature card with mana value 2 or less from your graveyard to your hand.";
+    const ISSUE_424_REPAIR: &str =
+        "Repair — Return target card with mana value 4 or greater from your graveyard to your hand.";
+    const ISSUE_424_IMPOUND: &str = "Impound — Exile target artifact or enchantment.";
+    const ISSUE_424_GEARBANE_DESTROY: &str = "Destroy up to one target artifact.";
+    const ISSUE_424_GEARBANE_SACRIFICE: &str =
+        "Sacrifice an artifact. If you do, put two +1/+1 counters on this creature.";
+    const ISSUE_424_TAP_NONLAND: &str = "Tap target nonland permanent.";
+    const ISSUE_424_UNTAP_NONLAND: &str = "Untap target nonland permanent.";
+    const ISSUE_424_TAP_CREATURE: &str = "Tap target creature.";
+    const ISSUE_424_UNTAP_CREATURE: &str = "Untap target creature.";
+    const ISSUE_424_OLTEC_RETURN: &str =
+        "Return target artifact card from your graveyard to your hand.";
+    const ISSUE_424_SCRY_THREE: &str = "Scry 3.";
+    const ISSUE_424_QUTRUB_DESTROY: &str =
+        "Destroy target creature that was dealt damage this turn.";
+    const ISSUE_424_QUTRUB_EXILE: &str = "Exile up to two target cards from a single graveyard.";
+    const ISSUE_424_BUTCHER_RAT: &str =
+        "Create a 1/1 black Rat creature token with \"This token can't block.\"";
+    const ISSUE_424_BUTCHER_SACRIFICE: &str =
+        "You may sacrifice another creature. If you do, scry 2, then draw a card.";
+    const ISSUE_424_BUTCHER_MENACE: &str = "Creatures you control gain menace until end of turn.";
+
+    #[test]
+    fn issue_424_modal_mode_recipes_match_their_exact_clauses() {
+        for (source_name, clause, expected_id) in [
+            (
+                "Daily Bugle Reporters",
+                ISSUE_424_PUFF_PIECE,
+                "modal_mode.put_counter.up_to_two_creatures",
+            ),
+            (
+                "White Widow, Free Agent",
+                "Put a +1/+1 counter on each of up to two target creatures.",
+                "modal_mode.put_counter.up_to_two_creatures",
+            ),
+            (
+                "Daily Bugle Reporters",
+                ISSUE_424_INVESTIGATIVE,
+                "modal_mode.return.creature_mv_le_two.graveyard_to_hand",
+            ),
+            (
+                "Damage Control Crew",
+                ISSUE_424_REPAIR,
+                "modal_mode.return.card_mv_ge_four.graveyard_to_hand",
+            ),
+            (
+                "Damage Control Crew",
+                ISSUE_424_IMPOUND,
+                "modal_mode.exile.artifact_or_enchantment",
+            ),
+            (
+                "Archdruid's Charm",
+                "Exile target artifact or enchantment.",
+                "modal_mode.exile.artifact_or_enchantment",
+            ),
+            (
+                "Gearbane Orangutan",
+                ISSUE_424_GEARBANE_DESTROY,
+                "modal_mode.destroy.up_to_one_artifact",
+            ),
+            (
+                "Gearbane Orangutan",
+                ISSUE_424_GEARBANE_SACRIFICE,
+                "modal_mode.sacrifice_artifact.two_counters_source",
+            ),
+            (
+                "Giant-Sized Flying Ant",
+                ISSUE_424_TAP_NONLAND,
+                "modal_mode.tap.nonland_permanent",
+            ),
+            (
+                "Giant-Sized Flying Ant",
+                ISSUE_424_UNTAP_NONLAND,
+                "modal_mode.untap.nonland_permanent",
+            ),
+            (
+                "Glamermite",
+                ISSUE_424_TAP_CREATURE,
+                "modal_mode.tap.creature",
+            ),
+            (
+                "Glamermite",
+                ISSUE_424_UNTAP_CREATURE,
+                "modal_mode.untap.creature",
+            ),
+            (
+                "Oltec Archaeologists",
+                ISSUE_424_OLTEC_RETURN,
+                "modal_mode.return.artifact_card.graveyard_to_hand",
+            ),
+            (
+                "Oltec Archaeologists",
+                ISSUE_424_SCRY_THREE,
+                "modal_mode.scry.three",
+            ),
+            (
+                "Qutrub Forayer",
+                ISSUE_424_QUTRUB_DESTROY,
+                "modal_mode.destroy.damaged_creature",
+            ),
+            (
+                "Qutrub Forayer",
+                ISSUE_424_QUTRUB_EXILE,
+                "modal_mode.exile.up_to_two.single_graveyard",
+            ),
+            (
+                "Lord Skitter's Butcher",
+                ISSUE_424_BUTCHER_RAT,
+                "modal_mode.create_token.rat.cant_block",
+            ),
+            (
+                "Lord Skitter's Butcher",
+                ISSUE_424_BUTCHER_SACRIFICE,
+                "modal_mode.sacrifice_another.scry_two_draw_one",
+            ),
+            (
+                "Lord Skitter's Butcher",
+                ISSUE_424_BUTCHER_MENACE,
+                "modal_mode.grant.team.menace",
+            ),
+        ] {
+            let matched = match_modal_mode(clause, &{
+                let mut test_context = context();
+                test_context.source_name = source_name.into();
+                test_context
+            })
+            .unwrap_or_else(|error| panic!("{clause}: {error}"))
+            .unwrap_or_else(|| panic!("missing modal_mode recipe for {clause}"));
+            assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+        }
+
+        for recipe_id in [
+            "modal_mode.put_counter.up_to_two_creatures",
+            "modal_mode.return.creature_mv_le_two.graveyard_to_hand",
+            "modal_mode.return.card_mv_ge_four.graveyard_to_hand",
+            "modal_mode.exile.artifact_or_enchantment",
+            "modal_mode.destroy.up_to_one_artifact",
+            "modal_mode.sacrifice_artifact.two_counters_source",
+            "modal_mode.tap.nonland_permanent",
+            "modal_mode.untap.nonland_permanent",
+            "modal_mode.tap.creature",
+            "modal_mode.untap.creature",
+            "modal_mode.return.artifact_card.graveyard_to_hand",
+            "modal_mode.scry.three",
+            "modal_mode.destroy.damaged_creature",
+            "modal_mode.exile.up_to_two.single_graveyard",
+            "modal_mode.create_token.rat.cant_block",
+            "modal_mode.sacrifice_another.scry_two_draw_one",
+            "modal_mode.grant.team.menace",
+        ] {
+            let recipe = CATALOG
+                .iter()
+                .find(|recipe| recipe.id.as_str() == recipe_id)
+                .unwrap_or_else(|| panic!("missing issue #424 recipe {recipe_id}"));
+            assert_eq!(recipe.surface, RecipeSurface::ModalMode, "{recipe_id}");
+        }
+    }
+
+    #[test]
+    fn issue_424_modal_mode_recipes_emit_typed_payloads() {
+        assert_eq!(
+            issue_424_modal_mode(
+                "Daily Bugle Reporters",
+                ISSUE_424_PUFF_PIECE,
+                "modal_mode.put_counter.up_to_two_creatures",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                }],
+                targeting: modal_targeting_range(
+                    "Choose up to two target creatures",
+                    0,
+                    2,
+                    vec![0],
+                    false,
+                ),
+            }
+        );
+
+        assert_eq!(
+            issue_424_modal_mode(
+                "Daily Bugle Reporters",
+                ISSUE_424_INVESTIGATIVE,
+                "modal_mode.return.creature_mv_le_two.graveyard_to_hand",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::MoveGraveyardCards {
+                    filter: GraveyardFilter {
+                        card: Some(ZoneCardFilter {
+                            card_type: Some(CardTypeFilter::Creature),
+                            max_mana_value: Some(2),
+                            ..ZoneCardFilter::default()
+                        }),
+                        ..GraveyardFilter::default()
+                    },
+                    destination: GraveyardDestination::Hand,
+                    linked_exile_id: None,
+                }],
+                targeting: modal_targeting(
+                    "Choose target creature card with mana value 2 or less from your graveyard",
+                    0,
+                ),
+            }
+        );
+
+        assert_eq!(
+            issue_424_modal_mode(
+                "Damage Control Crew",
+                ISSUE_424_REPAIR,
+                "modal_mode.return.card_mv_ge_four.graveyard_to_hand",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::MoveGraveyardCards {
+                    filter: GraveyardFilter {
+                        card: Some(ZoneCardFilter {
+                            min_mana_value: Some(4),
+                            ..ZoneCardFilter::default()
+                        }),
+                        ..GraveyardFilter::default()
+                    },
+                    destination: GraveyardDestination::Hand,
+                    linked_exile_id: None,
+                }],
+                targeting: modal_targeting(
+                    "Choose target card with mana value 4 or greater from your graveyard",
+                    0,
+                ),
+            }
+        );
+
+        let artifact_or_enchantment = TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            permanent_types: vec![
+                PermanentTypeFilter::Artifact,
+                PermanentTypeFilter::Enchantment,
+            ],
+            ..TargetFilter::default()
+        };
+        assert_eq!(
+            issue_424_modal_mode(
+                "Damage Control Crew",
+                ISSUE_424_IMPOUND,
+                "modal_mode.exile.artifact_or_enchantment",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::Exile {
+                    subject: EffectSubject::Chosen(Box::new(artifact_or_enchantment)),
+                }],
+                targeting: modal_targeting("Choose target artifact or enchantment", 0),
+            }
+        );
+
+        let artifact = TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            permanent_types: vec![PermanentTypeFilter::Artifact],
+            ..TargetFilter::default()
+        };
+        assert_eq!(
+            issue_424_modal_mode(
+                "Gearbane Orangutan",
+                ISSUE_424_GEARBANE_DESTROY,
+                "modal_mode.destroy.up_to_one_artifact",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::Destroy {
+                    subject: EffectSubject::Chosen(Box::new(artifact.clone())),
+                }],
+                targeting: modal_targeting_range(
+                    "Choose up to one target artifact",
+                    0,
+                    1,
+                    vec![0],
+                    false,
+                ),
+            }
+        );
+
+        assert_eq!(
+            issue_424_modal_mode(
+                "Gearbane Orangutan",
+                ISSUE_424_GEARBANE_SACRIFICE,
+                "modal_mode.sacrifice_artifact.two_counters_source",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::ChooseResolutionBranch {
+                    chooser: PlayerRecipient::Controller,
+                    optional: false,
+                    selection: ResolutionBranchSelection::PlayerChoice,
+                    branches: vec![ResolutionBranchDef {
+                        branch_id: ChoiceId::new("sacrifice_an_artifact").unwrap(),
+                        presentation: AbilityPresentation::OracleLines(vec![1]),
+                        runtime_fallback: None,
+                        cost: ResolutionCost::SacrificePermanent {
+                            filter: TargetFilter {
+                                controller: TargetController::You,
+                                ..artifact
+                            },
+                            source_only: false,
+                        },
+                        requirement: ResolutionBranchRequirement::Always,
+                        effects: vec![SpellEffectKind::PutCounters {
+                            counter: CounterKind::PlusOnePlusOne,
+                            count: Amount::Fixed(2),
+                            subject: EffectSubject::Source,
+                        }],
+                    }],
+                    otherwise: Vec::new(),
+                }],
+                targeting: None,
+            }
+        );
+
+        let nonland = TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            excluded_permanent_types: vec![PermanentTypeFilter::Land],
+            ..TargetFilter::default()
+        };
+        assert_eq!(
+            issue_424_modal_mode(
+                "Giant-Sized Flying Ant",
+                ISSUE_424_TAP_NONLAND,
+                "modal_mode.tap.nonland_permanent",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::Tap {
+                    subject: EffectSubject::Chosen(Box::new(nonland.clone())),
+                }],
+                targeting: modal_targeting("Choose target nonland permanent", 0),
+            }
+        );
+        assert_eq!(
+            issue_424_modal_mode(
+                "Giant-Sized Flying Ant",
+                ISSUE_424_UNTAP_NONLAND,
+                "modal_mode.untap.nonland_permanent",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::Untap {
+                    subject: EffectSubject::Chosen(Box::new(nonland)),
+                }],
+                targeting: modal_targeting("Choose target nonland permanent", 0),
+            }
+        );
+
+        assert_eq!(
+            issue_424_modal_mode(
+                "Glamermite",
+                ISSUE_424_TAP_CREATURE,
+                "modal_mode.tap.creature",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::Tap {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                }],
+                targeting: modal_targeting("Choose target creature", 0),
+            }
+        );
+        assert_eq!(
+            issue_424_modal_mode(
+                "Glamermite",
+                ISSUE_424_UNTAP_CREATURE,
+                "modal_mode.untap.creature",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::Untap {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                }],
+                targeting: modal_targeting("Choose target creature", 0),
+            }
+        );
+
+        assert_eq!(
+            issue_424_modal_mode(
+                "Oltec Archaeologists",
+                ISSUE_424_OLTEC_RETURN,
+                "modal_mode.return.artifact_card.graveyard_to_hand",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::MoveGraveyardCards {
+                    filter: GraveyardFilter {
+                        card: Some(ZoneCardFilter {
+                            card_type: Some(CardTypeFilter::Artifact),
+                            ..ZoneCardFilter::default()
+                        }),
+                        ..GraveyardFilter::default()
+                    },
+                    destination: GraveyardDestination::Hand,
+                    linked_exile_id: None,
+                }],
+                targeting: modal_targeting("Choose target artifact card from your graveyard", 0),
+            }
+        );
+        assert_eq!(
+            issue_424_modal_mode(
+                "Oltec Archaeologists",
+                ISSUE_424_SCRY_THREE,
+                "modal_mode.scry.three",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::Scry {
+                    count: Amount::Fixed(3),
+                }],
+                targeting: None,
+            }
+        );
+
+        assert_eq!(
+            issue_424_modal_mode(
+                "Qutrub Forayer",
+                ISSUE_424_QUTRUB_DESTROY,
+                "modal_mode.destroy.damaged_creature",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::Destroy {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::Creature,
+                        was_dealt_damage_this_turn: Some(true),
+                        ..TargetFilter::default()
+                    })),
+                }],
+                targeting: modal_targeting(
+                    "Choose target creature that was dealt damage this turn",
+                    0
+                ),
+            }
+        );
+        assert_eq!(
+            issue_424_modal_mode(
+                "Qutrub Forayer",
+                ISSUE_424_QUTRUB_EXILE,
+                "modal_mode.exile.up_to_two.single_graveyard",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::MoveGraveyardCards {
+                    filter: GraveyardFilter {
+                        owner: GraveyardOwner::AnyPlayer,
+                        ..GraveyardFilter::default()
+                    },
+                    destination: GraveyardDestination::Exile,
+                    linked_exile_id: None,
+                }],
+                targeting: modal_targeting_range(
+                    "Choose up to two target cards from a single graveyard",
+                    0,
+                    2,
+                    vec![0],
+                    true,
+                ),
+            }
+        );
+        assert_eq!(
+            issue_424_modal_mode(
+                "Lord Skitter's Butcher",
+                ISSUE_424_BUTCHER_RAT,
+                "modal_mode.create_token.rat.cant_block",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::CreateTokens {
+                    token: "rat_b_1_1_cant_block".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                }],
+                targeting: None,
+            }
+        );
+        assert_eq!(
+            issue_424_modal_mode(
+                "Lord Skitter's Butcher",
+                ISSUE_424_BUTCHER_SACRIFICE,
+                "modal_mode.sacrifice_another.scry_two_draw_one",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::ChooseResolutionBranch {
+                    chooser: PlayerRecipient::Controller,
+                    optional: true,
+                    selection: ResolutionBranchSelection::PlayerChoice,
+                    branches: vec![ResolutionBranchDef {
+                        branch_id: ChoiceId::new("sacrifice_another_creature").unwrap(),
+                        presentation: AbilityPresentation::OracleLines(vec![1]),
+                        runtime_fallback: None,
+                        cost: ResolutionCost::SacrificePermanent {
+                            filter: TargetFilter {
+                                kind: TargetKind::Creature,
+                                controller: TargetController::You,
+                                excluded_objects: vec![TargetObjectExclusion::Source],
+                                ..TargetFilter::default()
+                            },
+                            source_only: false,
+                        },
+                        requirement: ResolutionBranchRequirement::Always,
+                        effects: vec![
+                            SpellEffectKind::Scry {
+                                count: Amount::Fixed(2),
+                            },
+                            SpellEffectKind::Draw {
+                                who: PlayerRecipient::Controller,
+                                count: Amount::Fixed(1),
+                            },
+                        ],
+                    }],
+                    otherwise: Vec::new(),
+                }],
+                targeting: None,
+            }
+        );
+        assert_eq!(
+            issue_424_modal_mode(
+                "Lord Skitter's Butcher",
+                ISSUE_424_BUTCHER_MENACE,
+                "modal_mode.grant.team.menace",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::GrantKeywordsAll {
+                    filter: creatures_you_control(),
+                    keywords: vec![Keyword::Menace],
+                }],
+                targeting: None,
+            }
+        );
+    }
+
+    #[test]
+    fn issue_424_modal_mode_recipes_reject_near_misses() {
+        for (source_name, clause) in [
+            // Counter counts, target forms, controller scope, and riders.
+            (
+                "Daily Bugle Reporters",
+                "Put two +1/+1 counters on each of up to two target creatures.",
+            ),
+            (
+                "Daily Bugle Reporters",
+                "Put a +1/+1 counter on up to two target creatures.",
+            ),
+            (
+                "Daily Bugle Reporters",
+                "Put a +1/+1 counter on each of up to two target creatures you control.",
+            ),
+            (
+                "Daily Bugle Reporters",
+                "Puff Piece — Put a +1/+1 counter on each of up to two target creatures you control.",
+            ),
+            (
+                "Daily Bugle Reporters",
+                "Puff Piece — Put a +1/+1 counter on each of up to two target creature.",
+            ),
+            (
+                "Daily Bugle Reporters",
+                "Put a +1/+1 counter on each of up to two target creatures. Draw a card.",
+            ),
+            // Mana-value bounds, dropped ability words, ownership, and destinations.
+            (
+                "Daily Bugle Reporters",
+                "Investigative Journalism — Return target creature card with mana value 3 or less from your graveyard to your hand.",
+            ),
+            (
+                "Daily Bugle Reporters",
+                "Return target creature card with mana value 2 or less from your graveyard to your hand.",
+            ),
+            (
+                "Daily Bugle Reporters",
+                "Investigative Journalism — Return target creature card from your graveyard to your hand.",
+            ),
+            (
+                "Daily Bugle Reporters",
+                "Investigative Journalism — Return target creature card with mana value 2 or less from an opponent's graveyard to your hand.",
+            ),
+            (
+                "Daily Bugle Reporters",
+                "Investigative Journalism — Return target creature card with mana value 2 or less from your graveyard to the battlefield.",
+            ),
+            (
+                "Daily Bugle Reporters",
+                "Investigative Journalism — Return target card with mana value 2 or less from your graveyard to your hand.",
+            ),
+            (
+                "Daily Bugle Reporters",
+                "Investigative Journalism — Return target creature card with mana value 2 or less from your graveyard to your hand. Draw a card.",
+            ),
+            (
+                "Damage Control Crew",
+                "Repair — Return target card with mana value 3 or greater from your graveyard to your hand.",
+            ),
+            (
+                "Damage Control Crew",
+                "Return target card with mana value 4 or greater from your graveyard to your hand.",
+            ),
+            (
+                "Damage Control Crew",
+                "Repair — Return target creature card with mana value 4 or greater from your graveyard to your hand.",
+            ),
+            (
+                "Damage Control Crew",
+                "Repair — Return target card with mana value 4 or less from your graveyard to your hand.",
+            ),
+            (
+                "Damage Control Crew",
+                "Repair — Return target card with mana value 4 or greater from an opponent's graveyard to your hand.",
+            ),
+            (
+                "Damage Control Crew",
+                "Repair — Return target card with mana value 4 or greater from your graveyard to the battlefield.",
+            ),
+            (
+                "Damage Control Crew",
+                "Repair — Return target card with mana value 4 or greater from your graveyard to your hand. Draw a card.",
+            ),
+            // Single-type, optional, noncreature, ability-word, and rider exile forms.
+            ("Damage Control Crew", "Exile target artifact."),
+            ("Damage Control Crew", "Exile target enchantment."),
+            (
+                "Damage Control Crew",
+                "Exile up to one target artifact or enchantment.",
+            ),
+            (
+                "Damage Control Crew",
+                "Exile target noncreature artifact or enchantment.",
+            ),
+            (
+                "Damage Control Crew",
+                "Impound — Exile up to one target artifact or enchantment.",
+            ),
+            (
+                "Damage Control Crew",
+                "Exile target artifact or enchantment. You gain 2 life.",
+            ),
+            // Bound, union, controller, and rider destruction forms.
+            (
+                "Gearbane Orangutan",
+                "Destroy up to two target artifacts.",
+            ),
+            (
+                "Gearbane Orangutan",
+                "Destroy up to one target artifact or enchantment.",
+            ),
+            (
+                "Gearbane Orangutan",
+                "Destroy up to one target noncreature artifact.",
+            ),
+            (
+                "Gearbane Orangutan",
+                "Destroy up to one target artifact you control.",
+            ),
+            (
+                "Gearbane Orangutan",
+                "Destroy up to one target artifact. You gain 2 life.",
+            ),
+            // Optionality, counts, subjects, and riders on the sacrifice branch.
+            (
+                "Gearbane Orangutan",
+                "You may sacrifice an artifact. If you do, put two +1/+1 counters on this creature.",
+            ),
+            (
+                "Gearbane Orangutan",
+                "Sacrifice an artifact. If you do, put a +1/+1 counter on this creature.",
+            ),
+            (
+                "Gearbane Orangutan",
+                "Sacrifice an artifact. If you do, put two +1/+1 counters on target creature.",
+            ),
+            (
+                "Gearbane Orangutan",
+                "Sacrifice a creature. If you do, put two +1/+1 counters on this creature.",
+            ),
+            ("Gearbane Orangutan", "Sacrifice an artifact."),
+            (
+                "Gearbane Orangutan",
+                "Sacrifice an artifact. If you do, put two +1/+1 counters on this creature. Draw a card.",
+            ),
+            // Land-inclusive, bounded, controller, and rider tap/untap forms.
+            ("Giant-Sized Flying Ant", "Tap target permanent."),
+            (
+                "Giant-Sized Flying Ant",
+                "Tap up to one target nonland permanent.",
+            ),
+            (
+                "Giant-Sized Flying Ant",
+                "Tap target nonland permanent you control.",
+            ),
+            (
+                "Giant-Sized Flying Ant",
+                "Tap target nonland permanent. Draw a card.",
+            ),
+            ("Giant-Sized Flying Ant", "Untap target permanent."),
+            (
+                "Giant-Sized Flying Ant",
+                "Untap up to one target nonland permanent.",
+            ),
+            (
+                "Giant-Sized Flying Ant",
+                "Untap target nonland permanent you control.",
+            ),
+            (
+                "Giant-Sized Flying Ant",
+                "Untap target nonland permanent. Draw a card.",
+            ),
+            // Ability-word, bounded, noncreature, controller, and rider creature forms.
+            ("Glamermite", "Heckle — Tap target creature."),
+            ("Glamermite", "Tap up to one target creature."),
+            ("Glamermite", "Tap target noncreature permanent."),
+            ("Glamermite", "Tap target creature you control."),
+            ("Glamermite", "Tap target creature. Draw a card."),
+            ("Glamermite", "Hero Worship — Untap target creature."),
+            ("Glamermite", "Untap up to one target creature."),
+            ("Glamermite", "Untap target noncreature permanent."),
+            ("Glamermite", "Untap target creature you control."),
+            ("Glamermite", "Untap target creature. Draw a card."),
+            // Graveyard predicates, ownership, destinations, bounds, and riders.
+            (
+                "Oltec Archaeologists",
+                "Return target creature card from your graveyard to your hand.",
+            ),
+            (
+                "Oltec Archaeologists",
+                "Return target card from your graveyard to your hand.",
+            ),
+            (
+                "Oltec Archaeologists",
+                "Return target artifact card from an opponent's graveyard to your hand.",
+            ),
+            (
+                "Oltec Archaeologists",
+                "Return target artifact card from your graveyard to the battlefield.",
+            ),
+            (
+                "Oltec Archaeologists",
+                "Return up to one target artifact card from your graveyard to your hand.",
+            ),
+            (
+                "Oltec Archaeologists",
+                "Return target artifact card from your graveyard to your hand. Draw a card.",
+            ),
+            // Counts, surveil, missing instructions, and riders on the scry mode.
+            ("Oltec Archaeologists", "Scry 2."),
+            ("Oltec Archaeologists", "Scry 3"),
+            ("Oltec Archaeologists", "Surveil 3."),
+            ("Oltec Archaeologists", "Scry 4."),
+            ("Oltec Archaeologists", "Scry 3, then draw a card."),
+            ("Oltec Archaeologists", "Scry 3. Draw a card."),
+            // Damage windows, controller/type scope, bounds, and riders.
+            ("Qutrub Forayer", "Destroy target creature."),
+            (
+                "Qutrub Forayer",
+                "Destroy target creature that was dealt damage this combat.",
+            ),
+            (
+                "Qutrub Forayer",
+                "Destroy target permanent that was dealt damage this turn.",
+            ),
+            (
+                "Qutrub Forayer",
+                "Destroy up to one target creature that was dealt damage this turn.",
+            ),
+            (
+                "Qutrub Forayer",
+                "Destroy target creature that was dealt damage this turn. Draw a card.",
+            ),
+            // Graveyard scope, count, type, and rider forms on the double exile.
+            (
+                "Qutrub Forayer",
+                "Exile up to two target cards from a graveyard.",
+            ),
+            (
+                "Qutrub Forayer",
+                "Exile up to two target cards from target player's graveyard.",
+            ),
+            (
+                "Qutrub Forayer",
+                "Exile up to one target card from a single graveyard.",
+            ),
+            (
+                "Qutrub Forayer",
+                "Exile two target cards from a single graveyard.",
+            ),
+            (
+                "Qutrub Forayer",
+                "Exile up to two target creature cards from a single graveyard.",
+            ),
+            (
+                "Qutrub Forayer",
+                "Exile up to two target cards from a single graveyard. Draw a card.",
+            ),
+            // Token count, tapped entry, restriction wording, and riders on the Rat body.
+            (
+                "Lord Skitter's Butcher",
+                "Create two 1/1 black Rat creature tokens with \"This token can't block.\"",
+            ),
+            (
+                "Lord Skitter's Butcher",
+                "Create a tapped 1/1 black Rat creature token with \"This token can't block.\"",
+            ),
+            (
+                "Lord Skitter's Butcher",
+                "Create a 1/1 black Rat creature token with \"This creature can't block.\"",
+            ),
+            (
+                "Lord Skitter's Butcher",
+                "Create a 1/1 black Rat creature token with \"This token can't block.\" Draw a card.",
+            ),
+            // Another keyword or duration, a target scope, and riders on the menace grant.
+            (
+                "Lord Skitter's Butcher",
+                "Creatures you control gain menace and deathtouch until end of turn.",
+            ),
+            (
+                "Lord Skitter's Butcher",
+                "Target creature you control gains menace until end of turn.",
+            ),
+            (
+                "Lord Skitter's Butcher",
+                "Creatures you control gain menace until end of turn. Draw a card.",
+            ),
+            // Optionality, scope, counts, order, and riders on the sacrifice receipt.
+            (
+                "Lord Skitter's Butcher",
+                "Sacrifice another creature. If you do, scry 2, then draw a card.",
+            ),
+            (
+                "Lord Skitter's Butcher",
+                "You may sacrifice a creature. If you do, scry 2, then draw a card.",
+            ),
+            (
+                "Lord Skitter's Butcher",
+                "You may sacrifice another permanent. If you do, scry 2, then draw a card.",
+            ),
+            (
+                "Lord Skitter's Butcher",
+                "You may sacrifice another creature. If you do, scry 1, then draw a card.",
+            ),
+            (
+                "Lord Skitter's Butcher",
+                "You may sacrifice another creature. If you do, scry 2.",
+            ),
+            (
+                "Lord Skitter's Butcher",
+                "You may sacrifice another creature. If you do, draw a card, then scry 2.",
+            ),
+            (
+                "Lord Skitter's Butcher",
+                "You may sacrifice another creature. If you do, scry 2, then draw a card. Draw a card.",
+            ),
+        ] {
+            let mut test_context = context();
+            test_context.source_name = source_name.into();
+            assert!(
+                match_modal_mode(clause, &test_context)
+                    .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                    .is_none(),
+                "{source_name} near-miss was accepted: {clause}"
+            );
+        }
+
+        // Cross-owner clauses route to their shipped single owner instead of the new recipes.
+        for (clause, owner) in [
+            ("Destroy target artifact.", "modal_mode.destroy.artifact"),
+            ("Tap target creature.", "modal_mode.tap.creature"),
+            ("Untap target creature.", "modal_mode.untap.creature"),
+            (
+                "Tap target nonland permanent.",
+                "modal_mode.tap.nonland_permanent",
+            ),
+            (
+                "Untap target nonland permanent.",
+                "modal_mode.untap.nonland_permanent",
+            ),
+            (
+                "Destroy target artifact or enchantment.",
+                "modal_mode.destroy.artifact_or_enchantment",
+            ),
+            (
+                "Put a +1/+1 counter on target creature.",
+                "modal_mode.put_counter.creature.plus_one_plus_one",
+            ),
+            (
+                "Untap target creature. It gets +1/+0 and gains indestructible until end of turn.",
+                "modal_mode.untap.pump.plus_one_power.indestructible",
+            ),
+        ] {
+            assert_eq!(
+                match_modal_mode(clause, &context())
+                    .expect("cross-owner clause must not be ambiguous")
+                    .expect("cross-owner clause keeps its shipped owner")
+                    .id
+                    .as_str(),
+                owner,
+                "{clause}"
+            );
+        }
+
+        // Excluded identities stay unmapped until their missing capabilities exist: Blade of the
+        // Swarm's warp-card return and Kutzil's Flanker's target-player graveyard exile and count
+        // modes. Lord Skitter's Butcher's three bodies are now owned by their own recipes.
+        for clause in [
+            "Put target exiled card with warp on the bottom of its owner's library.",
+            "Put two +1/+1 counters on this creature.",
+            "Exile target player's graveyard.",
+            "Put a +1/+1 counter on this creature for each creature that left the battlefield under your control this turn.",
+            "You gain 2 life and scry 2.",
+        ] {
+            assert!(
+                match_modal_mode(clause, &context())
+                    .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                    .is_none(),
+                "excluded capability must stay unmapped: {clause}"
+            );
+        }
+
+        // Lord Skitter's Butcher's three bodies route to their own exact recipes.
+        for (clause, owner) in [
+            (
+                "Create a 1/1 black Rat creature token with \"This token can't block.\"",
+                "modal_mode.create_token.rat.cant_block",
+            ),
+            (
+                "Creatures you control gain menace until end of turn.",
+                "modal_mode.grant.team.menace",
+            ),
+            (
+                "You may sacrifice another creature. If you do, scry 2, then draw a card.",
+                "modal_mode.sacrifice_another.scry_two_draw_one",
+            ),
+        ] {
+            assert_eq!(
+                match_modal_mode(clause, &context())
+                    .expect("Butcher clause must not be ambiguous")
+                    .expect("Butcher clause must match")
+                    .id
+                    .as_str(),
+                owner,
+                "{clause}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_424_reviewed_modal_mode_sets_bind_exactly() {
+        for ids in [
+            &[
+                "modal_mode.put_counter.up_to_two_creatures",
+                "modal_mode.return.creature_mv_le_two.graveyard_to_hand",
+            ][..],
+            &[
+                "modal_mode.return.card_mv_ge_four.graveyard_to_hand",
+                "modal_mode.exile.artifact_or_enchantment",
+            ][..],
+            &[
+                "modal_mode.destroy.up_to_one_artifact",
+                "modal_mode.sacrifice_artifact.two_counters_source",
+            ][..],
+            &[
+                "modal_mode.tap.nonland_permanent",
+                "modal_mode.untap.nonland_permanent",
+            ][..],
+            &["modal_mode.tap.creature", "modal_mode.untap.creature"][..],
+            &[
+                "modal_mode.return.artifact_card.graveyard_to_hand",
+                "modal_mode.scry.three",
+            ][..],
+            &[
+                "modal_mode.destroy.damaged_creature",
+                "modal_mode.exile.up_to_two.single_graveyard",
+            ][..],
+            &[
+                "modal_mode.create_token.rat.cant_block",
+                "modal_mode.sacrifice_another.scry_two_draw_one",
+                "modal_mode.grant.team.menace",
+            ][..],
+        ] {
+            let recipe_ids = ids.iter().map(|id| RecipeId(id)).collect::<Vec<_>>();
+            assert!(
+                reviewed_modal_mode_pair(&recipe_ids, 1, 1),
+                "{ids:?} must be reviewed at (1, 1)"
+            );
+            assert!(
+                !reviewed_modal_mode_pair(&recipe_ids, 1, 2),
+                "{ids:?} must not accept widened bounds"
+            );
+        }
+
+        // Reversed, partial, and extended sets stay fail-closed.
+        for ids in [
+            &[
+                "modal_mode.return.creature_mv_le_two.graveyard_to_hand",
+                "modal_mode.put_counter.up_to_two_creatures",
+            ][..],
+            &["modal_mode.scry.three"][..],
+            &[
+                "modal_mode.exile.artifact_or_enchantment",
+                "modal_mode.return.card_mv_ge_four.graveyard_to_hand",
+            ][..],
+            &[
+                "modal_mode.destroy.damaged_creature",
+                "modal_mode.exile.up_to_two.single_graveyard",
+                "modal_mode.destroy.enchantment",
+            ][..],
+            &[
+                "modal_mode.create_token.rat.cant_block",
+                "modal_mode.grant.team.menace",
+            ][..],
+        ] {
+            let recipe_ids = ids.iter().map(|id| RecipeId(id)).collect::<Vec<_>>();
+            assert!(
+                !reviewed_modal_mode_pair(&recipe_ids, 1, 1),
+                "{ids:?} must not be a reviewed mode set"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_424_modal_bullets_assemble_with_ability_words_and_reminders() {
+        // Ability-word bullets must match their exact printed forms through the raw-bullet pass.
+        let ability_words = vec![
+            format!("• {ISSUE_424_PUFF_PIECE}"),
+            format!("• {ISSUE_424_INVESTIGATIVE}"),
+        ];
+        let mut labels = Vec::new();
+        let (modes, recipe_ids) =
+            crate::assemble_modal_modes(&ability_words, 2, &context(), &mut labels)
+                .expect("Daily Bugle Reporters bullets should assemble");
+        assert_eq!(
+            recipe_ids,
+            [
+                RecipeId("modal_mode.put_counter.up_to_two_creatures"),
+                RecipeId("modal_mode.return.creature_mv_le_two.graveyard_to_hand"),
+            ]
+        );
+        assert_eq!(modes.len(), 2);
+
+        // Oltec Archaeologists' scry reminder resolves through the reminder-stripped fallback.
+        let scry_bullets = vec![
+            "• Return target artifact card from your graveyard to your hand.".to_string(),
+            "• Scry 3. (Look at the top three cards of your library, then put any number of them on the bottom and the rest on top in any order.)".to_string(),
+        ];
+        let mut labels = Vec::new();
+        let (modes, recipe_ids) =
+            crate::assemble_modal_modes(&scry_bullets, 2, &context(), &mut labels)
+                .expect("Oltec Archaeologists bullets should assemble");
+        assert_eq!(
+            recipe_ids,
+            [
+                RecipeId("modal_mode.return.artifact_card.graveyard_to_hand"),
+                RecipeId("modal_mode.scry.three"),
+            ]
+        );
+        assert_eq!(modes.len(), 2);
+        assert_eq!(
+            modes[1].effects,
+            [SpellEffectKind::Scry {
+                count: Amount::Fixed(3),
+            }]
+        );
+
+        // Lord Skitter's Butcher's three bodies assemble in printed order.
+        let butcher_bullets = vec![
+            format!("• {ISSUE_424_BUTCHER_RAT}"),
+            format!("• {ISSUE_424_BUTCHER_SACRIFICE}"),
+            format!("• {ISSUE_424_BUTCHER_MENACE}"),
+        ];
+        let mut labels = Vec::new();
+        let (modes, recipe_ids) =
+            crate::assemble_modal_modes(&butcher_bullets, 2, &context(), &mut labels)
+                .expect("Lord Skitter's Butcher bullets should assemble");
+        assert_eq!(
+            recipe_ids,
+            [
+                RecipeId("modal_mode.create_token.rat.cant_block"),
+                RecipeId("modal_mode.sacrifice_another.scry_two_draw_one"),
+                RecipeId("modal_mode.grant.team.menace"),
+            ]
+        );
+        assert_eq!(modes.len(), 3);
     }
 }
