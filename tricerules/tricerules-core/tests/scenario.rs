@@ -521,3 +521,5 @@ mod issue_374_graveyard_condition_triggers;
 mod issue_375_graveyard_return;
 #[path = "scenario/issue_377_graveyard_static_conditions.rs"]
 mod issue_377_graveyard_static_conditions;
+#[path = "scenario/issue_412_modal_modes.rs"]
+mod issue_412_modal_modes;

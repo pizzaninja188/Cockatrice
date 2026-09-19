@@ -28,15 +28,16 @@ use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use tricerules_cards::primitives::{
-    EffectSubject, EntersTappedAffected, EntryCost, PlayerRecipient, StaticAbilityDef,
-    TargetController, TargetFilter, TargetSchema, TargetingDef,
+    CastCostGroupDef, CastCostOptionDef, EffectSubject, EntersTappedAffected, EntryCost,
+    ObjectCastCostKind, ObjectContributionKind, ObjectPaymentConstraint, PlayerRecipient,
+    StaticAbilityDef, TargetController, TargetFilter, TargetKind, TargetSchema, TargetingDef,
 };
 use tricerules_cards::{
     external_oracle_lines, slugify, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
     ActivatedAbilityDef, ActivationTiming, Amount, BasicLandType, CardFaceId, CardRegistry,
-    CharacteristicDefiningAbility, Color, GameCondition, IdentifiedAbility, Keyword, ManaAmount,
-    ManaCost, ModalDef, ModeDef, ModeId, SpellCostModifier, SpellEffectKind, TriggerCondition,
-    TriggeredAbilityDef,
+    CastCostOptionRef, CharacteristicDefiningAbility, ChoiceId, Color, GameCondition,
+    IdentifiedAbility, Keyword, ManaAmount, ManaCost, ModalDef, ModeDef, ModeId, SpellCostModifier,
+    SpellEffectKind, TriggerCondition, TriggeredAbilityDef,
 };
 
 #[path = "gen_cards/candidate_report.rs"]
@@ -61,8 +62,9 @@ use recipes::{
     issue_314_oracle_id_is_reviewed, issue_315_card_surface_is_exact,
     issue_315_oracle_id_is_reviewed, issue_373_card_surface_is_exact,
     issue_373_oracle_id_is_reviewed, issue_375_card_surface_is_exact, match_clause,
-    match_modal_assembly, match_modal_mode, match_station_assembly, reviewed_modal_mode_pair,
-    validate_catalog, RecipeAmbiguity, RecipeContext, RecipeEmission,
+    match_modal_assembly, match_modal_mode, match_station_assembly, match_teamwork_modal_assembly,
+    match_triggered_modal_assembly, reviewed_modal_mode_pair, validate_catalog, RecipeAmbiguity,
+    RecipeContext, RecipeEmission, RecipeId,
 };
 #[cfg(test)]
 use tricerules_cards::primitives::{
@@ -596,6 +598,7 @@ fn strip_reminder(text: &str) -> String {
 #[derive(Debug, Default, PartialEq, Eq)]
 struct ParsedRules {
     keywords: Vec<Keyword>,
+    cast_cost_groups: Vec<CastCostGroupDef>,
     cost_modifiers: Vec<SpellCostModifier>,
     warp_cost: Option<ManaCost>,
     flashback_cost: Option<ManaCost>,
@@ -615,6 +618,88 @@ struct ParsedRules {
 enum RulesParseError {
     Unsupported,
     Ambiguous(RecipeAmbiguity),
+}
+
+/// Match every printed bullet from an exact modal aggregate against its own `ModalMode` recipe
+/// and build the stable per-mode definitions. `first_line_number` is the one-based Oracle line of
+/// `mode_lines[0]`, so the caller owns whether the aggregate started at line 1 or later.
+fn assemble_modal_modes(
+    mode_lines: &[String],
+    first_line_number: u16,
+    base_context: &RecipeContext,
+    recipe_labels: &mut Vec<&'static str>,
+) -> Result<(Vec<ModeDef>, Vec<RecipeId>), RulesParseError> {
+    let mut modes = Vec::with_capacity(mode_lines.len());
+    let mut mode_recipe_ids = Vec::with_capacity(mode_lines.len());
+    for (mode_index, external_line) in mode_lines.iter().enumerate() {
+        let line_offset = u16::try_from(mode_index).map_err(|_| RulesParseError::Unsupported)?;
+        let line_number = first_line_number
+            .checked_add(line_offset)
+            .ok_or(RulesParseError::Unsupported)?;
+        let cleaned_mode = strip_reminder(external_line);
+        let mode_text = cleaned_mode
+            .trim()
+            .strip_prefix("• ")
+            .ok_or(RulesParseError::Unsupported)?;
+        let context = RecipeContext {
+            presentation: AbilityPresentation::OracleLines(vec![line_number]),
+            ..base_context.clone()
+        };
+        let matched = match_modal_mode(mode_text, &context)
+            .map_err(RulesParseError::Ambiguous)?
+            .ok_or(RulesParseError::Unsupported)?;
+        let RecipeEmission::ModalMode(emission) = matched.emission else {
+            return Err(RulesParseError::Unsupported);
+        };
+        mode_recipe_ids.push(matched.id);
+        let mode_id = ModeId::new(format!("mode_{:02}", mode_index + 1))
+            .map_err(|_| RulesParseError::Unsupported)?;
+        modes.push(ModeDef {
+            mode_id,
+            presentation: context.presentation,
+            linked_cast_cost: None,
+            effects: emission.effects,
+            targeting: emission.targeting,
+        });
+        recipe_labels.push(matched.label);
+    }
+    Ok((modes, mode_recipe_ids))
+}
+
+/// Build the exact Teamwork cast-cost group and mode set for one reviewed modal aggregate.
+fn teamwork_cast_cost_group(
+    teamwork_power: u32,
+) -> Result<(CastCostGroupDef, CastCostOptionRef), RulesParseError> {
+    let group_id = ChoiceId::new("teamwork").map_err(|_| RulesParseError::Unsupported)?;
+    let option_id = ChoiceId::new(format!("teamwork_{teamwork_power}"))
+        .map_err(|_| RulesParseError::Unsupported)?;
+    let group = CastCostGroupDef {
+        group_id: group_id.clone(),
+        presentation: AbilityPresentation::OracleLines(vec![1]),
+        min: 0,
+        max: 1,
+        options: vec![CastCostOptionDef::TapPermanents {
+            option_id: option_id.clone(),
+            presentation: AbilityPresentation::OracleLines(vec![1]),
+            kind: ObjectCastCostKind::Teamwork,
+            constraint: ObjectPaymentConstraint::AggregateMinimum {
+                minimum: teamwork_power,
+                contribution: ObjectContributionKind::CurrentPower,
+            },
+            filter: Box::new(TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..TargetFilter::default()
+            }),
+        }],
+    };
+    Ok((
+        group,
+        CastCostOptionRef {
+            group_id,
+            option_id,
+        },
+    ))
 }
 
 fn parse_rules_text(
@@ -668,39 +753,13 @@ fn parse_rules_text(
             let RecipeEmission::ModalAssembly(assembly_emission) = assembly.emission else {
                 return Err(RulesParseError::Unsupported);
             };
-            let mut modes = Vec::with_capacity(2);
-            let mut mode_recipe_ids = Vec::with_capacity(2);
             parsed.recipe_labels.push(assembly.label);
-            for (mode_index, external_line) in external_lines.iter().skip(1).enumerate() {
-                let line_number =
-                    u16::try_from(mode_index + 2).map_err(|_| RulesParseError::Unsupported)?;
-                let cleaned_mode = strip_reminder(external_line);
-                let mode_text = cleaned_mode
-                    .trim()
-                    .strip_prefix("• ")
-                    .ok_or(RulesParseError::Unsupported)?;
-                let context = RecipeContext {
-                    presentation: AbilityPresentation::OracleLines(vec![line_number]),
-                    ..base_context.clone()
-                };
-                let matched = match_modal_mode(mode_text, &context)
-                    .map_err(RulesParseError::Ambiguous)?
-                    .ok_or(RulesParseError::Unsupported)?;
-                let RecipeEmission::ModalMode(emission) = matched.emission else {
-                    return Err(RulesParseError::Unsupported);
-                };
-                mode_recipe_ids.push(matched.id);
-                let mode_id = ModeId::new(format!("mode_{:02}", mode_index + 1))
-                    .map_err(|_| RulesParseError::Unsupported)?;
-                modes.push(ModeDef {
-                    mode_id,
-                    presentation: context.presentation,
-                    linked_cast_cost: None,
-                    effects: emission.effects,
-                    targeting: emission.targeting,
-                });
-                parsed.recipe_labels.push(matched.label);
-            }
+            let (modes, mode_recipe_ids) = assemble_modal_modes(
+                &external_lines[1..],
+                2,
+                &base_context,
+                &mut parsed.recipe_labels,
+            )?;
             if !reviewed_modal_mode_pair(
                 &mode_recipe_ids,
                 assembly_emission.min_modes,
@@ -712,6 +771,37 @@ fn parse_rules_text(
                 min_modes: assembly_emission.min_modes,
                 max_modes: assembly_emission.max_modes,
                 all_modes_cast_cost: None,
+                modes,
+            });
+            return Ok(parsed);
+        }
+        if let Some(assembly) = match_teamwork_modal_assembly(oracle_text, &base_context)
+            .map_err(RulesParseError::Ambiguous)?
+        {
+            let RecipeEmission::TeamworkModalAssembly(assembly_emission) = assembly.emission else {
+                return Err(RulesParseError::Unsupported);
+            };
+            let (group, all_modes_ref) =
+                teamwork_cast_cost_group(assembly_emission.teamwork_power)?;
+            parsed.cast_cost_groups.push(group);
+            parsed.recipe_labels.push(assembly.label);
+            let (modes, mode_recipe_ids) = assemble_modal_modes(
+                &external_lines[2..],
+                3,
+                &base_context,
+                &mut parsed.recipe_labels,
+            )?;
+            if !reviewed_modal_mode_pair(
+                &mode_recipe_ids,
+                assembly_emission.min_modes,
+                assembly_emission.max_modes,
+            ) {
+                return Err(RulesParseError::Unsupported);
+            }
+            parsed.modal_spell = Some(ModalDef {
+                min_modes: assembly_emission.min_modes,
+                max_modes: assembly_emission.max_modes,
+                all_modes_cast_cost: Some(all_modes_ref),
                 modes,
             });
             return Ok(parsed);
@@ -783,8 +873,11 @@ fn parse_rules_text(
             consumed_station_lines.insert(line_index + 1);
         }
     }
-    for (line_index, external_line) in external_lines.iter().enumerate() {
-        if consumed_station_lines.contains(&line_index) {
+    let mut consumed_triggered_modal_lines = HashSet::new();
+    for (raw_line_index, external_line) in external_lines.iter().enumerate() {
+        if consumed_station_lines.contains(&raw_line_index)
+            || consumed_triggered_modal_lines.contains(&raw_line_index)
+        {
             continue;
         }
         let cleaned = strip_reminder(external_line);
@@ -792,7 +885,8 @@ fn parse_rules_text(
         if clause.is_empty() {
             continue;
         }
-        let line_index = u16::try_from(line_index + 1).map_err(|_| RulesParseError::Unsupported)?;
+        let line_index =
+            u16::try_from(raw_line_index + 1).map_err(|_| RulesParseError::Unsupported)?;
         let presentation = AbilityPresentation::OracleLines(vec![line_index]);
         let triggered_id = AbilityId::new(format!(
             "triggered_{:02}",
@@ -831,6 +925,77 @@ fn parse_rules_text(
             source_is_instant,
             source_is_sorcery,
         };
+        // A modal trigger header owns its following contiguous bullet run. The aggregate is built
+        // first so the assembly recipe validates the complete header-plus-bullets shape before any
+        // line is consumed; each bullet then matches its own exact ModalMode recipe.
+        if !is_spell {
+            let candidate_lines = std::iter::once(external_line.as_str())
+                .chain(
+                    external_lines
+                        .iter()
+                        .skip(raw_line_index + 1)
+                        .take_while(|following| strip_reminder(following).trim().starts_with("• "))
+                        .map(String::as_str),
+                )
+                .collect::<Vec<_>>();
+            if candidate_lines.len() >= 3 {
+                let aggregate = candidate_lines.join("\n");
+                if let Some(matched) = match_triggered_modal_assembly(&aggregate, &context)
+                    .map_err(RulesParseError::Ambiguous)?
+                {
+                    let RecipeEmission::TriggeredModalAssembly(assembly_emission) =
+                        matched.emission
+                    else {
+                        return Err(RulesParseError::Unsupported);
+                    };
+                    let bullet_lines = candidate_lines[1..]
+                        .iter()
+                        .map(|line| (*line).to_string())
+                        .collect::<Vec<_>>();
+                    let first_bullet_line = u16::try_from(raw_line_index + 2)
+                        .map_err(|_| RulesParseError::Unsupported)?;
+                    let (modes, mode_recipe_ids) = assemble_modal_modes(
+                        &bullet_lines,
+                        first_bullet_line,
+                        &context,
+                        &mut parsed.recipe_labels,
+                    )?;
+                    if !reviewed_modal_mode_pair(
+                        &mode_recipe_ids,
+                        assembly_emission.min_modes,
+                        assembly_emission.max_modes,
+                    ) {
+                        return Err(RulesParseError::Unsupported);
+                    }
+                    let bullet_count = u16::try_from(bullet_lines.len())
+                        .map_err(|_| RulesParseError::Unsupported)?;
+                    let mut presentation_lines = vec![line_index];
+                    presentation_lines.extend(first_bullet_line..first_bullet_line + bullet_count);
+                    parsed.triggered_abilities.push(TriggeredAbilityDef {
+                        ability_id: context.triggered_ability_id.clone(),
+                        presentation: AbilityPresentation::OracleLines(presentation_lines),
+                        trigger: assembly_emission.trigger,
+                        effect: Vec::new(),
+                        modal: Some(ModalDef {
+                            min_modes: assembly_emission.min_modes,
+                            max_modes: assembly_emission.max_modes,
+                            all_modes_cast_cost: None,
+                            modes,
+                        }),
+                        targeting: None,
+                        may: false,
+                        intervening_if: None,
+                        max_triggers_per_turn: None,
+                        triggers_only_once: false,
+                    });
+                    parsed.recipe_labels.push(matched.label);
+                    for offset in (raw_line_index + 1)..(raw_line_index + 1 + bullet_lines.len()) {
+                        consumed_triggered_modal_lines.insert(offset);
+                    }
+                    continue;
+                }
+            }
+        }
         // Most recipes operate on Oracle text with parenthetical reminder text removed. A
         // reminder-text keyword whose definition is part of the matching contract (Increment)
         // must be matched against the complete source line first, however; otherwise changing
@@ -896,6 +1061,8 @@ fn parse_rules_text(
                 parsed.harmonize_cost = Some(cost);
             }
             RecipeEmission::ModalAssembly(_)
+            | RecipeEmission::TeamworkModalAssembly(_)
+            | RecipeEmission::TriggeredModalAssembly(_)
             | RecipeEmission::ModalMode(_)
             | RecipeEmission::StationAssembly(_) => {
                 return Err(RulesParseError::Unsupported);
@@ -1057,6 +1224,7 @@ struct GenFace {
     color_indicator: Option<Vec<Color>>,
     characteristic_defining_abilities: Vec<IdentifiedAbility<CharacteristicDefiningAbility>>,
     keywords: Vec<Keyword>,
+    cast_cost_groups: Vec<CastCostGroupDef>,
     cost_modifiers: Vec<SpellCostModifier>,
     warp_cost: Option<ManaCost>,
     flashback_cost: Option<ManaCost>,
@@ -1163,6 +1331,17 @@ fn push_face_fields(s: &mut String, face: &GenFace, indent: &str, include_name: 
             .collect::<Vec<_>>()
             .join(", ");
         s.push_str(&format!("{indent}keywords: [{}],\n", keywords));
+    }
+    if !face.cast_cost_groups.is_empty() {
+        s.push_str(&format!(
+            "{indent}cast_cost_groups: [{}],\n",
+            face.cast_cost_groups
+                .iter()
+                .map(|group| ron::ser::to_string(group)
+                    .expect("generated cast cost group should serialize"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
     }
     if !face.cost_modifiers.is_empty() {
         s.push_str(&format!(
@@ -1865,6 +2044,7 @@ fn parse_multiface_face(
         color_indicator,
         characteristic_defining_abilities: rules.characteristic_defining_abilities,
         keywords: rules.keywords,
+        cast_cost_groups: rules.cast_cost_groups,
         cost_modifiers: rules.cost_modifiers,
         warp_cost: rules.warp_cost,
         flashback_cost: rules.flashback_cost,
@@ -2086,6 +2266,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
             color_indicator: None,
             characteristic_defining_abilities: rules.characteristic_defining_abilities,
             keywords: rules.keywords,
+            cast_cost_groups: rules.cast_cost_groups,
             cost_modifiers: rules.cost_modifiers,
             warp_cost: rules.warp_cost,
             flashback_cost: rules.flashback_cost,
@@ -3824,6 +4005,354 @@ mod tests {
                 "unreviewed or malformed Choose one or both aggregates must fail closed"
             );
         }
+    }
+
+    fn modal_spell_of(generated: &GenCard) -> ModalDef {
+        parse_generated(&generated.to_ron("fixture"))
+            .modal_spell
+            .expect("fixture should emit modal_spell")
+    }
+
+    #[test]
+    fn issue_412_two_and_three_mode_spells_generate_exact_modal_definitions() {
+        let plow_through = normal_card(
+            "Plow Through",
+            "{G}",
+            "Sorcery",
+            "Choose one —\n• Target creature you control fights target creature an opponent controls. (Each deals damage equal to its power to the other.)\n• Destroy target Vehicle.",
+            None,
+        );
+        let generated = evaluate_fresh(&plow_through).expect("Plow Through should generate");
+        let modal = modal_spell_of(&generated);
+        assert_eq!((modal.min_modes, modal.max_modes), (1, 1));
+        assert_eq!(modal.modes.len(), 2);
+        assert_eq!(
+            modal
+                .modes
+                .iter()
+                .map(|mode| mode.presentation.clone())
+                .collect::<Vec<_>>(),
+            [
+                AbilityPresentation::OracleLines(vec![2]),
+                AbilityPresentation::OracleLines(vec![3]),
+            ]
+        );
+        assert_eq!(
+            modal.modes[0].effects,
+            [SpellEffectKind::Fight {
+                first: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: tricerules_cards::primitives::TargetKind::Creature,
+                    controller: TargetController::You,
+                    ..TargetFilter::default()
+                })),
+                second: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: tricerules_cards::primitives::TargetKind::Creature,
+                    controller: TargetController::Opponent,
+                    ..TargetFilter::default()
+                })),
+            }]
+        );
+        assert_eq!(
+            modal.modes[1].effects,
+            [SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
+                    required_subtypes: vec!["Vehicle".into()],
+                    ..TargetFilter::default()
+                })),
+            }]
+        );
+        // The printed reminder normalizes away, so both forms are the same exact repertoire.
+        let without_reminder = normal_card(
+            "Plow Through",
+            "{G}",
+            "Sorcery",
+            "Choose one —\n• Target creature you control fights target creature an opponent controls.\n• Destroy target Vehicle.",
+            None,
+        );
+        assert_eq!(
+            modal_spell_of(&evaluate_fresh(&without_reminder).expect("reminder-less form")),
+            modal
+        );
+
+        for (name, oracle_text) in [
+            (
+                "Heritage Reclamation",
+                "Choose one —\n• Destroy target artifact.\n• Destroy target enchantment.\n• Exile up to one target card from a graveyard. Draw a card.",
+            ),
+            (
+                "Pawpatch Formation",
+                "Choose one —\n• Destroy target creature with flying.\n• Destroy target enchantment.\n• Draw a card. Create a Food token.",
+            ),
+            (
+                "Unforgiving Aim",
+                "Choose one —\n• Destroy target creature with flying.\n• Destroy target enchantment.\n• Create a 2/2 black and green Elf creature token.",
+            ),
+        ] {
+            let card = normal_card(name, "{1}{G}", "Instant", oracle_text, None);
+            let generated =
+                evaluate_fresh(&card).unwrap_or_else(|error| panic!("{name}: {error:?}"));
+            let modal = modal_spell_of(&generated);
+            assert_eq!((modal.min_modes, modal.max_modes), (1, 1), "{name}");
+            assert_eq!(modal.modes.len(), 3, "{name}");
+            assert_eq!(
+                modal
+                    .modes
+                    .iter()
+                    .map(|mode| mode.presentation.clone())
+                    .collect::<Vec<_>>(),
+                [
+                    AbilityPresentation::OracleLines(vec![2]),
+                    AbilityPresentation::OracleLines(vec![3]),
+                    AbilityPresentation::OracleLines(vec![4]),
+                ],
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_412_teamwork_modal_spells_emit_the_cost_group_and_both_mode_allowance() {
+        for (name, mana, power, oracle_text) in [
+            (
+                "Go Nuts!",
+                "{G}",
+                3,
+                "Teamwork 3 (As an additional cost to cast this spell, you may tap any number of creatures you control with total power 3 or more.)\nChoose one. If this spell was cast using teamwork, choose both instead.\n• Put a +1/+1 counter on target creature.\n• Target creature you control fights target creature an opponent controls.",
+            ),
+            (
+                "HULK SMASH!",
+                "{1}{R}",
+                4,
+                "Teamwork 4 (As an additional cost to cast this spell, you may tap any number of creatures you control with total power 4 or more.)\nChoose one. If this spell was cast using teamwork, choose both instead.\n• Destroy target noncreature artifact.\n• Target creature you control deals damage equal to its power to target creature an opponent controls.",
+            ),
+        ] {
+            let card = normal_card(name, mana, "Sorcery", oracle_text, None);
+            let generated =
+                evaluate_fresh(&card).unwrap_or_else(|error| panic!("{name}: {error:?}"));
+            let raw = parse_generated(&generated.to_ron("fixture"));
+            assert_eq!(raw.cast_cost_groups.len(), 1, "{name}");
+            let group = &raw.cast_cost_groups[0];
+            assert_eq!(group.group_id.as_str(), "teamwork", "{name}");
+            assert_eq!((group.min, group.max), (0, 1), "{name}");
+            assert_eq!(
+                group.options,
+                [tricerules_cards::primitives::CastCostOptionDef::TapPermanents {
+                    option_id: tricerules_cards::ChoiceId::new(format!("teamwork_{power}"))
+                        .unwrap_or_else(|_| panic!("{name}: option id")),
+                    presentation: AbilityPresentation::OracleLines(vec![1]),
+                    kind: tricerules_cards::primitives::ObjectCastCostKind::Teamwork,
+                    constraint: tricerules_cards::primitives::ObjectPaymentConstraint::AggregateMinimum {
+                        minimum: power,
+                        contribution: tricerules_cards::primitives::ObjectContributionKind::CurrentPower,
+                    },
+                    filter: Box::new(TargetFilter {
+                        kind: tricerules_cards::primitives::TargetKind::Creature,
+                        controller: TargetController::You,
+                        ..TargetFilter::default()
+                    }),
+                }],
+                "{name}"
+            );
+            let modal = raw.modal_spell.unwrap_or_else(|| panic!("{name}: modal_spell"));
+            assert_eq!((modal.min_modes, modal.max_modes), (1, 2), "{name}");
+            assert_eq!(
+                modal.all_modes_cast_cost.as_ref().map(|reference| (
+                    reference.group_id.as_str(),
+                    reference.option_id.as_str(),
+                )),
+                Some(("teamwork", format!("teamwork_{power}").as_str())),
+                "{name}"
+            );
+            assert_eq!(modal.modes.len(), 2, "{name}");
+            assert_eq!(
+                modal
+                    .modes
+                    .iter()
+                    .map(|mode| mode.presentation.clone())
+                    .collect::<Vec<_>>(),
+                [
+                    AbilityPresentation::OracleLines(vec![3]),
+                    AbilityPresentation::OracleLines(vec![4]),
+                ],
+                "{name}"
+            );
+        }
+
+        // The printed reminder number must control the emitted teamwork threshold.
+        let wrong_reminder = normal_card(
+            "Wrong Reminder Teamwork",
+            "{G}",
+            "Sorcery",
+            "Teamwork 3 (As an additional cost to cast this spell, you may tap any number of creatures you control with total power 4 or more.)\nChoose one. If this spell was cast using teamwork, choose both instead.\n• Put a +1/+1 counter on target creature.\n• Target creature you control fights target creature an opponent controls.",
+            None,
+        );
+        assert!(evaluate_fresh(&wrong_reminder).is_err());
+
+        let mismatched_cost_line = normal_card(
+            "Mismatched Cost Line",
+            "{G}",
+            "Sorcery",
+            "Teamwork 3 (As an additional cost to cast this spell, you may tap any number of creatures you control with total power 3 or more.)\nChoose one. If this spell was cast using teamwork, choose one instead.\n• Put a +1/+1 counter on target creature.\n• Target creature you control fights target creature an opponent controls.",
+            None,
+        );
+        assert!(evaluate_fresh(&mismatched_cost_line).is_err());
+    }
+
+    #[test]
+    fn issue_412_etb_modal_creatures_emit_triggered_modal_abilities() {
+        let coliseum = normal_card(
+            "Coliseum Behemoth",
+            "{5}{G}{G}",
+            "Creature — Beast",
+            "Trample\nWhen this creature enters, choose one —\n• Destroy target artifact or enchantment.\n• Draw a card.",
+            Some(("7", "7")),
+        );
+        let generated = evaluate_fresh(&coliseum).expect("Coliseum Behemoth should generate");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.keywords, [Keyword::Trample]);
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("Coliseum Behemoth must own exactly one triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![2, 3, 4])
+        );
+        let modal = ability.modal.as_ref().expect("ETB modal");
+        assert_eq!((modal.min_modes, modal.max_modes), (1, 1));
+        assert_eq!(modal.modes.len(), 2);
+        assert_eq!(
+            modal
+                .modes
+                .iter()
+                .map(|mode| mode.presentation.clone())
+                .collect::<Vec<_>>(),
+            [
+                AbilityPresentation::OracleLines(vec![3]),
+                AbilityPresentation::OracleLines(vec![4]),
+            ]
+        );
+        assert_eq!(
+            modal.modes[0].effects,
+            [SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
+                    permanent_types: vec![
+                        tricerules_cards::primitives::PermanentTypeFilter::Artifact,
+                        tricerules_cards::primitives::PermanentTypeFilter::Enchantment
+                    ],
+                    ..TargetFilter::default()
+                })),
+            }]
+        );
+        assert_eq!(
+            modal.modes[1].effects,
+            [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }]
+        );
+
+        let fangkeeper = normal_card(
+            "Fangkeeper's Familiar",
+            "{1}{B}{G}{U}",
+            "Creature — Snake",
+            "Flash\nWhen this creature enters, choose one —\n• You gain 3 life and surveil 3. (Look at the top three cards of your library, then put any number of them into your graveyard and the rest on top of your library in any order.)\n• Destroy target enchantment.\n• Counter target creature spell.",
+            Some(("3", "3")),
+        );
+        let generated = evaluate_fresh(&fangkeeper).expect("Fangkeeper's Familiar should generate");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.keywords, [Keyword::Flash]);
+        let [ability] = raw.triggered_abilities.as_slice() else {
+            panic!("Fangkeeper's Familiar must own exactly one triggered ability");
+        };
+        assert_eq!(
+            ability.presentation,
+            AbilityPresentation::OracleLines(vec![2, 3, 4, 5])
+        );
+        let modal = ability.modal.as_ref().expect("ETB modal");
+        assert_eq!((modal.min_modes, modal.max_modes), (1, 1));
+        assert_eq!(modal.modes.len(), 3);
+        assert_eq!(
+            modal.modes[2].effects,
+            [SpellEffectKind::CounterTargetSpell {
+                spell_filter: tricerules_cards::primitives::StackSpellFilter {
+                    card_type: Some(tricerules_cards::primitives::CardTypeFilter::Creature),
+                    ..Default::default()
+                },
+                unless_controller_pays: None,
+                unless_controller_pays_by_cast_cost: None,
+            }]
+        );
+    }
+
+    #[test]
+    fn issue_412_unreviewed_or_malformed_modal_aggregates_fail_closed() {
+        for (name, oracle_text) in [
+            (
+                // Reordered pair is not the reviewed printing order.
+                "Reordered Plow",
+                "Choose one —\n• Destroy target Vehicle.\n• Target creature you control fights target creature an opponent controls.",
+            ),
+            (
+                // Four bullets are not a reviewed assembly.
+                "Four Bullet Modal",
+                "Choose one —\n• Destroy target artifact.\n• Destroy target enchantment.\n• Draw a card.\n• Create a 2/2 black and green Elf creature token.",
+            ),
+            (
+                // One bullet has no exact modal recipe.
+                "Unsupported Bullet Modal",
+                "Choose one —\n• Destroy target artifact.\n• Destroy target enchantment.\n• Scry 1.",
+            ),
+            (
+                // The same reviewed modes in an unreviewed order.
+                "Reordered Three Bullet Modal",
+                "Choose one —\n• Destroy target enchantment.\n• Destroy target artifact.\n• Exile up to one target card from a graveyard. Draw a card.",
+            ),
+        ] {
+            let card = normal_card(name, "{1}{G}", "Instant", oracle_text, None);
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "{name} must stay unsupported"
+            );
+        }
+
+        let unreviewed_teamwork = normal_card(
+            "Unreviewed Teamwork Modal",
+            "{2}{U}",
+            "Instant",
+            "Teamwork 3 (As an additional cost to cast this spell, you may tap any number of creatures you control with total power 3 or more.)\nChoose one. If this spell was cast using teamwork, choose both instead.\n• Counter target spell.\n• Draw a card.",
+            None,
+        );
+        assert!(evaluate_fresh(&unreviewed_teamwork).is_err());
+
+        let unreviewed_etb = normal_card(
+            "Unreviewed ETB Modal",
+            "{1}{G}",
+            "Creature — Beast",
+            "When this creature enters, choose one —\n• Draw a card.\n• You gain 3 life and surveil 3.",
+            Some(("2", "2")),
+        );
+        assert!(evaluate_fresh(&unreviewed_etb).is_err());
+
+        let four_bullet_etb = normal_card(
+            "Four Bullet ETB Modal",
+            "{1}{G}",
+            "Creature — Beast",
+            "When this creature enters, choose one —\n• Destroy target artifact or enchantment.\n• Draw a card.\n• Destroy target enchantment.\n• Counter target creature spell.",
+            Some(("2", "2")),
+        );
+        assert!(evaluate_fresh(&four_bullet_etb).is_err());
+
+        let noncreature_etb_header = normal_card(
+            "Enchantment With Creature Header",
+            "{1}{G}",
+            "Enchantment",
+            "When this enchantment enters, choose one —\n• Destroy target artifact or enchantment.\n• Draw a card.",
+            None,
+        );
+        assert!(evaluate_fresh(&noncreature_etb_header).is_err());
     }
 
     #[test]

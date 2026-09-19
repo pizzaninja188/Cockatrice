@@ -38,6 +38,15 @@ pub(super) enum RecipeSurface {
     /// A complete modal Oracle-text aggregate. The assembly owns the header and every bullet;
     /// individual bullet mechanics are matched again on [`Self::ModalMode`].
     ModalAssembly,
+    /// A complete Teamwork modal-spell aggregate: the printed Teamwork announcement line, the
+    /// `choose both if this spell was cast using teamwork` modal sentence, and every bullet. The
+    /// assembly owns the cast-cost group and the `all_modes_cast_cost` link so a partial or
+    /// reordered teamwork aggregate stays unsupported.
+    TeamworkModalAssembly,
+    /// A modal triggered-ability aggregate (`When this creature enters, choose one —` plus every
+    /// bullet). The assembly owns the trigger and selection bounds; bullet mechanics are matched
+    /// again on [`Self::ModalMode`].
+    TriggeredModalAssembly,
     /// The complete paired Station header and threshold striation. The assembly owns both
     /// lines so an orphan, reordered, duplicated, or appended Station fragment stays unsupported.
     StationAssembly,
@@ -146,6 +155,8 @@ pub(super) enum RecipeEmission {
     CharacteristicAbility(IdentifiedAbility<CharacteristicDefiningAbility>),
     ModalMode(ModalModeEmission),
     ModalAssembly(ModalAssemblyEmission),
+    TeamworkModalAssembly(TeamworkModalAssemblyEmission),
+    TriggeredModalAssembly(TriggeredModalAssemblyEmission),
     StationAssembly(StationAssemblyEmission),
     /// CR 702.185: the face-level hand alternative cost printed as `Warp {cost}`.
     WarpCost(ManaCost),
@@ -163,6 +174,20 @@ pub(super) struct ModalModeEmission {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct ModalAssemblyEmission {
+    pub(super) min_modes: u32,
+    pub(super) max_modes: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct TeamworkModalAssemblyEmission {
+    pub(super) min_modes: u32,
+    pub(super) max_modes: u32,
+    pub(super) teamwork_power: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct TriggeredModalAssemblyEmission {
+    pub(super) trigger: TriggerCondition,
     pub(super) min_modes: u32,
     pub(super) max_modes: u32,
 }
@@ -1273,6 +1298,91 @@ fn match_modal_two_modes(text: &str, _: &RecipeContext) -> Option<RecipeEmission
     }))
 }
 
+fn normalized_modal_lines(text: &str) -> Vec<&str> {
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect()
+}
+
+fn modal_bullets_are_exact(lines: &[&str], first_bullet: usize) -> bool {
+    lines.len() > first_bullet
+        && lines[first_bullet..]
+            .iter()
+            .all(|line| line.starts_with("• ") && !line.trim_start_matches("• ").trim().is_empty())
+}
+
+/// Issue #412: the exact three-bullet `Choose one —` aggregate. The shipped two-bullet matcher
+/// stays untouched; a four-bullet or mixed-header aggregate still matches neither.
+fn match_modal_three_modes(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    let lines = normalized_modal_lines(text);
+    if lines.len() != 4 || lines[0] != "Choose one —" || !modal_bullets_are_exact(&lines, 1) {
+        return None;
+    }
+    Some(RecipeEmission::ModalAssembly(ModalAssemblyEmission {
+        min_modes: 1,
+        max_modes: 1,
+    }))
+}
+
+/// The exact printed Teamwork announcement line. The reminder text must repeat the same
+/// aggregate power; a mismatched reminder or any other number fails closed.
+fn teamwork_announcement_power(line: &str) -> Option<u32> {
+    let rest = line.strip_prefix("Teamwork ")?;
+    let (number, reminder) = rest.split_once(' ')?;
+    let power = number.parse::<u32>().ok()?;
+    if power == 0 || power.to_string() != number {
+        return None;
+    }
+    (reminder
+        == format!(
+            "(As an additional cost to cast this spell, you may tap any number of creatures you control with total power {power} or more.)"
+        ))
+    .then_some(power)
+}
+
+/// Issue #412 / CR 702.194 / 700.2: the exact four-line Teamwork modal aggregate. The assembly
+/// owns the printed Teamwork cost line and the choose-both sentence; the two bullets are matched
+/// again on [`RecipeSurface::ModalMode`] and the reviewed mode-set allowance.
+fn match_teamwork_modal_two_modes(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    let lines = normalized_modal_lines(text);
+    if lines.len() != 4
+        || lines[1] != "Choose one. If this spell was cast using teamwork, choose both instead."
+        || !modal_bullets_are_exact(&lines, 2)
+    {
+        return None;
+    }
+    let teamwork_power = teamwork_announcement_power(lines[0])?;
+    Some(RecipeEmission::TeamworkModalAssembly(
+        TeamworkModalAssemblyEmission {
+            min_modes: 1,
+            max_modes: 2,
+            teamwork_power,
+        },
+    ))
+}
+
+/// Issue #412 / CR 603.3c / 700.2b: the exact `When this creature enters, choose one —` header
+/// plus its contiguous bullet run. The trigger and selection bounds belong to the assembly; the
+/// bullets are matched again on [`RecipeSurface::ModalMode`] and the reviewed mode-set allowance.
+fn match_modal_etb_choose_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    let lines = normalized_modal_lines(text);
+    if !context.source_is_creature
+        || lines.len() < 3
+        || lines[0] != "When this creature enters, choose one —"
+        || !modal_bullets_are_exact(&lines, 1)
+    {
+        return None;
+    }
+    Some(RecipeEmission::TriggeredModalAssembly(
+        TriggeredModalAssemblyEmission {
+            trigger: TriggerCondition::WhenSelfEntersBattlefield,
+            min_modes: 1,
+            max_modes: 1,
+        },
+    ))
+}
+
 fn match_modal_damage_three_to_creature(
     text: &str,
     context: &RecipeContext,
@@ -1818,6 +1928,230 @@ fn match_modal_destroy_noncreature_artifact(
                 })),
             }],
             modal_targeting("Choose target noncreature artifact", 0),
+        )
+    })
+}
+
+/// Issue #412: the single-enchantment bullet (`Destroy target enchantment.`) mirrors the shipped
+/// single-artifact recipe. The artifact-or-enchantment union, "up to one" variants, other
+/// permanent types, control restrictions, and riders stay with their own owners or unsupported.
+fn match_modal_destroy_enchantment(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Destroy target enchantment.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![PermanentTypeFilter::Enchantment],
+                    ..TargetFilter::default()
+                })),
+            }],
+            modal_targeting("Choose target enchantment", 0),
+        )
+    })
+}
+
+/// Issue #412: the power-four-or-greater destruction bullet is the exact power sibling of the
+/// shipped toughness-four recipe. CR 608.2b rechecks the printed characteristic, so power and
+/// toughness stay separate filters. Other bounds, controller restrictions, "up to one", and
+/// riders stay unsupported.
+fn match_modal_destroy_power_four(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Destroy target creature with power 4 or greater.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    power: Some(PowerComparison::AtLeast(4)),
+                    ..TargetFilter::default()
+                })),
+            }],
+            modal_targeting("Choose target creature with power 4 or greater", 0),
+        )
+    })
+}
+
+/// Issue #412 / CR 701.12: the fight bullet binds a controlled creature and an opposing creature
+/// as two separate CR 115 targets, reusing the shipped `Fight` instruction. "Another target",
+/// "you don't control", any-target, up-to-one, and rider forms stay unsupported.
+fn match_modal_fight_controlled_vs_opponent(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Target creature you control fights target creature an opponent controls.").then(
+        || {
+            modal_mode(
+                vec![SpellEffectKind::Fight {
+                    first: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::Creature,
+                        controller: TargetController::You,
+                        ..TargetFilter::default()
+                    })),
+                    second: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::Creature,
+                        controller: TargetController::Opponent,
+                        ..TargetFilter::default()
+                    })),
+                }],
+                modal_targeting_groups(vec![
+                    ("Choose target creature you control", vec![0]),
+                    ("Choose target creature an opponent controls", vec![0]),
+                ]),
+            )
+        },
+    )
+}
+
+/// Issue #412: `Destroy target Vehicle.` uses the shipped subtype predicate shape. Artifact-only,
+/// "up to one", controls-relative, noncreature, and rider forms stay unsupported.
+fn match_modal_destroy_vehicle(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Destroy target Vehicle.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    required_subtypes: vec!["Vehicle".into()],
+                    ..TargetFilter::default()
+                })),
+            }],
+            modal_targeting("Choose target Vehicle", 0),
+        )
+    })
+}
+
+/// Issue #412 / CR 115.1 / 701.13: `Exile up to one target card from a graveyard. Draw a card.`
+/// reuses the shipped any-graveyard exile shape with an optional (min 0) target group; the
+/// following draw is unconditional. Mandatory targets, owner-scoped graveyards, creature-card
+/// restrictions, other counts, and split instructions stay unsupported.
+fn match_modal_exile_graveyard_card_up_to_one_draw_one(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Exile up to one target card from a graveyard. Draw a card.").then(|| {
+        modal_mode(
+            vec![
+                SpellEffectKind::MoveGraveyardCards {
+                    filter: GraveyardFilter {
+                        owner: GraveyardOwner::AnyPlayer,
+                        ..GraveyardFilter::default()
+                    },
+                    destination: GraveyardDestination::Exile,
+                    linked_exile_id: None,
+                },
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                },
+            ],
+            Some(TargetingDef {
+                groups: vec![TargetGroupDef {
+                    min: 0,
+                    max: 1,
+                    prompt: "Choose up to one target card from a graveyard".into(),
+                    effect_indices: vec![0],
+                    distinct_from: Vec::new(),
+                    same_graveyard: false,
+                    cast_cost_expansion: None,
+                }],
+            }),
+        )
+    })
+}
+
+/// Issue #412 / CR 121.1: the plain one-card draw bullet. Other counts, appended instructions,
+/// and other recipients stay unsupported.
+fn match_modal_draw_one(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Draw a card.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }],
+            None,
+        )
+    })
+}
+
+/// Issue #412 / CR 111 / 121.1: `Draw a card. Create a Food token.` is one bullet with the
+/// unconditional draw followed by the registered Food token. Another token, another order,
+/// other counts, and freeform riders stay unsupported.
+fn match_modal_draw_one_create_food(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Draw a card. Create a Food token.").then(|| {
+        modal_mode(
+            vec![
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                },
+                SpellEffectKind::CreateTokens {
+                    token: "food".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                },
+            ],
+            None,
+        )
+    })
+}
+
+/// Issue #412 / CR 119.3 / 701.25: `You gain 3 life and surveil 3.` emits the fixed life gain and
+/// the shipped Surveil library partition in printed order. Other amounts, split sentences, and
+/// additional instructions stay unsupported.
+fn match_modal_gain_life_three_surveil_three(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "You gain 3 life and surveil 3.").then(|| {
+        modal_mode(
+            vec![
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(3),
+                },
+                SpellEffectKind::LibraryPartition {
+                    count: 3,
+                    top_min: 0,
+                    top_max: None,
+                    kind: LibraryPartitionKind::Surveil,
+                },
+            ],
+            None,
+        )
+    })
+}
+
+/// Issue #412 / CR 701.5: `Counter target creature spell.` narrows the shipped unrestricted modal
+/// counter with the creature spell-type filter. The unrestricted and noncreature forms, up-to-one,
+/// soft counters, and riders stay with their shipped recipes or unsupported.
+fn match_modal_counter_creature_spell(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Counter target creature spell.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::CounterTargetSpell {
+                spell_filter: StackSpellFilter {
+                    card_type: Some(CardTypeFilter::Creature),
+                    ..StackSpellFilter::default()
+                },
+                unless_controller_pays: None,
+                unless_controller_pays_by_cast_cost: None,
+            }],
+            modal_targeting("Choose target creature spell", 0),
+        )
+    })
+}
+
+/// Issue #412 / CR 111: the black-green 2/2 Elf token bullet reuses the registered `elf_bg_2_2`
+/// identity already consumed by Morcant's Eyes. Other colors, types, sizes, counts, and riders
+/// stay unsupported.
+fn match_modal_create_elf_token(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Create a 2/2 black and green Elf creature token.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::CreateTokens {
+                token: "elf_bg_2_2".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }],
+            None,
         )
     })
 }
@@ -13731,10 +14065,55 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Overwhelming Surge" => "Choose one or both —\n• Overwhelming Surge deals 3 damage to target creature.\n• Destroy target noncreature artifact.";
             "Choose two —\n• Draw a card.\n• You gain 2 life.",
             "Choose one —\n• Draw a card.",
-            "Choose one —\n• Draw a card.\n• You gain 2 life.\n• Create a token.",
+            // A three-bullet Choose one aggregate is owned by modal.choose_one.three_modes.
             "Choose one —\nDraw a card.\n• You gain 2 life.",
             "Choose one or both —\n• Draw a card.",
             "Choose one or both —\n• Draw a card.\n• You gain 2 life.\n• Create a token."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal.choose_one.three_modes"),
+        label: "three-bullet modal spell assembly",
+        surface: RecipeSurface::ModalAssembly,
+        matcher: match_modal_three_modes,
+        calibration: calibrations!(
+            "Heritage Reclamation" => "Choose one —\n• Destroy target artifact.\n• Destroy target enchantment.\n• Exile up to one target card from a graveyard. Draw a card.",
+            "Pawpatch Formation" => "Choose one —\n• Destroy target creature with flying.\n• Destroy target enchantment.\n• Draw a card. Create a Food token.";
+            "Choose two —\n• Draw a card.\n• You gain 2 life.",
+            "Choose one —\n• Draw a card.",
+            // A two-bullet Choose one aggregate is owned by modal.choose_one.two_modes.
+            "Choose one —\n• Draw a card.\n• You gain 2 life.\n• Create a token.\n• Create a Treasure token.",
+            "Choose one or both —\n• Draw a card.\n• You gain 2 life.\n• Create a token."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal.teamwork.choose_both_two_modes"),
+        label: "two-bullet Teamwork modal spell assembly",
+        surface: RecipeSurface::TeamworkModalAssembly,
+        matcher: match_teamwork_modal_two_modes,
+        calibration: calibrations!(
+            "Go Nuts!" => "Teamwork 3 (As an additional cost to cast this spell, you may tap any number of creatures you control with total power 3 or more.)\nChoose one. If this spell was cast using teamwork, choose both instead.\n• Put a +1/+1 counter on target creature.\n• Target creature you control fights target creature an opponent controls.",
+            "HULK SMASH!" => "Teamwork 4 (As an additional cost to cast this spell, you may tap any number of creatures you control with total power 4 or more.)\nChoose one. If this spell was cast using teamwork, choose both instead.\n• Destroy target noncreature artifact.\n• Target creature you control deals damage equal to its power to target creature an opponent controls.";
+            "Teamwork 3 (As an additional cost to cast this spell, you may tap any number of creatures you control with total power 4 or more.)\nChoose one. If this spell was cast using teamwork, choose both instead.\n• Put a +1/+1 counter on target creature.\n• Target creature you control fights target creature an opponent controls.",
+            "Teamwork 3 (As an additional cost to cast this spell, you may tap any number of creatures you control with total power 3 or more.)\nChoose one. If this spell was cast using teamwork, choose one instead.\n• Put a +1/+1 counter on target creature.\n• Target creature you control fights target creature an opponent controls.",
+            "Teamwork 3 (As an additional cost to cast this spell, you may tap any number of creatures you control with total power 3 or more.)\nChoose one —\n• Put a +1/+1 counter on target creature.\n• Target creature you control fights target creature an opponent controls.",
+            "Teamwork 3 (As an additional cost to cast this spell, you may tap any number of creatures you control with total power 3 or more.)\nChoose one. If this spell was cast using teamwork, choose both instead.\n• Put a +1/+1 counter on target creature."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal.etb.choose_one.modal_trigger"),
+        label: "ETB choose-one modal trigger assembly",
+        surface: RecipeSurface::TriggeredModalAssembly,
+        matcher: match_modal_etb_choose_one,
+        calibration: calibrations!(
+            "Coliseum Behemoth" => "When this creature enters, choose one —\n• Destroy target artifact or enchantment.\n• Draw a card.",
+            "Fangkeeper's Familiar" => "When this creature enters, choose one —\n• You gain 3 life and surveil 3.\n• Destroy target enchantment.\n• Counter target creature spell.";
+            "When this creature enters, choose one —\n• Draw a card.",
+            "When this creature enters, choose one. If this creature was kicked, choose both instead.\n• Draw a card.\n• You gain 2 life.",
+            "When this creature dies, choose one —\n• Draw a card.\n• You gain 2 life.",
+            // A four-bullet run reaches the assembly but no reviewed mode-set allowance accepts
+            // it; that fail-closed path is covered by the generation regression below.
+            "When this enchantment enters, choose one —\n• Draw a card.\n• You gain 2 life."
         ),
     },
     Recipe {
@@ -14091,7 +14470,8 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Valorous Stance" => "Destroy target creature with toughness 4 or greater.",
             "Collar the Culprit" => "Destroy target creature with toughness 4 or greater.";
             "Destroy target creature with toughness 3 or greater.",
-            "Destroy target creature with power 4 or greater.",
+            // The power form is owned by modal_mode.destroy.creature.power_at_least_four.
+            "Destroy target creature with power 4 or less.",
             "Destroy target creature with toughness 4 or greater. You gain 2 life.",
             "Destroy up to one target creature with toughness 4 or greater."
         ),
@@ -14149,6 +14529,152 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Destroy target noncreature permanent.",
             "Destroy target noncreature artifact. You gain 2 life.",
             "Destroy target artifact or planeswalker."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.destroy.enchantment"),
+        label: "destroy target enchantment mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_destroy_enchantment,
+        calibration: calibrations!(
+            "Fangkeeper's Familiar" => "Destroy target enchantment.",
+            "Heritage Reclamation" => "Destroy target enchantment.",
+            "Quandrix Charm" => "Destroy target enchantment.";
+            "Destroy up to one target enchantment.",
+            "Destroy target permanent.",
+            "Destroy target enchantment you control.",
+            "Destroy target enchantment. You gain 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.destroy.creature.power_at_least_four"),
+        label: "destroy target creature with power four or greater mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_destroy_power_four,
+        calibration: calibrations!(
+            "Moment of Valor" => "Destroy target creature with power 4 or greater.",
+            "Spectacular Tactics" => "Destroy target creature with power 4 or greater.";
+            "Destroy target creature with power 3 or greater.",
+            "Destroy target creature with power 4 or greater you control.",
+            "Destroy target creature with power 4 or greater. You gain 2 life.",
+            "Destroy up to one target creature with power 4 or greater."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.fight.controlled_vs_opponent"),
+        label: "controlled creature fights opposing creature mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_fight_controlled_vs_opponent,
+        calibration: calibrations!(
+            "Go Nuts!" => "Target creature you control fights target creature an opponent controls.",
+            "Plow Through" => "Target creature you control fights target creature an opponent controls.";
+            "Target creature you control fights another target creature an opponent controls.",
+            "Target creature you control fights target creature you don't control.",
+            "Target creature an opponent controls fights target creature you control.",
+            "Target creature fights target creature an opponent controls.",
+            "Target creature you control fights up to one target creature an opponent controls.",
+            "Target creature you control fights target creature an opponent controls. Untap them."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.destroy.vehicle"),
+        label: "destroy target Vehicle mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_destroy_vehicle,
+        // Plow Through is the cohort identity; Crash and Burn is the full-corpus sibling that
+        // prints the same exact bullet.
+        calibration: calibrations!(
+            "Plow Through" => "Destroy target Vehicle.",
+            "Crash and Burn" => "Destroy target Vehicle.";
+            "Destroy up to one target Vehicle.",
+            "Destroy target Vehicle you control.",
+            "Destroy target noncreature Vehicle.",
+            "Destroy target Vehicle. You gain 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.exile.graveyard_card_up_to_one.draw_one"),
+        label: "exile up to one graveyard card then draw one mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_exile_graveyard_card_up_to_one_draw_one,
+        calibration: singleton_calibrations!(
+            "Heritage Reclamation" => "Exile up to one target card from a graveyard. Draw a card.";
+            "Exile up to one target card from your graveyard. Draw a card.",
+            "Exile up to one target card from an opponent's graveyard. Draw a card.",
+            "Exile target card from a graveyard. Draw a card.",
+            "Exile up to one target creature card from a graveyard. Draw a card.",
+            "Exile up to two target cards from a graveyard. Draw a card.",
+            "Exile up to one target card from a graveyard.",
+            "Exile up to one target card from a graveyard. Draw two cards."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.draw.one"),
+        label: "draw a card mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_draw_one,
+        calibration: calibrations!(
+            "Coliseum Behemoth" => "Draw a card.",
+            "Silent Hallcreeper" => "Draw a card.";
+            "Draw two cards.",
+            "Draw a card. You gain 1 life.",
+            "Draw a card. Create a Treasure token.",
+            "Each player draws a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.draw.one.create_food"),
+        label: "draw a card and create a Food mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_draw_one_create_food,
+        calibration: singleton_calibrations!(
+            "Pawpatch Formation" => "Draw a card. Create a Food token.";
+            "Draw a card. Create a Treasure token.",
+            "Draw two cards. Create a Food token.",
+            "Create a Food token. Draw a card.",
+            "Draw a card, then create a Food token."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.gain_life.three.surveil.three"),
+        label: "gain three life and surveil three mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_gain_life_three_surveil_three,
+        calibration: singleton_calibrations!(
+            "Fangkeeper's Familiar" => "You gain 3 life and surveil 3.";
+            "You gain 3 life.",
+            "You gain 2 life and surveil 3.",
+            "You gain 3 life and surveil 2.",
+            "You gain 3 life, then surveil 3.",
+            "You gain 3 life and surveil 3, then draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.counter.creature_spell"),
+        label: "counter target creature spell mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_counter_creature_spell,
+        calibration: calibrations!(
+            "Fangkeeper's Familiar" => "Counter target creature spell.",
+            "Essence Scatter" => "Counter target creature spell.";
+            "Counter target noncreature spell.",
+            "Counter up to one target creature spell.",
+            "Counter target creature spell unless its controller pays {2}.",
+            "Counter target creature spell. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.create_token.elf_black_green.two_two"),
+        label: "create a black-green 2/2 Elf token mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_create_elf_token,
+        calibration: singleton_calibrations!(
+            "Unforgiving Aim" => "Create a 2/2 black and green Elf creature token.";
+            "Create a 2/2 green Elf creature token.",
+            "Create a 2/2 black and green Elf Warrior creature token.",
+            "Create two 2/2 black and green Elf creature tokens.",
+            "Create a tapped 2/2 black and green Elf creature token.",
+            "Create a 2/2 black and green Elf creature token. Draw a card."
         ),
     },
     Recipe {
@@ -19914,6 +20440,8 @@ fn surface_applies(surface: RecipeSurface, is_spell: bool, context: &RecipeConte
         RecipeSurface::SpellClause => is_spell,
         RecipeSurface::AuraSpellClause => context.source_is_aura,
         RecipeSurface::ModalAssembly
+        | RecipeSurface::TeamworkModalAssembly
+        | RecipeSurface::TriggeredModalAssembly
         | RecipeSurface::ModalMode
         | RecipeSurface::StationAssembly => false,
         RecipeSurface::ZoneActivatedAbility
@@ -19967,6 +20495,30 @@ pub(super) fn match_modal_mode(
     context: &RecipeContext,
 ) -> Result<Option<RecipeMatch>, RecipeAmbiguity> {
     match_surface_in(CATALOG, mode_text, RecipeSurface::ModalMode, context)
+}
+
+pub(super) fn match_teamwork_modal_assembly(
+    oracle_text: &str,
+    context: &RecipeContext,
+) -> Result<Option<RecipeMatch>, RecipeAmbiguity> {
+    match_surface_in(
+        CATALOG,
+        oracle_text,
+        RecipeSurface::TeamworkModalAssembly,
+        context,
+    )
+}
+
+pub(super) fn match_triggered_modal_assembly(
+    oracle_text: &str,
+    context: &RecipeContext,
+) -> Result<Option<RecipeMatch>, RecipeAmbiguity> {
+    match_surface_in(
+        CATALOG,
+        oracle_text,
+        RecipeSurface::TriggeredModalAssembly,
+        context,
+    )
 }
 
 pub(super) fn match_station_assembly(
@@ -20035,6 +20587,28 @@ pub(super) fn reviewed_modal_mode_pair(
         ["modal_mode.damage.creature.three.source", "modal_mode.destroy.noncreature_artifact"] => {
             Some((1, 2))
         }
+        // Issue #412 exact mode sets. Only these printed sets and orders are reviewed; every
+        // other modal aggregate still fails closed even when each bullet matches a recipe.
+        ["modal_mode.destroy.artifact_or_enchantment", "modal_mode.draw.one"] => Some((1, 1)),
+        ["modal_mode.gain_life.three.surveil.three", "modal_mode.destroy.enchantment", "modal_mode.counter.creature_spell"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.destroy.artifact", "modal_mode.destroy.enchantment", "modal_mode.exile.graveyard_card_up_to_one.draw_one"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.destroy.creature.flying", "modal_mode.destroy.enchantment", "modal_mode.draw.one.create_food"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.destroy.creature.flying", "modal_mode.destroy.enchantment", "modal_mode.create_token.elf_black_green.two_two"] => {
+            Some((1, 1))
+        }
+        ["modal_mode.put_counter.creature.plus_one_plus_one", "modal_mode.fight.controlled_vs_opponent"] => {
+            Some((1, 2))
+        }
+        ["modal_mode.destroy.noncreature_artifact", "modal_mode.damage.creature.equal_power.controlled_to_opponent"] => {
+            Some((1, 2))
+        }
+        ["modal_mode.fight.controlled_vs_opponent", "modal_mode.destroy.vehicle"] => Some((1, 1)),
         _ => None,
     };
     expected_bounds == Some((min_modes, max_modes))
@@ -20147,6 +20721,8 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
             }
             let matched = match recipe.surface {
                 RecipeSurface::ModalAssembly
+                | RecipeSurface::TeamworkModalAssembly
+                | RecipeSurface::TriggeredModalAssembly
                 | RecipeSurface::ModalMode
                 | RecipeSurface::StationAssembly => {
                     match_surface_in(catalog, positive.clause, recipe.surface, &context)
@@ -20191,6 +20767,8 @@ fn validate_catalog_in(catalog: &[Recipe]) -> Result<(), String> {
             }
             let matched = match recipe.surface {
                 RecipeSurface::ModalAssembly
+                | RecipeSurface::TeamworkModalAssembly
+                | RecipeSurface::TriggeredModalAssembly
                 | RecipeSurface::ModalMode
                 | RecipeSurface::StationAssembly => {
                     match_surface_in(catalog, negative, recipe.surface, &context)
@@ -37531,5 +38109,507 @@ mod tests {
                 .is_none(),
             "the disguise-flavored reduction stays unsupported until #345 adds disguise cost assembly"
         );
+    }
+
+    fn assert_modal_mode(clause: &str, expected_id: &str) -> ModalModeEmission {
+        let matched = match_modal_mode(clause, &context())
+            .unwrap_or_else(|error| panic!("{clause}: {error}"))
+            .unwrap_or_else(|| panic!("missing modal_mode recipe for {clause}"));
+        assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+        let RecipeEmission::ModalMode(emission) = matched.emission else {
+            panic!("{expected_id} must emit a modal mode");
+        };
+        emission
+    }
+
+    #[test]
+    fn issue_412_modal_mode_recipes_match_their_exact_clauses() {
+        // The power-based damage mode already ships as
+        // `modal_mode.damage.creature.equal_power.controlled_to_opponent`; issue #412's proposed
+        // second id would be a duplicate clause owner and an ambiguity error, so this batch keeps
+        // the shipped recipe and proves HULK SMASH!'s printed bullet routes to it.
+        for (clause, expected_id) in [
+            (
+                "Destroy target enchantment.",
+                "modal_mode.destroy.enchantment",
+            ),
+            (
+                "Destroy target creature with power 4 or greater.",
+                "modal_mode.destroy.creature.power_at_least_four",
+            ),
+            (
+                "Target creature you control fights target creature an opponent controls.",
+                "modal_mode.fight.controlled_vs_opponent",
+            ),
+            (
+                "Target creature you control deals damage equal to its power to target creature an opponent controls.",
+                "modal_mode.damage.creature.equal_power.controlled_to_opponent",
+            ),
+            ("Destroy target Vehicle.", "modal_mode.destroy.vehicle"),
+            (
+                "Exile up to one target card from a graveyard. Draw a card.",
+                "modal_mode.exile.graveyard_card_up_to_one.draw_one",
+            ),
+            ("Draw a card.", "modal_mode.draw.one"),
+            (
+                "Draw a card. Create a Food token.",
+                "modal_mode.draw.one.create_food",
+            ),
+            (
+                "You gain 3 life and surveil 3.",
+                "modal_mode.gain_life.three.surveil.three",
+            ),
+            (
+                "Counter target creature spell.",
+                "modal_mode.counter.creature_spell",
+            ),
+            (
+                "Create a 2/2 black and green Elf creature token.",
+                "modal_mode.create_token.elf_black_green.two_two",
+            ),
+        ] {
+            let matched = match_modal_mode(clause, &context())
+                .unwrap_or_else(|error| panic!("{clause}: {error}"))
+                .unwrap_or_else(|| panic!("missing modal_mode recipe for {clause}"));
+            assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+        }
+
+        for recipe_id in [
+            "modal_mode.destroy.enchantment",
+            "modal_mode.destroy.creature.power_at_least_four",
+            "modal_mode.fight.controlled_vs_opponent",
+            "modal_mode.destroy.vehicle",
+            "modal_mode.exile.graveyard_card_up_to_one.draw_one",
+            "modal_mode.draw.one",
+            "modal_mode.draw.one.create_food",
+            "modal_mode.gain_life.three.surveil.three",
+            "modal_mode.counter.creature_spell",
+            "modal_mode.create_token.elf_black_green.two_two",
+        ] {
+            let recipe = CATALOG
+                .iter()
+                .find(|recipe| recipe.id.as_str() == recipe_id)
+                .unwrap_or_else(|| panic!("missing issue #412 recipe {recipe_id}"));
+            assert_eq!(recipe.surface, RecipeSurface::ModalMode, "{recipe_id}");
+        }
+    }
+
+    #[test]
+    fn issue_412_modal_mode_recipes_emit_typed_payloads() {
+        assert_eq!(
+            assert_modal_mode(
+                "Destroy target enchantment.",
+                "modal_mode.destroy.enchantment"
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::Destroy {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        permanent_types: vec![PermanentTypeFilter::Enchantment],
+                        ..TargetFilter::default()
+                    })),
+                }],
+                targeting: modal_targeting("Choose target enchantment", 0),
+            }
+        );
+        assert_eq!(
+            assert_modal_mode(
+                "Destroy target creature with power 4 or greater.",
+                "modal_mode.destroy.creature.power_at_least_four",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::Destroy {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::Creature,
+                        power: Some(tricerules_cards::PowerComparison::AtLeast(4)),
+                        ..TargetFilter::default()
+                    })),
+                }],
+                targeting: modal_targeting("Choose target creature with power 4 or greater", 0),
+            }
+        );
+        assert_eq!(
+            assert_modal_mode(
+                "Target creature you control fights target creature an opponent controls.",
+                "modal_mode.fight.controlled_vs_opponent",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::Fight {
+                    first: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::Creature,
+                        controller: TargetController::You,
+                        ..TargetFilter::default()
+                    })),
+                    second: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::Creature,
+                        controller: TargetController::Opponent,
+                        ..TargetFilter::default()
+                    })),
+                }],
+                targeting: modal_targeting_groups(vec![
+                    ("Choose target creature you control", vec![0]),
+                    ("Choose target creature an opponent controls", vec![0]),
+                ]),
+            }
+        );
+        assert_eq!(
+            assert_modal_mode("Destroy target Vehicle.", "modal_mode.destroy.vehicle"),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::Destroy {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        required_subtypes: vec!["Vehicle".into()],
+                        ..TargetFilter::default()
+                    })),
+                }],
+                targeting: modal_targeting("Choose target Vehicle", 0),
+            }
+        );
+        assert_eq!(
+            assert_modal_mode(
+                "Exile up to one target card from a graveyard. Draw a card.",
+                "modal_mode.exile.graveyard_card_up_to_one.draw_one",
+            ),
+            ModalModeEmission {
+                effects: vec![
+                    SpellEffectKind::MoveGraveyardCards {
+                        filter: GraveyardFilter {
+                            owner: GraveyardOwner::AnyPlayer,
+                            ..GraveyardFilter::default()
+                        },
+                        destination: GraveyardDestination::Exile,
+                        linked_exile_id: None,
+                    },
+                    SpellEffectKind::Draw {
+                        who: PlayerRecipient::Controller,
+                        count: Amount::Fixed(1),
+                    },
+                ],
+                targeting: Some(TargetingDef {
+                    groups: vec![TargetGroupDef {
+                        min: 0,
+                        max: 1,
+                        prompt: "Choose up to one target card from a graveyard".into(),
+                        effect_indices: vec![0],
+                        distinct_from: Vec::new(),
+                        same_graveyard: false,
+                        cast_cost_expansion: None,
+                    }],
+                }),
+            }
+        );
+        assert_eq!(
+            assert_modal_mode("Draw a card.", "modal_mode.draw.one"),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                }],
+                targeting: None,
+            }
+        );
+        assert_eq!(
+            assert_modal_mode(
+                "Draw a card. Create a Food token.",
+                "modal_mode.draw.one.create_food",
+            ),
+            ModalModeEmission {
+                effects: vec![
+                    SpellEffectKind::Draw {
+                        who: PlayerRecipient::Controller,
+                        count: Amount::Fixed(1),
+                    },
+                    SpellEffectKind::CreateTokens {
+                        token: "food".into(),
+                        count: Amount::Fixed(1),
+                        who: PlayerRecipient::Controller,
+                        tapped: false,
+                        sacrifice_timing: None,
+                    },
+                ],
+                targeting: None,
+            }
+        );
+        assert_eq!(
+            assert_modal_mode(
+                "You gain 3 life and surveil 3.",
+                "modal_mode.gain_life.three.surveil.three",
+            ),
+            ModalModeEmission {
+                effects: vec![
+                    SpellEffectKind::GainLife {
+                        amount: Amount::Fixed(3),
+                    },
+                    SpellEffectKind::LibraryPartition {
+                        count: 3,
+                        top_min: 0,
+                        top_max: None,
+                        kind: LibraryPartitionKind::Surveil,
+                    },
+                ],
+                targeting: None,
+            }
+        );
+        assert_eq!(
+            assert_modal_mode(
+                "Counter target creature spell.",
+                "modal_mode.counter.creature_spell",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::CounterTargetSpell {
+                    spell_filter: StackSpellFilter {
+                        card_type: Some(CardTypeFilter::Creature),
+                        ..StackSpellFilter::default()
+                    },
+                    unless_controller_pays: None,
+                    unless_controller_pays_by_cast_cost: None,
+                }],
+                targeting: modal_targeting("Choose target creature spell", 0),
+            }
+        );
+        assert_eq!(
+            assert_modal_mode(
+                "Create a 2/2 black and green Elf creature token.",
+                "modal_mode.create_token.elf_black_green.two_two",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::CreateTokens {
+                    token: "elf_bg_2_2".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                }],
+                targeting: None,
+            }
+        );
+    }
+
+    #[test]
+    fn issue_412_modal_mode_recipes_reject_near_misses() {
+        // Appended riders, up-to-one forms, union/other-type wording, other damage bases, other
+        // controller relationships, and other counts or tokens must stay unsupported.
+        for clause in [
+            "Destroy up to one target enchantment.",
+            "Destroy target permanent.",
+            "Destroy target enchantment you control.",
+            "Destroy target enchantment. You gain 2 life.",
+        ] {
+            assert!(
+                match_modal_mode(clause, &context())
+                    .expect("near-miss must not be ambiguous")
+                    .is_none(),
+                "destroy.enchantment accepted {clause}"
+            );
+        }
+        // The union and single-artifact forms stay owned by their shipped recipes instead of
+        // collapsing into the new single-type matcher.
+        for (clause, owner) in [
+            (
+                "Destroy target artifact or enchantment.",
+                "modal_mode.destroy.artifact_or_enchantment",
+            ),
+            ("Destroy target artifact.", "modal_mode.destroy.artifact"),
+        ] {
+            assert_eq!(
+                match_modal_mode(clause, &context())
+                    .expect("cross-owner near-miss must not be ambiguous")
+                    .unwrap_or_else(|| panic!(
+                        "cross-owner near-miss must keep its owner: {clause}"
+                    ))
+                    .id
+                    .as_str(),
+                owner,
+                "{clause}"
+            );
+        }
+
+        for clause in [
+            "Destroy target creature with power 3 or greater.",
+            "Destroy target creature with power 4 or greater you control.",
+            "Destroy target creature with power 4 or greater. You gain 2 life.",
+            "Destroy up to one target creature with power 4 or greater.",
+        ] {
+            assert!(
+                match_modal_mode(clause, &context())
+                    .expect("near-miss must not be ambiguous")
+                    .is_none(),
+                "destroy.creature.power_at_least_four accepted {clause}"
+            );
+        }
+        // The toughness sibling is a different printed restriction and keeps its own recipe.
+        assert_eq!(
+            match_modal_mode(
+                "Destroy target creature with toughness 4 or greater.",
+                &context()
+            )
+            .expect("the toughness sibling must not be ambiguous")
+            .expect("the toughness sibling should match")
+            .id
+            .as_str(),
+            "modal_mode.destroy.creature.toughness_at_least_four"
+        );
+
+        for clause in [
+            "Target creature you control fights another target creature an opponent controls.",
+            "Target creature you control fights target creature you don't control.",
+            "Target creature an opponent controls fights target creature you control.",
+            "Target creature fights target creature an opponent controls.",
+            "Target creature you control fights up to one target creature an opponent controls.",
+            "Target creature you control fights target creature an opponent controls. Untap them.",
+        ] {
+            assert!(
+                match_modal_mode(clause, &context())
+                    .expect("near-miss must not be ambiguous")
+                    .is_none(),
+                "fight.controlled_vs_opponent accepted {clause}"
+            );
+        }
+
+        for clause in [
+            "Target creature you control deals damage equal to its toughness to target creature an opponent controls.",
+            "Target creature deals damage equal to its power to target creature an opponent controls.",
+            "Target creature you control deals damage equal to its power to target creature you don't control.",
+            "Target creature you control deals damage equal to its power to target creature an opponent controls. Draw a card.",
+        ] {
+            assert!(
+                match_modal_mode(clause, &context())
+                    .expect("near-miss must not be ambiguous")
+                    .is_none(),
+                "the shipped power-damage recipe accepted {clause}"
+            );
+        }
+
+        for clause in [
+            "Destroy up to one target Vehicle.",
+            "Destroy target Vehicle you control.",
+            "Destroy target noncreature Vehicle.",
+            "Destroy target Vehicle. You gain 2 life.",
+        ] {
+            assert!(
+                match_modal_mode(clause, &context())
+                    .expect("near-miss must not be ambiguous")
+                    .is_none(),
+                "destroy.vehicle accepted {clause}"
+            );
+        }
+        assert_eq!(
+            match_modal_mode("Destroy target artifact.", &context())
+                .expect("cross-owner near-miss must not be ambiguous")
+                .expect("the single-artifact bullet keeps its shipped owner")
+                .id
+                .as_str(),
+            "modal_mode.destroy.artifact"
+        );
+
+        for clause in [
+            "Exile up to one target card from your graveyard. Draw a card.",
+            "Exile up to one target card from an opponent's graveyard. Draw a card.",
+            "Exile target card from a graveyard. Draw a card.",
+            "Exile up to one target creature card from a graveyard. Draw a card.",
+            "Exile up to two target cards from a graveyard. Draw a card.",
+            "Exile up to one target card from a graveyard.",
+            "Exile up to one target card from a graveyard. Draw two cards.",
+            "Exile up to one target card from a graveyard. You gain 1 life.",
+        ] {
+            assert!(
+                match_modal_mode(clause, &context())
+                    .expect("near-miss must not be ambiguous")
+                    .is_none(),
+                "exile.graveyard_card_up_to_one.draw_one accepted {clause}"
+            );
+        }
+
+        for clause in [
+            "Draw two cards.",
+            "Draw a card. You gain 1 life.",
+            "Draw a card. Create a Treasure token.",
+            "Each player draws a card.",
+        ] {
+            assert!(
+                match_modal_mode(clause, &context())
+                    .expect("near-miss must not be ambiguous")
+                    .is_none(),
+                "draw.one accepted {clause}"
+            );
+        }
+        // `Draw a card. Create a Food token.` owns its own recipe; an overlapping plain-draw
+        // matcher would surface here as an ambiguity error instead of the exact owner.
+        assert_eq!(
+            assert_modal_mode(
+                "Draw a card. Create a Food token.",
+                "modal_mode.draw.one.create_food",
+            )
+            .effects
+            .len(),
+            2,
+            "draw.one must stay disjoint from draw.one.create_food"
+        );
+
+        for clause in [
+            "Draw a card. Create a Treasure token.",
+            "Draw two cards. Create a Food token.",
+            "Create a Food token. Draw a card.",
+            "Draw a card, then create a Food token.",
+        ] {
+            assert!(
+                match_modal_mode(clause, &context())
+                    .expect("near-miss must not be ambiguous")
+                    .is_none(),
+                "draw.one.create_food accepted {clause}"
+            );
+        }
+
+        for clause in [
+            "You gain 3 life.",
+            "You gain 2 life and surveil 3.",
+            "You gain 3 life and surveil 2.",
+            "You gain 3 life, then surveil 3.",
+            "You gain 3 life and surveil 3, then draw a card.",
+        ] {
+            assert!(
+                match_modal_mode(clause, &context())
+                    .expect("near-miss must not be ambiguous")
+                    .is_none(),
+                "gain_life.three.surveil.three accepted {clause}"
+            );
+        }
+
+        for clause in [
+            "Counter target noncreature spell.",
+            "Counter up to one target creature spell.",
+            "Counter target creature spell unless its controller pays {2}.",
+            "Counter target creature spell. Draw a card.",
+        ] {
+            assert!(
+                match_modal_mode(clause, &context())
+                    .expect("near-miss must not be ambiguous")
+                    .is_none(),
+                "counter.creature_spell accepted {clause}"
+            );
+        }
+        assert_eq!(
+            match_modal_mode("Counter target spell.", &context())
+                .expect("cross-owner near-miss must not be ambiguous")
+                .expect("the unrestricted counter keeps its shipped owner")
+                .id
+                .as_str(),
+            "modal_mode.counter.spell.unrestricted"
+        );
+
+        for clause in [
+            "Create a 2/2 green Elf creature token.",
+            "Create a 2/2 black and green Elf Warrior creature token.",
+            "Create two 2/2 black and green Elf creature tokens.",
+            "Create a tapped 2/2 black and green Elf creature token.",
+            "Create a 2/2 black and green Elf creature token. Draw a card.",
+        ] {
+            assert!(
+                match_modal_mode(clause, &context())
+                    .expect("near-miss must not be ambiguous")
+                    .is_none(),
+                "create_token.elf_black_green.two_two accepted {clause}"
+            );
+        }
     }
 }
