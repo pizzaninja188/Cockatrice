@@ -964,6 +964,9 @@ gilacorn	0	cast	exercised
 gilded_lotus	0	ability:0	exercised
 gilded_lotus	0	cast	exercised
 gilded_sentinel	0	cast	exercised
+gingerbrute	0	ability:0	exercised
+gingerbrute	0	ability:1	exercised
+gingerbrute	0	cast	exercised
 give_in_to_violence	0	cast	exercised
 glacial_wall	0	cast	exercised
 gladecover_scout	0	cast	exercised
@@ -1131,6 +1134,9 @@ hearthfire_hobgoblin	0	cast	exercised
 heated_argument	0	cast	exercised
 hecteyes	0	cast	exercised
 hedge_maze	0	land	exercised
+hedron_archive	0	ability:0	exercised
+hedron_archive	0	ability:1	exercised
+hedron_archive	0	cast	exercised
 hedron_crawler	0	ability:0	exercised
 hedron_crawler	0	cast	exercised
 heirloom_auntie	0	cast	exercised
@@ -1212,6 +1218,9 @@ hydraulic_helper	0	cast	exercised
 hydro-man,_fluid_felon	0	cast	exercised
 hyena_pack	0	cast	exercised
 hymn_to_tourach	0	cast	exercised
+ice_cream_kitty	0	ability:0	exercised
+ice_cream_kitty	0	ability:1	exercised
+ice_cream_kitty	0	cast	exercised
 icecave_crasher	0	cast	exercised
 iceridge_serpent	0	cast	exercised
 icetill_explorer	0	cast	exercised
@@ -1931,6 +1940,9 @@ rig_for_war	0	cast	exercised
 riling_dawnbreaker_signaling_roar	0	cast	exercised
 riling_dawnbreaker_signaling_roar	1	cast	exercised
 rimekin_recluse	0	cast	exercised
+ring_of_the_lucii	0	ability:0	exercised
+ring_of_the_lucii	0	ability:1	exercised
+ring_of_the_lucii	0	cast	exercised
 riot_devils	0	cast	exercised
 rip-clan_crasher	0	cast	exercised
 ripchain_razorkin	0	ability:0	exercised
@@ -2511,6 +2523,9 @@ tormented_angel	0	cast	exercised
 tormenting_voice	0	cast	exercised
 totally_lost	0	cast	exercised
 touch_of_brilliance	0	cast	exercised
+tough_cookie	0	ability:0	exercised
+tough_cookie	0	ability:1	exercised
+tough_cookie	0	cast	exercised
 tower_gargoyle	0	cast	exercised
 towering_indrik	0	cast	exercised
 trade_route_envoy	0	cast	exercised

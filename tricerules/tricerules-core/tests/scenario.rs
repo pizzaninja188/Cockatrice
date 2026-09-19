@@ -529,3 +529,5 @@ mod issue_414_enters_with_minus_counters;
 mod issue_415_clue_equipment;
 #[path = "scenario/issue_416_roads_entry.rs"]
 mod issue_416_roads_entry;
+#[path = "scenario/issue_417_self_sacrifice_mana.rs"]
+mod issue_417_self_sacrifice_mana;

@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    ActivationLimit, BattlefieldAggregate, BattlefieldCreatureCountFilter,
+    ActivationLimit, BasePowerToughnessValue, BattlefieldAggregate, BattlefieldCreatureCountFilter,
     BattlefieldPermanentFilter, CardResultAction, CardResultFilter, CardResultSource,
     CardTypeFilter, CombatRestriction, CombatRestrictionScope, CombatRole, ConditionPlayerSet,
     CountExpression, CounterRemovalPaymentSource, CreatureScopeController, CreatureScopeFilter,
@@ -10021,6 +10021,286 @@ fn match_etb_enchantment_two_soldier_tokens(
     })
 }
 
+// ---------------------------------------------------------------------------
+// Issue #417 — self-sacrifice mana utility cohort.
+//
+// CR 605.1a classifies a mana ability by its `ProduceMana` effect, not its cost, so the colorless
+// producer shares the ordinary activated-ability surface. CR 602.2b / 601.2h order every activation
+// cost; CR 701.21a makes `Sacrifice this ...` an atomic cost paid before resolution; CR 119.4
+// bounds the pay-life cost by the activator's life total; CR 611.2c / 509.1b apply the turn's
+// combat restriction; CR 111 creates the Food token; CR 205.1b / 613.1d / 613.4b layer the
+// artifact animation. Every matcher compares the complete normalized Oracle line and gates on the
+// printed source kind, so a near-miss, a different source kind, or an appended rider stays
+// unsupported.
+// ---------------------------------------------------------------------------
+
+const ISSUE_417_COLORLESS_TWO_CLAUSE: &str = "{T}: Add {C}{C}.";
+const ISSUE_417_CREATURE_GAIN_THREE_CLAUSE: &str =
+    "{2}, {T}, Sacrifice this creature: You gain 3 life.";
+const ISSUE_417_ARTIFACT_DRAW_TWO_CLAUSE: &str =
+    "{2}, {T}, Sacrifice this artifact: Draw two cards.";
+const ISSUE_417_PAY_LIFE_TAP_NONLAND_CLAUSE: &str =
+    "{2}, {T}, Pay 1 life: Tap target nonland permanent.";
+const ISSUE_417_GINGERBRUTE_EVASION_CLAUSE: &str =
+    "{1}: This creature can't be blocked this turn except by creatures with haste.";
+const ISSUE_417_ICE_CREAM_KITTY_CLAUSE: &str =
+    "{2}, Sacrifice another creature or token: Draw a card. Activate only as a sorcery.";
+const ISSUE_417_TOUGH_COOKIE_ANIMATION_CLAUSE: &str =
+    "{2}{G}: Until end of turn, target noncreature artifact you control becomes a 4/4 artifact creature.";
+
+/// CR 605 / 106.1: exactly `{T}: Add {C}{C}.` produces one bag of two colorless mana. The tap
+/// symbol is the whole cost, so the ability is a mana ability and never targets. A single
+/// colorless symbol, three colorless mana, a mana-cost component, or a rider stays unsupported.
+fn match_mana_tap_add_colorless_two(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (text == ISSUE_417_COLORLESS_TWO_CLAUSE).then(|| {
+        utility_activated_ability(
+            context,
+            vec![AbilityCost::Tap],
+            vec![SpellEffectKind::ProduceMana {
+                options: vec![ManaAmount {
+                    c: 2,
+                    ..ManaAmount::default()
+                }],
+                restriction: None,
+                conditional: None,
+            }],
+            None,
+        )
+    })
+}
+
+/// CR 602.2b / 601.2h / 701.21a / 119.3: exactly
+/// `{2}, {T}, Sacrifice this creature: You gain 3 life.` pays the printed mana, taps the source,
+/// and sacrifices it as ordered activation costs; the controller gains life only on resolution.
+/// The artifact wording keeps its shipped recipe, and another mana amount, a missing tap, another
+/// life amount, or a rider stays unsupported.
+fn match_creature_sacrifice_self_gain_three(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_417_CREATURE_GAIN_THREE_CLAUSE).then(|| {
+        utility_activated_ability(
+            context,
+            vec![
+                fixed_mana_cost("{2}"),
+                AbilityCost::Tap,
+                AbilityCost::SacrificeSelf,
+            ],
+            vec![SpellEffectKind::GainLife {
+                amount: Amount::Fixed(3),
+            }],
+            None,
+        )
+    })
+}
+
+/// CR 602.2b / 601.2h / 701.21a / 121.1: exactly
+/// `{2}, {T}, Sacrifice this artifact: Draw two cards.` pays the printed mana, taps the source,
+/// and sacrifices it as ordered activation costs; the controller draws two only on resolution.
+/// The `{3}{U}` artifact sacrifice sibling keeps its own recipe, and another mana amount, a
+/// missing tap, another draw count, or a rider stays unsupported.
+fn match_artifact_sacrifice_self_draw_two(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_artifact && text == ISSUE_417_ARTIFACT_DRAW_TWO_CLAUSE).then(|| {
+        utility_activated_ability(
+            context,
+            vec![
+                fixed_mana_cost("{2}"),
+                AbilityCost::Tap,
+                AbilityCost::SacrificeSelf,
+            ],
+            vec![SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(2),
+            }],
+            None,
+        )
+    })
+}
+
+fn issue_417_nonland_permanent() -> TargetFilter {
+    TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        excluded_permanent_types: vec![PermanentTypeFilter::Land],
+        ..TargetFilter::default()
+    }
+}
+
+/// CR 602.2b / 601.2h / 119.4 / 701.26: exactly
+/// `{2}, {T}, Pay 1 life: Tap target nonland permanent.` pays the printed mana, taps the source,
+/// and pays one life as ordered activation costs, then taps one chosen nonland permanent on
+/// resolution. Another life amount, a missing tap or mana component, a land permanent, an
+/// untap, or a rider stays unsupported.
+fn match_pay_life_tap_nonland_permanent(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_417_PAY_LIFE_TAP_NONLAND_CLAUSE).then(|| {
+        utility_activated_ability(
+            context,
+            vec![
+                fixed_mana_cost("{2}"),
+                AbilityCost::Tap,
+                AbilityCost::PayLife { amount: 1 },
+            ],
+            vec![SpellEffectKind::Tap {
+                subject: EffectSubject::Chosen(Box::new(issue_417_nonland_permanent())),
+            }],
+            single_targeting("Choose target nonland permanent"),
+        )
+    })
+}
+
+/// CR 509.1b / 611.2c: exactly
+/// `{1}: This creature can't be blocked this turn except by creatures with haste.` creates the
+/// turn's combat restriction on the source: only blockers that currently have haste may block it.
+/// The equivalent inverted predicate is the shipped `cant_be_blocked_by` creature filter with the
+/// haste keyword excluded, so no matcher is widened. Another cost, a targeted subject, a missing
+/// "this turn" duration, another keyword, or a rider stays unsupported.
+fn match_self_cant_be_blocked_except_haste(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_417_GINGERBRUTE_EVASION_CLAUSE).then(|| {
+        utility_activated_ability(
+            context,
+            vec![fixed_mana_cost("{1}")],
+            vec![SpellEffectKind::ApplyCombatRestriction {
+                scope: CombatRestrictionScope::Source,
+                restriction: CombatRestriction {
+                    cant_be_blocked_by: vec![TargetFilter {
+                        kind: TargetKind::Creature,
+                        excluded_keywords: vec![Keyword::Haste],
+                        ..TargetFilter::default()
+                    }],
+                    ..CombatRestriction::default()
+                },
+            }],
+            None,
+        )
+    })
+}
+
+fn issue_417_another_creature_or_token() -> TargetFilter {
+    TargetFilter {
+        any_of: Some(vec![
+            TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                excluded_objects: vec![TargetObjectExclusion::Source],
+                ..TargetFilter::default()
+            },
+            TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                controller: TargetController::You,
+                token: Some(true),
+                excluded_objects: vec![TargetObjectExclusion::Source],
+                ..TargetFilter::default()
+            },
+        ]),
+        ..TargetFilter::default()
+    }
+}
+
+/// CR 602.2b / 601.2h / 701.21a / 117.1a: exactly
+/// `{2}, Sacrifice another creature or token: Draw a card. Activate only as a sorcery.` pays the
+/// printed mana and then sacrifices one other creature or token the activator controls as ordered
+/// activation costs, drawing only on resolution at sorcery speed. The source exclusion is the
+/// printed "another"; the token branch is the unlimited token characteristic. The plain
+/// single-creature sacrifice keeps its shipped owner, and a missing sorcery rider, another
+/// cohort, a second draw, or an appended instruction stays unsupported.
+fn match_sacrifice_another_creature_or_token_draw_sorcery(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_417_ICE_CREAM_KITTY_CLAUSE).then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![
+                fixed_mana_cost("{2}"),
+                AbilityCost::SacrificePermanent {
+                    filter: issue_417_another_creature_or_token(),
+                },
+            ],
+            effect: vec![SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }],
+            targeting: None,
+            timing: ActivationTiming::SorcerySpeed,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
+fn issue_417_noncreature_artifact_you_control() -> TargetFilter {
+    TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        permanent_types: vec![PermanentTypeFilter::Artifact],
+        excluded_permanent_types: vec![PermanentTypeFilter::Creature],
+        controller: TargetController::You,
+        ..TargetFilter::default()
+    }
+}
+
+/// CR 205.1b / 611.2 / 613.1d / 613.4b: exactly
+/// `{2}{G}: Until end of turn, target noncreature artifact you control becomes a 4/4 artifact
+/// creature.` sets base power and toughness to 4/4 and adds the artifact and creature card types
+/// without replacing the existing type line, both until end of turn. Both instructions share one
+/// chosen target. The base-P/T operation is authored first because each resolving instruction
+/// rechecks the shared target's printed "noncreature artifact" predicate and the type addition
+/// would otherwise make the second instruction's target illegal; CR 613 layers make the resulting
+/// characteristics identical either way. Another cost, another bonus, a missing artifact or
+/// noncreature restriction, an opponent-controlled subject, a different duration, or a rider stays
+/// unsupported.
+fn match_animate_noncreature_artifact_four_four(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_417_TOUGH_COOKIE_ANIMATION_CLAUSE).then(|| {
+        let target = issue_417_noncreature_artifact_you_control();
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![fixed_mana_cost("{2}{G}")],
+            effect: vec![
+                SpellEffectKind::SetBasePowerToughness {
+                    target: target.clone(),
+                    power: BasePowerToughnessValue::Fixed(4),
+                    toughness: BasePowerToughnessValue::Fixed(4),
+                },
+                SpellEffectKind::AddTypes {
+                    subject: EffectSubject::Chosen(Box::new(target)),
+                    addition: TypeLineAddition {
+                        card_types: vec![
+                            PermanentTypeFilter::Artifact,
+                            PermanentTypeFilter::Creature,
+                        ],
+                        creature_types: Vec::new(),
+                    },
+                },
+            ],
+            targeting: Some(exact_targeting(
+                1,
+                1,
+                "Choose target noncreature artifact you control",
+                vec![0, 1],
+            )),
+            timing: ActivationTiming::Normal,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
 macro_rules! calibrations {
     ($($positive_name:literal => $positive_clause:literal),+; $($negative:literal),+ $(,)?) => {
         RecipeCalibration {
@@ -16721,7 +17001,9 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Omni-Cheese Pizza" => "{2}, {T}, Sacrifice this artifact: You gain 3 life.";
             "{2}, Sacrifice this artifact: You gain 3 life.",
             "{2}, {T}: You gain 3 life.",
-            "{2}, {T}, Sacrifice this creature: You gain 3 life.",
+            // The creature wording is owned by issue #417's exact
+            // `ability.sacrifice_self.gain_life.three` recipe and is asserted directly in its
+            // focused tests instead of as a catalog negative.
             "{1}, {T}, Sacrifice this artifact: You gain 3 life.",
             "{2}, {T}, Sacrifice this artifact: You gain 2 life.",
             "{2}, {T}, Sacrifice this artifact: You gain 3 life and create a Food token."
@@ -21337,6 +21619,154 @@ pub(super) static CATALOG: &[Recipe] = &[
             "At the beginning of your upkeep, if there are six or more permanent cards in your graveyard, transform Exdeath.",
             "At the beginning of your end step, if there are six or more permanent cards in your graveyard, transform another creature.",
             "At the beginning of your end step, if there are six or more permanent cards in your graveyard, transform Exdeath. Draw a card."
+        ),
+    },
+    // Issue #417 — self-sacrifice mana utility cohort. Each entry owns one complete printed
+    // template; the colorless producer and the creature/artifact sacrifice pair have real
+    // two-card calibration, and the documented corpus singletons use `singleton_calibrations!`.
+    Recipe {
+        id: RecipeId("mana.tap.add_colorless_two"),
+        label: "tap for two colorless mana",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_mana_tap_add_colorless_two,
+        // Hedron Archive, Ring of the Lucii, and Arid Archway are the only three pinned-corpus
+        // printings of this exact clause (verified); Arid Archway is calibration-only because its
+        // remaining clauses stay unmapped. The single-color, three-colorless, and cost-carrying
+        // near-misses are asserted directly in the focused tests instead of as catalog negatives
+        // because the shipped producers own them.
+        calibration: calibrations!(
+            "Hedron Archive" => "{T}: Add {C}{C}.",
+            "Ring of the Lucii" => "{T}: Add {C}{C}.",
+            "Arid Archway" => "{T}: Add {C}{C}.";
+            // Another count or cost, a spending restriction, an appended rider, a repeated
+            // "or" form, and a missing period stay unsupported.
+            "{T}: Add {C}{C}{C}.",
+            "{1}, {T}: Add {C}{C}.",
+            "{T}: Add {C}{C}. Spend this mana only to cast artifact spells.",
+            "{T}: Add {C}{C}. Draw a card.",
+            "{T}: Add {C} or {C}.",
+            "{T}: Add {C}{C}"
+        ),
+    },
+    Recipe {
+        id: RecipeId("ability.sacrifice_self.gain_life.three"),
+        label: "creature sacrifice for three life",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_creature_sacrifice_self_gain_three,
+        // Gingerbrute, Ice Cream Kitty, and Tough Cookie are the only three pinned-corpus
+        // printings of the creature wording (verified). The artifact printing keeps
+        // `activated.artifact.pay_two_tap_sacrifice.gain_three` and is asserted directly in the
+        // focused tests instead of as a catalog negative.
+        calibration: calibrations!(
+            "Gingerbrute" => "{2}, {T}, Sacrifice this creature: You gain 3 life.",
+            "Ice Cream Kitty" => "{2}, {T}, Sacrifice this creature: You gain 3 life.",
+            "Tough Cookie" => "{2}, {T}, Sacrifice this creature: You gain 3 life.";
+            // Another mana or life amount, a missing mana or tap component, an exile cost, an
+            // extra cost component, and an appended draw stay unsupported.
+            "{3}, {T}, Sacrifice this creature: You gain 3 life.",
+            "{2}, Sacrifice this creature: You gain 3 life.",
+            "{2}, {T}, Sacrifice this creature: You gain 2 life.",
+            "{2}, {T}, Sacrifice this creature: You gain 3 life and draw a card.",
+            "{2}, {T}, Exile this creature: You gain 3 life.",
+            "{2}, {T}, Pay 1 life, Sacrifice this creature: You gain 3 life.",
+            "{2}, {T}, Sacrifice this creature: You gain 3 life. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("ability.sacrifice_self.artifact.draw_two"),
+        label: "artifact sacrifice for two cards",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_artifact_sacrifice_self_draw_two,
+        // Hedron Archive is the only pinned-corpus printing of this exact clause (verified).
+        // The `{3}{U}` artifact sacrifice sibling stays on
+        // `activated.artifact.pay_three_u_sacrifice.draw_two` and is asserted directly in the
+        // focused tests instead of as a catalog negative.
+        calibration: singleton_calibrations!(
+            "Hedron Archive" => "{2}, {T}, Sacrifice this artifact: Draw two cards.";
+            // Another mana amount or draw count, a missing mana or tap component, an exile cost,
+            // a sorcery-speed rider, and a life rider stay unsupported.
+            "{3}, {T}, Sacrifice this artifact: Draw two cards.",
+            "{2}, {T}, Sacrifice this artifact: Draw three cards.",
+            "{2}, Sacrifice this artifact: Draw two cards.",
+            "{2}, {T}, Exile this artifact: Draw two cards.",
+            "{2}, {T}, Sacrifice this artifact: Draw two cards. Activate only as a sorcery.",
+            "{2}, {T}, Sacrifice this artifact: Draw two cards. You gain 1 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("ability.pay_life.tap_nonland"),
+        label: "pay life and tap a nonland permanent",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_pay_life_tap_nonland_permanent,
+        // Ring of the Lucii is the only pinned-corpus printing of this exact clause (verified).
+        calibration: singleton_calibrations!(
+            "Ring of the Lucii" => "{2}, {T}, Pay 1 life: Tap target nonland permanent.";
+            // Another life or mana amount, a missing mana, tap, or life component, a land or
+            // unrestricted permanent subject, an untap, and an appended draw stay unsupported.
+            "{1}, {T}, Pay 1 life: Tap target nonland permanent.",
+            "{2}, {T}: Tap target nonland permanent.",
+            "{2}, {T}, Pay 1 life: Tap target nonland permanent. Draw a card.",
+            "{2}, {T}, Pay 2 life: Tap target nonland permanent.",
+            "{2}, {T}, Pay 1 life: Tap target land.",
+            "{2}, {T}, Pay 1 life: Tap target permanent.",
+            "{2}, {T}, Pay 1 life: Untap target nonland permanent."
+        ),
+    },
+    Recipe {
+        id: RecipeId("ability.cant_be_blocked.self_except_haste"),
+        label: "self can't be blocked except by haste creatures",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_self_cant_be_blocked_except_haste,
+        // Gingerbrute is the only pinned-corpus printing of this exact clause (verified).
+        calibration: singleton_calibrations!(
+            "Gingerbrute" => "{1}: This creature can't be blocked this turn except by creatures with haste.";
+            // Another mana amount, a targeted subject, another keyword, another subject type,
+            // a tap component, and an appended draw stay unsupported.
+            "{2}: This creature can't be blocked this turn except by creatures with haste.",
+            "{1}: Target creature can't be blocked this turn except by creatures with haste.",
+            "{1}: This creature can't be blocked this turn except by creatures with flying.",
+            "{1}: This creature can't be blocked this turn except by artifacts with haste.",
+            "{1}, {T}: This creature can't be blocked this turn except by creatures with haste.",
+            "{1}: This creature can't be blocked this turn except by creatures with haste. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("ability.sacrifice_another_creature_or_token.draw_one.sorcery"),
+        label: "sacrifice another creature or token at sorcery speed to draw one",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_sacrifice_another_creature_or_token_draw_sorcery,
+        // Ice Cream Kitty is the only pinned-corpus printing of this exact clause (verified).
+        calibration: singleton_calibrations!(
+            "Ice Cream Kitty" => "{2}, Sacrifice another creature or token: Draw a card. Activate only as a sorcery.";
+            // The single-creature and single-token cohorts, a missing or different timing rider,
+            // another mana amount, another draw count, and another effect stay unsupported.
+            "{2}, Sacrifice another creature: Draw a card. Activate only as a sorcery.",
+            "{2}, Sacrifice another token: Draw a card. Activate only as a sorcery.",
+            "{2}, Sacrifice another creature or token: Draw a card.",
+            "{1}, Sacrifice another creature or token: Draw a card. Activate only as a sorcery.",
+            "{2}, Sacrifice another creature or token: Draw two cards. Activate only as a sorcery.",
+            "{2}, Sacrifice another creature or artifact: Draw a card. Activate only as a sorcery.",
+            "{2}, Sacrifice another creature or token: Draw a card. Activate only as an instant."
+        ),
+    },
+    Recipe {
+        id: RecipeId("ability.animate.noncreature_artifact.four_four"),
+        label: "animate a noncreature artifact into a 4/4 artifact creature",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_animate_noncreature_artifact_four_four,
+        // Tough Cookie is the only pinned-corpus printing of this exact clause (verified). The
+        // Food-token ETB half of the card is owned by the shipped `etb.create_token.food.one`.
+        calibration: singleton_calibrations!(
+            "Tough Cookie" => "{2}{G}: Until end of turn, target noncreature artifact you control becomes a 4/4 artifact creature.";
+            // Another cost or bonus, a missing artifact or noncreature restriction, an opponent's
+            // artifact, a missing duration, and an appended keyword stay unsupported.
+            "{1}{G}: Until end of turn, target noncreature artifact you control becomes a 4/4 artifact creature.",
+            "{2}{G}: Until end of turn, target noncreature artifact you control becomes a 5/5 artifact creature.",
+            "{2}{G}: Until end of turn, target noncreature artifact you control becomes a 4/4 creature.",
+            "{2}{G}: Until end of turn, target artifact you control becomes a 4/4 artifact creature.",
+            "{2}{G}: Until end of turn, target noncreature artifact an opponent controls becomes a 4/4 artifact creature.",
+            "{2}{G}: Target noncreature artifact you control becomes a 4/4 artifact creature.",
+            "{2}{G}: Until end of turn, target noncreature artifact you control becomes a 4/4 artifact creature with trample."
         ),
     },
 ];
@@ -40578,6 +41008,549 @@ mod tests {
                 matched.id.as_str(),
                 "activated.mana.tap_one",
                 "{clause} must reuse the shipped single-color mana recipe"
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #417 — self-sacrifice mana utility cohort.
+    // -----------------------------------------------------------------------
+
+    const ISSUE_417_COLORLESS_TWO_CLAUSE: &str = "{T}: Add {C}{C}.";
+    const ISSUE_417_CREATURE_GAIN_THREE_CLAUSE: &str =
+        "{2}, {T}, Sacrifice this creature: You gain 3 life.";
+    const ISSUE_417_ARTIFACT_DRAW_TWO_CLAUSE: &str =
+        "{2}, {T}, Sacrifice this artifact: Draw two cards.";
+    const ISSUE_417_PAY_LIFE_TAP_NONLAND_CLAUSE: &str =
+        "{2}, {T}, Pay 1 life: Tap target nonland permanent.";
+    const ISSUE_417_GINGERBRUTE_EVASION_CLAUSE: &str =
+        "{1}: This creature can't be blocked this turn except by creatures with haste.";
+    const ISSUE_417_ICE_CREAM_KITTY_CLAUSE: &str =
+        "{2}, Sacrifice another creature or token: Draw a card. Activate only as a sorcery.";
+    const ISSUE_417_TOUGH_COOKIE_ANIMATION_CLAUSE: &str = "{2}{G}: Until end of turn, target noncreature artifact you control becomes a 4/4 artifact creature.";
+
+    /// A noncreature artifact source: artifact and permanent, not a creature, land, Aura, Vehicle,
+    /// enchantment, or spell. This is the printed surface of Hedron Archive and Ring of the Lucii.
+    fn issue_417_artifact_context() -> RecipeContext {
+        RecipeContext {
+            source_is_creature: false,
+            source_is_land: false,
+            source_is_aura: false,
+            source_is_instant: false,
+            source_is_sorcery: false,
+            source_is_vehicle: false,
+            source_is_spacecraft_or_planet: false,
+            source_is_enchantment: false,
+            source_is_equipment: false,
+            source_is_artifact: true,
+            source_is_permanent: true,
+            ..context()
+        }
+    }
+
+    /// A creature source that is not an artifact: Gingerbrute-class wording stays on its exact
+    /// source-kind gate even when the printed card is an artifact creature.
+    fn issue_417_creature_context() -> RecipeContext {
+        RecipeContext {
+            source_is_artifact: false,
+            source_is_land: false,
+            source_is_aura: false,
+            source_is_instant: false,
+            source_is_sorcery: false,
+            source_is_vehicle: false,
+            source_is_spacecraft_or_planet: false,
+            source_is_enchantment: false,
+            source_is_equipment: false,
+            source_is_creature: true,
+            source_is_permanent: true,
+            ..context()
+        }
+    }
+
+    fn issue_417_nonland_permanent() -> TargetFilter {
+        TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            excluded_permanent_types: vec![PermanentTypeFilter::Land],
+            ..TargetFilter::default()
+        }
+    }
+
+    fn issue_417_noncreature_artifact_you_control() -> TargetFilter {
+        TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            permanent_types: vec![PermanentTypeFilter::Artifact],
+            excluded_permanent_types: vec![PermanentTypeFilter::Creature],
+            controller: TargetController::You,
+            ..TargetFilter::default()
+        }
+    }
+
+    fn issue_417_another_creature_or_token() -> TargetFilter {
+        TargetFilter {
+            any_of: Some(vec![
+                TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    excluded_objects: vec![TargetObjectExclusion::Source],
+                    ..TargetFilter::default()
+                },
+                TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    controller: TargetController::You,
+                    token: Some(true),
+                    excluded_objects: vec![TargetObjectExclusion::Source],
+                    ..TargetFilter::default()
+                },
+            ]),
+            ..TargetFilter::default()
+        }
+    }
+
+    fn issue_417_match(clause: &str, source: &RecipeContext) -> RecipeMatch {
+        match_clause(clause, false, source)
+            .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+            .unwrap_or_else(|| panic!("{clause} must match an exact recipe"))
+    }
+
+    fn issue_417_only_activated_ability(matched: &RecipeMatch) -> &ActivatedAbilityDef {
+        let RecipeEmission::ActivatedAbility(ability) = &matched.emission else {
+            panic!("expected one activated ability, got {:?}", matched.emission);
+        };
+        ability
+    }
+
+    #[test]
+    fn issue_417_colorless_two_mana_recipe_is_exact_and_typed() {
+        let matched = issue_417_match(
+            ISSUE_417_COLORLESS_TWO_CLAUSE,
+            &issue_417_artifact_context(),
+        );
+        assert_eq!(matched.id.as_str(), "mana.tap.add_colorless_two");
+        let ability = issue_417_only_activated_ability(&matched);
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(ability.costs, [AbilityCost::Tap]);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::ProduceMana {
+                options: vec![ManaAmount {
+                    c: 2,
+                    ..ManaAmount::default()
+                }],
+                restriction: None,
+                conditional: None,
+            }]
+        );
+        assert_eq!(ability.timing, ActivationTiming::Normal);
+        assert!(ability.targeting.is_none());
+        assert!(ability.conditions.is_empty());
+        assert!(ability.cost_modifiers.is_empty());
+        assert!(ability.activation_limit.is_none());
+
+        // The single-color and "any color" producers keep their shipped owners.
+        assert_eq!(
+            issue_417_match("{T}: Add {C}.", &issue_417_artifact_context())
+                .id
+                .as_str(),
+            "activated.mana.tap_one"
+        );
+        assert_eq!(
+            issue_417_match(
+                "{T}: Add one mana of any color.",
+                &issue_417_artifact_context()
+            )
+            .id
+            .as_str(),
+            "activated.mana.tap_any_color"
+        );
+
+        for negative in [
+            "{T}: Add {C}{C}{C}.",
+            "{1}, {T}: Add {C}{C}.",
+            "{T}: Add {C}{C}. Spend this mana only to cast artifact spells.",
+            "{T}: Add {C}{C}. Draw a card.",
+            "{T}: Add {C} or {C}.",
+            "{T}: Add {C}{C}",
+        ] {
+            assert!(
+                match_clause(negative, false, &issue_417_artifact_context())
+                    .unwrap_or_else(|ambiguity| panic!("{negative}: {ambiguity}"))
+                    .map(|matched| matched.id.as_str())
+                    != Some("mana.tap.add_colorless_two"),
+                "near-miss was accepted by the colorless-two recipe: {negative}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_417_creature_sacrifice_gain_three_is_exact_and_typed() {
+        for name in ["Gingerbrute", "Ice Cream Kitty", "Tough Cookie"] {
+            let mut source = issue_417_creature_context();
+            source.source_name = name.into();
+            let matched = issue_417_match(ISSUE_417_CREATURE_GAIN_THREE_CLAUSE, &source);
+            assert_eq!(
+                matched.id.as_str(),
+                "ability.sacrifice_self.gain_life.three",
+                "{name} must match the creature sacrifice-for-life recipe"
+            );
+            let ability = issue_417_only_activated_ability(&matched);
+            assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+            assert_eq!(
+                ability.costs,
+                [
+                    fixed_mana_cost("{2}"),
+                    AbilityCost::Tap,
+                    AbilityCost::SacrificeSelf,
+                ]
+            );
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(3),
+                }]
+            );
+            assert_eq!(ability.timing, ActivationTiming::Normal);
+            assert!(ability.targeting.is_none());
+        }
+
+        // The artifact printing keeps its shipped owner and never falls into the creature recipe.
+        assert_eq!(
+            issue_417_match(
+                "{2}, {T}, Sacrifice this artifact: You gain 3 life.",
+                &issue_417_artifact_context()
+            )
+            .id
+            .as_str(),
+            "activated.artifact.pay_two_tap_sacrifice.gain_three"
+        );
+
+        let mut noncreature = issue_417_artifact_context();
+        noncreature.source_is_artifact = true;
+        assert!(
+            match_clause(ISSUE_417_CREATURE_GAIN_THREE_CLAUSE, false, &noncreature)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the exact creature clause must stay bound to creature sources"
+        );
+        assert!(
+            match_clause(ISSUE_417_CREATURE_GAIN_THREE_CLAUSE, true, &context())
+                .expect("spell surface check must not be ambiguous")
+                .is_none(),
+            "the ability must stay activated-ability-only"
+        );
+    }
+
+    #[test]
+    fn issue_417_artifact_sacrifice_draw_two_is_exact_and_typed() {
+        let matched = issue_417_match(
+            ISSUE_417_ARTIFACT_DRAW_TWO_CLAUSE,
+            &issue_417_artifact_context(),
+        );
+        assert_eq!(
+            matched.id.as_str(),
+            "ability.sacrifice_self.artifact.draw_two"
+        );
+        let ability = issue_417_only_activated_ability(&matched);
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(
+            ability.costs,
+            [
+                fixed_mana_cost("{2}"),
+                AbilityCost::Tap,
+                AbilityCost::SacrificeSelf,
+            ]
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(2),
+            }]
+        );
+        assert_eq!(ability.timing, ActivationTiming::Normal);
+        assert!(ability.targeting.is_none());
+
+        // The adjacent {3}{U} artifact sacrifice and the creature sacrifice keep their owners.
+        assert_eq!(
+            issue_417_match(
+                "{3}{U}, Sacrifice this artifact: Draw two cards.",
+                &issue_417_artifact_context()
+            )
+            .id
+            .as_str(),
+            "activated.artifact.pay_three_u_sacrifice.draw_two"
+        );
+        assert_eq!(
+            issue_417_match(
+                "{2}, Sacrifice this creature: Draw a card.",
+                &issue_417_creature_context()
+            )
+            .id
+            .as_str(),
+            "activated.creature.pay_two_sacrifice.draw_one"
+        );
+
+        let mut nonartifact = issue_417_creature_context();
+        nonartifact.source_is_artifact = false;
+        assert!(
+            match_clause(ISSUE_417_ARTIFACT_DRAW_TWO_CLAUSE, false, &nonartifact)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the exact artifact clause must stay bound to artifact sources"
+        );
+    }
+
+    #[test]
+    fn issue_417_pay_life_tap_nonland_is_exact_and_typed() {
+        let matched = issue_417_match(
+            ISSUE_417_PAY_LIFE_TAP_NONLAND_CLAUSE,
+            &issue_417_artifact_context(),
+        );
+        assert_eq!(matched.id.as_str(), "ability.pay_life.tap_nonland");
+        let ability = issue_417_only_activated_ability(&matched);
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(
+            ability.costs,
+            [
+                fixed_mana_cost("{2}"),
+                AbilityCost::Tap,
+                AbilityCost::PayLife { amount: 1 },
+            ]
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Tap {
+                subject: EffectSubject::Chosen(Box::new(issue_417_nonland_permanent())),
+            }]
+        );
+        assert_eq!(ability.timing, ActivationTiming::Normal);
+        assert_eq!(
+            ability.targeting,
+            Some(exact_targeting(
+                1,
+                1,
+                "Choose target nonland permanent",
+                vec![0],
+            ))
+        );
+    }
+
+    #[test]
+    fn issue_417_gingerbrute_haste_evasion_is_exact_and_typed() {
+        let matched = issue_417_match(
+            ISSUE_417_GINGERBRUTE_EVASION_CLAUSE,
+            &issue_417_creature_context(),
+        );
+        assert_eq!(
+            matched.id.as_str(),
+            "ability.cant_be_blocked.self_except_haste"
+        );
+        let ability = issue_417_only_activated_ability(&matched);
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(ability.costs, [fixed_mana_cost("{1}")]);
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::ApplyCombatRestriction {
+                scope: CombatRestrictionScope::Source,
+                restriction: CombatRestriction {
+                    cant_be_blocked_by: vec![TargetFilter {
+                        kind: TargetKind::Creature,
+                        excluded_keywords: vec![Keyword::Haste],
+                        ..TargetFilter::default()
+                    }],
+                    ..CombatRestriction::default()
+                },
+            }]
+        );
+        assert_eq!(ability.timing, ActivationTiming::Normal);
+        assert!(ability.targeting.is_none());
+
+        let mut noncreature = issue_417_artifact_context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_417_GINGERBRUTE_EVASION_CLAUSE, false, &noncreature)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the exact self-evasion clause must stay bound to creature sources"
+        );
+    }
+
+    #[test]
+    fn issue_417_ice_cream_kitty_sacrifice_other_is_sorcery_speed_and_typed() {
+        let matched = issue_417_match(
+            ISSUE_417_ICE_CREAM_KITTY_CLAUSE,
+            &issue_417_creature_context(),
+        );
+        assert_eq!(
+            matched.id.as_str(),
+            "ability.sacrifice_another_creature_or_token.draw_one.sorcery"
+        );
+        let ability = issue_417_only_activated_ability(&matched);
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(
+            ability.costs,
+            [
+                fixed_mana_cost("{2}"),
+                AbilityCost::SacrificePermanent {
+                    filter: issue_417_another_creature_or_token(),
+                },
+            ]
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }]
+        );
+        assert_eq!(ability.timing, ActivationTiming::SorcerySpeed);
+        assert!(ability.targeting.is_none());
+
+        let mut noncreature = issue_417_artifact_context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_417_ICE_CREAM_KITTY_CLAUSE, false, &noncreature)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the exact another-creature clause must stay bound to creature sources"
+        );
+    }
+
+    #[test]
+    fn issue_417_tough_cookie_animation_is_exact_and_typed() {
+        let matched = issue_417_match(
+            ISSUE_417_TOUGH_COOKIE_ANIMATION_CLAUSE,
+            &issue_417_creature_context(),
+        );
+        assert_eq!(
+            matched.id.as_str(),
+            "ability.animate.noncreature_artifact.four_four"
+        );
+        let ability = issue_417_only_activated_ability(&matched);
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(ability.costs, [fixed_mana_cost("{2}{G}")]);
+        let target = issue_417_noncreature_artifact_you_control();
+        assert_eq!(
+            ability.effect,
+            [
+                SpellEffectKind::SetBasePowerToughness {
+                    target: target.clone(),
+                    power: BasePowerToughnessValue::Fixed(4),
+                    toughness: BasePowerToughnessValue::Fixed(4),
+                },
+                SpellEffectKind::AddTypes {
+                    subject: EffectSubject::Chosen(Box::new(target)),
+                    addition: TypeLineAddition {
+                        card_types: vec![
+                            PermanentTypeFilter::Artifact,
+                            PermanentTypeFilter::Creature,
+                        ],
+                        creature_types: Vec::new(),
+                    },
+                },
+            ]
+        );
+        assert_eq!(ability.timing, ActivationTiming::Normal);
+        assert_eq!(
+            ability.targeting,
+            Some(exact_targeting(
+                1,
+                1,
+                "Choose target noncreature artifact you control",
+                vec![0, 1],
+            ))
+        );
+    }
+
+    #[test]
+    fn issue_417_near_misses_stay_fail_closed() {
+        for (clause, source, expected_owner) in [
+            (
+                "{2}, {T}, Sacrifice this creature: You gain 2 life.",
+                issue_417_creature_context(),
+                "ability.sacrifice_self.gain_life.three",
+            ),
+            (
+                "{2}, {T}, Sacrifice this creature: You gain 3 life and draw a card.",
+                issue_417_creature_context(),
+                "ability.sacrifice_self.gain_life.three",
+            ),
+            (
+                "{3}, {T}, Sacrifice this artifact: Draw two cards.",
+                issue_417_artifact_context(),
+                "ability.sacrifice_self.artifact.draw_two",
+            ),
+            (
+                "{2}, {T}, Sacrifice this artifact: Draw a card.",
+                issue_417_artifact_context(),
+                "ability.sacrifice_self.artifact.draw_two",
+            ),
+            (
+                "{2}, {T}, Pay 2 life: Tap target nonland permanent.",
+                issue_417_artifact_context(),
+                "ability.pay_life.tap_nonland",
+            ),
+            (
+                "{2}, {T}, Pay 1 life: Tap target permanent.",
+                issue_417_artifact_context(),
+                "ability.pay_life.tap_nonland",
+            ),
+            (
+                "{2}, {T}, Pay 1 life: Tap target nonland permanent. Draw a card.",
+                issue_417_artifact_context(),
+                "ability.pay_life.tap_nonland",
+            ),
+            (
+                "{2}: This creature can't be blocked this turn except by creatures with haste.",
+                issue_417_creature_context(),
+                "ability.cant_be_blocked.self_except_haste",
+            ),
+            (
+                "{1}: This creature can't be blocked this turn except by creatures with flying.",
+                issue_417_creature_context(),
+                "ability.cant_be_blocked.self_except_haste",
+            ),
+            (
+                "{1}, {T}: This creature can't be blocked this turn except by creatures with haste.",
+                issue_417_creature_context(),
+                "ability.cant_be_blocked.self_except_haste",
+            ),
+            (
+                "{2}, Sacrifice another creature: Draw a card. Activate only as a sorcery.",
+                issue_417_creature_context(),
+                "ability.sacrifice_another_creature_or_token.draw_one.sorcery",
+            ),
+            (
+                "{2}, Sacrifice another creature or token: Draw a card.",
+                issue_417_creature_context(),
+                "ability.sacrifice_another_creature_or_token.draw_one.sorcery",
+            ),
+            (
+                "{2}, Sacrifice another creature or artifact: Draw a card. Activate only as a sorcery.",
+                issue_417_creature_context(),
+                "ability.sacrifice_another_creature_or_token.draw_one.sorcery",
+            ),
+            (
+                "{2}{G}: Until end of turn, target artifact you control becomes a 4/4 artifact creature.",
+                issue_417_creature_context(),
+                "ability.animate.noncreature_artifact.four_four",
+            ),
+            (
+                "{2}{G}: Until end of turn, target noncreature artifact you control becomes a 4/4 creature.",
+                issue_417_creature_context(),
+                "ability.animate.noncreature_artifact.four_four",
+            ),
+            (
+                "{2}{G}: Until end of turn, target noncreature artifact you control becomes a 5/5 artifact creature.",
+                issue_417_creature_context(),
+                "ability.animate.noncreature_artifact.four_four",
+            ),
+        ] {
+            assert!(
+                match_clause(clause, false, &source)
+                    .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                    .map(|matched| matched.id.as_str())
+                    != Some(expected_owner),
+                "near-miss was accepted by {expected_owner}: {clause}"
             );
         }
     }
