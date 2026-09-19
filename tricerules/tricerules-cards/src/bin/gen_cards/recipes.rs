@@ -850,6 +850,23 @@ fn match_spell_source_damage_creature_four(
     })
 }
 
+/// Issue #413 / CR 120 / 608.2h: the source deals a fixed two damage to every creature on the
+/// battlefield. The untargeted `DamageAll` sweep is the same shape Pyroclasm's hand-authored
+/// data uses; another amount, an opponent- or controller-scoped sweep, and targeted forms stay
+/// unsupported.
+fn match_spell_source_damage_each_creature_two(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == format!("{} deals 2 damage to each creature.", context.source_name)).then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::DamageAll {
+            amount: Amount::Fixed(2),
+            players: RelativePlayerSet::All,
+            kind: TargetFilter::default_creature(),
+        })
+    })
+}
+
 fn match_spell_destroy_artifact_or_enchantment(
     text: &str,
     _: &RecipeContext,
@@ -862,6 +879,40 @@ fn match_spell_destroy_artifact_or_enchantment(
                     PermanentTypeFilter::Artifact,
                     PermanentTypeFilter::Enchantment,
                 ],
+                ..TargetFilter::default()
+            })),
+        })
+    })
+}
+
+/// Issue #413 / CR 115.1 / 701.8 / 205.3g: the three-way union is one mandatory permanent
+/// target whose shipped pure-OR `any_of` is any artifact, any enchantment, and a creature with
+/// flying (an artifact or enchantment creature is covered by its type branch). "Artifact or
+/// enchantment", single-type, "up to one", and appended-clause forms stay with their own owners.
+fn match_spell_destroy_artifact_enchantment_or_flying_creature(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Destroy target artifact, enchantment, or creature with flying.").then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::Destroy {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                any_of: Some(vec![
+                    TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        permanent_types: vec![PermanentTypeFilter::Artifact],
+                        ..TargetFilter::default()
+                    },
+                    TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        permanent_types: vec![PermanentTypeFilter::Enchantment],
+                        ..TargetFilter::default()
+                    },
+                    TargetFilter {
+                        kind: TargetKind::Creature,
+                        required_keywords: vec![Keyword::Flying],
+                        ..TargetFilter::default()
+                    },
+                ]),
                 ..TargetFilter::default()
             })),
         })
@@ -884,6 +935,64 @@ fn match_spell_destroy_creature_or_planeswalker(
             })),
         })
     })
+}
+
+/// Issue #413 / CR 208 / 701.8: the non-modal sibling of the shipped modal
+/// `modal_mode.destroy.creature.toughness_at_least_four` predicate. The complete clause names
+/// toughness, so CR 608.2b rechecks toughness and never power; other bounds and riders stay
+/// unsupported.
+fn match_spell_destroy_creature_toughness_at_least_four(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Destroy target creature with toughness 4 or greater.").then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::Destroy {
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                kind: TargetKind::Creature,
+                toughness: Some(PowerComparison::AtLeast(4)),
+                ..TargetFilter::default()
+            })),
+        })
+    })
+}
+
+/// Issue #413 / CR 701.26 / 122.1d / 301.7: tap the chosen creature-or-Vehicle and put three
+/// stun counters on that same object. The single authored target group binds both instructions
+/// (the "it" anaphor), reusing the shipped `any_of` creature leaf plus Vehicle-subtype leaf from
+/// `spell.destroy.creature_or_vehicle` and the shipped Stun `PutCounters` kind. The printed
+/// reminder body is part of the exact accepted line.
+fn match_spell_tap_creature_or_vehicle_stun_counters_three(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text
+        == "Tap target creature or Vehicle, then put three stun counters on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)")
+        .then(|| {
+            let target = TargetFilter {
+                any_of: Some(vec![
+                    TargetFilter::default_creature(),
+                    TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        required_subtypes: vec!["Vehicle".into()],
+                        ..TargetFilter::default()
+                    },
+                ]),
+                ..TargetFilter::default()
+            };
+            RecipeEmission::SpellEffectsWithTargeting {
+                effects: vec![
+                    SpellEffectKind::Tap {
+                        subject: EffectSubject::Chosen(Box::new(target.clone())),
+                    },
+                    SpellEffectKind::PutCounters {
+                        counter: CounterKind::Stun,
+                        count: Amount::Fixed(3),
+                        subject: EffectSubject::Chosen(Box::new(target)),
+                    },
+                ],
+                targeting: exact_targeting(1, 1, "Choose target creature or Vehicle", vec![0, 1]),
+            }
+        })
 }
 
 fn match_spell_team_plus_three_trample(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
@@ -7006,8 +7115,21 @@ fn hand_discard_ability(
     })
 }
 
+/// CR 702.29a: Cycling is a hand-zone activated ability. The exact printed line is either the
+/// bare `Cycling {cost}` form or the fixed reminder form `Cycling {cost} ({cost}, Discard this
+/// card: Draw a card.)`. The reminder body must repeat the same cost and the exact draw-one
+/// instruction; a mismatched cost, another parenthetical, or an appended instruction stays
+/// unsupported. Issue #413 names the recipe `cycling.draw.reminder` and matches both forms with
+/// one activator and one emission.
 fn match_cycling_draw(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
-    let cost = exact_mana_cost(text.strip_prefix("Cycling ")?)?;
+    let body = text.strip_prefix("Cycling ")?;
+    let cost = match body.split_once(" (") {
+        Some((printed_cost, reminder)) => {
+            let cost = exact_mana_cost(printed_cost)?;
+            (reminder == format!("{}, Discard this card: Draw a card.)", cost)).then_some(cost)?
+        }
+        None => exact_mana_cost(body)?,
+    };
     Some(hand_discard_ability(
         context,
         cost,
@@ -17403,19 +17525,96 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
-        id: RecipeId("activated.hand.cycling.draw"),
+        id: RecipeId("cycling.draw.reminder"),
         label: "cycling draw",
         surface: RecipeSurface::ZoneActivatedAbility,
         matcher: match_cycling_draw,
         calibration: calibrations!(
             "Lightshield Parry" => "Cycling {2}",
-            "Migrating Ketradon" => "Cycling {2}";
+            "Migrating Ketradon" => "Cycling {2}",
+            "Airship Crash" => "Cycling {2} ({2}, Discard this card: Draw a card.)",
+            "Fuel the Flames" => "Cycling {2} ({2}, Discard this card: Draw a card.)",
+            "Gallant Strike" => "Cycling {2} ({2}, Discard this card: Draw a card.)",
+            "Stall Out" => "Cycling {2} ({2}, Discard this card: Draw a card.)";
             "Cycle {2}",
             "Cycling {X}",
             "Cycling {2}{S}",
             "Cycling {2} — You may discard this card: Draw a card.",
             "Cycling {2}. Activate only as a sorcery.",
-            "Cycling {2}. When you cycle this card, you gain 1 life."
+            "Cycling {2}. When you cycle this card, you gain 1 life.",
+            "Cycling {2} (Draw a card.)",
+            "Cycling {2} ({2}, Discard this card: Draw two cards.)",
+            "Cycling {2} ({2}, Discard this card: Draw a card. Then discard a card.)",
+            "Cycling {2} ({3}, Discard this card: Draw a card.)",
+            "Cycling 2",
+            "Cycling {02}"
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.destroy.artifact_enchantment_or_flying_creature"),
+        label: "destroy artifact, enchantment, or creature with flying",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_destroy_artifact_enchantment_or_flying_creature,
+        calibration: calibrations!(
+            "Airship Crash" => "Destroy target artifact, enchantment, or creature with flying.",
+            "Broken Wings" => "Destroy target artifact, enchantment, or creature with flying.";
+            "Destroy target artifact, enchantment, or creature.",
+            "Destroy target artifact, enchantment, or creature with reach.",
+            "Destroy target artifact, enchantment, or creature with flying. Surveil 1.",
+            "Destroy up to one target artifact, enchantment, or creature with flying.",
+            "Destroy target creature with flying."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.source_damage.each_creature.two"),
+        label: "source deals two damage to each creature",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_source_damage_each_creature_two,
+        calibration: calibrations!(
+            "Fuel the Flames" => "Fuel the Flames deals 2 damage to each creature.",
+            "Pyroclasm" => "Pyroclasm deals 2 damage to each creature.";
+            "Fuel the Flames deals 3 damage to each creature.",
+            "Fuel the Flames deals 2 damage to each creature you don't control.",
+            "Fuel the Flames deals 2 damage to target creature.",
+            "Fuel the Flames deals 2 damage to each opponent.",
+            "It deals 2 damage to each creature."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.destroy.creature.toughness_at_least_four"),
+        label: "destroy target creature with toughness four or greater",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_destroy_creature_toughness_at_least_four,
+        // Gallant Strike, Collar the Culprit, and Sungold Barrage all print this exact non-modal
+        // clause in the pinned corpus. Valorous Stance and Destroy Evil print it only as a modal
+        // bullet owned by modal_mode.destroy.creature.toughness_at_least_four.
+        calibration: calibrations!(
+            "Gallant Strike" => "Destroy target creature with toughness 4 or greater.",
+            "Collar the Culprit" => "Destroy target creature with toughness 4 or greater.",
+            "Sungold Barrage" => "Destroy target creature with toughness 4 or greater.";
+            "Destroy target creature with toughness 3 or greater.",
+            "Destroy target creature with toughness 4 or less.",
+            "Destroy target creature with power 4 or greater.",
+            "Destroy up to one target creature with toughness 4 or greater.",
+            "Destroy target creature with toughness 4 or greater. You gain 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.tap.creature_or_vehicle.stun_counters.three"),
+        label: "tap creature or Vehicle and put three stun counters on it",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_tap_creature_or_vehicle_stun_counters_three,
+        // Stall Out is the only pinned-corpus printing. The stun-counter instruction itself is
+        // shared with the shipped equipment attack trigger ("put a stun counter on target
+        // creature"), and the creature-or-Vehicle target union is shared with the shipped
+        // `spell.destroy.creature_or_vehicle` recipe.
+        calibration: singleton_calibrations!(
+            "Stall Out" => "Tap target creature or Vehicle, then put three stun counters on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)";
+            "Tap target creature or Vehicle, then put two stun counters on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)",
+            "Tap target creature or Vehicle, then put three stun counters on it.",
+            "Tap target creature, then put three stun counters on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)",
+            "Tap target permanent, then put three stun counters on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)",
+            "Tap target creature or Vehicle, then put three stun counters on it. (If a permanent with a stun counter would become untapped, remove two from it instead.)"
         ),
     },
     Recipe {
@@ -18305,7 +18504,6 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Destroy target creature with power 3 or less",
             "Destroy up to one target creature with power 3 or less.",
             "Destroy target creature with toughness 3 or less.",
-            "Destroy target creature with toughness 4 or greater.",
             "Destroy target artifact creature with power 3 or less.",
             "Destroy two target creatures with power 3 or less.",
             "Destroy target creature with power 3 or less. You gain 1 life."
@@ -24261,7 +24459,7 @@ mod tests {
     #[test]
     fn cycling_clauses_have_distinct_stable_zone_ability_recipe_ids() {
         for (clause, is_spell, expected_id) in [
-            ("Cycling {2}", true, "activated.hand.cycling.draw"),
+            ("Cycling {2}", true, "cycling.draw.reminder"),
             (
                 "Basic landcycling {1}{G}",
                 false,
@@ -24281,6 +24479,249 @@ mod tests {
                 matched.emission,
                 RecipeEmission::ActivatedAbility(_)
             ));
+        }
+    }
+
+    const ISSUE_413_CYCLING_REMINDER_CLAUSE: &str =
+        "Cycling {2} ({2}, Discard this card: Draw a card.)";
+    const ISSUE_413_DESTROY_UNION_CLAUSE: &str =
+        "Destroy target artifact, enchantment, or creature with flying.";
+    const ISSUE_413_FUEL_THE_FLAMES_CLAUSE: &str =
+        "Fuel the Flames deals 2 damage to each creature.";
+    const ISSUE_413_GALLANT_STRIKE_CLAUSE: &str =
+        "Destroy target creature with toughness 4 or greater.";
+    const ISSUE_413_STALL_OUT_CLAUSE: &str =
+        "Tap target creature or Vehicle, then put three stun counters on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)";
+
+    fn issue_413_match_spell(clause: &str) -> RecipeMatch {
+        issue_413_match_spell_named(clause, "Test Card")
+    }
+
+    fn issue_413_match_spell_named(clause: &str, source_name: &str) -> RecipeMatch {
+        let mut source = context();
+        source.source_name = source_name.into();
+        match_clause(clause, true, &source)
+            .unwrap_or_else(|ambiguity| {
+                panic!("issue #413 clause must not be ambiguous: {clause}: {ambiguity}")
+            })
+            .unwrap_or_else(|| panic!("issue #413 clause must match exactly one recipe: {clause}"))
+    }
+
+    fn issue_413_creature_or_vehicle_target() -> TargetFilter {
+        TargetFilter {
+            any_of: Some(vec![
+                TargetFilter::default_creature(),
+                TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    required_subtypes: vec!["Vehicle".into()],
+                    ..TargetFilter::default()
+                },
+            ]),
+            ..TargetFilter::default()
+        }
+    }
+
+    /// Issue #413: the shipped cycling recipe now owns both exact printed forms. The reminder
+    /// body must repeat the same cost and the exact draw-one text; every other parenthetical,
+    /// mismatched cost, or appended instruction stays fail-closed.
+    #[test]
+    fn issue_413_cycling_reminder_matches_once_and_keeps_the_bare_form() {
+        for clause in ["Cycling {2}", ISSUE_413_CYCLING_REMINDER_CLAUSE] {
+            let matched = match_clause(clause, false, &context())
+                .unwrap_or_else(|ambiguity| panic!("cycling must not be ambiguous: {ambiguity}"))
+                .unwrap_or_else(|| panic!("cycling clause must be supported: {clause}"));
+            assert_eq!(matched.id.as_str(), "cycling.draw.reminder", "{clause}");
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("cycling must emit one hand-zone activated ability");
+            };
+            assert_eq!(ability.ability_id.as_str(), "activated_01");
+            assert_eq!(ability.source_zone, AbilitySourceZone::Hand);
+            assert!(matches!(
+                ability.costs.as_slice(),
+                [AbilityCost::Mana(cost), AbilityCost::DiscardSelf] if cost.to_string() == "{2}"
+            ));
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                }]
+            );
+        }
+
+        for near_miss in [
+            "Cycling {2} (Draw a card.)",
+            "Cycling {2} ({2}, Discard this card: Draw two cards.)",
+            "Cycling {2} ({2}, Discard this card: Draw a card. Then discard a card.)",
+            "Cycling 2",
+            "Cycling {02}",
+            "Cycling {3} ({2}, Discard this card: Draw a card.)",
+        ] {
+            assert!(
+                match_clause(near_miss, false, &context())
+                    .unwrap_or_else(|ambiguity| panic!(
+                        "near-miss must not be ambiguous: {near_miss}: {ambiguity}"
+                    ))
+                    .is_none(),
+                "cycling near-miss must remain unsupported: {near_miss}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_413_primary_recipes_emit_their_exact_typed_effects() {
+        let union = issue_413_match_spell(ISSUE_413_DESTROY_UNION_CLAUSE);
+        assert_eq!(
+            union.id.as_str(),
+            "spell.destroy.artifact_enchantment_or_flying_creature"
+        );
+        assert_eq!(
+            union.emission,
+            RecipeEmission::SpellEffect(SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    any_of: Some(vec![
+                        TargetFilter {
+                            kind: TargetKind::AnyPermanent,
+                            permanent_types: vec![PermanentTypeFilter::Artifact],
+                            ..TargetFilter::default()
+                        },
+                        TargetFilter {
+                            kind: TargetKind::AnyPermanent,
+                            permanent_types: vec![PermanentTypeFilter::Enchantment],
+                            ..TargetFilter::default()
+                        },
+                        TargetFilter {
+                            kind: TargetKind::Creature,
+                            required_keywords: vec![Keyword::Flying],
+                            ..TargetFilter::default()
+                        },
+                    ]),
+                    ..TargetFilter::default()
+                })),
+            })
+        );
+
+        let mass = issue_413_match_spell_named(ISSUE_413_FUEL_THE_FLAMES_CLAUSE, "Fuel the Flames");
+        assert_eq!(mass.id.as_str(), "spell.source_damage.each_creature.two");
+        assert_eq!(
+            mass.emission,
+            RecipeEmission::SpellEffect(SpellEffectKind::DamageAll {
+                amount: Amount::Fixed(2),
+                players: RelativePlayerSet::All,
+                kind: TargetFilter::default_creature(),
+            })
+        );
+
+        let tough = issue_413_match_spell(ISSUE_413_GALLANT_STRIKE_CLAUSE);
+        assert_eq!(
+            tough.id.as_str(),
+            "spell.destroy.creature.toughness_at_least_four"
+        );
+        assert_eq!(
+            tough.emission,
+            RecipeEmission::SpellEffect(SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    toughness: Some(PowerComparison::AtLeast(4)),
+                    ..TargetFilter::default()
+                })),
+            })
+        );
+
+        let target = issue_413_creature_or_vehicle_target();
+        let stall = issue_413_match_spell(ISSUE_413_STALL_OUT_CLAUSE);
+        assert_eq!(
+            stall.id.as_str(),
+            "spell.tap.creature_or_vehicle.stun_counters.three"
+        );
+        assert_eq!(
+            stall.emission,
+            RecipeEmission::SpellEffectsWithTargeting {
+                effects: vec![
+                    SpellEffectKind::Tap {
+                        subject: EffectSubject::Chosen(Box::new(target.clone())),
+                    },
+                    SpellEffectKind::PutCounters {
+                        counter: CounterKind::Stun,
+                        count: Amount::Fixed(3),
+                        subject: EffectSubject::Chosen(Box::new(target)),
+                    },
+                ],
+                targeting: exact_targeting(1, 1, "Choose target creature or Vehicle", vec![0, 1]),
+            }
+        );
+    }
+
+    #[test]
+    fn issue_413_primary_recipes_reject_close_near_misses() {
+        for near_miss in [
+            "Destroy target artifact, enchantment, or creature.",
+            "Destroy target artifact, enchantment, or creature with reach.",
+            "Destroy target artifact, enchantment, or creature with flying. Surveil 1.",
+            "Destroy up to one target artifact, enchantment, or creature with flying.",
+            "Destroy target creature with flying.",
+        ] {
+            assert!(
+                match_clause(near_miss, true, &context())
+                    .unwrap_or_else(|ambiguity| panic!(
+                        "destroy-union near-miss must not be ambiguous: {near_miss}: {ambiguity}"
+                    ))
+                    .is_none(),
+                "destroy-union near-miss must remain unsupported: {near_miss}"
+            );
+        }
+
+        let mut fuel_the_flames = context();
+        fuel_the_flames.source_name = "Fuel the Flames".into();
+        for near_miss in [
+            "Fuel the Flames deals 3 damage to each creature.",
+            "Fuel the Flames deals 2 damage to each creature you don't control.",
+            "Fuel the Flames deals 2 damage to target creature.",
+            "Fuel the Flames deals 2 damage to each opponent.",
+            "It deals 2 damage to each creature.",
+        ] {
+            assert!(
+                match_clause(near_miss, true, &fuel_the_flames)
+                    .unwrap_or_else(|ambiguity| panic!(
+                        "mass-damage near-miss must not be ambiguous: {near_miss}: {ambiguity}"
+                    ))
+                    .is_none(),
+                "mass-damage near-miss must remain unsupported: {near_miss}"
+            );
+        }
+
+        for near_miss in [
+            "Destroy target creature with toughness 3 or greater.",
+            "Destroy target creature with toughness 4 or less.",
+            "Destroy target creature with power 4 or greater.",
+            "Destroy up to one target creature with toughness 4 or greater.",
+            "Destroy target creature with toughness 4 or greater. You gain 2 life.",
+        ] {
+            assert!(
+                match_clause(near_miss, true, &context())
+                    .unwrap_or_else(|ambiguity| panic!(
+                        "toughness-destroy near-miss must not be ambiguous: {near_miss}: {ambiguity}"
+                    ))
+                    .is_none(),
+                "toughness-destroy near-miss must remain unsupported: {near_miss}"
+            );
+        }
+
+        for near_miss in [
+            "Tap target creature or Vehicle, then put two stun counters on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)",
+            "Tap target creature or Vehicle, then put three stun counters on it.",
+            "Tap target creature, then put three stun counters on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)",
+            "Tap target permanent, then put three stun counters on it. (If a permanent with a stun counter would become untapped, remove one from it instead.)",
+            "Tap target creature or Vehicle, then put three stun counters on it. (If a permanent with a stun counter would become untapped, remove two from it instead.)",
+        ] {
+            assert!(
+                match_clause(near_miss, true, &context())
+                    .unwrap_or_else(|ambiguity| panic!(
+                        "stun near-miss must not be ambiguous: {near_miss}: {ambiguity}"
+                    ))
+                    .is_none(),
+                "stun near-miss must remain unsupported: {near_miss}"
+            );
         }
     }
 
@@ -27973,7 +28414,6 @@ mod tests {
             "Destroy target creature with power 3 or less",
             "Destroy up to one target creature with power 3 or less.",
             "Destroy target creature with toughness 3 or less.",
-            "Destroy target creature with toughness 4 or greater.",
             "Destroy target artifact creature with power 3 or less.",
             "Destroy two target creatures with power 3 or less.",
             "Destroy target creature with power 3 or less. You gain 1 life.",

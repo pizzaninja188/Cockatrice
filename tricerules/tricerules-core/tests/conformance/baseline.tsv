@@ -42,6 +42,8 @@ air_elemental	0	cast	exercised
 air_response_unit	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
 air_response_unit	0	cast	exercised
 airbending_lesson	0	cast	exercised
+airship_crash	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
+airship_crash	0	cast	exercised
 airship_engine_room	0	ability:0	exercised
 airship_engine_room	0	ability:1	exercised
 airship_engine_room	0	land	exercised
@@ -902,6 +904,8 @@ frost_breath	0	cast	exercised
 frost_ogre	0	cast	exercised
 frostbridge_guard	0	ability:0	exercised
 frostbridge_guard	0	cast	exercised
+fuel_the_flames	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
+fuel_the_flames	0	cast	exercised
 fugitive_wizard	0	cast	exercised
 fungal_colossus	0	cast	exercised
 fusion_elemental	0	cast	exercised
@@ -916,6 +920,8 @@ galewind_moose	0	cast	exercised
 galion,_elvenkings_butler	0	cast	exercised
 gallant_citizen	0	cast	exercised
 gallant_pie-wielder	0	cast	exercised
+gallant_strike	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
+gallant_strike	0	cast	unsupported: target group 0 needs a richer fixture
 galvanizing_sawship	0	ability:0	exercised
 galvanizing_sawship	0	cast	exercised
 gangly_stompling	0	cast	exercised
@@ -2278,6 +2284,8 @@ squires_lightblade	0	cast	exercised
 squirrelanoids	0	cast	exercised
 stab	0	cast	exercised
 staggering_size	0	cast	exercised
+stall_out	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
+stall_out	0	cast	exercised
 stampeding_rhino	0	cast	exercised
 standing_troops	0	cast	exercised
 star_charter	0	cast	exercised
