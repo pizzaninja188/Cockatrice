@@ -523,3 +523,5 @@ mod issue_375_graveyard_return;
 mod issue_377_graveyard_static_conditions;
 #[path = "scenario/issue_412_modal_modes.rs"]
 mod issue_412_modal_modes;
+#[path = "scenario/issue_414_enters_with_minus_counters.rs"]
+mod issue_414_enters_with_minus_counters;

@@ -2,13 +2,13 @@ use tricerules_cards::primitives::{
     ActivationLimit, BattlefieldAggregate, BattlefieldCreatureCountFilter,
     BattlefieldPermanentFilter, CardResultAction, CardResultFilter, CardResultSource,
     CardTypeFilter, CombatRestriction, CombatRestrictionScope, CombatRole, ConditionPlayerSet,
-    CountExpression, CreatureScopeController, CreatureScopeFilter, DelayedTokenSacrificeTiming,
-    DiscardQuantity, DrawDiscardOrder, EffectSubject, EntersTappedAffected,
-    EntersWithCountersAffected, EntryCost, EventZone, FaceChangeAction, GameCondition,
-    GraveyardAggregate, GraveyardDestination, GraveyardFilter, GraveyardOwner, HandCardAction,
-    HandCardChooser, HandChoiceVisibility, LibraryPlacement, LifeAmount, LifeChangeKind,
-    ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter,
-    PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient, PowerComparison,
+    CountExpression, CounterRemovalPaymentSource, CreatureScopeController, CreatureScopeFilter,
+    DelayedTokenSacrificeTiming, DiscardQuantity, DrawDiscardOrder, EffectSubject,
+    EntersTappedAffected, EntersWithCountersAffected, EntryCost, EventZone, FaceChangeAction,
+    GameCondition, GraveyardAggregate, GraveyardDestination, GraveyardFilter, GraveyardOwner,
+    HandCardAction, HandCardChooser, HandChoiceVisibility, LibraryPlacement, LifeAmount,
+    LifeChangeKind, ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter,
+    PermanentTypeFilter, PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient, PowerComparison,
     PowerToughnessCharacteristic, PtScale, PtScaleBasis, QuantityTerm, RelativePlayerSet,
     ResolutionBranchDef, ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost,
     SearchDestination, SearchZoneSelection, SpellCastFilter, SpellCostModifier,
@@ -13004,6 +13004,313 @@ fn match_static_enters_with_three_minus_one_minus_one_counters(
 }
 
 // ---------------------------------------------------------------------------
+// Issue #414 — enters-with-minus-counter creature cohort.
+//
+// The shipped three-counter entry template (#374) gains its one- and two-counter siblings as
+// generic exact templates: the two-counter line has thirteen pinned-corpus printings (Brambleback
+// Brute, Burdened Stoneback, Carnifex Demon, Chainbreaker, Deity of Scars, Gnarlbark Elm,
+// Heirloom Auntie, Hovel Hurler, Leech Bonder, Morselhoarder, Reaping Willow, Reluctant Dounguard,
+// Slumbering Walker) and the one-counter line has five (Bloodied Ghost, Flitterwing Nuisance,
+// Glen Elendra Guardian, Moonlit Lamenter, Wickerbough Elder). Each retained creature's companion
+// remove-counter activation is an exact pinned-corpus singleton built from shipped typed
+// vocabulary: `AbilityCost::RemoveCounters` paying from `Source`, `GrantKeywords`, `PumpTarget`,
+// `Draw`, and `MoveGraveyardCards`.
+//
+// "Remove two counters from this creature" means any two counters, possibly of different kinds.
+// A single cost component cannot express that: `CounterRemovalSelection` binds one selected
+// counter kind (`libcockatrice_protocol/.../ruled_v1.proto:905-909`), so
+// `RemoveCounters { counter: None, count: 2 }` would have to approximate mixed-kind payment as two
+// counters of one kind, and `AbilityCost::validate` rejects the shape outright
+// (tricerules-cards/src/primitives/costs.rs:167-176). The exact representation is *two*
+// `RemoveCounters { counter: None, count: 1, payment_source: Source }` components: the engine
+// publishes one any-one-counter legal choice per component
+// (tricerules-core/src/engine/legal_actions.rs:829-854), proves a joint assignment exists before
+// offering the ability (`GameEngine::counter_costs_payable`,
+// tricerules-core/src/engine/counters.rs:126-197), and aggregates every counter debit against the
+// live counters before any payment commits (`revalidate_cost_transaction`,
+// tricerules-core/src/engine/payment/transaction.rs:1997-2305). The client already walks
+// consecutive counter-removal choices
+// (`RuledPendingCast::chooseCounterCosts`, cockatrice/src/game/ruled/ruled_pending_cast.cpp:14-56),
+// so mixed-kind removal needs no protocol, relay, or client change.
+// ---------------------------------------------------------------------------
+
+const ISSUE_414_ENTERS_WITH_TWO_CLAUSE: &str =
+    "This creature enters with two -1/-1 counters on it.";
+const ISSUE_414_ENTERS_WITH_ONE_CLAUSE: &str = "This creature enters with a -1/-1 counter on it.";
+const ISSUE_414_BURDENED_STONEBACK_CLAUSE: &str = "{1}{W}, Remove a counter from this creature: Target creature gains indestructible until end of turn. Activate only as a sorcery.";
+const ISSUE_414_MOONLIT_LAMENTER_CLAUSE: &str =
+    "{1}{W}, Remove a counter from this creature: Draw a card. Activate only as a sorcery.";
+const ISSUE_414_HOVEL_HURLER_CLAUSE: &str = "{R/W}{R/W}, Remove a counter from this creature: Another target creature you control gets +1/+0 and gains flying until end of turn. Activate only as a sorcery.";
+const ISSUE_414_GNARLBARK_ELM_CLAUSE: &str = "{2}{B}, Remove two counters from this creature: Target creature gets -2/-2 until end of turn. Activate only as a sorcery.";
+const ISSUE_414_REAPING_WILLOW_CLAUSE: &str = "{1}{W/B}, Remove two counters from this creature: Return target creature card with mana value 3 or less from your graveyard to the battlefield. Activate only as a sorcery.";
+
+/// CR 614.1c / 122.6: "This creature enters with two -1/-1 counters on it." is an unconditional
+/// self entry replacement. Thirteen pinned-corpus printings share the exact template (Brambleback
+/// Brute, Burdened Stoneback, Carnifex Demon, Chainbreaker, Deity of Scars, Gnarlbark Elm,
+/// Heirloom Auntie, Hovel Hurler, Leech Bonder, Morselhoarder, Reaping Willow, Reluctant
+/// Dounguard, Slumbering Walker), so the recipe stays generic rather than identity-gated. Another
+/// counter kind or count, a condition, another instruction form, and riders stay unsupported.
+fn match_static_enters_with_two_minus_one_minus_one_counters(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_414_ENTERS_WITH_TWO_CLAUSE).then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::EntersWithCounters {
+                affected: EntersWithCountersAffected::Self_,
+                counter: CounterKind::MinusOneMinusOne,
+                amount: Amount::Fixed(2),
+                cast_cost_condition: None,
+            },
+        })
+    })
+}
+
+/// CR 614.1c / 122.6: the one-counter sibling of the two-counter entry template; five pinned-
+/// corpus printings share the exact line (Bloodied Ghost, Flitterwing Nuisance, Glen Elendra
+/// Guardian, Moonlit Lamenter, Wickerbough Elder). Another counter kind or count, a condition,
+/// another instruction form, and riders stay unsupported.
+fn match_static_enters_with_one_minus_one_minus_one_counter(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_414_ENTERS_WITH_ONE_CLAUSE).then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::EntersWithCounters {
+                affected: EntersWithCountersAffected::Self_,
+                counter: CounterKind::MinusOneMinusOne,
+                amount: Amount::Fixed(1),
+                cast_cost_condition: None,
+            },
+        })
+    })
+}
+
+/// CR 602.2b / 601.2h / 122.1: removing any one counter of any kind from the exact source
+/// generation is one atomic activation cost. None permits exactly one counter of any present
+/// kind, and the shipped `Source` payment source binds the reference to the activating permanent
+/// (Brambleback Brute is the existing data consumer).
+fn issue_414_remove_one_counter_from_source() -> AbilityCost {
+    AbilityCost::RemoveCounters {
+        counter: None,
+        count: 1,
+        payment_source: CounterRemovalPaymentSource::Source,
+    }
+}
+
+/// CR 602.2b / 601.2h / 122.1 / 702.12 / 602.5d: Burdened Stoneback's sorcery-speed activation
+/// pays {1}{W} plus any one counter from its source, then grants indestructible until end of turn
+/// to one target creature. The exact clause is a pinned-corpus singleton (verified), so the
+/// calibration is a documented singleton. Another cost, removal count, or payment source, another
+/// granted keyword or duration, another target restriction, and riders stay unsupported.
+fn match_activated_remove_counter_grant_indestructible(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_414_BURDENED_STONEBACK_CLAUSE).then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![
+                AbilityCost::Mana(ManaCost::parse("{1}{W}").expect("printed mana cost")),
+                issue_414_remove_one_counter_from_source(),
+            ],
+            effect: vec![SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                keywords: vec![Keyword::Indestructible],
+            }],
+            targeting: Some(exact_targeting(1, 1, "Choose target creature", vec![0])),
+            timing: ActivationTiming::SorcerySpeed,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
+/// CR 602.2b / 601.2h / 122.1 / 121.1 / 602.5d: Moonlit Lamenter's sorcery-speed activation pays
+/// {1}{W} plus any one counter from its source and then draws a card without targeting. The exact
+/// clause is a pinned-corpus singleton (verified), so the calibration is a documented singleton.
+/// Another cost or removal count, another drawer or count, a target, and riders stay unsupported.
+fn match_activated_remove_counter_draw_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_414_MOONLIT_LAMENTER_CLAUSE).then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![
+                AbilityCost::Mana(ManaCost::parse("{1}{W}").expect("printed mana cost")),
+                issue_414_remove_one_counter_from_source(),
+            ],
+            effect: vec![SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }],
+            targeting: None,
+            timing: ActivationTiming::SorcerySpeed,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
+/// CR 602.2b / 601.2h / 122.1 / 613.4c / 702.9 / 602.5d: Hovel Hurler's sorcery-speed activation
+/// pays the hybrid {R/W}{R/W} plus any one counter from its source, then pumps one *other*
+/// creature its controller controls +1/+0 and grants that same target flying until end of turn.
+/// The exact clause is a pinned-corpus singleton (verified), so the calibration is a documented
+/// singleton. Another cost or removal count, a self-inclusive or any-controller target, another
+/// pump or keyword, and riders stay unsupported.
+fn match_activated_remove_counter_pump_flying_another_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_414_HOVEL_HURLER_CLAUSE).then(|| {
+        let another_creature_you_control = TargetFilter {
+            kind: TargetKind::Creature,
+            controller: TargetController::You,
+            excluded_objects: vec![TargetObjectExclusion::Source],
+            ..TargetFilter::default()
+        };
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![
+                AbilityCost::Mana(ManaCost::parse("{R/W}{R/W}").expect("printed hybrid mana cost")),
+                issue_414_remove_one_counter_from_source(),
+            ],
+            effect: vec![
+                SpellEffectKind::PumpTarget {
+                    power: 1,
+                    toughness: 0,
+                    scale: None,
+                    subject: EffectSubject::Chosen(Box::new(another_creature_you_control.clone())),
+                },
+                SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::Chosen(Box::new(another_creature_you_control)),
+                    keywords: vec![Keyword::Flying],
+                },
+            ],
+            targeting: Some(exact_targeting(
+                1,
+                1,
+                "Choose another target creature you control",
+                vec![0, 1],
+            )),
+            timing: ActivationTiming::SorcerySpeed,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
+/// CR 602.2b / 601.2h / 122.1: "Remove two counters from this creature" is any two counters of
+/// any kinds. The protocol binds one counter kind per selection
+/// (`CounterRemovalSelection`, ruled_v1.proto), so the exact representation is two atomic
+/// any-one-counter components. The engine publishes one legal choice per component, requires a
+/// joint assignment before offering the ability (`counter_costs_payable`), and aggregates both
+/// debits before committing any payment (`revalidate_cost_transaction`). Removing two counters of
+/// one kind stays legal; a mixed-kind pair stays legal; a source with fewer than two counters is
+/// illegal as a whole.
+fn issue_414_remove_two_counters_from_source() -> Vec<AbilityCost> {
+    vec![
+        issue_414_remove_one_counter_from_source(),
+        issue_414_remove_one_counter_from_source(),
+    ]
+}
+
+/// CR 602.2b / 601.2h / 122.1 / 613.4c / 602.5d: Gnarlbark Elm's sorcery-speed activation pays
+/// {2}{B} plus any two counters from its source, then pumps one target creature -2/-2 until end
+/// of turn. The exact clause is a pinned-corpus singleton (verified), so the calibration is a
+/// documented singleton. Another cost or removal count, another pump, another target
+/// restriction, and riders stay unsupported.
+fn match_activated_remove_counter_pump_minus_two(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_414_GNARLBARK_ELM_CLAUSE).then(|| {
+        let mut costs = vec![AbilityCost::Mana(
+            ManaCost::parse("{2}{B}").expect("printed mana cost"),
+        )];
+        costs.extend(issue_414_remove_two_counters_from_source());
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs,
+            effect: vec![SpellEffectKind::PumpTarget {
+                power: -2,
+                toughness: -2,
+                scale: None,
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            }],
+            targeting: Some(exact_targeting(1, 1, "Choose target creature", vec![0])),
+            timing: ActivationTiming::SorcerySpeed,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
+/// CR 602.2b / 601.2h / 122.1 / 404.2 / 602.5d: Reaping Willow's sorcery-speed activation pays
+/// {1}{W/B} plus any two counters from its source, then returns one target creature card with mana
+/// value 3 or less from its controller's graveyard to the battlefield (CR 614.1c entry
+/// machinery). The exact clause is a pinned-corpus singleton (verified), so the calibration is a
+/// documented singleton. Another cost or removal count, a wider or narrower graveyard predicate,
+/// any-graveyard scope, another destination, and riders stay unsupported.
+fn match_activated_remove_counter_return_small_creature_card(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_414_REAPING_WILLOW_CLAUSE).then(|| {
+        let mut costs = vec![AbilityCost::Mana(
+            ManaCost::parse("{1}{W/B}").expect("printed hybrid mana cost"),
+        )];
+        costs.extend(issue_414_remove_two_counters_from_source());
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs,
+            effect: vec![SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    owner: GraveyardOwner::Controller,
+                    card: Some(ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::Creature),
+                        max_mana_value: Some(3),
+                        ..ZoneCardFilter::default()
+                    }),
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::Battlefield { tapped: false },
+                linked_exile_id: None,
+            }],
+            targeting: Some(exact_targeting(
+                1,
+                1,
+                "Choose target creature card with mana value 3 or less from your graveyard",
+                vec![0],
+            )),
+            timing: ActivationTiming::SorcerySpeed,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Issue #370 — "This spell costs {1} less to cast for each ... in your graveyard."
 //
 // Every matcher accepts only its exact normalized Oracle line and emits the shipped
@@ -13413,12 +13720,154 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Creakwood Safewright" => "This creature enters with three -1/-1 counters on it.",
             "Grim Poppet" => "This creature enters with three -1/-1 counters on it.";
             // Another count or counter kind, a condition, another instruction form, and riders
-            // stay unsupported.
-            "This creature enters with two -1/-1 counters on it.",
+            // stay unsupported; the two-counter line is owned by its sibling recipe.
             "This creature enters with three +1/+1 counters on it.",
             "This creature enters with three -1/-1 counters on it if a creature died this turn.",
             "When this creature enters, put three -1/-1 counters on it.",
             "This creature enters with three -1/-1 counters on it. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.enters_with.minus_one_minus_one.two"),
+        label: "enters with two -1/-1 counters",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_enters_with_two_minus_one_minus_one_counters,
+        // Brambleback Brute and Burdened Stoneback are two of the eight pinned-oracle-corpus
+        // printings of this exact unconditional template. The one-counter sibling is owned by
+        // `static.enters_with.minus_one_minus_one.one`.
+        calibration: calibrations!(
+            "Brambleback Brute" => "This creature enters with two -1/-1 counters on it.",
+            "Burdened Stoneback" => "This creature enters with two -1/-1 counters on it.";
+            // Another counter kind or count, a condition, another instruction form, and riders
+            // stay unsupported.
+            "This creature enters with two +1/+1 counters on it.",
+            "This creature enters with two -1/-1 counters on it if a creature died this turn.",
+            "When this creature enters, put two -1/-1 counters on it.",
+            "This creature enters with two -1/-1 counters on it. Draw a card.",
+            "This creature enters with one -1/-1 counter on it."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.enters_with.minus_one_minus_one.one"),
+        label: "enters with a -1/-1 counter",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_enters_with_one_minus_one_minus_one_counter,
+        // Moonlit Lamenter and Flitterwing Nuisance are reviewed cohort identities; Glen Elendra
+        // Guardian is the third pinned-oracle-corpus printing. The two-counter sibling is owned by
+        // `static.enters_with.minus_one_minus_one.two`.
+        calibration: calibrations!(
+            "Moonlit Lamenter" => "This creature enters with a -1/-1 counter on it.",
+            "Flitterwing Nuisance" => "This creature enters with a -1/-1 counter on it.";
+            // Another counter kind or count, a condition, another instruction form, and riders
+            // stay unsupported.
+            "This creature enters with a +1/+1 counter on it.",
+            "This creature enters with one -1/-1 counter on it.",
+            "This creature enters with a -1/-1 counter on it if a creature died this turn.",
+            "When this creature enters, put a -1/-1 counter on it.",
+            "This creature enters with a -1/-1 counter on it. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("ability.remove_counter.grant_indestructible.one"),
+        label: "remove a counter for an indestructible grant",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_remove_counter_grant_indestructible,
+        // Burdened Stoneback is the only card in the pinned full Oracle corpus printing this exact
+        // clause; the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Burdened Stoneback" => "{1}{W}, Remove a counter from this creature: Target creature gains indestructible until end of turn. Activate only as a sorcery.";
+            // Another cost, removal count, or payment source, another granted keyword or duration,
+            // another target restriction, and riders stay unsupported.
+            "{1}{W}, Remove a counter from target creature: Target creature gains indestructible until end of turn. Activate only as a sorcery.",
+            "{1}{W}, Remove two counters from this creature: Target creature gains indestructible until end of turn. Activate only as a sorcery.",
+            "{2}{W}, Remove a counter from this creature: Target creature gains indestructible until end of turn. Activate only as a sorcery.",
+            "{1}{W}, Remove a counter from this creature: Target creature gains indestructible until end of turn.",
+            "{1}{W}, Remove a counter from this creature: Target creature gains hexproof until end of turn. Activate only as a sorcery.",
+            "{1}{W}, Remove a counter from this creature: Target creature gains indestructible until your next turn. Activate only as a sorcery.",
+            "{1}{W}, Remove a counter from this creature: Another target creature gains indestructible until end of turn. Activate only as a sorcery.",
+            "{1}{W}, Remove a counter from this creature: Target creature gains indestructible until end of turn. Activate only as a sorcery. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("ability.remove_counter.draw_one.one"),
+        label: "remove a counter to draw a card",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_remove_counter_draw_one,
+        // Moonlit Lamenter is the only card in the pinned full Oracle corpus printing this exact
+        // clause; the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Moonlit Lamenter" => "{1}{W}, Remove a counter from this creature: Draw a card. Activate only as a sorcery.";
+            // Another cost or removal count, another drawer or count, a target, and riders stay
+            // unsupported.
+            "{1}{W}, Remove a counter from this creature: Draw two cards. Activate only as a sorcery.",
+            "{1}{W}, Remove a counter from this creature: Draw a card.",
+            "{2}{W}, Remove a counter from this creature: Draw a card. Activate only as a sorcery.",
+            "{1}{W}, Remove two counters from this creature: Draw a card. Activate only as a sorcery.",
+            "{1}{W}, Remove a counter from target creature: Draw a card. Activate only as a sorcery.",
+            "{1}{W}, Remove a counter from this creature: Draw a card. Activate only as a sorcery. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("ability.remove_counter.pump_flying.one"),
+        label: "remove a counter to pump another creature and grant flying",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_remove_counter_pump_flying_another_creature,
+        // Hovel Hurler is the only card in the pinned full Oracle corpus printing this exact
+        // clause; the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Hovel Hurler" => "{R/W}{R/W}, Remove a counter from this creature: Another target creature you control gets +1/+0 and gains flying until end of turn. Activate only as a sorcery.";
+            // Another cost or removal count, a self-inclusive or any-controller target, another
+            // pump or keyword, and riders stay unsupported.
+            "{R/W}{R/W}, Remove a counter from this creature: Target creature you control gets +1/+0 and gains flying until end of turn. Activate only as a sorcery.",
+            "{R/W}{R/W}, Remove a counter from this creature: Another target creature gets +1/+0 and gains flying until end of turn. Activate only as a sorcery.",
+            "{R/W}{R/W}, Remove a counter from this creature: Another target creature you control gets +1/+1 and gains flying until end of turn. Activate only as a sorcery.",
+            "{R/W}{R/W}, Remove a counter from this creature: Another target creature you control gets +1/+0 and gains flying. Activate only as a sorcery.",
+            "{R/W}{R/W}, Remove a counter from this creature: Another target creature you control gets +1/+0 and gains flying until end of turn.",
+            "{R/W}, Remove a counter from this creature: Another target creature you control gets +1/+0 and gains flying until end of turn. Activate only as a sorcery.",
+            "{R/W}{R/W}, Remove a counter from this creature: Another target creature you control gets +1/+0 and gains flying until end of turn. Activate only as a sorcery. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("ability.remove_counter.pump_minus_two.two"),
+        label: "remove two counters to pump -2/-2",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_remove_counter_pump_minus_two,
+        // Gnarlbark Elm is the only card in the pinned full Oracle corpus printing this exact
+        // clause; the singleton is verified, not an unreviewed gap. The two-counter cost is
+        // emitted as two any-one-counter components (see issue_414_remove_two_counters_from_source).
+        calibration: singleton_calibrations!(
+            "Gnarlbark Elm" => "{2}{B}, Remove two counters from this creature: Target creature gets -2/-2 until end of turn. Activate only as a sorcery.";
+            // Another cost, removal count, or payment source, another pump, another target
+            // restriction, and riders stay unsupported.
+            "{2}{B}, Remove a counter from this creature: Target creature gets -2/-2 until end of turn. Activate only as a sorcery.",
+            "{1}{B}, Remove two counters from this creature: Target creature gets -2/-2 until end of turn. Activate only as a sorcery.",
+            "{2}{B}, Remove two counters from this creature: Target creature gets -1/-1 until end of turn. Activate only as a sorcery.",
+            "{2}{B}, Remove two counters from this creature: Another target creature gets -2/-2 until end of turn. Activate only as a sorcery.",
+            "{2}{B}, Remove two counters from target creature: Target creature gets -2/-2 until end of turn. Activate only as a sorcery.",
+            "{2}{B}, Remove two counters from this creature: Target creature gets -2/-2 until end of turn.",
+            "{2}{B}, Remove two counters from this creature: Target creature gets -2/-2 until end of turn. Activate only as a sorcery. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("ability.remove_counter.return_creature_card.mana_value_three.two"),
+        label: "remove two counters to return a small creature card from your graveyard",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_remove_counter_return_small_creature_card,
+        // Reaping Willow is the only card in the pinned full Oracle corpus printing this exact
+        // clause; the singleton is verified, not an unreviewed gap. The two-counter cost is
+        // emitted as two any-one-counter components (see issue_414_remove_two_counters_from_source).
+        calibration: singleton_calibrations!(
+            "Reaping Willow" => "{1}{W/B}, Remove two counters from this creature: Return target creature card with mana value 3 or less from your graveyard to the battlefield. Activate only as a sorcery.";
+            // Another cost or removal count, a wider or narrower graveyard predicate,
+            // any-graveyard scope, another destination, and riders stay unsupported.
+            "{1}{W/B}, Remove a counter from this creature: Return target creature card with mana value 3 or less from your graveyard to the battlefield. Activate only as a sorcery.",
+            "{2}{W/B}, Remove two counters from this creature: Return target creature card with mana value 3 or less from your graveyard to the battlefield. Activate only as a sorcery.",
+            "{1}{W/B}, Remove two counters from this creature: Return target creature card with mana value 2 or less from your graveyard to the battlefield. Activate only as a sorcery.",
+            "{1}{W/B}, Remove two counters from this creature: Return target permanent card with mana value 3 or less from your graveyard to the battlefield. Activate only as a sorcery.",
+            "{1}{W/B}, Remove two counters from this creature: Return target creature card with mana value 3 or less from a graveyard to the battlefield. Activate only as a sorcery.",
+            "{1}{W/B}, Remove two counters from this creature: Return target creature card with mana value 3 or less from your graveyard to your hand. Activate only as a sorcery.",
+            "{1}{W/B}, Remove two counters from this creature: Return target creature card with mana value 3 or less from your graveyard to the battlefield.",
+            "{1}{W/B}, Remove two counters from this creature: Return target creature card with mana value 3 or less from your graveyard to the battlefield. Activate only as a sorcery. Draw a card."
         ),
     },
 
@@ -37869,7 +38318,6 @@ mod tests {
         }
 
         for negative in [
-            "This creature enters with two -1/-1 counters on it.",
             "This creature enters with three +1/+1 counters on it.",
             "This creature enters with three -1/-1 counters on it if a creature died this turn.",
             "When this creature enters, put three -1/-1 counters on it.",
@@ -37884,6 +38332,20 @@ mod tests {
                 "near-miss was accepted: {negative}"
             );
         }
+        // The two-counter line now has its own sibling recipe; it must be consumed there rather
+        // than by the three-counter template.
+        assert_eq!(
+            match_clause(
+                "This creature enters with two -1/-1 counters on it.",
+                false,
+                &context()
+            )
+            .expect("the two-counter line must not be ambiguous")
+            .expect("the two-counter line must keep its sibling owner")
+            .id
+            .as_str(),
+            "static.enters_with.minus_one_minus_one.two"
+        );
     }
 
     /// Issue #370: each graveyard-count cost-reduction clause must match exactly one recipe on
@@ -38609,6 +39071,518 @@ mod tests {
                     .expect("near-miss must not be ambiguous")
                     .is_none(),
                 "create_token.elf_black_green.two_two accepted {clause}"
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #414 — enters-with-minus-counter creature cohort.
+    // -----------------------------------------------------------------------
+
+    const ISSUE_414_BURDENED_STONEBACK_ORACLE_ID: &str = "8a5e17a0-6f3c-49ed-b328-ed90a46ed6c5";
+    const ISSUE_414_MOONLIT_LAMENTER_ORACLE_ID: &str = "ce009bd4-5ffb-46a4-a9dd-b9c060926467";
+    const ISSUE_414_HOVEL_HURLER_ORACLE_ID: &str = "fb9cd9d0-8eea-4aa8-bb9c-bb0aac847421";
+    const ISSUE_414_GNARLBARK_ELM_ORACLE_ID: &str = "a848ea46-347d-49c7-85c8-023cf836d0b3";
+    const ISSUE_414_REAPING_WILLOW_ORACLE_ID: &str = "ce60402c-34cd-44fe-ae1d-4a5404298f5b";
+    const ISSUE_414_GNARLBARK_ELM_CLAUSE: &str = "{2}{B}, Remove two counters from this creature: Target creature gets -2/-2 until end of turn. Activate only as a sorcery.";
+    const ISSUE_414_REAPING_WILLOW_CLAUSE: &str = "{1}{W/B}, Remove two counters from this creature: Return target creature card with mana value 3 or less from your graveyard to the battlefield. Activate only as a sorcery.";
+
+    fn issue_414_context(oracle_id: &str, source_name: &str) -> RecipeContext {
+        let mut context = context();
+        context.oracle_id = Some(oracle_id.into());
+        context.source_name = source_name.into();
+        context
+    }
+
+    #[test]
+    fn issue_414_enters_with_one_and_two_minus_one_counters_are_generic_exact_templates() {
+        for (clause, expected_amount, corpus_printings) in [
+            (
+                ISSUE_414_ENTERS_WITH_TWO_CLAUSE,
+                2,
+                &[
+                    "Brambleback Brute",
+                    "Burdened Stoneback",
+                    "Carnifex Demon",
+                    "Chainbreaker",
+                    "Deity of Scars",
+                    "Gnarlbark Elm",
+                    "Heirloom Auntie",
+                    "Hovel Hurler",
+                    "Leech Bonder",
+                    "Morselhoarder",
+                    "Reaping Willow",
+                    "Reluctant Dounguard",
+                    "Slumbering Walker",
+                ][..],
+            ),
+            (
+                ISSUE_414_ENTERS_WITH_ONE_CLAUSE,
+                1,
+                &[
+                    "Bloodied Ghost",
+                    "Flitterwing Nuisance",
+                    "Glen Elendra Guardian",
+                    "Moonlit Lamenter",
+                    "Wickerbough Elder",
+                ][..],
+            ),
+        ] {
+            for source_name in corpus_printings {
+                let mut source = context();
+                source.source_name = (*source_name).into();
+                let matched = match_clause(clause, false, &source)
+                    .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                    .unwrap_or_else(|| {
+                        panic!("{source_name} should match the {expected_amount}-counter recipe")
+                    });
+                assert_eq!(
+                    matched.id.as_str(),
+                    match expected_amount {
+                        1 => "static.enters_with.minus_one_minus_one.one",
+                        _ => "static.enters_with.minus_one_minus_one.two",
+                    },
+                    "{clause}"
+                );
+                let RecipeEmission::StaticAbility(ability) = matched.emission else {
+                    panic!("expected a static ability, got {:?}", matched.emission);
+                };
+                assert_eq!(
+                    ability.definition,
+                    StaticAbilityDef::EntersWithCounters {
+                        affected: EntersWithCountersAffected::Self_,
+                        counter: CounterKind::MinusOneMinusOne,
+                        amount: Amount::Fixed(expected_amount),
+                        cast_cost_condition: None,
+                    }
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn issue_414_retained_remove_counter_activations_are_exact_singletons() {
+        // 1. Burdened Stoneback: {1}{W} plus removing any one counter from the source buys an
+        // indestructible grant on one target creature at sorcery speed.
+        let matched = match_clause(
+            ISSUE_414_BURDENED_STONEBACK_CLAUSE,
+            false,
+            &issue_414_context(ISSUE_414_BURDENED_STONEBACK_ORACLE_ID, "Burdened Stoneback"),
+        )
+        .expect("Burdened Stoneback clause must not be ambiguous")
+        .expect("Burdened Stoneback clause must match");
+        assert_eq!(
+            matched.id.as_str(),
+            "ability.remove_counter.grant_indestructible.one"
+        );
+        let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+            panic!("expected an activated ability, got {:?}", matched.emission);
+        };
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(
+            ability.costs,
+            vec![
+                AbilityCost::Mana(ManaCost::parse("{1}{W}").expect("printed mana cost")),
+                AbilityCost::RemoveCounters {
+                    counter: None,
+                    count: 1,
+                    payment_source: CounterRemovalPaymentSource::Source,
+                },
+            ]
+        );
+        assert_eq!(
+            ability.effect,
+            vec![SpellEffectKind::GrantKeywords {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                keywords: vec![Keyword::Indestructible],
+            }]
+        );
+        assert_eq!(ability.timing, ActivationTiming::SorcerySpeed);
+        assert_eq!(
+            ability.targeting,
+            Some(exact_targeting(1, 1, "Choose target creature", vec![0]))
+        );
+
+        // 2. Moonlit Lamenter: {1}{W} plus removing any one counter from the source draws a card at
+        // sorcery speed without targeting.
+        let matched = match_clause(
+            ISSUE_414_MOONLIT_LAMENTER_CLAUSE,
+            false,
+            &issue_414_context(ISSUE_414_MOONLIT_LAMENTER_ORACLE_ID, "Moonlit Lamenter"),
+        )
+        .expect("Moonlit Lamenter clause must not be ambiguous")
+        .expect("Moonlit Lamenter clause must match");
+        assert_eq!(matched.id.as_str(), "ability.remove_counter.draw_one.one");
+        let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+            panic!("expected an activated ability, got {:?}", matched.emission);
+        };
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(
+            ability.costs,
+            vec![
+                AbilityCost::Mana(ManaCost::parse("{1}{W}").expect("printed mana cost")),
+                AbilityCost::RemoveCounters {
+                    counter: None,
+                    count: 1,
+                    payment_source: CounterRemovalPaymentSource::Source,
+                },
+            ]
+        );
+        assert_eq!(
+            ability.effect,
+            vec![SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }]
+        );
+        assert_eq!(ability.timing, ActivationTiming::SorcerySpeed);
+        assert_eq!(ability.targeting, None);
+
+        // 3. Hovel Hurler: the hybrid {R/W}{R/W} plus one counter pumps a *different* creature its
+        // controller controls +1/+0 and grants flying to that same target.
+        let matched = match_clause(
+            ISSUE_414_HOVEL_HURLER_CLAUSE,
+            false,
+            &issue_414_context(ISSUE_414_HOVEL_HURLER_ORACLE_ID, "Hovel Hurler"),
+        )
+        .expect("Hovel Hurler clause must not be ambiguous")
+        .expect("Hovel Hurler clause must match");
+        assert_eq!(
+            matched.id.as_str(),
+            "ability.remove_counter.pump_flying.one"
+        );
+        let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+            panic!("expected an activated ability, got {:?}", matched.emission);
+        };
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(
+            ability.costs,
+            vec![
+                AbilityCost::Mana(ManaCost::parse("{R/W}{R/W}").expect("printed hybrid mana cost")),
+                AbilityCost::RemoveCounters {
+                    counter: None,
+                    count: 1,
+                    payment_source: CounterRemovalPaymentSource::Source,
+                },
+            ]
+        );
+        let another_creature_you_control = TargetFilter {
+            kind: TargetKind::Creature,
+            controller: TargetController::You,
+            excluded_objects: vec![TargetObjectExclusion::Source],
+            ..TargetFilter::default()
+        };
+        assert_eq!(
+            ability.effect,
+            vec![
+                SpellEffectKind::PumpTarget {
+                    power: 1,
+                    toughness: 0,
+                    scale: None,
+                    subject: EffectSubject::Chosen(Box::new(another_creature_you_control.clone())),
+                },
+                SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::Chosen(Box::new(another_creature_you_control)),
+                    keywords: vec![Keyword::Flying],
+                },
+            ]
+        );
+        assert_eq!(ability.timing, ActivationTiming::SorcerySpeed);
+        assert_eq!(
+            ability.targeting,
+            Some(exact_targeting(
+                1,
+                1,
+                "Choose another target creature you control",
+                vec![0, 1],
+            ))
+        );
+    }
+
+    #[test]
+    fn issue_414_remove_two_counter_activations_match_their_exact_recipes() {
+        // 1. Gnarlbark Elm: {2}{B} plus removing any two counters from the source pumps one target
+        // creature -2/-2 until end of turn at sorcery speed. The two-counter cost is two atomic
+        // any-one-counter components so a mixed-kind pair stays legal.
+        let matched = match_clause(
+            ISSUE_414_GNARLBARK_ELM_CLAUSE,
+            false,
+            &issue_414_context(ISSUE_414_GNARLBARK_ELM_ORACLE_ID, "Gnarlbark Elm"),
+        )
+        .expect("Gnarlbark Elm clause must not be ambiguous")
+        .expect("Gnarlbark Elm clause must match");
+        assert_eq!(
+            matched.id.as_str(),
+            "ability.remove_counter.pump_minus_two.two"
+        );
+        let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+            panic!("expected an activated ability, got {:?}", matched.emission);
+        };
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(
+            ability.costs,
+            vec![
+                AbilityCost::Mana(ManaCost::parse("{2}{B}").expect("printed mana cost")),
+                AbilityCost::RemoveCounters {
+                    counter: None,
+                    count: 1,
+                    payment_source: CounterRemovalPaymentSource::Source,
+                },
+                AbilityCost::RemoveCounters {
+                    counter: None,
+                    count: 1,
+                    payment_source: CounterRemovalPaymentSource::Source,
+                },
+            ]
+        );
+        assert_eq!(
+            ability.effect,
+            vec![SpellEffectKind::PumpTarget {
+                power: -2,
+                toughness: -2,
+                scale: None,
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            }]
+        );
+        assert_eq!(ability.timing, ActivationTiming::SorcerySpeed);
+        assert_eq!(
+            ability.targeting,
+            Some(exact_targeting(1, 1, "Choose target creature", vec![0]))
+        );
+
+        // 2. Reaping Willow: {1}{W/B} plus removing any two counters from the source returns one
+        // target creature card with mana value 3 or less from the controller's own graveyard to
+        // the battlefield at sorcery speed.
+        let matched = match_clause(
+            ISSUE_414_REAPING_WILLOW_CLAUSE,
+            false,
+            &issue_414_context(ISSUE_414_REAPING_WILLOW_ORACLE_ID, "Reaping Willow"),
+        )
+        .expect("Reaping Willow clause must not be ambiguous")
+        .expect("Reaping Willow clause must match");
+        assert_eq!(
+            matched.id.as_str(),
+            "ability.remove_counter.return_creature_card.mana_value_three.two"
+        );
+        let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+            panic!("expected an activated ability, got {:?}", matched.emission);
+        };
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(
+            ability.costs,
+            vec![
+                AbilityCost::Mana(ManaCost::parse("{1}{W/B}").expect("printed hybrid mana cost")),
+                AbilityCost::RemoveCounters {
+                    counter: None,
+                    count: 1,
+                    payment_source: CounterRemovalPaymentSource::Source,
+                },
+                AbilityCost::RemoveCounters {
+                    counter: None,
+                    count: 1,
+                    payment_source: CounterRemovalPaymentSource::Source,
+                },
+            ]
+        );
+        assert_eq!(
+            ability.effect,
+            vec![SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    owner: GraveyardOwner::Controller,
+                    card: Some(ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::Creature),
+                        max_mana_value: Some(3),
+                        ..ZoneCardFilter::default()
+                    }),
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::Battlefield { tapped: false },
+                linked_exile_id: None,
+            }]
+        );
+        assert_eq!(ability.timing, ActivationTiming::SorcerySpeed);
+        assert_eq!(
+            ability.targeting,
+            Some(exact_targeting(
+                1,
+                1,
+                "Choose target creature card with mana value 3 or less from your graveyard",
+                vec![0],
+            ))
+        );
+    }
+
+    #[test]
+    fn issue_414_remove_two_counter_near_misses_stay_fail_closed() {
+        for clause in [
+            "This creature enters with two +1/+1 counters on it.",
+            "This creature enters with two -1/-1 counters on it if a creature died this turn.",
+            "When this creature enters, put two -1/-1 counters on it.",
+            "This creature enters with two -1/-1 counters on it. Draw a card.",
+            "This creature enters with a +1/+1 counter on it.",
+            "This creature enters with a -1/-1 counter on it if a creature died this turn.",
+            "When this creature enters, put a -1/-1 counter on it.",
+            "This creature enters with a -1/-1 counter on it. Draw a card.",
+        ] {
+            assert!(
+                match_clause(clause, false, &context())
+                    .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                    .is_none(),
+                "enters-with-counter near-miss must stay unmatched: {clause}"
+            );
+        }
+
+        for (clause, source_name) in [
+            (
+                "{2}{B}, Remove a counter from this creature: Target creature gets -2/-2 until end of turn. Activate only as a sorcery.",
+                "Gnarlbark Elm",
+            ),
+            (
+                "{1}{B}, Remove two counters from this creature: Target creature gets -2/-2 until end of turn. Activate only as a sorcery.",
+                "Gnarlbark Elm",
+            ),
+            (
+                "{2}{B}, Remove two counters from this creature: Target creature gets -1/-1 until end of turn. Activate only as a sorcery.",
+                "Gnarlbark Elm",
+            ),
+            (
+                "{2}{B}, Remove two counters from this creature: Another target creature gets -2/-2 until end of turn. Activate only as a sorcery.",
+                "Gnarlbark Elm",
+            ),
+            (
+                "{2}{B}, Remove two counters from target creature: Target creature gets -2/-2 until end of turn. Activate only as a sorcery.",
+                "Gnarlbark Elm",
+            ),
+            (
+                "{2}{B}, Remove two counters from this creature: Target creature gets -2/-2 until end of turn.",
+                "Gnarlbark Elm",
+            ),
+            (
+                "{2}{B}, Remove two counters from this creature: Target creature gets -2/-2 until end of turn. Activate only as a sorcery. Draw a card.",
+                "Gnarlbark Elm",
+            ),
+            (
+                "{1}{W/B}, Remove a counter from this creature: Return target creature card with mana value 3 or less from your graveyard to the battlefield. Activate only as a sorcery.",
+                "Reaping Willow",
+            ),
+            (
+                "{2}{W/B}, Remove two counters from this creature: Return target creature card with mana value 3 or less from your graveyard to the battlefield. Activate only as a sorcery.",
+                "Reaping Willow",
+            ),
+            (
+                "{1}{W/B}, Remove two counters from this creature: Return target creature card with mana value 2 or less from your graveyard to the battlefield. Activate only as a sorcery.",
+                "Reaping Willow",
+            ),
+            (
+                "{1}{W/B}, Remove two counters from this creature: Return target permanent card with mana value 3 or less from your graveyard to the battlefield. Activate only as a sorcery.",
+                "Reaping Willow",
+            ),
+            (
+                "{1}{W/B}, Remove two counters from this creature: Return target creature card with mana value 3 or less from a graveyard to the battlefield. Activate only as a sorcery.",
+                "Reaping Willow",
+            ),
+            (
+                "{1}{W/B}, Remove two counters from this creature: Return target creature card with mana value 3 or less from your graveyard to your hand. Activate only as a sorcery.",
+                "Reaping Willow",
+            ),
+            (
+                "{1}{W/B}, Remove two counters from this creature: Return target creature card with mana value 3 or less from your graveyard to the battlefield.",
+                "Reaping Willow",
+            ),
+            (
+                "{1}{W/B}, Remove two counters from this creature: Return target creature card with mana value 3 or less from your graveyard to the battlefield. Activate only as a sorcery. Draw a card.",
+                "Reaping Willow",
+            ),
+            (
+                "{1}{W}, Remove a counter from target creature: Target creature gains indestructible until end of turn. Activate only as a sorcery.",
+                "Burdened Stoneback",
+            ),
+            (
+                "{1}{W}, Remove two counters from this creature: Target creature gains indestructible until end of turn. Activate only as a sorcery.",
+                "Burdened Stoneback",
+            ),
+            (
+                "{2}{W}, Remove a counter from this creature: Target creature gains indestructible until end of turn. Activate only as a sorcery.",
+                "Burdened Stoneback",
+            ),
+            (
+                "{1}{W}, Remove a counter from this creature: Target creature gains indestructible until end of turn.",
+                "Burdened Stoneback",
+            ),
+            (
+                "{1}{W}, Remove a counter from this creature: Target creature gains hexproof until end of turn. Activate only as a sorcery.",
+                "Burdened Stoneback",
+            ),
+            (
+                "{1}{W}, Remove a counter from this creature: Target creature gains indestructible until your next turn. Activate only as a sorcery.",
+                "Burdened Stoneback",
+            ),
+            (
+                "{1}{W}, Remove a counter from this creature: Another target creature gains indestructible until end of turn. Activate only as a sorcery.",
+                "Burdened Stoneback",
+            ),
+            (
+                "{1}{W}, Remove a counter from this creature: Target creature gains indestructible until end of turn. Activate only as a sorcery. Draw a card.",
+                "Burdened Stoneback",
+            ),
+            (
+                "{1}{W}, Remove a counter from this creature: Draw two cards. Activate only as a sorcery.",
+                "Moonlit Lamenter",
+            ),
+            (
+                "{1}{W}, Remove a counter from this creature: Draw a card.",
+                "Moonlit Lamenter",
+            ),
+            (
+                "{2}{W}, Remove a counter from this creature: Draw a card. Activate only as a sorcery.",
+                "Moonlit Lamenter",
+            ),
+            (
+                "{1}{W}, Remove two counters from this creature: Draw a card. Activate only as a sorcery.",
+                "Moonlit Lamenter",
+            ),
+            (
+                "{1}{W}, Remove a counter from target creature: Draw a card. Activate only as a sorcery.",
+                "Moonlit Lamenter",
+            ),
+            (
+                "{1}{W}, Remove a counter from this creature: Draw a card. Activate only as a sorcery. Draw a card.",
+                "Moonlit Lamenter",
+            ),
+            (
+                "{R/W}{R/W}, Remove a counter from this creature: Target creature you control gets +1/+0 and gains flying until end of turn. Activate only as a sorcery.",
+                "Hovel Hurler",
+            ),
+            (
+                "{R/W}{R/W}, Remove a counter from this creature: Another target creature gets +1/+0 and gains flying until end of turn. Activate only as a sorcery.",
+                "Hovel Hurler",
+            ),
+            (
+                "{R/W}{R/W}, Remove a counter from this creature: Another target creature you control gets +1/+1 and gains flying until end of turn. Activate only as a sorcery.",
+                "Hovel Hurler",
+            ),
+            (
+                "{R/W}{R/W}, Remove a counter from this creature: Another target creature you control gets +1/+0 and gains flying. Activate only as a sorcery.",
+                "Hovel Hurler",
+            ),
+            (
+                "{R/W}{R/W}, Remove a counter from this creature: Another target creature you control gets +1/+0 and gains flying until end of turn.",
+                "Hovel Hurler",
+            ),
+            (
+                "{R/W}, Remove a counter from this creature: Another target creature you control gets +1/+0 and gains flying until end of turn. Activate only as a sorcery.",
+                "Hovel Hurler",
+            ),
+            (
+                "{R/W}{R/W}, Remove a counter from this creature: Another target creature you control gets +1/+0 and gains flying until end of turn. Activate only as a sorcery. Draw a card.",
+                "Hovel Hurler",
+            ),
+        ] {
+            assert!(
+                match_clause(clause, false, &context())
+                    .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                    .is_none(),
+                "remove-counter activation near-miss must stay unmatched ({source_name}): {clause}"
             );
         }
     }

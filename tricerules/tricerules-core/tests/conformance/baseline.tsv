@@ -331,6 +331,8 @@ bull_cerodon	0	cast	exercised
 bull_rush	0	cast	exercised
 bulwark_giant	0	cast	exercised
 bump_in_the_night	0	cast	exercised
+burdened_stoneback	0	ability:0	unsupported: nonmana costs need additional fixture resources
+burdened_stoneback	0	cast	exercised
 burglar_rat	0	cast	exercised
 burn,_burn,_tree_and_fern	0	cast	exercised
 burning_curiosity	0	cast	exercised
@@ -981,6 +983,8 @@ gloomlake_verge	0	land	exercised
 glorious_anthem	0	cast	exercised
 glorious_charge	0	cast	exercised
 glory_seeker	0	cast	exercised
+gnarlbark_elm	0	ability:0	unsupported: nonmana costs need additional fixture resources
+gnarlbark_elm	0	cast	exercised
 gnarled_mass	0	cast	exercised
 gnarlid_colony	0	cast	exercised
 gnottvold_recluse	0	cast	exercised
@@ -1177,6 +1181,8 @@ horrid_vigor	0	cast	exercised
 hostile_minotaur	0	cast	exercised
 hot_dog_cart	0	ability:0	exercised
 hot_dog_cart	0	cast	exercised
+hovel_hurler	0	ability:0	unsupported: nonmana costs need additional fixture resources
+hovel_hurler	0	cast	exercised
 hover_barrier	0	cast	exercised
 hovermyr	0	cast	exercised
 hoverstone_pilgrim	0	ability:0	exercised
@@ -1565,6 +1571,8 @@ moon-vigil_adherents	0	cast	exercised
 moon_heron	0	cast	exercised
 moon_sprite	0	cast	exercised
 moonglove_winnower	0	cast	exercised
+moonlit_lamenter	0	ability:0	unsupported: nonmana costs need additional fixture resources
+moonlit_lamenter	0	cast	exercised
 moonrise_cleric	0	cast	exercised
 moorish_cavalry	0	cast	exercised
 morcants_eyes	0	ability:0	exercised
@@ -1872,6 +1880,8 @@ razortrap_gorge	0	ability:0	exercised
 razortrap_gorge	0	land	exercised
 reach_through_mists	0	cast	exercised
 reanimate	0	cast	exercised
+reaping_willow	0	ability:0	unsupported: nonmana costs need additional fixture resources
+reaping_willow	0	cast	exercised
 rearing_embermare	0	cast	exercised
 rebellious_captives	0	ability:0	exercised
 rebellious_captives	0	cast	exercised
