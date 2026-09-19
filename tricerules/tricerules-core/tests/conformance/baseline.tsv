@@ -144,6 +144,7 @@ aven_reedstalker	0	cast	exercised
 aven_sentry	0	cast	exercised
 aven_skirmisher	0	cast	exercised
 aven_wind_mage	0	cast	exercised
+avenger_of_the_fallen	0	cast	exercised
 avengers_hangar	0	ability:0	exercised
 avengers_hangar	0	land	exercised
 axebane_beast	0	cast	exercised
@@ -438,6 +439,7 @@ cloudbound_moogle	0	cast	exercised
 cloudcrown_oak	0	cast	exercised
 cloudkin_seer	0	cast	exercised
 cloudsculpt_technician	0	cast	exercised
+coati_scavenger	0	cast	exercised
 cobblebrute	0	cast	exercised
 coercion	0	cast	exercised
 coeurl	0	ability:0	exercised
@@ -485,6 +487,7 @@ coral_sword	0	cast	exercised
 corroding_dragonstorm	0	cast	exercised
 corrupt_court_official	0	cast	exercised
 council_of_advisors	0	cast	exercised
+council_of_echoes	0	cast	exercised
 counsel_of_the_soratami	0	cast	exercised
 counterspell	0	cast	unsupported: target group 0 needs a richer fixture
 courier_griffin	0	cast	exercised
@@ -2447,6 +2450,7 @@ thundering_giant	0	cast	exercised
 thundering_tanadon	0	cast	exercised
 ticket_booth_tunnel_of_hate	0	cast	exercised
 ticket_booth_tunnel_of_hate	1	cast	exercised
+tidecaller_mentor	0	cast	exercised
 tidehollow_strix	0	cast	exercised
 tidings	0	cast	exercised
 timid_shieldbearer	0	ability:0	exercised

@@ -60,9 +60,9 @@ use recipes::{
     issue_313_oracle_id_is_reviewed, issue_314_card_surface_is_exact,
     issue_314_oracle_id_is_reviewed, issue_315_card_surface_is_exact,
     issue_315_oracle_id_is_reviewed, issue_373_card_surface_is_exact,
-    issue_373_oracle_id_is_reviewed, match_clause, match_modal_assembly, match_modal_mode,
-    match_station_assembly, reviewed_modal_mode_pair, validate_catalog, RecipeAmbiguity,
-    RecipeContext, RecipeEmission,
+    issue_373_oracle_id_is_reviewed, issue_375_card_surface_is_exact, match_clause,
+    match_modal_assembly, match_modal_mode, match_station_assembly, reviewed_modal_mode_pair,
+    validate_catalog, RecipeAmbiguity, RecipeContext, RecipeEmission,
 };
 #[cfg(test)]
 use tricerules_cards::primitives::{
@@ -1959,6 +1959,17 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
         return Err(Skip::NonKeywordText.into());
     }
     if !issue_373_card_surface_is_exact(
+        str_field(card, "oracle_id"),
+        &name,
+        &mana_cost,
+        type_line,
+        oracle_text,
+        card.get("power").and_then(Value::as_str),
+        card.get("toughness").and_then(Value::as_str),
+    ) {
+        return Err(Skip::NonKeywordText.into());
+    }
+    if !issue_375_card_surface_is_exact(
         str_field(card, "oracle_id"),
         &name,
         &mana_cost,
@@ -12665,6 +12676,251 @@ mod tests {
         assert_eq!(
             raw.activated_abilities[0].source_zone,
             AbilitySourceZone::Graveyard
+        );
+    }
+
+    /// Issue #375: the four fully expressible graveyard-return identities generate exact typed
+    /// RON, while the nine identities with a blocked clause stay unsupported end to end.
+    #[test]
+    fn issue_375_retained_cards_generate_exact_typed_definitions() {
+        use tricerules_cards::primitives::{
+            CardTypeFilter, CountExpression, DelayedTokenSacrificeTiming, GraveyardAggregate,
+            GraveyardDestination, PermanentTypeFilter, RelativePlayerSet, TargetKind,
+            TargetObjectExclusion, ZoneCardFilter,
+        };
+
+        let avenger = normal_card_with_oracle_id(
+            "158d0272-a850-4399-8afa-d0caa143c3cb",
+            "Avenger of the Fallen",
+            "{2}{B}",
+            "Creature — Human Warrior",
+            "Deathtouch\nMobilize X, where X is the number of creature cards in your graveyard. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+            Some(("2", "4")),
+        );
+        let generated = evaluate_fresh(&avenger).expect("Avenger of the Fallen should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.keywords, [Keyword::Deathtouch]);
+        let [mobilize] = raw.triggered_abilities.as_slice() else {
+            panic!("Avenger must emit one mobilize trigger");
+        };
+        assert_eq!(
+            mobilize.trigger,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0,
+            }
+        );
+        let [SpellEffectKind::CreateAttackingTokens {
+            token,
+            count,
+            sacrifice_timing,
+        }] = mobilize.effect.as_slice()
+        else {
+            panic!("unexpected mobilize payload: {:?}", mobilize.effect);
+        };
+        assert_eq!(token, "warrior_r_1_1");
+        assert!(matches!(
+            count,
+            Amount::Count(CountExpression::GraveyardCards {
+                owners: RelativePlayerSet::Controller,
+                filter: Some(ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::Creature),
+                    ..
+                }),
+            })
+        ));
+        assert_eq!(
+            *sacrifice_timing,
+            Some(DelayedTokenSacrificeTiming::NextEndStep)
+        );
+
+        let permanent_card = ZoneCardFilter {
+            excluded_card_types: vec![CardTypeFilter::Instant, CardTypeFilter::Sorcery],
+            ..ZoneCardFilter::default()
+        };
+        let coati = normal_card_with_oracle_id(
+            "535f9bc6-9a07-4850-91eb-c00d06633e7e",
+            "Coati Scavenger",
+            "{2}{G}",
+            "Creature — Raccoon",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return target permanent card from your graveyard to your hand.",
+            Some(("3", "2")),
+        );
+        let generated = evaluate_fresh(&coati).expect("Coati Scavenger should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        let [descend] = raw.triggered_abilities.as_slice() else {
+            panic!("Coati must emit one descend trigger");
+        };
+        assert_eq!(descend.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            descend.intervening_if,
+            Some(GameCondition::GraveyardAggregate {
+                owners: RelativePlayerSet::Controller,
+                aggregate: GraveyardAggregate::CardCount,
+                filter: Some(permanent_card),
+                min: Some(4),
+                max: None,
+            })
+        );
+        let targeting = descend.targeting.as_ref().expect("one target group");
+        assert_eq!((targeting.groups[0].min, targeting.groups[0].max), (1, 1));
+        assert!(matches!(
+            descend.effect.as_slice(),
+            [SpellEffectKind::MoveGraveyardCards {
+                destination: GraveyardDestination::Hand,
+                ..
+            }]
+        ));
+
+        let council = normal_card_with_oracle_id(
+            "7b513bd0-27df-45f3-a85f-1f0aba3cae48",
+            "Council of Echoes",
+            "{4}{U}{U}",
+            "Creature — Spirit Advisor",
+            "Flying\nDescend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return up to one target nonland permanent other than this creature to its owner's hand.",
+            Some(("4", "4")),
+        );
+        let generated = evaluate_fresh(&council).expect("Council of Echoes should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.keywords, [Keyword::Flying]);
+        let [descend] = raw.triggered_abilities.as_slice() else {
+            panic!("Council must emit one descend trigger");
+        };
+        let [SpellEffectKind::ReturnToOwnersHand {
+            subject: EffectSubject::Chosen(target),
+        }] = descend.effect.as_slice()
+        else {
+            panic!("unexpected Council payload: {:?}", descend.effect);
+        };
+        assert_eq!(target.kind, TargetKind::AnyPermanent);
+        assert_eq!(target.excluded_permanent_types, [PermanentTypeFilter::Land]);
+        assert_eq!(target.excluded_objects, [TargetObjectExclusion::Source]);
+        let targeting = descend.targeting.as_ref().expect("one target group");
+        assert_eq!((targeting.groups[0].min, targeting.groups[0].max), (0, 1));
+
+        let tidecaller = normal_card_with_oracle_id(
+            "e75e40a5-a9ae-4789-96c1-0e19d1ce59c5",
+            "Tidecaller Mentor",
+            "{1}{U}{B}",
+            "Creature — Rat Wizard",
+            "Menace\nThreshold — When this creature enters, if there are seven or more cards in your graveyard, return up to one target nonland permanent to its owner's hand.",
+            Some(("3", "3")),
+        );
+        let generated = evaluate_fresh(&tidecaller).expect("Tidecaller Mentor should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.keywords, [Keyword::Menace]);
+        let [threshold] = raw.triggered_abilities.as_slice() else {
+            panic!("Tidecaller must emit one threshold trigger");
+        };
+        assert_eq!(
+            threshold.intervening_if,
+            Some(GameCondition::GraveyardAggregate {
+                owners: RelativePlayerSet::Controller,
+                aggregate: GraveyardAggregate::CardCount,
+                filter: None,
+                min: Some(7),
+                max: None,
+            })
+        );
+        let [SpellEffectKind::ReturnToOwnersHand {
+            subject: EffectSubject::Chosen(target),
+        }] = threshold.effect.as_slice()
+        else {
+            panic!("unexpected Tidecaller payload: {:?}", threshold.effect);
+        };
+        assert!(target.excluded_objects.is_empty());
+        let targeting = threshold.targeting.as_ref().expect("one target group");
+        assert_eq!((targeting.groups[0].min, targeting.groups[0].max), (0, 1));
+    }
+
+    #[test]
+    fn issue_375_blocked_identities_and_surface_drift_stay_unsupported() {
+        let blocked = [
+            normal_card_with_oracle_id(
+                "b047cd3f-9129-41cc-8b91-b0dc970f5068",
+                "Brilliance Unleashed",
+                "{4}{U}{R}",
+                "Sorcery",
+                "Choose one or both —\n• Brilliance Unleashed deals 5 damage to target creature.\n• Choose target artifact card in your graveyard. Return it to the battlefield if it's an artifact creature card. Otherwise, return it to the battlefield and it's a 3/3 Robot artifact creature with flying.",
+                None,
+            ),
+            normal_card_with_oracle_id(
+                "77eb76cf-a361-44e0-aeee-e8ef4b695799",
+                "Persistent Marshstalker",
+                "{1}{B}",
+                "Creature — Rat Berserker",
+                "This creature gets +1/+0 for each other Rat you control.\nThreshold — Whenever you attack with one or more Rats, if there are seven or more cards in your graveyard, you may pay {2}{B}. If you do, return this card from your graveyard to the battlefield tapped and attacking.",
+                Some(("3", "1")),
+            ),
+            normal_card_with_oracle_id(
+                "0a094c5f-cefb-4ba1-90c8-dd78ae8efe95",
+                "Kaya, Spirits' Justice",
+                "{2}{W}{B}",
+                "Legendary Planeswalker — Kaya",
+                "Whenever one or more creatures you control and/or creature cards in your graveyard are put into exile, you may choose a creature card from among them. Until end of turn, target token you control becomes a copy of it, except it has flying.\n+2: Surveil 2, then exile a card from a graveyard.\n+1: Create a 1/1 white and black Spirit creature token with flying.\n-2: Exile target creature you control. For each other player, exile up to one target creature that player controls.",
+                None,
+            ),
+            normal_card_with_oracle_id(
+                "e04560ea-f2bd-4cb7-8f65-3aa0dd58fbdf",
+                "Likeness Looter",
+                "{U}{B}",
+                "Creature — Faerie Shapeshifter",
+                "Flying\n{T}: Draw a card, then discard a card.\n{X}: This creature becomes a copy of target creature card in your graveyard with mana value X, except it has flying and this ability. Activate only as a sorcery.",
+                Some(("1", "1")),
+            ),
+            normal_card_with_oracle_id(
+                "e3559565-0512-4525-addb-bf27903bcd13",
+                "Night Nurse, Healer of Heroes",
+                "{1}{W}",
+                "Legendary Creature — Human Doctor Hero",
+                "Flash\nLifelink\nWhen Night Nurse enters, choose target permanent card in your graveyard that was put there from anywhere this turn. Return it to your hand.",
+                Some(("2", "1")),
+            ),
+            normal_card_with_oracle_id(
+                "a728685f-8670-4db2-ae02-3cf74eb3c402",
+                "Ran and Shaw",
+                "{3}{R}{R}",
+                "Legendary Creature — Dragon",
+                "Flying, firebending 2\nWhen Ran and Shaw enter, if you cast them and there are three or more Dragon and/or Lesson cards in your graveyard, create a token that's a copy of Ran and Shaw, except it's not legendary.\n{3}{R}: Dragons you control get +2/+0 until end of turn.",
+                Some(("4", "4")),
+            ),
+            normal_card_with_oracle_id(
+                "e468f1fe-d99c-4034-a94f-91c41a129092",
+                "Squirming Emergence",
+                "{1}{B}{G}",
+                "Sorcery",
+                "Fathomless descent — Return to the battlefield target nonland permanent card in your graveyard with mana value less than or equal to the number of permanent cards in your graveyard.",
+                None,
+            ),
+            normal_card_with_oracle_id(
+                "e50fecff-8872-42f5-8882-41ad13d9d1ae",
+                "Too Evil to Stay Dead",
+                "{2}{B}",
+                "Sorcery",
+                "Teamwork 4 (As an additional cost to cast this spell, you may tap any number of creatures you control with total power 4 or more.)\nChoose target creature card in your graveyard with mana value 4 or less. If this spell was cast using teamwork, instead choose target creature card in your graveyard. Return the chosen card to the battlefield.",
+                None,
+            ),
+        ];
+        for card in blocked {
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "blocked identity qualified for generation: {}",
+                card["name"]
+            );
+        }
+
+        // A drifted Power/Toughness on a reviewed identity fails the whole-card surface gate even
+        // though every clause still matches its recipe.
+        let drifted = normal_card_with_oracle_id(
+            "158d0272-a850-4399-8afa-d0caa143c3cb",
+            "Avenger of the Fallen",
+            "{2}{B}",
+            "Creature — Human Warrior",
+            "Deathtouch\nMobilize X, where X is the number of creature cards in your graveyard. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+            Some(("3", "4")),
+        );
+        assert!(
+            evaluate_fresh(&drifted).is_err(),
+            "surface drift on a retained identity must fail closed"
         );
     }
 

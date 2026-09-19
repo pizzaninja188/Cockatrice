@@ -511,5 +511,7 @@ mod issue_363_generated_dragonstorm_cohort;
 mod issue_371_graveyard_count_tokens;
 #[path = "scenario/issue_373_graveyard_count_resolution.rs"]
 mod issue_373_graveyard_count_resolution;
+#[path = "scenario/issue_375_graveyard_return.rs"]
+mod issue_375_graveyard_return;
 #[path = "scenario/issue_377_graveyard_static_conditions.rs"]
 mod issue_377_graveyard_static_conditions;

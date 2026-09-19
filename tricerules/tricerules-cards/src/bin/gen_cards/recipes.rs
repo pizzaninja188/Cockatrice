@@ -2,19 +2,20 @@ use tricerules_cards::primitives::{
     ActivationLimit, BattlefieldAggregate, BattlefieldCreatureCountFilter,
     BattlefieldPermanentFilter, CardResultAction, CardResultFilter, CardResultSource,
     CardTypeFilter, CombatRestriction, CombatRestrictionScope, CombatRole, ConditionPlayerSet,
-    CountExpression, CreatureScopeController, CreatureScopeFilter, DiscardQuantity,
-    DrawDiscardOrder, EffectSubject, EntersTappedAffected, EntersWithCountersAffected, EntryCost,
-    EventZone, GameCondition, GraveyardAggregate, GraveyardDestination, GraveyardFilter,
-    GraveyardOwner, HandCardAction, HandCardChooser, HandChoiceVisibility, LibraryPlacement,
-    LifeAmount, LifeChangeKind, ObjectContributionKind, ObjectPaymentConstraint,
-    PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerQuantifier,
-    PlayerRecipient, PowerComparison, PowerToughnessCharacteristic, PtScale, PtScaleBasis,
-    QuantityTerm, RelativePlayerSet, ResolutionBranchDef, ResolutionBranchRequirement,
-    ResolutionBranchSelection, ResolutionCost, SearchDestination, SearchZoneSelection,
-    SpellCastFilter, SpellCostModifier, SpellManaSpentComparison, StackSpellFilter,
-    StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
-    TargetMatchFilter, TargetObjectExclusion, TargetingDef, TargetingSourceFilter,
-    TypeLineAddition, ZoneCardFilter, ZoneEventCardinality, ZoneEventDestination,
+    CountExpression, CreatureScopeController, CreatureScopeFilter, DelayedTokenSacrificeTiming,
+    DiscardQuantity, DrawDiscardOrder, EffectSubject, EntersTappedAffected,
+    EntersWithCountersAffected, EntryCost, EventZone, FaceChangeAction, GameCondition,
+    GraveyardAggregate, GraveyardDestination, GraveyardFilter, GraveyardOwner, HandCardAction,
+    HandCardChooser, HandChoiceVisibility, LibraryPlacement, LifeAmount, LifeChangeKind,
+    ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter,
+    PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient, PowerComparison,
+    PowerToughnessCharacteristic, PtScale, PtScaleBasis, QuantityTerm, RelativePlayerSet,
+    ResolutionBranchDef, ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost,
+    SearchDestination, SearchZoneSelection, SpellCastFilter, SpellCostModifier,
+    SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter,
+    TargetGroupDef, TargetKind, TargetMatchFilter, TargetObjectExclusion, TargetingDef,
+    TargetingSourceFilter, TypeLineAddition, ZoneCardFilter, ZoneEventCardinality,
+    ZoneEventDestination,
 };
 use tricerules_cards::{
     external_oracle_lines, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
@@ -2955,6 +2956,62 @@ pub(super) fn issue_373_card_surface_is_exact(
         "f780d6f6-540b-4773-8a48-e56e95c2d39e" => ("Lasyd Prowler", "{2}{G}{G}", "Creature — Snake Ranger", "When this creature enters, you may mill cards equal to the number of lands you control.\nRenew — {1}{G}, Exile this card from your graveyard: Put X +1/+1 counters on target creature, where X is the number of land cards in your graveyard. Activate only as a sorcery.", Some("5"), Some("5")),
         // Wickerfolk Thresher
         "fa6d7d68-34e3-4ff6-ae6c-36848974555a" => ("Wickerfolk Thresher", "{3}{G}", "Artifact Creature — Scarecrow", "Delirium — Whenever this creature attacks, if there are four or more card types among cards in your graveyard, look at the top card of your library. If it's a land card, you may put it onto the battlefield. If you don't put the card onto the battlefield, put it into your hand.", Some("5"), Some("4")),
+        _ => return true,
+    };
+    (name, mana_cost, type_line, oracle_text, power, toughness)
+        == (
+            expected.0, expected.1, expected.2, expected.3, expected.4, expected.5,
+        )
+}
+
+/// Issue #375 retained identities. Generation stays fail-closed if any reviewed printing's whole
+/// surface drifts (including a Power/Toughness errata the clause recipes cannot observe).
+pub(super) fn issue_375_card_surface_is_exact(
+    oracle_id: &str,
+    name: &str,
+    mana_cost: &str,
+    type_line: &str,
+    oracle_text: &str,
+    power: Option<&str>,
+    toughness: Option<&str>,
+) -> bool {
+    let expected = match oracle_id {
+        // Avenger of the Fallen
+        "158d0272-a850-4399-8afa-d0caa143c3cb" => (
+            "Avenger of the Fallen",
+            "{2}{B}",
+            "Creature — Human Warrior",
+            "Deathtouch\nMobilize X, where X is the number of creature cards in your graveyard. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+            Some("2"),
+            Some("4"),
+        ),
+        // Coati Scavenger
+        "535f9bc6-9a07-4850-91eb-c00d06633e7e" => (
+            "Coati Scavenger",
+            "{2}{G}",
+            "Creature — Raccoon",
+            ISSUE_375_COATI_CLAUSE,
+            Some("3"),
+            Some("2"),
+        ),
+        // Council of Echoes
+        "7b513bd0-27df-45f3-a85f-1f0aba3cae48" => (
+            "Council of Echoes",
+            "{4}{U}{U}",
+            "Creature — Spirit Advisor",
+            "Flying\nDescend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return up to one target nonland permanent other than this creature to its owner's hand.",
+            Some("4"),
+            Some("4"),
+        ),
+        // Tidecaller Mentor
+        "e75e40a5-a9ae-4789-96c1-0e19d1ce59c5" => (
+            "Tidecaller Mentor",
+            "{1}{U}{B}",
+            "Creature — Rat Wizard",
+            "Menace\nThreshold — When this creature enters, if there are seven or more cards in your graveyard, return up to one target nonland permanent to its owner's hand.",
+            Some("3"),
+            Some("3"),
+        ),
         _ => return true,
     };
     (name, mana_cost, type_line, oracle_text, power, toughness)
@@ -11707,6 +11764,296 @@ fn match_spell_create_horror_tapped_cast_from_graveyard_scales(
     })
 }
 
+// ---------------------------------------------------------------------------
+// Issue #375 — graveyard return, reanimate, transform, and copy cohort.
+//
+// Every matcher binds the complete normalized Oracle line and a reviewed Oracle identity, so
+// identical text on an unreviewed identity stays unsupported. The descend/threshold gates reuse
+// the shipped `GraveyardAggregate` condition and the `CountExpression::GraveyardCards` count;
+// the transform surfaces reuse `ChangeSourceFace`; mobilize reuses `CreateAttackingTokens`.
+// ---------------------------------------------------------------------------
+
+const ISSUE_375_REVIEWED_ORACLE_IDS: &[&str] = &[
+    "158d0272-a850-4399-8afa-d0caa143c3cb", // Avenger of the Fallen
+    "535f9bc6-9a07-4850-91eb-c00d06633e7e", // Coati Scavenger
+    "7b513bd0-27df-45f3-a85f-1f0aba3cae48", // Council of Echoes
+    "3b102ccc-7629-457c-aba6-e9b00fd50c85", // Emet-Selch, Unsundered // Hades, Sorcerer of Eld
+    "16182e01-22ff-4786-985d-919b47c4aa4d", // Matzalantli, the Great Door // The Core
+    "1f57a9f1-6b95-4395-bdf0-c5289b786ab1", // The Everflowing Well // The Myriad Pools
+    "e75e40a5-a9ae-4789-96c1-0e19d1ce59c5", // Tidecaller Mentor
+];
+
+fn issue_375_context_is_reviewed(context: &RecipeContext) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        .is_none_or(|oracle_id| ISSUE_375_REVIEWED_ORACLE_IDS.contains(&oracle_id))
+}
+
+const ISSUE_375_COATI_CLAUSE: &str = "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return target permanent card from your graveyard to your hand.";
+const ISSUE_375_COUNCIL_CLAUSE: &str = "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return up to one target nonland permanent other than this creature to its owner's hand.";
+const ISSUE_375_TIDECALLER_CLAUSE: &str = "Threshold — When this creature enters, if there are seven or more cards in your graveyard, return up to one target nonland permanent to its owner's hand.";
+const ISSUE_375_EVERFLOWING_CLAUSE: &str = "Descend 8 — At the beginning of your upkeep, if there are eight or more permanent cards in your graveyard, transform The Everflowing Well.";
+const ISSUE_375_EMET_SELCH_CLAUSE: &str = "At the beginning of your upkeep, if there are fourteen or more cards in your graveyard, you may transform Emet-Selch.";
+const ISSUE_375_MATZALANTLI_CLAUSE: &str = "{4}, {T}: Transform Matzalantli. Activate only if there are four or more permanent types among cards in your graveyard. (Artifact, battle, creature, enchantment, land, and planeswalker are permanent types.)";
+const ISSUE_375_AVENGER_CLAUSE: &str = "Mobilize X, where X is the number of creature cards in your graveyard. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)";
+
+/// R1 (CR 603.6a / 404.2 / 400.7): Coati Scavenger's descend-4 entry trigger returns one
+/// permanent card from the controller's public graveyard to hand. The gate and the card filter
+/// share the shipped excluded-card-types permanent predicate. Coati Scavenger is the only exact
+/// full-corpus printing of this clause (verified against the pinned bulk corpus); the wider
+/// "return target permanent card ..." tail also prints on eight other cards with different
+/// conditions, so the complete line is required.
+fn match_triggered_etb_descend_4_return_target_permanent_card_to_hand(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_375_context_is_reviewed(context)
+        && context.source_is_creature
+        && text == ISSUE_375_COATI_CLAUSE)
+        .then(|| {
+            let permanent_card = issue_373_permanent_card_filter();
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability(
+                context,
+                SpellEffectKind::MoveGraveyardCards {
+                    filter: GraveyardFilter {
+                        excluded_objects: Vec::new(),
+                        owner: GraveyardOwner::Controller,
+                        card: Some(permanent_card.clone()),
+                    },
+                    destination: GraveyardDestination::Hand,
+                    linked_exile_id: None,
+                },
+            ) else {
+                unreachable!("triggered_ability always returns a triggered ability")
+            };
+            ability.intervening_if = Some(issue_373_graveyard_threshold(
+                GraveyardAggregate::CardCount,
+                Some(permanent_card),
+                4,
+            ));
+            ability.targeting = Some(exact_targeting(
+                1,
+                1,
+                "Choose target permanent card from your graveyard",
+                vec![0],
+            ));
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
+/// R2 (CR 603.6a / 404.2 / 115.1): Council of Echoes' descend-4 entry trigger returns up to one
+/// nonland permanent other than the source to its owner's hand. The `excluded_objects` binding
+/// keeps "other than this creature" generation-scoped. Council of Echoes is the only exact
+/// full-corpus printing of this clause (verified).
+fn match_triggered_etb_descend_4_return_up_to_one_nonland_permanent_to_hand(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_375_context_is_reviewed(context)
+        && context.source_is_creature
+        && text == ISSUE_375_COUNCIL_CLAUSE)
+        .then(|| {
+            let target = TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                excluded_objects: vec![TargetObjectExclusion::Source],
+                excluded_permanent_types: vec![PermanentTypeFilter::Land],
+                ..TargetFilter::default()
+            };
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfEntersBattlefield,
+                vec![SpellEffectKind::ReturnToOwnersHand {
+                    subject: EffectSubject::Chosen(Box::new(target)),
+                }],
+            ) else {
+                unreachable!("triggered_ability_with always returns a triggered ability")
+            };
+            ability.intervening_if = Some(issue_373_graveyard_threshold(
+                GraveyardAggregate::CardCount,
+                Some(issue_373_permanent_card_filter()),
+                4,
+            ));
+            ability.targeting = Some(exact_targeting(
+                0,
+                1,
+                "Choose up to one target nonland permanent",
+                vec![0],
+            ));
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
+/// R3 (CR 603.6a / 404.2): Tidecaller Mentor's threshold entry trigger returns up to one nonland
+/// permanent to its owner's hand. The gate is the unfiltered seven-card threshold count, and the
+/// printed clause has no source exclusion. Tidecaller Mentor is the only exact full-corpus
+/// printing of this clause (verified).
+fn match_triggered_etb_threshold_7_return_up_to_one_nonland_permanent_to_hand(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_375_context_is_reviewed(context)
+        && context.source_is_creature
+        && text == ISSUE_375_TIDECALLER_CLAUSE)
+        .then(|| {
+            let target = TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                excluded_permanent_types: vec![PermanentTypeFilter::Land],
+                ..TargetFilter::default()
+            };
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfEntersBattlefield,
+                vec![SpellEffectKind::ReturnToOwnersHand {
+                    subject: EffectSubject::Chosen(Box::new(target)),
+                }],
+            ) else {
+                unreachable!("triggered_ability_with always returns a triggered ability")
+            };
+            ability.intervening_if = Some(issue_373_graveyard_threshold(
+                GraveyardAggregate::CardCount,
+                None,
+                7,
+            ));
+            ability.targeting = Some(exact_targeting(
+                0,
+                1,
+                "Choose up to one target nonland permanent",
+                vec![0],
+            ));
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
+/// R4 (CR 701.27 / 603.4 / 404.2): The Everflowing Well's descend-8 upkeep trigger transforms
+/// the artifact source. The intervening-if re-checks the permanent-card graveyard count on
+/// resolution. The Everflowing Well is the only exact full-corpus printing of this clause
+/// (verified).
+fn match_triggered_upkeep_descend_8_transform_self(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_375_context_is_reviewed(context)
+        && context.source_is_artifact
+        && text == ISSUE_375_EVERFLOWING_CLAUSE)
+        .then(|| {
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+                context,
+                TriggerCondition::AtBeginningOfUpkeep {
+                    player: CastTriggerPlayer::Controller,
+                },
+                vec![SpellEffectKind::ChangeSourceFace {
+                    action: FaceChangeAction::Transform,
+                }],
+            ) else {
+                unreachable!("triggered_ability_with always returns a triggered ability")
+            };
+            ability.intervening_if = Some(issue_373_graveyard_threshold(
+                GraveyardAggregate::CardCount,
+                Some(issue_373_permanent_card_filter()),
+                8,
+            ));
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
+/// R5 (CR 701.27 / 603.4 / 404.2): Emet-Selch's fourteen-card upkeep trigger optionally
+/// transforms the creature source; the may choice stays a logged resolution decision. The
+/// printed gate counts every card, not only permanent cards. Emet-Selch is the only exact
+/// full-corpus printing of this clause (verified).
+fn match_triggered_upkeep_graveyard_card_count_14_transform_self_may(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_375_context_is_reviewed(context)
+        && context.source_is_creature
+        && text == ISSUE_375_EMET_SELCH_CLAUSE)
+        .then(|| {
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+                context,
+                TriggerCondition::AtBeginningOfUpkeep {
+                    player: CastTriggerPlayer::Controller,
+                },
+                vec![SpellEffectKind::ChangeSourceFace {
+                    action: FaceChangeAction::Transform,
+                }],
+            ) else {
+                unreachable!("triggered_ability_with always returns a triggered ability")
+            };
+            ability.may = true;
+            ability.intervening_if = Some(issue_373_graveyard_threshold(
+                GraveyardAggregate::CardCount,
+                None,
+                14,
+            ));
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
+/// R6 (CR 602.5 / 701.27 / 404.2): Matzalantli's `{4}, {T}` activation transforms the artifact
+/// only while four or more permanent types are among the controller's graveyard cards. The
+/// condition is the shipped `DistinctCardTypes` aggregate, so an activation with an unmet gate
+/// cannot begin. Matzalantli is the only exact full-corpus printing of this clause (verified).
+fn match_activated_transform_graveyard_distinct_permanent_types_4(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_375_context_is_reviewed(context)
+        && context.source_is_artifact
+        && text == ISSUE_375_MATZALANTLI_CLAUSE)
+        .then(|| {
+            RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+                ability_id: context.activated_ability_id.clone(),
+                presentation: context.presentation.clone(),
+                cost_modifiers: Vec::new(),
+                source_zone: AbilitySourceZone::Battlefield,
+                costs: vec![
+                    AbilityCost::Mana(ManaCost::parse("{4}").expect("printed mana cost")),
+                    AbilityCost::Tap,
+                ],
+                effect: vec![SpellEffectKind::ChangeSourceFace {
+                    action: FaceChangeAction::Transform,
+                }],
+                targeting: None,
+                timing: ActivationTiming::Normal,
+                conditions: vec![issue_373_graveyard_threshold(
+                    GraveyardAggregate::DistinctCardTypes,
+                    Some(issue_373_permanent_card_filter()),
+                    4,
+                )],
+                activation_limit: None,
+            })
+        })
+}
+
+/// R9 (CR 702.181 / 508.4 / 404.2): the mobilize-X keyword line's attack trigger creates one
+/// registered 1/1 red Warrior token for each creature card in the controller's public graveyard,
+/// sacrificed at the next end step. Mobilize is not a standalone keyword; the shipped fixed
+/// mobilize cards author this trigger shape by hand. Avenger of the Fallen is the only exact
+/// full-corpus printing of this clause (verified; Devoted Mardu uses a devotion count and
+/// Infantry Shield prints the granted-creature form).
+fn match_keyword_mobilize_x_graveyard_creature_cards(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (issue_375_context_is_reviewed(context)
+        && context.source_is_creature
+        && text == ISSUE_375_AVENGER_CLAUSE)
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                },
+                vec![SpellEffectKind::CreateAttackingTokens {
+                    token: "warrior_r_1_1".into(),
+                    count: issue_373_graveyard_count(Some(graveyard_creature_card_filter())),
+                    sacrifice_timing: Some(DelayedTokenSacrificeTiming::NextEndStep),
+                }],
+            )
+        })
+}
+
 pub(super) static CATALOG: &[Recipe] = &[
     Recipe {
         id: RecipeId("static.cost_reduction.affinity_artifacts"),
@@ -18218,6 +18565,145 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create three of those tokens.",
             "Create a tapped 2/2 black Horror creature token. If this spell was cast from a graveyard, instead create X of those tokens, where X is the number of creature cards in your graveyard.",
             "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create X of those tokens, where X is the number of creature cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.descend_4.return_target_permanent_card_to_hand"),
+        label: "descend-4 ETB return a permanent card to hand",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_triggered_etb_descend_4_return_target_permanent_card_to_hand,
+        // Coati Scavenger is the only exact full-corpus printing (verified). The eight other
+        // printings of the "return target permanent card" tail use different conditions.
+        calibration: singleton_calibrations!(
+            "Coati Scavenger" => "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return target permanent card from your graveyard to your hand.";
+            // Five instead of four, an up-to-one bound, a creature-card filter, an opponent's
+            // graveyard, a battlefield destination, a missing ability word, and an appended
+            // instruction stay unsupported.
+            "Descend 4 — When this creature enters, if there are five or more permanent cards in your graveyard, return target permanent card from your graveyard to your hand.",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return up to one target permanent card from your graveyard to your hand.",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return target creature card from your graveyard to your hand.",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return target permanent card from an opponent's graveyard to your hand.",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, put target permanent card from your graveyard onto the battlefield.",
+            "When this creature enters, if there are four or more permanent cards in your graveyard, return target permanent card from your graveyard to your hand.",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return target permanent card from your graveyard to your hand. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.descend_4.return_up_to_one_nonland_permanent_to_hand"),
+        label: "descend-4 ETB return up to one nonland permanent to hand",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_triggered_etb_descend_4_return_up_to_one_nonland_permanent_to_hand,
+        // Council of Echoes is the only exact full-corpus printing (verified).
+        calibration: singleton_calibrations!(
+            "Council of Echoes" => "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return up to one target nonland permanent other than this creature to its owner's hand.";
+            // A missing source exclusion, a mandatory target, an opponent-controlled
+            // restriction, a land-permitting filter, a missing ability word, and an appended
+            // instruction stay unsupported.
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return up to one target nonland permanent to its owner's hand.",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return target nonland permanent other than this creature to its owner's hand.",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return up to one target nonland permanent an opponent controls to its owner's hand.",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return up to one target permanent other than this creature to its owner's hand.",
+            "When this creature enters, if there are four or more permanent cards in your graveyard, return up to one target nonland permanent other than this creature to its owner's hand.",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return up to one target nonland permanent other than this creature to its owner's hand. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.threshold_7.return_up_to_one_nonland_permanent_to_hand"),
+        label: "threshold-7 ETB return up to one nonland permanent to hand",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_triggered_etb_threshold_7_return_up_to_one_nonland_permanent_to_hand,
+        // Tidecaller Mentor is the only exact full-corpus printing (verified). The wider tail
+        // also prints on Monk Class, Psychic Pickpocket, and Spider-Byte with different text.
+        calibration: singleton_calibrations!(
+            "Tidecaller Mentor" => "Threshold — When this creature enters, if there are seven or more cards in your graveyard, return up to one target nonland permanent to its owner's hand.";
+            // Six or eight cards, the descend four-permanent form, a mandatory target, a
+            // creature restriction, a missing ability word, and an appended instruction stay
+            // unsupported.
+            "Threshold — When this creature enters, if there are six or more cards in your graveyard, return up to one target nonland permanent to its owner's hand.",
+            "Threshold — When this creature enters, if there are eight or more cards in your graveyard, return up to one target nonland permanent to its owner's hand.",
+            "Threshold — When this creature enters, if there are four or more permanent cards in your graveyard, return up to one target nonland permanent to its owner's hand.",
+            "Threshold — When this creature enters, if there are seven or more cards in your graveyard, return target nonland permanent to its owner's hand.",
+            "Threshold — When this creature enters, if there are seven or more cards in your graveyard, return up to one target creature to its owner's hand.",
+            "When this creature enters, if there are seven or more cards in your graveyard, return up to one target nonland permanent to its owner's hand.",
+            "Threshold — When this creature enters, if there are seven or more cards in your graveyard, return up to one target nonland permanent to its owner's hand. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.upkeep.descend_8.graveyard_permanent_cards.transform_self"),
+        label: "descend-8 upkeep transform this artifact",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_triggered_upkeep_descend_8_transform_self,
+        // The Everflowing Well is the only exact full-corpus printing (verified).
+        calibration: singleton_calibrations!(
+            "The Everflowing Well" => "Descend 8 — At the beginning of your upkeep, if there are eight or more permanent cards in your graveyard, transform The Everflowing Well.";
+            // Seven cards, a permanent-type count, a nonland filter, the optional wording, an end
+            // step instead of upkeep, a missing ability word, and an appended instruction stay
+            // unsupported.
+            "Descend 8 — At the beginning of your upkeep, if there are seven or more permanent cards in your graveyard, transform The Everflowing Well.",
+            "Descend 8 — At the beginning of your upkeep, if there are eight or more permanent types among cards in your graveyard, transform The Everflowing Well.",
+            "Descend 8 — At the beginning of your upkeep, if there are eight or more nonland permanent cards in your graveyard, transform The Everflowing Well.",
+            "Descend 8 — At the beginning of your upkeep, if there are eight or more permanent cards in your graveyard, you may transform The Everflowing Well.",
+            "Descend 8 — At the beginning of your end step, if there are eight or more permanent cards in your graveyard, transform The Everflowing Well.",
+            "At the beginning of your upkeep, if there are eight or more permanent cards in your graveyard, transform The Everflowing Well.",
+            "Descend 8 — At the beginning of your upkeep, if there are eight or more permanent cards in your graveyard, transform The Everflowing Well. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.upkeep.graveyard_card_count_14.transform_self_may"),
+        label: "fourteen-card upkeep optionally transform this creature",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_triggered_upkeep_graveyard_card_count_14_transform_self_may,
+        // Emet-Selch, Unsundered is the only exact full-corpus printing (verified).
+        calibration: singleton_calibrations!(
+            "Emet-Selch, Unsundered" => "At the beginning of your upkeep, if there are fourteen or more cards in your graveyard, you may transform Emet-Selch.";
+            // Thirteen cards, a permanent-card filter, the mandatory wording, an end step, a
+            // different transform subject, and an appended instruction stay unsupported.
+            "At the beginning of your upkeep, if there are thirteen or more cards in your graveyard, you may transform Emet-Selch.",
+            "At the beginning of your upkeep, if there are fourteen or more permanent cards in your graveyard, you may transform Emet-Selch.",
+            "At the beginning of your upkeep, if there are fourteen or more cards in your graveyard, transform Emet-Selch.",
+            "At the beginning of your end step, if there are fourteen or more cards in your graveyard, you may transform Emet-Selch.",
+            "At the beginning of your upkeep, if there are fourteen or more cards in your graveyard, you may transform another creature.",
+            "At the beginning of your upkeep, if there are fourteen or more cards in your graveyard, you may transform Emet-Selch. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.transform.graveyard_distinct_permanent_types_4"),
+        label: "transform while four permanent types are in the graveyard",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_transform_graveyard_distinct_permanent_types_4,
+        // Matzalantli, the Great Door is the only exact full-corpus printing (verified).
+        calibration: singleton_calibrations!(
+            "Matzalantli, the Great Door" => "{4}, {T}: Transform Matzalantli. Activate only if there are four or more permanent types among cards in your graveyard. (Artifact, battle, creature, enchantment, land, and planeswalker are permanent types.)";
+            // A card count instead of permanent types, three permanent types, a different mana
+            // cost, a sorcery-speed rider, a target subject, a missing reminder, and an appended
+            // instruction stay unsupported.
+            "{4}, {T}: Transform Matzalantli. Activate only if there are four or more cards in your graveyard. (Artifact, battle, creature, enchantment, land, and planeswalker are permanent types.)",
+            "{4}, {T}: Transform Matzalantli. Activate only if there are three or more permanent types among cards in your graveyard. (Artifact, battle, creature, enchantment, land, and planeswalker are permanent types.)",
+            "{3}, {T}: Transform Matzalantli. Activate only if there are four or more permanent types among cards in your graveyard. (Artifact, battle, creature, enchantment, land, and planeswalker are permanent types.)",
+            "{4}, {T}: Transform Matzalantli. Activate only if there are four or more permanent types among cards in your graveyard. (Artifact, battle, creature, enchantment, land, and planeswalker are permanent types.) Activate only as a sorcery.",
+            "{4}, {T}: Transform target permanent. Activate only if there are four or more permanent types among cards in your graveyard. (Artifact, battle, creature, enchantment, land, and planeswalker are permanent types.)",
+            "{4}, {T}: Transform Matzalantli. Activate only if there are four or more permanent types among cards in your graveyard.",
+            "{4}, {T}: Transform Matzalantli. Activate only if there are four or more permanent types among cards in your graveyard. (Artifact, battle, creature, enchantment, land, and planeswalker are permanent types.) Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("keyword.mobilize_x.graveyard_creature_cards"),
+        label: "mobilize X for each creature card in your graveyard",
+        surface: RecipeSurface::KeywordClause,
+        matcher: match_keyword_mobilize_x_graveyard_creature_cards,
+        // Avenger of the Fallen is the only exact full-corpus printing (verified); Devoted Mardu
+        // uses a devotion count and Infantry Shield prints the granted-creature form.
+        calibration: singleton_calibrations!(
+            "Avenger of the Fallen" => "Mobilize X, where X is the number of creature cards in your graveyard. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)";
+            // The fixed mobilize reminder, another graveyard cohort, permanent cards, a
+            // battlefield cohort, a missing reminder, and an appended instruction stay
+            // unsupported.
+            "Mobilize 2 (Whenever this creature attacks, create two tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+            "Mobilize X, where X is the number of creature cards in all graveyards. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+            "Mobilize X, where X is the number of permanent cards in your graveyard. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+            "Mobilize X, where X is the number of creatures you control. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+            "Mobilize X, where X is the number of creature cards in your graveyard.",
+            "Mobilize X, where X is the number of creature cards in your graveyard. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.) Draw a card."
         ),
     },
 ];
@@ -34241,5 +34727,477 @@ mod tests {
         assert_eq!(from_result.source, CardResultSource::PreviousEffect);
         assert_eq!(from_result.action, CardResultAction::Mill);
         assert_eq!(from_result.players, RelativePlayerSet::Controller);
+    }
+
+    fn issue_375_assert_identity_gate(clause: &str, is_spell: bool, oracle_id: &str) {
+        let mut reviewed = context();
+        reviewed.oracle_id = Some(oracle_id.into());
+        assert!(
+            match_clause(clause, is_spell, &reviewed)
+                .expect("reviewed clause must not be ambiguous")
+                .is_some(),
+            "reviewed Oracle identity must match: {oracle_id}"
+        );
+        let mut unreviewed = context();
+        unreviewed.oracle_id = Some("00000000-0000-0000-0000-000000000000".into());
+        assert!(
+            match_clause(clause, is_spell, &unreviewed)
+                .expect("unreviewed clause must not be ambiguous")
+                .is_none(),
+            "an unreviewed Oracle identity must stay unsupported"
+        );
+    }
+
+    fn issue_375_assert_negatives(negatives: &[&str]) {
+        for negative in negatives {
+            assert!(
+                match_clause(negative, false, &context())
+                    .expect("negative near-miss must not be ambiguous")
+                    .is_none(),
+                "negative near-miss was accepted: {negative}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_375_coati_descend_4_return_is_exact_and_fail_closed() {
+        let matched = match_clause(ISSUE_375_COATI_CLAUSE, false, &context())
+            .expect("Coati clause must not be ambiguous")
+            .expect("Coati clause must match its recipe");
+        assert_eq!(
+            matched.id.as_str(),
+            "triggered.etb.descend_4.return_target_permanent_card_to_hand"
+        );
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("Coati must emit one triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(!ability.may);
+        assert_eq!(
+            ability.intervening_if,
+            Some(issue_373_graveyard_threshold(
+                GraveyardAggregate::CardCount,
+                Some(issue_373_permanent_card_filter()),
+                4,
+            ))
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    excluded_objects: Vec::new(),
+                    owner: GraveyardOwner::Controller,
+                    card: Some(issue_373_permanent_card_filter()),
+                },
+                destination: GraveyardDestination::Hand,
+                linked_exile_id: None,
+            }]
+        );
+        let targeting = ability.targeting.as_ref().expect("one target group");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("Coati must have exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(
+            group.prompt,
+            "Choose target permanent card from your graveyard"
+        );
+        assert_eq!(group.effect_indices, [0]);
+
+        issue_375_assert_identity_gate(
+            ISSUE_375_COATI_CLAUSE,
+            false,
+            "535f9bc6-9a07-4850-91eb-c00d06633e7e",
+        );
+        issue_375_assert_negatives(&[
+            "Descend 4 — When this creature enters, if there are five or more permanent cards in your graveyard, return target permanent card from your graveyard to your hand.",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return up to one target permanent card from your graveyard to your hand.",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return target creature card from your graveyard to your hand.",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return target permanent card from an opponent's graveyard to your hand.",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, put target permanent card from your graveyard onto the battlefield.",
+            "When this creature enters, if there are four or more permanent cards in your graveyard, return target permanent card from your graveyard to your hand.",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return target permanent card from your graveyard to your hand. Draw a card.",
+        ]);
+
+        let mut noncreature = context();
+        noncreature.oracle_id = Some("535f9bc6-9a07-4850-91eb-c00d06633e7e".into());
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_375_COATI_CLAUSE, false, &noncreature)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the Coati ETB must stay bound to creature sources"
+        );
+        assert!(
+            match_clause(ISSUE_375_COATI_CLAUSE, true, &context())
+                .expect("spell surface must not be ambiguous")
+                .is_none(),
+            "the Coati clause must stay a triggered ability"
+        );
+    }
+
+    #[test]
+    fn issue_375_council_descend_4_bounce_is_exact_and_fail_closed() {
+        let matched = match_clause(ISSUE_375_COUNCIL_CLAUSE, false, &context())
+            .expect("Council clause must not be ambiguous")
+            .expect("Council clause must match its recipe");
+        assert_eq!(
+            matched.id.as_str(),
+            "triggered.etb.descend_4.return_up_to_one_nonland_permanent_to_hand"
+        );
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("Council must emit one triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(!ability.may);
+        assert_eq!(
+            ability.intervening_if,
+            Some(issue_373_graveyard_threshold(
+                GraveyardAggregate::CardCount,
+                Some(issue_373_permanent_card_filter()),
+                4,
+            ))
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::ReturnToOwnersHand {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    excluded_objects: vec![TargetObjectExclusion::Source],
+                    excluded_permanent_types: vec![PermanentTypeFilter::Land],
+                    ..TargetFilter::default()
+                })),
+            }]
+        );
+        let targeting = ability.targeting.as_ref().expect("one target group");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("Council must have exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (0, 1));
+        assert_eq!(group.effect_indices, [0]);
+
+        issue_375_assert_identity_gate(
+            ISSUE_375_COUNCIL_CLAUSE,
+            false,
+            "7b513bd0-27df-45f3-a85f-1f0aba3cae48",
+        );
+        issue_375_assert_negatives(&[
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return up to one target nonland permanent to its owner's hand.",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return target nonland permanent other than this creature to its owner's hand.",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return up to one target nonland permanent an opponent controls to its owner's hand.",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return up to one target permanent other than this creature to its owner's hand.",
+            "When this creature enters, if there are four or more permanent cards in your graveyard, return up to one target nonland permanent other than this creature to its owner's hand.",
+            "Descend 4 — When this creature enters, if there are four or more permanent cards in your graveyard, return up to one target nonland permanent other than this creature to its owner's hand. Draw a card.",
+        ]);
+
+        let mut noncreature = context();
+        noncreature.oracle_id = Some("7b513bd0-27df-45f3-a85f-1f0aba3cae48".into());
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_375_COUNCIL_CLAUSE, false, &noncreature)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the Council ETB must stay bound to creature sources"
+        );
+    }
+
+    #[test]
+    fn issue_375_tidecaller_threshold_7_bounce_is_exact_and_fail_closed() {
+        let matched = match_clause(ISSUE_375_TIDECALLER_CLAUSE, false, &context())
+            .expect("Tidecaller clause must not be ambiguous")
+            .expect("Tidecaller clause must match its recipe");
+        assert_eq!(
+            matched.id.as_str(),
+            "triggered.etb.threshold_7.return_up_to_one_nonland_permanent_to_hand"
+        );
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("Tidecaller must emit one triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert!(!ability.may);
+        assert_eq!(
+            ability.intervening_if,
+            Some(issue_373_graveyard_threshold(
+                GraveyardAggregate::CardCount,
+                None,
+                7,
+            ))
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::ReturnToOwnersHand {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    excluded_objects: Vec::new(),
+                    excluded_permanent_types: vec![PermanentTypeFilter::Land],
+                    ..TargetFilter::default()
+                })),
+            }]
+        );
+        let targeting = ability.targeting.as_ref().expect("one target group");
+        let [group] = targeting.groups.as_slice() else {
+            panic!("Tidecaller must have exactly one target group");
+        };
+        assert_eq!((group.min, group.max), (0, 1));
+        assert_eq!(group.effect_indices, [0]);
+
+        issue_375_assert_identity_gate(
+            ISSUE_375_TIDECALLER_CLAUSE,
+            false,
+            "e75e40a5-a9ae-4789-96c1-0e19d1ce59c5",
+        );
+        issue_375_assert_negatives(&[
+            "Threshold — When this creature enters, if there are six or more cards in your graveyard, return up to one target nonland permanent to its owner's hand.",
+            "Threshold — When this creature enters, if there are eight or more cards in your graveyard, return up to one target nonland permanent to its owner's hand.",
+            "Threshold — When this creature enters, if there are four or more permanent cards in your graveyard, return up to one target nonland permanent to its owner's hand.",
+            "Threshold — When this creature enters, if there are seven or more cards in your graveyard, return target nonland permanent to its owner's hand.",
+            "Threshold — When this creature enters, if there are seven or more cards in your graveyard, return up to one target creature to its owner's hand.",
+            "When this creature enters, if there are seven or more cards in your graveyard, return up to one target nonland permanent to its owner's hand.",
+            "Threshold — When this creature enters, if there are seven or more cards in your graveyard, return up to one target nonland permanent to its owner's hand. Draw a card.",
+        ]);
+
+        let mut noncreature = context();
+        noncreature.oracle_id = Some("e75e40a5-a9ae-4789-96c1-0e19d1ce59c5".into());
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_375_TIDECALLER_CLAUSE, false, &noncreature)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the Tidecaller ETB must stay bound to creature sources"
+        );
+    }
+
+    #[test]
+    fn issue_375_everflowing_descend_8_transform_is_exact_and_fail_closed() {
+        let matched = match_clause(ISSUE_375_EVERFLOWING_CLAUSE, false, &context())
+            .expect("Everflowing clause must not be ambiguous")
+            .expect("Everflowing clause must match its recipe");
+        assert_eq!(
+            matched.id.as_str(),
+            "triggered.upkeep.descend_8.graveyard_permanent_cards.transform_self"
+        );
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("Everflowing must emit one triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::AtBeginningOfUpkeep {
+                player: CastTriggerPlayer::Controller,
+            }
+        );
+        assert!(!ability.may);
+        assert_eq!(
+            ability.intervening_if,
+            Some(issue_373_graveyard_threshold(
+                GraveyardAggregate::CardCount,
+                Some(issue_373_permanent_card_filter()),
+                8,
+            ))
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::ChangeSourceFace {
+                action: FaceChangeAction::Transform,
+            }]
+        );
+
+        issue_375_assert_identity_gate(
+            ISSUE_375_EVERFLOWING_CLAUSE,
+            false,
+            "1f57a9f1-6b95-4395-bdf0-c5289b786ab1",
+        );
+        issue_375_assert_negatives(&[
+            "Descend 8 — At the beginning of your upkeep, if there are seven or more permanent cards in your graveyard, transform The Everflowing Well.",
+            "Descend 8 — At the beginning of your upkeep, if there are eight or more permanent types among cards in your graveyard, transform The Everflowing Well.",
+            "Descend 8 — At the beginning of your upkeep, if there are eight or more nonland permanent cards in your graveyard, transform The Everflowing Well.",
+            "Descend 8 — At the beginning of your upkeep, if there are eight or more permanent cards in your graveyard, you may transform The Everflowing Well.",
+            "Descend 8 — At the beginning of your end step, if there are eight or more permanent cards in your graveyard, transform The Everflowing Well.",
+            "At the beginning of your upkeep, if there are eight or more permanent cards in your graveyard, transform The Everflowing Well.",
+            "Descend 8 — At the beginning of your upkeep, if there are eight or more permanent cards in your graveyard, transform The Everflowing Well. Draw a card.",
+        ]);
+
+        let mut nonartifact = context();
+        nonartifact.oracle_id = Some("1f57a9f1-6b95-4395-bdf0-c5289b786ab1".into());
+        nonartifact.source_is_artifact = false;
+        assert!(
+            match_clause(ISSUE_375_EVERFLOWING_CLAUSE, false, &nonartifact)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the Everflowing transform must stay bound to artifact sources"
+        );
+    }
+
+    #[test]
+    fn issue_375_emet_selch_graveyard_14_transform_is_exact_and_fail_closed() {
+        let matched = match_clause(ISSUE_375_EMET_SELCH_CLAUSE, false, &context())
+            .expect("Emet-Selch clause must not be ambiguous")
+            .expect("Emet-Selch clause must match its recipe");
+        assert_eq!(
+            matched.id.as_str(),
+            "triggered.upkeep.graveyard_card_count_14.transform_self_may"
+        );
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("Emet-Selch must emit one triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::AtBeginningOfUpkeep {
+                player: CastTriggerPlayer::Controller,
+            }
+        );
+        assert!(ability.may);
+        assert_eq!(
+            ability.intervening_if,
+            Some(issue_373_graveyard_threshold(
+                GraveyardAggregate::CardCount,
+                None,
+                14,
+            ))
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::ChangeSourceFace {
+                action: FaceChangeAction::Transform,
+            }]
+        );
+
+        issue_375_assert_identity_gate(
+            ISSUE_375_EMET_SELCH_CLAUSE,
+            false,
+            "3b102ccc-7629-457c-aba6-e9b00fd50c85",
+        );
+        issue_375_assert_negatives(&[
+            "At the beginning of your upkeep, if there are thirteen or more cards in your graveyard, you may transform Emet-Selch.",
+            "At the beginning of your upkeep, if there are fourteen or more permanent cards in your graveyard, you may transform Emet-Selch.",
+            "At the beginning of your upkeep, if there are fourteen or more cards in your graveyard, transform Emet-Selch.",
+            "At the beginning of your end step, if there are fourteen or more cards in your graveyard, you may transform Emet-Selch.",
+            "At the beginning of your upkeep, if there are fourteen or more cards in your graveyard, you may transform another creature.",
+            "At the beginning of your upkeep, if there are fourteen or more cards in your graveyard, you may transform Emet-Selch. Draw a card.",
+        ]);
+    }
+
+    #[test]
+    fn issue_375_matzalantli_transform_is_exact_and_fail_closed() {
+        let matched = match_clause(ISSUE_375_MATZALANTLI_CLAUSE, false, &context())
+            .expect("Matzalantli clause must not be ambiguous")
+            .expect("Matzalantli clause must match its recipe");
+        assert_eq!(
+            matched.id.as_str(),
+            "activated.transform.graveyard_distinct_permanent_types_4"
+        );
+        let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+            panic!("Matzalantli must emit one activated ability");
+        };
+        assert_eq!(ability.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(
+            ability.costs,
+            [
+                AbilityCost::Mana(ManaCost::parse("{4}").expect("printed mana cost")),
+                AbilityCost::Tap,
+            ]
+        );
+        assert_eq!(
+            ability.conditions,
+            [issue_373_graveyard_threshold(
+                GraveyardAggregate::DistinctCardTypes,
+                Some(issue_373_permanent_card_filter()),
+                4,
+            )]
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::ChangeSourceFace {
+                action: FaceChangeAction::Transform,
+            }]
+        );
+        assert_eq!(ability.timing, ActivationTiming::Normal);
+        assert!(ability.targeting.is_none());
+
+        issue_375_assert_identity_gate(
+            ISSUE_375_MATZALANTLI_CLAUSE,
+            false,
+            "16182e01-22ff-4786-985d-919b47c4aa4d",
+        );
+        issue_375_assert_negatives(&[
+            "{4}, {T}: Transform Matzalantli. Activate only if there are four or more cards in your graveyard. (Artifact, battle, creature, enchantment, land, and planeswalker are permanent types.)",
+            "{4}, {T}: Transform Matzalantli. Activate only if there are three or more permanent types among cards in your graveyard. (Artifact, battle, creature, enchantment, land, and planeswalker are permanent types.)",
+            "{3}, {T}: Transform Matzalantli. Activate only if there are four or more permanent types among cards in your graveyard. (Artifact, battle, creature, enchantment, land, and planeswalker are permanent types.)",
+            "{4}, {T}: Transform Matzalantli. Activate only if there are four or more permanent types among cards in your graveyard. (Artifact, battle, creature, enchantment, land, and planeswalker are permanent types.) Activate only as a sorcery.",
+            "{4}, {T}: Transform target permanent. Activate only if there are four or more permanent types among cards in your graveyard. (Artifact, battle, creature, enchantment, land, and planeswalker are permanent types.)",
+            "{4}, {T}: Transform Matzalantli. Activate only if there are four or more permanent types among cards in your graveyard.",
+            "{4}, {T}: Transform Matzalantli. Activate only if there are four or more permanent types among cards in your graveyard. (Artifact, battle, creature, enchantment, land, and planeswalker are permanent types.) Draw a card.",
+        ]);
+
+        let mut nonartifact = context();
+        nonartifact.oracle_id = Some("16182e01-22ff-4786-985d-919b47c4aa4d".into());
+        nonartifact.source_is_artifact = false;
+        assert!(
+            match_clause(ISSUE_375_MATZALANTLI_CLAUSE, false, &nonartifact)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "the Matzalantli transform must stay bound to artifact sources"
+        );
+    }
+
+    #[test]
+    fn issue_375_avenger_mobilize_x_is_exact_and_fail_closed() {
+        let matched = match_clause(ISSUE_375_AVENGER_CLAUSE, false, &context())
+            .expect("Avenger clause must not be ambiguous")
+            .expect("Avenger clause must match its recipe");
+        assert_eq!(
+            matched.id.as_str(),
+            "keyword.mobilize_x.graveyard_creature_cards"
+        );
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("Avenger mobilize must emit one triggered ability");
+        };
+        assert_eq!(
+            ability.trigger,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0,
+            }
+        );
+        assert_eq!(
+            ability.effect,
+            [SpellEffectKind::CreateAttackingTokens {
+                token: "warrior_r_1_1".into(),
+                count: issue_373_graveyard_count(Some(graveyard_creature_card_filter())),
+                sacrifice_timing: Some(DelayedTokenSacrificeTiming::NextEndStep),
+            }]
+        );
+
+        issue_375_assert_identity_gate(
+            ISSUE_375_AVENGER_CLAUSE,
+            false,
+            "158d0272-a850-4399-8afa-d0caa143c3cb",
+        );
+        issue_375_assert_negatives(&[
+            "Mobilize 2 (Whenever this creature attacks, create two tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+            "Mobilize X, where X is the number of creature cards in all graveyards. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+            "Mobilize X, where X is the number of permanent cards in your graveyard. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+            "Mobilize X, where X is the number of creatures you control. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+            "Mobilize X, where X is the number of creature cards in your graveyard.",
+            "Mobilize X, where X is the number of creature cards in your graveyard. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.) Draw a card.",
+        ]);
+
+        let mut nonspell_source = context();
+        nonspell_source.oracle_id = Some("158d0272-a850-4399-8afa-d0caa143c3cb".into());
+        nonspell_source.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_375_AVENGER_CLAUSE, false, &nonspell_source)
+                .expect("source-kind check must not be ambiguous")
+                .is_none(),
+            "mobilize must stay bound to creature sources"
+        );
+        assert!(
+            match_clause(ISSUE_375_AVENGER_CLAUSE, true, &{
+                let mut spell_face = context();
+                spell_face.source_is_creature = false;
+                spell_face
+            })
+            .expect("spell surface must not be ambiguous")
+            .is_none(),
+            "mobilize must stay off instant and sorcery faces"
+        );
     }
 }
