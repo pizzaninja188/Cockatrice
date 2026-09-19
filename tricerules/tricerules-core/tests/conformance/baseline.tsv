@@ -502,6 +502,7 @@ crash_of_rhinos	0	cast	exercised
 craw_wurm	0	cast	exercised
 crazed_goblin	0	cast	exercised
 crazed_skirge	0	cast	exercised
+creakwood_safewright	0	cast	exercised
 creeping_peeper	0	ability:0	exercised
 creeping_peeper	0	cast	exercised
 creosote_heath	0	ability:0	exercised
@@ -561,6 +562,7 @@ darksteel_citadel	0	ability:0	exercised
 darksteel_citadel	0	land	exercised
 darksteel_myr	0	cast	exercised
 dawn_gryff	0	cast	exercised
+dawnhand_eulogist	0	cast	exercised
 dawning_angel	0	cast	exercised
 dawns_light_archer	0	cast	exercised
 dawnstrike_paladin	0	cast	exercised
@@ -1085,6 +1087,7 @@ hallowed_fountain	0	ability:0	exercised
 hallowed_fountain	0	land	exercised
 hamato_guardian_stance	0	cast	exercised
 hand_of_silumgar	0	cast	exercised
+hand_that_feeds	0	cast	exercised
 happy_hogan,_dauntless_driver	0	cast	exercised
 hard-hitting_question	0	cast	exercised
 hard-won_jitte	0	ability:0	exercised
@@ -2259,6 +2262,7 @@ steward_of_valeron	0	ability:0	exercised
 steward_of_valeron	0	cast	exercised
 stickytongue_sentinel	0	cast	exercised
 stingblade_assassin	0	cast	exercised
+stinging_cave_crawler	0	cast	exercised
 stir_up_trouble	0	cast	unsupported: required cast-cost group needs a specialized fixture
 stomped_by_the_foot	0	cast	exercised
 stomper_cub	0	cast	exercised
@@ -2658,6 +2662,7 @@ wall_of_swords	0	cast	exercised
 wall_of_torches	0	cast	exercised
 wall_of_vines	0	cast	exercised
 wall_of_wood	0	cast	exercised
+walltop_sentries	0	cast	exercised
 wan_shi_tong,_librarian	0	cast	exercised
 wander_off	0	cast	exercised
 wanderbrine_preacher	0	cast	exercised

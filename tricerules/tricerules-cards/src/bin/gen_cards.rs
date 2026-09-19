@@ -13078,6 +13078,315 @@ mod tests {
         );
     }
 
+    /// Issue #374: the five fully expressible graveyard-condition trigger identities generate
+    /// exact typed RON, while the six identities with a blocked non-graveyard clause stay
+    /// unsupported end to end.
+    #[test]
+    fn issue_374_retained_cards_generate_exact_typed_definitions() {
+        use tricerules_cards::primitives::{
+            EffectSubject, EntersWithCountersAffected, GraveyardAggregate, LifeAmount,
+            PlayerRecipient, RelativePlayerSet, ResolutionBranchRequirement,
+            ResolutionBranchSelection, StaticAbilityDef, ZoneCardFilter,
+        };
+
+        let elf_filter = ZoneCardFilter {
+            required_subtypes: vec!["Elf".into()],
+            ..ZoneCardFilter::default()
+        };
+        let permanent_filter = ZoneCardFilter {
+            excluded_card_types: vec![CardTypeFilter::Instant, CardTypeFilter::Sorcery],
+            ..ZoneCardFilter::default()
+        };
+        let graveyard_gate = |aggregate, filter, min| GameCondition::GraveyardAggregate {
+            owners: RelativePlayerSet::Controller,
+            aggregate,
+            filter,
+            min: Some(min),
+            max: None,
+        };
+
+        let creakwood = normal_card_with_oracle_id(
+            "f9b7bbea-ea20-400b-a5b7-4d6993d8777b",
+            "Creakwood Safewright",
+            "{1}{B}",
+            "Creature — Elf Warrior",
+            "This creature enters with three -1/-1 counters on it.\nAt the beginning of your end step, if there is an Elf card in your graveyard and this creature has a -1/-1 counter on it, remove a -1/-1 counter from this creature.",
+            Some(("5", "5")),
+        );
+        let generated = evaluate_fresh(&creakwood).expect("Creakwood Safewright should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        let [entry] = raw.static_abilities.as_slice() else {
+            panic!("Creakwood must emit one entry replacement");
+        };
+        assert_eq!(
+            entry.definition,
+            StaticAbilityDef::EntersWithCounters {
+                affected: EntersWithCountersAffected::Self_,
+                counter: CounterKind::MinusOneMinusOne,
+                amount: Amount::Fixed(3),
+                cast_cost_condition: None,
+            }
+        );
+        let [end_step] = raw.triggered_abilities.as_slice() else {
+            panic!("Creakwood must emit one end-step trigger");
+        };
+        assert_eq!(
+            end_step.trigger,
+            TriggerCondition::AtBeginningOfEndStep {
+                player: CastTriggerPlayer::Controller,
+            }
+        );
+        assert_eq!(
+            end_step.intervening_if,
+            Some(GameCondition::AllOf(vec![
+                graveyard_gate(GraveyardAggregate::CardCount, Some(elf_filter.clone()), 1,),
+                GameCondition::SourceCounterCount {
+                    counter: CounterKind::MinusOneMinusOne,
+                    min: Some(1),
+                    max: None,
+                },
+            ]))
+        );
+        assert_eq!(
+            end_step.effect,
+            [SpellEffectKind::RemoveCounters {
+                counter: CounterKind::MinusOneMinusOne,
+                count: 1,
+                subject: EffectSubject::Source,
+            }]
+        );
+
+        let dawnhand = normal_card_with_oracle_id(
+            "57bbd80b-290f-461e-8dc6-26ba4d673fa9",
+            "Dawnhand Eulogist",
+            "{3}{B}",
+            "Creature — Elf Warlock",
+            "Menace (This creature can't be blocked except by two or more creatures.)\nWhen this creature enters, mill three cards. Then if there is an Elf card in your graveyard, each opponent loses 2 life and you gain 2 life. (To mill three cards, put the top three cards of your library into your graveyard.)",
+            Some(("3", "3")),
+        );
+        let generated = evaluate_fresh(&dawnhand).expect("Dawnhand Eulogist should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.keywords, [Keyword::Menace]);
+        let [etb] = raw.triggered_abilities.as_slice() else {
+            panic!("Dawnhand must emit one entry trigger");
+        };
+        let [mill, branch] = etb.effect.as_slice() else {
+            panic!("unexpected Dawnhand payload: {:?}", etb.effect);
+        };
+        assert_eq!(
+            *mill,
+            SpellEffectKind::Mill {
+                count: Amount::Fixed(3),
+                who: PlayerRecipient::Controller,
+            }
+        );
+        let SpellEffectKind::ChooseResolutionBranch {
+            selection,
+            branches,
+            ..
+        } = branch
+        else {
+            panic!("Dawnhand must author the Elf-card branch: {branch:?}");
+        };
+        assert_eq!(*selection, ResolutionBranchSelection::FirstApplicable);
+        assert_eq!(branches.len(), 2);
+        assert_eq!(
+            branches[0].requirement,
+            ResolutionBranchRequirement::GameCondition(graveyard_gate(
+                GraveyardAggregate::CardCount,
+                Some(elf_filter),
+                1,
+            ))
+        );
+        assert_eq!(
+            branches[0].effects,
+            [
+                SpellEffectKind::LoseLife {
+                    amount: LifeAmount::Fixed(2),
+                    who: PlayerRecipient::EachOpponent,
+                },
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(2),
+                },
+            ]
+        );
+        assert_eq!(branches[1].requirement, ResolutionBranchRequirement::Always);
+        assert!(branches[1].effects.is_empty());
+
+        let hand = normal_card_with_oracle_id(
+            "6b348051-3ba8-4aa0-b337-b42d8ef8cbba",
+            "Hand That Feeds",
+            "{1}{R}",
+            "Creature — Mutant",
+            "Delirium — Whenever this creature attacks while there are four or more card types among cards in your graveyard, it gets +2/+0 and gains menace until end of turn. (It can't be blocked except by two or more creatures.)",
+            Some(("2", "2")),
+        );
+        let generated = evaluate_fresh(&hand).expect("Hand That Feeds should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        let [attack] = raw.triggered_abilities.as_slice() else {
+            panic!("Hand That Feeds must emit one attack trigger");
+        };
+        assert_eq!(
+            attack.trigger,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0,
+            }
+        );
+        assert_eq!(
+            attack.intervening_if,
+            Some(graveyard_gate(
+                GraveyardAggregate::DistinctCardTypes,
+                None,
+                4,
+            ))
+        );
+        assert_eq!(
+            attack.effect,
+            [
+                SpellEffectKind::PumpTarget {
+                    power: 2,
+                    toughness: 0,
+                    scale: None,
+                    subject: EffectSubject::Source,
+                },
+                SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::Source,
+                    keywords: vec![Keyword::Menace],
+                },
+            ]
+        );
+
+        let stinging = normal_card_with_oracle_id(
+            "a9a35c77-637f-4d56-afa2-6c8a4ded4838",
+            "Stinging Cave Crawler",
+            "{2}{B}",
+            "Creature — Insect Horror",
+            "Deathtouch\nDescend 4 — Whenever this creature attacks, if there are four or more permanent cards in your graveyard, you draw a card and you lose 1 life.",
+            Some(("1", "3")),
+        );
+        let generated = evaluate_fresh(&stinging).expect("Stinging Cave Crawler should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.keywords, [Keyword::Deathtouch]);
+        let [attack] = raw.triggered_abilities.as_slice() else {
+            panic!("Stinging Cave Crawler must emit one attack trigger");
+        };
+        assert_eq!(
+            attack.intervening_if,
+            Some(graveyard_gate(
+                GraveyardAggregate::CardCount,
+                Some(permanent_filter),
+                4,
+            ))
+        );
+        assert_eq!(
+            attack.effect,
+            [
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                },
+                SpellEffectKind::LoseLife {
+                    amount: LifeAmount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                },
+            ]
+        );
+
+        let walltop = normal_card_with_oracle_id(
+            "fb3a0910-a582-41ef-b5b9-3cda1f1cd5ce",
+            "Walltop Sentries",
+            "{2}{G}",
+            "Creature — Human Soldier Ally",
+            "Reach, deathtouch\nWhen this creature dies, if there's a Lesson card in your graveyard, you gain 2 life.",
+            Some(("2", "3")),
+        );
+        let generated = evaluate_fresh(&walltop).expect("Walltop Sentries should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(raw.keywords, [Keyword::Reach, Keyword::Deathtouch]);
+        let [dies] = raw.triggered_abilities.as_slice() else {
+            panic!("Walltop Sentries must emit one dies trigger");
+        };
+        assert_eq!(dies.trigger, TriggerCondition::WhenSelfDies);
+        assert_eq!(
+            dies.intervening_if,
+            Some(graveyard_gate(
+                GraveyardAggregate::CardCount,
+                Some(ZoneCardFilter {
+                    required_subtypes: vec!["Lesson".into()],
+                    ..ZoneCardFilter::default()
+                }),
+                1,
+            ))
+        );
+        assert_eq!(
+            dies.effect,
+            [SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2),
+            }]
+        );
+    }
+
+    #[test]
+    fn issue_374_blocked_identities_stay_unsupported() {
+        let blocked = [
+            normal_card_with_oracle_id(
+                "0ae74149-60fc-407a-8782-8865458606b5",
+                "Fear of Burning Alive",
+                "{4}{R}{R}",
+                "Enchantment Creature — Nightmare",
+                "When this creature enters, it deals 4 damage to each opponent.\nDelirium — Whenever a source you control deals noncombat damage to an opponent, if there are four or more card types among cards in your graveyard, this creature deals that amount of damage to target creature that player controls.",
+                Some(("4", "4")),
+            ),
+            normal_card_with_oracle_id(
+                "236ce592-1321-4a7c-b695-fd84496f8924",
+                "Fear of Missing Out",
+                "{1}{R}",
+                "Enchantment Creature — Nightmare",
+                "When this creature enters, discard a card, then draw a card.\nDelirium — Whenever this creature attacks for the first time each turn, if there are four or more card types among cards in your graveyard, untap target creature. After this phase, there is an additional combat phase.",
+                Some(("2", "3")),
+            ),
+            normal_card_with_oracle_id(
+                "33c3a81a-6cea-48c9-b966-67084d96e74f",
+                "Osseous Sticktwister",
+                "{1}{B}",
+                "Artifact Creature — Scarecrow",
+                "Lifelink\nDelirium — At the beginning of your end step, if there are four or more card types among cards in your graveyard, each opponent may sacrifice a nonland permanent of their choice or discard a card. Then this creature deals damage equal to its power to each opponent who didn't sacrifice a permanent or discard a card this way.",
+                Some(("2", "2")),
+            ),
+            normal_card_with_oracle_id(
+                "2ca969eb-3d79-4d1f-8d9d-7b8204ad166a",
+                "Starving Revenant",
+                "{2}{B}{B}",
+                "Creature — Spirit Horror",
+                "When this creature enters, surveil 2. Then for each card you put on top of your library, you draw a card and you lose 3 life.\nDescend 8 — Whenever you draw a card, if there are eight or more permanent cards in your graveyard, target opponent loses 1 life and you gain 1 life.",
+                Some(("4", "4")),
+            ),
+            normal_card_with_oracle_id(
+                "961d1128-a022-480c-918e-16ba0abf844b",
+                "Trystan, Callous Cultivator // Trystan, Penitent Culler",
+                "{2}{G}",
+                "Legendary Creature — Elf Druid",
+                "Deathtouch\nWhenever this creature enters or transforms into Trystan, Callous Cultivator, mill three cards. Then if there is an Elf card in your graveyard, you gain 2 life.\nAt the beginning of your first main phase, you may pay {B}. If you do, transform Trystan.",
+                Some(("3", "4")),
+            ),
+            normal_card_with_oracle_id(
+                "5a9baafb-bffd-4e28-bbe1-b4154cd86bf3",
+                "Winter, Misanthropic Guide",
+                "{1}{B}{R}{G}",
+                "Legendary Creature — Human Warlock",
+                "Ward {2}\nAt the beginning of your upkeep, each player draws two cards.\nDelirium — As long as there are four or more card types among cards in your graveyard, each opponent's maximum hand size is equal to seven minus the number of those card types.",
+                Some(("3", "4")),
+            ),
+        ];
+        for card in blocked {
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "blocked identity qualified for generation: {}",
+                card["name"]
+            );
+        }
+    }
+
     #[cfg(windows)]
     #[test]
     fn windows_card_data_wrappers_preserve_inputs_and_download_provenance() {

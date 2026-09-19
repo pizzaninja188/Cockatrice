@@ -513,6 +513,8 @@ mod issue_371_graveyard_count_tokens;
 mod issue_372_static_count_scaled_pt;
 #[path = "scenario/issue_373_graveyard_count_resolution.rs"]
 mod issue_373_graveyard_count_resolution;
+#[path = "scenario/issue_374_graveyard_condition_triggers.rs"]
+mod issue_374_graveyard_condition_triggers;
 #[path = "scenario/issue_375_graveyard_return.rs"]
 mod issue_375_graveyard_return;
 #[path = "scenario/issue_377_graveyard_static_conditions.rs"]

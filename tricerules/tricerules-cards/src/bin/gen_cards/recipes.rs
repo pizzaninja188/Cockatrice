@@ -12384,7 +12384,413 @@ fn match_triggered_end_step_graveyard_permanent_card_count_six_transform_self(
     })
 }
 
+// ---------------------------------------------------------------------------
+// Issue #374 — triggered abilities keyed on public graveyard state.
+//
+// Every cohort template is a full-corpus singleton (verified against the pinned Oracle bulk
+// corpus), so each exact clause is bound to its reviewed printing-independent identity and the
+// shared typed shapes are exercised by the cited existing consumers: the `Elf`/`Lesson`
+// subtype graveyard filter by the token and cost-reduction cohorts, the `DistinctCardTypes`
+// gate by the shipped delirium statics, and the `excluded_card_types: [Instant, Sorcery]`
+// "permanent card" filter by `spell.cost_reduction.graveyard_permanent_cards.one`. The
+// unconditional three -1/-1 counter entry replacement is a generic exact template with four
+// full-corpus printings, so it is not identity-gated.
+// ---------------------------------------------------------------------------
+
+const ISSUE_374_CREAKWOOD_SAFEWRIGHT_ORACLE_ID: &str = "f9b7bbea-ea20-400b-a5b7-4d6993d8777b";
+const ISSUE_374_DAWNHAND_EULOGIST_ORACLE_ID: &str = "57bbd80b-290f-461e-8dc6-26ba4d673fa9";
+const ISSUE_374_HAND_THAT_FEEDS_ORACLE_ID: &str = "6b348051-3ba8-4aa0-b337-b42d8ef8cbba";
+const ISSUE_374_STINGING_CAVE_CRAWLER_ORACLE_ID: &str = "a9a35c77-637f-4d56-afa2-6c8a4ded4838";
+const ISSUE_374_WALLTOP_SENTRIES_ORACLE_ID: &str = "fb3a0910-a582-41ef-b5b9-3cda1f1cd5ce";
+
+const ISSUE_374_REVIEWED_ORACLE_IDS: &[&str] = &[
+    ISSUE_374_CREAKWOOD_SAFEWRIGHT_ORACLE_ID,
+    ISSUE_374_DAWNHAND_EULOGIST_ORACLE_ID,
+    ISSUE_374_HAND_THAT_FEEDS_ORACLE_ID,
+    ISSUE_374_STINGING_CAVE_CRAWLER_ORACLE_ID,
+    ISSUE_374_WALLTOP_SENTRIES_ORACLE_ID,
+];
+
+const ISSUE_374_CREAKWOOD_END_STEP_CLAUSE: &str = "At the beginning of your end step, if there is an Elf card in your graveyard and this creature has a -1/-1 counter on it, remove a -1/-1 counter from this creature.";
+const ISSUE_374_CREAKWOOD_ENTERS_CLAUSE: &str =
+    "This creature enters with three -1/-1 counters on it.";
+const ISSUE_374_DAWNHAND_ETB_CLAUSE: &str = "When this creature enters, mill three cards. Then if there is an Elf card in your graveyard, each opponent loses 2 life and you gain 2 life.";
+const ISSUE_374_HAND_THAT_FEEDS_CLAUSE: &str = "Delirium — Whenever this creature attacks while there are four or more card types among cards in your graveyard, it gets +2/+0 and gains menace until end of turn.";
+const ISSUE_374_STINGING_CAVE_CRAWLER_CLAUSE: &str = "Descend 4 — Whenever this creature attacks, if there are four or more permanent cards in your graveyard, you draw a card and you lose 1 life.";
+const ISSUE_374_WALLTOP_SENTRIES_CLAUSE: &str =
+    "When this creature dies, if there's a Lesson card in your graveyard, you gain 2 life.";
+
+fn issue_374_context_is_reviewed(context: &RecipeContext) -> bool {
+    context
+        .oracle_id
+        .as_deref()
+        .is_none_or(|oracle_id| ISSUE_374_REVIEWED_ORACLE_IDS.contains(&oracle_id))
+}
+
+/// CR 603.4 / 404.2: Creakwood Safewright's end-step trigger requires both a public Elf card in
+/// its controller's graveyard and one -1/-1 counter on the exact source generation; the
+/// conjunction is rechecked when the trigger is created and again when it resolves. Another step,
+/// a missing counter prerequisite, another counter kind, another removal count, another subject,
+/// a battlefield Elf predicate, and riders stay unsupported.
+fn match_triggered_end_step_elf_card_graveyard_and_source_minus_one_counter(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_374_context_is_reviewed(context)
+        && text == ISSUE_374_CREAKWOOD_END_STEP_CLAUSE)
+        .then(|| {
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+                context,
+                TriggerCondition::AtBeginningOfEndStep {
+                    player: CastTriggerPlayer::Controller,
+                },
+                vec![SpellEffectKind::RemoveCounters {
+                    counter: CounterKind::MinusOneMinusOne,
+                    count: 1,
+                    subject: EffectSubject::Source,
+                }],
+            ) else {
+                unreachable!("triggered_ability_with always returns a triggered ability")
+            };
+            ability.intervening_if = Some(GameCondition::AllOf(vec![
+                issue_373_graveyard_threshold(
+                    GraveyardAggregate::CardCount,
+                    Some(issue_371_elf_card_filter()),
+                    1,
+                ),
+                GameCondition::SourceCounterCount {
+                    counter: CounterKind::MinusOneMinusOne,
+                    min: Some(1),
+                    max: None,
+                },
+            ]));
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
+/// CR 603.6a / 404.2 / 608.2c: Dawnhand Eulogist's entry trigger mills three first, then the
+/// mandatory `FirstApplicable` branch drains each opponent 2 and gains 2 only when the mill left
+/// an Elf card in the controller's graveyard. The empty unconditional fallback matches the shipped
+/// Long Lake Nuisance / Patient Instructor shape; the printed order and mill count are exact.
+fn match_etb_mill_three_then_elf_card_graveyard_drain(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_374_context_is_reviewed(context)
+        && text == ISSUE_374_DAWNHAND_ETB_CLAUSE)
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfEntersBattlefield,
+                vec![
+                    SpellEffectKind::Mill {
+                        count: Amount::Fixed(3),
+                        who: PlayerRecipient::Controller,
+                    },
+                    SpellEffectKind::ChooseResolutionBranch {
+                        chooser: PlayerRecipient::Controller,
+                        optional: false,
+                        selection: ResolutionBranchSelection::FirstApplicable,
+                        branches: vec![
+                            ResolutionBranchDef {
+                                branch_id: ChoiceId::new("elf_in_graveyard")
+                                    .expect("closed Dawnhand branch uses a valid choice ID"),
+                                presentation: AbilityPresentation::Fallback,
+                                runtime_fallback: None,
+                                cost: ResolutionCost::None,
+                                requirement: ResolutionBranchRequirement::GameCondition(
+                                    issue_373_graveyard_threshold(
+                                        GraveyardAggregate::CardCount,
+                                        Some(issue_371_elf_card_filter()),
+                                        1,
+                                    ),
+                                ),
+                                effects: vec![
+                                    SpellEffectKind::LoseLife {
+                                        amount: LifeAmount::Fixed(2),
+                                        who: PlayerRecipient::EachOpponent,
+                                    },
+                                    SpellEffectKind::GainLife {
+                                        amount: Amount::Fixed(2),
+                                    },
+                                ],
+                            },
+                            ResolutionBranchDef {
+                                branch_id: ChoiceId::new("otherwise")
+                                    .expect("closed Dawnhand fallback uses a valid choice ID"),
+                                presentation: AbilityPresentation::Fallback,
+                                runtime_fallback: None,
+                                cost: ResolutionCost::None,
+                                requirement: ResolutionBranchRequirement::Always,
+                                effects: Vec::new(),
+                            },
+                        ],
+                        otherwise: Vec::new(),
+                    },
+                ],
+            )
+        })
+}
+
+/// CR 603.4 / 404.2 / 611.2c: Hand That Feeds' Delirium attack trigger pumps the source +2/+0
+/// and grants menace in printed order while four or more distinct card types sit in the public
+/// graveyard; the gate is rechecked at trigger creation and resolution. Another pump or keyword,
+/// another threshold or aggregate, the intervening-if wording form, and riders stay unsupported.
+fn match_triggered_self_attacks_delirium_pump_source_plus_two_menace(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_374_context_is_reviewed(context)
+        && text == ISSUE_374_HAND_THAT_FEEDS_CLAUSE)
+        .then(|| {
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+                context,
+                TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                },
+                vec![
+                    SpellEffectKind::PumpTarget {
+                        power: 2,
+                        toughness: 0,
+                        scale: None,
+                        subject: EffectSubject::Source,
+                    },
+                    SpellEffectKind::GrantKeywords {
+                        subject: EffectSubject::Source,
+                        keywords: vec![Keyword::Menace],
+                    },
+                ],
+            ) else {
+                unreachable!("triggered_ability_with always returns a triggered ability")
+            };
+            ability.intervening_if = Some(issue_373_graveyard_threshold(
+                GraveyardAggregate::DistinctCardTypes,
+                None,
+                4,
+            ));
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
+/// CR 603.4 / 404.2: Stinging Cave Crawler's Descend 4 attack trigger draws a card and loses one
+/// life only with four or more permanent cards in the controller's public graveyard; the
+/// permanent-card predicate is the shipped instant/sorcery exclusion, and the intervening-if is
+/// rechecked at trigger creation and resolution. Another threshold, a card-count gate, a singular
+/// permanent predicate, reordered or partial effects, and riders stay unsupported.
+fn match_triggered_self_attacks_descend_four_draw_and_lose_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_374_context_is_reviewed(context)
+        && text == ISSUE_374_STINGING_CAVE_CRAWLER_CLAUSE)
+        .then(|| {
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+                context,
+                TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                },
+                vec![
+                    SpellEffectKind::Draw {
+                        who: PlayerRecipient::Controller,
+                        count: Amount::Fixed(1),
+                    },
+                    SpellEffectKind::LoseLife {
+                        amount: LifeAmount::Fixed(1),
+                        who: PlayerRecipient::Controller,
+                    },
+                ],
+            ) else {
+                unreachable!("triggered_ability_with always returns a triggered ability")
+            };
+            ability.intervening_if = Some(issue_373_graveyard_threshold(
+                GraveyardAggregate::CardCount,
+                Some(issue_373_permanent_card_filter()),
+                4,
+            ));
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
+/// CR 603.4 / 404.2: Walltop Sentries' dies trigger gains two life only when a Lesson card sits
+/// in the controller's public graveyard at trigger creation and again at resolution. Another
+/// zone, a Lesson permanent, another life amount, a drain, and riders stay unsupported.
+fn match_triggered_dies_lesson_card_graveyard_gain_two(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_374_context_is_reviewed(context)
+        && text == ISSUE_374_WALLTOP_SENTRIES_CLAUSE)
+        .then(|| {
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfDies,
+                vec![SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(2),
+                }],
+            ) else {
+                unreachable!("triggered_ability_with always returns a triggered ability")
+            };
+            ability.intervening_if = Some(issue_373_graveyard_threshold(
+                GraveyardAggregate::CardCount,
+                Some(ZoneCardFilter {
+                    required_subtypes: vec!["Lesson".into()],
+                    ..ZoneCardFilter::default()
+                }),
+                1,
+            ));
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
+/// CR 614.1c / 122.6: "This creature enters with three -1/-1 counters on it." is an unconditional
+/// self entry replacement. Four full-corpus printings share the exact template (Creakwood
+/// Safewright, Grim Poppet, Loch Mare, Encumbered Reejerey), so the recipe stays generic rather
+/// than identity-gated. Another counter kind or count, a condition, and riders stay unsupported.
+fn match_static_enters_with_three_minus_one_minus_one_counters(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_374_CREAKWOOD_ENTERS_CLAUSE).then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::EntersWithCounters {
+                affected: EntersWithCountersAffected::Self_,
+                counter: CounterKind::MinusOneMinusOne,
+                amount: Amount::Fixed(3),
+                cast_cost_condition: None,
+            },
+        })
+    })
+}
+
 pub(super) static CATALOG: &[Recipe] = &[
+    Recipe {
+        id: RecipeId(
+            "triggered.end_step.elf_card_graveyard_and_source_minus_one_counter.remove_minus_one_counter_source",
+        ),
+        label: "end-step Elf-in-graveyard and self -1/-1 counter removal",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_triggered_end_step_elf_card_graveyard_and_source_minus_one_counter,
+        // Creakwood Safewright is the only card in the pinned full Oracle corpus printing this
+        // exact clause; the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Creakwood Safewright" => "At the beginning of your end step, if there is an Elf card in your graveyard and this creature has a -1/-1 counter on it, remove a -1/-1 counter from this creature.";
+            // A missing counter prerequisite, another removal subject or count, another counter
+            // kind, another step, a battlefield Elf predicate, and riders stay unsupported.
+            "At the beginning of your end step, if there is an Elf card in your graveyard, remove a -1/-1 counter from this creature.",
+            "At the beginning of your end step, if there is an Elf card in your graveyard and this creature has a -1/-1 counter on it, remove a -1/-1 counter from target creature.",
+            "At the beginning of your end step, if there is an Elf card in your graveyard and this creature has a -1/-1 counter on it, remove two -1/-1 counters from this creature.",
+            "At the beginning of your end step, if there is an Elf card in your graveyard and this creature has a +1/+1 counter on it, remove a -1/-1 counter from this creature.",
+            "At the beginning of your upkeep, if there is an Elf card in your graveyard and this creature has a -1/-1 counter on it, remove a -1/-1 counter from this creature.",
+            "At the beginning of your end step, if there is an Elf permanent on the battlefield and this creature has a -1/-1 counter on it, remove a -1/-1 counter from this creature.",
+            "At the beginning of your end step, if there is an Elf card in your graveyard and this creature has a -1/-1 counter on it, remove a -1/-1 counter from this creature. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId(
+            "etb.mill_three.then_elf_card_graveyard.each_opponent_loses_two_you_gain_two",
+        ),
+        label: "entry mill three then conditional Elf-in-graveyard drain",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_mill_three_then_elf_card_graveyard_drain,
+        // Dawnhand Eulogist is the only card in the pinned full Oracle corpus printing this exact
+        // clause; the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Dawnhand Eulogist" => "When this creature enters, mill three cards. Then if there is an Elf card in your graveyard, each opponent loses 2 life and you gain 2 life.";
+            // A missing gain, a missing condition, another drain amount, another mill count,
+            // another trigger event, another subtype, and riders stay unsupported.
+            "When this creature enters, mill three cards. Then if there is an Elf card in your graveyard, each opponent loses 2 life.",
+            "When this creature enters, mill three cards. Then if there is an Elf card in your graveyard, you gain 2 life.",
+            "When this creature enters, mill three cards. Then each opponent loses 2 life and you gain 2 life.",
+            "When this creature enters, mill three cards. Then if there is an Elf card in your graveyard, each opponent loses 1 life and you gain 1 life.",
+            "When this creature enters, mill two cards. Then if there is an Elf card in your graveyard, each opponent loses 2 life and you gain 2 life.",
+            "When this creature attacks, mill three cards. Then if there is an Elf card in your graveyard, each opponent loses 2 life and you gain 2 life.",
+            "When this creature enters, mill three cards. Then if there is a Lesson card in your graveyard, each opponent loses 2 life and you gain 2 life.",
+            "When this creature enters, mill three cards. Then if there is an Elf card in your graveyard, each opponent loses 2 life and you gain 2 life. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.self_attacks.delirium.pump_source_plus_two_menace"),
+        label: "Delirium attack pump and menace on the source",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_triggered_self_attacks_delirium_pump_source_plus_two_menace,
+        // Hand That Feeds is the only card in the pinned full Oracle corpus printing this exact
+        // clause; the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Hand That Feeds" => "Delirium — Whenever this creature attacks while there are four or more card types among cards in your graveyard, it gets +2/+0 and gains menace until end of turn.";
+            // Another pump, another keyword, another threshold or aggregate, the intervening-if
+            // wording form, and riders stay unsupported.
+            "Delirium — Whenever this creature attacks while there are four or more card types among cards in your graveyard, it gets +2/+1 and gains menace until end of turn.",
+            "Delirium — Whenever this creature attacks while there are four or more card types among cards in your graveyard, it gets +2/+0 and gains trample until end of turn.",
+            "Delirium — Whenever this creature attacks while there are three or more card types among cards in your graveyard, it gets +2/+0 and gains menace until end of turn.",
+            "Delirium — Whenever this creature attacks while there are seven or more cards in your graveyard, it gets +2/+0 and gains menace until end of turn.",
+            "Delirium — Whenever this creature attacks, if there are four or more card types among cards in your graveyard, it gets +2/+0 and gains menace until end of turn.",
+            "Delirium — Whenever this creature attacks while there are four or more card types among cards in your graveyard, it gets +2/+0 and gains menace until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.self_attacks.descend_four_graveyard.draw_one_lose_one"),
+        label: "Descend 4 attack draw and life loss",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_triggered_self_attacks_descend_four_draw_and_lose_one,
+        // Stinging Cave Crawler is the only card in the pinned full Oracle corpus printing this
+        // exact clause; the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Stinging Cave Crawler" => "Descend 4 — Whenever this creature attacks, if there are four or more permanent cards in your graveyard, you draw a card and you lose 1 life.";
+            // Another threshold, a card-count gate, a singular permanent predicate, reordered or
+            // partial effects, another trigger event, and riders stay unsupported.
+            "Descend 4 — Whenever this creature attacks, if there are eight or more permanent cards in your graveyard, you draw a card and you lose 1 life.",
+            "Descend 4 — Whenever this creature attacks, if there are four or more cards in your graveyard, you draw a card and you lose 1 life.",
+            "Descend 4 — Whenever this creature attacks, if there is a permanent card in your graveyard, you draw a card and you lose 1 life.",
+            "Descend 4 — Whenever this creature attacks, if there are four or more permanent cards in your graveyard, you draw a card.",
+            "Descend 4 — Whenever this creature attacks, if there are four or more permanent cards in your graveyard, each opponent loses 1 life and you gain 1 life.",
+            "Descend 4 — At the beginning of combat, if there are four or more permanent cards in your graveyard, you draw a card and you lose 1 life.",
+            "Descend 4 — Whenever this creature attacks, if there are four or more permanent cards in your graveyard, you draw a card and you lose 1 life. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.dies.lesson_card_graveyard.gain_two"),
+        label: "dies trigger gains two with a Lesson card in the graveyard",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_triggered_dies_lesson_card_graveyard_gain_two,
+        // Walltop Sentries is the only card in the pinned full Oracle corpus printing this exact
+        // clause; the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Walltop Sentries" => "When this creature dies, if there's a Lesson card in your graveyard, you gain 2 life.";
+            // Another zone, a Lesson permanent, another life amount, a drain, another leave
+            // event, and riders stay unsupported.
+            "When this creature dies, if there's a Lesson card in your hand, you gain 2 life.",
+            "When this creature dies, if there's a Lesson permanent on the battlefield, you gain 2 life.",
+            "When this creature dies, if there's a Lesson card in your graveyard, you gain 1 life.",
+            "When this creature dies, if there's a Lesson card in your graveyard, each opponent loses 2 life and you gain 2 life.",
+            "When this creature leaves the battlefield, if there's a Lesson card in your graveyard, you gain 2 life.",
+            "When this creature dies, if there's a Lesson card in your graveyard, you gain 2 life. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.enters_with_counter.three_minus_one_minus_one"),
+        label: "enters with three -1/-1 counters",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_enters_with_three_minus_one_minus_one_counters,
+        calibration: calibrations!(
+            "Creakwood Safewright" => "This creature enters with three -1/-1 counters on it.",
+            "Grim Poppet" => "This creature enters with three -1/-1 counters on it.";
+            // Another count or counter kind, a condition, another instruction form, and riders
+            // stay unsupported.
+            "This creature enters with two -1/-1 counters on it.",
+            "This creature enters with three +1/+1 counters on it.",
+            "This creature enters with three -1/-1 counters on it if a creature died this turn.",
+            "When this creature enters, put three -1/-1 counters on it.",
+            "This creature enters with three -1/-1 counters on it. Draw a card."
+        ),
+    },
+
     Recipe {
         id: RecipeId("static.cost_reduction.affinity_artifacts"),
         label: "affinity for artifacts",
@@ -36201,6 +36607,407 @@ mod tests {
                 .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
                 .unwrap_or_else(|| panic!("{clause} should stay consumed by its shipped recipe"));
             assert_eq!(matched.id.as_str(), expected, "{clause}");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #374 — triggered abilities keyed on public graveyard state.
+    // -----------------------------------------------------------------------
+
+    const ISSUE_374_CREAKWOOD_ID: &str = "f9b7bbea-ea20-400b-a5b7-4d6993d8777b";
+    const ISSUE_374_DAWNHAND_ID: &str = "57bbd80b-290f-461e-8dc6-26ba4d673fa9";
+    const ISSUE_374_HAND_THAT_FEEDS_ID: &str = "6b348051-3ba8-4aa0-b337-b42d8ef8cbba";
+    const ISSUE_374_STINGING_ID: &str = "a9a35c77-637f-4d56-afa2-6c8a4ded4838";
+    const ISSUE_374_WALLTOP_ID: &str = "fb3a0910-a582-41ef-b5b9-3cda1f1cd5ce";
+
+    const ISSUE_374_CREAKWOOD_TRIGGER_CLAUSE: &str = "At the beginning of your end step, if there is an Elf card in your graveyard and this creature has a -1/-1 counter on it, remove a -1/-1 counter from this creature.";
+    const ISSUE_374_CREAKWOOD_ENTERS_CLAUSE: &str =
+        "This creature enters with three -1/-1 counters on it.";
+    const ISSUE_374_DAWNHAND_CLAUSE: &str = "When this creature enters, mill three cards. Then if there is an Elf card in your graveyard, each opponent loses 2 life and you gain 2 life.";
+    const ISSUE_374_HAND_THAT_FEEDS_CLAUSE: &str = "Delirium — Whenever this creature attacks while there are four or more card types among cards in your graveyard, it gets +2/+0 and gains menace until end of turn.";
+    const ISSUE_374_STINGING_CLAUSE: &str = "Descend 4 — Whenever this creature attacks, if there are four or more permanent cards in your graveyard, you draw a card and you lose 1 life.";
+    const ISSUE_374_WALLTOP_CLAUSE: &str =
+        "When this creature dies, if there's a Lesson card in your graveyard, you gain 2 life.";
+
+    fn issue_374_context(oracle_id: &str) -> RecipeContext {
+        let mut context = context();
+        context.oracle_id = Some(oracle_id.into());
+        context.source_name = "Issue 374 Reviewed Card".into();
+        context
+    }
+
+    fn issue_374_assert_unmatched(clause: &str, oracle_id: &str) {
+        let context = issue_374_context(oracle_id);
+        assert!(
+            match_clause(clause, false, &context)
+                .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                .is_none(),
+            "near-miss was accepted: {clause}"
+        );
+    }
+
+    fn issue_374_graveyard_gate(
+        aggregate: GraveyardAggregate,
+        filter: Option<ZoneCardFilter>,
+        min: u32,
+    ) -> GameCondition {
+        GameCondition::GraveyardAggregate {
+            owners: RelativePlayerSet::Controller,
+            aggregate,
+            filter,
+            min: Some(min),
+            max: None,
+        }
+    }
+
+    fn issue_374_elf_card_filter() -> ZoneCardFilter {
+        ZoneCardFilter {
+            required_subtypes: vec!["Elf".into()],
+            ..ZoneCardFilter::default()
+        }
+    }
+
+    fn issue_374_permanent_card_filter() -> ZoneCardFilter {
+        ZoneCardFilter {
+            excluded_card_types: vec![CardTypeFilter::Instant, CardTypeFilter::Sorcery],
+            ..ZoneCardFilter::default()
+        }
+    }
+
+    fn issue_374_triggered_emission(oracle_id: &str, clause: &str) -> TriggeredAbilityDef {
+        let context = issue_374_context(oracle_id);
+        match match_clause(clause, false, &context)
+            .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+            .unwrap_or_else(|| panic!("{clause} should match its exact recipe"))
+            .emission
+        {
+            RecipeEmission::TriggeredAbility(ability) => ability,
+            other => panic!("expected a triggered ability, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn issue_374_trigger_recipes_match_exact_clauses_with_exact_payloads() {
+        // 1. Creakwood Safewright's end-step counter removal: an `AllOf` intervening-if that
+        // combines the Elf-card graveyard gate with the generation-scoped self counter count.
+        let creakwood = issue_374_triggered_emission(
+            ISSUE_374_CREAKWOOD_ID,
+            ISSUE_374_CREAKWOOD_TRIGGER_CLAUSE,
+        );
+        assert_eq!(
+            creakwood.trigger,
+            TriggerCondition::AtBeginningOfEndStep {
+                player: CastTriggerPlayer::Controller,
+            }
+        );
+        assert_eq!(
+            creakwood.intervening_if,
+            Some(GameCondition::AllOf(vec![
+                issue_374_graveyard_gate(
+                    GraveyardAggregate::CardCount,
+                    Some(issue_374_elf_card_filter()),
+                    1,
+                ),
+                GameCondition::SourceCounterCount {
+                    counter: CounterKind::MinusOneMinusOne,
+                    min: Some(1),
+                    max: None,
+                },
+            ]))
+        );
+        assert_eq!(
+            creakwood.effect,
+            vec![SpellEffectKind::RemoveCounters {
+                counter: CounterKind::MinusOneMinusOne,
+                count: 1,
+                subject: EffectSubject::Source,
+            }]
+        );
+
+        // 2. Dawnhand Eulogist's entry trigger mills first, then runs the mandatory
+        // `FirstApplicable` Elf-card branch.
+        let dawnhand =
+            issue_374_triggered_emission(ISSUE_374_DAWNHAND_ID, ISSUE_374_DAWNHAND_CLAUSE);
+        assert_eq!(
+            dawnhand.trigger,
+            TriggerCondition::WhenSelfEntersBattlefield
+        );
+        assert_eq!(dawnhand.intervening_if, None);
+        assert_eq!(
+            dawnhand.effect,
+            vec![
+                SpellEffectKind::Mill {
+                    count: Amount::Fixed(3),
+                    who: PlayerRecipient::Controller,
+                },
+                SpellEffectKind::ChooseResolutionBranch {
+                    chooser: PlayerRecipient::Controller,
+                    optional: false,
+                    selection: ResolutionBranchSelection::FirstApplicable,
+                    branches: vec![
+                        ResolutionBranchDef {
+                            branch_id: ChoiceId::new("elf_in_graveyard").unwrap(),
+                            presentation: AbilityPresentation::Fallback,
+                            runtime_fallback: None,
+                            cost: ResolutionCost::None,
+                            requirement: ResolutionBranchRequirement::GameCondition(
+                                issue_374_graveyard_gate(
+                                    GraveyardAggregate::CardCount,
+                                    Some(issue_374_elf_card_filter()),
+                                    1,
+                                ),
+                            ),
+                            effects: vec![
+                                SpellEffectKind::LoseLife {
+                                    amount: LifeAmount::Fixed(2),
+                                    who: PlayerRecipient::EachOpponent,
+                                },
+                                SpellEffectKind::GainLife {
+                                    amount: Amount::Fixed(2),
+                                },
+                            ],
+                        },
+                        ResolutionBranchDef {
+                            branch_id: ChoiceId::new("otherwise").unwrap(),
+                            presentation: AbilityPresentation::Fallback,
+                            runtime_fallback: None,
+                            cost: ResolutionCost::None,
+                            requirement: ResolutionBranchRequirement::Always,
+                            effects: Vec::new(),
+                        },
+                    ],
+                    otherwise: Vec::new(),
+                },
+            ]
+        );
+
+        // 3. Hand That Feeds' Delirium attack pump: distinct card types gate a self +2/+0 and
+        // menace grant in printed order.
+        let hand = issue_374_triggered_emission(
+            ISSUE_374_HAND_THAT_FEEDS_ID,
+            ISSUE_374_HAND_THAT_FEEDS_CLAUSE,
+        );
+        assert_eq!(
+            hand.trigger,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0,
+            }
+        );
+        assert_eq!(
+            hand.intervening_if,
+            Some(issue_374_graveyard_gate(
+                GraveyardAggregate::DistinctCardTypes,
+                None,
+                4,
+            ))
+        );
+        assert_eq!(
+            hand.effect,
+            vec![
+                SpellEffectKind::PumpTarget {
+                    power: 2,
+                    toughness: 0,
+                    scale: None,
+                    subject: EffectSubject::Source,
+                },
+                SpellEffectKind::GrantKeywords {
+                    subject: EffectSubject::Source,
+                    keywords: vec![Keyword::Menace],
+                },
+            ]
+        );
+
+        // 4. Stinging Cave Crawler's Descend 4 attack trigger draws then loses one life; the
+        // permanent-card predicate is the shipped instant/sorcery exclusion.
+        let stinging =
+            issue_374_triggered_emission(ISSUE_374_STINGING_ID, ISSUE_374_STINGING_CLAUSE);
+        assert_eq!(
+            stinging.trigger,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0,
+            }
+        );
+        assert_eq!(
+            stinging.intervening_if,
+            Some(issue_374_graveyard_gate(
+                GraveyardAggregate::CardCount,
+                Some(issue_374_permanent_card_filter()),
+                4,
+            ))
+        );
+        assert_eq!(
+            stinging.effect,
+            vec![
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                },
+                SpellEffectKind::LoseLife {
+                    amount: LifeAmount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                },
+            ]
+        );
+
+        // 5. Walltop Sentries' dies trigger gains two only with a Lesson card in the graveyard.
+        let walltop = issue_374_triggered_emission(ISSUE_374_WALLTOP_ID, ISSUE_374_WALLTOP_CLAUSE);
+        assert_eq!(walltop.trigger, TriggerCondition::WhenSelfDies);
+        assert_eq!(
+            walltop.intervening_if,
+            Some(issue_374_graveyard_gate(
+                GraveyardAggregate::CardCount,
+                Some(ZoneCardFilter {
+                    required_subtypes: vec!["Lesson".into()],
+                    ..ZoneCardFilter::default()
+                }),
+                1,
+            ))
+        );
+        assert_eq!(
+            walltop.effect,
+            vec![SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2),
+            }]
+        );
+    }
+
+    #[test]
+    fn issue_374_enters_with_three_minus_one_minus_one_counters_is_a_generic_exact_recipe() {
+        for source_name in [
+            "Creakwood Safewright",
+            "Grim Poppet",
+            "Loch Mare",
+            "Encumbered Reejerey",
+        ] {
+            let mut source = context();
+            source.source_name = source_name.into();
+            let matched = match_clause(ISSUE_374_CREAKWOOD_ENTERS_CLAUSE, false, &source)
+                .unwrap_or_else(|ambiguity| panic!("{source_name}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{source_name} should match the exact counter recipe"));
+            assert_eq!(
+                matched.id.as_str(),
+                "static.enters_with_counter.three_minus_one_minus_one"
+            );
+            let RecipeEmission::StaticAbility(ability) = matched.emission else {
+                panic!("expected a static ability, got {:?}", matched.emission);
+            };
+            assert_eq!(
+                ability.definition,
+                StaticAbilityDef::EntersWithCounters {
+                    affected: EntersWithCountersAffected::Self_,
+                    counter: CounterKind::MinusOneMinusOne,
+                    amount: Amount::Fixed(3),
+                    cast_cost_condition: None,
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn issue_374_unreviewed_identities_and_near_misses_stay_fail_closed() {
+        for (clause, reviewed_id) in [
+            (ISSUE_374_CREAKWOOD_TRIGGER_CLAUSE, ISSUE_374_CREAKWOOD_ID),
+            (ISSUE_374_DAWNHAND_CLAUSE, ISSUE_374_DAWNHAND_ID),
+            (
+                ISSUE_374_HAND_THAT_FEEDS_CLAUSE,
+                ISSUE_374_HAND_THAT_FEEDS_ID,
+            ),
+            (ISSUE_374_STINGING_CLAUSE, ISSUE_374_STINGING_ID),
+            (ISSUE_374_WALLTOP_CLAUSE, ISSUE_374_WALLTOP_ID),
+        ] {
+            for oracle_id in [
+                "00000000-0000-0000-0000-000000000000",
+                "",
+                "unreviewed-identical-clause",
+            ] {
+                let mut unreviewed = context();
+                unreviewed.oracle_id = Some(oracle_id.into());
+                assert!(
+                    match_clause(clause, false, &unreviewed)
+                        .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                        .is_none(),
+                    "identical text must stay unsupported for an unreviewed Oracle identity"
+                );
+            }
+            assert!(!issue_374_triggered_emission(reviewed_id, clause)
+                .effect
+                .is_empty());
+        }
+
+        for negative in [
+            "At the beginning of your end step, if there is an Elf card in your graveyard, remove a -1/-1 counter from this creature.",
+            "At the beginning of your end step, if there is an Elf card in your graveyard and this creature has a -1/-1 counter on it, remove a -1/-1 counter from target creature.",
+            "At the beginning of your end step, if there is an Elf card in your graveyard and this creature has a -1/-1 counter on it, remove two -1/-1 counters from this creature.",
+            "At the beginning of your end step, if there is an Elf card in your graveyard and this creature has a +1/+1 counter on it, remove a -1/-1 counter from this creature.",
+            "At the beginning of your upkeep, if there is an Elf card in your graveyard and this creature has a -1/-1 counter on it, remove a -1/-1 counter from this creature.",
+            "At the beginning of your end step, if there is an Elf permanent on the battlefield and this creature has a -1/-1 counter on it, remove a -1/-1 counter from this creature.",
+            "At the beginning of your end step, if there is an Elf card in your graveyard and this creature has a -1/-1 counter on it, remove a -1/-1 counter from this creature. Draw a card.",
+        ] {
+            issue_374_assert_unmatched(negative, ISSUE_374_CREAKWOOD_ID);
+        }
+
+        for negative in [
+            "When this creature enters, mill three cards. Then if there is an Elf card in your graveyard, each opponent loses 2 life.",
+            "When this creature enters, mill three cards. Then if there is an Elf card in your graveyard, you gain 2 life.",
+            "When this creature enters, mill three cards. Then each opponent loses 2 life and you gain 2 life.",
+            "When this creature enters, mill three cards. Then if there is an Elf card in your graveyard, each opponent loses 1 life and you gain 1 life.",
+            "When this creature enters, mill two cards. Then if there is an Elf card in your graveyard, each opponent loses 2 life and you gain 2 life.",
+            "When this creature attacks, mill three cards. Then if there is an Elf card in your graveyard, each opponent loses 2 life and you gain 2 life.",
+            "When this creature enters, mill three cards. Then if there is a Lesson card in your graveyard, each opponent loses 2 life and you gain 2 life.",
+            "When this creature enters, mill three cards. Then if there is an Elf card in your graveyard, each opponent loses 2 life and you gain 2 life. Draw a card.",
+        ] {
+            issue_374_assert_unmatched(negative, ISSUE_374_DAWNHAND_ID);
+        }
+
+        for negative in [
+            "Delirium — Whenever this creature attacks while there are four or more card types among cards in your graveyard, it gets +2/+1 and gains menace until end of turn.",
+            "Delirium — Whenever this creature attacks while there are four or more card types among cards in your graveyard, it gets +2/+0 and gains trample until end of turn.",
+            "Delirium — Whenever this creature attacks while there are three or more card types among cards in your graveyard, it gets +2/+0 and gains menace until end of turn.",
+            "Delirium — Whenever this creature attacks while there are seven or more cards in your graveyard, it gets +2/+0 and gains menace until end of turn.",
+            "Delirium — Whenever this creature attacks, if there are four or more card types among cards in your graveyard, it gets +2/+0 and gains menace until end of turn.",
+            "Delirium — Whenever this creature attacks while there are four or more card types among cards in your graveyard, it gets +2/+0 and gains menace until end of turn. Draw a card.",
+        ] {
+            issue_374_assert_unmatched(negative, ISSUE_374_HAND_THAT_FEEDS_ID);
+        }
+
+        for negative in [
+            "Descend 4 — Whenever this creature attacks, if there are eight or more permanent cards in your graveyard, you draw a card and you lose 1 life.",
+            "Descend 4 — Whenever this creature attacks, if there are four or more cards in your graveyard, you draw a card and you lose 1 life.",
+            "Descend 4 — Whenever this creature attacks, if there is a permanent card in your graveyard, you draw a card and you lose 1 life.",
+            "Descend 4 — Whenever this creature attacks, if there are four or more permanent cards in your graveyard, you draw a card.",
+            "Descend 4 — Whenever this creature attacks, if there are four or more permanent cards in your graveyard, each opponent loses 1 life and you gain 1 life.",
+            "Descend 4 — At the beginning of combat, if there are four or more permanent cards in your graveyard, you draw a card and you lose 1 life.",
+            "Descend 4 — Whenever this creature attacks, if there are four or more permanent cards in your graveyard, you draw a card and you lose 1 life. Draw a card.",
+        ] {
+            issue_374_assert_unmatched(negative, ISSUE_374_STINGING_ID);
+        }
+
+        for negative in [
+            "When this creature dies, if there's a Lesson card in your hand, you gain 2 life.",
+            "When this creature dies, if there's a Lesson permanent on the battlefield, you gain 2 life.",
+            "When this creature dies, if there's a Lesson card in your graveyard, you gain 1 life.",
+            "When this creature dies, if there's a Lesson card in your graveyard, each opponent loses 2 life and you gain 2 life.",
+            "When this creature leaves the battlefield, if there's a Lesson card in your graveyard, you gain 2 life.",
+            "When this creature dies, if there's a Lesson card in your graveyard, you gain 2 life. Draw a card.",
+        ] {
+            issue_374_assert_unmatched(negative, ISSUE_374_WALLTOP_ID);
+        }
+
+        for negative in [
+            "This creature enters with two -1/-1 counters on it.",
+            "This creature enters with three +1/+1 counters on it.",
+            "This creature enters with three -1/-1 counters on it if a creature died this turn.",
+            "When this creature enters, put three -1/-1 counters on it.",
+            "This creature enters with three -1/-1 counters on it. Draw a card.",
+        ] {
+            let mut source = context();
+            source.source_name = "Creakwood Safewright".into();
+            assert!(
+                match_clause(negative, false, &source)
+                    .unwrap_or_else(|ambiguity| panic!("{negative}: {ambiguity}"))
+                    .is_none(),
+                "near-miss was accepted: {negative}"
+            );
         }
     }
 }
