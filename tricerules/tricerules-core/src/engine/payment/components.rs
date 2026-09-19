@@ -57,6 +57,15 @@ impl ObjectPaymentComponent {
         }
     }
 
+    /// Discard cost restricted to one printed card type (Lluwen, Imperfect Naturalist's
+    /// "Discard a land card:"). Shares the resolution cost's filtered hand-discard matching.
+    pub(in crate::engine) fn discard_filtered(filter: CardTypeFilter) -> Self {
+        Self::Discard {
+            filter: Some(filter),
+            excluded: None,
+        }
+    }
+
     pub(in crate::engine) fn announced_sacrifice(
         source: Option<ObjectId>,
         filter: &TargetFilter,

@@ -20,7 +20,7 @@ use tricerules_cards::{
     external_oracle_lines, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
     ActivatedAbilityDef, ActivationTiming, Amount, BasicLandType, CastTriggerPlayer,
     CharacteristicDefiningAbility, ChoiceId, CounterKind, IdentifiedAbility, Keyword,
-    LibraryPartitionKind, ManaAmount, ManaCost, SpellEffectKind, TriggerCondition,
+    LibraryPartitionKind, ManaAmount, ManaCost, SpellCastOrigin, SpellEffectKind, TriggerCondition,
     TriggeredAbilityDef,
 };
 
@@ -124,6 +124,14 @@ pub(super) enum RecipeEmission {
     SpellEffectsWithTargeting {
         effects: Vec<SpellEffectKind>,
         targeting: TargetingDef,
+    },
+    /// One exact clause that also establishes face-level cast conditions, for example a spell
+    /// that behaves differently when cast from a graveyard. The conditions are appended to the
+    /// face's cast-condition list and the effects to its spell-effect list. The Final Days is
+    /// the first consumer.
+    SpellEffectsWithCastConditions {
+        conditions: Vec<GameCondition>,
+        effects: Vec<SpellEffectKind>,
     },
     SpellCostModifier(SpellCostModifier),
     TriggeredAbility(TriggeredAbilityDef),
@@ -11045,9 +11053,11 @@ fn match_etb_surveil_three(text: &str, context: &RecipeContext) -> Option<Recipe
 }
 
 /// CR 503.1 / 701.25: the source's controller surveils one at the beginning of their own
-/// upkeep. Another player scope, another count, and riders stay unsupported.
+/// upkeep. The printed template names no source kind, so it applies to any permanent (Mindwhisker
+/// and Uurg, Spawn of Turg print it on creatures; Morcant's Eyes prints it on an enchantment).
+/// Another player scope, another count, and riders stay unsupported.
 fn match_upkeep_surveil_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
-    (context.source_is_creature && text == ISSUE_377_UPKEEP_SURVEIL_ONE_CLAUSE).then(|| {
+    (text == ISSUE_377_UPKEEP_SURVEIL_ONE_CLAUSE).then(|| {
         triggered_ability_with(
             context,
             TriggerCondition::AtBeginningOfUpkeep {
@@ -11241,6 +11251,459 @@ fn match_etb_create_two_insect_tokens(
                 },
             )
         })
+}
+
+// ---------------------------------------------------------------------------
+// Issue #371 — token creation whose count or gating comes from public graveyard state.
+//
+// Each cohort clause is a full-corpus singleton (verified), so the exact template is the
+// contract: the shared typed filters and gates are exercised by the cited existing consumers
+// instead of a second token printing. The stated printed clause is normalized only for CR 201.5c
+// shortened self-references (Aatchik, Kiora, Lluwen). Creatures use `this creature`; the
+// enchantment source (Morcant's Eyes) keeps its dedicated surface. The Final Days establishes a
+// face cast condition consumed through `CastSnapshot`, matching the shipped branch pattern.
+// ---------------------------------------------------------------------------
+
+const ISSUE_371_AATCHIK_ETB_CLAUSE: &str = "When this creature enters, create a 1/1 green Insect creature token for each artifact and/or creature card in your graveyard.";
+const ISSUE_371_AATCHIK_DIES_CLAUSE: &str = "Whenever another Insect you control dies, put a +1/+1 counter on this creature. Each opponent loses 1 life.";
+const ISSUE_371_ARNIM_ACTIVATED_CLAUSE: &str = "{3}, {T}: Create a tapped 2/1 black Villain creature token with menace. Activate only if there are two or more creature cards in your graveyard.";
+const ISSUE_371_HYDRA_ETB_CLAUSE: &str = "When this creature enters, create a tapped 2/1 black Villain creature token with menace if there are two or more creature cards in your graveyard. Otherwise, mill two cards.";
+const ISSUE_371_KIORA_ETB_CLAUSE: &str =
+    "When this creature enters, draw two cards, then discard two cards.";
+const ISSUE_371_KIORA_ATTACK_CLAUSE: &str = "Whenever this creature attacks, if there are seven or more cards in your graveyard, you may create Scion of the Deep, a legendary 8/8 blue Octopus creature token.";
+const ISSUE_371_LLUWEN_ETB_CLAUSE: &str = "When this creature enters, mill four cards, then you may put a creature or land card from among the milled cards on top of your library.";
+const ISSUE_371_LLUWEN_ACTIVATED_CLAUSE: &str = "{2}{B/G}{B/G}{B/G}, {T}, Discard a land card: Create a 1/1 black and green Worm creature token for each land card in your graveyard.";
+const ISSUE_371_MORCANT_ACTIVATED_CLAUSE: &str = "{4}{G}{G}, Sacrifice this enchantment: Create X 2/2 black and green Elf creature tokens, where X is the number of Elf cards in your graveyard. Activate only as a sorcery.";
+const ISSUE_371_REVENGE_SPELL_CLAUSE: &str =
+    "Create a tapped 1/1 black Rat creature token for each creature card in your graveyard.";
+const ISSUE_371_FINAL_DAYS_CLAUSE: &str = "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create X of those tokens, where X is the number of creature cards in your graveyard.";
+
+/// CR 111.1: the shared creature-card graveyard predicate. The same printed cohort is used by
+/// recipe 3's otherwise gate and by the existing `Hollow Marauder`/`Killmonger` consumers.
+fn issue_371_creature_card_filter() -> ZoneCardFilter {
+    ZoneCardFilter {
+        card_type: Some(CardTypeFilter::Creature),
+        ..ZoneCardFilter::default()
+    }
+}
+
+/// CR 111.1: the artifact-and/or-creature graveyard union. The identical `any_of` shape is used
+/// by `Ooze Patrol` (counter placement) and `Chitin Gravestalker` (cost reduction); recipe 1
+/// reuses it without changing those recipes.
+fn issue_371_artifact_or_creature_card_filter() -> ZoneCardFilter {
+    ZoneCardFilter {
+        any_of: Some(vec![
+            ZoneCardFilter {
+                card_type: Some(CardTypeFilter::Artifact),
+                ..ZoneCardFilter::default()
+            },
+            issue_371_creature_card_filter(),
+        ]),
+        ..ZoneCardFilter::default()
+    }
+}
+
+fn issue_371_land_card_filter() -> ZoneCardFilter {
+    ZoneCardFilter {
+        card_type: Some(CardTypeFilter::Land),
+        ..ZoneCardFilter::default()
+    }
+}
+
+fn issue_371_elf_card_filter() -> ZoneCardFilter {
+    ZoneCardFilter {
+        required_subtypes: vec!["Elf".into()],
+        ..ZoneCardFilter::default()
+    }
+}
+
+fn issue_371_create_tokens(token: &str, count: Amount, tapped: bool) -> SpellEffectKind {
+    SpellEffectKind::CreateTokens {
+        token: token.into(),
+        count,
+        who: PlayerRecipient::Controller,
+        tapped,
+        sacrifice_timing: None,
+    }
+}
+
+/// 1. Aatchik's ETB creates one registered 1/1 green Insect token for each artifact and/or
+/// creature card in the controller's public graveyard (CR 404.2, 608.2h).
+fn match_triggered_etb_create_insect_for_each_artifact_or_creature_graveyard_card(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context) == ISSUE_371_AATCHIK_ETB_CLAUSE)
+        .then(|| {
+            triggered_ability(
+                context,
+                issue_371_create_tokens(
+                    "insect_g_1_1",
+                    issue_373_graveyard_count(Some(issue_371_artifact_or_creature_card_filter())),
+                    false,
+                ),
+            )
+        })
+}
+
+/// Aatchik's non-cohort dies clause: the counter always lands on the source and the drain is
+/// untargeted (CR 119.3). Subtype-filtered death observers are shipped vocabulary
+/// (`WheneverCreatureDies` + `PermanentEventFilter`), so the card is complete rather than partial.
+fn match_triggered_insect_dies_counter_and_each_opponent_drain(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context) == ISSUE_371_AATCHIK_DIES_CLAUSE)
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WheneverCreatureDies {
+                    controller: CastTriggerPlayer::Controller,
+                    filter: PermanentEventFilter {
+                        permanent_type: Some(PermanentTypeFilter::Creature),
+                        required_subtypes: vec!["Insect".into()],
+                        exclude_source: true,
+                        ..PermanentEventFilter::default()
+                    },
+                },
+                vec![
+                    SpellEffectKind::PutCounters {
+                        counter: CounterKind::PlusOnePlusOne,
+                        count: Amount::Fixed(1),
+                        subject: EffectSubject::Source,
+                    },
+                    SpellEffectKind::LoseLife {
+                        amount: LifeAmount::Fixed(1),
+                        who: PlayerRecipient::EachOpponent,
+                    },
+                ],
+            )
+        })
+}
+
+/// 2. Arnim Zola's activation gate is the shipped inclusive two-plus creature-card graveyard
+/// condition (CR 602.5b: checked before payment), and the Villain token is the registered #377
+/// identity. Untapped, other thresholds, another mana/tap shape, and timing restrictions stay
+/// unsupported.
+fn match_activated_create_villain_menace_only_two_creature_cards_graveyard(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_371_ARNIM_ACTIVATED_CLAUSE).then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![
+                AbilityCost::Mana(ManaCost::parse("{3}").expect("printed mana cost")),
+                AbilityCost::Tap,
+            ],
+            effect: vec![issue_371_create_tokens(
+                "villain_b_2_1_menace",
+                Amount::Fixed(1),
+                true,
+            )],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: vec![issue_373_graveyard_threshold(
+                GraveyardAggregate::CardCount,
+                Some(issue_371_creature_card_filter()),
+                2,
+            )],
+            activation_limit: None,
+        })
+    })
+}
+
+/// 3. HYDRA Troopers' mandatory ETB uses the shipped `FirstApplicable` branch shape: the gate is
+/// the same two-plus creature-card condition as recipe 2, and the otherwise clause mills two
+/// (CR 701.17). Optional branches, other thresholds, and other mill counts stay unsupported.
+fn match_triggered_etb_create_villain_menace_or_mill_two(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_371_HYDRA_ETB_CLAUSE).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WhenSelfEntersBattlefield,
+            vec![SpellEffectKind::ChooseResolutionBranch {
+                chooser: PlayerRecipient::Controller,
+                optional: false,
+                selection: ResolutionBranchSelection::FirstApplicable,
+                branches: vec![
+                    ResolutionBranchDef {
+                        branch_id: ChoiceId::new("villain")
+                            .expect("closed HYDRA branch uses a valid choice ID"),
+                        presentation: AbilityPresentation::Fallback,
+                        runtime_fallback: None,
+                        cost: ResolutionCost::None,
+                        requirement: ResolutionBranchRequirement::GameCondition(
+                            issue_373_graveyard_threshold(
+                                GraveyardAggregate::CardCount,
+                                Some(issue_371_creature_card_filter()),
+                                2,
+                            ),
+                        ),
+                        effects: vec![issue_371_create_tokens(
+                            "villain_b_2_1_menace",
+                            Amount::Fixed(1),
+                            true,
+                        )],
+                    },
+                    ResolutionBranchDef {
+                        branch_id: ChoiceId::new("otherwise")
+                            .expect("closed HYDRA fallback uses a valid choice ID"),
+                        presentation: AbilityPresentation::Fallback,
+                        runtime_fallback: None,
+                        cost: ResolutionCost::None,
+                        requirement: ResolutionBranchRequirement::Always,
+                        effects: vec![SpellEffectKind::Mill {
+                            count: Amount::Fixed(2),
+                            who: PlayerRecipient::Controller,
+                        }],
+                    },
+                ],
+                otherwise: Vec::new(),
+            }],
+        )
+    })
+}
+
+/// 4. Lluwen's activation requires a land-card discard, expressed by the typed filtered-discard
+/// cost (the resolution-cost sibling already ships as Crypt Lurker's `DiscardCard`). The count
+/// reads the controller's public graveyard as the token instruction resolves.
+fn match_activated_create_worm_for_each_land_graveyard_card(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_371_LLUWEN_ACTIVATED_CLAUSE).then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![
+                AbilityCost::Mana(
+                    ManaCost::parse("{2}{B/G}{B/G}{B/G}").expect("printed hybrid mana cost"),
+                ),
+                AbilityCost::Tap,
+                AbilityCost::DiscardCard {
+                    filter: CardTypeFilter::Land,
+                },
+            ],
+            effect: vec![issue_371_create_tokens(
+                "worm_bg_1_1",
+                issue_373_graveyard_count(Some(issue_371_land_card_filter())),
+                false,
+            )],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
+/// Lluwen's non-cohort ETB mills four and then offers the printed optional choice among the
+/// exact milled cards (`from_result` binds the preceding mill cohort), putting one creature-or-land
+/// card on top of the library (CR 608.2d). A mandatory choice, another count, another destination,
+/// or a mill-then-return wording all stay unsupported.
+fn match_triggered_etb_mill_four_then_may_choose_creature_or_land_to_top(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context) == ISSUE_371_LLUWEN_ETB_CLAUSE)
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfEntersBattlefield,
+                vec![
+                    SpellEffectKind::Mill {
+                        count: Amount::Fixed(4),
+                        who: PlayerRecipient::Controller,
+                    },
+                    SpellEffectKind::ChooseGraveyardCard {
+                        filter: ZoneCardFilter {
+                            any_of: Some(vec![
+                                issue_371_creature_card_filter(),
+                                issue_371_land_card_filter(),
+                            ]),
+                            ..ZoneCardFilter::default()
+                        },
+                        destination: GraveyardDestination::LibraryTop,
+                        optional: true,
+                        from_result: Some(CardResultFilter {
+                            source: CardResultSource::PreviousEffect,
+                            action: CardResultAction::Mill,
+                            players: RelativePlayerSet::Controller,
+                            card_type: None,
+                        }),
+                    },
+                ],
+            )
+        })
+}
+
+/// 5. Morcant's Eyes' sorcery-speed self-sacrifice creates X registered 2/2 black and green Elf
+/// tokens from the subtype-filtered public graveyard count. Other thresholds, a targeted Elf card,
+/// a different token, and a non-sacrifice cost stay unsupported.
+fn match_activated_create_elf_for_each_elf_graveyard_card_sorcery(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_enchantment && text == ISSUE_371_MORCANT_ACTIVATED_CLAUSE).then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![
+                AbilityCost::Mana(ManaCost::parse("{4}{G}{G}").expect("printed mana cost")),
+                AbilityCost::SacrificeSelf,
+            ],
+            effect: vec![issue_371_create_tokens(
+                "elf_bg_2_2",
+                issue_373_graveyard_count(Some(issue_371_elf_card_filter())),
+                false,
+            )],
+            targeting: None,
+            timing: ActivationTiming::SorcerySpeed,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
+/// 6. Revenge of the Rats creates one registered tapped 1/1 black Rat token per creature card in
+/// its controller's graveyard. This is deliberately not the shipped `rat_b_1_1_cant_block`
+/// identity: the printed token has no combat restriction.
+fn match_spell_create_rat_tapped_for_each_creature_graveyard_card(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_371_REVENGE_SPELL_CLAUSE).then(|| {
+        RecipeEmission::SpellEffect(issue_371_create_tokens(
+            "rat_b_1_1",
+            issue_373_graveyard_count(Some(issue_371_creature_card_filter())),
+            true,
+        ))
+    })
+}
+
+/// Kiora's non-cohort ETB is the shipped loot shape with two cards in each direction; the
+/// shortened self-reference (CR 201.5c) normalizes to `this creature`, so Jadzi, Steward of Fate's
+/// identical printed line is the second calibration consumer.
+fn match_triggered_etb_draw_two_then_discard_two(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && issue_377_self_name_normalized(text, context) == ISSUE_371_KIORA_ETB_CLAUSE)
+        .then(|| {
+            triggered_ability(
+                context,
+                SpellEffectKind::DrawDiscard {
+                    who: PlayerRecipient::Controller,
+                    draw_count: 2,
+                    discard_count: 2,
+                    order: DrawDiscardOrder::DrawThenDiscard,
+                    optional: false,
+                },
+            )
+        })
+}
+
+/// 7. Kiora's Threshold attack trigger is the shipped optional-attack shape with the printed
+/// seven-card intervening-if gate, re-checked on resolution (CR 603.4). "Threshold" is an ability
+/// word, mapped through the ability's Oracle-line presentation rather than new vocabulary.
+fn match_triggered_attack_create_octopus_may_threshold_seven(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_creature {
+        return None;
+    }
+    let body = issue_373_strip_ability_word(text);
+    if issue_377_self_name_normalized(body, context) != ISSUE_371_KIORA_ATTACK_CLAUSE {
+        return None;
+    }
+    let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+        context,
+        TriggerCondition::WheneverSelfAttacks {
+            minimum_other_attackers: 0,
+        },
+        vec![issue_371_create_tokens(
+            "scion_of_the_deep",
+            Amount::Fixed(1),
+            false,
+        )],
+    ) else {
+        unreachable!("triggered_ability_with always returns a triggered ability")
+    };
+    ability.may = true;
+    ability.intervening_if = Some(issue_373_graveyard_threshold(
+        GraveyardAggregate::CardCount,
+        None,
+        7,
+    ));
+    Some(RecipeEmission::TriggeredAbility(ability))
+}
+
+/// 8. The Final Days establishes `CastOrigin(Graveyard)` as the face's cast condition and resolves
+/// the printed "instead" substitution through the shipped mandatory `FirstApplicable` branch: the
+/// cast-from-graveyard branch creates X tokens from the creature-card graveyard count, and the
+/// unconditional fallback creates exactly two. The issue's suggested nested
+/// `Amount::Conditional` shape cannot express a dynamic `when_true` (both branches are `u32`), so
+/// this exact shipped shape replaces it without widening any matcher or adding vocabulary.
+fn match_spell_create_horror_tapped_cast_from_graveyard_scales(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_371_FINAL_DAYS_CLAUSE).then(|| RecipeEmission::SpellEffectsWithCastConditions {
+        conditions: vec![GameCondition::CastOrigin {
+            origin: SpellCastOrigin::Graveyard,
+        }],
+        effects: vec![SpellEffectKind::ChooseResolutionBranch {
+            chooser: PlayerRecipient::Controller,
+            optional: false,
+            selection: ResolutionBranchSelection::FirstApplicable,
+            branches: vec![
+                ResolutionBranchDef {
+                    branch_id: ChoiceId::new("cast_from_graveyard")
+                        .expect("closed Final Days branch uses a valid choice ID"),
+                    presentation: AbilityPresentation::Fallback,
+                    runtime_fallback: None,
+                    cost: ResolutionCost::None,
+                    requirement: ResolutionBranchRequirement::GameCondition(
+                        GameCondition::CastSnapshot { index: 0 },
+                    ),
+                    effects: vec![issue_371_create_tokens(
+                        "horror_b_2_2",
+                        issue_373_graveyard_count(Some(issue_371_creature_card_filter())),
+                        true,
+                    )],
+                },
+                ResolutionBranchDef {
+                    branch_id: ChoiceId::new("cast_otherwise")
+                        .expect("closed Final Days fallback uses a valid choice ID"),
+                    presentation: AbilityPresentation::Fallback,
+                    runtime_fallback: None,
+                    cost: ResolutionCost::None,
+                    requirement: ResolutionBranchRequirement::Always,
+                    effects: vec![issue_371_create_tokens(
+                        "horror_b_2_2",
+                        Amount::Fixed(2),
+                        true,
+                    )],
+                },
+            ],
+            otherwise: Vec::new(),
+        }],
+    })
 }
 
 pub(super) static CATALOG: &[Recipe] = &[
@@ -17441,10 +17904,11 @@ pub(super) static CATALOG: &[Recipe] = &[
         surface: RecipeSurface::TriggeredAbility,
         matcher: match_upkeep_surveil_one,
         // Mindwhisker is the cohort identity; Uurg, Spawn of Turg prints the same upkeep clause
-        // in the full corpus.
+        // in the full corpus, and Morcant's Eyes prints the identical template on an enchantment.
         calibration: calibrations!(
             "Mindwhisker" => "At the beginning of your upkeep, surveil 1.",
-            "Uurg, Spawn of Turg" => "At the beginning of your upkeep, surveil 1.";
+            "Uurg, Spawn of Turg" => "At the beginning of your upkeep, surveil 1.",
+            "Morcant's Eyes" => "At the beginning of your upkeep, surveil 1.";
             // Another count, another step, a rider, and the each-upkeep scope stay unsupported.
             "At the beginning of your upkeep, surveil 2.",
             "At the beginning of your end step, surveil 1.",
@@ -17553,6 +18017,206 @@ pub(super) static CATALOG: &[Recipe] = &[
             "When this creature enters, create three 1/1 black and green Insect creature tokens with flying.",
             "When this creature enters, create two 1/1 black Insect creature tokens with flying.",
             "When this creature enters, create two 1/1 black and green Insect creature tokens with deathtouch."
+        ),
+    },
+    Recipe {
+        id: RecipeId(
+            "triggered.etb.create_tokens.insect.for_each_artifact_or_creature_graveyard_card",
+        ),
+        label: "ETB Insect per artifact-and/or-creature graveyard card",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_triggered_etb_create_insect_for_each_artifact_or_creature_graveyard_card,
+        // Aatchik, Emerald Radian is the only exact full-corpus printing (verified). The shared
+        // `artifact and/or creature` filter shape is exercised by Ooze Patrol and Chitin
+        // Gravestalker; no matcher widening is involved.
+        calibration: singleton_calibrations!(
+            "Aatchik, Emerald Radian" => "When Aatchik enters, create a 1/1 green Insect creature token for each artifact and/or creature card in your graveyard.";
+            "When this creature enters, create a 1/1 green Insect creature token for each creature card in your graveyard.",
+            "When this creature enters, create a 1/1 green Insect creature token for each artifact card in your graveyard.",
+            "When this creature enters, create a 1/1 green Insect creature token for each artifact and/or creature card in target player's graveyard.",
+            "When this creature enters, create two 1/1 green Insect creature tokens for each artifact and/or creature card in your graveyard.",
+            "When this creature enters, create a 1/1 green Insect creature token for each artifact and/or creature card in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId(
+            "triggered.dies.insect_you_control.self_counter_and_each_opponent_drain",
+        ),
+        label: "another Insect dying adds a counter and drains each opponent",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_triggered_insect_dies_counter_and_each_opponent_drain,
+        // Aatchik, Emerald Radian is the only exact full-corpus printing; Zask, Skittering
+        // Swarmlord prints the same trigger with a different effect.
+        calibration: singleton_calibrations!(
+            "Aatchik, Emerald Radian" => "Whenever another Insect you control dies, put a +1/+1 counter on Aatchik. Each opponent loses 1 life.";
+            "Whenever another creature you control dies, put a +1/+1 counter on this creature. Each opponent loses 1 life.",
+            "Whenever another Insect you control dies, put a +1/+1 counter on this creature.",
+            "Whenever another Insect you control dies, put two +1/+1 counters on this creature. Each opponent loses 1 life.",
+            "Whenever another Insect you control dies, put a +1/+1 counter on this creature. Each opponent loses 2 life.",
+            "Whenever another Insect you control dies, put a +1/+1 counter on this creature. You gain 1 life.",
+            "Whenever another Insect you control dies, put a +1/+1 counter on this creature. Each opponent loses 1 life. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.create_tokens.villain_menace.only_two_creature_cards_graveyard"),
+        label: "Villain activation gated on two creature cards in the graveyard",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_create_villain_menace_only_two_creature_cards_graveyard,
+        // Arnim Zola, Bio-Fanatic is the only exact full-corpus printing. The registered
+        // `villain_b_2_1_menace` token and the inclusive two-plus creature-card gate are shared
+        // with HYDRA Troopers' retained recipe and the #377 Villain consumers.
+        calibration: singleton_calibrations!(
+            "Arnim Zola, Bio-Fanatic" => "{3}, {T}: Create a tapped 2/1 black Villain creature token with menace. Activate only if there are two or more creature cards in your graveyard.";
+            "{3}, {T}: Create a 2/1 black Villain creature token with menace. Activate only if there are two or more creature cards in your graveyard.",
+            "{3}, {T}: Create a tapped 2/1 black Villain creature token with menace. Activate only if there are one or more creature cards in your graveyard.",
+            "{3}, {T}: Create a tapped 2/1 black Villain creature token with menace. Activate only if there are three or more creature cards in your graveyard.",
+            "{2}, {T}: Create a tapped 2/1 black Villain creature token with menace. Activate only if there are two or more creature cards in your graveyard.",
+            "{3}: Create a tapped 2/1 black Villain creature token with menace. Activate only if there are two or more creature cards in your graveyard.",
+            "{3}, {T}: Create a tapped 2/1 black Villain creature token with menace. Activate only as a sorcery and only if there are two or more creature cards in your graveyard.",
+            "{3}, {T}: Create a tapped 2/1 black Villain creature token with menace. Activate only if there are two or more creature cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.create_tokens.villain_menace_or_mill_two.condition_two_creature_cards_graveyard"),
+        label: "ETB Villain at two creature cards otherwise mill two",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_triggered_etb_create_villain_menace_or_mill_two,
+        // HYDRA Troopers is the only exact full-corpus printing. The mandatory FirstApplicable
+        // branch and its single unconditional fallback ship today; the Villain token and gate are
+        // shared with recipe 2.
+        calibration: singleton_calibrations!(
+            "HYDRA Troopers" => "When this creature enters, create a tapped 2/1 black Villain creature token with menace if there are two or more creature cards in your graveyard. Otherwise, mill two cards.";
+            "When this creature enters, create a tapped 2/1 black Villain creature token with menace if there are two or more creature cards in your graveyard.",
+            "When this creature enters, create a tapped 2/1 black Villain creature token with menace if there are three or more creature cards in your graveyard. Otherwise, mill two cards.",
+            "When this creature enters, create a tapped 2/1 black Villain creature token with menace if there are two or more creature cards in your graveyard. Otherwise, mill a card.",
+            "When this creature enters, create a tapped 2/1 black Villain creature token with menace if there are two or more creature cards in your graveyard. Otherwise, mill three cards.",
+            "When this creature enters, create a 2/1 black Villain creature token with menace if there are two or more creature cards in your graveyard. Otherwise, mill two cards.",
+            "When this creature enters, you may create a tapped 2/1 black Villain creature token with menace if there are two or more creature cards in your graveyard. Otherwise, mill two cards.",
+            "When this creature enters, create a tapped 2/1 black Villain creature token with menace if there are two or more creature cards in your graveyard. Otherwise, mill two cards. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.create_tokens.worm.for_each_land_graveyard_card"),
+        label: "Worm per land card in the graveyard with a filtered discard cost",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_create_worm_for_each_land_graveyard_card,
+        // Lluwen, Imperfect Naturalist is the only exact full-corpus printing. The land-card
+        // graveyard count is shared with Lasyd Prowler and Cavernous Maw; the filtered-discard
+        // cost mirrors the shipped ResolutionCost::DiscardCard consumers (Crypt Lurker).
+        calibration: singleton_calibrations!(
+            "Lluwen, Imperfect Naturalist" => "{2}{B/G}{B/G}{B/G}, {T}, Discard a land card: Create a 1/1 black and green Worm creature token for each land card in your graveyard.";
+            "{2}{B/G}{B/G}{B/G}, {T}, Discard a card: Create a 1/1 black and green Worm creature token for each land card in your graveyard.",
+            "{1}{B/G}{B/G}{B/G}, {T}, Discard a land card: Create a 1/1 black and green Worm creature token for each land card in your graveyard.",
+            "{2}{B/G}{B/G}{B/G}, Discard a land card: Create a 1/1 black and green Worm creature token for each land card in your graveyard.",
+            "{2}{B/G}{B/G}{B/G}, {T}, Discard a land card: Create a 2/2 black and green Worm creature token for each land card in your graveyard.",
+            "{2}{B/G}{B/G}{B/G}, {T}, Discard a land card: Create a 1/1 black and green Worm creature token for each permanent card in your graveyard.",
+            "{2}{B/G}{B/G}{B/G}, {T}, Discard a land card: Create a 1/1 black and green Worm creature token for each land card in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.mill_four.then_may_choose_creature_or_land_to_library_top"),
+        label: "ETB mill four then optionally top a milled creature or land",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_triggered_etb_mill_four_then_may_choose_creature_or_land_to_top,
+        // Lluwen, Imperfect Naturalist is the only exact full-corpus printing; no other card
+        // prints this mill count with this optional top-of-library choice.
+        calibration: singleton_calibrations!(
+            "Lluwen, Imperfect Naturalist" => "When Lluwen enters, mill four cards, then you may put a creature or land card from among the milled cards on top of your library.";
+            "When this creature enters, mill three cards, then you may put a creature or land card from among the milled cards on top of your library.",
+            "When this creature enters, mill four cards, then put a creature or land card from among the milled cards on top of your library.",
+            "When this creature enters, mill four cards, then you may put a creature card from among the milled cards on top of your library.",
+            "When this creature enters, mill four cards, then you may put a creature or land card from among the milled cards into your hand.",
+            "When this creature enters, mill four cards, then you may put a creature or land card from among the milled cards on the bottom of your library.",
+            "When this creature enters, mill four cards, then you may put a creature or land card from among the milled cards on top of your library. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.create_tokens.elf.for_each_elf_graveyard_card.sorcery"),
+        label: "sorcery-speed Elf tokens per graveyard Elf card",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_create_elf_for_each_elf_graveyard_card_sorcery,
+        // Morcant's Eyes is the only exact full-corpus printing. The subtype-filtered graveyard
+        // count is shared with Gloom Ripper (Elf cards) and Sinuous Benthisaur (Cave cards).
+        calibration: singleton_calibrations!(
+            "Morcant's Eyes" => "{4}{G}{G}, Sacrifice this enchantment: Create X 2/2 black and green Elf creature tokens, where X is the number of Elf cards in your graveyard. Activate only as a sorcery.";
+            "{4}{G}{G}, Sacrifice this enchantment: Create X 2/2 black and green Elf creature tokens, where X is the number of Elf cards in your graveyard. Activate only if there are two or more Elf cards in your graveyard.",
+            "{4}{G}{G}, Sacrifice this enchantment: Create X 2/2 black and green Elf creature tokens, where X is the number of Elf cards in target player's graveyard. Activate only as a sorcery.",
+            "{4}{G}{G}, Sacrifice this enchantment: Create X 1/1 green Elf Warrior creature tokens, where X is the number of Elf cards in your graveyard. Activate only as a sorcery.",
+            "{4}{G}{G}: Create X 2/2 black and green Elf creature tokens, where X is the number of Elf cards in your graveyard. Activate only as a sorcery.",
+            "{3}{G}{G}, Sacrifice this enchantment: Create X 2/2 black and green Elf creature tokens, where X is the number of Elf cards in your graveyard. Activate only as a sorcery.",
+            "{4}{G}{G}, Sacrifice this enchantment: Create X 2/2 black and green Elf creature tokens, where X is the number of Elf cards in your graveyard. Activate only as a sorcery. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.create_tokens.rat.tapped.for_each_creature_graveyard_card"),
+        label: "tapped Rat per creature card in the graveyard",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_create_rat_tapped_for_each_creature_graveyard_card,
+        // Revenge of the Rats is the only exact full-corpus printing; the registered token is a
+        // new identity without `rat_b_1_1_cant_block`'s combat restriction. The creature-card
+        // graveyard count is shared with Hollow Marauder and Killmonger.
+        calibration: singleton_calibrations!(
+            "Revenge of the Rats" => "Create a tapped 1/1 black Rat creature token for each creature card in your graveyard.";
+            "Create a 1/1 black Rat creature token for each creature card in your graveyard.",
+            "Create a tapped 1/1 black Rat creature token for each Rat card in your graveyard.",
+            "Create a tapped 1/1 black Rat creature token for each creature card in target player's graveyard.",
+            "Create a tapped 1/1 black Rat creature token with \"This token can't block\" for each creature card in your graveyard.",
+            "Create a tapped 1/1 black Rat creature token for each creature card in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.etb.draw_discard.two_two.controller"),
+        label: "ETB draw two then discard two",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_triggered_etb_draw_two_then_discard_two,
+        // Kiora, the Rising Tide prints the shortened form; Jadzi, Steward of Fate prints the
+        // identical line with its own shortened name (CR 201.5c). Both are named positives. The
+        // one/two or two/one loot forms and the optional forms stay unsupported.
+        calibration: calibrations!(
+            "Kiora, the Rising Tide" => "When Kiora enters, draw two cards, then discard two cards.",
+            "Jadzi, Steward of Fate" => "When Jadzi enters, draw two cards, then discard two cards.";
+            "When this creature enters, draw two cards, then discard a card.",
+            "When this creature enters, draw a card, then discard two cards.",
+            "When this creature enters, you may draw two cards, then discard two cards.",
+            "When this creature enters, draw two cards, then discard two cards. Draw a card.",
+            "Whenever this creature attacks, draw two cards, then discard two cards."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.attack.create_tokens.octopus.may_threshold_seven_graveyard"),
+        label: "optional threshold attack Scion of the Deep",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_triggered_attack_create_octopus_may_threshold_seven,
+        // Kiora, the Rising Tide is the only exact full-corpus printing. The seven-card threshold
+        // gate is shared with Mind Drill Assailant and Billowing Shriekmass; "Threshold" stays an
+        // ability word mapped through the ability's Oracle-line presentation.
+        calibration: singleton_calibrations!(
+            "Kiora, the Rising Tide" => "Threshold — Whenever Kiora attacks, if there are seven or more cards in your graveyard, you may create Scion of the Deep, a legendary 8/8 blue Octopus creature token.";
+            "Threshold — Whenever this creature attacks, if there are six or more cards in your graveyard, you may create Scion of the Deep, a legendary 8/8 blue Octopus creature token.",
+            "Threshold — Whenever this creature attacks, if there are seven or more cards in your graveyard, create Scion of the Deep, a legendary 8/8 blue Octopus creature token.",
+            "Threshold — Whenever this creature attacks, if there are seven or more cards in your graveyard, you may create Scion of the Deep, a legendary 8/8 green Octopus creature token.",
+            "Threshold — Whenever this creature attacks, if there are seven or more cards in your graveyard, you may create Scion of the Deep, an 8/8 blue Octopus creature token.",
+            "Threshold — Whenever this creature attacks, you may create Scion of the Deep, a legendary 8/8 blue Octopus creature token.",
+            "Threshold — Whenever this creature attacks, if there are seven or more cards in your graveyard, you may create Scion of the Deep, a legendary 8/8 blue Octopus creature token. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.create_tokens.horror.tapped.cast_from_graveyard_scales"),
+        label: "cast-from-graveyard Horror token substitution",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_create_horror_tapped_cast_from_graveyard_scales,
+        // The Final Days is the only exact full-corpus printing. The issue's nested
+        // Amount::Conditional shape cannot hold a dynamic when_true; the shipped mandatory
+        // FirstApplicable branch over the face CastSnapshot expresses the printed "instead"
+        // exactly (same branch shape as the engine's cast-snapshot regression test).
+        calibration: singleton_calibrations!(
+            "The Final Days" => "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create X of those tokens, where X is the number of creature cards in your graveyard.";
+            "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from your hand, instead create X of those tokens, where X is the number of creature cards in your graveyard.",
+            "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create X of those tokens, where X is the number of creature cards in target player's graveyard.",
+            "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create X of those tokens, where X is the number of land cards in your graveyard.",
+            "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create three of those tokens.",
+            "Create a tapped 2/2 black Horror creature token. If this spell was cast from a graveyard, instead create X of those tokens, where X is the number of creature cards in your graveyard.",
+            "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create X of those tokens, where X is the number of creature cards in your graveyard. Draw a card."
         ),
     },
 ];
@@ -32774,5 +33438,807 @@ mod tests {
                 sacrifice_timing: None,
             }]
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #371 — graveyard-count token creation cohort.
+    // -----------------------------------------------------------------------
+
+    const ISSUE_371_AATCHIK_ETB_CLAUSE: &str = "When Aatchik enters, create a 1/1 green Insect creature token for each artifact and/or creature card in your graveyard.";
+    const ISSUE_371_AATCHIK_DIES_CLAUSE: &str = "Whenever another Insect you control dies, put a +1/+1 counter on Aatchik. Each opponent loses 1 life.";
+    const ISSUE_371_ARNIM_ACTIVATED_CLAUSE: &str = "{3}, {T}: Create a tapped 2/1 black Villain creature token with menace. Activate only if there are two or more creature cards in your graveyard.";
+    const ISSUE_371_HYDRA_ETB_CLAUSE: &str = "When this creature enters, create a tapped 2/1 black Villain creature token with menace if there are two or more creature cards in your graveyard. Otherwise, mill two cards.";
+    const ISSUE_371_KIORA_ETB_CLAUSE: &str =
+        "When Kiora enters, draw two cards, then discard two cards.";
+    const ISSUE_371_KIORA_ATTACK_CLAUSE: &str = "Threshold — Whenever Kiora attacks, if there are seven or more cards in your graveyard, you may create Scion of the Deep, a legendary 8/8 blue Octopus creature token.";
+    const ISSUE_371_LLUWEN_ETB_CLAUSE: &str = "When Lluwen enters, mill four cards, then you may put a creature or land card from among the milled cards on top of your library.";
+    const ISSUE_371_LLUWEN_ACTIVATED_CLAUSE: &str = "{2}{B/G}{B/G}{B/G}, {T}, Discard a land card: Create a 1/1 black and green Worm creature token for each land card in your graveyard.";
+    const ISSUE_371_MORCANT_ACTIVATED_CLAUSE: &str = "{4}{G}{G}, Sacrifice this enchantment: Create X 2/2 black and green Elf creature tokens, where X is the number of Elf cards in your graveyard. Activate only as a sorcery.";
+    const ISSUE_371_REVENGE_SPELL_CLAUSE: &str =
+        "Create a tapped 1/1 black Rat creature token for each creature card in your graveyard.";
+    const ISSUE_371_FINAL_DAYS_CLAUSE: &str = "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create X of those tokens, where X is the number of creature cards in your graveyard.";
+
+    const ISSUE_371_AATCHIK_ETB_RECIPE: &str =
+        "triggered.etb.create_tokens.insect.for_each_artifact_or_creature_graveyard_card";
+    const ISSUE_371_AATCHIK_DIES_RECIPE: &str =
+        "triggered.dies.insect_you_control.self_counter_and_each_opponent_drain";
+    const ISSUE_371_ARNIM_RECIPE: &str =
+        "activated.create_tokens.villain_menace.only_two_creature_cards_graveyard";
+    const ISSUE_371_HYDRA_RECIPE: &str = "triggered.etb.create_tokens.villain_menace_or_mill_two.condition_two_creature_cards_graveyard";
+    const ISSUE_371_KIORA_ETB_RECIPE: &str = "triggered.etb.draw_discard.two_two.controller";
+    const ISSUE_371_KIORA_ATTACK_RECIPE: &str =
+        "triggered.attack.create_tokens.octopus.may_threshold_seven_graveyard";
+    const ISSUE_371_LLUWEN_ETB_RECIPE: &str =
+        "triggered.etb.mill_four.then_may_choose_creature_or_land_to_library_top";
+    const ISSUE_371_LLUWEN_ACTIVATED_RECIPE: &str =
+        "activated.create_tokens.worm.for_each_land_graveyard_card";
+    const ISSUE_371_MORCANT_RECIPE: &str =
+        "activated.create_tokens.elf.for_each_elf_graveyard_card.sorcery";
+    const ISSUE_371_REVENGE_RECIPE: &str =
+        "spell.create_tokens.rat.tapped.for_each_creature_graveyard_card";
+    const ISSUE_371_FINAL_DAYS_RECIPE: &str =
+        "spell.create_tokens.horror.tapped.cast_from_graveyard_scales";
+
+    fn issue_371_context(source_name: &str, is_spell: bool) -> RecipeContext {
+        let mut context = context();
+        context.source_name = source_name.into();
+        context.source_is_permanent = !is_spell;
+        context.source_is_creature = !is_spell;
+        context.source_is_enchantment = source_name == "Morcant's Eyes";
+        context.source_is_instant = false;
+        context.source_is_sorcery = is_spell;
+        context.oracle_id = Some("00000000-0000-0000-0000-000000000371".into());
+        context
+    }
+
+    #[test]
+    fn issue_371_cohort_clauses_match_their_exact_recipes() {
+        for (source_name, clause, is_spell, recipe_id) in [
+            (
+                "Aatchik, Emerald Radian",
+                ISSUE_371_AATCHIK_ETB_CLAUSE,
+                false,
+                ISSUE_371_AATCHIK_ETB_RECIPE,
+            ),
+            (
+                "Arnim Zola, Bio-Fanatic",
+                ISSUE_371_ARNIM_ACTIVATED_CLAUSE,
+                false,
+                ISSUE_371_ARNIM_RECIPE,
+            ),
+            (
+                "HYDRA Troopers",
+                ISSUE_371_HYDRA_ETB_CLAUSE,
+                false,
+                ISSUE_371_HYDRA_RECIPE,
+            ),
+            (
+                "Kiora, the Rising Tide",
+                ISSUE_371_KIORA_ATTACK_CLAUSE,
+                false,
+                ISSUE_371_KIORA_ATTACK_RECIPE,
+            ),
+            (
+                "Lluwen, Imperfect Naturalist",
+                ISSUE_371_LLUWEN_ACTIVATED_CLAUSE,
+                false,
+                ISSUE_371_LLUWEN_ACTIVATED_RECIPE,
+            ),
+            (
+                "Morcant's Eyes",
+                ISSUE_371_MORCANT_ACTIVATED_CLAUSE,
+                false,
+                ISSUE_371_MORCANT_RECIPE,
+            ),
+            (
+                "Revenge of the Rats",
+                ISSUE_371_REVENGE_SPELL_CLAUSE,
+                true,
+                ISSUE_371_REVENGE_RECIPE,
+            ),
+            (
+                "The Final Days",
+                ISSUE_371_FINAL_DAYS_CLAUSE,
+                true,
+                ISSUE_371_FINAL_DAYS_RECIPE,
+            ),
+        ] {
+            let matched = match_clause(clause, is_spell, &issue_371_context(source_name, is_spell))
+                .unwrap_or_else(|ambiguity| panic!("{recipe_id} clause is ambiguous: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{recipe_id} clause must match exactly one recipe"));
+            assert_eq!(
+                matched.id.as_str(),
+                recipe_id,
+                "unexpected recipe for clause {clause:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_371_completion_clauses_match_their_exact_recipes() {
+        for (source_name, clause, recipe_id) in [
+            (
+                "Aatchik, Emerald Radian",
+                ISSUE_371_AATCHIK_DIES_CLAUSE,
+                ISSUE_371_AATCHIK_DIES_RECIPE,
+            ),
+            (
+                "Kiora, the Rising Tide",
+                ISSUE_371_KIORA_ETB_CLAUSE,
+                ISSUE_371_KIORA_ETB_RECIPE,
+            ),
+            (
+                "Lluwen, Imperfect Naturalist",
+                ISSUE_371_LLUWEN_ETB_CLAUSE,
+                ISSUE_371_LLUWEN_ETB_RECIPE,
+            ),
+        ] {
+            let matched = match_clause(clause, false, &issue_371_context(source_name, false))
+                .unwrap_or_else(|ambiguity| panic!("{recipe_id} clause is ambiguous: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{recipe_id} clause must match exactly one recipe"));
+            assert_eq!(
+                matched.id.as_str(),
+                recipe_id,
+                "unexpected recipe for clause {clause:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_371_negative_near_misses_stay_fail_closed() {
+        for (source_name, is_spell, negative) in [
+            (
+                "Aatchik, Emerald Radian",
+                false,
+                "When Aatchik enters, create a 1/1 green Insect creature token for each creature card in your graveyard.",
+            ),
+            (
+                "Aatchik, Emerald Radian",
+                false,
+                "When Aatchik enters, create a 1/1 green Insect creature token for each artifact card in your graveyard.",
+            ),
+            (
+                "Aatchik, Emerald Radian",
+                false,
+                "When Aatchik enters, create a 1/1 green Insect creature token for each artifact and/or creature card in target player's graveyard.",
+            ),
+            (
+                "Aatchik, Emerald Radian",
+                false,
+                "When Aatchik enters, create two 1/1 green Insect creature tokens for each artifact and/or creature card in your graveyard.",
+            ),
+            (
+                "Aatchik, Emerald Radian",
+                false,
+                "When Aatchik enters, create a 1/1 green Insect creature token for each artifact and/or creature card in your graveyard. Draw a card.",
+            ),
+            (
+                "Aatchik, Emerald Radian",
+                false,
+                "Whenever another Insect you control dies, put a +1/+1 counter on Aatchik.",
+            ),
+            (
+                "Aatchik, Emerald Radian",
+                false,
+                "Whenever another Insect you control dies, put a +1/+1 counter on Aatchik. Each opponent loses 2 life.",
+            ),
+            (
+                "Aatchik, Emerald Radian",
+                false,
+                "Whenever another Insect you control dies, put a +1/+1 counter on Aatchik. You gain 1 life.",
+            ),
+            (
+                "Arnim Zola, Bio-Fanatic",
+                false,
+                "{3}, {T}: Create a 2/1 black Villain creature token with menace. Activate only if there are two or more creature cards in your graveyard.",
+            ),
+            (
+                "Arnim Zola, Bio-Fanatic",
+                false,
+                "{3}, {T}: Create a tapped 2/1 black Villain creature token with menace. Activate only if there are one or more creature cards in your graveyard.",
+            ),
+            (
+                "Arnim Zola, Bio-Fanatic",
+                false,
+                "{3}, {T}: Create a tapped 2/1 black Villain creature token with menace. Activate only if there are three or more creature cards in your graveyard.",
+            ),
+            (
+                "Arnim Zola, Bio-Fanatic",
+                false,
+                "{2}, {T}: Create a tapped 2/1 black Villain creature token with menace. Activate only if there are two or more creature cards in your graveyard.",
+            ),
+            (
+                "Arnim Zola, Bio-Fanatic",
+                false,
+                "{3}, {T}: Create a tapped 2/1 black Villain creature token with menace. Activate only if there are two or more creature cards in your graveyard. Draw a card.",
+            ),
+            (
+                "HYDRA Troopers",
+                false,
+                "When this creature enters, create a tapped 2/1 black Villain creature token with menace if there are two or more creature cards in your graveyard.",
+            ),
+            (
+                "HYDRA Troopers",
+                false,
+                "When this creature enters, create a tapped 2/1 black Villain creature token with menace if there are three or more creature cards in your graveyard. Otherwise, mill two cards.",
+            ),
+            (
+                "HYDRA Troopers",
+                false,
+                "When this creature enters, create a tapped 2/1 black Villain creature token with menace if there are two or more creature cards in your graveyard. Otherwise, mill a card.",
+            ),
+            (
+                "HYDRA Troopers",
+                false,
+                "When this creature enters, create a 2/1 black Villain creature token with menace if there are two or more creature cards in your graveyard. Otherwise, mill two cards.",
+            ),
+            (
+                "HYDRA Troopers",
+                false,
+                "When this creature enters, you may create a tapped 2/1 black Villain creature token with menace if there are two or more creature cards in your graveyard. Otherwise, mill two cards.",
+            ),
+            (
+                "HYDRA Troopers",
+                false,
+                "When this creature enters, create a tapped 2/1 black Villain creature token with menace if there are two or more creature cards in your graveyard. Otherwise, mill two cards. Draw a card.",
+            ),
+            (
+                "Lluwen, Imperfect Naturalist",
+                false,
+                "{2}{B/G}{B/G}{B/G}, {T}, Discard a card: Create a 1/1 black and green Worm creature token for each land card in your graveyard.",
+            ),
+            (
+                "Lluwen, Imperfect Naturalist",
+                false,
+                "{1}{B/G}{B/G}{B/G}, {T}, Discard a land card: Create a 1/1 black and green Worm creature token for each land card in your graveyard.",
+            ),
+            (
+                "Lluwen, Imperfect Naturalist",
+                false,
+                "{2}{B/G}{B/G}{B/G}, Discard a land card: Create a 1/1 black and green Worm creature token for each land card in your graveyard.",
+            ),
+            (
+                "Lluwen, Imperfect Naturalist",
+                false,
+                "{2}{B/G}{B/G}{B/G}, {T}, Discard a land card: Create a 2/2 black and green Worm creature token for each land card in your graveyard.",
+            ),
+            (
+                "Lluwen, Imperfect Naturalist",
+                false,
+                "{2}{B/G}{B/G}{B/G}, {T}, Discard a land card: Create a 1/1 black and green Worm creature token for each permanent card in your graveyard.",
+            ),
+            (
+                "Lluwen, Imperfect Naturalist",
+                false,
+                "{2}{B/G}{B/G}{B/G}, {T}, Discard a land card: Create a 1/1 black and green Worm creature token for each land card in your graveyard. Draw a card.",
+            ),
+            (
+                "Lluwen, Imperfect Naturalist",
+                false,
+                "When Lluwen enters, mill three cards, then you may put a creature or land card from among the milled cards on top of your library.",
+            ),
+            (
+                "Lluwen, Imperfect Naturalist",
+                false,
+                "When Lluwen enters, mill four cards, then put a creature or land card from among the milled cards on top of your library.",
+            ),
+            (
+                "Lluwen, Imperfect Naturalist",
+                false,
+                "When Lluwen enters, mill four cards, then you may put a creature card from among the milled cards on top of your library.",
+            ),
+            (
+                "Lluwen, Imperfect Naturalist",
+                false,
+                "When Lluwen enters, mill four cards, then you may put a creature or land card from among the milled cards into your hand.",
+            ),
+            (
+                "Morcant's Eyes",
+                false,
+                "{4}{G}{G}, Sacrifice this enchantment: Create X 2/2 black and green Elf creature tokens, where X is the number of Elf cards in your graveyard. Activate only if there are two or more Elf cards in your graveyard.",
+            ),
+            (
+                "Morcant's Eyes",
+                false,
+                "{4}{G}{G}, Sacrifice this enchantment: Create X 2/2 black and green Elf creature tokens, where X is the number of Elf cards in target player's graveyard. Activate only as a sorcery.",
+            ),
+            (
+                "Morcant's Eyes",
+                false,
+                "{4}{G}{G}, Sacrifice this enchantment: Create X 1/1 green Elf Warrior creature tokens, where X is the number of Elf cards in your graveyard. Activate only as a sorcery.",
+            ),
+            (
+                "Morcant's Eyes",
+                false,
+                "{4}{G}{G}: Create X 2/2 black and green Elf creature tokens, where X is the number of Elf cards in your graveyard. Activate only as a sorcery.",
+            ),
+            (
+                "Morcant's Eyes",
+                false,
+                "{4}{G}{G}, Sacrifice this enchantment: Create X 2/2 black and green Elf creature tokens, where X is the number of Elf cards in your graveyard. Activate only as a sorcery. Draw a card.",
+            ),
+            (
+                "Revenge of the Rats",
+                true,
+                "Create a 1/1 black Rat creature token for each creature card in your graveyard.",
+            ),
+            (
+                "Revenge of the Rats",
+                true,
+                "Create a tapped 1/1 black Rat creature token for each Rat card in your graveyard.",
+            ),
+            (
+                "Revenge of the Rats",
+                true,
+                "Create a tapped 1/1 black Rat creature token for each creature card in target player's graveyard.",
+            ),
+            (
+                "Revenge of the Rats",
+                true,
+                "Create a tapped 1/1 black Rat creature token for each creature card in your graveyard. Draw a card.",
+            ),
+            (
+                "Kiora, the Rising Tide",
+                false,
+                "Threshold — Whenever Kiora attacks, if there are six or more cards in your graveyard, you may create Scion of the Deep, a legendary 8/8 blue Octopus creature token.",
+            ),
+            (
+                "Kiora, the Rising Tide",
+                false,
+                "Threshold — Whenever Kiora attacks, if there are seven or more cards in your graveyard, create Scion of the Deep, a legendary 8/8 blue Octopus creature token.",
+            ),
+            (
+                "Kiora, the Rising Tide",
+                false,
+                "Threshold — Whenever Kiora attacks, if there are seven or more cards in your graveyard, you may create Scion of the Deep, a legendary 8/8 green Octopus creature token.",
+            ),
+            (
+                "Kiora, the Rising Tide",
+                false,
+                "Threshold — Whenever Kiora attacks, you may create Scion of the Deep, a legendary 8/8 blue Octopus creature token.",
+            ),
+            (
+                "Kiora, the Rising Tide",
+                false,
+                "Threshold — Whenever Kiora attacks, if there are seven or more cards in your graveyard, you may create Scion of the Deep, a legendary 8/8 blue Octopus creature token. Draw a card.",
+            ),
+            (
+                "Kiora, the Rising Tide",
+                false,
+                "When Kiora enters, draw two cards, then discard a card.",
+            ),
+            (
+                "Kiora, the Rising Tide",
+                false,
+                "When Kiora enters, draw a card, then discard two cards.",
+            ),
+            (
+                "Kiora, the Rising Tide",
+                false,
+                "When Kiora enters, you may draw two cards, then discard two cards.",
+            ),
+            (
+                "Kiora, the Rising Tide",
+                false,
+                "When Kiora enters, draw two cards, then discard two cards. Draw a card.",
+            ),
+            (
+                "The Final Days",
+                true,
+                "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from your hand, instead create X of those tokens, where X is the number of creature cards in your graveyard.",
+            ),
+            (
+                "The Final Days",
+                true,
+                "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create X of those tokens, where X is the number of creature cards in target player's graveyard.",
+            ),
+            (
+                "The Final Days",
+                true,
+                "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create X of those tokens, where X is the number of land cards in your graveyard.",
+            ),
+            (
+                "The Final Days",
+                true,
+                "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create three of those tokens, where X is the number of creature cards in your graveyard.",
+            ),
+            (
+                "The Final Days",
+                true,
+                "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create X of those tokens, where X is the number of creature cards in your graveyard. Draw a card.",
+            ),
+        ] {
+            let matched = match_clause(negative, is_spell, &issue_371_context(source_name, is_spell))
+                .unwrap_or_else(|ambiguity| {
+                    panic!("negative {negative:?} must not be ambiguous: {ambiguity}")
+                });
+            assert!(
+                matched.is_none(),
+                "negative near-miss unexpectedly matched {}: {negative}",
+                matched.map(|m| m.id.as_str()).unwrap_or_default()
+            );
+        }
+    }
+
+    #[test]
+    fn issue_371_recipes_have_stable_ids_and_surfaces() {
+        for (id, surface) in [
+            (ISSUE_371_AATCHIK_ETB_RECIPE, RecipeSurface::EtbAbility),
+            (
+                ISSUE_371_AATCHIK_DIES_RECIPE,
+                RecipeSurface::TriggeredAbility,
+            ),
+            (ISSUE_371_ARNIM_RECIPE, RecipeSurface::ActivatedAbility),
+            (ISSUE_371_HYDRA_RECIPE, RecipeSurface::EtbAbility),
+            (ISSUE_371_KIORA_ETB_RECIPE, RecipeSurface::EtbAbility),
+            (
+                ISSUE_371_KIORA_ATTACK_RECIPE,
+                RecipeSurface::TriggeredAbility,
+            ),
+            (ISSUE_371_LLUWEN_ETB_RECIPE, RecipeSurface::EtbAbility),
+            (
+                ISSUE_371_LLUWEN_ACTIVATED_RECIPE,
+                RecipeSurface::ActivatedAbility,
+            ),
+            (ISSUE_371_MORCANT_RECIPE, RecipeSurface::ActivatedAbility),
+            (ISSUE_371_REVENGE_RECIPE, RecipeSurface::SpellClause),
+            (ISSUE_371_FINAL_DAYS_RECIPE, RecipeSurface::SpellClause),
+        ] {
+            let recipe = CATALOG
+                .iter()
+                .find(|recipe| recipe.id.as_str() == id)
+                .unwrap_or_else(|| panic!("missing recipe {id}"));
+            assert_eq!(recipe.surface, surface, "{id}");
+        }
+    }
+
+    fn issue_371_emission(source_name: &str, clause: &str, is_spell: bool) -> RecipeEmission {
+        match_clause(clause, is_spell, &issue_371_context(source_name, is_spell))
+            .unwrap_or_else(|ambiguity| panic!("{source_name} clause is ambiguous: {ambiguity}"))
+            .unwrap_or_else(|| panic!("{source_name} clause must match"))
+            .emission
+    }
+
+    fn issue_371_count(amount: &Amount) -> (&RelativePlayerSet, &ZoneCardFilter) {
+        let Amount::Count(CountExpression::GraveyardCards { owners, filter }) = amount else {
+            panic!("expected a graveyard card count, got {amount:?}");
+        };
+        (
+            owners,
+            filter.as_ref().expect("the printed counts are filtered"),
+        )
+    }
+
+    #[test]
+    fn issue_371_cohort_payloads_are_exact() {
+        // 1. Aatchik's ETB creates the new green Insect per artifact-and/or-creature card.
+        let RecipeEmission::TriggeredAbility(aatchik) = issue_371_emission(
+            "Aatchik, Emerald Radian",
+            ISSUE_371_AATCHIK_ETB_CLAUSE,
+            false,
+        ) else {
+            panic!("Aatchik's ETB must emit one triggered ability");
+        };
+        assert_eq!(aatchik.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        let [SpellEffectKind::CreateTokens {
+            token,
+            count,
+            who,
+            tapped,
+            sacrifice_timing,
+        }] = aatchik.effect.as_slice()
+        else {
+            panic!("unexpected Aatchik payload: {:?}", aatchik.effect);
+        };
+        assert_eq!(token, "insect_g_1_1");
+        assert_eq!(*who, PlayerRecipient::Controller);
+        assert!(!tapped);
+        assert!(sacrifice_timing.is_none());
+        let (owners, filter) = issue_371_count(count);
+        assert_eq!(*owners, RelativePlayerSet::Controller);
+        let branches = filter.any_of.as_ref().expect("artifact-or-creature OR");
+        assert_eq!(branches.len(), 2);
+        assert!(branches
+            .iter()
+            .any(|branch| branch.card_type == Some(CardTypeFilter::Artifact)));
+        assert!(branches
+            .iter()
+            .any(|branch| branch.card_type == Some(CardTypeFilter::Creature)));
+
+        // Aatchik's non-cohort dies clause drains each opponent untargeted.
+        let RecipeEmission::TriggeredAbility(dies) = issue_371_emission(
+            "Aatchik, Emerald Radian",
+            ISSUE_371_AATCHIK_DIES_CLAUSE,
+            false,
+        ) else {
+            panic!("Aatchik's dies clause must emit one triggered ability");
+        };
+        assert!(matches!(
+            dies.trigger,
+            TriggerCondition::WheneverCreatureDies { .. }
+        ));
+        let [SpellEffectKind::PutCounters { subject, .. }, SpellEffectKind::LoseLife { amount, who }] =
+            dies.effect.as_slice()
+        else {
+            panic!("unexpected Aatchik dies payload: {:?}", dies.effect);
+        };
+        assert_eq!(subject, &EffectSubject::Source);
+        assert_eq!(*amount, LifeAmount::Fixed(1));
+        assert_eq!(*who, PlayerRecipient::EachOpponent);
+
+        // 2. Arnim Zola's activation: {3}, {T}, two-plus creature cards, tapped Villain.
+        let RecipeEmission::ActivatedAbility(arnim) = issue_371_emission(
+            "Arnim Zola, Bio-Fanatic",
+            ISSUE_371_ARNIM_ACTIVATED_CLAUSE,
+            false,
+        ) else {
+            panic!("Arnim Zola must emit one activated ability");
+        };
+        assert_eq!(arnim.source_zone, AbilitySourceZone::Battlefield);
+        assert_eq!(arnim.timing, ActivationTiming::Normal);
+        assert_eq!(
+            arnim.costs,
+            [
+                AbilityCost::Mana(ManaCost::parse("{3}").expect("printed cost")),
+                AbilityCost::Tap,
+            ]
+        );
+        assert_eq!(
+            arnim.conditions,
+            [issue_373_graveyard_threshold(
+                GraveyardAggregate::CardCount,
+                Some(ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::Creature),
+                    ..ZoneCardFilter::default()
+                }),
+                2,
+            )]
+        );
+        assert!(matches!(
+            arnim.effect.as_slice(),
+            [SpellEffectKind::CreateTokens { token, tapped: true, .. }]
+                if token == "villain_b_2_1_menace"
+        ));
+
+        // 3. HYDRA Troopers: mandatory FirstApplicable villain gate with a mill-two fallback.
+        let RecipeEmission::TriggeredAbility(hydra) =
+            issue_371_emission("HYDRA Troopers", ISSUE_371_HYDRA_ETB_CLAUSE, false)
+        else {
+            panic!("HYDRA Troopers must emit one triggered ability");
+        };
+        let [SpellEffectKind::ChooseResolutionBranch {
+            optional,
+            selection,
+            branches,
+            otherwise,
+            ..
+        }] = hydra.effect.as_slice()
+        else {
+            panic!("unexpected HYDRA payload: {:?}", hydra.effect);
+        };
+        assert!(!optional);
+        assert_eq!(*selection, ResolutionBranchSelection::FirstApplicable);
+        assert!(otherwise.is_empty());
+        assert!(matches!(
+            &branches[0].requirement,
+            ResolutionBranchRequirement::GameCondition(GameCondition::GraveyardAggregate {
+                aggregate: GraveyardAggregate::CardCount,
+                min: Some(2),
+                ..
+            })
+        ));
+        assert!(matches!(
+            branches[0].effects.as_slice(),
+            [SpellEffectKind::CreateTokens { token, tapped: true, .. }]
+                if token == "villain_b_2_1_menace"
+        ));
+        assert_eq!(branches[1].requirement, ResolutionBranchRequirement::Always);
+        assert_eq!(
+            branches[1].effects,
+            [SpellEffectKind::Mill {
+                count: Amount::Fixed(2),
+                who: PlayerRecipient::Controller,
+            }]
+        );
+
+        // 4. Lluwen's activation uses the typed filtered discard cost and land count.
+        let RecipeEmission::ActivatedAbility(lluwen) = issue_371_emission(
+            "Lluwen, Imperfect Naturalist",
+            ISSUE_371_LLUWEN_ACTIVATED_CLAUSE,
+            false,
+        ) else {
+            panic!("Lluwen must emit one activated ability");
+        };
+        assert_eq!(
+            lluwen.costs,
+            [
+                AbilityCost::Mana(
+                    ManaCost::parse("{2}{B/G}{B/G}{B/G}").expect("printed hybrid cost")
+                ),
+                AbilityCost::Tap,
+                AbilityCost::DiscardCard {
+                    filter: CardTypeFilter::Land,
+                },
+            ]
+        );
+        let [SpellEffectKind::CreateTokens {
+            token,
+            count,
+            tapped,
+            ..
+        }] = lluwen.effect.as_slice()
+        else {
+            panic!("unexpected Lluwen payload: {:?}", lluwen.effect);
+        };
+        assert_eq!(token, "worm_bg_1_1");
+        assert!(!tapped);
+        assert_eq!(
+            issue_371_count(count).1.card_type,
+            Some(CardTypeFilter::Land)
+        );
+
+        // 5. Morcant's Eyes is a sorcery-speed self-sacrifice with the Elf-card count.
+        let RecipeEmission::ActivatedAbility(morcant) =
+            issue_371_emission("Morcant's Eyes", ISSUE_371_MORCANT_ACTIVATED_CLAUSE, false)
+        else {
+            panic!("Morcant's Eyes must emit one activated ability");
+        };
+        assert_eq!(morcant.timing, ActivationTiming::SorcerySpeed);
+        assert_eq!(
+            morcant.costs,
+            [
+                AbilityCost::Mana(ManaCost::parse("{4}{G}{G}").expect("printed cost")),
+                AbilityCost::SacrificeSelf,
+            ]
+        );
+        let [SpellEffectKind::CreateTokens { token, count, .. }] = morcant.effect.as_slice() else {
+            panic!("unexpected Morcant payload: {:?}", morcant.effect);
+        };
+        assert_eq!(token, "elf_bg_2_2");
+        assert_eq!(
+            issue_371_count(count).1.required_subtypes,
+            vec!["Elf".to_string()]
+        );
+
+        // 6. Revenge of the Rats creates the new unrestrictive Rat identity, tapped.
+        let RecipeEmission::SpellEffect(revenge) =
+            issue_371_emission("Revenge of the Rats", ISSUE_371_REVENGE_SPELL_CLAUSE, true)
+        else {
+            panic!("Revenge of the Rats must emit one spell effect");
+        };
+        let SpellEffectKind::CreateTokens {
+            token,
+            count,
+            tapped,
+            ..
+        } = &revenge
+        else {
+            panic!("unexpected Revenge payload: {revenge:?}");
+        };
+        assert_eq!(token, "rat_b_1_1");
+        assert!(tapped);
+        assert_eq!(
+            issue_371_count(count).1.card_type,
+            Some(CardTypeFilter::Creature)
+        );
+
+        // 7. Kiora's Threshold attack trigger is optional with the seven-card gate.
+        let RecipeEmission::TriggeredAbility(kiora) = issue_371_emission(
+            "Kiora, the Rising Tide",
+            ISSUE_371_KIORA_ATTACK_CLAUSE,
+            false,
+        ) else {
+            panic!("Kiora must emit one triggered ability");
+        };
+        assert_eq!(
+            kiora.trigger,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0,
+            }
+        );
+        assert!(kiora.may);
+        assert_eq!(
+            kiora.intervening_if,
+            Some(GameCondition::GraveyardAggregate {
+                owners: RelativePlayerSet::Controller,
+                aggregate: GraveyardAggregate::CardCount,
+                filter: None,
+                min: Some(7),
+                max: None,
+            })
+        );
+        assert!(matches!(
+            kiora.effect.as_slice(),
+            [SpellEffectKind::CreateTokens { token, tapped: false, .. }]
+                if token == "scion_of_the_deep"
+        ));
+
+        // 8. The Final Days establishes the face cast origin and the exact substitution branch.
+        let RecipeEmission::SpellEffectsWithCastConditions {
+            conditions,
+            effects,
+        } = issue_371_emission("The Final Days", ISSUE_371_FINAL_DAYS_CLAUSE, true)
+        else {
+            panic!("The Final Days must emit a cast condition and branch effects");
+        };
+        assert_eq!(
+            conditions,
+            [GameCondition::CastOrigin {
+                origin: SpellCastOrigin::Graveyard,
+            }]
+        );
+        let [SpellEffectKind::ChooseResolutionBranch {
+            selection,
+            branches,
+            otherwise,
+            ..
+        }] = effects.as_slice()
+        else {
+            panic!("unexpected The Final Days payload: {effects:?}");
+        };
+        assert_eq!(*selection, ResolutionBranchSelection::FirstApplicable);
+        assert!(otherwise.is_empty());
+        assert_eq!(
+            branches[0].requirement,
+            ResolutionBranchRequirement::GameCondition(GameCondition::CastSnapshot { index: 0 })
+        );
+        assert!(matches!(
+            branches[0].effects.as_slice(),
+            [SpellEffectKind::CreateTokens { token, count, tapped: true, .. }]
+                if token == "horror_b_2_2"
+                    && matches!(count, Amount::Count(CountExpression::GraveyardCards { .. }))
+        ));
+        assert_eq!(branches[1].requirement, ResolutionBranchRequirement::Always);
+        assert!(matches!(
+            branches[1].effects.as_slice(),
+            [SpellEffectKind::CreateTokens { token, count: Amount::Fixed(2), tapped: true, .. }]
+                if token == "horror_b_2_2"
+        ));
+    }
+
+    #[test]
+    fn issue_371_completion_payloads_are_exact() {
+        // Kiora's non-cohort ETB is the shipped two/two loot.
+        let RecipeEmission::TriggeredAbility(etb) =
+            issue_371_emission("Kiora, the Rising Tide", ISSUE_371_KIORA_ETB_CLAUSE, false)
+        else {
+            panic!("Kiora's ETB must emit one triggered ability");
+        };
+        assert_eq!(
+            etb.effect,
+            [SpellEffectKind::DrawDiscard {
+                who: PlayerRecipient::Controller,
+                draw_count: 2,
+                discard_count: 2,
+                order: DrawDiscardOrder::DrawThenDiscard,
+                optional: false,
+            }]
+        );
+
+        // Lluwen's non-cohort ETB binds the optional choice to the preceding mill cohort.
+        let RecipeEmission::TriggeredAbility(lluwen) = issue_371_emission(
+            "Lluwen, Imperfect Naturalist",
+            ISSUE_371_LLUWEN_ETB_CLAUSE,
+            false,
+        ) else {
+            panic!("Lluwen's ETB must emit one triggered ability");
+        };
+        let [SpellEffectKind::Mill { count, .. }, SpellEffectKind::ChooseGraveyardCard {
+            filter,
+            destination,
+            optional,
+            from_result,
+        }] = lluwen.effect.as_slice()
+        else {
+            panic!("unexpected Lluwen ETB payload: {:?}", lluwen.effect);
+        };
+        assert_eq!(*count, Amount::Fixed(4));
+        assert!(*optional);
+        assert_eq!(*destination, GraveyardDestination::LibraryTop);
+        assert_eq!(filter.any_of.as_ref().map(Vec::len), Some(2));
+        let from_result = from_result.as_ref().expect("milled cohort restriction");
+        assert_eq!(from_result.source, CardResultSource::PreviousEffect);
+        assert_eq!(from_result.action, CardResultAction::Mill);
+        assert_eq!(from_result.players, RelativePlayerSet::Controller);
     }
 }

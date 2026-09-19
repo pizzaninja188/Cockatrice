@@ -1,0 +1,11 @@
+// Scion of the Deep, a legendary 8/8 blue Octopus creature token (Kiora, the Rising Tide).
+(
+  id: "scion_of_the_deep",
+  name: "Scion of the Deep",
+  face_id: "scion_of_the_deep",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Octopus"],
+  colors: [Blue],
+  power: 8,
+  toughness: 8,
+)

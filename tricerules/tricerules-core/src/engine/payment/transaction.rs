@@ -1375,7 +1375,7 @@ impl GameEngine {
                     }
                     mana_cost.pips.extend(cost.pips.iter().cloned());
                 }
-                AbilityCost::Discard => {
+                AbilityCost::Discard | AbilityCost::DiscardCard { .. } => {
                     expected_selections += 1;
                     let Some(selection) = by_index.get(&cost_index) else {
                         return Err(EngineError::Illegal("missing discard cost selection"));
@@ -1391,9 +1391,15 @@ impl GameEngine {
                     if !consumed.insert(oid) {
                         return Err(EngineError::Illegal("one object cannot pay two costs"));
                     }
+                    let component = match costs[cost_index] {
+                        AbilityCost::DiscardCard { filter } => {
+                            ObjectPaymentComponent::discard_filtered(filter)
+                        }
+                        _ => ObjectPaymentComponent::discard(None),
+                    };
                     debits.push(self.plan_object_payment(
                         player,
-                        ObjectPaymentComponent::discard(None),
+                        component,
                         &[self.payment_object_ref(oid)],
                     )?);
                 }

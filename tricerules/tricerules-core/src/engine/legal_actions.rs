@@ -445,6 +445,7 @@ pub(super) fn activated_ability_info(
             AbilityCost::Mana(cost) => cost.to_string(),
             AbilityCost::Waterbend(cost) => format!("Waterbend {cost}"),
             AbilityCost::Discard => "Discard a card".to_string(),
+            AbilityCost::DiscardCard { filter } => format!("Discard a {}", filter.noun()),
             AbilityCost::DiscardSelf => "Discard this card".to_string(),
             AbilityCost::ExileSelf => "Exile this card".to_string(),
             AbilityCost::SacrificeSelf => "Sacrifice this".to_string(),
@@ -879,8 +880,14 @@ fn legal_ability_cost_choices(
                     aggregate_minimum: None,
                 });
             }
-            AbilityCost::Discard => {
-                let candidates = ObjectPaymentComponent::discard(None).candidates(eng, player);
+            AbilityCost::Discard | AbilityCost::DiscardCard { .. } => {
+                let component = match cost {
+                    AbilityCost::DiscardCard { filter } => {
+                        ObjectPaymentComponent::discard_filtered(*filter)
+                    }
+                    _ => ObjectPaymentComponent::discard(None),
+                };
+                let candidates = component.candidates(eng, player);
                 let candidate_ids = eng.state.players[player_idx]
                     .hand
                     .iter()

@@ -34,8 +34,8 @@ use tricerules_cards::primitives::{
 use tricerules_cards::{
     external_oracle_lines, slugify, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
     ActivatedAbilityDef, ActivationTiming, Amount, BasicLandType, CardFaceId, CardRegistry,
-    CharacteristicDefiningAbility, Color, IdentifiedAbility, Keyword, ManaAmount, ManaCost,
-    ModalDef, ModeDef, ModeId, SpellCostModifier, SpellEffectKind, TriggerCondition,
+    CharacteristicDefiningAbility, Color, GameCondition, IdentifiedAbility, Keyword, ManaAmount,
+    ManaCost, ModalDef, ModeDef, ModeId, SpellCostModifier, SpellEffectKind, TriggerCondition,
     TriggeredAbilityDef,
 };
 
@@ -600,6 +600,7 @@ struct ParsedRules {
     warp_cost: Option<ManaCost>,
     flashback_cost: Option<ManaCost>,
     harmonize_cost: Option<ManaCost>,
+    cast_conditions: Vec<GameCondition>,
     spell_effect: Vec<SpellEffectKind>,
     targeting: Option<TargetingDef>,
     modal_spell: Option<ModalDef>,
@@ -854,6 +855,19 @@ fn parse_rules_text(
                 assemble_spell_effects(&mut parsed, vec![effect])?
             }
             RecipeEmission::SpellEffects(effects) => assemble_spell_effects(&mut parsed, effects)?,
+            RecipeEmission::SpellEffectsWithCastConditions {
+                conditions,
+                effects,
+            } => {
+                // One clause may establish a face's cast conditions exactly once. A second
+                // authored cast-condition clause stays unsupported so a face cannot silently
+                // accumulate or reorder its snapshot indices.
+                if !parsed.cast_conditions.is_empty() {
+                    return Err(RulesParseError::Unsupported);
+                }
+                parsed.cast_conditions = conditions;
+                assemble_spell_effects(&mut parsed, effects)?;
+            }
             RecipeEmission::SpellEffectsWithTargeting { effects, targeting } => {
                 assemble_spell_effects_with_targeting(&mut parsed, effects, targeting)?
             }
@@ -1047,6 +1061,7 @@ struct GenFace {
     warp_cost: Option<ManaCost>,
     flashback_cost: Option<ManaCost>,
     harmonize_cost: Option<ManaCost>,
+    cast_conditions: Vec<GameCondition>,
     spell_effect: Vec<SpellEffectKind>,
     targeting: Option<TargetingDef>,
     modal_spell: Option<ModalDef>,
@@ -1095,6 +1110,17 @@ fn push_face_fields(s: &mut String, face: &GenFace, indent: &str, include_name: 
         s.push_str(&format!(
             "{indent}warp_cost: Some({:?}),\n",
             cost.to_string()
+        ));
+    }
+    if !face.cast_conditions.is_empty() {
+        s.push_str(&format!(
+            "{indent}cast_conditions: [{}],\n",
+            face.cast_conditions
+                .iter()
+                .map(|condition| ron::ser::to_string(condition)
+                    .expect("generated cast condition should serialize"))
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
     }
     s.push_str(&format!("{indent}types: [{}],\n", quoted_list(&face.types)));
@@ -1788,6 +1814,7 @@ fn parse_multiface_face(
         warp_cost: rules.warp_cost,
         flashback_cost: rules.flashback_cost,
         harmonize_cost: rules.harmonize_cost,
+        cast_conditions: rules.cast_conditions,
         spell_effect: rules.spell_effect,
         targeting: rules.targeting,
         modal_spell: rules.modal_spell,
@@ -1992,6 +2019,7 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
             warp_cost: rules.warp_cost,
             flashback_cost: rules.flashback_cost,
             harmonize_cost: rules.harmonize_cost,
+            cast_conditions: rules.cast_conditions,
             spell_effect: rules.spell_effect,
             targeting: rules.targeting,
             modal_spell: rules.modal_spell,
@@ -12661,6 +12689,97 @@ mod tests {
             output.status,
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    /// Issue #371: a clause that establishes a face cast condition must assemble that condition
+    /// and its ordered spell effects in one pass, and the same line must stay unsupported on a
+    /// non-spell face or when repeated.
+    #[test]
+    fn issue_371_cast_condition_clause_assembles_with_its_branch_effects() {
+        const CLAUSE: &str = "Create two tapped 2/2 black Horror creature tokens. If this spell was cast from a graveyard, instead create X of those tokens, where X is the number of creature cards in your graveyard.";
+        let mut card = normal_card(
+            "Final Days Probe",
+            "{2}{B}{B}",
+            "Sorcery",
+            &format!("{CLAUSE}\nFlashback {{4}}{{B}}{{B}}"),
+            None,
+        );
+        card["colors"] = json!(["B"]);
+        let generated = evaluate_fresh(&card).expect("exact cast-origin clause should qualify");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        assert_eq!(
+            raw.cast_conditions,
+            [GameCondition::CastOrigin {
+                origin: tricerules_cards::SpellCastOrigin::Graveyard,
+            }],
+            "the clause establishes exactly the graveyard cast origin"
+        );
+        assert_eq!(
+            raw.flashback_cost.as_ref().map(ToString::to_string),
+            Some("{4}{B}{B}".to_string())
+        );
+        let [SpellEffectKind::ChooseResolutionBranch {
+            selection,
+            branches,
+            otherwise,
+            ..
+        }] = raw.spell_effect.as_slice()
+        else {
+            panic!(
+                "the clause must emit one first-applicable branch: {:?}",
+                raw.spell_effect
+            );
+        };
+        assert_eq!(
+            *selection,
+            tricerules_cards::primitives::ResolutionBranchSelection::FirstApplicable
+        );
+        assert!(otherwise.is_empty());
+        assert_eq!(branches.len(), 2);
+        assert!(
+            matches!(
+                &branches[0].requirement,
+                tricerules_cards::primitives::ResolutionBranchRequirement::GameCondition(
+                    GameCondition::CastSnapshot { index: 0 }
+                )
+            ),
+            "the first branch consumes the face cast snapshot"
+        );
+        assert!(
+            matches!(
+                &branches[1].requirement,
+                tricerules_cards::primitives::ResolutionBranchRequirement::Always
+            ),
+            "the final branch is the unconditional fallback"
+        );
+
+        // The same exact line on a permanent face has no matching surface.
+        let mut enchantment = normal_card(
+            "Final Days Enchantment Probe",
+            "{2}{B}",
+            "Enchantment",
+            CLAUSE,
+            None,
+        );
+        enchantment["colors"] = json!(["B"]);
+        assert!(
+            evaluate_fresh(&enchantment).is_err(),
+            "the cast-origin clause must stay bound to instant and sorcery faces"
+        );
+
+        // A second copy of the clause cannot silently accumulate a second face condition.
+        let mut duplicate = normal_card(
+            "Final Days Duplicate Probe",
+            "{2}{B}{B}",
+            "Sorcery",
+            &format!("{CLAUSE}\n{CLAUSE}"),
+            None,
+        );
+        duplicate["colors"] = json!(["B"]);
+        assert!(
+            evaluate_fresh(&duplicate).is_err(),
+            "a repeated cast-condition clause must fail closed"
         );
     }
 }

@@ -1,0 +1,11 @@
+// 1/1 black Rat creature token with no combat restriction (Revenge of the Rats). Distinct from
+// the existing `rat_b_1_1_cant_block` identity.
+(
+  id: "rat_b_1_1",
+  name: "Rat",
+  face_id: "rat",
+  types: ["Creature", "Rat"],
+  colors: [Black],
+  power: 1,
+  toughness: 1,
+)

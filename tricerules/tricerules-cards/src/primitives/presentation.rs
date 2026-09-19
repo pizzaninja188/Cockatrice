@@ -64,6 +64,7 @@ pub(super) fn simple_costs(costs: &[AbilityCost], source: &str) -> Option<String
                 AbilityCost::Mana(mana) => mana.to_string(),
                 AbilityCost::SacrificeSelf => format!("Sacrifice {source}"),
                 AbilityCost::Discard => "Discard a card".into(),
+                AbilityCost::DiscardCard { filter } => format!("Discard a {}", filter.noun()),
                 AbilityCost::DiscardSelf => format!("Discard {source}"),
                 AbilityCost::ExileSelf => format!("Exile {source}"),
                 AbilityCost::PayLife { amount } => format!("Pay {amount} life"),

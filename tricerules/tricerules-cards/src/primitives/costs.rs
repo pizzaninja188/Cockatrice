@@ -129,6 +129,11 @@ pub enum AbilityCost {
     Waterbend(ManaCost),
     /// Discard one card chosen from the activating player's hand.
     Discard,
+    /// Discard one card of the printed card type chosen from the activating player's hand
+    /// ("Discard a land card:"). Lluwen, Imperfect Naturalist is the first data consumer; the
+    /// same filtered-discard mechanic already ships as a resolution cost (Crypt Lurker's
+    /// `ResolutionCost::DiscardCard`). Unfiltered discard remains `Discard`.
+    DiscardCard { filter: super::CardTypeFilter },
     /// Discard the source object itself from its owner's hand (cycling and typecycling).
     DiscardSelf,
     /// Exile the source object itself from the battlefield or its owner's graveyard. Sapling

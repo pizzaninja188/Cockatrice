@@ -297,7 +297,9 @@ fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
     costs
         .iter()
         .filter_map(|cost| match cost {
-            AbilityCost::Discard | AbilityCost::DiscardSelf => Some(CardResultAction::Discard),
+            AbilityCost::Discard | AbilityCost::DiscardCard { .. } | AbilityCost::DiscardSelf => {
+                Some(CardResultAction::Discard)
+            }
             AbilityCost::ExileSelf | AbilityCost::ExileGraveyardCards { .. } => {
                 Some(CardResultAction::Exile)
             }

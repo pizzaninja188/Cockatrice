@@ -1,0 +1,10 @@
+// 2/2 black Horror creature token (The Final Days).
+(
+  id: "horror_b_2_2",
+  name: "Horror",
+  face_id: "horror",
+  types: ["Creature", "Horror"],
+  colors: [Black],
+  power: 2,
+  toughness: 2,
+)

@@ -4,6 +4,7 @@ a.i.m._labs	0	land	exercised
 a.i.m._synthoids	0	cast	exercised
 aangs_journey	0	cast	exercised
 aardvark_sloth	0	cast	exercised
+aatchik,_emerald_radian	0	cast	exercised
 abandon_attachments	0	cast	exercised
 abandoned_campground	0	ability:0	exercised
 abandoned_campground	0	land	exercised
@@ -113,6 +114,8 @@ armored_warhorse	0	cast	exercised
 armored_whirl_turtle	0	cast	exercised
 armored_wolf-rider	0	cast	exercised
 armory_mice	0	cast	exercised
+arnim_zola,_bio-fanatic	0	ability:0	unsupported: nonmana costs need additional fixture resources
+arnim_zola,_bio-fanatic	0	cast	exercised
 arrogant_vampire	0	cast	exercised
 arrogant_wurm	0	cast	exercised
 ascendant_dustspeaker	0	cast	exercised
@@ -1178,6 +1181,7 @@ hungry_ghoul	0	cast	exercised
 hungry_graffalon	0	cast	exercised
 hunters_edge	0	cast	exercised
 hussar_patrol	0	cast	exercised
+hydra_troopers	0	cast	exercised
 hydraulic_helper	0	ability:0	exercised
 hydraulic_helper	0	cast	exercised
 hydro-man,_fluid_felon	0	cast	exercised
@@ -1314,6 +1318,7 @@ kindled_heroism	0	cast	exercised
 kindly_customer	0	cast	exercised
 king_cheetah	0	cast	exercised
 kinjallis_dawnrunner	0	cast	exercised
+kiora,_the_rising_tide	0	cast	exercised
 kitesail_scout	0	cast	exercised
 kithkin_billyrider	0	cast	exercised
 knight_errant	0	cast	exercised
@@ -1401,6 +1406,8 @@ llanowar_elves	0	ability:0	exercised
 llanowar_elves	0	cast	exercised
 llanowar_visionary	0	ability:0	exercised
 llanowar_visionary	0	cast	exercised
+lluwen,_imperfect_naturalist	0	ability:0	exercised
+lluwen,_imperfect_naturalist	0	cast	exercised
 loamdragger_giant	0	cast	exercised
 lofty_dreams	0	cast	exercised
 lone_missionary	0	cast	exercised
@@ -1543,6 +1550,8 @@ moon_sprite	0	cast	exercised
 moonglove_winnower	0	cast	exercised
 moonrise_cleric	0	cast	exercised
 moorish_cavalry	0	cast	exercised
+morcants_eyes	0	ability:0	exercised
+morcants_eyes	0	cast	exercised
 moriok_reaver	0	cast	exercised
 moss_kami	0	cast	exercised
 moss_monster	0	cast	exercised
@@ -1873,6 +1882,7 @@ restless_reef	0	ability:0	exercised
 restless_reef	0	ability:1	exercised
 restless_reef	0	land	exercised
 return_to_the_sewers	0	cast	exercised
+revenge_of_the_rats	0	cast	exercised
 reverent_howl	0	cast	exercised
 rhox_brute	0	cast	exercised
 rhox_oracle	0	cast	exercised
@@ -2397,6 +2407,7 @@ thawbringer	0	cast	exercised
 the_arkenstone_seek_the_heart	0	cast	exercised
 the_arkenstone_seek_the_heart	1	cast	exercised
 the_fabulous_frog-man	0	cast	exercised
+the_final_days	0	cast	exercised
 the_lion-turtle	0	ability:0	exercised
 the_lion-turtle	0	cast	exercised
 the_mountain-kings_return	0	cast	exercised

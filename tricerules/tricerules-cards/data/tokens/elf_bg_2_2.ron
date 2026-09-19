@@ -1,0 +1,10 @@
+// 2/2 black and green Elf creature token (Morcant's Eyes).
+(
+  id: "elf_bg_2_2",
+  name: "Elf",
+  face_id: "elf",
+  types: ["Creature", "Elf"],
+  colors: [Black, Green],
+  power: 2,
+  toughness: 2,
+)

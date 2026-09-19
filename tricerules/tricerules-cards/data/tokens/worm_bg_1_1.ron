@@ -1,0 +1,10 @@
+// 1/1 black and green Worm creature token (Lluwen, Imperfect Naturalist).
+(
+  id: "worm_bg_1_1",
+  name: "Worm",
+  face_id: "worm",
+  types: ["Creature", "Worm"],
+  colors: [Black, Green],
+  power: 1,
+  toughness: 1,
+)

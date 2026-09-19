@@ -512,6 +512,26 @@ impl StackSpellFilter {
 }
 
 impl CardTypeFilter {
+    /// Short noun phrase for engine-authored cost labels ("Discard a land card"). Engine-authored
+    /// display vocabulary, not Oracle prose.
+    pub fn noun(self) -> &'static str {
+        match self {
+            Self::BasicLand => "basic land card",
+            Self::Land => "land card",
+            Self::Enchantment => "enchantment card",
+            Self::Instant => "instant card",
+            Self::Sorcery => "sorcery card",
+            Self::InstantOrSorcery => "instant or sorcery card",
+            Self::Creature => "creature card",
+            Self::Artifact => "artifact card",
+            Self::Planeswalker => "planeswalker card",
+            Self::Battle => "battle card",
+            Self::Nonland => "nonland card",
+            Self::NonlandPermanent => "nonland permanent card",
+            Self::Noncreature => "noncreature card",
+        }
+    }
+
     /// Exhaustive list used when an action snapshots the card types it matched at that moment.
     pub const ALL: [Self; 13] = [
         Self::BasicLand,
