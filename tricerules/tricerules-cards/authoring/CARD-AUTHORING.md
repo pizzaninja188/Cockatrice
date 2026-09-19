@@ -593,6 +593,12 @@ and keeps any optional Oracle Tags summary advisory and separate from the clause
 
 ### Scaffold source-backed authoring
 
+For complete-card dependencies and projected individual/pair unlocks, use the separate
+[versioned dependency report](DEPENDENCY-REPORT.md). It inventories the full pinned corpus and
+its Standard subset, distinguishes generator eligibility from registered support, and requires
+reviewed evidence before counting a whole identity as unlocked. The clause report above remains
+unchanged.
+
 For an unsupported card chosen from a candidate report, scaffold the clerical source fields from
 the same pinned, SHA-verified Oracle bulk input:
 

@@ -42,6 +42,8 @@ use tricerules_cards::{
 
 #[path = "gen_cards/candidate_report.rs"]
 mod candidate_report;
+#[path = "gen_cards/dependency_report.rs"]
+mod dependency_report;
 #[path = "gen_cards/presentation_audit.rs"]
 mod presentation_audit;
 #[path = "gen_cards/recipes.rs"]
@@ -82,6 +84,9 @@ struct Args {
     metadata: PathBuf,
     oracle_tags: Option<String>,
     candidate_report: Option<PathBuf>,
+    dependency_report: Option<PathBuf>,
+    dependency_evidence: Option<PathBuf>,
+    dependency_issues: Option<PathBuf>,
     target_names: Option<PathBuf>,
     scaffold_card: Option<String>,
     scaffold_batch: Option<PathBuf>,
@@ -105,6 +110,9 @@ fn print_usage() {
          --metadata <path>  bulk metadata sidecar (default: <input>.meta.json)\n  \
          --oracle-tags <path> optional `oracle_tags` .jsonl.gz advisory report\n  \
          --candidate-report <path> write a read-only unsupported-clause JSON report\n  \
+         --dependency-report <path> write a versioned complete-identity dependency report\n  \
+         --dependency-evidence <path> optional reviewed evidence snapshot JSON\n  \
+         --dependency-issues <path> optional current issue snapshot JSON\n  \
          --target-names <path> optional exact-name corpus for --candidate-report\n  \
          --scaffold-card <name> emit one source-backed incomplete authoring scaffold\n  \
          --scaffold-batch <path> emit a deterministic exact-name scaffold batch + manifest\n  \
@@ -127,6 +135,9 @@ fn parse_args() -> Result<Args, String> {
     let mut metadata: Option<PathBuf> = None;
     let mut oracle_tags: Option<String> = None;
     let mut candidate_report: Option<PathBuf> = None;
+    let mut dependency_report = None;
+    let mut dependency_evidence = None;
+    let mut dependency_issues = None;
     let mut target_names: Option<PathBuf> = None;
     let mut scaffold_card = None;
     let mut scaffold_batch = None;
@@ -157,6 +168,21 @@ fn parse_args() -> Result<Args, String> {
             "--target-names" => {
                 target_names = Some(PathBuf::from(
                     it.next().ok_or("--target-names needs a value")?,
+                ))
+            }
+            "--dependency-report" => {
+                dependency_report = Some(PathBuf::from(
+                    it.next().ok_or("--dependency-report needs a value")?,
+                ))
+            }
+            "--dependency-evidence" => {
+                dependency_evidence = Some(PathBuf::from(
+                    it.next().ok_or("--dependency-evidence needs a value")?,
+                ))
+            }
+            "--dependency-issues" => {
+                dependency_issues = Some(PathBuf::from(
+                    it.next().ok_or("--dependency-issues needs a value")?,
                 ))
             }
             "--scaffold-card" => {
@@ -221,6 +247,28 @@ fn parse_args() -> Result<Args, String> {
         return Err("--scaffold-card and --scaffold-batch are mutually exclusive".into());
     }
     let scaffolding = scaffold_card.is_some() || scaffold_batch.is_some();
+    if (dependency_evidence.is_some() || dependency_issues.is_some()) && dependency_report.is_none()
+    {
+        return Err("dependency evidence/issues require --dependency-report".into());
+    }
+    if dependency_report.is_some()
+        && (candidate_report.is_some()
+            || target_names.is_some()
+            || scaffolding
+            || scaffold_out_dir.is_some()
+            || inspect_existing
+            || oracle_tags.is_some()
+            || dry_run
+            || check
+            || include_new
+            || limit.is_some()
+            || audit_presentation
+            || inspect_card.is_some()
+            || out_dir.is_some()
+            || presentation_registry.is_some())
+    {
+        return Err("--dependency-report is a separate read-only full-corpus mode".into());
+    }
     if (scaffold_out_dir.is_some() || inspect_existing) && !scaffolding {
         return Err("--scaffold-out-dir and --inspect-existing require a scaffold mode".into());
     }
@@ -275,6 +323,9 @@ fn parse_args() -> Result<Args, String> {
         metadata,
         oracle_tags,
         candidate_report,
+        dependency_report,
+        dependency_evidence,
+        dependency_issues,
         target_names,
         scaffold_card,
         scaffold_batch,
@@ -2638,6 +2689,26 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+
+    if let Some(report_path) = &args.dependency_report {
+        return match dependency_report::run(
+            input_path,
+            &args.metadata,
+            report_path,
+            args.dependency_evidence.as_deref(),
+            args.dependency_issues.as_deref(),
+            &provenance,
+        ) {
+            Ok(summary) => {
+                eprintln!("{summary}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("error: {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
 
     if args.scaffold_card.is_some() || args.scaffold_batch.is_some() {
         let batch_names = match args.scaffold_batch.as_ref() {
