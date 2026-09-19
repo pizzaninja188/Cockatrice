@@ -15,7 +15,7 @@ use tricerules_cards::primitives::{
     SearchDestination, SearchZoneSelection, SpellCastFilter, SpellCostModifier,
     SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter,
     TargetGroupDef, TargetKind, TargetMatchFilter, TargetObjectExclusion, TargetingDef,
-    TargetingSourceFilter, TypeLineAddition, ZoneCardFilter, ZoneEventCardinality,
+    TargetingSourceFilter, TokenCopySource, TypeLineAddition, ZoneCardFilter, ZoneEventCardinality,
     ZoneEventDestination,
 };
 use tricerules_cards::{
@@ -1712,6 +1712,39 @@ fn match_modal_three_modes(text: &str, _: &RecipeContext) -> Option<RecipeEmissi
     Some(RecipeEmission::ModalAssembly(ModalAssemblyEmission {
         min_modes: 1,
         max_modes: 1,
+    }))
+}
+
+/// The exact printed `Choose two —` header. The pinned corpus prints this header with exactly
+/// three or four bullets: Return from the Wilds' three-bullet aggregate (choose two of three) and
+/// the four-bullet Command printings. Each bullet count gets its own disjoint matcher rather than
+/// one matcher accepting either count, so every other header or bullet count still fails closed.
+/// Unlike `Choose one —`, the selection bounds are fixed at two, so the assembly always emits
+/// `min_modes: 2, max_modes: 2`; the reviewed mode-set allowance still owns which printed sets may
+/// generate, so every other printing (Special Move and the older Command cycles included) stays
+/// unregistered.
+fn match_modal_choose_two_four_modes(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    let lines = normalized_modal_lines(text);
+    if lines.len() != 5 || lines[0] != "Choose two —" || !modal_bullets_are_exact(&lines, 1) {
+        return None;
+    }
+    Some(RecipeEmission::ModalAssembly(ModalAssemblyEmission {
+        min_modes: 2,
+        max_modes: 2,
+    }))
+}
+
+/// The three-bullet `Choose two —` shape (Return from the Wilds). Kept separate from
+/// [`match_modal_choose_two_four_modes`] so a four-bullet aggregate never satisfies this matcher
+/// and vice versa.
+fn match_modal_choose_two_three_modes(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    let lines = normalized_modal_lines(text);
+    if lines.len() != 4 || lines[0] != "Choose two —" || !modal_bullets_are_exact(&lines, 1) {
+        return None;
+    }
+    Some(RecipeEmission::ModalAssembly(ModalAssemblyEmission {
+        min_modes: 2,
+        max_modes: 2,
     }))
 }
 
@@ -3485,6 +3518,249 @@ fn match_modal_search_artifact_reveal_hand(
                 None,
             )
         })
+}
+
+/// Issue #428 / CR 707.2: one `Create a token that's a copy of target <subtype> you control.`
+/// mode. The chosen permanent is a genuine CR 115 target and the token uses its copiable values;
+/// Cackling Counterpart is the shipped consumer of the same `CreateTokenCopies` shape. Each
+/// Command subtype prints as a corpus singleton, so the exact line owns its own recipe.
+fn chosen_subtype_copy_mode(subtype: &str, prompt: &str) -> RecipeEmission {
+    modal_mode(
+        vec![SpellEffectKind::CreateTokenCopies {
+            count: Amount::Fixed(1),
+            source: TokenCopySource::Chosen(Box::new(TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                required_subtypes: vec![subtype.into()],
+                ..TargetFilter::default()
+            })),
+        }],
+        modal_targeting(prompt, 0),
+    )
+}
+
+fn match_modal_create_token_copy_elemental(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Create a token that's a copy of target Elemental you control.")
+        .then(|| chosen_subtype_copy_mode("Elemental", "Choose target Elemental you control"))
+}
+
+fn match_modal_create_token_copy_kithkin(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Create a token that's a copy of target Kithkin you control.")
+        .then(|| chosen_subtype_copy_mode("Kithkin", "Choose target Kithkin you control"))
+}
+
+fn match_modal_create_token_copy_goblin(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Create a token that's a copy of target Goblin you control.")
+        .then(|| chosen_subtype_copy_mode("Goblin", "Choose target Goblin you control"))
+}
+
+fn match_modal_create_token_copy_merfolk(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Create a token that's a copy of target Merfolk you control.")
+        .then(|| chosen_subtype_copy_mode("Merfolk", "Choose target Merfolk you control"))
+}
+
+fn match_modal_create_token_copy_elf(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Create a token that's a copy of target Elf you control.")
+        .then(|| chosen_subtype_copy_mode("Elf", "Choose target Elf you control"))
+}
+
+/// Issue #428 / CR 121.2: the plain `Target player draws two cards.` mode. The shipped
+/// `modal_mode.target_player.draw_two.lose_two` owns the combined lose-two form; this recipe owns
+/// only the bare draw.
+fn match_modal_target_player_draw_two(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Target player draws two cards.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::TargetPlayerDraws {
+                count: 2,
+                target: TargetFilter {
+                    kind: TargetKind::AnyPlayer,
+                    ..TargetFilter::default()
+                },
+            }],
+            modal_targeting("Choose target player", 0),
+        )
+    })
+}
+
+/// Issue #428 / CR 121.2: the plain `Target player draws a card.` mode. The untargeted
+/// `modal_mode.draw.one` owns `Draw a card.`.
+fn match_modal_target_player_draw_one(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Target player draws a card.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::TargetPlayerDraws {
+                count: 1,
+                target: TargetFilter {
+                    kind: TargetKind::AnyPlayer,
+                    ..TargetFilter::default()
+                },
+            }],
+            modal_targeting("Choose target player", 0),
+        )
+    })
+}
+
+/// Issue #428 / CR 611.2a / 613.4c: the controlled-creature `+3/+3` mode. The unrestricted
+/// `modal_mode.pump.creature.plus_three_plus_three` owns `Target creature gets +3/+3 ...`;
+/// this recipe adds the printed "you control" controller restriction.
+fn match_modal_pump_controlled_plus_three(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Target creature you control gets +3/+3 until end of turn.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::PumpTarget {
+                power: 3,
+                toughness: 3,
+                scale: None,
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    ..TargetFilter::default()
+                })),
+            }],
+            modal_targeting("Choose target creature you control", 0),
+        )
+    })
+}
+
+/// Issue #428 / CR 701.7: a two-branch destroy union. Only the exact printed artifact-or-creature
+/// and creature-or-enchantment pairs are reviewed; each branch is a distinct terminal predicate.
+fn modal_destroy_union_mode(mut leaves: Vec<TargetFilter>, prompt: &str) -> RecipeEmission {
+    debug_assert!(leaves.len() >= 2);
+    let target = TargetFilter {
+        any_of: Some(std::mem::take(&mut leaves)),
+        ..TargetFilter::default()
+    };
+    modal_mode(
+        vec![SpellEffectKind::Destroy {
+            subject: EffectSubject::Chosen(Box::new(target)),
+        }],
+        modal_targeting(prompt, 0),
+    )
+}
+
+fn match_modal_destroy_artifact_or_creature(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Destroy target artifact or creature.").then(|| {
+        modal_destroy_union_mode(
+            vec![
+                TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![PermanentTypeFilter::Artifact],
+                    ..TargetFilter::default()
+                },
+                TargetFilter::default_creature(),
+            ],
+            "Choose target artifact or creature",
+        )
+    })
+}
+
+fn match_modal_destroy_creature_or_enchantment(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Destroy target creature or enchantment.").then(|| {
+        modal_destroy_union_mode(
+            vec![
+                TargetFilter::default_creature(),
+                TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![PermanentTypeFilter::Enchantment],
+                    ..TargetFilter::default()
+                },
+            ],
+            "Choose target creature or enchantment",
+        )
+    })
+}
+
+/// Issue #428 / CR 701.23: the modal basic-land tutor. The shipped clause recipe
+/// `spell.search_library.basic_land.battlefield_tapped` owns the same instruction on ordinary
+/// spells; this mode recipe is its exact modal sibling.
+fn match_modal_search_basic_land_tapped(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text
+        == "Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.")
+        .then(|| {
+            modal_mode(
+                vec![SpellEffectKind::SearchLibrary {
+                    who: PlayerRecipient::Controller,
+                    optional: false,
+                    count: 1,
+                    count_by_cast_cost: None,
+                    filter: Some(ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::BasicLand),
+                        ..ZoneCardFilter::default()
+                    }),
+                    slots: Vec::new(),
+                    zones: SearchZoneSelection::default(),
+                    destination: SearchDestination::Battlefield { tapped: true },
+                    conditional_destination: None,
+                    shuffle: true,
+                    reveal: false,
+                    result_id: None,
+                }],
+                None,
+            )
+        })
+}
+
+/// Issue #428 / CR 111.4: Return from the Wilds' plain Human token. The definition ships as
+/// `data/tokens/human_w_1_1.ron`; the printed Soldier token is a different identity.
+fn match_modal_create_human_token(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Create a 1/1 white Human creature token.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::CreateTokens {
+                token: "human_w_1_1".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }],
+            None,
+        )
+    })
+}
+
+/// Issue #428 / CR 111.10b: the predefined Food token. The printed bullet carries reminder text;
+/// the assembly strips it before matching this exact instruction.
+fn match_modal_create_food(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Create a Food token.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::CreateTokens {
+                token: "food".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }],
+            None,
+        )
+    })
+}
+
+/// Issue #428 / CR 701.26 / 122.1d: tap the chosen creature and put one stun counter on that same
+/// object. The single authored target group binds the "it" anaphor, mirroring the shipped
+/// Stall Out shape at one counter.
+fn match_modal_tap_stun_counter(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Tap target creature. Put a stun counter on it.").then(|| {
+        let target = TargetFilter::default_creature();
+        modal_mode(
+            vec![
+                SpellEffectKind::Tap {
+                    subject: EffectSubject::Chosen(Box::new(target.clone())),
+                },
+                SpellEffectKind::PutCounters {
+                    counter: CounterKind::Stun,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Chosen(Box::new(target)),
+                },
+            ],
+            modal_targeting_groups(vec![("Choose target creature", vec![0, 1])]),
+        )
+    })
 }
 
 fn triggered_ability_with(
@@ -17339,6 +17615,46 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("modal.choose_two.four_modes"),
+        label: "four-bullet Choose two modal spell assembly",
+        surface: RecipeSurface::ModalAssembly,
+        matcher: match_modal_choose_two_four_modes,
+        calibration: calibrations!(
+            "Ashling's Command" => "Choose two —\n• Create a token that's a copy of target Elemental you control.\n• Target player draws two cards.\n• Ashling's Command deals 2 damage to each creature target player controls.\n• Target player creates two Treasure tokens.",
+            "Brigid's Command" => "Choose two —\n• Create a token that's a copy of target Kithkin you control.\n• Target player creates a 1/1 green and white Kithkin creature token.\n• Target creature you control gets +3/+3 until end of turn.\n• Target creature you control fights target creature an opponent controls.";
+            // Two or five bullets, another header, a missing bullet prefix, and an empty bullet
+            // stay unsupported. The three-bullet Choose two shape is owned by
+            // modal.choose_two.three_modes and is likewise not accepted here.
+            "Choose two —\n• Draw a card.\n• You gain 2 life.",
+            "Choose two —\n• Draw a card.\n• You gain 2 life.\n• Create a token.\n• Create a Treasure token.\n• Draw a card.",
+            "Choose up to two —\n• Draw a card.\n• You gain 2 life.\n• Create a token.",
+            "Choose one or both —\n• Draw a card.\n• You gain 2 life.\n• Create a token.\n• Create a Treasure token.",
+            "Choose one —\n• Draw a card.\n• You gain 2 life.\n• Create a token.\n• Create a Treasure token.",
+            "Choose two —",
+            "Choose two —\nDraw a card.\n• You gain 2 life.",
+            "Choose two —\n• Draw a card.\n• \n• Create a token."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal.choose_two.three_modes"),
+        label: "three-bullet Choose two modal spell assembly",
+        surface: RecipeSurface::ModalAssembly,
+        matcher: match_modal_choose_two_three_modes,
+        calibration: singleton_calibrations!(
+            "Return from the Wilds" => "Choose two —\n• Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.\n• Create a 1/1 white Human creature token.\n• Create a Food token. (It's an artifact with \"{2}, {T}, Sacrifice this token: You gain 3 life.\")";
+            // Two or five bullets, another header, a missing bullet prefix, and an empty bullet
+            // stay unsupported. The four-bullet Choose two shape is owned by
+            // modal.choose_two.four_modes and is likewise not accepted here.
+            "Choose two —\n• Draw a card.\n• You gain 2 life.",
+            "Choose two —\n• Draw a card.\n• You gain 2 life.\n• Create a token.\n• Create a Treasure token.\n• Draw a card.",
+            "Choose up to two —\n• Draw a card.\n• You gain 2 life.\n• Create a token.",
+            "Choose one or both —\n• Draw a card.\n• You gain 2 life.\n• Create a token.",
+            "Choose two —",
+            "Choose two —\nDraw a card.\n• You gain 2 life.",
+            "Choose two —\n• Draw a card.\n• \n• Create a token."
+        ),
+    },
+    Recipe {
         id: RecipeId("modal.teamwork.choose_both_two_modes"),
         label: "two-bullet Teamwork modal spell assembly",
         surface: RecipeSurface::TeamworkModalAssembly,
@@ -17462,7 +17778,8 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Sarkhan's Resolve" => "Target creature gets +3/+3 until end of turn.",
             "Giant Growth" => "Target creature gets +3/+3 until end of turn.";
             "Up to one target creature gets +3/+3 until end of turn.",
-            "Target creature you control gets +3/+3 until end of turn.",
+            // The controlled variant is owned by modal_mode.pump.controlled.plus_three_plus_three.
+            "Target creature gets +3/+3 until end of turn. Untap it.",
             "Target creature gets +4/+4 until end of turn.",
             "Target creature gets +3/+3 and gains trample until end of turn."
         ),
@@ -17642,7 +17959,8 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Reverent Howl" => "Target player draws two cards and loses 2 life.",
             "Shredder's Revenge" => "Target player draws two cards and loses 2 life.";
             "Target player draws two cards and loses 3 life.",
-            "Target player draws two cards.",
+            // The bare draw is owned by modal_mode.target_player.draw_two.
+            "Target player draws two cards and loses 1 life.",
             "Target player draws two cards and you lose 2 life.",
             "Each player draws two cards and loses 2 life."
         ),
@@ -18557,6 +18875,239 @@ pub(super) static CATALOG: &[Recipe] = &[
             "You may sacrifice another creature. If you do, scry 2.",
             "You may sacrifice another creature. If you do, draw a card, then scry 2.",
             "You may sacrifice another creature. If you do, scry 2, then draw a card. Draw a card."
+        ),
+    },
+    // Issue #428 — `Choose two —` mode vocabulary. Every matcher is exact and each printed
+    // instruction owns one recipe. The Command identities whose remaining bullets lack shipped
+    // vocabulary stay out of the registry; these recipes are their reviewed exact halves.
+    Recipe {
+        id: RecipeId("modal_mode.create_token_copy.chosen_elemental"),
+        label: "copy a chosen Elemental you control mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_create_token_copy_elemental,
+        // Ashling's Command is the only pinned-corpus printing of this exact bullet (verified).
+        // Cackling Counterpart is the shipped non-modal consumer of the same copy shape.
+        calibration: singleton_calibrations!(
+            "Ashling's Command" => "Create a token that's a copy of target Elemental you control.";
+            // A missing subtype or controller restriction, another subtype, a count other
+            // than one, and riders stay unsupported.
+            "Create a token that's a copy of target creature you control.",
+            "Create a token that's a copy of target Elemental.",
+            "Create a token that's a copy of target Elemental an opponent controls.",
+            "Create two tokens that are copies of target Elemental you control.",
+            "Create a token that's a copy of target Soldier you control.",
+            "Create a token that's a copy of target Elemental you control. It has haste."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.create_token_copy.chosen_kithkin"),
+        label: "copy a chosen Kithkin you control mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_create_token_copy_kithkin,
+        // Brigid's Command is the only pinned-corpus printing of this exact bullet (verified).
+        calibration: singleton_calibrations!(
+            "Brigid's Command" => "Create a token that's a copy of target Kithkin you control.";
+            "Create a token that's a copy of target creature you control.",
+            "Create a token that's a copy of target Kithkin.",
+            "Create a token that's a copy of target Kithkin an opponent controls.",
+            "Create two tokens that are copies of target Kithkin you control.",
+            "Create a token that's a copy of target Soldier you control.",
+            "Create a token that's a copy of target Kithkin you control. It has haste."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.create_token_copy.chosen_goblin"),
+        label: "copy a chosen Goblin you control mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_create_token_copy_goblin,
+        // Grub's Command is the only pinned-corpus printing of this exact bullet (verified).
+        calibration: singleton_calibrations!(
+            "Grub's Command" => "Create a token that's a copy of target Goblin you control.";
+            "Create a token that's a copy of target creature you control.",
+            "Create a token that's a copy of target Goblin.",
+            "Create a token that's a copy of target Goblin an opponent controls.",
+            "Create two tokens that are copies of target Goblin you control.",
+            "Create a token that's a copy of target Soldier you control.",
+            "Create a token that's a copy of target Goblin you control. It has haste."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.create_token_copy.chosen_merfolk"),
+        label: "copy a chosen Merfolk you control mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_create_token_copy_merfolk,
+        // Sygg's Command is the only pinned-corpus printing of this exact bullet (verified).
+        calibration: singleton_calibrations!(
+            "Sygg's Command" => "Create a token that's a copy of target Merfolk you control.";
+            "Create a token that's a copy of target creature you control.",
+            "Create a token that's a copy of target Merfolk.",
+            "Create a token that's a copy of target Merfolk an opponent controls.",
+            "Create two tokens that are copies of target Merfolk you control.",
+            "Create a token that's a copy of target Soldier you control.",
+            "Create a token that's a copy of target Merfolk you control. It has haste."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.create_token_copy.chosen_elf"),
+        label: "copy a chosen Elf you control mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_create_token_copy_elf,
+        // Trystan's Command is the only pinned-corpus printing of this exact bullet (verified).
+        calibration: singleton_calibrations!(
+            "Trystan's Command" => "Create a token that's a copy of target Elf you control.";
+            "Create a token that's a copy of target creature you control.",
+            "Create a token that's a copy of target Elf.",
+            "Create a token that's a copy of target Elf an opponent controls.",
+            "Create two tokens that are copies of target Elf you control.",
+            "Create a token that's a copy of target Soldier you control.",
+            "Create a token that's a copy of target Elf you control. It has haste."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.target_player.draw_two"),
+        label: "target player draws two cards mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_target_player_draw_two,
+        // Ashling's Command is the only pinned-corpus printing of the bare bullet (verified).
+        // The combined `... and loses 2 life.` form keeps modal_mode.target_player.draw_two.lose_two.
+        calibration: singleton_calibrations!(
+            "Ashling's Command" => "Target player draws two cards.";
+            // Another count, a life rider, a different player scope, and riders stay unsupported.
+            "Target player draws two cards and loses 3 life.",
+            "Target player draws three cards.",
+            "Each player draws two cards.",
+            "Target player draws two cards. You gain 2 life.",
+            "Target opponent draws two cards."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.target_player.draw_one"),
+        label: "target player draws a card mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_target_player_draw_one,
+        // Sygg's Command is the only pinned-corpus printing of the bare bullet (verified); the
+        // untargeted `modal_mode.draw.one` owns `Draw a card.`.
+        calibration: singleton_calibrations!(
+            "Sygg's Command" => "Target player draws a card.";
+            // Another count, another player scope, and life riders stay unsupported.
+            "Target player draws three cards.",
+            "Target opponent draws a card.",
+            "Target player draws a card and loses 1 life.",
+            "Each player draws a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.pump.controlled.plus_three_plus_three"),
+        label: "controlled creature plus three plus three mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_pump_controlled_plus_three,
+        // Brigid's Command is the only pinned-corpus printing of the controlled bullet (verified);
+        // the unrestricted modal_mode.pump.creature.plus_three_plus_three owns the bare form.
+        calibration: singleton_calibrations!(
+            "Brigid's Command" => "Target creature you control gets +3/+3 until end of turn.";
+            // Another bonus, an opposing or unrestricted scope, another duration, and riders stay
+            // unsupported.
+            "Target creature you control gets +4/+4 until end of turn.",
+            "Target creature you control gets +3/+0 until end of turn.",
+            "Target creature an opponent controls gets +3/+3 until end of turn.",
+            "Target creature you control gets +3/+3 and gains trample until end of turn.",
+            "Up to one target creature you control gets +3/+3 until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.destroy.artifact_or_creature"),
+        label: "destroy target artifact or creature mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_destroy_artifact_or_creature,
+        // Grub's Command is the only pinned-corpus printing of this exact bullet (verified).
+        calibration: singleton_calibrations!(
+            "Grub's Command" => "Destroy target artifact or creature.";
+            // Other unions, bounded forms, and riders stay unsupported; the artifact-or-
+            // enchantment and creature-or-Vehicle unions keep their own shipped recipes.
+            "Destroy target artifact or planeswalker.",
+            "Destroy target noncreature artifact or creature.",
+            "Destroy up to one target artifact or creature.",
+            "Destroy target artifact or creature. You gain 1 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.destroy.creature_or_enchantment"),
+        label: "destroy target creature or enchantment mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_destroy_creature_or_enchantment,
+        calibration: calibrations!(
+            "Trystan's Command" => "Destroy target creature or enchantment.",
+            "Mortify" => "Destroy target creature or enchantment.";
+            // Other unions, bounded forms, and riders stay unsupported.
+            "Destroy target creature or planeswalker.",
+            "Destroy target creature or artifact.",
+            "Destroy up to one target creature or enchantment.",
+            "Destroy target creature or enchantment. You gain 1 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.search.basic_land.tapped"),
+        label: "search library for a basic land onto the battlefield tapped mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_search_basic_land_tapped,
+        calibration: calibrations!(
+            "Shared Roots" => "Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            "Thunderherd Migration" => "Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.";
+            // Reveal-to-hand, untapped, nonbasic, up-to-two, and optional forms stay unsupported.
+            "Search your library for a basic land card, put it onto the battlefield, then shuffle.",
+            "Search your library for a land card, put it onto the battlefield tapped, then shuffle.",
+            "You may search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            "Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.",
+            "Search your library for a basic land card, reveal it, put it into your hand, then shuffle."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.create_token.human_w_1_1"),
+        label: "create a 1/1 white Human creature token mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_create_human_token,
+        // Return from the Wilds is the only pinned-corpus printing of this exact bullet
+        // (verified); the Soldier token is a distinct registry identity.
+        calibration: singleton_calibrations!(
+            "Return from the Wilds" => "Create a 1/1 white Human creature token.";
+            // Another count, keyword or subtype, and the Soldier identity stay unsupported.
+            "Create two 1/1 white Human creature tokens.",
+            "Create a 1/1 white Human creature token with lifelink.",
+            "Create a 1/1 white Soldier creature token.",
+            "Create a 1/1 green and white Kithkin creature token."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.create_food"),
+        label: "create a Food token mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_create_food,
+        // Return from the Wilds' printed bullet embeds the Food reminder text, which the
+        // assembly strips before matching this exact stripped instruction.
+        calibration: singleton_calibrations!(
+            "Return from the Wilds" => "Create a Food token.";
+            // Another count, tapped entry, riders, and other predefined tokens stay unsupported.
+            "Create two Food tokens.",
+            "Create a tapped Food token.",
+            "Create a Food token. You gain 3 life.",
+            "Create a Clue token."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.tap.stun_counter"),
+        label: "tap target creature and put a stun counter on it mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_tap_stun_counter,
+        // Sygg's Command is the only pinned-corpus printing of this exact bullet (verified); the
+        // Stall Out spell shapes the same tap-plus-stun binding at three counters.
+        calibration: singleton_calibrations!(
+            "Sygg's Command" => "Tap target creature. Put a stun counter on it.";
+            // Another counter count, another subject, reordered or appended instructions, and a
+            // missing binding stay unsupported.
+            "Tap target creature. Put two stun counters on it.",
+            "Tap target permanent. Put a stun counter on it.",
+            "Tap target creature. Put a stun counter on it. Draw a card.",
+            "Tap target creature. Then put a stun counter on it."
         ),
     },
     Recipe {
@@ -25145,6 +25696,12 @@ pub(super) fn reviewed_modal_mode_pair(
         // Lord Skitter's Butcher prints its three bodies in this exact order.
         ["modal_mode.create_token.rat.cant_block", "modal_mode.sacrifice_another.scry_two_draw_one", "modal_mode.grant.team.menace"] => {
             Some((1, 1))
+        }
+        // Issue #428 exact choose-two sets, in printed bullet order. Return from the Wilds is
+        // the only fully shipped choose-two identity; the five Command sets stay absent because
+        // their remaining bullets lack shipped vocabulary, so no partial set may generate.
+        ["modal_mode.search.basic_land.tapped", "modal_mode.create_token.human_w_1_1", "modal_mode.create_food"] => {
+            Some((2, 2))
         }
         _ => None,
     };
@@ -48467,6 +49024,430 @@ mod tests {
                 issue_427_match(clause, "Boiling Rock Rioter").is_none(),
                 "excluded cohort clause must stay unsupported: {clause:?}"
             );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #428 — the `Choose two —` command-cycle modal identities.
+    //
+    // The pinned corpus prints the `Choose two —` header with exactly three or four bullets. The
+    // reviewed cohort is five four-bullet Command cards plus Return from the Wilds' three-bullet
+    // aggregate; every other printing fails closed through the reviewed mode-set allowance. The
+    // issue claimed a four-bullet-only matcher and four Return from the Wilds modes; the corpus
+    // disagrees, so each bullet count gets its own disjoint assembly matcher and every other
+    // header or bullet count still fails closed.
+    // -----------------------------------------------------------------------
+
+    const ISSUE_428_CHOOSE_TWO_FOUR_BULLETS: &str = "Choose two —\n• Create a token that's a copy of target Elemental you control.\n• Target player draws two cards.\n• Ashling's Command deals 2 damage to each creature target player controls.\n• Target player creates two Treasure tokens.";
+    const ISSUE_428_CHOOSE_TWO_THREE_BULLETS: &str = "Choose two —\n• Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.\n• Create a 1/1 white Human creature token.\n• Create a Food token. (It's an artifact with \"{2}, {T}, Sacrifice this token: You gain 3 life.\")";
+
+    fn issue_428_assembly(text: &str) -> Option<RecipeMatch> {
+        match_modal_assembly(text, &context())
+            .unwrap_or_else(|ambiguity| panic!("assembly near-miss is ambiguous: {ambiguity}"))
+    }
+
+    fn issue_428_modal_mode(clause: &str) -> Option<RecipeMatch> {
+        match_modal_mode(clause, &context())
+            .unwrap_or_else(|ambiguity| panic!("{clause:?} is ambiguous: {ambiguity}"))
+    }
+
+    fn issue_428_modal_mode_emission(clause: &str) -> (String, ModalModeEmission) {
+        let matched = issue_428_modal_mode(clause)
+            .unwrap_or_else(|| panic!("missing modal_mode recipe for {clause:?}"));
+        let RecipeEmission::ModalMode(emission) = matched.emission else {
+            panic!("{clause:?} must emit a modal mode");
+        };
+        (matched.id.as_str().to_string(), emission)
+    }
+
+    #[test]
+    fn issue_428_choose_two_assembly_matches_exact_three_and_four_bullet_shapes() {
+        for (text, expected_id) in [
+            (
+                ISSUE_428_CHOOSE_TWO_FOUR_BULLETS,
+                "modal.choose_two.four_modes",
+            ),
+            (
+                ISSUE_428_CHOOSE_TWO_THREE_BULLETS,
+                "modal.choose_two.three_modes",
+            ),
+        ] {
+            let matched = issue_428_assembly(text).expect("the exact printed aggregate");
+            assert_eq!(matched.id.as_str(), expected_id);
+            let RecipeEmission::ModalAssembly(emission) = matched.emission else {
+                panic!("{expected_id} must emit a modal assembly");
+            };
+            assert_eq!((emission.min_modes, emission.max_modes), (2, 2));
+        }
+
+        // A three-bullet choose-two is the three_modes positive and a four-bullet choose-two is
+        // the four_modes positive, so the exact-id asserts above already prove each matcher
+        // rejects the other's bullet count. Every other header, count, or malformed bullet run
+        // matches no assembly recipe at all.
+        for near_miss in [
+            "Choose two —\n• Draw a card.\n• You gain 2 life.",
+            "Choose two —\n• Draw a card.\n• You gain 2 life.\n• Create a token.\n• Create a Treasure token.\n• Draw a card.",
+            "Choose up to two —\n• Draw a card.\n• You gain 2 life.\n• Create a token.",
+            "Choose one or both —\n• Draw a card.\n• You gain 2 life.\n• Create a token.\n• Create a Treasure token.",
+            "Choose one —\n• Draw a card.\n• You gain 2 life.\n• Create a token.\n• Create a Treasure token.",
+            "Choose two —",
+            "Choose two —\nDraw a card.\n• You gain 2 life.",
+            "Choose two —\n• Draw a card.\n• \n• Create a token.",
+        ] {
+            assert!(
+                issue_428_assembly(near_miss).is_none(),
+                "assembly near-miss must stay unsupported: {near_miss:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_428_choose_two_mode_recipes_match_once_with_typed_emissions() {
+        for (clause, expected_id, subtype) in [
+            (
+                "Create a token that's a copy of target Elemental you control.",
+                "modal_mode.create_token_copy.chosen_elemental",
+                "Elemental",
+            ),
+            (
+                "Create a token that's a copy of target Kithkin you control.",
+                "modal_mode.create_token_copy.chosen_kithkin",
+                "Kithkin",
+            ),
+            (
+                "Create a token that's a copy of target Goblin you control.",
+                "modal_mode.create_token_copy.chosen_goblin",
+                "Goblin",
+            ),
+            (
+                "Create a token that's a copy of target Merfolk you control.",
+                "modal_mode.create_token_copy.chosen_merfolk",
+                "Merfolk",
+            ),
+            (
+                "Create a token that's a copy of target Elf you control.",
+                "modal_mode.create_token_copy.chosen_elf",
+                "Elf",
+            ),
+        ] {
+            let (id, emission) = issue_428_modal_mode_emission(clause);
+            assert_eq!(id, expected_id, "{clause}");
+            assert_eq!(
+                emission.effects,
+                [SpellEffectKind::CreateTokenCopies {
+                    count: Amount::Fixed(1),
+                    source: tricerules_cards::primitives::TokenCopySource::Chosen(Box::new(
+                        TargetFilter {
+                            kind: TargetKind::Creature,
+                            controller: TargetController::You,
+                            required_subtypes: vec![subtype.into()],
+                            ..TargetFilter::default()
+                        }
+                    )),
+                }],
+                "{clause}"
+            );
+            let group = &emission.targeting.expect("copy mode target group").groups[0];
+            assert_eq!((group.min, group.max), (1, 1), "{clause}");
+            assert_eq!(
+                group.prompt,
+                format!("Choose target {subtype} you control"),
+                "{clause}"
+            );
+            assert_eq!(group.effect_indices, vec![0], "{clause}");
+        }
+
+        let (id, emission) = issue_428_modal_mode_emission("Target player draws two cards.");
+        assert_eq!(id, "modal_mode.target_player.draw_two");
+        assert_eq!(
+            emission.effects,
+            [SpellEffectKind::TargetPlayerDraws {
+                count: 2,
+                target: TargetFilter {
+                    kind: TargetKind::AnyPlayer,
+                    ..TargetFilter::default()
+                },
+            }]
+        );
+        let group = &emission.targeting.expect("draw-two target group").groups[0];
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.prompt, "Choose target player");
+
+        let (id, emission) = issue_428_modal_mode_emission("Target player draws a card.");
+        assert_eq!(id, "modal_mode.target_player.draw_one");
+        assert_eq!(
+            emission.effects,
+            [SpellEffectKind::TargetPlayerDraws {
+                count: 1,
+                target: TargetFilter {
+                    kind: TargetKind::AnyPlayer,
+                    ..TargetFilter::default()
+                },
+            }]
+        );
+
+        let (id, emission) = issue_428_modal_mode_emission(
+            "Target creature you control gets +3/+3 until end of turn.",
+        );
+        assert_eq!(id, "modal_mode.pump.controlled.plus_three_plus_three");
+        assert_eq!(
+            emission.effects,
+            [SpellEffectKind::PumpTarget {
+                power: 3,
+                toughness: 3,
+                scale: None,
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    ..TargetFilter::default()
+                })),
+            }]
+        );
+        let group = &emission
+            .targeting
+            .expect("controlled pump target group")
+            .groups[0];
+        assert_eq!(group.prompt, "Choose target creature you control");
+        assert_eq!(group.effect_indices, vec![0]);
+
+        let artifact_or_creature = TargetFilter {
+            any_of: Some(vec![
+                TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![PermanentTypeFilter::Artifact],
+                    ..TargetFilter::default()
+                },
+                TargetFilter::default_creature(),
+            ]),
+            ..TargetFilter::default()
+        };
+        let (id, emission) = issue_428_modal_mode_emission("Destroy target artifact or creature.");
+        assert_eq!(id, "modal_mode.destroy.artifact_or_creature");
+        assert_eq!(
+            emission.effects,
+            [SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(artifact_or_creature)),
+            }]
+        );
+        assert_eq!(
+            emission.targeting.expect("destroy group").groups[0].prompt,
+            "Choose target artifact or creature"
+        );
+
+        let creature_or_enchantment = TargetFilter {
+            any_of: Some(vec![
+                TargetFilter::default_creature(),
+                TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![PermanentTypeFilter::Enchantment],
+                    ..TargetFilter::default()
+                },
+            ]),
+            ..TargetFilter::default()
+        };
+        let (id, emission) =
+            issue_428_modal_mode_emission("Destroy target creature or enchantment.");
+        assert_eq!(id, "modal_mode.destroy.creature_or_enchantment");
+        assert_eq!(
+            emission.effects,
+            [SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(creature_or_enchantment)),
+            }]
+        );
+        assert_eq!(
+            emission.targeting.expect("destroy group").groups[0].prompt,
+            "Choose target creature or enchantment"
+        );
+
+        let (id, emission) = issue_428_modal_mode_emission(
+            "Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+        );
+        assert_eq!(id, "modal_mode.search.basic_land.tapped");
+        assert_eq!(
+            emission.effects,
+            [SpellEffectKind::SearchLibrary {
+                who: PlayerRecipient::Controller,
+                optional: false,
+                count: 1,
+                count_by_cast_cost: None,
+                filter: Some(ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::BasicLand),
+                    ..ZoneCardFilter::default()
+                }),
+                slots: Vec::new(),
+                zones: SearchZoneSelection::default(),
+                destination: SearchDestination::Battlefield { tapped: true },
+                conditional_destination: None,
+                shuffle: true,
+                reveal: false,
+                result_id: None,
+            }]
+        );
+        assert!(emission.targeting.is_none());
+
+        let (id, emission) =
+            issue_428_modal_mode_emission("Create a 1/1 white Human creature token.");
+        assert_eq!(id, "modal_mode.create_token.human_w_1_1");
+        assert_eq!(
+            emission.effects,
+            [SpellEffectKind::CreateTokens {
+                token: "human_w_1_1".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }]
+        );
+        assert!(emission.targeting.is_none());
+
+        let (id, emission) = issue_428_modal_mode_emission("Create a Food token.");
+        assert_eq!(id, "modal_mode.create_food");
+        assert_eq!(
+            emission.effects,
+            [SpellEffectKind::CreateTokens {
+                token: "food".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            }]
+        );
+        assert!(emission.targeting.is_none());
+
+        let (id, emission) =
+            issue_428_modal_mode_emission("Tap target creature. Put a stun counter on it.");
+        assert_eq!(id, "modal_mode.tap.stun_counter");
+        assert_eq!(
+            emission.effects,
+            [
+                SpellEffectKind::Tap {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                },
+                SpellEffectKind::PutCounters {
+                    counter: CounterKind::Stun,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                },
+            ]
+        );
+        let group = &emission
+            .targeting
+            .expect("tap and stun target group")
+            .groups[0];
+        assert_eq!((group.min, group.max), (1, 1));
+        assert_eq!(group.prompt, "Choose target creature");
+        assert_eq!(group.effect_indices, vec![0, 1]);
+    }
+
+    #[test]
+    fn issue_428_choose_two_mode_recipes_reject_near_misses() {
+        for (positive, near_misses) in [
+            (
+                "Create a token that's a copy of target Elemental you control.",
+                &[
+                    "Create a token that's a copy of target creature you control.",
+                    "Create a token that's a copy of target Elemental.",
+                    "Create a token that's a copy of target Elemental an opponent controls.",
+                    "Create two tokens that are copies of target Elemental you control.",
+                    "Create a token that's a copy of target Soldier you control.",
+                    "Create a token that's a copy of target Elemental you control. It has haste.",
+                ][..],
+            ),
+            (
+                "Target player draws two cards.",
+                &[
+                    "Target player draws two cards and loses 3 life.",
+                    "Target player draws three cards.",
+                    "Each player draws two cards.",
+                    "Target player draws two cards. You gain 2 life.",
+                    "Target opponent draws two cards.",
+                ][..],
+            ),
+            (
+                "Target player draws a card.",
+                &[
+                    "Target player draws three cards.",
+                    "Target opponent draws a card.",
+                    "Target player draws a card and loses 1 life.",
+                    "Each player draws a card.",
+                ][..],
+            ),
+            (
+                "Target creature you control gets +3/+3 until end of turn.",
+                &[
+                    "Target creature you control gets +4/+4 until end of turn.",
+                    "Target creature you control gets +3/+0 until end of turn.",
+                    "Target creature an opponent controls gets +3/+3 until end of turn.",
+                    "Target creature you control gets +3/+3 and gains trample until end of turn.",
+                    "Up to one target creature you control gets +3/+3 until end of turn.",
+                ][..],
+            ),
+            (
+                "Destroy target artifact or creature.",
+                &[
+                    "Destroy target artifact or planeswalker.",
+                    "Destroy target noncreature artifact or creature.",
+                    "Destroy up to one target artifact or creature.",
+                    "Destroy target artifact or creature. You gain 1 life.",
+                ][..],
+            ),
+            (
+                "Destroy target creature or enchantment.",
+                &[
+                    "Destroy target creature or planeswalker.",
+                    "Destroy target creature or artifact.",
+                    "Destroy up to one target creature or enchantment.",
+                    "Destroy target creature or enchantment. You gain 1 life.",
+                ][..],
+            ),
+            (
+                "Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+                &[
+                    "Search your library for a basic land card, put it onto the battlefield, then shuffle.",
+                    "Search your library for a land card, put it onto the battlefield tapped, then shuffle.",
+                    "You may search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+                    "Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle.",
+                    "Search your library for a basic land card, reveal it, put it into your hand, then shuffle.",
+                ][..],
+            ),
+            (
+                "Create a 1/1 white Human creature token.",
+                &[
+                    "Create two 1/1 white Human creature tokens.",
+                    "Create a 1/1 white Human creature token with lifelink.",
+                    "Create a 1/1 white Soldier creature token.",
+                    "Create a 1/1 green and white Kithkin creature token.",
+                ][..],
+            ),
+            (
+                "Create a Food token.",
+                &[
+                    "Create two Food tokens.",
+                    "Create a tapped Food token.",
+                    "Create a Food token. You gain 3 life.",
+                    "Create a Clue token.",
+                ][..],
+            ),
+            (
+                "Tap target creature. Put a stun counter on it.",
+                &[
+                    "Tap target creature. Put two stun counters on it.",
+                    "Tap target permanent. Put a stun counter on it.",
+                    "Tap target creature. Put a stun counter on it. Draw a card.",
+                    "Tap target creature. Then put a stun counter on it.",
+                ][..],
+            ),
+        ] {
+            assert!(
+                issue_428_modal_mode(positive).is_some(),
+                "expected positive must match: {positive:?}"
+            );
+            for near_miss in near_misses {
+                assert!(
+                    issue_428_modal_mode(near_miss).is_none(),
+                    "near-miss must stay unsupported: {near_miss:?}"
+                );
+            }
         }
     }
 }

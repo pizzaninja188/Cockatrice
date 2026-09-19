@@ -1,0 +1,10 @@
+// 1/1 white Human creature token (Return from the Wilds). The Soldier identity is distinct.
+(
+  id: "human_w_1_1",
+  name: "Human",
+  face_id: "human",
+  types: ["Creature", "Human"],
+  colors: [White],
+  power: 1,
+  toughness: 1,
+)
