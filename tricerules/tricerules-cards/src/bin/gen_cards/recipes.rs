@@ -12669,7 +12669,304 @@ fn match_static_enters_with_three_minus_one_minus_one_counters(
     })
 }
 
+// ---------------------------------------------------------------------------
+// Issue #370 — "This spell costs {1} less to cast for each ... in your graveyard."
+//
+// Every matcher accepts only its exact normalized Oracle line and emits the shipped
+// `SpellCostModifier::GenericReduction` over the public pre-resolution `GraveyardCards` count,
+// with the `Affine` battlefield-plus-graveyard sibling for the Cave template. Four templates are
+// full-corpus singletons in the pinned Oracle bulk corpus (verified); the creature-card and
+// instant-and-sorcery templates have seven corpus printings each. The disguise-flavored
+// template from the same issue is
+// deliberately absent: `SpellCostModifier` has no binding to a face-down alternative cost
+// (tricerules-cards/src/primitives/costs.rs:513-536), so any emission authored today would
+// misapply the reduction to the normal cast; #345 owns Disguise cost assembly.
+//
+// Reviewed deviation from the issue text: it specifies `RecipeSurface::SpellClause`, but that
+// surface only applies when the source face is an instant or sorcery (`surface_applies`), and
+// every cohort identity is a creature. The shipped precedent for a creature-printed self-cost
+// reduction is `spell.cost_reduction.creature_died_this_turn.three` (Dreaded Bat-Cloud, #358) on
+// `SpellStaticAbility`, which functions while the source object is a spell regardless of the
+// card's permanent status. `SpellClause` would leave every retained identity ungenerateable.
+// ---------------------------------------------------------------------------
+
+const ISSUE_370_CREATURE_CARDS_CLAUSE: &str =
+    "This spell costs {1} less to cast for each creature card in your graveyard.";
+const ISSUE_370_INSTANT_AND_SORCERY_CARDS_CLAUSE: &str =
+    "This spell costs {1} less to cast for each instant and sorcery card in your graveyard.";
+const ISSUE_370_ARTIFACT_AND_OR_CREATURE_CARDS_CLAUSE: &str =
+    "This spell costs {1} less to cast for each artifact and/or creature card in your graveyard.";
+const ISSUE_370_PERMANENT_CARDS_CLAUSE: &str =
+    "This spell costs {1} less to cast for each permanent card in your graveyard.";
+const ISSUE_370_NONCREATURE_NONLAND_CARDS_CLAUSE: &str =
+    "This spell costs {1} less to cast for each noncreature, nonland card in your graveyard.";
+const ISSUE_370_CAVES_CLAUSE: &str =
+    "This spell costs {1} less to cast for each Cave you control and each Cave card in your graveyard.";
+
+fn issue_370_graveyard_generic_reduction(filter: Option<ZoneCardFilter>) -> RecipeEmission {
+    RecipeEmission::SpellCostModifier(SpellCostModifier::GenericReduction {
+        amount: issue_373_graveyard_count(filter),
+    })
+}
+
+/// CR 601.2f / 404.2: a per-card generic self-cost reduction counted from the caster's public
+/// graveyard. Seven pinned-corpus cards print the creature form (Hollow Marauder, Ghoultree, and
+/// five others); another count, a battlefield predicate, a permanent predicate, another owner
+/// scope, and riders stay unsupported.
+fn match_spell_cost_reduction_graveyard_creature_cards_one(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_370_CREATURE_CARDS_CLAUSE).then(|| {
+        issue_370_graveyard_generic_reduction(Some(ZoneCardFilter {
+            card_type: Some(CardTypeFilter::Creature),
+            ..ZoneCardFilter::default()
+        }))
+    })
+}
+
+/// CR 601.2f / 404.2: seven pinned-corpus cards print the instant-and-sorcery form, including
+/// Eddymurk Crab (already hand-authored), The Dawning Archaic, and Tolarian Terror. Another
+/// count, "or" instead of "and", another owner scope, and riders stay unsupported.
+fn match_spell_cost_reduction_graveyard_instant_and_sorcery_cards_one(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_370_INSTANT_AND_SORCERY_CARDS_CLAUSE).then(|| {
+        issue_370_graveyard_generic_reduction(Some(ZoneCardFilter {
+            card_type: Some(CardTypeFilter::InstantOrSorcery),
+            ..ZoneCardFilter::default()
+        }))
+    })
+}
+
+/// CR 601.2f / 404.2: the shipped disjunctive `ZoneCardFilter::any_of` expresses the printed
+/// "artifact and/or creature" cohort; Chitin Gravestalker is the only pinned-corpus printing.
+/// Reversed or single-type unions, other counts, and riders stay unsupported.
+fn match_spell_cost_reduction_graveyard_artifact_and_or_creature_cards_one(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_370_ARTIFACT_AND_OR_CREATURE_CARDS_CLAUSE).then(|| {
+        issue_370_graveyard_generic_reduction(Some(ZoneCardFilter {
+            any_of: Some(vec![
+                ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::Artifact),
+                    ..ZoneCardFilter::default()
+                },
+                ZoneCardFilter {
+                    card_type: Some(CardTypeFilter::Creature),
+                    ..ZoneCardFilter::default()
+                },
+            ]),
+            ..ZoneCardFilter::default()
+        }))
+    })
+}
+
+/// CR 601.2f / 404.2 / 110.4a: a permanent card outside the stack is exactly a card that is
+/// neither an instant nor a sorcery, the shipped exclusion idiom. Diamond Weapon is the only
+/// pinned-corpus printing; "nonland permanent", a controlled-permanent count, another count,
+/// and riders stay unsupported.
+fn match_spell_cost_reduction_graveyard_permanent_cards_one(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_370_PERMANENT_CARDS_CLAUSE).then(|| {
+        issue_370_graveyard_generic_reduction(Some(ZoneCardFilter {
+            excluded_card_types: vec![CardTypeFilter::Instant, CardTypeFilter::Sorcery],
+            ..ZoneCardFilter::default()
+        }))
+    })
+}
+
+/// CR 601.2f / 404.2: Serpent of the Pass is the only pinned-corpus printing of the
+/// noncreature-nonland form, the shipped creature/land exclusion idiom. A single-exclusion or
+/// permanent form, another count, and riders stay unsupported.
+fn match_spell_cost_reduction_graveyard_noncreature_nonland_cards_one(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_370_NONCREATURE_NONLAND_CARDS_CLAUSE).then(|| {
+        issue_370_graveyard_generic_reduction(Some(ZoneCardFilter {
+            excluded_card_types: vec![CardTypeFilter::Creature, CardTypeFilter::Land],
+            ..ZoneCardFilter::default()
+        }))
+    })
+}
+
+/// CR 601.2f / 404.2: Gargantuan Leech is the only pinned-corpus printing and sums two public
+/// cohorts in one `Affine` amount: Cave permanents the caster controls plus Cave cards in the
+/// caster's graveyard. A single cohort, another subtype, another owner scope, another count, and
+/// riders stay unsupported.
+fn match_spell_cost_reduction_graveyard_caves_you_control_and_graveyard_one(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == ISSUE_370_CAVES_CLAUSE).then(|| {
+        RecipeEmission::SpellCostModifier(SpellCostModifier::GenericReduction {
+            amount: Amount::Count(CountExpression::Affine {
+                constant: 0,
+                terms: vec![
+                    QuantityTerm {
+                        coefficient: 1,
+                        quantity: CountExpression::BattlefieldPermanents {
+                            filter: BattlefieldPermanentFilter {
+                                token: None,
+                                any_of: None,
+                                controllers: RelativePlayerSet::Controller,
+                                card_type: None,
+                                color: None,
+                                name: None,
+                                required_subtypes: vec!["Cave".to_string()],
+                                exclude_source: false,
+                            },
+                        },
+                    },
+                    QuantityTerm {
+                        coefficient: 1,
+                        quantity: CountExpression::GraveyardCards {
+                            owners: RelativePlayerSet::Controller,
+                            filter: Some(ZoneCardFilter {
+                                required_subtypes: vec!["Cave".to_string()],
+                                ..ZoneCardFilter::default()
+                            }),
+                        },
+                    },
+                ],
+            }),
+        })
+    })
+}
+
 pub(super) static CATALOG: &[Recipe] = &[
+    Recipe {
+        id: RecipeId("spell.cost_reduction.graveyard_creature_cards.one"),
+        label: "creature cards in your graveyard reduce the spell's generic cost",
+        surface: RecipeSurface::SpellStaticAbility,
+        matcher: match_spell_cost_reduction_graveyard_creature_cards_one,
+        // Hollow Marauder and Ghoultree are two of the seven pinned full-Oracle-corpus cards
+        // printing this exact clause; both calibrate the shared grammar. The permanent-card form
+        // is owned by `spell.cost_reduction.graveyard_permanent_cards.one` and is asserted
+        // directly on this matcher in the catalog tests instead of as a catalog negative.
+        calibration: calibrations!(
+            "Hollow Marauder" => "This spell costs {1} less to cast for each creature card in your graveyard.",
+            "Ghoultree" => "This spell costs {1} less to cast for each creature card in your graveyard.";
+            // Another count or union, a battlefield cohort, another owner scope, and riders
+            // stay unsupported.
+            "This spell costs {2} less to cast for each creature card in your graveyard.",
+            "This spell costs {1} less to cast for each creature you control.",
+            "This spell costs {1} less to cast for each creature and/or artifact card in your graveyard.",
+            "This spell costs {1} less to cast for each creature card in each graveyard.",
+            "This spell costs {1} less to cast for each creature card in an opponent's graveyard.",
+            "This spell costs {1} less to cast for each creature card in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.cost_reduction.graveyard_instant_and_sorcery_cards.one"),
+        label: "instant and sorcery cards in your graveyard reduce the spell's generic cost",
+        surface: RecipeSurface::SpellStaticAbility,
+        matcher: match_spell_cost_reduction_graveyard_instant_and_sorcery_cards_one,
+        // The Dawning Archaic and Tolarian Terror are the reviewed cohort identities; Eddymurk
+        // Crab is one of the seven pinned-corpus printings and is already hand-authored. The
+        // noncreature-nonland form is owned by
+        // `spell.cost_reduction.graveyard_noncreature_nonland_cards.one` and is asserted directly
+        // on this matcher in the catalog tests instead of as a catalog negative.
+        calibration: calibrations!(
+            "The Dawning Archaic" => "This spell costs {1} less to cast for each instant and sorcery card in your graveyard.",
+            "Tolarian Terror" => "This spell costs {1} less to cast for each instant and sorcery card in your graveyard.";
+            // Another count, an "or" union, a single spell type, another owner scope, and riders
+            // stay unsupported.
+            "This spell costs {2} less to cast for each instant and sorcery card in your graveyard.",
+            "This spell costs {1} less to cast for each instant or sorcery card in your graveyard.",
+            "This spell costs {1} less to cast for each instant card in your graveyard.",
+            "This spell costs {1} less to cast for each sorcery card in your graveyard.",
+            "This spell costs {1} less to cast for each instant and sorcery card in an opponent's graveyard.",
+            "This spell costs {1} less to cast for each instant and sorcery card in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.cost_reduction.graveyard_artifact_and_or_creature_cards.one"),
+        label: "artifact and/or creature cards in your graveyard reduce the spell's generic cost",
+        surface: RecipeSurface::SpellStaticAbility,
+        matcher: match_spell_cost_reduction_graveyard_artifact_and_or_creature_cards_one,
+        // Chitin Gravestalker is the only card in the pinned full Oracle corpus printing this
+        // exact clause; the singleton is verified, not an unreviewed gap. The plain
+        // creature-card form is owned by `spell.cost_reduction.graveyard_creature_cards.one` and
+        // is asserted directly on this matcher in the catalog tests instead of as a catalog
+        // negative.
+        calibration: singleton_calibrations!(
+            "Chitin Gravestalker" => "This spell costs {1} less to cast for each artifact and/or creature card in your graveyard.";
+            // A reversed union, single-type or other-type unions, another count, and riders stay
+            // unsupported.
+            "This spell costs {1} less to cast for each artifact or creature card in your graveyard.",
+            "This spell costs {1} less to cast for each artifact card in your graveyard.",
+            "This spell costs {1} less to cast for each artifact and enchantment card in your graveyard.",
+            "This spell costs {2} less to cast for each artifact and/or creature card in your graveyard.",
+            "This spell costs {1} less to cast for each artifact and/or creature card in each graveyard.",
+            "This spell costs {1} less to cast for each artifact and/or creature card in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.cost_reduction.graveyard_permanent_cards.one"),
+        label: "permanent cards in your graveyard reduce the spell's generic cost",
+        surface: RecipeSurface::SpellStaticAbility,
+        matcher: match_spell_cost_reduction_graveyard_permanent_cards_one,
+        // Diamond Weapon is the only card in the pinned full Oracle corpus printing this exact
+        // clause; the singleton is verified, not an unreviewed gap. The creature-card form and
+        // the noncreature-nonland form are owned by their own recipes and asserted directly on
+        // this matcher in the catalog tests instead of as catalog negatives.
+        calibration: singleton_calibrations!(
+            "Diamond Weapon" => "This spell costs {1} less to cast for each permanent card in your graveyard.";
+            // A narrowed or controlled cohort, another count, another owner scope, and riders
+            // stay unsupported.
+            "This spell costs {1} less to cast for each nonland permanent card in your graveyard.",
+            "This spell costs {1} less to cast for each permanent you control.",
+            "This spell costs {2} less to cast for each permanent card in your graveyard.",
+            "This spell costs {1} less to cast for each permanent card in each graveyard.",
+            "This spell costs {1} less to cast for each permanent card in an opponent's graveyard.",
+            "This spell costs {1} less to cast for each permanent card in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.cost_reduction.graveyard_noncreature_nonland_cards.one"),
+        label: "noncreature, nonland cards in your graveyard reduce the spell's generic cost",
+        surface: RecipeSurface::SpellStaticAbility,
+        matcher: match_spell_cost_reduction_graveyard_noncreature_nonland_cards_one,
+        // Serpent of the Pass is the only card in the pinned full Oracle corpus printing this
+        // exact clause; the singleton is verified, not an unreviewed gap. The instant-and-
+        // sorcery form and the permanent form are owned by their own recipes and asserted
+        // directly on this matcher in the catalog tests instead of as catalog negatives.
+        calibration: singleton_calibrations!(
+            "Serpent of the Pass" => "This spell costs {1} less to cast for each noncreature, nonland card in your graveyard.";
+            // A single exclusion, a narrowed permanent form, another count, and riders stay
+            // unsupported.
+            "This spell costs {1} less to cast for each noncreature card in your graveyard.",
+            "This spell costs {1} less to cast for each nonland card in your graveyard.",
+            "This spell costs {1} less to cast for each noncreature, nonland permanent card in your graveyard.",
+            "This spell costs {2} less to cast for each noncreature, nonland card in your graveyard.",
+            "This spell costs {1} less to cast for each noncreature, nonland card in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.cost_reduction.graveyard_caves_you_control_and_graveyard.one"),
+        label: "Caves you control and Cave cards in your graveyard reduce the spell's generic cost",
+        surface: RecipeSurface::SpellStaticAbility,
+        matcher: match_spell_cost_reduction_graveyard_caves_you_control_and_graveyard_one,
+        // Gargantuan Leech is the only card in the pinned full Oracle corpus printing this exact
+        // clause; the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Gargantuan Leech" => "This spell costs {1} less to cast for each Cave you control and each Cave card in your graveyard.";
+            // A single cohort, non-Cave wording, another count, another owner scope, and riders
+            // stay unsupported.
+            "This spell costs {1} less to cast for each Cave you control.",
+            "This spell costs {1} less to cast for each Cave card in your graveyard.",
+            "This spell costs {1} less to cast for each Cave permanent you control and each Cave card in your graveyard.",
+            "This spell costs {2} less to cast for each Cave you control and each Cave card in your graveyard.",
+            "This spell costs {1} less to cast for each Cave you control and each Cave card in an opponent's graveyard.",
+            "This spell costs {1} less to cast for each Cave you control and each Cave card in your graveyard. Draw a card."
+        ),
+    },
     Recipe {
         id: RecipeId(
             "triggered.end_step.elf_card_graveyard_and_source_minus_one_counter.remove_minus_one_counter_source",
@@ -37009,5 +37306,230 @@ mod tests {
                 "near-miss was accepted: {negative}"
             );
         }
+    }
+
+    /// Issue #370: each graveyard-count cost-reduction clause must match exactly one recipe on
+    /// the spell surface and emit the shipped `GenericReduction` over the exact filter the
+    /// printed predicate names.
+    #[track_caller]
+    fn issue_370_assert_graveyard_reduction(
+        clause: &str,
+        recipe_id: &str,
+        filter: Option<ZoneCardFilter>,
+    ) {
+        // The cohort identities are creatures, so the permanent-face context is authoritative;
+        // `SpellStaticAbility` also applies on instant and sorcery faces.
+        let matched = match_clause(clause, false, &context())
+            .expect("issue #370 clause must not be ambiguous")
+            .unwrap_or_else(|| panic!("issue #370 clause must be supported: {clause}"));
+        assert_eq!(matched.id.as_str(), recipe_id, "{clause}");
+        assert_eq!(
+            matched.emission,
+            RecipeEmission::SpellCostModifier(SpellCostModifier::GenericReduction {
+                amount: Amount::Count(CountExpression::GraveyardCards {
+                    owners: RelativePlayerSet::Controller,
+                    filter,
+                }),
+            }),
+            "{clause}"
+        );
+    }
+
+    #[test]
+    fn issue_370_graveyard_count_cost_reduction_recipes_are_exact_and_typed() {
+        issue_370_assert_graveyard_reduction(
+            ISSUE_370_CREATURE_CARDS_CLAUSE,
+            "spell.cost_reduction.graveyard_creature_cards.one",
+            Some(ZoneCardFilter {
+                card_type: Some(CardTypeFilter::Creature),
+                ..ZoneCardFilter::default()
+            }),
+        );
+        issue_370_assert_graveyard_reduction(
+            ISSUE_370_INSTANT_AND_SORCERY_CARDS_CLAUSE,
+            "spell.cost_reduction.graveyard_instant_and_sorcery_cards.one",
+            Some(ZoneCardFilter {
+                card_type: Some(CardTypeFilter::InstantOrSorcery),
+                ..ZoneCardFilter::default()
+            }),
+        );
+        issue_370_assert_graveyard_reduction(
+            ISSUE_370_ARTIFACT_AND_OR_CREATURE_CARDS_CLAUSE,
+            "spell.cost_reduction.graveyard_artifact_and_or_creature_cards.one",
+            Some(ZoneCardFilter {
+                any_of: Some(vec![
+                    ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::Artifact),
+                        ..ZoneCardFilter::default()
+                    },
+                    ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::Creature),
+                        ..ZoneCardFilter::default()
+                    },
+                ]),
+                ..ZoneCardFilter::default()
+            }),
+        );
+        issue_370_assert_graveyard_reduction(
+            ISSUE_370_PERMANENT_CARDS_CLAUSE,
+            "spell.cost_reduction.graveyard_permanent_cards.one",
+            Some(ZoneCardFilter {
+                excluded_card_types: vec![CardTypeFilter::Instant, CardTypeFilter::Sorcery],
+                ..ZoneCardFilter::default()
+            }),
+        );
+        issue_370_assert_graveyard_reduction(
+            ISSUE_370_NONCREATURE_NONLAND_CARDS_CLAUSE,
+            "spell.cost_reduction.graveyard_noncreature_nonland_cards.one",
+            Some(ZoneCardFilter {
+                excluded_card_types: vec![CardTypeFilter::Creature, CardTypeFilter::Land],
+                ..ZoneCardFilter::default()
+            }),
+        );
+
+        let matched = match_clause(ISSUE_370_CAVES_CLAUSE, false, &context())
+            .expect("issue #370 Cave clause must not be ambiguous")
+            .expect("issue #370 Cave clause must be supported");
+        assert_eq!(
+            matched.id.as_str(),
+            "spell.cost_reduction.graveyard_caves_you_control_and_graveyard.one"
+        );
+        assert_eq!(
+            matched.emission,
+            RecipeEmission::SpellCostModifier(SpellCostModifier::GenericReduction {
+                amount: Amount::Count(CountExpression::Affine {
+                    constant: 0,
+                    terms: vec![
+                        QuantityTerm {
+                            coefficient: 1,
+                            quantity: CountExpression::BattlefieldPermanents {
+                                filter: BattlefieldPermanentFilter {
+                                    token: None,
+                                    any_of: None,
+                                    controllers: RelativePlayerSet::Controller,
+                                    card_type: None,
+                                    color: None,
+                                    name: None,
+                                    required_subtypes: vec!["Cave".to_string()],
+                                    exclude_source: false,
+                                },
+                            },
+                        },
+                        QuantityTerm {
+                            coefficient: 1,
+                            quantity: CountExpression::GraveyardCards {
+                                owners: RelativePlayerSet::Controller,
+                                filter: Some(ZoneCardFilter {
+                                    required_subtypes: vec!["Cave".to_string()],
+                                    ..ZoneCardFilter::default()
+                                }),
+                            },
+                        },
+                    ],
+                }),
+            })
+        );
+    }
+
+    /// Cross-recipe near-misses from issue #370 cannot be catalog negatives because another
+    /// exact recipe in the same batch owns them; asserting directly on the matcher proves each
+    /// filter stays disjoint, and `match_clause` proves the catalog routes the clause to its
+    /// single owner.
+    #[test]
+    fn issue_370_cross_recipe_near_misses_stay_disjoint() {
+        assert!(
+            match_spell_cost_reduction_graveyard_creature_cards_one(
+                ISSUE_370_PERMANENT_CARDS_CLAUSE,
+                &context()
+            )
+            .is_none(),
+            "the permanent-card clause must not be accepted by the creature-card matcher"
+        );
+        assert!(
+            match_spell_cost_reduction_graveyard_permanent_cards_one(
+                ISSUE_370_CREATURE_CARDS_CLAUSE,
+                &context()
+            )
+            .is_none(),
+            "the creature-card clause must not be accepted by the permanent-card matcher"
+        );
+        assert!(
+            match_spell_cost_reduction_graveyard_permanent_cards_one(
+                ISSUE_370_NONCREATURE_NONLAND_CARDS_CLAUSE,
+                &context()
+            )
+            .is_none(),
+            "the noncreature-nonland clause must not be accepted by the permanent-card matcher"
+        );
+        assert!(
+            match_spell_cost_reduction_graveyard_noncreature_nonland_cards_one(
+                ISSUE_370_INSTANT_AND_SORCERY_CARDS_CLAUSE,
+                &context()
+            )
+            .is_none(),
+            "the instant-and-sorcery clause must not be accepted by the noncreature-nonland matcher"
+        );
+        assert!(
+            match_spell_cost_reduction_graveyard_artifact_and_or_creature_cards_one(
+                ISSUE_370_CREATURE_CARDS_CLAUSE,
+                &context()
+            )
+            .is_none(),
+            "the creature-card clause must not be accepted by the artifact-and-or-creature matcher"
+        );
+        assert!(
+            match_spell_cost_reduction_graveyard_artifact_and_or_creature_cards_one(
+                ISSUE_370_INSTANT_AND_SORCERY_CARDS_CLAUSE,
+                &context()
+            )
+            .is_none(),
+            "the instant-and-sorcery clause must not be accepted by the artifact matcher"
+        );
+
+        for (clause, owner) in [
+            (
+                ISSUE_370_PERMANENT_CARDS_CLAUSE,
+                "spell.cost_reduction.graveyard_permanent_cards.one",
+            ),
+            (
+                ISSUE_370_NONCREATURE_NONLAND_CARDS_CLAUSE,
+                "spell.cost_reduction.graveyard_noncreature_nonland_cards.one",
+            ),
+        ] {
+            let matched = match_clause(clause, false, &context())
+                .expect("cross-recipe near-miss must not be ambiguous")
+                .unwrap_or_else(|| panic!("cross-recipe near-miss must have one owner: {clause}"));
+            assert_eq!(matched.id.as_str(), owner, "{clause}");
+        }
+
+        for recipe_id in [
+            "spell.cost_reduction.graveyard_creature_cards.one",
+            "spell.cost_reduction.graveyard_instant_and_sorcery_cards.one",
+            "spell.cost_reduction.graveyard_artifact_and_or_creature_cards.one",
+            "spell.cost_reduction.graveyard_permanent_cards.one",
+            "spell.cost_reduction.graveyard_noncreature_nonland_cards.one",
+            "spell.cost_reduction.graveyard_caves_you_control_and_graveyard.one",
+        ] {
+            let recipe = CATALOG
+                .iter()
+                .find(|recipe| recipe.id.as_str() == recipe_id)
+                .unwrap_or_else(|| panic!("missing issue #370 recipe {recipe_id}"));
+            assert_eq!(
+                recipe.surface,
+                RecipeSurface::SpellStaticAbility,
+                "{recipe_id} must function while a permanent card is a spell"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_370_disguise_reduction_has_no_recipe_without_disguise_cost_vocabulary() {
+        const DISGUISE_CLAUSE: &str = "Disguise {5}{R}. This cost is reduced by {1} for each instant and sorcery card in your graveyard.";
+        assert!(
+            match_clause(DISGUISE_CLAUSE, false, &context())
+                .expect("the disguise clause must not be ambiguous")
+                .is_none(),
+            "the disguise-flavored reduction stays unsupported until #345 adds disguise cost assembly"
+        );
     }
 }

@@ -412,6 +412,8 @@ charity_extractor	0	cast	exercised
 charmed_sleep	0	cast	exercised
 chase_inspiration	0	cast	exercised
 child_of_night	0	cast	exercised
+chitin_gravestalker	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+chitin_gravestalker	0	cast	exercised
 chitinous_graspling	0	cast	exercised
 chomping_changeling	0	cast	exercised
 chrome_companion	0	ability:0	exercised
@@ -910,6 +912,7 @@ gallant_pie-wielder	0	cast	exercised
 galvanizing_sawship	0	ability:0	exercised
 galvanizing_sawship	0	cast	exercised
 gangly_stompling	0	cast	exercised
+gargantuan_leech	0	cast	exercised
 garruks_companion	0	cast	exercised
 garruks_gorehorn	0	cast	exercised
 gearsmith_guardian	0	cast	exercised
@@ -2469,6 +2472,7 @@ titanic_growth	0	cast	exercised
 toadstool_admirer	0	ability:0	exercised
 toadstool_admirer	0	cast	exercised
 tolarian_scholar	0	cast	exercised
+tolarian_terror	0	cast	exercised
 tomb_trawler	0	ability:0	exercised
 tomb_trawler	0	cast	exercised
 tome_raider	0	cast	exercised
