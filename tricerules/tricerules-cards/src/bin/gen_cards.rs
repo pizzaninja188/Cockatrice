@@ -4067,6 +4067,177 @@ mod tests {
     }
 
     #[test]
+    fn issue_425_choose_one_or_both_cohort_emits_exact_modal_definitions() {
+        for (name, mana, type_line, oracle_text) in [
+            (
+                "Amazing Acrobatics",
+                "{1}{U}{U}",
+                "Instant",
+                "Choose one or both —\n• Counter target spell.\n• Tap one or two target creatures.",
+            ),
+            (
+                "Avengers Disassembled",
+                "{1}{R}{R}",
+                "Sorcery",
+                "Choose one or both —\n• Avengers Disassembled deals 3 damage to each creature.\n• Destroy target land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            ),
+            (
+                "Decoy Ploy",
+                "{1}{B}",
+                "Instant",
+                "Choose one or both —\n• Return target Villain card from your graveyard to your hand.\n• Return target Hero card from your graveyard to your hand.",
+            ),
+            (
+                "Epic Fight",
+                "{2}{G}",
+                "Sorcery",
+                "Choose one or both —\n• Double target creature's power and toughness until end of turn.\n• Target creature you control fights target creature an opponent controls.",
+            ),
+            (
+                "Pinecone Strike",
+                "{1}{R}",
+                "Instant",
+                "Choose one or both —\n• Pinecone Strike deals 3 damage to target creature. If that creature would die this turn, exile it instead.\n• Destroy target artifact token.",
+            ),
+            (
+                "Scour for Scrap",
+                "{3}{U}",
+                "Instant",
+                "Choose one or both —\n• Search your library for an artifact card, reveal it, put it into your hand, then shuffle.\n• Return target artifact card from your graveyard to your hand.",
+            ),
+        ] {
+            let card = normal_card(name, mana, type_line, oracle_text, None);
+            let generated =
+                evaluate_fresh(&card).unwrap_or_else(|error| panic!("{name}: {error:?}"));
+            let modal = modal_spell_of(&generated);
+            assert_eq!((modal.min_modes, modal.max_modes), (1, 2), "{name}");
+            assert_eq!(modal.modes.len(), 2, "{name}");
+            assert_eq!(
+                modal
+                    .modes
+                    .iter()
+                    .map(|mode| mode.mode_id.as_str())
+                    .collect::<Vec<_>>(),
+                ["mode_01", "mode_02"],
+                "{name}"
+            );
+            assert_eq!(
+                modal
+                    .modes
+                    .iter()
+                    .map(|mode| mode.presentation.clone())
+                    .collect::<Vec<_>>(),
+                [
+                    AbilityPresentation::OracleLines(vec![2]),
+                    AbilityPresentation::OracleLines(vec![3]),
+                ],
+                "{name}"
+            );
+            assert!(
+                modal.modes.iter().all(|mode| !mode.effects.is_empty()),
+                "{name}"
+            );
+            assert_eq!(
+                generated.faces[0].recipe_labels.first().copied(),
+                Some("two-bullet modal spell assembly"),
+                "{name}"
+            );
+        }
+
+        // The four identities whose printed clauses have no shipped vocabulary stay unregistered:
+        // Choreographed Sparks' can't-be-copied static and modified spell copies, Expose the
+        // Culprit's face-up and cloak pair, Go Ninja Go's blink, and Perfect Intimidation's
+        // remove-all-counters mode.
+        for (name, mana, type_line, oracle_text) in [
+            (
+                "Choreographed Sparks",
+                "{R}{R}",
+                "Instant",
+                "This spell can't be copied.\nChoose one or both —\n• Copy target instant or sorcery spell you control. You may choose new targets for the copy.\n• Copy target creature spell you control. The copy gains haste and \"At the beginning of the end step, sacrifice this token.\"",
+            ),
+            (
+                "Expose the Culprit",
+                "{1}{R}",
+                "Instant",
+                "Choose one or both —\n• Turn target face-down creature face up.\n• Exile any number of face-up creatures you control with disguise in a face-down pile, shuffle that pile, then cloak them. (To cloak a card, put it onto the battlefield face down as a 2/2 creature with ward {2}. Turn it face up any time for its mana cost if it's a creature card.)",
+            ),
+            (
+                "Go Ninja Go",
+                "{R}{W}",
+                "Sorcery",
+                "Choose one or both —\n• Exile target creature you control, then return it to the battlefield under its owner's control.\n• Go Ninja Go deals damage equal to the greatest power among creatures you control to target creature an opponent controls.",
+            ),
+            (
+                "Perfect Intimidation",
+                "{3}{B}",
+                "Sorcery",
+                "Choose one or both —\n• Target opponent exiles two cards from their hand.\n• Remove all counters from target creature.",
+            ),
+        ] {
+            let card = normal_card(name, mana, type_line, oracle_text, None);
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "{name} must stay unregistered while a printed mode lacks shipped vocabulary"
+            );
+        }
+
+        for (name, oracle_text) in [
+            (
+                "Amazing Acrobatics",
+                "Choose one or both —\n• Counter target spell.\n• Tap up to one target creature.",
+            ),
+            (
+                "Amazing Acrobatics",
+                "Choose one or both —\n• Counter target spell.\n• Tap one or two target creatures.\n• Draw a card.",
+            ),
+            (
+                "Avengers Disassembled",
+                "Choose one or both —\n• Avengers Disassembled deals 2 damage to each creature.\n• Destroy target land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            ),
+            (
+                "Avengers Disassembled",
+                "Choose one or both —\n• Avengers Disassembled deals 3 damage to each creature.\n• Destroy target land. Its controller may search their library for a basic land card, put it onto the battlefield, then shuffle.",
+            ),
+            (
+                "Decoy Ploy",
+                "Choose one or both —\n• Return target Hero card from an opponent's graveyard to your hand.\n• Return target Villain card from your graveyard to your hand.",
+            ),
+            (
+                "Epic Fight",
+                "Choose one or both —\n• Double target creature's power until end of turn.\n• Target creature you control fights target creature an opponent controls.",
+            ),
+            (
+                "Pinecone Strike",
+                "Choose one or both —\n• Pinecone Strike deals 3 damage to target creature. If that creature would die this turn, exile it instead. Draw a card.\n• Destroy target artifact token.",
+            ),
+            (
+                "Pinecone Strike",
+                "Choose one or both —\n• Pinecone Strike deals 3 damage to target creature. If that creature would die this turn, exile it instead.\n• Destroy target artifact.",
+            ),
+            (
+                "Scour for Scrap",
+                "Choose one or both —\n• Search your library for an artifact card, put it into your hand, then shuffle.\n• Return target artifact card from your graveyard to your hand.",
+            ),
+            // The reviewed pairs are choose-both-only; the choose-one header fails closed.
+            (
+                "Decoy Ploy",
+                "Choose one —\n• Return target Villain card from your graveyard to your hand.\n• Return target Hero card from your graveyard to your hand.",
+            ),
+            // A three-bullet `Choose one or both` aggregate never reaches the two-mode assembly.
+            (
+                "Avengers Disassembled",
+                "Choose one or both —\n• Avengers Disassembled deals 3 damage to each creature.\n• Destroy target land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle.\n• Draw a card.",
+            ),
+        ] {
+            let card = normal_card(name, "{1}{R}", "Instant", oracle_text, None);
+            assert!(
+                evaluate_fresh(&card).is_err(),
+                "{name} near-miss must fail closed: {oracle_text:?}"
+            );
+        }
+    }
+
+    #[test]
     fn issue_412_two_and_three_mode_spells_generate_exact_modal_definitions() {
         let plow_through = normal_card(
             "Plow Through",

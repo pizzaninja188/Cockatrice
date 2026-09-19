@@ -3250,6 +3250,243 @@ fn triggered_ability(context: &RecipeContext, effect: SpellEffectKind) -> Recipe
     )
 }
 
+/// Issue #425 / CR 700.2 / 701.26: Amazing Acrobatics' `Tap one or two target creatures.`
+/// is the bounded creature tap sibling of the shipped exactly-one `modal_mode.tap.creature`;
+/// the shipped modal target helper only builds exactly-one groups, so the reviewed bounds are
+/// authored with [`modal_targeting_range`]. "Up to two", controller scopes, and riders stay
+/// unsupported.
+fn match_modal_tap_one_or_two_creatures(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Tap one or two target creatures.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::Tap {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+            }],
+            modal_targeting_range("Choose one or two target creatures", 1, 2, vec![0], false),
+        )
+    })
+}
+
+/// Issue #425 / CR 120: Avengers Disassembled's mass damage bullet is the three-damage sibling
+/// of the shipped `spell.source_damage.each_creature.two` sweep. Another amount, opponent- or
+/// controller-scoped sweeps, and targeted forms stay unsupported.
+fn match_modal_source_damage_each_creature_three(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == format!("{} deals 3 damage to each creature.", context.source_name)).then(|| {
+        modal_mode(
+            vec![SpellEffectKind::DamageAll {
+                amount: Amount::Fixed(3),
+                players: RelativePlayerSet::All,
+                kind: TargetFilter::default_creature(),
+            }],
+            None,
+        )
+    })
+}
+
+/// Issue #425 / CR 400.7 / 701.23: Avengers Disassembled's land bullet destroys one target land
+/// and lets that land's controller optionally search out a basic land tapped. Demolition Field's
+/// reviewed `ControllerOfTargetGroup` search shape is reused; the target group binds only the
+/// destroy instruction. Other destinations, owners, or land restrictions stay unsupported.
+fn match_modal_destroy_land_its_controller_search_basic(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text
+        == "Destroy target land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle.")
+        .then(|| {
+            modal_mode(
+                vec![
+                    SpellEffectKind::Destroy {
+                        subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                            kind: TargetKind::AnyPermanent,
+                            permanent_types: vec![PermanentTypeFilter::Land],
+                            ..TargetFilter::default()
+                        })),
+                    },
+                    SpellEffectKind::SearchLibrary {
+                        who: PlayerRecipient::ControllerOfTargetGroup { group_index: 0 },
+                        optional: true,
+                        count: 1,
+                        count_by_cast_cost: None,
+                        filter: Some(ZoneCardFilter {
+                            card_type: Some(CardTypeFilter::BasicLand),
+                            ..ZoneCardFilter::default()
+                        }),
+                        slots: Vec::new(),
+                        zones: SearchZoneSelection::default(),
+                        destination: SearchDestination::Battlefield { tapped: true },
+                        conditional_destination: None,
+                        shuffle: true,
+                        reveal: false,
+                        result_id: None,
+                    },
+                ],
+                modal_targeting("Choose target land", 0),
+            )
+        })
+}
+
+/// Issue #425 / CR 400.7: Decoy Ploy's Hero/Villain graveyard returns reuse the shipped typed
+/// graveyard-to-hand family with the printed subtype predicate. Other subtypes, owners, or
+/// destinations stay unsupported.
+fn match_modal_return_hero_card(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Return target Hero card from your graveyard to your hand.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    card: Some(ZoneCardFilter {
+                        required_subtypes: vec!["Hero".into()],
+                        ..ZoneCardFilter::default()
+                    }),
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::Hand,
+                linked_exile_id: None,
+            }],
+            modal_targeting("Choose target Hero card from your graveyard", 0),
+        )
+    })
+}
+
+fn match_modal_return_villain_card(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Return target Villain card from your graveyard to your hand.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::MoveGraveyardCards {
+                filter: GraveyardFilter {
+                    card: Some(ZoneCardFilter {
+                        required_subtypes: vec!["Villain".into()],
+                        ..ZoneCardFilter::default()
+                    }),
+                    ..GraveyardFilter::default()
+                },
+                destination: GraveyardDestination::Hand,
+                linked_exile_id: None,
+            }],
+            modal_targeting("Choose target Villain card from your graveyard", 0),
+        )
+    })
+}
+
+/// Issue #425 / CR 107.1b / 613.4c: Epic Fight doubles the chosen creature's current power and
+/// toughness with the shipped one-shot `PumpTarget` snapshot path. The signed `Subject` basis is
+/// applied once per characteristic so a negative power or toughness doubles under CR 107.1b's
+/// exception; both instructions share the printed single target. Another pump, "triple", and
+/// split clauses stay unsupported.
+fn match_modal_double_power_toughness(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Double target creature's power and toughness until end of turn.").then(|| {
+        let target = TargetFilter::default_creature();
+        modal_mode(
+            vec![
+                SpellEffectKind::PumpTarget {
+                    power: 0,
+                    toughness: 0,
+                    scale: Some(PtScale {
+                        basis: PtScaleBasis::Subject(PowerToughnessCharacteristic::Power),
+                        power_per_unit: 1,
+                        toughness_per_unit: 0,
+                    }),
+                    subject: EffectSubject::Chosen(Box::new(target.clone())),
+                },
+                SpellEffectKind::PumpTarget {
+                    power: 0,
+                    toughness: 0,
+                    scale: Some(PtScale {
+                        basis: PtScaleBasis::Subject(PowerToughnessCharacteristic::Toughness),
+                        power_per_unit: 0,
+                        toughness_per_unit: 1,
+                    }),
+                    subject: EffectSubject::Chosen(Box::new(target)),
+                },
+            ],
+            modal_targeting_groups(vec![("Choose target creature", vec![0, 1])]),
+        )
+    })
+}
+
+/// Issue #425 / CR 120 / 614.1a: Pinecone Strike's damage bullet pairs the shipped fixed damage
+/// instruction with the shipped turn-scoped exile-if-would-die replacement on the same chosen
+/// target (the Lava Coil / Scorching Dragonfire shape). Other amounts, any-target forms, and
+/// riders stay unsupported.
+fn match_modal_source_damage_three_exile_rider(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text
+        == format!(
+            "{} deals 3 damage to target creature. If that creature would die this turn, exile it instead.",
+            context.source_name
+        ))
+    .then(|| {
+        modal_mode(
+            vec![
+                SpellEffectKind::DamageTarget {
+                    amount: Amount::Fixed(3),
+                    target: TargetFilter::default_creature(),
+                },
+                SpellEffectKind::ExileIfWouldDieThisTurn {
+                    target: TargetFilter::default_creature(),
+                },
+            ],
+            modal_targeting_groups(vec![("Choose target creature", vec![0, 1])]),
+        )
+    })
+}
+
+/// Issue #425 / CR 111.1 / 701.6: Pinecone Strike's artifact-token destruction narrows the
+/// shipped artifact destroy with the physical token predicate. Non-token artifacts,
+/// noncreature forms, and riders stay unsupported (the exactly-one artifact form keeps its own
+/// `modal_mode.destroy.artifact` recipe).
+fn match_modal_destroy_artifact_token(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Destroy target artifact token.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![PermanentTypeFilter::Artifact],
+                    token: Some(true),
+                    ..TargetFilter::default()
+                })),
+            }],
+            modal_targeting("Choose target artifact token", 0),
+        )
+    })
+}
+
+/// Issue #425 / CR 701.23: Scour for Scrap's artifact search is the modal search of the shipped
+/// `SearchLibrary` tutor with the printed reveal. Other card types, destinations, shuffles,
+/// and optional forms stay unsupported.
+fn match_modal_search_artifact_reveal_hand(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text
+        == "Search your library for an artifact card, reveal it, put it into your hand, then shuffle.")
+        .then(|| {
+            modal_mode(
+                vec![SpellEffectKind::SearchLibrary {
+                    who: PlayerRecipient::Controller,
+                    optional: false,
+                    count: 1,
+                    count_by_cast_cost: None,
+                    filter: Some(ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::Artifact),
+                        ..ZoneCardFilter::default()
+                    }),
+                    slots: Vec::new(),
+                    zones: SearchZoneSelection::default(),
+                    destination: SearchDestination::Hand,
+                    conditional_destination: None,
+                    shuffle: true,
+                    reveal: true,
+                    result_id: None,
+                }],
+                None,
+            )
+        })
+}
+
 fn triggered_ability_with(
     context: &RecipeContext,
     trigger: TriggerCondition,
@@ -17738,6 +17975,167 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Until end of turn, target creature becomes an artifact in addition to its other types and gains indestructible. (Damage and effects that say \"destroy\" don't destroy it. If its toughness is 0 or less, it still dies.)"
         ),
     },
+    // Issue #425 — the `Choose one or both —` modal-mode bodies. Each entry owns exactly one
+    // printed bullet; its reviewed two-mode set lives in `reviewed_modal_mode_pair`. Matchers
+    // accept the exact clause text and nothing else.
+    Recipe {
+        id: RecipeId("modal_mode.tap.one_or_two_creatures"),
+        label: "tap one or two target creatures mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_tap_one_or_two_creatures,
+        // Amazing Acrobatics is the only pinned-corpus printing of this exact clause (verified);
+        // the documented singleton authors the reviewed (1, 2) bounds.
+        calibration: singleton_calibrations!(
+            "Amazing Acrobatics" => "Tap one or two target creatures.";
+            // The exactly-one form is owned by `modal_mode.tap.creature`; "up to", controller,
+            // and rider forms stay unsupported.
+            "Tap up to one target creature.",
+            "Tap one or two target creatures you control.",
+            "Tap one or two target creatures. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.damage.each_creature.three.source"),
+        label: "source deals three damage to each creature mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_source_damage_each_creature_three,
+        calibration: calibrations!(
+            "Avengers Disassembled" => "Avengers Disassembled deals 3 damage to each creature.",
+            "Slagstorm" => "Slagstorm deals 3 damage to each creature.";
+            // Another amount, a scoped sweep, and player or any-target forms stay unsupported.
+            // The targeted-creature form is owned by `modal_mode.damage.creature.three.source`.
+            "Avengers Disassembled deals 2 damage to each creature.",
+            "Avengers Disassembled deals 3 damage to each creature you don't control.",
+            "Avengers Disassembled deals 3 damage to each opponent."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.destroy.land.its_controller_search_basic"),
+        label: "destroy target land and its controller searches a basic tapped mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_destroy_land_its_controller_search_basic,
+        // Avengers Disassembled is the only pinned-corpus *modal* consumer of this exact
+        // compound clause (verified; Cleansing Wildfire prints the same non-modal sorcery); the
+        // documented singleton reuses Demolition Field's reviewed controller-of-target search
+        // shape.
+        calibration: singleton_calibrations!(
+            "Avengers Disassembled" => "Destroy target land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle.";
+            // Untapped, mandatory, nonbasic, owner-swapped, and rider forms stay unsupported.
+            "Destroy target land. Its controller may search their library for a basic land card, put it onto the battlefield, then shuffle.",
+            "Destroy target land. Its controller searches their library for a basic land card, puts it onto the battlefield tapped, then shuffles.",
+            "Destroy target nonbasic land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            "Destroy target land. Its controller may search their library for a basic land card, put it into their hand, then shuffle.",
+            "Destroy target land. You may search your library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            "Destroy target land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.return.hero_card.graveyard_to_hand"),
+        label: "return target Hero card from your graveyard to hand mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_return_hero_card,
+        // Decoy Ploy is the only pinned-corpus printing of this exact clause (verified); the
+        // documented singleton reuses the shipped typed graveyard-to-hand family.
+        calibration: singleton_calibrations!(
+            "Decoy Ploy" => "Return target Hero card from your graveyard to your hand.";
+            // Another subtype, owner, or destination and riders stay unsupported. The Villain
+            // form is owned by `modal_mode.return.villain_card.graveyard_to_hand`.
+            "Return target creature card from your graveyard to your hand.",
+            "Return target card from your graveyard to your hand.",
+            "Return target Hero card from an opponent's graveyard to your hand.",
+            "Return target Hero card from your graveyard to the battlefield.",
+            "Return target Hero card from your graveyard to your hand. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.return.villain_card.graveyard_to_hand"),
+        label: "return target Villain card from your graveyard to hand mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_return_villain_card,
+        // Decoy Ploy is the only pinned-corpus printing of this exact clause (verified); the
+        // documented singleton reuses the shipped typed graveyard-to-hand family.
+        calibration: singleton_calibrations!(
+            "Decoy Ploy" => "Return target Villain card from your graveyard to your hand.";
+            // Another subtype, owner, or destination and riders stay unsupported. The Hero
+            // form is owned by `modal_mode.return.hero_card.graveyard_to_hand`.
+            "Return target creature card from your graveyard to your hand.",
+            "Return target card from your graveyard to your hand.",
+            "Return target Villain card from an opponent's graveyard to your hand.",
+            "Return target Villain card from your graveyard to the battlefield.",
+            "Return target Villain card from your graveyard to your hand. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.double.power_toughness"),
+        label: "double target creature's power and toughness mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_double_power_toughness,
+        // Epic Fight is the only pinned-corpus free-standing printing of this exact bullet
+        // (verified); Choose Your Weapon and Tifa's Limit Break print it behind ability-word and
+        // tiered prefixes. The documented singleton cites the shipped `PtScaleBasis::Subject`
+        // doubling path already used by Mightform Harmonizer (the Toughness sibling is the same
+        // symmetric engine path).
+        calibration: singleton_calibrations!(
+            "Epic Fight" => "Double target creature's power and toughness until end of turn.";
+            // One characteristic, "triple", another duration, and rider forms stay unsupported.
+            "Double target creature's power until end of turn.",
+            "Double target creature's toughness until end of turn.",
+            "Triple target creature's power and toughness until end of turn.",
+            "Double target creature's power and toughness.",
+            "Double target creature you control's power and toughness until end of turn.",
+            "Double target creature's power and toughness until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.damage.three.exile_if_would_die"),
+        label: "source deals three damage and exiles if it would die mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_source_damage_three_exile_rider,
+        calibration: calibrations!(
+            "Pinecone Strike" => "Pinecone Strike deals 3 damage to target creature. If that creature would die this turn, exile it instead.",
+            "Suplex" => "Suplex deals 3 damage to target creature. If that creature would die this turn, exile it instead.";
+            // Another amount, any-target, another replacement window, and riders stay unsupported.
+            "Pinecone Strike deals 2 damage to target creature. If that creature would die this turn, exile it instead.",
+            "Pinecone Strike deals 3 damage to any target. If that creature would die this turn, exile it instead.",
+            "Pinecone Strike deals 3 damage to target creature. If that creature would die this combat, exile it instead.",
+            "Pinecone Strike deals 3 damage to target creature. If that creature would die this turn, exile it instead. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.destroy.artifact_token"),
+        label: "destroy target artifact token mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_destroy_artifact_token,
+        // Pinecone Strike is the only pinned-corpus printing of this exact clause (verified);
+        // the documented singleton narrows the shipped artifact destroy with the token predicate.
+        calibration: singleton_calibrations!(
+            "Pinecone Strike" => "Destroy target artifact token.";
+            // The exactly-one artifact form is owned by `modal_mode.destroy.artifact`;
+            // controller, noncreature, and rider forms stay unsupported.
+            "Destroy target artifact token you control.",
+            "Destroy target noncreature artifact token.",
+            "Destroy target token.",
+            "Destroy target artifact token. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.search.artifact.reveal_hand"),
+        label: "search for an artifact card reveal to hand mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_search_artifact_reveal_hand,
+        // Scour for Scrap is the only pinned-corpus *modal* consumer of this exact clause
+        // (verified; Fabricate and Inventors' Fair print the same non-modal instruction); the
+        // documented singleton reuses the shipped hidden-zone search with the printed reveal.
+        calibration: singleton_calibrations!(
+            "Scour for Scrap" => "Search your library for an artifact card, reveal it, put it into your hand, then shuffle.";
+            // Another card type, destination, or shuffle and riders stay unsupported.
+            "Search your library for an artifact card, put it into your hand, then shuffle.",
+            "Search your library for an artifact card, reveal it, put it onto the battlefield, then shuffle.",
+            "Search your library for an artifact card, reveal it, put it into your hand.",
+            "Search your library for a creature card, reveal it, put it into your hand, then shuffle.",
+            "Search your library for an artifact card, reveal it, put it into your hand, then shuffle. Draw a card."
+        ),
+    },
     // Issue #424 — the triggered `When this creature enters, choose one —` modal-mode bodies.
     // Each entry owns exactly one printed bullet; its reviewed two-mode set lives in
     // `reviewed_modal_mode_pair`. Ability-word bullets match their exact printed form.
@@ -24448,6 +24846,27 @@ pub(super) fn reviewed_modal_mode_pair(
         }
         ["modal_mode.destroy.creature.power_at_least_four", "modal_mode.becomes_artifact.indestructible"] => {
             Some((1, 1))
+        }
+        // Issue #425 exact `Choose one or both —` sets, in printed bullet order. Every other
+        // order, partial set, or added bullet still fails closed even when each bullet matches a
+        // recipe.
+        ["modal_mode.counter.spell.unrestricted", "modal_mode.tap.one_or_two_creatures"] => {
+            Some((1, 2))
+        }
+        ["modal_mode.damage.each_creature.three.source", "modal_mode.destroy.land.its_controller_search_basic"] => {
+            Some((1, 2))
+        }
+        ["modal_mode.return.villain_card.graveyard_to_hand", "modal_mode.return.hero_card.graveyard_to_hand"] => {
+            Some((1, 2))
+        }
+        ["modal_mode.double.power_toughness", "modal_mode.fight.controlled_vs_opponent"] => {
+            Some((1, 2))
+        }
+        ["modal_mode.damage.three.exile_if_would_die", "modal_mode.destroy.artifact_token"] => {
+            Some((1, 2))
+        }
+        ["modal_mode.search.artifact.reveal_hand", "modal_mode.return.artifact_card.graveyard_to_hand"] => {
+            Some((1, 2))
         }
         // Issue #424 exact triggered-modal sets, in printed bullet order. Every other order,
         // partial set, or added bullet still fails closed even when each bullet matches a recipe.
@@ -47030,5 +47449,506 @@ mod tests {
             ]
         );
         assert_eq!(modes.len(), 3);
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #425 — the `Choose one or both —` modal-mode batch.
+    // -----------------------------------------------------------------------
+
+    fn issue_425_modal_mode(
+        source_name: &str,
+        clause: &str,
+        expected_id: &str,
+    ) -> ModalModeEmission {
+        let mut test_context = context();
+        test_context.source_name = source_name.into();
+        let matched = match_modal_mode(clause, &test_context)
+            .unwrap_or_else(|error| panic!("{clause}: {error}"))
+            .unwrap_or_else(|| panic!("missing modal_mode recipe for {clause}"));
+        assert_eq!(matched.id.as_str(), expected_id, "{clause}");
+        let RecipeEmission::ModalMode(emission) = matched.emission else {
+            panic!("{expected_id} must emit a modal mode");
+        };
+        emission
+    }
+
+    #[test]
+    fn issue_425_modal_mode_recipes_match_their_exact_clauses() {
+        for (source, clause, expected_id) in [
+            (
+                "Amazing Acrobatics",
+                "Tap one or two target creatures.",
+                "modal_mode.tap.one_or_two_creatures",
+            ),
+            (
+                "Avengers Disassembled",
+                "Avengers Disassembled deals 3 damage to each creature.",
+                "modal_mode.damage.each_creature.three.source",
+            ),
+            (
+                "Avengers Disassembled",
+                "Destroy target land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+                "modal_mode.destroy.land.its_controller_search_basic",
+            ),
+            (
+                "Decoy Ploy",
+                "Return target Hero card from your graveyard to your hand.",
+                "modal_mode.return.hero_card.graveyard_to_hand",
+            ),
+            (
+                "Decoy Ploy",
+                "Return target Villain card from your graveyard to your hand.",
+                "modal_mode.return.villain_card.graveyard_to_hand",
+            ),
+            (
+                "Epic Fight",
+                "Double target creature's power and toughness until end of turn.",
+                "modal_mode.double.power_toughness",
+            ),
+            (
+                "Pinecone Strike",
+                "Pinecone Strike deals 3 damage to target creature. If that creature would die this turn, exile it instead.",
+                "modal_mode.damage.three.exile_if_would_die",
+            ),
+            (
+                "Pinecone Strike",
+                "Destroy target artifact token.",
+                "modal_mode.destroy.artifact_token",
+            ),
+            (
+                "Scour for Scrap",
+                "Search your library for an artifact card, reveal it, put it into your hand, then shuffle.",
+                "modal_mode.search.artifact.reveal_hand",
+            ),
+        ] {
+            issue_425_modal_mode(source, clause, expected_id);
+        }
+
+        // The cohort's already-shipped siblings stay with their own recipes and are never
+        // widened by the new entries.
+        for (source, clause, expected_id) in [
+            (
+                "Amazing Acrobatics",
+                "Counter target spell.",
+                "modal_mode.counter.spell.unrestricted",
+            ),
+            (
+                "Epic Fight",
+                "Target creature you control fights target creature an opponent controls.",
+                "modal_mode.fight.controlled_vs_opponent",
+            ),
+            (
+                "Scour for Scrap",
+                "Return target artifact card from your graveyard to your hand.",
+                "modal_mode.return.artifact_card.graveyard_to_hand",
+            ),
+        ] {
+            issue_425_modal_mode(source, clause, expected_id);
+        }
+
+        for recipe_id in [
+            "modal_mode.tap.one_or_two_creatures",
+            "modal_mode.damage.each_creature.three.source",
+            "modal_mode.destroy.land.its_controller_search_basic",
+            "modal_mode.return.hero_card.graveyard_to_hand",
+            "modal_mode.return.villain_card.graveyard_to_hand",
+            "modal_mode.double.power_toughness",
+            "modal_mode.damage.three.exile_if_would_die",
+            "modal_mode.destroy.artifact_token",
+            "modal_mode.search.artifact.reveal_hand",
+        ] {
+            let recipe = CATALOG
+                .iter()
+                .find(|recipe| recipe.id.as_str() == recipe_id)
+                .unwrap_or_else(|| panic!("missing issue #425 recipe {recipe_id}"));
+            assert_eq!(recipe.surface, RecipeSurface::ModalMode, "{recipe_id}");
+        }
+    }
+
+    #[test]
+    fn issue_425_modal_mode_recipes_emit_typed_payloads() {
+        assert_eq!(
+            issue_425_modal_mode(
+                "Amazing Acrobatics",
+                "Tap one or two target creatures.",
+                "modal_mode.tap.one_or_two_creatures",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::Tap {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                }],
+                targeting: modal_targeting_range(
+                    "Choose one or two target creatures",
+                    1,
+                    2,
+                    vec![0],
+                    false
+                ),
+            }
+        );
+        assert_eq!(
+            issue_425_modal_mode(
+                "Avengers Disassembled",
+                "Avengers Disassembled deals 3 damage to each creature.",
+                "modal_mode.damage.each_creature.three.source",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::DamageAll {
+                    amount: Amount::Fixed(3),
+                    players: RelativePlayerSet::All,
+                    kind: TargetFilter::default_creature(),
+                }],
+                targeting: None,
+            }
+        );
+        assert_eq!(
+            issue_425_modal_mode(
+                "Avengers Disassembled",
+                "Destroy target land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+                "modal_mode.destroy.land.its_controller_search_basic",
+            ),
+            ModalModeEmission {
+                effects: vec![
+                    SpellEffectKind::Destroy {
+                        subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                            kind: TargetKind::AnyPermanent,
+                            permanent_types: vec![PermanentTypeFilter::Land],
+                            ..TargetFilter::default()
+                        })),
+                    },
+                    SpellEffectKind::SearchLibrary {
+                        who: PlayerRecipient::ControllerOfTargetGroup { group_index: 0 },
+                        optional: true,
+                        count: 1,
+                        count_by_cast_cost: None,
+                        filter: Some(ZoneCardFilter {
+                            card_type: Some(CardTypeFilter::BasicLand),
+                            ..ZoneCardFilter::default()
+                        }),
+                        slots: Vec::new(),
+                        zones: SearchZoneSelection::default(),
+                        destination: SearchDestination::Battlefield { tapped: true },
+                        conditional_destination: None,
+                        shuffle: true,
+                        reveal: false,
+                        result_id: None,
+                    },
+                ],
+                targeting: modal_targeting("Choose target land", 0),
+            }
+        );
+        for (clause, subtype, expected_id) in [
+            (
+                "Return target Hero card from your graveyard to your hand.",
+                "Hero",
+                "modal_mode.return.hero_card.graveyard_to_hand",
+            ),
+            (
+                "Return target Villain card from your graveyard to your hand.",
+                "Villain",
+                "modal_mode.return.villain_card.graveyard_to_hand",
+            ),
+        ] {
+            assert_eq!(
+                issue_425_modal_mode("Decoy Ploy", clause, expected_id),
+                ModalModeEmission {
+                    effects: vec![SpellEffectKind::MoveGraveyardCards {
+                        filter: GraveyardFilter {
+                            card: Some(ZoneCardFilter {
+                                required_subtypes: vec![subtype.into()],
+                                ..ZoneCardFilter::default()
+                            }),
+                            ..GraveyardFilter::default()
+                        },
+                        destination: GraveyardDestination::Hand,
+                        linked_exile_id: None,
+                    }],
+                    targeting: modal_targeting(
+                        &format!("Choose target {subtype} card from your graveyard"),
+                        0,
+                    ),
+                },
+                "{clause}"
+            );
+        }
+        assert_eq!(
+            issue_425_modal_mode(
+                "Epic Fight",
+                "Double target creature's power and toughness until end of turn.",
+                "modal_mode.double.power_toughness",
+            ),
+            ModalModeEmission {
+                effects: vec![
+                    SpellEffectKind::PumpTarget {
+                        power: 0,
+                        toughness: 0,
+                        scale: Some(PtScale {
+                            basis: PtScaleBasis::Subject(PowerToughnessCharacteristic::Power),
+                            power_per_unit: 1,
+                            toughness_per_unit: 0,
+                        }),
+                        subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    },
+                    SpellEffectKind::PumpTarget {
+                        power: 0,
+                        toughness: 0,
+                        scale: Some(PtScale {
+                            basis: PtScaleBasis::Subject(PowerToughnessCharacteristic::Toughness),
+                            power_per_unit: 0,
+                            toughness_per_unit: 1,
+                        }),
+                        subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    },
+                ],
+                targeting: modal_targeting_groups(vec![("Choose target creature", vec![0, 1])]),
+            }
+        );
+        assert_eq!(
+            issue_425_modal_mode(
+                "Pinecone Strike",
+                "Pinecone Strike deals 3 damage to target creature. If that creature would die this turn, exile it instead.",
+                "modal_mode.damage.three.exile_if_would_die",
+            ),
+            ModalModeEmission {
+                effects: vec![
+                    SpellEffectKind::DamageTarget {
+                        amount: Amount::Fixed(3),
+                        target: TargetFilter::default_creature(),
+                    },
+                    SpellEffectKind::ExileIfWouldDieThisTurn {
+                        target: TargetFilter::default_creature(),
+                    },
+                ],
+                targeting: modal_targeting_groups(vec![("Choose target creature", vec![0, 1])]),
+            }
+        );
+        assert_eq!(
+            issue_425_modal_mode(
+                "Pinecone Strike",
+                "Destroy target artifact token.",
+                "modal_mode.destroy.artifact_token",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::Destroy {
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        permanent_types: vec![PermanentTypeFilter::Artifact],
+                        token: Some(true),
+                        ..TargetFilter::default()
+                    })),
+                }],
+                targeting: modal_targeting("Choose target artifact token", 0),
+            }
+        );
+        assert_eq!(
+            issue_425_modal_mode(
+                "Scour for Scrap",
+                "Search your library for an artifact card, reveal it, put it into your hand, then shuffle.",
+                "modal_mode.search.artifact.reveal_hand",
+            ),
+            ModalModeEmission {
+                effects: vec![SpellEffectKind::SearchLibrary {
+                    who: PlayerRecipient::Controller,
+                    optional: false,
+                    count: 1,
+                    count_by_cast_cost: None,
+                    filter: Some(ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::Artifact),
+                        ..ZoneCardFilter::default()
+                    }),
+                    slots: Vec::new(),
+                    zones: SearchZoneSelection::default(),
+                    destination: SearchDestination::Hand,
+                    conditional_destination: None,
+                    shuffle: true,
+                    reveal: true,
+                    result_id: None,
+                }],
+                targeting: None,
+            }
+        );
+    }
+
+    #[test]
+    fn issue_425_modal_mode_matchers_reject_near_misses() {
+        for (source, clause) in [
+            (
+                "Amazing Acrobatics",
+                "Tap up to two target creatures.",
+            ),
+            (
+                "Amazing Acrobatics",
+                "Tap one or two target creatures you control.",
+            ),
+            (
+                "Avengers Disassembled",
+                "Avengers Disassembled deals 2 damage to each creature.",
+            ),
+            (
+                "Avengers Disassembled",
+                "Avengers Disassembled deals 3 damage to each creature you don't control.",
+            ),
+            (
+                "Avengers Disassembled",
+                "Destroy target land. Its controller may search their library for a basic land card, put it onto the battlefield, then shuffle.",
+            ),
+            (
+                "Avengers Disassembled",
+                "Destroy target nonbasic land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+            ),
+            (
+                "Decoy Ploy",
+                "Return target Hero card from an opponent's graveyard to your hand.",
+            ),
+            (
+                "Decoy Ploy",
+                "Return target card from your graveyard to your hand.",
+            ),
+            (
+                "Epic Fight",
+                "Double target creature's power until end of turn.",
+            ),
+            (
+                "Epic Fight",
+                "Triple target creature's power and toughness until end of turn.",
+            ),
+            (
+                "Pinecone Strike",
+                "Pinecone Strike deals 3 damage to target creature. If that creature would die this turn, exile it instead. Draw a card.",
+            ),
+            (
+                "Pinecone Strike",
+                "Pinecone Strike deals 3 damage to any target. If that creature would die this turn, exile it instead.",
+            ),
+            (
+                "Pinecone Strike",
+                "Destroy target artifact token an opponent controls.",
+            ),
+            (
+                "Scour for Scrap",
+                "Search your library for an artifact card, put it into your hand, then shuffle.",
+            ),
+            (
+                "Scour for Scrap",
+                "Search your library for an artifact card, reveal it, put it onto the battlefield, then shuffle.",
+            ),
+        ] {
+            let mut test_context = context();
+            test_context.source_name = source.into();
+            assert!(
+                match_modal_mode(clause, &test_context)
+                    .unwrap_or_else(|error| panic!("{clause}: {error}"))
+                    .is_none(),
+                "{clause:?} must not match a modal mode"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_425_reviewed_choose_both_pairs_bind_exactly() {
+        for ids in [
+            &[
+                "modal_mode.counter.spell.unrestricted",
+                "modal_mode.tap.one_or_two_creatures",
+            ][..],
+            &[
+                "modal_mode.damage.each_creature.three.source",
+                "modal_mode.destroy.land.its_controller_search_basic",
+            ][..],
+            &[
+                "modal_mode.return.villain_card.graveyard_to_hand",
+                "modal_mode.return.hero_card.graveyard_to_hand",
+            ][..],
+            &[
+                "modal_mode.double.power_toughness",
+                "modal_mode.fight.controlled_vs_opponent",
+            ][..],
+            &[
+                "modal_mode.damage.three.exile_if_would_die",
+                "modal_mode.destroy.artifact_token",
+            ][..],
+            &[
+                "modal_mode.search.artifact.reveal_hand",
+                "modal_mode.return.artifact_card.graveyard_to_hand",
+            ][..],
+        ] {
+            let recipe_ids = ids.iter().map(|id| RecipeId(id)).collect::<Vec<_>>();
+            assert!(
+                reviewed_modal_mode_pair(&recipe_ids, 1, 2),
+                "{ids:?} must be reviewed at (1, 2)"
+            );
+            assert!(
+                !reviewed_modal_mode_pair(&recipe_ids, 1, 1),
+                "{ids:?} must not accept choose-one bounds"
+            );
+        }
+
+        // Reversed, partial, and extended sets stay fail-closed.
+        for ids in [
+            &[
+                "modal_mode.tap.one_or_two_creatures",
+                "modal_mode.counter.spell.unrestricted",
+            ][..],
+            &["modal_mode.tap.one_or_two_creatures"][..],
+            &[
+                "modal_mode.damage.each_creature.three.source",
+                "modal_mode.destroy.enchantment",
+            ][..],
+            &[
+                "modal_mode.return.hero_card.graveyard_to_hand",
+                "modal_mode.return.villain_card.graveyard_to_hand",
+            ][..],
+            &[
+                "modal_mode.double.power_toughness",
+                "modal_mode.fight.controlled_vs_opponent",
+                "modal_mode.draw.one",
+            ][..],
+            &[
+                "modal_mode.destroy.artifact_token",
+                "modal_mode.damage.three.exile_if_would_die",
+            ][..],
+            &[
+                "modal_mode.return.artifact_card.graveyard_to_hand",
+                "modal_mode.search.artifact.reveal_hand",
+            ][..],
+        ] {
+            let recipe_ids = ids.iter().map(|id| RecipeId(id)).collect::<Vec<_>>();
+            assert!(
+                !reviewed_modal_mode_pair(&recipe_ids, 1, 2),
+                "{ids:?} must not be a reviewed mode set"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_425_choose_both_bullets_assemble_in_printed_order() {
+        let bullets = vec![
+            "• Avengers Disassembled deals 3 damage to each creature.".to_string(),
+            "• Destroy target land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle.".to_string(),
+        ];
+        let mut labels = Vec::new();
+        let mut test_context = context();
+        test_context.source_name = "Avengers Disassembled".into();
+        let (modes, recipe_ids) =
+            crate::assemble_modal_modes(&bullets, 2, &test_context, &mut labels)
+                .expect("Avengers Disassembled bullets should assemble");
+        assert_eq!(
+            recipe_ids,
+            [
+                RecipeId("modal_mode.damage.each_creature.three.source"),
+                RecipeId("modal_mode.destroy.land.its_controller_search_basic"),
+            ]
+        );
+        assert_eq!(modes.len(), 2);
+        assert_eq!(
+            modes
+                .iter()
+                .map(|mode| mode.presentation.clone())
+                .collect::<Vec<_>>(),
+            [
+                AbilityPresentation::OracleLines(vec![2]),
+                AbilityPresentation::OracleLines(vec![3]),
+            ]
+        );
     }
 }

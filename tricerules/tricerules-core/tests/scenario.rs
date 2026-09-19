@@ -537,5 +537,7 @@ mod issue_417_self_sacrifice_mana;
 mod issue_423_station_thresholds;
 #[path = "scenario/issue_424_triggered_modal_etb.rs"]
 mod issue_424_triggered_modal_etb;
+#[path = "scenario/issue_425_choose_one_or_both.rs"]
+mod issue_425_choose_one_or_both;
 #[path = "scenario/issue_426_one_mode_modal.rs"]
 mod issue_426_one_mode_modal;
