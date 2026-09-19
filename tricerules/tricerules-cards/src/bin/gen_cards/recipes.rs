@@ -12054,6 +12054,336 @@ fn match_keyword_mobilize_x_graveyard_creature_cards(
         })
 }
 
+// ---------------------------------------------------------------------------
+// Issue #372 — static graveyard-count-scaled P/T cohort.
+//
+// Six Standard identities print a static clause whose magnitude is a public graveyard count.
+// Five of them are the exact #342 count-scaled shapes (`CountScaledSelfPt`,
+// `CharacteristicDefiningAbility::CountScaledPowerToughness`, and `AttachedModifier`'s count
+// fields); the sixth (Cid, Timeless Artificer) needs the count-scaled creature-scope anthem owned
+// by #368 and is deliberately absent. The ordinary clauses printed alongside the cohort's static
+// lines (the Aura enchant line, the Aura's optional entry mill, and Exdeath's end-step transform
+// trigger) are authored as additional exact recipes so each complete identity can generate; none
+// of them widens an existing matcher.
+//
+// CR 201.5c: Oracle text refers to a legendary permanent by the part of its name before the first
+// comma. The self-name templates therefore compare against the short printed name rather than the
+// full face name, which keeps the Xande and Neo Exdeath forms exact.
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+const ISSUE_372_XANDE_CLAUSE: &str =
+    "Xande gets +1/+1 for each noncreature, nonland card in your graveyard.";
+const ISSUE_372_MOON_VIGIL_CLAUSE: &str =
+    "This creature gets +1/+1 for each creature you control and each creature card in your graveyard.";
+const ISSUE_372_AVATAR_CLAUSE: &str =
+    "Enchanted creature gets +1/+1 for each creature card in your graveyard and is an Avatar in addition to its other types.";
+const ISSUE_372_SONG_CLAUSE: &str =
+    "Fathomless descent — Enchanted permanent gets -X/-0, where X is the number of permanent cards in your graveyard.";
+#[cfg(test)]
+const ISSUE_372_CDA_CLAUSE: &str =
+    "Neo Exdeath's power is equal to the number of permanent cards in your graveyard.";
+const ISSUE_372_ENCHANT_CLAUSE: &str = "Enchant creature or Vehicle";
+const ISSUE_372_SONG_ETB_CLAUSE: &str = "When this Aura enters, you may mill two cards.";
+#[cfg(test)]
+const ISSUE_372_EXDEATH_TRANSFORM_CLAUSE: &str =
+    "At the beginning of your end step, if there are six or more permanent cards in your graveyard, transform Exdeath.";
+const ISSUE_372_NEO_EXDEATH_FACE_NAME: &str = "Neo Exdeath, Dimension's End";
+
+/// CR 201.5c: the printed short self-reference is the face name before the first comma.
+fn issue_372_short_name(context: &RecipeContext) -> &str {
+    context
+        .source_name
+        .split(',')
+        .next()
+        .unwrap_or(context.source_name.as_str())
+        .trim()
+}
+
+/// CR 110.4a: "noncreature, nonland card" is the complement of the creature and land card types.
+/// The schema has no single permanent predicate, so this is the explicit two-type exclusion.
+fn issue_372_noncreature_nonland_card_filter() -> ZoneCardFilter {
+    ZoneCardFilter {
+        excluded_card_types: vec![CardTypeFilter::Creature, CardTypeFilter::Land],
+        ..ZoneCardFilter::default()
+    }
+}
+
+/// CR 613.4c / layer 7c: Xande gets +1/+1 for each noncreature, nonland card in its controller's
+/// public graveyard. The count reads printed public card data (CR 404.2). Other cohorts, other
+/// P/T values, each-graveyard scopes, and riders stay unsupported. Xande, Dark Mage is the only
+/// exact full-corpus printing of the template with this short self-name (the second corpus match
+/// is Serpent of the Pass's cost-reduction clause, a different template).
+fn match_static_self_count_scaled_graveyard_noncreature_nonland_plus_one_plus_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == format!(
+                "{} gets +1/+1 for each noncreature, nonland card in your graveyard.",
+                issue_372_short_name(context)
+            ))
+    .then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::CountScaledSelfPt {
+                count: CountExpression::GraveyardCards {
+                    owners: RelativePlayerSet::Controller,
+                    filter: Some(issue_372_noncreature_nonland_card_filter()),
+                },
+                power_per_match: 1,
+                toughness_per_match: 1,
+            },
+        })
+    })
+}
+
+/// CR 613.4c / layer 7c: Moon-Vigil Adherents sums two independently authored public counts — the
+/// controller's battlefield creatures (pre-layer-7 derived characteristics) and the controller's
+/// graveyard creature cards (printed public data, CR 404.2) — through the shipped `Affine` sum.
+/// The `other creature`, each-graveyard, single-leaf, other-value, and rider forms stay
+/// unsupported. Moon-Vigil Adherents is the only exact full-corpus printing (verified).
+fn match_static_self_count_scaled_controlled_creatures_plus_graveyard_creature_cards_plus_one_plus_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && text == ISSUE_372_MOON_VIGIL_CLAUSE).then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::CountScaledSelfPt {
+                count: CountExpression::Affine {
+                    constant: 0,
+                    terms: vec![
+                        QuantityTerm {
+                            coefficient: 1,
+                            quantity: CountExpression::BattlefieldCreatures {
+                                filter: BattlefieldCreatureCountFilter {
+                                    controllers: RelativePlayerSet::Controller,
+                                    ..BattlefieldCreatureCountFilter::default()
+                                },
+                            },
+                        },
+                        QuantityTerm {
+                            coefficient: 1,
+                            quantity: CountExpression::GraveyardCards {
+                                owners: RelativePlayerSet::Controller,
+                                filter: Some(graveyard_creature_card_filter()),
+                            },
+                        },
+                    ],
+                },
+                power_per_match: 1,
+                toughness_per_match: 1,
+            },
+        })
+    })
+}
+
+/// CR 613.4c / layer 7c + CR 205.1b / layer 4: Avatar Destiny's Aura grants the attached creature
+/// +1/+1 per creature card in its controller's graveyard and adds the Avatar creature type. The
+/// type addition is authored on the same `AttachedModifier` so both move with the attachment. The
+/// count-free form, another subtype, another P/T, each-graveyard scopes, and riders stay
+/// unsupported. Avatar Destiny is the only exact full-corpus printing (verified).
+fn match_static_attached_count_scaled_graveyard_creature_cards_avatar_plus_one_plus_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_aura && text == ISSUE_372_AVATAR_CLAUSE).then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::AttachedModifier {
+                condition: None,
+                add_types: TypeLineAddition {
+                    card_types: Vec::new(),
+                    creature_types: vec!["Avatar".to_string()],
+                },
+                set_types: None,
+                set_name: None,
+                set_colors: None,
+                delta_power: 0,
+                delta_toughness: 0,
+                count: Some(CountExpression::GraveyardCards {
+                    owners: RelativePlayerSet::Controller,
+                    filter: Some(graveyard_creature_card_filter()),
+                }),
+                power_per_match: 1,
+                toughness_per_match: 1,
+                set_power: None,
+                set_toughness: None,
+                remove_all_abilities: false,
+                keywords: Vec::new(),
+                triggered_abilities: Vec::new(),
+                activated_abilities: Vec::new(),
+                restriction: Default::default(),
+                doesnt_untap_during_untap_step: false,
+                cant_untap: false,
+            },
+        })
+    })
+}
+
+/// CR 613.4c / layer 7c: Song of Stupefaction's Fathomless descent line gives the enchanted
+/// permanent (creature or Vehicle) -1/-0 per permanent card in its controller's graveyard. The
+/// `-X/-0` split leaves toughness untouched, and the ability word is part of the exact line. Other
+/// attachments, other signs, other cohorts, each-graveyard scopes, a missing ability word, and
+/// riders stay unsupported. Song of Stupefaction is the only exact full-corpus printing (verified).
+fn match_static_attached_count_scaled_graveyard_permanent_cards_minus_one_zero(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_aura && text == ISSUE_372_SONG_CLAUSE).then(|| {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: context.static_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: StaticAbilityDef::AttachedModifier {
+                condition: None,
+                add_types: TypeLineAddition::default(),
+                set_types: None,
+                set_name: None,
+                set_colors: None,
+                delta_power: 0,
+                delta_toughness: 0,
+                count: Some(CountExpression::GraveyardCards {
+                    owners: RelativePlayerSet::Controller,
+                    filter: Some(issue_373_permanent_card_filter()),
+                }),
+                power_per_match: -1,
+                toughness_per_match: 0,
+                set_power: None,
+                set_toughness: None,
+                remove_all_abilities: false,
+                keywords: Vec::new(),
+                triggered_abilities: Vec::new(),
+                activated_abilities: Vec::new(),
+                restriction: Default::default(),
+                doesnt_untap_during_untap_step: false,
+                cant_untap: false,
+            },
+        })
+    })
+}
+
+/// CR 208.2a / 604.3 / 613.4a: Neo Exdeath defines only its power as the number of permanent
+/// cards in its controller's graveyard in every zone; its printed toughness remains 3. The
+/// printed clause uses the transform face's short name, so the recipe binds the exact
+/// `Neo Exdeath, Dimension's End` face name rather than accepting any short-name match. Other
+/// components, cohorts, each-graveyard scopes, and riders stay unsupported.
+fn match_characteristic_count_scaled_graveyard_permanent_cards_power(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && context.source_name == ISSUE_372_NEO_EXDEATH_FACE_NAME
+        && text
+            == format!(
+                "{}'s power is equal to the number of permanent cards in your graveyard.",
+                issue_372_short_name(context)
+            ))
+    .then(|| {
+        RecipeEmission::CharacteristicAbility(IdentifiedAbility {
+            ability_id: context.characteristic_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            definition: CharacteristicDefiningAbility::CountScaledPowerToughness {
+                count: CountExpression::GraveyardCards {
+                    owners: RelativePlayerSet::Controller,
+                    filter: Some(issue_373_permanent_card_filter()),
+                },
+                power_per_match: 1,
+                toughness_per_match: 0,
+            },
+        })
+    })
+}
+
+/// CR 303.4 / 702.5a: an Aura's enchant line names the legal attachment cohort. "Creature or
+/// Vehicle" is the shipped OR-composed target filter (the same vehicle-subtype branch Spin Out
+/// uses). Other unions, restricted controllers, and riders stay unsupported. Ten reviewed corpus
+/// cards print this exact line (Aether Meltdown, Mists of Littjara, and eight more).
+fn match_enchant_creature_or_vehicle(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_aura && text == ISSUE_372_ENCHANT_CLAUSE).then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::AuraAttach {
+            target: TargetFilter {
+                any_of: Some(vec![
+                    TargetFilter {
+                        kind: TargetKind::Creature,
+                        ..TargetFilter::default()
+                    },
+                    TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        required_subtypes: vec!["Vehicle".to_string()],
+                        ..TargetFilter::default()
+                    },
+                ]),
+                ..TargetFilter::default()
+            },
+        })
+    })
+}
+
+/// CR 603.6a / 701.13 / 603.5: Song of Stupefaction's own entry trigger optionally mills exactly
+/// two cards into its controller's public graveyard. The mandatory wording, another count, the
+/// `this enchantment` self-reference, and riders stay unsupported. Song of Stupefaction is the
+/// only Aura full-corpus printing of this exact clause (verified).
+fn match_etb_aura_may_mill_two(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_aura && text == ISSUE_372_SONG_ETB_CLAUSE).then(|| {
+        let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability(
+            context,
+            SpellEffectKind::Mill {
+                count: Amount::Fixed(2),
+                who: PlayerRecipient::Controller,
+            },
+        ) else {
+            unreachable!("triggered_ability always returns a triggered ability")
+        };
+        ability.may = true;
+        RecipeEmission::TriggeredAbility(ability)
+    })
+}
+
+/// CR 603.4 / 701.27 / 404.2: Exdeath's end-step trigger transforms the source only while six or
+/// more permanent cards are in its controller's graveyard; the intervening-if is the shipped
+/// `GraveyardAggregate` threshold rechecked on resolution. The clause is mandatory and uses the
+/// front face's short self-name. Other steps, counts, cohorts, the optional wording, and riders
+/// stay unsupported. Exdeath, Void Warlock is the only exact full-corpus printing of the
+/// end-step template (The Everflowing Well prints a different ability-worded upkeep form).
+fn match_triggered_end_step_graveyard_permanent_card_count_six_transform_self(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_creature
+        && text
+            == format!(
+                "At the beginning of your end step, if there are six or more permanent cards in your graveyard, transform {}.",
+                issue_372_short_name(context)
+            ))
+    .then(|| {
+        let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability_with(
+            context,
+            TriggerCondition::AtBeginningOfEndStep {
+                player: CastTriggerPlayer::Controller,
+            },
+            vec![SpellEffectKind::ChangeSourceFace {
+                action: FaceChangeAction::Transform,
+            }],
+        ) else {
+            unreachable!("triggered_ability_with always returns a triggered ability")
+        };
+        ability.intervening_if = Some(issue_373_graveyard_threshold(
+            GraveyardAggregate::CardCount,
+            Some(issue_373_permanent_card_filter()),
+            6,
+        ));
+        RecipeEmission::TriggeredAbility(ability)
+    })
+}
+
 pub(super) static CATALOG: &[Recipe] = &[
     Recipe {
         id: RecipeId("static.cost_reduction.affinity_artifacts"),
@@ -12575,7 +12905,7 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Enchant permanent",
             "Enchant creature an opponent controls",
             "Enchant tapped creature",
-            "Enchant creature or Vehicle",
+            "Enchant creature or artifact",
             "Enchant creature. When this Aura enters, draw a card."
         ),
     },
@@ -18704,6 +19034,173 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Mobilize X, where X is the number of creatures you control. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
             "Mobilize X, where X is the number of creature cards in your graveyard.",
             "Mobilize X, where X is the number of creature cards in your graveyard. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.) Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId(
+            "static.self_count_scaled.graveyard_noncreature_nonland_plus_one_plus_one",
+        ),
+        label: "self +1/+1 per noncreature, nonland graveyard card",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_self_count_scaled_graveyard_noncreature_nonland_plus_one_plus_one,
+        // Xande, Dark Mage is the only exact full-corpus printing with this short self-name
+        // (verified); the second corpus match is Serpent of the Pass's cost-reduction clause.
+        calibration: singleton_calibrations!(
+            "Xande, Dark Mage" => "Xande gets +1/+1 for each noncreature, nonland card in your graveyard.";
+            // Each single-type cohort, each graveyard, another P/T value, the
+            // `this creature` self-reference, and appended instructions stay unsupported.
+            "Xande gets +1/+1 for each noncreature card in your graveyard.",
+            "Xande gets +1/+1 for each nonland card in your graveyard.",
+            "Xande gets +1/+1 for each creature card in your graveyard.",
+            "Xande gets +1/+1 for each card in your graveyard.",
+            "Xande gets +1/+1 for each noncreature, nonland card in each graveyard.",
+            "Xande gets +2/+2 for each noncreature, nonland card in your graveyard.",
+            "Xande gets +1/+0 for each noncreature, nonland card in your graveyard.",
+            "Xande gets +0/+1 for each noncreature, nonland card in your graveyard.",
+            "Xande gets +1/+1 for each noncreature, nonland card in your graveyard. Draw a card.",
+            "This creature gets +1/+1 for each noncreature, nonland card in your graveyard."
+        ),
+    },
+    Recipe {
+        id: RecipeId(
+            "static.self_count_scaled.controlled_creatures_plus_graveyard_creature_cards_plus_one_plus_one",
+        ),
+        label: "self +1/+1 per controlled creature plus graveyard creature card",
+        surface: RecipeSurface::StaticAbility,
+        matcher:
+            match_static_self_count_scaled_controlled_creatures_plus_graveyard_creature_cards_plus_one_plus_one,
+        // Moon-Vigil Adherents is the only exact full-corpus printing (verified).
+        calibration: singleton_calibrations!(
+            "Moon-Vigil Adherents" => "This creature gets +1/+1 for each creature you control and each creature card in your graveyard.";
+            // Another/other scopes, each graveyard, either single leaf alone, another P/T
+            // value, the permanent-card cohort, and appended instructions stay unsupported.
+            "This creature gets +1/+1 for each other creature you control and each creature card in your graveyard.",
+            "This creature gets +1/+1 for each creature you control and each creature card in each graveyard.",
+            "This creature gets +1/+1 for each creature you control.",
+            "This creature gets +1/+1 for each creature card in your graveyard.",
+            "This creature gets +2/+2 for each creature you control and each creature card in your graveyard.",
+            "This creature gets +1/+0 for each creature you control and each creature card in your graveyard.",
+            "This creature gets +1/+1 for each creature you control and each permanent card in your graveyard.",
+            "This creature gets +1/+1 for each creature you control and each creature card in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId(
+            "static.attached_count_scaled.graveyard_creature_cards_avatar_plus_one_plus_one",
+        ),
+        label: "attached +1/+1 per graveyard creature card and Avatar type",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_attached_count_scaled_graveyard_creature_cards_avatar_plus_one_plus_one,
+        // Avatar Destiny is the only exact full-corpus printing (verified).
+        calibration: singleton_calibrations!(
+            "Avatar Destiny" => "Enchanted creature gets +1/+1 for each creature card in your graveyard and is an Avatar in addition to its other types.";
+            // The count without the type grant, another subtype, a permanent attachment, other
+            // P/T values, each-graveyard scopes, and appended instructions stay unsupported.
+            "Enchanted creature gets +1/+1 for each creature card in your graveyard.",
+            "Enchanted creature gets +1/+1 for each creature card in your graveyard and is a Soldier in addition to its other types.",
+            "Enchanted permanent gets +1/+1 for each creature card in your graveyard and is an Avatar in addition to its other types.",
+            "Enchanted creature gets +1/+0 for each creature card in your graveyard and is an Avatar in addition to its other types.",
+            "Enchanted creature gets -1/-1 for each creature card in your graveyard and is an Avatar in addition to its other types.",
+            "Enchanted creature gets +1/+1 for each creature card in each graveyard and is an Avatar in addition to its other types.",
+            "Enchanted creature gets +1/+1 for each creature card in your graveyard and is an Avatar in addition to its other types. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.attached_count_scaled.graveyard_permanent_cards_minus_one_zero"),
+        label: "attached -1/-0 per graveyard permanent card",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_attached_count_scaled_graveyard_permanent_cards_minus_one_zero,
+        // Song of Stupefaction is the only exact full-corpus printing (verified).
+        calibration: singleton_calibrations!(
+            "Song of Stupefaction" => "Fathomless descent — Enchanted permanent gets -X/-0, where X is the number of permanent cards in your graveyard.";
+            // Another attachment, another sign split, other cohorts, each graveyard, a missing
+            // ability word, and appended instructions stay unsupported.
+            "Fathomless descent — Enchanted creature gets -X/-0, where X is the number of permanent cards in your graveyard.",
+            "Fathomless descent — Enchanted permanent gets -0/-X, where X is the number of permanent cards in your graveyard.",
+            "Fathomless descent — Enchanted permanent gets -X/-X, where X is the number of permanent cards in your graveyard.",
+            "Fathomless descent — Enchanted permanent gets -X/-0, where X is the number of creature cards in your graveyard.",
+            "Fathomless descent — Enchanted permanent gets -X/-0, where X is the number of nonland cards in your graveyard.",
+            "Fathomless descent — Enchanted permanent gets -X/-0, where X is the number of permanent cards in each graveyard.",
+            "Enchanted permanent gets -X/-0, where X is the number of permanent cards in your graveyard.",
+            "Fathomless descent — Enchanted permanent gets -X/-0, where X is the number of permanent cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("characteristic.count_scaled.graveyard_permanent_cards_power"),
+        label: "power per graveyard permanent card",
+        surface: RecipeSurface::CharacteristicAbility,
+        matcher: match_characteristic_count_scaled_graveyard_permanent_cards_power,
+        // Neo Exdeath, Dimension's End is the only exact full-corpus printing (verified; Souls
+        // of the Lost prints a combined power-and-toughness form).
+        calibration: singleton_calibrations!(
+            "Neo Exdeath, Dimension's End" => "Neo Exdeath's power is equal to the number of permanent cards in your graveyard.";
+            // The toughness-only and combined forms, other cohorts, each graveyard, the greatest
+            // mana value form, and appended instructions stay unsupported.
+            "Neo Exdeath's toughness is equal to the number of permanent cards in your graveyard.",
+            "Neo Exdeath's power and toughness are each equal to the number of permanent cards in your graveyard.",
+            "Neo Exdeath's power is equal to the number of creature cards in your graveyard.",
+            "Neo Exdeath's power is equal to the number of nonland cards in your graveyard.",
+            "Neo Exdeath's power is equal to the number of permanent cards in each graveyard.",
+            "Neo Exdeath's power is equal to the greatest mana value among cards in your graveyard.",
+            "Neo Exdeath's power is equal to the number of permanent cards in your graveyard. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("aura.enchant.creature_or_vehicle"),
+        label: "enchant creature or Vehicle",
+        surface: RecipeSurface::AuraSpellClause,
+        matcher: match_enchant_creature_or_vehicle,
+        // Ten reviewed corpus cards print this exact line (Aether Meltdown and Mists of Littjara
+        // are the calibration pair).
+        calibration: calibrations!(
+            "Aether Meltdown" => "Enchant creature or Vehicle",
+            "Mists of Littjara" => "Enchant creature or Vehicle";
+            // The plain permanent, singular creature, artifact union, restricted-controller,
+            // self-restricted union, and rider forms stay unsupported.
+            "Enchant permanent",
+            "Enchant Vehicle",
+            "Enchant creature an opponent controls",
+            "Enchant creature or Vehicle you control",
+            "Enchant creature or artifact",
+            "Enchant artifact or creature",
+            "Enchant creature or Vehicle. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.aura.mill.controller.two.may"),
+        label: "Aura ETB may mill two",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_aura_may_mill_two,
+        // Song of Stupefaction is the only Aura full-corpus printing of this exact clause
+        // (verified).
+        calibration: singleton_calibrations!(
+            "Song of Stupefaction" => "When this Aura enters, you may mill two cards.";
+            // The mandatory wording, other counts, the enchantment self-reference, and appended
+            // instructions stay unsupported.
+            "When this Aura enters, mill two cards.",
+            "When this Aura enters, you may mill a card.",
+            "When this Aura enters, you may mill three cards.",
+            "When this Aura enters, you may mill two cards, then draw a card.",
+            "When this enchantment enters, you may mill two cards."
+        ),
+    },
+    Recipe {
+        id: RecipeId("triggered.end_step.graveyard_permanent_card_count_6.transform_self"),
+        label: "end-step descend six transform this creature",
+        surface: RecipeSurface::TriggeredAbility,
+        matcher: match_triggered_end_step_graveyard_permanent_card_count_six_transform_self,
+        // Exdeath, Void Warlock is the only exact full-corpus printing (verified; The
+        // Everflowing Well prints a different ability-worded upkeep form).
+        calibration: singleton_calibrations!(
+            "Exdeath, Void Warlock" => "At the beginning of your end step, if there are six or more permanent cards in your graveyard, transform Exdeath.";
+            // The optional wording, other counts, other cohorts, other steps, another subject,
+            // and appended instructions stay unsupported.
+            "At the beginning of your end step, if there are six or more permanent cards in your graveyard, you may transform Exdeath.",
+            "At the beginning of your end step, if there are five or more permanent cards in your graveyard, transform Exdeath.",
+            "At the beginning of your end step, if there are six or more cards in your graveyard, transform Exdeath.",
+            "At the beginning of your upkeep, if there are six or more permanent cards in your graveyard, transform Exdeath.",
+            "At the beginning of your end step, if there are six or more permanent cards in your graveyard, transform another creature.",
+            "At the beginning of your end step, if there are six or more permanent cards in your graveyard, transform Exdeath. Draw a card."
         ),
     },
 ];
@@ -35199,5 +35696,511 @@ mod tests {
             .is_none(),
             "mobilize must stay off instant and sorcery faces"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #372 — static graveyard-count-scaled P/T cohort
+    // -----------------------------------------------------------------------
+
+    fn issue_372_graveyard_creature_filter() -> ZoneCardFilter {
+        ZoneCardFilter {
+            card_type: Some(CardTypeFilter::Creature),
+            ..ZoneCardFilter::default()
+        }
+    }
+
+    fn issue_372_permanent_card_filter() -> ZoneCardFilter {
+        ZoneCardFilter {
+            excluded_card_types: vec![CardTypeFilter::Instant, CardTypeFilter::Sorcery],
+            ..ZoneCardFilter::default()
+        }
+    }
+
+    fn issue_372_match(clause: &str, source_name: &str) -> Option<RecipeMatch> {
+        let mut source = context();
+        source.source_name = source_name.into();
+        match_clause(clause, false, &source)
+            .unwrap_or_else(|ambiguity| panic!("{source_name} is ambiguous: {ambiguity}"))
+    }
+
+    fn issue_372_assert_unmatched(clause: &str, source_name: &str) {
+        assert!(
+            issue_372_match(clause, source_name).is_none(),
+            "unsupported near-miss was accepted: {clause}"
+        );
+    }
+
+    #[test]
+    fn issue_372_completed_identities_match_one_exact_recipe() {
+        for (clause, source_name, expected) in [
+            (
+                ISSUE_372_XANDE_CLAUSE,
+                "Xande, Dark Mage",
+                "static.self_count_scaled.graveyard_noncreature_nonland_plus_one_plus_one",
+            ),
+            (
+                ISSUE_372_MOON_VIGIL_CLAUSE,
+                "Moon-Vigil Adherents",
+                "static.self_count_scaled.controlled_creatures_plus_graveyard_creature_cards_plus_one_plus_one",
+            ),
+            (
+                ISSUE_372_AVATAR_CLAUSE,
+                "Avatar Destiny",
+                "static.attached_count_scaled.graveyard_creature_cards_avatar_plus_one_plus_one",
+            ),
+            (
+                ISSUE_372_SONG_CLAUSE,
+                "Song of Stupefaction",
+                "static.attached_count_scaled.graveyard_permanent_cards_minus_one_zero",
+            ),
+            (
+                ISSUE_372_CDA_CLAUSE,
+                "Neo Exdeath, Dimension's End",
+                "characteristic.count_scaled.graveyard_permanent_cards_power",
+            ),
+            (
+                ISSUE_372_ENCHANT_CLAUSE,
+                "Song of Stupefaction",
+                "aura.enchant.creature_or_vehicle",
+            ),
+            (
+                ISSUE_372_SONG_ETB_CLAUSE,
+                "Song of Stupefaction",
+                "etb.aura.mill.controller.two.may",
+            ),
+            (
+                ISSUE_372_EXDEATH_TRANSFORM_CLAUSE,
+                "Exdeath, Void Warlock",
+                "triggered.end_step.graveyard_permanent_card_count_6.transform_self",
+            ),
+        ] {
+            let matched =
+                issue_372_match(clause, source_name).unwrap_or_else(|| panic!("{source_name}"));
+            assert_eq!(matched.id.as_str(), expected, "{source_name}");
+        }
+    }
+
+    #[test]
+    fn issue_372_count_scaled_payloads_are_typed() {
+        let Some(RecipeMatch {
+            emission: RecipeEmission::StaticAbility(xande),
+            ..
+        }) = issue_372_match(ISSUE_372_XANDE_CLAUSE, "Xande, Dark Mage")
+        else {
+            panic!("Xande must emit one static ability");
+        };
+        assert_eq!(
+            xande.definition,
+            StaticAbilityDef::CountScaledSelfPt {
+                count: CountExpression::GraveyardCards {
+                    owners: RelativePlayerSet::Controller,
+                    filter: Some(ZoneCardFilter {
+                        excluded_card_types: vec![CardTypeFilter::Creature, CardTypeFilter::Land],
+                        ..ZoneCardFilter::default()
+                    }),
+                },
+                power_per_match: 1,
+                toughness_per_match: 1,
+            }
+        );
+
+        let Some(RecipeMatch {
+            emission: RecipeEmission::StaticAbility(moon_vigil),
+            ..
+        }) = issue_372_match(ISSUE_372_MOON_VIGIL_CLAUSE, "Moon-Vigil Adherents")
+        else {
+            panic!("Moon-Vigil Adherents must emit one static ability");
+        };
+        assert_eq!(
+            moon_vigil.definition,
+            StaticAbilityDef::CountScaledSelfPt {
+                count: CountExpression::Affine {
+                    constant: 0,
+                    terms: vec![
+                        QuantityTerm {
+                            coefficient: 1,
+                            quantity: CountExpression::BattlefieldCreatures {
+                                filter: BattlefieldCreatureCountFilter {
+                                    controllers: RelativePlayerSet::Controller,
+                                    ..BattlefieldCreatureCountFilter::default()
+                                },
+                            },
+                        },
+                        QuantityTerm {
+                            coefficient: 1,
+                            quantity: CountExpression::GraveyardCards {
+                                owners: RelativePlayerSet::Controller,
+                                filter: Some(issue_372_graveyard_creature_filter()),
+                            },
+                        },
+                    ],
+                },
+                power_per_match: 1,
+                toughness_per_match: 1,
+            }
+        );
+
+        let Some(RecipeMatch {
+            emission: RecipeEmission::StaticAbility(avatar),
+            ..
+        }) = issue_372_match(ISSUE_372_AVATAR_CLAUSE, "Avatar Destiny")
+        else {
+            panic!("Avatar Destiny must emit one static ability");
+        };
+        assert_eq!(
+            avatar.definition,
+            StaticAbilityDef::AttachedModifier {
+                condition: None,
+                add_types: TypeLineAddition {
+                    card_types: Vec::new(),
+                    creature_types: vec!["Avatar".to_string()],
+                },
+                set_types: None,
+                set_name: None,
+                set_colors: None,
+                delta_power: 0,
+                delta_toughness: 0,
+                count: Some(CountExpression::GraveyardCards {
+                    owners: RelativePlayerSet::Controller,
+                    filter: Some(issue_372_graveyard_creature_filter()),
+                }),
+                power_per_match: 1,
+                toughness_per_match: 1,
+                set_power: None,
+                set_toughness: None,
+                remove_all_abilities: false,
+                keywords: Vec::new(),
+                triggered_abilities: Vec::new(),
+                activated_abilities: Vec::new(),
+                restriction: Default::default(),
+                doesnt_untap_during_untap_step: false,
+                cant_untap: false,
+            }
+        );
+
+        let Some(RecipeMatch {
+            emission: RecipeEmission::StaticAbility(song),
+            ..
+        }) = issue_372_match(ISSUE_372_SONG_CLAUSE, "Song of Stupefaction")
+        else {
+            panic!("Song of Stupefaction must emit one static ability");
+        };
+        assert_eq!(
+            song.definition,
+            StaticAbilityDef::AttachedModifier {
+                condition: None,
+                add_types: TypeLineAddition::default(),
+                set_types: None,
+                set_name: None,
+                set_colors: None,
+                delta_power: 0,
+                delta_toughness: 0,
+                count: Some(CountExpression::GraveyardCards {
+                    owners: RelativePlayerSet::Controller,
+                    filter: Some(issue_372_permanent_card_filter()),
+                }),
+                power_per_match: -1,
+                toughness_per_match: 0,
+                set_power: None,
+                set_toughness: None,
+                remove_all_abilities: false,
+                keywords: Vec::new(),
+                triggered_abilities: Vec::new(),
+                activated_abilities: Vec::new(),
+                restriction: Default::default(),
+                doesnt_untap_during_untap_step: false,
+                cant_untap: false,
+            }
+        );
+
+        let Some(RecipeMatch {
+            emission: RecipeEmission::CharacteristicAbility(cda),
+            ..
+        }) = issue_372_match(ISSUE_372_CDA_CLAUSE, "Neo Exdeath, Dimension's End")
+        else {
+            panic!("Neo Exdeath must emit one characteristic-defining ability");
+        };
+        assert_eq!(
+            cda.definition,
+            CharacteristicDefiningAbility::CountScaledPowerToughness {
+                count: CountExpression::GraveyardCards {
+                    owners: RelativePlayerSet::Controller,
+                    filter: Some(issue_372_permanent_card_filter()),
+                },
+                power_per_match: 1,
+                toughness_per_match: 0,
+            }
+        );
+
+        let Some(RecipeMatch {
+            emission: RecipeEmission::SpellEffect(attach),
+            ..
+        }) = issue_372_match(ISSUE_372_ENCHANT_CLAUSE, "Song of Stupefaction")
+        else {
+            panic!("the Aura enchant line must emit one AuraAttach effect");
+        };
+        assert_eq!(
+            attach,
+            SpellEffectKind::AuraAttach {
+                target: TargetFilter {
+                    any_of: Some(vec![
+                        TargetFilter {
+                            kind: TargetKind::Creature,
+                            ..TargetFilter::default()
+                        },
+                        TargetFilter {
+                            kind: TargetKind::AnyPermanent,
+                            required_subtypes: vec!["Vehicle".to_string()],
+                            ..TargetFilter::default()
+                        },
+                    ]),
+                    ..TargetFilter::default()
+                },
+            }
+        );
+
+        let Some(RecipeMatch {
+            emission: RecipeEmission::TriggeredAbility(song_etb),
+            ..
+        }) = issue_372_match(ISSUE_372_SONG_ETB_CLAUSE, "Song of Stupefaction")
+        else {
+            panic!("Song of Stupefaction's ETB must emit one triggered ability");
+        };
+        assert_eq!(
+            song_etb.trigger,
+            TriggerCondition::WhenSelfEntersBattlefield
+        );
+        assert!(song_etb.may);
+        assert_eq!(
+            song_etb.effect,
+            [SpellEffectKind::Mill {
+                count: Amount::Fixed(2),
+                who: PlayerRecipient::Controller,
+            }]
+        );
+
+        let Some(RecipeMatch {
+            emission: RecipeEmission::TriggeredAbility(transform),
+            ..
+        }) = issue_372_match(ISSUE_372_EXDEATH_TRANSFORM_CLAUSE, "Exdeath, Void Warlock")
+        else {
+            panic!("Exdeath must emit one transform trigger");
+        };
+        assert_eq!(
+            transform.trigger,
+            TriggerCondition::AtBeginningOfEndStep {
+                player: CastTriggerPlayer::Controller,
+            }
+        );
+        assert!(!transform.may);
+        assert_eq!(
+            transform.intervening_if,
+            Some(issue_373_graveyard_threshold(
+                GraveyardAggregate::CardCount,
+                Some(issue_372_permanent_card_filter()),
+                6,
+            ))
+        );
+        assert_eq!(
+            transform.effect,
+            [SpellEffectKind::ChangeSourceFace {
+                action: FaceChangeAction::Transform,
+            }]
+        );
+    }
+
+    #[test]
+    fn issue_372_negative_near_misses_stay_unmatched() {
+        for negative in [
+            "Xande gets +1/+1 for each noncreature card in your graveyard.",
+            "Xande gets +1/+1 for each nonland card in your graveyard.",
+            "Xande gets +1/+1 for each creature card in your graveyard.",
+            "Xande gets +1/+1 for each card in your graveyard.",
+            "Xande gets +1/+1 for each noncreature, nonland card in each graveyard.",
+            "Xande gets +2/+2 for each noncreature, nonland card in your graveyard.",
+            "Xande gets +1/+0 for each noncreature, nonland card in your graveyard.",
+            "Xande gets +0/+1 for each noncreature, nonland card in your graveyard.",
+            "Xande gets +1/+1 for each noncreature, nonland card in your graveyard. Draw a card.",
+            "This creature gets +1/+1 for each noncreature, nonland card in your graveyard.",
+        ] {
+            issue_372_assert_unmatched(negative, "Xande, Dark Mage");
+        }
+
+        for negative in [
+            "This creature gets +1/+1 for each other creature you control and each creature card in your graveyard.",
+            "This creature gets +1/+1 for each creature you control and each creature card in each graveyard.",
+            "This creature gets +1/+1 for each creature you control.",
+            "This creature gets +1/+1 for each creature card in your graveyard.",
+            "This creature gets +2/+2 for each creature you control and each creature card in your graveyard.",
+            "This creature gets +1/+0 for each creature you control and each creature card in your graveyard.",
+            "This creature gets +1/+1 for each creature you control and each permanent card in your graveyard.",
+            "This creature gets +1/+1 for each creature you control and each creature card in your graveyard. Draw a card.",
+        ] {
+            issue_372_assert_unmatched(negative, "Moon-Vigil Adherents");
+        }
+
+        for negative in [
+            "Enchanted creature gets +1/+1 for each creature card in your graveyard.",
+            "Enchanted creature gets +1/+1 for each creature card in your graveyard and is a Soldier in addition to its other types.",
+            "Enchanted permanent gets +1/+1 for each creature card in your graveyard and is an Avatar in addition to its other types.",
+            "Enchanted creature gets +1/+0 for each creature card in your graveyard and is an Avatar in addition to its other types.",
+            "Enchanted creature gets -1/-1 for each creature card in your graveyard and is an Avatar in addition to its other types.",
+            "Enchanted creature gets +1/+1 for each creature card in each graveyard and is an Avatar in addition to its other types.",
+            "Enchanted creature gets +1/+1 for each creature card in your graveyard and is an Avatar in addition to its other types. Draw a card.",
+        ] {
+            issue_372_assert_unmatched(negative, "Avatar Destiny");
+        }
+
+        for negative in [
+            "Fathomless descent — Enchanted creature gets -X/-0, where X is the number of permanent cards in your graveyard.",
+            "Fathomless descent — Enchanted permanent gets -0/-X, where X is the number of permanent cards in your graveyard.",
+            "Fathomless descent — Enchanted permanent gets -X/-X, where X is the number of permanent cards in your graveyard.",
+            "Fathomless descent — Enchanted permanent gets -X/-0, where X is the number of creature cards in your graveyard.",
+            "Fathomless descent — Enchanted permanent gets -X/-0, where X is the number of nonland cards in your graveyard.",
+            "Fathomless descent — Enchanted permanent gets -X/-0, where X is the number of permanent cards in each graveyard.",
+            "Enchanted permanent gets -X/-0, where X is the number of permanent cards in your graveyard.",
+            "Fathomless descent — Enchanted permanent gets -X/-0, where X is the number of permanent cards in your graveyard. Draw a card.",
+        ] {
+            issue_372_assert_unmatched(negative, "Song of Stupefaction");
+        }
+
+        for negative in [
+            "Neo Exdeath's toughness is equal to the number of permanent cards in your graveyard.",
+            "Neo Exdeath's power and toughness are each equal to the number of permanent cards in your graveyard.",
+            "Neo Exdeath's power is equal to the number of creature cards in your graveyard.",
+            "Neo Exdeath's power is equal to the number of nonland cards in your graveyard.",
+            "Neo Exdeath's power is equal to the number of permanent cards in each graveyard.",
+            "Neo Exdeath's power is equal to the greatest mana value among cards in your graveyard.",
+            "Neo Exdeath's power is equal to the number of permanent cards in your graveyard. Draw a card.",
+        ] {
+            issue_372_assert_unmatched(negative, "Neo Exdeath, Dimension's End");
+        }
+
+        for negative in [
+            "Enchant permanent",
+            "Enchant Vehicle",
+            "Enchant creature an opponent controls",
+            "Enchant creature or Vehicle you control",
+            "Enchant creature or artifact",
+            "Enchant artifact or creature",
+            "Enchant creature or Vehicle. Draw a card.",
+        ] {
+            issue_372_assert_unmatched(negative, "Song of Stupefaction");
+        }
+
+        for negative in [
+            "When this Aura enters, mill two cards.",
+            "When this Aura enters, you may mill a card.",
+            "When this Aura enters, you may mill three cards.",
+            "When this Aura enters, you may mill two cards, then draw a card.",
+            "When this enchantment enters, you may mill two cards.",
+        ] {
+            issue_372_assert_unmatched(negative, "Song of Stupefaction");
+        }
+
+        for negative in [
+            "At the beginning of your end step, if there are six or more permanent cards in your graveyard, you may transform Exdeath.",
+            "At the beginning of your end step, if there are five or more permanent cards in your graveyard, transform Exdeath.",
+            "At the beginning of your end step, if there are six or more cards in your graveyard, transform Exdeath.",
+            "At the beginning of your upkeep, if there are six or more permanent cards in your graveyard, transform Exdeath.",
+            "At the beginning of your end step, if there are six or more permanent cards in your graveyard, transform another creature.",
+            "At the beginning of your end step, if there are six or more permanent cards in your graveyard, transform Exdeath. Draw a card.",
+        ] {
+            issue_372_assert_unmatched(negative, "Exdeath, Void Warlock");
+        }
+    }
+
+    #[test]
+    fn issue_372_source_kind_and_face_gates_stay_fail_closed() {
+        for (clause, source_name, aura, creature) in [
+            (ISSUE_372_XANDE_CLAUSE, "Xande, Dark Mage", false, false),
+            (
+                ISSUE_372_MOON_VIGIL_CLAUSE,
+                "Moon-Vigil Adherents",
+                false,
+                false,
+            ),
+            (ISSUE_372_AVATAR_CLAUSE, "Avatar Destiny", false, true),
+            (ISSUE_372_SONG_CLAUSE, "Song of Stupefaction", false, false),
+            (
+                ISSUE_372_SONG_ETB_CLAUSE,
+                "Song of Stupefaction",
+                false,
+                false,
+            ),
+            (
+                ISSUE_372_EXDEATH_TRANSFORM_CLAUSE,
+                "Exdeath, Void Warlock",
+                false,
+                false,
+            ),
+        ] {
+            let mut gated = context();
+            gated.source_name = source_name.into();
+            gated.source_is_aura = aura;
+            gated.source_is_creature = creature;
+            assert!(
+                match_clause(clause, false, &gated)
+                    .expect("gated clause must not be ambiguous")
+                    .is_none(),
+                "{source_name} must stay gated on its printed source kind"
+            );
+        }
+
+        let mut front_face = context();
+        front_face.source_name = "Exdeath, Void Warlock".into();
+        assert!(
+            match_clause(ISSUE_372_CDA_CLAUSE, false, &front_face)
+                .expect("front face must not be ambiguous")
+                .is_none(),
+            "the CDA must stay bound to the Neo Exdeath face"
+        );
+        let mut unreviewed_face = context();
+        unreviewed_face.source_name = "Unreviewed Face".into();
+        assert!(
+            match_clause(ISSUE_372_CDA_CLAUSE, false, &unreviewed_face)
+                .expect("unreviewed face must not be ambiguous")
+                .is_none(),
+            "the CDA must not match an arbitrary face with the same short-name text"
+        );
+    }
+
+    #[test]
+    fn issue_372_recipes_do_not_disturb_shipped_recipes() {
+        for (clause, source_name, expected) in [
+            ("Enchant creature", "Flight", "aura.enchant.creature"),
+            (
+                "When this creature enters, you may mill two cards.",
+                "Daggerfang Duo",
+                "etb.mill.controller.two.may",
+            ),
+            (
+                "This creature gets +1/+0 for each artifact you control.",
+                "Guidelight Synergist",
+                "static.self.count_scaled.artifact.plus_one_zero",
+            ),
+            (
+                "When this creature enters, you gain 3 life.",
+                "Hill Giant Herdgorger",
+                "etb.gain_life.fixed",
+            ),
+            (
+                "Enchanted creature gets +2/+2 and has trample and lifelink.",
+                "Unflinching Courage",
+                "static.attached_modifier.creature.fixed",
+            ),
+            (
+                "When The Lion-Turtle enters, you gain 3 life.",
+                "The Lion-Turtle",
+                "triggered.etb.gain_life.three",
+            ),
+        ] {
+            let mut source = context();
+            source.source_name = source_name.into();
+            let matched = match_clause(clause, false, &source)
+                .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{clause} should stay consumed by its shipped recipe"));
+            assert_eq!(matched.id.as_str(), expected, "{clause}");
+        }
     }
 }

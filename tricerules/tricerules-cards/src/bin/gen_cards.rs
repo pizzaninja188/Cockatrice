@@ -1678,26 +1678,77 @@ fn same_colors(left: &[Color], right: &[Color]) -> bool {
     left.len() == right.len() && left.iter().all(|color| right.contains(color))
 }
 
+/// CR 208.2a: a printed `*` power or toughness is defined by a characteristic-defining ability,
+/// so it carries no literal base value. Only the exact `*` marker is accepted; `1+*`, `∞`, and
+/// every other non-numeric form stay unsupported so a missing value never silently becomes zero.
+fn parse_printed_power_toughness_stat(value: &Value) -> Option<Option<u32>> {
+    let text = value.as_str()?;
+    if text == "*" {
+        return Some(None);
+    }
+    text.parse::<u32>().ok().map(Some)
+}
+
 fn parse_optional_power_toughness(face: &Value) -> Result<(Option<u32>, Option<u32>), Skip> {
     let power = face.get("power").filter(|value| !value.is_null());
     let toughness = face.get("toughness").filter(|value| !value.is_null());
     match (power, toughness) {
         (None, None) => Ok((None, None)),
         (Some(power), Some(toughness)) => {
-            let power = power
-                .as_str()
-                .ok_or(Skip::FacePowerToughness)?
-                .parse::<u32>()
-                .map_err(|_| Skip::FacePowerToughness)?;
-            let toughness = toughness
-                .as_str()
-                .ok_or(Skip::FacePowerToughness)?
-                .parse::<u32>()
-                .map_err(|_| Skip::FacePowerToughness)?;
-            Ok((Some(power), Some(toughness)))
+            let power =
+                parse_printed_power_toughness_stat(power).ok_or(Skip::FacePowerToughness)?;
+            let toughness =
+                parse_printed_power_toughness_stat(toughness).ok_or(Skip::FacePowerToughness)?;
+            Ok((power, toughness))
         }
         _ => Err(Skip::FacePowerToughness),
     }
+}
+
+/// Whether the source printed a complete P/T pair. A `*` component parses to `None`, so this
+/// keeps "printed `*`" distinct from "no P/T printed" for spells and other P/T-less permanents.
+fn has_printed_power_toughness_pair(source: &Value) -> bool {
+    let present = |key: &str| source.get(key).is_some_and(|value| !value.is_null());
+    present("power") && present("toughness")
+}
+
+/// CR 208.2a: a face with an undefined (`*`) P/T component is legal only when a
+/// characteristic-defining ability defines that component. A genuinely missing component on a
+/// creature face also stays unsupported; non-creature sources that printed no P/T pair (spells,
+/// P/T-less permanents) are unaffected.
+fn require_power_toughness_is_defined(
+    has_printed_pair: bool,
+    is_creature: bool,
+    power: Option<u32>,
+    toughness: Option<u32>,
+    rules: &ParsedRules,
+) -> Result<(), Skip> {
+    if !is_creature && !has_printed_pair {
+        return Ok(());
+    }
+    let cda_defines = |wants_power: bool| {
+        rules
+            .characteristic_defining_abilities
+            .iter()
+            .any(|ability| match &ability.definition {
+                CharacteristicDefiningAbility::CountScaledPowerToughness {
+                    power_per_match,
+                    toughness_per_match,
+                    ..
+                } => {
+                    if wants_power {
+                        *power_per_match != 0
+                    } else {
+                        *toughness_per_match != 0
+                    }
+                }
+                CharacteristicDefiningAbility::Changeling => false,
+            })
+    };
+    if (power.is_none() && !cda_defines(true)) || (toughness.is_none() && !cda_defines(false)) {
+        return Err(Skip::FacePowerToughness);
+    }
+    Ok(())
 }
 
 fn parse_multiface_face(
@@ -1738,9 +1789,6 @@ fn parse_multiface_face(
     types.extend(subtypes);
 
     let (power, toughness) = parse_optional_power_toughness(face)?;
-    if is_creature && power.is_none() {
-        return Err(Skip::FacePowerToughness.into());
-    }
 
     let oracle_text = match face.get("oracle_text") {
         None | Some(Value::Null) => "",
@@ -1772,6 +1820,13 @@ fn parse_multiface_face(
         types.iter().any(|card_type| card_type == "Sorcery"),
     )
     .map_err(|error| EvaluationError::rules_text(error, Skip::FaceText))?;
+    require_power_toughness_is_defined(
+        has_printed_power_toughness_pair(face),
+        is_creature,
+        power,
+        toughness,
+        &rules,
+    )?;
     add_intrinsic_land_mana_ability(&mut rules, &types, oracle_text)
         .map_err(|error| EvaluationError::rules_text(error, Skip::FaceText))?;
 
@@ -1842,9 +1897,6 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
     let source_is_permanent = !is_spell;
     let (power, toughness) =
         parse_optional_power_toughness(card).map_err(|_| Skip::BadPowerToughness)?;
-    if is_creature && (power.is_none() || toughness.is_none()) {
-        return Err(Skip::BadPowerToughness.into());
-    }
 
     let mana_cost = str_field(card, "mana_cost").to_string();
     let parsed = ManaCost::parse(&mana_cost).map_err(|_| Skip::BadManaCost)?;
@@ -2000,6 +2052,14 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
         card_types.iter().any(|card_type| card_type == "Sorcery"),
     )
     .map_err(|error| EvaluationError::rules_text(error, Skip::NonKeywordText))?;
+    require_power_toughness_is_defined(
+        has_printed_power_toughness_pair(card),
+        is_creature,
+        power,
+        toughness,
+        &rules,
+    )
+    .map_err(|_| Skip::BadPowerToughness)?;
     if !is_creature && !is_spell && rules.recipe_labels.is_empty() {
         return Err(Skip::NotCreature.into());
     }
@@ -3899,6 +3959,100 @@ mod tests {
             raw.static_abilities[0].definition,
             StaticAbilityDef::SpellCannotBeCountered
         );
+    }
+
+    #[test]
+    fn issue_372_star_power_is_accepted_only_with_a_defining_cda() {
+        let exdeath = multiface(
+            "transform",
+            "Exdeath, Void Warlock // Neo Exdeath, Dimension's End",
+            vec![
+                face(
+                    "Exdeath, Void Warlock",
+                    "{1}{B}{G}",
+                    "Legendary Creature — Spirit Warlock",
+                    "When Exdeath enters, you gain 3 life.\nAt the beginning of your end step, if there are six or more permanent cards in your graveyard, transform Exdeath.",
+                    Some(("3", "3")),
+                    &["B", "G"],
+                    None,
+                ),
+                face(
+                    "Neo Exdeath, Dimension's End",
+                    "",
+                    "Legendary Creature — Spirit Avatar",
+                    "Trample\nNeo Exdeath's power is equal to the number of permanent cards in your graveyard.",
+                    Some(("*", "3")),
+                    &["B", "G"],
+                    Some(&["B", "G"]),
+                ),
+            ],
+        );
+        let generated = evaluate_fresh(&exdeath).expect("Neo Exdeath's `*` power is CDA-defined");
+        assert_eq!(generated.faces[1].power, None);
+        assert_eq!(generated.faces[1].toughness, Some(3));
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        let [cda] = raw.faces[1].characteristic_defining_abilities.as_slice() else {
+            panic!("Neo Exdeath must author one characteristic-defining ability");
+        };
+        assert_eq!(
+            cda.definition,
+            CharacteristicDefiningAbility::CountScaledPowerToughness {
+                count: CountExpression::GraveyardCards {
+                    owners: RelativePlayerSet::Controller,
+                    filter: Some(tricerules_cards::primitives::ZoneCardFilter {
+                        excluded_card_types: vec![CardTypeFilter::Instant, CardTypeFilter::Sorcery,],
+                        ..tricerules_cards::primitives::ZoneCardFilter::default()
+                    }),
+                },
+                power_per_match: 1,
+                toughness_per_match: 0,
+            }
+        );
+
+        // A `*` power with no defining characteristic-defining ability stays unsupported.
+        let undefined = multiface(
+            "transform",
+            "Star Power Front // Star Power Back",
+            vec![
+                face(
+                    "Star Power Front",
+                    "{1}{G}",
+                    "Creature — Bear",
+                    "Trample",
+                    Some(("2", "2")),
+                    &["G"],
+                    None,
+                ),
+                face(
+                    "Star Power Back",
+                    "",
+                    "Creature — Bear",
+                    "Trample",
+                    Some(("*", "2")),
+                    &["G"],
+                    Some(&["G"]),
+                ),
+            ],
+        );
+        assert!(matches!(
+            evaluate_fresh(&undefined),
+            Err(EvaluationError::Skip(Skip::FacePowerToughness))
+        ));
+
+        // The printed `*` guard is not creature-only: a Vehicle with `*` power is legal only
+        // when a defining CDA exists, even though the Crew keyword keeps it otherwise
+        // generatable. Without the guard this card would be written with an undefined power.
+        let vehicle = normal_card(
+            "Star Power Vehicle",
+            "{2}",
+            "Artifact — Vehicle",
+            "Crew 2",
+            Some(("*", "4")),
+        );
+        assert!(matches!(
+            evaluate_fresh(&vehicle),
+            Err(EvaluationError::Skip(Skip::BadPowerToughness))
+        ));
     }
 
     #[test]
