@@ -600,11 +600,13 @@ remains the damage source. Exact formatted comparison rejects alternative numeri
 overflow, variables, other source names, qualifiers, optionality and appended instructions.
 Other damage grammars retain their own recipes.
 
-The reviewed initial catalog instances are **spell 4**, **modal 3**, and **modal 4**. The typed
-amount enum contains only Three and Four; that does not authorize the cross-product of amounts
-and surfaces. In particular spell 3 remains unsupported. Each instance retains its previous
-recipe ID, report label and calibration metadata. All instances participate in the ordinary
-exact-one matcher: identical emissions from overlapping owners are still an ambiguity error.
+The reviewed catalog instances are now **spell 3**, **spell 4**, **spell 5**, **modal 3**, and
+**modal 4**. The #449 structural pilot admitted only spell 4, modal 3, and modal 4 and
+deliberately left the other spell-surface amounts unsupported; #452 added the `Five` amount
+variant plus the two reviewed spell instances (Three and Five) after complete-card preflight
+of the pinned corpus. Each instance keeps its own recipe ID, report label and calibration
+metadata. All instances participate in the ordinary exact-one matcher: identical emissions from
+overlapping owners are still an ambiguity error, and one amount never implies another surface.
 The previous three bespoke recognizers were removed together. Modal assembly headers, bounds,
 ordered recipe sets, stable mode IDs and presentation mappings are unchanged.
 
@@ -628,6 +630,26 @@ recipe-label or eligibility changes. Canonical checks against the pre-extraction
 byte equality for all 2,425 generated definitions and the fingerprint catalog both after the
 builder extraction and after enabling the family. No metadata migration is needed.
 
+Issue #452 used the same extraction as a throughput pilot and added two reviewed spell instances:
+
+- **spell 3** completes Ragefire and Repulsor Rays.
+- **spell 5** completes Scorching Shot (pinned-Standard), Command the Storm, Concentrated Fire,
+  Direct Hit, and Engulfing Eruption.
+
+The complete-card preflight excluded the observed amount-2 (Breath of Fire) and amount-7 (Fiery
+Finish) spell singletons as unreviewed, and left the four already-eligible spell-4 identities
+(Bathe in Dragonfire, Electrify, Explosive Shot, Flame Slash) outside the retained cohort to keep
+the pilot bounded. No modal damage instance was added: the modal identities that print a
+`deals N damage to target creature` bullet with an unadmitted amount each also print at least one
+unsupported bullet, so a new parameter would not have completed a card. Measured marginal work
+for the two instances was one added enum variant in total plus one catalog entry each — two
+positive calibrations and four reviewed negative near-misses apiece — plus the shared
+characterization/negative matrix; the seven-card cohort then cost one pinned
+`--dry-run --include-new` preview, review of seven generated definitions, one registry matrix,
+one shared semantic scenario matrix, and seven conformance baseline rows (seven `cast`
+`exercised`, no new abilities). The three-damage and five-damage instances remain exact-one
+matched. This is a measured cohort of **seven complete Oracle identities**, not a projection.
+
 Measured duplication: three authored grammar comparisons and three typed damage constructions
 become one of each, with three small catalog adapters. The two repeated modal wrappers become
 one. Existing calibration rows stay intact; one shared characterization matrix covers all three
@@ -637,7 +659,9 @@ lines or new card coverage. Session inventories and comparison evidence stay und
 not in a persistent campaign tracker.
 
 Source review on 2026-09-19 fetched exact-name Scryfall records and `rulings_uri` for Bombard,
-Iroh's Demonstration, Abrade and Bathe in Dragonfire; all returned no rulings. The
+Iroh's Demonstration, Abrade and Bathe in Dragonfire; all returned no rulings. #452 additionally
+fetched the same data for Ragefire, Repulsor Rays, Scorching Shot, Command the Storm, Concentrated
+Fire, Direct Hit and Engulfing Eruption; all returned no rulings. The
 [official rules page](https://magic.wizards.com/en/rules) linked the 2026-09-25 rules text.
 CR 120.2b (damage source), 115.1a (spell targets), 608.2b (target revalidation), and 700.2a/c
 (modes and their targets) govern the preserved semantics.
@@ -645,10 +669,12 @@ CR 120.2b (damage source), 115.1a (spell targets), 608.2b (target revalidation),
 Interaction audit: compile-time source/face matching emits existing typed definitions; runtime
 state authority, physical source identity/generations, target legality, resolution order and
 damage processing are unchanged. Existing engine scenarios remain, with explicit targeted-mode
-acceptance/rejection and bounded completion added for Iroh. No new player assumptions, fields,
-visibility flows or public offers are introduced. Protobuf, relay, Qt, freeform and manual GUI
-acceptance are N/A because their contracts and generated inputs are unchanged. Generator tests,
-feature-enabled Clippy, conformance and the full Rust/card-data gate remain required.
+acceptance/rejection and bounded completion added for Iroh. The #452 cohort adds exact-damage,
+illegal-target-class and CR 608.2b fizzle scenarios using the same command boundary. No new
+player assumptions, fields, visibility flows or public offers are introduced. Protobuf, relay,
+Qt, freeform and manual GUI acceptance are N/A because their contracts and generated inputs are
+unchanged. Generator tests, feature-enabled Clippy, conformance and the full Rust/card-data gate
+remain required.
 
 ### Independent modal composition pilot
 
@@ -693,6 +719,17 @@ combinations. Synthetic spell and creature-ETB tests prove a new combination nee
 whole-card pair matcher, while registered Divination, Elvish Visionary and Pawpatch Formation
 tests preserve their exact effects, recipients, trigger/modal wrapper, stable IDs and Oracle
 presentation mappings.
+
+Issue #452's bounded corpus preflight found **zero fully supported independent-modal candidates**
+in the same pinned snapshot. Only four modal identities print bullets that all fall inside the
+pilot's draw/life/token grammar, and all four are unsupported token-copy effects (Ember Island
+Production, Mirage Mockery, One Dozen Eyes, Saheeli's Artistry). Every other near-miss identity
+pairs a supported draw/life/token bullet with at least one unsupported bullet or wrapper (for
+example Demonic Pact, Splatter Technique, Apothecary Stomper, Charming Prince, Witherbloom Charm,
+and Wardens of the Cycle). The pilot therefore reported the route as corpus-exhausted and did not
+widen the effect grammar, add a modal mode, or admit an identity. Future modal admissions need a
+new reviewed mode recipe or new composition support first; the empty result says nothing about
+the validator's correctness, only that the pinned corpus holds no complete card it can own.
 
 Source review on 2026-09-19 fetched exact Scryfall records and each `rulings_uri` for Divination,
 Elvish Visionary, Pawpatch Formation, Exhibition Magician and A-Exhibition Magician. Only Pawpatch
@@ -803,6 +840,34 @@ definitions without permitting replacement:
   --review-out build/direct-ron/elvish_visionary.packet.json
 ```
 
+Issue #452 promoted the first identities through this path: `stand_up_for_yourself` (Stand Up for
+Yourself, destroy target creature with power 3 or greater) and `oracles_restoration` (Oracle's
+Restoration, pump/draw/life in printed order). Their maps are checked in beside the inspect-only
+examples and can be rerun with `--review-existing` after any change:
+
+```powershell
+./scripts/gen-cards.ps1 --review-existing `
+  --review-draft tricerules/tricerules-cards/data/stand_up_for_yourself.ron `
+  --review-map tricerules/tricerules-cards/authoring/review-maps/stand_up_for_yourself.json `
+  --review-out build/direct-ron/stand_up_for_yourself.packet.json
+
+./scripts/gen-cards.ps1 --review-existing `
+  --review-draft tricerules/tricerules-cards/data/oracles_restoration.ron `
+  --review-map tricerules/tricerules-cards/authoring/review-maps/oracles_restoration.json `
+  --review-out build/direct-ron/oracles_restoration.packet.json
+```
+
+Use `oracle_id` in the map whenever a whole-card name is ambiguous across oracle IDs: the `sos`
+Oracle's Restoration and its `asos` art-series namesake normalize to the same name and an
+`exact_name` selection is refused. Promotion also added explicit narrow target prompts
+(`Choose target creature with power 3 or greater`, `Choose target creature you control`), a
+registry/presentation matrix, semantic scenarios for accepted and illegal paths plus CR 608.2b
+fizzling, and conformance baseline rows (`oracles_restoration` exercised; `stand_up_for_yourself`
+recorded as `unsupported: target group 0 needs a richer fixture` because the shared conformance
+fixture has no power-three-or-greater creature, while the dedicated scenario exercises it).
+Runner-up Nimble Thopterist was excluded because `thopter_c_1_1_flying` is not in the embedded
+token registry.
+
 After a draft and packet pass review, promotion remains an explicit authored-card change: copy the
 reviewed draft to its canonical handwritten `.ron` path under `data/`; recheck stable card, face,
 ability, mode, and choice IDs; refresh and review Oracle fingerprints and `CARDS.md`; add the
@@ -810,6 +875,40 @@ complete-definition registry assertions, applicable happy/illegal semantic scena
 and conformance coverage, and checklist evidence; then run the full Rust/card-data gate. Never
 promote an unresolved packet, overwrite an existing identity, add generator provenance to direct
 RON, or let Refresh modify a handwritten card.
+
+### Authoring throughput and the dependency-driven blocker lane
+
+The #452 bounded pilot (corpus `9611b5d9...`, starting revision `82960669a`, one writer with an
+independent read-only review) established the following as the default campaign workflow:
+
+1. **Preflight the complete card before authoring.** Use the versioned dependency report,
+   `--candidate-report`, and targeted pinned-corpus scans to enumerate every face, clause, cost,
+   target, choice, token, and presentation prerequisite. Classify each remaining requirement
+   against the actual emitter/validator/consumer/tests. A recognized clause, recipe name, or
+   effect enum is never evidence of complete support.
+2. **Route by demonstrated repetition.** Shared exact templates with typed parameters extend the
+   family catalog; supported singletons and unusual compositions use direct RON; any needed
+   runtime, choice, target, or presentation contract becomes a scoped blocker. Do not partially
+   admit a card to keep a batch moving, and do not widen a grammar because a route's candidate
+   set came back empty.
+3. **Reuse evidence; do not re-run it for measurement.** #447-#451 evidence (dependency
+   inventory, semantic fixtures, family extraction, modal validator, review tool) was consumed
+   as-is. Admission from a pinned cohort input uses `--dry-run --include-new` followed by
+   `--include-new` and then canonical Refresh, which restores canonical provenance and the full
+   fingerprint catalog. Measure selection/preflight, implementation, review, verification, and
+   rework separately; never infer phase timing from commit spacing.
+4. **Review a frozen patch while verification is serialized.** Snapshot the intended diff, hash
+   it, and have an independent reviewer inspect that exact patch and its evidence read-only.
+   Run the focused and full gates on the same frozen content, and return findings as rework
+   before treating the evidence as final. Escalate review depth only for demonstrated semantic
+   risk; keep engine/primitive changes on the deeper-review path.
+5. **Select shared blockers by verified complete-card unlocks.** A blocker is an assignment
+   candidate only when its deliverable is the last remaining requirement for specific named
+   identities and its evidence is reviewed. Verify the runtime/protocol/UI impact of the
+   deliverable before assigning it, give the blocking mechanism one owner, and return the
+   unlocked identities to a single routine owner for complete-card preflight and admission.
+   Do not implement unrelated blockers to grow a batch, and never count a blocker-only mapping
+   as implemented coverage.
 
 ## 9. Track partial implementations
 

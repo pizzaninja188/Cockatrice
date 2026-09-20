@@ -40,6 +40,12 @@ requirements; this skill routes the work rather than replacing them.
   [card authoring guide](../../../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md).
   Use its Oracle/rulings research, complete-support boundary, presentation mappings, and blocker
   tracking. Do not substitute nearby legacy RON for the guide.
+- Preflight the complete card before writing anything: enumerate every face, clause, cost, target,
+  choice, token, and presentation prerequisite, and route by demonstrated repetition — extend a
+  typed family for a shared exact template, use reviewed direct RON for a supported
+  singleton/unusual composition, and file a scoped blocker for missing runtime, choice, target,
+  or presentation contracts. An empty route reports its limitation; it never authorizes widening
+  a grammar. A recognized clause or recipe name is not evidence of complete support.
 - For an unsupported data-only card or batch, use the source-backed scaffold mode to populate only
   clerical source fields. Keep scaffolds outside embedded `data/`; mechanically author and review
   every unresolved field before removing both sentinels and promoting a file to `.ron`.
@@ -51,6 +57,11 @@ requirements; this skill routes the work rather than replacing them.
   through the quiet runner, then the full affected-side entry point. Choose the affected side
   from the actual contract, not merely changed file extensions. Use Preview if the selected
   final command sequence needs inspection.
+- Freeze the intended patch before independent review: snapshot and hash the diff, give a
+  read-only reviewer that exact patch plus its evidence, and run the focused and full gates on the
+  same frozen content. Return review findings as rework before treating evidence as final.
+  Escalate review depth for demonstrated semantic risk; keep engine and primitive changes on the
+  deeper-review path. Reuse prior valid evidence instead of re-running gates solely to measure.
 - When authored cards change generated metadata, explicitly run
   `scripts/update-card-data.ps1 -Mode Refresh` from the root and inspect the generated diff.
   Regeneration from existing local inputs is part of authorized card implementation and needs
@@ -62,6 +73,11 @@ requirements; this skill routes the work rather than replacing them.
   Final card verification uses the read-only Check mode through
   `scripts/verify.ps1 -Side Rust -CardData` or `-Side Both -CardData`.
   Do not silently refresh external sources or accept unrelated generated churn.
+- Select shared blockers by verified complete-card unlocks, not unsupported-clause frequency.
+  Assign a blocker only when its deliverable is the last remaining reviewed requirement for named
+  identities, verify its runtime/protocol/UI impact first, keep one owner for the mechanism, and
+  return the unlocked identities to a single routine owner. Do not implement unrelated blockers
+  to grow a batch, and never count a blocker-only mapping as implemented coverage.
 - For a reported UI defect, use the
   [game guide](../../../cockatrice/src/game/AGENTS.md) to trace the engine offer through physical
   identity into the actual click/render path. Reuse the existing two-client launcher and logged

@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "00e94b75-ad31-4e1f-b3be-eed7cd3e4d76",
+  "spans": [
+    {
+      "face_id": "stand_up_for_yourself",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter.power",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen/power"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_452_direct_ron::issue_452_stand_up_for_yourself_destroys_only_power_three_or_greater",
+      "covers": "power-three target is destroyed after accepted cast and bounded resolution; power-two and player targets are rejected at cast time"
+    },
+    {
+      "test": "scenario issue_452_direct_ron::issue_452_stand_up_for_yourself_fizzles_after_an_illegal_target_on_resolution",
+      "covers": "CR 608.2b target revalidation: a target that leaves before resolution leaves the board untouched"
+    },
+    {
+      "test": "scenario issue_452_direct_ron::issue_452_stand_up_for_yourself_fizzles_when_power_drops_below_the_bound",
+      "covers": "CR 608.2b rechecks current characteristics: a surviving target reduced below power three is illegal and the spell resolves with no effect"
+    },
+    {
+      "test": "issue_452_direct_ron::issue_452_direct_ron_registers_both_reviewed_handwritten_cards",
+      "covers": "reviewed identity, mana cost, type, colors, targeting group, and typed Destroy payload"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

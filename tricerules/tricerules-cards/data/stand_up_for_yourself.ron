@@ -1,0 +1,16 @@
+(
+  id: "stand_up_for_yourself",
+  name: "Stand Up for Yourself",
+  face_id: "stand_up_for_yourself",
+  mana_cost: "{2}{W}",
+  types: ["Instant"],
+  spell_effect: [Destroy(subject: Chosen((kind: Creature, power: AtLeast(3))))],
+  targeting: Some((
+    groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature with power 3 or greater",
+      effect_indices: [0],
+    )],
+  )),
+)

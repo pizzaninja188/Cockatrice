@@ -475,6 +475,7 @@ colossodon_yearling	0	cast	exercised
 combustion_technique	0	cast	exercised
 command_bridge	0	ability:0	exercised
 command_bridge	0	land	exercised
+command_the_storm	0	cast	exercised
 commercial_district	0	land	exercised
 common_crook	0	cast	exercised
 commune_with_nature	0	cast	exercised
@@ -482,6 +483,7 @@ compassionate_healer	0	cast	exercised
 concealed_courtyard	0	ability:0	exercised
 concealed_courtyard	0	land	exercised
 concentrate	0	cast	exercised
+concentrated_fire	0	cast	exercised
 concordia_pegasus	0	cast	exercised
 conductive_machete	0	ability:0	exercised
 conductive_machete	0	cast	exercised
@@ -640,6 +642,7 @@ dimension_x	0	ability:0	exercised
 dimension_x	0	land	exercised
 dimir_guildgate	0	ability:0	exercised
 dimir_guildgate	0	land	exercised
+direct_hit	0	cast	exercised
 diregraf_ghoul	0	cast	exercised
 diresight	0	cast	exercised
 dirgur_island_dragon_skimming_strike	0	cast	exercised
@@ -746,6 +749,7 @@ encroaching_dragonstorm	0	cast	exercised
 endless_one	0	cast	exercised
 enduring_curiosity	0	cast	exercised
 enforcer_griffin	0	cast	exercised
+engulfing_eruption	0	cast	exercised
 enormous_baloth	0	cast	exercised
 enter_the_enigma	0	cast	exercised
 enterprising_scallywag	0	cast	exercised
@@ -1748,6 +1752,7 @@ ooze_spill	0	cast	unsupported: target group 0 needs a richer fixture
 opt	0	cast	exercised
 opulent_palace	0	ability:0	exercised
 opulent_palace	0	land	exercised
+oracles_restoration	0	cast	exercised
 orazca_frillback	0	cast	exercised
 orazca_raptor	0	cast	exercised
 orb_of_dreams	0	cast	exercised
@@ -1895,6 +1900,7 @@ quilled_slagwurm	0	cast	exercised
 qutrub_forayer	0	cast	exercised
 rabid_bite	0	cast	exercised
 radiant_strike	0	cast	exercised
+ragefire	0	cast	exercised
 ragged_playmate	0	ability:0	exercised
 ragged_playmate	0	cast	exercised
 raging_bull	0	cast	exercised
@@ -1960,6 +1966,7 @@ relic_sloth	0	cast	exercised
 reluctant_dounguard	0	cast	exercised
 renegade_demon	0	cast	exercised
 renegade_troops	0	cast	exercised
+repulsor_rays	0	cast	exercised
 reputable_merchant	0	cast	exercised
 requiting_hex	0	cast	exercised
 reroute_systems	0	cast	exercised
@@ -2105,6 +2112,7 @@ scholar_of_stars	0	cast	exercised
 scion_of_ugin	0	cast	exercised
 scorch_spitter	0	cast	exercised
 scorching_dragonfire	0	cast	exercised
+scorching_shot	0	cast	exercised
 scoria_elemental	0	cast	exercised
 scorpions_sting	0	cast	exercised
 scour_for_scrap	0	cast	exercised
@@ -2329,6 +2337,7 @@ staggering_size	0	cast	exercised
 stall_out	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 stall_out	0	cast	exercised
 stampeding_rhino	0	cast	exercised
+stand_up_for_yourself	0	cast	unsupported: target group 0 needs a richer fixture
 standing_troops	0	cast	exercised
 star_charter	0	cast	exercised
 starbreach_whale	0	cast	exercised

@@ -548,3 +548,7 @@ mod issue_426_one_mode_modal;
 mod issue_427_firebending;
 #[path = "scenario/issue_428_choose_two.rs"]
 mod issue_428_choose_two;
+#[path = "scenario/issue_452_direct_ron.rs"]
+mod issue_452_direct_ron;
+#[path = "scenario/issue_452_fixed_damage_family.rs"]
+mod issue_452_fixed_damage_family;

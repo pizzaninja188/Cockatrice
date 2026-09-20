@@ -865,11 +865,14 @@ fn fixed_source_creature_damage(amount: u32) -> SpellEffectKind {
     }
 }
 
-/// Reviewed numeric parameters, not a parser for arbitrary Oracle integers.
+/// Reviewed numeric parameters, not a parser for arbitrary Oracle integers. Issue #452 extended
+/// the reviewed spell-surface values with Three and Five after the pinned corpus and complete-card
+/// preflight; every value still needs its own catalog instance.
 #[derive(Clone, Copy)]
 enum FixedDamageAmount {
     Three = 3,
     Four = 4,
+    Five = 5,
 }
 
 #[derive(Clone, Copy)]
@@ -880,8 +883,9 @@ enum FixedDamageSurface {
 
 /// One private typed family owns the complete source-name/creature-target grammar.
 /// Catalog instances retain their historical IDs, labels and calibration metadata. Only
-/// (Spell, Four), (ModalMode, Three), and (ModalMode, Four) are admitted in this pilot;
-/// recognizing a bullet never bypasses the separate complete modal-assembly allowlist.
+/// (Spell, Four), (ModalMode, Three), and (ModalMode, Four) were admitted in the #449 structural
+/// pilot; #452 adds (Spell, Three) and (Spell, Five) for their complete corpus cards. Recognizing a
+/// bullet never bypasses the separate complete modal-assembly allowlist.
 struct FixedSourceCreatureDamage {
     amount: FixedDamageAmount,
     surface: FixedDamageSurface,
@@ -17258,10 +17262,44 @@ pub(super) static CATALOG: &[Recipe] = &[
         calibration: calibrations!(
             "Bombard" => "Bombard deals 4 damage to target creature.",
             "Bathe in Dragonfire" => "Bathe in Dragonfire deals 4 damage to target creature.";
-            "Bombard deals 3 damage to target creature.",
+            "Bombard deals 2 damage to target creature.",
             "Bombard deals 4 damage to any target.",
             "It deals 4 damage to target creature.",
             "Bombard deals 4 damage to target creature and 1 damage to its controller."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.damage.creature.fixed_three.source"),
+        label: "source deals three damage to target creature",
+        surface: RecipeSurface::SpellClause,
+        matcher: |text, context| FixedSourceCreatureDamage {
+            amount: FixedDamageAmount::Three,
+            surface: FixedDamageSurface::Spell,
+        }.recognize(text, context),
+        calibration: calibrations!(
+            "Ragefire" => "Ragefire deals 3 damage to target creature.",
+            "Repulsor Rays" => "Repulsor Rays deals 3 damage to target creature.";
+            "Ragefire deals 2 damage to target creature.",
+            "It deals 3 damage to target creature.",
+            "Ragefire deals 3 damage to target creature or planeswalker.",
+            "Ragefire deals 3 damage to target creature. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.damage.creature.fixed_five.source"),
+        label: "source deals five damage to target creature",
+        surface: RecipeSurface::SpellClause,
+        matcher: |text, context| FixedSourceCreatureDamage {
+            amount: FixedDamageAmount::Five,
+            surface: FixedDamageSurface::Spell,
+        }.recognize(text, context),
+        calibration: calibrations!(
+            "Scorching Shot" => "Scorching Shot deals 5 damage to target creature.",
+            "Command the Storm" => "Command the Storm deals 5 damage to target creature.";
+            "Scorching Shot deals 6 damage to target creature.",
+            "Scorching Shot deals 5 damage to target player.",
+            "Scorching Shot deals 5 damage to target creature or planeswalker.",
+            "Scorching Shot deals 5 damage to target creature. Draw a card."
         ),
     },
     Recipe {
@@ -26017,6 +26055,20 @@ mod tests {
                 "source deals four damage to target creature",
             ),
             (
+                "Ragefire",
+                3,
+                RecipeSurface::SpellClause,
+                "spell.damage.creature.fixed_three.source",
+                "source deals three damage to target creature",
+            ),
+            (
+                "Scorching Shot",
+                5,
+                RecipeSurface::SpellClause,
+                "spell.damage.creature.fixed_five.source",
+                "source deals five damage to target creature",
+            ),
+            (
                 "Iroh's Demonstration",
                 4,
                 RecipeSurface::ModalMode,
@@ -26101,32 +26153,60 @@ mod tests {
                     recipe.surface == surface
                         && matches!(
                             recipe.id.as_str(),
-                            "spell.damage.creature.fixed_four.source"
+                            "spell.damage.creature.fixed_three.source"
+                                | "spell.damage.creature.fixed_four.source"
+                                | "spell.damage.creature.fixed_five.source"
                                 | "modal_mode.damage.creature.three.source"
                                 | "modal_mode.damage.creature.four.source"
                         )
                 })
                 .all(|recipe| (recipe.matcher)(text, &context).is_none())
         };
-        for surface in [RecipeSurface::SpellClause, RecipeSurface::ModalMode] {
-            for amount in [
-                "0",
-                "1",
-                "2",
-                "5",
-                "6",
-                "7",
-                "13",
-                "4294967296",
-                "99999999999999999999999999999",
-                "-4",
-                "+4",
-                "04",
-                "4.0",
-                "X",
-                "four",
-                "４",
-            ] {
+        // Each surface rejects exactly the amounts and surfaces without a reviewed instance.
+        for (surface, amounts) in [
+            (
+                RecipeSurface::SpellClause,
+                &[
+                    "0",
+                    "1",
+                    "2",
+                    "6",
+                    "7",
+                    "13",
+                    "4294967296",
+                    "99999999999999999999999999999",
+                    "-4",
+                    "+4",
+                    "04",
+                    "4.0",
+                    "X",
+                    "four",
+                    "４",
+                ][..],
+            ),
+            (
+                RecipeSurface::ModalMode,
+                &[
+                    "0",
+                    "1",
+                    "2",
+                    "5",
+                    "6",
+                    "7",
+                    "13",
+                    "4294967296",
+                    "99999999999999999999999999999",
+                    "-4",
+                    "+4",
+                    "04",
+                    "4.0",
+                    "X",
+                    "four",
+                    "４",
+                ][..],
+            ),
+        ] {
+            for amount in amounts {
                 let text = format!("Bombard deals {amount} damage to target creature.");
                 assert!(rejects_family(&text, surface), "{surface:?}: {text}");
             }
@@ -26155,10 +26235,30 @@ mod tests {
                 assert!(rejects_family(text, surface), "{surface:?}: {text}");
             }
         }
+        // Amounts without a reviewed instance still fail the full exact-one catalog, and every
+        // admitted amount resolves to exactly its own instance rather than an ambiguity.
         assert!(
-            match_clause("Bombard deals 3 damage to target creature.", true, &context)
+            match_clause("Bombard deals 2 damage to target creature.", true, &context)
                 .unwrap()
                 .is_none()
+        );
+        assert!(
+            match_clause("Bombard deals 6 damage to target creature.", true, &context)
+                .unwrap()
+                .is_none()
+        );
+        context.source_name = "Ragefire".into();
+        assert_eq!(
+            match_clause(
+                "Ragefire deals 3 damage to target creature.",
+                true,
+                &context
+            )
+            .unwrap()
+            .expect("reviewed spell-three instance")
+            .id
+            .as_str(),
+            "spell.damage.creature.fixed_three.source"
         );
         context.source_name = "Cut".into();
         assert!(
