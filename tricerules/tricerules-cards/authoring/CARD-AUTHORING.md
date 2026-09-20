@@ -650,6 +650,63 @@ visibility flows or public offers are introduced. Protobuf, relay, Qt, freeform 
 acceptance are N/A because their contracts and generated inputs are unchanged. Generator tests,
 feature-enabled Clippy, conformance and the full Rust/card-data gate remain required.
 
+### Independent modal composition pilot
+
+Issue #450 keeps `RecipeSurface`, `RecipeEmission`, and the spell/trigger wrappers as distinct
+authoring contexts, but shares private typed construction for controller draw, fixed life gain,
+and controller token creation. `IndependentModalComposition` validates the already-emitted
+`ModalDef`/`ModeDef` values rather than introducing another runtime IR. Its contract requires:
+
+- one contiguous half-open Oracle-line span per bullet, in printed order, with stable sequential
+  mode IDs and an exact presentation line;
+- valid selection bounds and at least two distinct exact mode recipes;
+- a successfully compiled existing `TargetSchema`, with no target groups or linked cast cost for
+  this pilot;
+- only controller `Draw(Fixed(1..=4))`, `GainLife(Fixed(2..=6))`, or controller
+  `CreateTokens(Fixed(n))` effects, in their emitted order; and
+- every referenced token ID to exist in the embedded token registry.
+
+The reviewed initial clause signatures are the existing one-card draw, Food/Human token modes and
+exact registered-token mode recipes, plus standalone controller draws of two through four cards
+and standalone controller life gains of two through six. This is not an amount/surface
+cross-product: each clause still needs one exact `ModalMode` recipe, and complete-card admission
+still validates the whole header, every bullet and every nested payload. Conditional or shared
+targets, result references, variable/budgeted or repeatable selection, additional costs (including
+Teamwork and Spree), targeted-player effects, unsupported riders, duplicate modes and unknown
+tokens remain rejected.
+
+Ordinary `Choose one`, two-bullet `Choose one or both`, and reviewed three/four-bullet `Choose
+two` assemblies, plus the exact creature-ETB wrapper, may use the pilot. Teamwork and every other
+wrapper stay on their specialized path. Pilot admission and `reviewed_modal_mode_pair` are an
+exclusive-or: overlap fails closed. The complete pinned-corpus comparison retained identical
+eligibility, failure and production recipe-label classifications for all **38,626** identities
+and all **4,887** pinned-Standard identities. It added diagnostic observations to **43** identities,
+including six pinned-Standard identities (Demonic Pact, Splatter Technique, Apothecary Stomper,
+Charming Prince, Witherbloom Charm and Wardens of the Cycle), but admitted **zero** new identities.
+Exhibition Magician and A-Exhibition Magician are explicit missing-token candidates: their exact
+Citizen bullet is observed, but `citizen_gw_1_1` is not registered, so both remain ineligible.
+
+No legacy mode-set allowance was replaced because no currently allowed aggregate consists wholly
+of the pilot effect set. Every existing `reviewed_modal_mode_pair` entry remains the compatibility
+boundary for its prior composition; the new validator only owns disjoint, independently supported
+combinations. Synthetic spell and creature-ETB tests prove a new combination needs no bespoke
+whole-card pair matcher, while registered Divination, Elvish Visionary and Pawpatch Formation
+tests preserve their exact effects, recipients, trigger/modal wrapper, stable IDs and Oracle
+presentation mappings.
+
+Source review on 2026-09-19 fetched exact Scryfall records and each `rulings_uri` for Divination,
+Elvish Visionary, Pawpatch Formation, Exhibition Magician and A-Exhibition Magician. Only Pawpatch
+returned rulings, whose Food notes were reviewed. The official 2026-06-19 Comprehensive Rules
+govern through CR 700.2a-b/d (modal selection and nonrepeatability), 608.2c (printed resolution
+order), 121.1-2 (draws), 603.6a (entry triggers), and 111.10a-b (Treasure and Food definitions).
+
+Interaction audit: tricerules remains the sole runtime authority; the generator only validates
+and emits existing typed effects. Card/face/ability/mode identities and source/controller roles are
+preserved. No zone-change identity, timing, target, replacement, visibility, protocol, relay, Qt,
+or freeform contract changes. C++ and manual GUI acceptance are N/A. Generator tests,
+feature-enabled Clippy, semantic fixture/registered-card regressions and the full Rust/card-data
+gate remain required.
+
 ### Scaffold source-backed authoring
 
 For complete-card dependencies and projected individual/pair unlocks, use the separate

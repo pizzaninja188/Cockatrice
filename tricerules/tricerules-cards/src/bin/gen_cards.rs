@@ -672,6 +672,104 @@ enum RulesParseError {
     Ambiguous(RecipeAmbiguity),
 }
 
+/// One half-open, one-based Oracle-line span owned by a modal assembly fragment. This stays
+/// private to generation: runtime continues to consume the existing `ModalDef`/`ModeDef` types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ModalSourceSpan {
+    start_line: u16,
+    end_line: u16,
+}
+
+type AssembledModalModes = (Vec<ModeDef>, Vec<RecipeId>, Vec<ModalSourceSpan>);
+
+/// Private validation view over the existing typed modal definition. It records only the source
+/// ownership and wrapper requirements that `ModalDef` deliberately does not carry at runtime.
+struct IndependentModalComposition<'a> {
+    modes: &'a [ModeDef],
+    recipe_ids: &'a [RecipeId],
+    source_spans: &'a [ModalSourceSpan],
+    aggregate_span: ModalSourceSpan,
+    min_modes: u32,
+    max_modes: u32,
+}
+
+fn mode_has_only_independent_controller_effects(mode: &ModeDef) -> bool {
+    let Ok(schema) = TargetSchema::compile(&mode.effects, mode.targeting.as_ref()) else {
+        return false;
+    };
+    if !schema.groups.is_empty() || mode.linked_cast_cost.is_some() || mode.effects.is_empty() {
+        return false;
+    }
+    mode.effects.iter().all(|effect| match effect {
+        SpellEffectKind::Draw {
+            who: PlayerRecipient::Controller,
+            count: Amount::Fixed(count),
+        } => (1..=4).contains(count),
+        SpellEffectKind::GainLife {
+            amount: Amount::Fixed(amount),
+        } => (2..=6).contains(amount),
+        SpellEffectKind::CreateTokens {
+            token,
+            count: Amount::Fixed(count),
+            who: PlayerRecipient::Controller,
+            tapped: false,
+            sacrifice_timing: None,
+        } => *count > 0 && CardRegistry::global().is_token(token),
+        _ => false,
+    })
+}
+
+/// Issue #450's deliberately narrow behavior-changing pilot. Every bullet owns exactly one source
+/// line, every nested payload is validated through the existing target schema, and only
+/// source-independent controller draw/life/token effects can bypass the legacy exact mode-set
+/// allowlist. Printed effect order remains the `ModeDef.effects` order.
+fn independently_composable_modal(contract: &IndependentModalComposition<'_>) -> bool {
+    let mode_count = contract.modes.len();
+    if mode_count < 2
+        || contract.recipe_ids.len() != mode_count
+        || contract
+            .recipe_ids
+            .iter()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len()
+            != mode_count
+        || contract.source_spans.len() != mode_count
+        || contract.min_modes == 0
+        || contract.min_modes > contract.max_modes
+        || contract.max_modes as usize > mode_count
+        || contract.aggregate_span.start_line >= contract.aggregate_span.end_line
+    {
+        return false;
+    }
+
+    let mut next_line = match contract.aggregate_span.start_line.checked_add(1) {
+        Some(line) => line,
+        None => return false,
+    };
+    for (index, (mode, span)) in contract.modes.iter().zip(contract.source_spans).enumerate() {
+        let expected_id = format!("mode_{:02}", index + 1);
+        if mode.mode_id.as_str() != expected_id
+            || span.start_line != next_line
+            || span.end_line != span.start_line.checked_add(1).unwrap_or(0)
+            || mode.presentation != AbilityPresentation::OracleLines(vec![span.start_line])
+            || !mode_has_only_independent_controller_effects(mode)
+        {
+            return false;
+        }
+        next_line = span.end_line;
+    }
+    next_line == contract.aggregate_span.end_line
+}
+
+fn reviewed_modal_composition(contract: &IndependentModalComposition<'_>) -> bool {
+    let independent = independently_composable_modal(contract);
+    let legacy =
+        reviewed_modal_mode_pair(contract.recipe_ids, contract.min_modes, contract.max_modes);
+    // The two admission owners must stay disjoint. An overlap is a catalog bug, not permission to
+    // accept the card through whichever path happened to run first.
+    independent ^ legacy
+}
+
 /// Match every printed bullet from an exact modal aggregate against its own `ModalMode` recipe
 /// and build the stable per-mode definitions. `first_line_number` is the one-based Oracle line of
 /// `mode_lines[0]`, so the caller owns whether the aggregate started at line 1 or later.
@@ -684,9 +782,10 @@ fn assemble_modal_modes(
     first_line_number: u16,
     base_context: &RecipeContext,
     recipe_labels: &mut Vec<&'static str>,
-) -> Result<(Vec<ModeDef>, Vec<RecipeId>), RulesParseError> {
+) -> Result<AssembledModalModes, RulesParseError> {
     let mut modes = Vec::with_capacity(mode_lines.len());
     let mut mode_recipe_ids = Vec::with_capacity(mode_lines.len());
+    let mut source_spans = Vec::with_capacity(mode_lines.len());
     for (mode_index, external_line) in mode_lines.iter().enumerate() {
         let line_offset = u16::try_from(mode_index).map_err(|_| RulesParseError::Unsupported)?;
         let line_number = first_line_number
@@ -727,9 +826,15 @@ fn assemble_modal_modes(
             effects: emission.effects,
             targeting: emission.targeting,
         });
+        source_spans.push(ModalSourceSpan {
+            start_line: line_number,
+            end_line: line_number
+                .checked_add(1)
+                .ok_or(RulesParseError::Unsupported)?,
+        });
         recipe_labels.push(matched.label);
     }
-    Ok((modes, mode_recipe_ids))
+    Ok((modes, mode_recipe_ids, source_spans))
 }
 
 /// Build the exact Teamwork cast-cost group and mode set for one reviewed modal aggregate.
@@ -829,17 +934,25 @@ fn parse_rules_text(
                 return Err(RulesParseError::Unsupported);
             };
             parsed.recipe_labels.push(assembly.label);
-            let (modes, mode_recipe_ids) = assemble_modal_modes(
+            let (modes, mode_recipe_ids, source_spans) = assemble_modal_modes(
                 &external_lines[1..],
                 2,
                 &base_context,
                 &mut parsed.recipe_labels,
             )?;
-            if !reviewed_modal_mode_pair(
-                &mode_recipe_ids,
-                assembly_emission.min_modes,
-                assembly_emission.max_modes,
-            ) {
+            let end_line = u16::try_from(external_lines.len() + 1)
+                .map_err(|_| RulesParseError::Unsupported)?;
+            if !reviewed_modal_composition(&IndependentModalComposition {
+                modes: &modes,
+                recipe_ids: &mode_recipe_ids,
+                source_spans: &source_spans,
+                aggregate_span: ModalSourceSpan {
+                    start_line: 1,
+                    end_line,
+                },
+                min_modes: assembly_emission.min_modes,
+                max_modes: assembly_emission.max_modes,
+            }) {
                 return Err(RulesParseError::Unsupported);
             }
             parsed.modal_spell = Some(ModalDef {
@@ -860,7 +973,7 @@ fn parse_rules_text(
                 teamwork_cast_cost_group(assembly_emission.teamwork_power)?;
             parsed.cast_cost_groups.push(group);
             parsed.recipe_labels.push(assembly.label);
-            let (modes, mode_recipe_ids) = assemble_modal_modes(
+            let (modes, mode_recipe_ids, _) = assemble_modal_modes(
                 &external_lines[2..],
                 3,
                 &base_context,
@@ -1046,17 +1159,29 @@ fn parse_rules_text(
                         .collect::<Vec<_>>();
                     let first_bullet_line = u16::try_from(raw_line_index + 2)
                         .map_err(|_| RulesParseError::Unsupported)?;
-                    let (modes, mode_recipe_ids) = assemble_modal_modes(
+                    let (modes, mode_recipe_ids, source_spans) = assemble_modal_modes(
                         &bullet_lines,
                         first_bullet_line,
                         &context,
                         &mut parsed.recipe_labels,
                     )?;
-                    if !reviewed_modal_mode_pair(
-                        &mode_recipe_ids,
-                        assembly_emission.min_modes,
-                        assembly_emission.max_modes,
-                    ) {
+                    let end_line = first_bullet_line
+                        .checked_add(
+                            u16::try_from(bullet_lines.len())
+                                .map_err(|_| RulesParseError::Unsupported)?,
+                        )
+                        .ok_or(RulesParseError::Unsupported)?;
+                    if !reviewed_modal_composition(&IndependentModalComposition {
+                        modes: &modes,
+                        recipe_ids: &mode_recipe_ids,
+                        source_spans: &source_spans,
+                        aggregate_span: ModalSourceSpan {
+                            start_line: line_index,
+                            end_line,
+                        },
+                        min_modes: assembly_emission.min_modes,
+                        max_modes: assembly_emission.max_modes,
+                    }) {
                         return Err(RulesParseError::Unsupported);
                     }
                     let bullet_count = u16::try_from(bullet_lines.len())
@@ -8614,7 +8739,7 @@ mod tests {
             "Destroy up to one target creature.",
             "Target creature gets +X/+X until end of turn.",
             "Draw two cards. You lose 2 life.",
-            "Choose one —\n• Draw two cards.\n• You gain 4 life.",
+            "Choose one —\n• Draw five cards.\n• You gain 4 life.",
         ] {
             let card = normal_card("Near Miss", "{2}{U}", "Sorcery", text, None);
             assert_eq!(
@@ -14511,5 +14636,266 @@ mod tests {
                 Err(other) => panic!("{name} skipped for an unexpected reason: {other:?}"),
             }
         }
+    }
+
+    #[test]
+    fn issue_450_independent_modal_effects_compose_without_a_card_pair_allowance() {
+        let spell = normal_card(
+            "Independent Modal Spell Probe",
+            "{1}{W}{U}",
+            "Sorcery",
+            "Choose one or both —\n• Draw two cards.\n• You gain 4 life.",
+            None,
+        );
+        let generated = evaluate_fresh(&spell)
+            .expect("reviewed independent spell modes should compose without an exact pair");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        let modal = raw.modal_spell.expect("probe should emit a modal spell");
+        assert_eq!((modal.min_modes, modal.max_modes), (1, 2));
+        assert_eq!(
+            modal
+                .modes
+                .iter()
+                .map(|mode| mode.effects.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                vec![SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(2),
+                }],
+                vec![SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(4),
+                }],
+            ]
+        );
+
+        let creature = normal_card(
+            "Independent Modal ETB Probe",
+            "{2}{G}",
+            "Creature — Elf",
+            "When this creature enters, choose one —\n• Create a 1/1 white Human creature token.\n• Create a Food token.",
+            Some(("2", "2")),
+        );
+        let generated = evaluate_fresh(&creature)
+            .expect("reviewed independent ETB modes should compose without an exact pair");
+        let raw = parse_generated(&generated.to_ron("fixture"));
+        let modal = raw.triggered_abilities[0]
+            .modal
+            .as_ref()
+            .expect("probe should emit a modal ETB trigger");
+        assert_eq!((modal.min_modes, modal.max_modes), (1, 1));
+        assert_eq!(modal.modes.len(), 2);
+    }
+
+    #[test]
+    fn issue_450_registered_draw_wrappers_keep_their_typed_payloads() {
+        let registry = CardRegistry::global();
+
+        let divination = registry
+            .get("divination")
+            .expect("Divination should stay registered")
+            .primary_face();
+        assert_eq!(
+            divination.spell_effect,
+            [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(2),
+            }]
+        );
+        assert!(divination.modal_spell.is_none());
+
+        let visionary = registry
+            .get("elvish_visionary")
+            .expect("Elvish Visionary should stay registered")
+            .primary_face();
+        let visionary_trigger = &visionary.triggered_abilities[0];
+        assert_eq!(visionary_trigger.ability_id.as_str(), "triggered_01");
+        assert_eq!(
+            visionary_trigger.presentation,
+            AbilityPresentation::OracleLines(vec![1])
+        );
+        assert_eq!(
+            visionary_trigger.effect,
+            [SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }]
+        );
+        assert_eq!(
+            visionary_trigger.trigger,
+            TriggerCondition::WhenSelfEntersBattlefield
+        );
+        assert!(visionary_trigger.modal.is_none());
+
+        let pawpatch = registry
+            .get("pawpatch_formation")
+            .expect("Pawpatch Formation should stay registered")
+            .primary_face();
+        let modal = pawpatch
+            .modal_spell
+            .as_ref()
+            .expect("Pawpatch Formation should stay modal");
+        assert_eq!((modal.min_modes, modal.max_modes), (1, 1));
+        assert_eq!(modal.modes[2].mode_id.as_str(), "mode_03");
+        assert_eq!(
+            modal.modes[2].presentation,
+            AbilityPresentation::OracleLines(vec![4])
+        );
+        assert_eq!(
+            modal.modes[2].effects,
+            [
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                },
+                SpellEffectKind::CreateTokens {
+                    token: "food".into(),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn issue_450_independent_modal_composition_rejects_every_pilot_exclusion() {
+        for (name, text) in [
+            (
+                "Duplicate Modes Probe",
+                "Choose one —\n• Draw two cards.\n• Draw two cards.",
+            ),
+            (
+                "Missing Token Probe",
+                "Choose one —\n• Create a 1/1 green and white Citizen creature token.\n• Create a Food token.",
+            ),
+            (
+                "Targeted Player Probe",
+                "Choose one —\n• Target player draws two cards.\n• You gain 4 life.",
+            ),
+            (
+                "Conditional Mode Probe",
+                "Choose one —\n• If you control a creature, draw two cards.\n• You gain 4 life.",
+            ),
+            (
+                "Shared Result Probe",
+                "Choose one —\n• Draw two cards.\n• You gain life equal to the number of cards drawn this way.",
+            ),
+            (
+                "Invalid Bounds Probe",
+                "Choose two —\n• Draw two cards.\n• You gain 4 life.",
+            ),
+            (
+                "Unconsumed Rider Probe",
+                "Choose one —\n• Draw two cards.\n• You gain 4 life.\nThen scry 1.",
+            ),
+            (
+                "Repeatable Modes Probe",
+                "Choose one. You may choose the same mode more than once.\n• Draw two cards.\n• You gain 4 life.",
+            ),
+        ] {
+            assert!(
+                evaluate_fresh(&normal_card(name, "{2}{U}", "Sorcery", text, None)).is_err(),
+                "{name} must remain outside the pilot"
+            );
+        }
+
+        let teamwork = "Teamwork 2 (As an additional cost to cast this spell, you may tap any number of creatures you control with total power 2 or more.)\nChoose one. If this spell was cast using teamwork, choose both instead.\n• Draw two cards.\n• You gain 4 life.";
+        assert!(
+            evaluate_fresh(&normal_card(
+                "Teamwork Probe",
+                "{2}{U}",
+                "Sorcery",
+                teamwork,
+                None,
+            ))
+            .is_err(),
+            "additional-cost wrappers must remain on the legacy reviewed path"
+        );
+
+        let wrong_recipient = ModeDef {
+            mode_id: ModeId::new("mode_01").unwrap(),
+            presentation: AbilityPresentation::OracleLines(vec![2]),
+            linked_cast_cost: None,
+            effects: vec![SpellEffectKind::Draw {
+                who: PlayerRecipient::AffectedPlayer,
+                count: Amount::Fixed(2),
+            }],
+            targeting: None,
+        };
+        assert!(!mode_has_only_independent_controller_effects(
+            &wrong_recipient
+        ));
+
+        let source_dependent = ModeDef {
+            mode_id: ModeId::new("mode_01").unwrap(),
+            presentation: AbilityPresentation::OracleLines(vec![2]),
+            linked_cast_cost: None,
+            effects: vec![SpellEffectKind::CreateTokens {
+                token: "food".into(),
+                count: Amount::Fixed(1),
+                who: PlayerRecipient::SourceController,
+                tapped: false,
+                sacrifice_timing: None,
+            }],
+            targeting: None,
+        };
+        assert!(!mode_has_only_independent_controller_effects(
+            &source_dependent
+        ));
+
+        let context = RecipeContext {
+            triggered_ability_id: AbilityId::new("triggered_01").unwrap(),
+            activated_ability_id: AbilityId::new("activated_01").unwrap(),
+            static_ability_id: AbilityId::new("static_01").unwrap(),
+            characteristic_ability_id: AbilityId::new("characteristic_01").unwrap(),
+            presentation: AbilityPresentation::OracleLines(vec![1]),
+            source_name: "Abrade".into(),
+            oracle_id: None,
+            source_is_permanent: false,
+            source_is_artifact: false,
+            source_is_spacecraft_or_planet: false,
+            source_is_land: false,
+            source_is_creature: false,
+            source_is_vehicle: false,
+            source_is_aura: false,
+            source_is_equipment: false,
+            source_is_enchantment: false,
+            source_is_instant: true,
+            source_is_sorcery: false,
+        };
+        let bullets = vec![
+            "• Abrade deals 3 damage to target creature.".to_string(),
+            "• Destroy target artifact.".to_string(),
+        ];
+        let (mut modes, recipe_ids, source_spans) =
+            assemble_modal_modes(&bullets, 2, &context, &mut Vec::new()).unwrap();
+        modes[0].effects = vec![SpellEffectKind::Draw {
+            who: PlayerRecipient::Controller,
+            count: Amount::Fixed(2),
+        }];
+        modes[0].targeting = None;
+        modes[1].effects = vec![SpellEffectKind::GainLife {
+            amount: Amount::Fixed(4),
+        }];
+        modes[1].targeting = None;
+        let overlap = IndependentModalComposition {
+            modes: &modes,
+            recipe_ids: &recipe_ids,
+            source_spans: &source_spans,
+            aggregate_span: ModalSourceSpan {
+                start_line: 1,
+                end_line: 4,
+            },
+            min_modes: 1,
+            max_modes: 1,
+        };
+        assert!(independently_composable_modal(&overlap));
+        assert!(reviewed_modal_mode_pair(&recipe_ids, 1, 1));
+        assert!(
+            !reviewed_modal_composition(&overlap),
+            "an overlap between independent and legacy admission must fail closed"
+        );
     }
 }

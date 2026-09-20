@@ -235,16 +235,36 @@ fn parse_count_word(value: &str) -> Option<u32> {
     }
 }
 
+fn controller_draw_effect(count: u32) -> SpellEffectKind {
+    SpellEffectKind::Draw {
+        who: PlayerRecipient::Controller,
+        count: Amount::Fixed(count),
+    }
+}
+
+fn fixed_life_gain_effect(amount: u32) -> SpellEffectKind {
+    SpellEffectKind::GainLife {
+        amount: Amount::Fixed(amount),
+    }
+}
+
+fn controller_token_effect(token: &str, count: u32) -> SpellEffectKind {
+    SpellEffectKind::CreateTokens {
+        token: token.into(),
+        count: Amount::Fixed(count),
+        who: PlayerRecipient::Controller,
+        tapped: false,
+        sacrifice_timing: None,
+    }
+}
+
 fn draw_effect(text: &str) -> Option<SpellEffectKind> {
     let count = text
         .strip_prefix("Draw ")?
         .strip_suffix('.')?
         .strip_suffix(" card")
         .or_else(|| text.strip_prefix("Draw ")?.strip_suffix(" cards."))?;
-    Some(SpellEffectKind::Draw {
-        who: PlayerRecipient::Controller,
-        count: Amount::Fixed(parse_count_word(count)?),
-    })
+    Some(controller_draw_effect(parse_count_word(count)?))
 }
 
 fn gain_life_effect(text: &str) -> Option<SpellEffectKind> {
@@ -253,9 +273,7 @@ fn gain_life_effect(text: &str) -> Option<SpellEffectKind> {
         .strip_suffix(" life.")?
         .parse()
         .ok()?;
-    Some(SpellEffectKind::GainLife {
-        amount: Amount::Fixed(amount),
-    })
+    Some(fixed_life_gain_effect(amount))
 }
 
 fn capitalize(value: &str) -> String {
@@ -2866,15 +2884,36 @@ fn match_modal_exile_graveyard_card_up_to_one_draw_one(
 /// Issue #412 / CR 121.1: the plain one-card draw bullet. Other counts, appended instructions,
 /// and other recipients stay unsupported.
 fn match_modal_draw_one(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
-    (text == "Draw a card.").then(|| {
-        modal_mode(
-            vec![SpellEffectKind::Draw {
-                who: PlayerRecipient::Controller,
-                count: Amount::Fixed(1),
-            }],
-            None,
-        )
-    })
+    (text == "Draw a card.").then(|| modal_mode(vec![controller_draw_effect(1)], None))
+}
+
+/// Issue #450: reviewed fixed controller-draw modal bodies beyond the existing one-card recipe.
+/// The pinned corpus supplies exact two-, three-, and four-card bullets. Other counts, recipients,
+/// variables, and riders remain outside this initial composition pilot.
+fn match_modal_draw_fixed(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    let effect = draw_effect(text)?;
+    let SpellEffectKind::Draw {
+        count: Amount::Fixed(count),
+        ..
+    } = effect
+    else {
+        return None;
+    };
+    matches!(count, 2..=4).then(|| modal_mode(vec![controller_draw_effect(count)], None))
+}
+
+/// Issue #450: reviewed fixed controller-life-gain modal bodies. These are the exact standalone
+/// amounts observed in the pinned corpus; zero, one, larger amounts, variables, drains, and riders
+/// remain unsupported by this pilot.
+fn match_modal_gain_life_fixed(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    let effect = gain_life_effect(text)?;
+    let SpellEffectKind::GainLife {
+        amount: Amount::Fixed(amount),
+    } = effect
+    else {
+        return None;
+    };
+    matches!(amount, 2..=6).then(|| modal_mode(vec![fixed_life_gain_effect(amount)], None))
 }
 
 /// Issue #412 / CR 111 / 121.1: `Draw a card. Create a Food token.` is one bullet with the
@@ -2884,17 +2923,8 @@ fn match_modal_draw_one_create_food(text: &str, _: &RecipeContext) -> Option<Rec
     (text == "Draw a card. Create a Food token.").then(|| {
         modal_mode(
             vec![
-                SpellEffectKind::Draw {
-                    who: PlayerRecipient::Controller,
-                    count: Amount::Fixed(1),
-                },
-                SpellEffectKind::CreateTokens {
-                    token: "food".into(),
-                    count: Amount::Fixed(1),
-                    who: PlayerRecipient::Controller,
-                    tapped: false,
-                    sacrifice_timing: None,
-                },
+                controller_draw_effect(1),
+                controller_token_effect("food", 1),
             ],
             None,
         )
@@ -3720,35 +3750,23 @@ fn match_modal_search_basic_land_tapped(text: &str, _: &RecipeContext) -> Option
 /// Issue #428 / CR 111.4: Return from the Wilds' plain Human token. The definition ships as
 /// `data/tokens/human_w_1_1.ron`; the printed Soldier token is a different identity.
 fn match_modal_create_human_token(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
-    (text == "Create a 1/1 white Human creature token.").then(|| {
-        modal_mode(
-            vec![SpellEffectKind::CreateTokens {
-                token: "human_w_1_1".into(),
-                count: Amount::Fixed(1),
-                who: PlayerRecipient::Controller,
-                tapped: false,
-                sacrifice_timing: None,
-            }],
-            None,
-        )
-    })
+    (text == "Create a 1/1 white Human creature token.")
+        .then(|| modal_mode(vec![controller_token_effect("human_w_1_1", 1)], None))
+}
+
+/// Issue #450 missing-token boundary. Exhibition Magician's exact Citizen body is recognized for
+/// dependency reporting, but the composition validator refuses it until that token identity is
+/// registered. Recognition alone must never make either printing generator-eligible.
+fn match_modal_create_citizen_token(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Create a 1/1 green and white Citizen creature token.")
+        .then(|| modal_mode(vec![controller_token_effect("citizen_gw_1_1", 1)], None))
 }
 
 /// Issue #428 / CR 111.10b: the predefined Food token. The printed bullet carries reminder text;
 /// the assembly strips it before matching this exact instruction.
 fn match_modal_create_food(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
-    (text == "Create a Food token.").then(|| {
-        modal_mode(
-            vec![SpellEffectKind::CreateTokens {
-                token: "food".into(),
-                count: Amount::Fixed(1),
-                who: PlayerRecipient::Controller,
-                tapped: false,
-                sacrifice_timing: None,
-            }],
-            None,
-        )
-    })
+    (text == "Create a Food token.")
+        .then(|| modal_mode(vec![controller_token_effect("food", 1)], None))
 }
 
 /// Issue #428 / CR 701.26 / 122.1d: tap the chosen creature and put one stun counter on that same
@@ -18208,10 +18226,43 @@ pub(super) static CATALOG: &[Recipe] = &[
         calibration: calibrations!(
             "Coliseum Behemoth" => "Draw a card.",
             "Silent Hallcreeper" => "Draw a card.";
-            "Draw two cards.",
+            "Draw five cards.",
             "Draw a card. You gain 1 life.",
             "Draw a card. Create a Treasure token.",
             "Each player draws a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.draw.fixed.controller"),
+        label: "draw a reviewed fixed number of cards mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_draw_fixed,
+        calibration: calibrations!(
+            "Soul Read" => "Draw two cards.",
+            "Read the Tides" => "Draw three cards.",
+            "Splatter Technique" => "Draw four cards.";
+            "Draw five cards.",
+            "Draw X cards.",
+            "You draw two cards.",
+            "Draw two cards and gain 1 life.",
+            "Draw two cards if you control a creature."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.gain_life.fixed.controller"),
+        label: "gain a reviewed fixed amount of life mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_gain_life_fixed,
+        calibration: calibrations!(
+            "Umezawa's Charm" => "You gain 2 life.",
+            "Light of Hope" => "You gain 4 life.",
+            "Dromar's Charm" => "You gain 5 life.",
+            "Recuperate" => "You gain 6 life.";
+            "You gain 1 life.",
+            "You gain 7 life.",
+            "Target player gains 4 life.",
+            "You gain 4 life and scry 2.",
+            "Each opponent loses 4 life and you gain 4 life."
         ),
     },
     Recipe {
@@ -18234,7 +18285,7 @@ pub(super) static CATALOG: &[Recipe] = &[
         matcher: match_modal_gain_life_three_surveil_three,
         calibration: singleton_calibrations!(
             "Fangkeeper's Familiar" => "You gain 3 life and surveil 3.";
-            "You gain 3 life.",
+            "You gain 7 life and surveil 3.",
             "You gain 2 life and surveil 3.",
             "You gain 3 life and surveil 2.",
             "You gain 3 life, then surveil 3.",
@@ -19094,6 +19145,20 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Create a 1/1 white Human creature token with lifelink.",
             "Create a 1/1 white Soldier creature token.",
             "Create a 1/1 green and white Kithkin creature token."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.create_token.citizen_gw_1_1.unregistered"),
+        label: "create an unregistered green-white Citizen token mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_create_citizen_token,
+        calibration: calibrations!(
+            "Exhibition Magician" => "Create a 1/1 green and white Citizen creature token.",
+            "A-Exhibition Magician" => "Create a 1/1 green and white Citizen creature token.";
+            "Create two 1/1 green and white Citizen creature tokens.",
+            "Create a tapped 1/1 green and white Citizen creature token.",
+            "Target player creates a 1/1 green and white Citizen creature token.",
+            "Create a 1/1 white Citizen creature token."
         ),
     },
     Recipe {
@@ -44058,7 +44123,7 @@ mod tests {
         }
 
         for clause in [
-            "Draw two cards.",
+            "Draw five cards.",
             "Draw a card. You gain 1 life.",
             "Draw a card. Create a Treasure token.",
             "Each player draws a card.",
@@ -44098,7 +44163,7 @@ mod tests {
         }
 
         for clause in [
-            "You gain 3 life.",
+            "You gain 7 life and surveil 3.",
             "You gain 2 life and surveil 3.",
             "You gain 3 life and surveil 2.",
             "You gain 3 life, then surveil 3.",
@@ -47308,8 +47373,9 @@ mod tests {
             format!("• {ISSUE_426_OVER_THE_EDGE_CLAUSE}"),
         ];
         let mut labels = Vec::new();
-        let (modes, recipe_ids) = crate::assemble_modal_modes(&bullets, 2, &context(), &mut labels)
-            .expect("Over the Edge bullets should assemble");
+        let (modes, recipe_ids, _) =
+            crate::assemble_modal_modes(&bullets, 2, &context(), &mut labels)
+                .expect("Over the Edge bullets should assemble");
         assert_eq!(
             recipe_ids,
             [
@@ -47337,7 +47403,7 @@ mod tests {
             "• Target opponent discards two cards.".to_string(),
         ];
         let mut labels = Vec::new();
-        let (modes, recipe_ids) =
+        let (modes, recipe_ids, _) =
             crate::assemble_modal_modes(&stripped, 2, &context(), &mut labels)
                 .expect("ordinary bullets should assemble");
         assert_eq!(
@@ -48394,7 +48460,7 @@ mod tests {
             format!("• {ISSUE_424_INVESTIGATIVE}"),
         ];
         let mut labels = Vec::new();
-        let (modes, recipe_ids) =
+        let (modes, recipe_ids, _) =
             crate::assemble_modal_modes(&ability_words, 2, &context(), &mut labels)
                 .expect("Daily Bugle Reporters bullets should assemble");
         assert_eq!(
@@ -48412,7 +48478,7 @@ mod tests {
             "• Scry 3. (Look at the top three cards of your library, then put any number of them on the bottom and the rest on top in any order.)".to_string(),
         ];
         let mut labels = Vec::new();
-        let (modes, recipe_ids) =
+        let (modes, recipe_ids, _) =
             crate::assemble_modal_modes(&scry_bullets, 2, &context(), &mut labels)
                 .expect("Oltec Archaeologists bullets should assemble");
         assert_eq!(
@@ -48437,7 +48503,7 @@ mod tests {
             format!("• {ISSUE_424_BUTCHER_MENACE}"),
         ];
         let mut labels = Vec::new();
-        let (modes, recipe_ids) =
+        let (modes, recipe_ids, _) =
             crate::assemble_modal_modes(&butcher_bullets, 2, &context(), &mut labels)
                 .expect("Lord Skitter's Butcher bullets should assemble");
         assert_eq!(
@@ -48929,7 +48995,7 @@ mod tests {
         let mut labels = Vec::new();
         let mut test_context = context();
         test_context.source_name = "Avengers Disassembled".into();
-        let (modes, recipe_ids) =
+        let (modes, recipe_ids, _) =
             crate::assemble_modal_modes(&bullets, 2, &test_context, &mut labels)
                 .expect("Avengers Disassembled bullets should assemble");
         assert_eq!(
