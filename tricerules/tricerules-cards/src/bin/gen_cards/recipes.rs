@@ -9178,6 +9178,83 @@ fn match_tap_for_multicolor_mana(text: &str, context: &RecipeContext) -> Option<
     }))
 }
 
+/// CR 605.1a / 602.5 / 400.7 / 603.6: one tap symbol produces one of a reviewed two-color pair,
+/// but only while the exact source generation entered this turn or its controller controls a
+/// basic land. The clause must be exactly
+/// `{T}: Add <c1> or <c2>. Activate only if this land entered this turn or if you control a basic land.`
+/// with the reviewed printed pairs `{B}/{R}`, `{G}/{W}`, `{R}/{G}`, and `{W}/{U}`. Same-color,
+/// colorless, reversed, hybrid, or non-single-symbol pairs, mana-cost prefixes, subset
+/// conditions, timing restrictions, a missing period, and riders stay unsupported, and the
+/// handwritten Hidden Lair `{U}/{B}` clause stays unclaimed.
+fn match_activated_tap_conditional_pair_mana(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    const CONDITION_SUFFIX: &str =
+        ". Activate only if this land entered this turn or if you control a basic land.";
+    const REVIEWED_PAIRS: &[(char, char)] = &[('B', 'R'), ('G', 'W'), ('R', 'G'), ('W', 'U')];
+    if !context.source_is_land {
+        return None;
+    }
+    let symbols = text
+        .strip_prefix("{T}: Add ")?
+        .strip_suffix(CONDITION_SUFFIX)?;
+    let (first, second) = symbols.split_once(" or ")?;
+    let color = |token: &str| -> Option<char> {
+        let inner = token.strip_prefix('{')?.strip_suffix('}')?;
+        let mut chars = inner.chars();
+        let color = chars.next()?;
+        chars.next().is_none().then_some(color)
+    };
+    let (first, second) = (color(first)?, color(second)?);
+    REVIEWED_PAIRS.contains(&(first, second)).then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![AbilityCost::Tap],
+            effect: vec![SpellEffectKind::ProduceMana {
+                options: vec![
+                    parse_mana_amount(first).expect("reviewed pair uses color symbols"),
+                    parse_mana_amount(second).expect("reviewed pair uses color symbols"),
+                ],
+                restriction: None,
+                conditional: None,
+            }],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: vec![GameCondition::AnyOf(vec![
+                GameCondition::PermanentsEnteredThisTurn {
+                    controllers: RelativePlayerSet::All,
+                    filter: PermanentEventFilter {
+                        source_only: true,
+                        ..PermanentEventFilter::default()
+                    },
+                    min: Some(1),
+                    max: None,
+                },
+                GameCondition::BattlefieldAggregate {
+                    filter: BattlefieldPermanentFilter {
+                        token: None,
+                        any_of: None,
+                        controllers: RelativePlayerSet::Controller,
+                        card_type: Some(CardTypeFilter::BasicLand),
+                        color: None,
+                        name: None,
+                        required_subtypes: Vec::new(),
+                        exclude_source: false,
+                    },
+                    aggregate: BattlefieldAggregate::Count,
+                    min: Some(1),
+                    max: None,
+                },
+            ])],
+            activation_limit: None,
+        })
+    })
+}
+
 fn match_sacrifice_to_naturalize(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (text == "{1}, Sacrifice this creature: Destroy target artifact or enchantment.").then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
@@ -20804,6 +20881,37 @@ pub(super) static CATALOG: &[Recipe] = &[
             "{T}: Add {G} or {U}. Spend this mana only to cast creature spells.",
             "{T}, Pay 1 life: Add {G} or {U}.",
             "{T}: Add {G}{U}."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.tap.conditional_pair_mana"),
+        label: "tap for a conditional dual-land color pair",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_tap_conditional_pair_mana,
+        // The four retained Standard identities are Dark Fortress, Gathering Place, Training
+        // Compound, and Gleaming Bastion. Hidden Lair's handwritten `{U}/{B}` clause is absent
+        // from the allowlist, and the unconditional pair line stays with
+        // `activated.mana.tap_two_or_three_colors`; both ownership boundaries are asserted
+        // directly on the matchers in the catalog tests instead of as catalog negatives.
+        calibration: calibrations!(
+            "Dark Fortress" => "{T}: Add {B} or {R}. Activate only if this land entered this turn or if you control a basic land.",
+            "Gathering Place" => "{T}: Add {G} or {W}. Activate only if this land entered this turn or if you control a basic land.",
+            "Training Compound" => "{T}: Add {R} or {G}. Activate only if this land entered this turn or if you control a basic land.",
+            "Gleaming Bastion" => "{T}: Add {W} or {U}. Activate only if this land entered this turn or if you control a basic land.";
+            // The handwritten `{U}/{B}` identity, same-color and colorless pairs, reversed and
+            // hybrid symbols, either subset condition alone, a timing restriction, a mana-cost
+            // prefix, a missing period, and an appended rider all stay unsupported.
+            "{T}: Add {U} or {B}. Activate only if this land entered this turn or if you control a basic land.",
+            "{T}: Add {B} or {B}. Activate only if this land entered this turn or if you control a basic land.",
+            "{T}: Add {C} or {R}. Activate only if this land entered this turn or if you control a basic land.",
+            "{T}: Add {R} or {B}. Activate only if this land entered this turn or if you control a basic land.",
+            "{T}: Add {W/U} or {B}. Activate only if this land entered this turn or if you control a basic land.",
+            "{T}: Add {B} or {R}. Activate only if this land entered this turn.",
+            "{T}: Add {B} or {R}. Activate only if you control a basic land.",
+            "{T}: Add {B} or {R}. Activate only as a sorcery.",
+            "{1}, {T}: Add {B} or {R}. Activate only if this land entered this turn or if you control a basic land.",
+            "{T}: Add {B} or {R}. Activate only if this land entered this turn or if you control a basic land",
+            "{T}: Add {B} or {R}. Activate only if this land entered this turn or if you control a basic land. Draw a card."
         ),
     },
     Recipe {
@@ -50298,5 +50406,180 @@ mod tests {
                 "{id} surface drifted"
             );
         }
+    }
+
+    /// The four retained Standard identities behind issue #456. Each prints `{T}: Add {C}.`
+    /// followed by the exact conditional pair clause with its reviewed printed color order.
+    const ISSUE_456_CONDITIONAL_PAIR_MANA_CLAUSES: [(&str, char, char); 4] = [
+        ("Dark Fortress", 'B', 'R'),
+        ("Gathering Place", 'G', 'W'),
+        ("Training Compound", 'R', 'G'),
+        ("Gleaming Bastion", 'W', 'U'),
+    ];
+
+    const ISSUE_456_CONDITIONAL_PAIR_MANA_SUFFIX: &str =
+        ". Activate only if this land entered this turn or if you control a basic land.";
+
+    fn issue_456_clause(first: char, second: char) -> String {
+        format!("{{T}}: Add {{{first}}} or {{{second}}}{ISSUE_456_CONDITIONAL_PAIR_MANA_SUFFIX}")
+    }
+
+    /// The exact Hidden Lair condition shape: either the source's own entry this turn or a
+    /// controller-controlled basic land.
+    fn issue_456_condition() -> GameCondition {
+        GameCondition::AnyOf(vec![
+            GameCondition::PermanentsEnteredThisTurn {
+                controllers: RelativePlayerSet::All,
+                filter: PermanentEventFilter {
+                    source_only: true,
+                    ..PermanentEventFilter::default()
+                },
+                min: Some(1),
+                max: None,
+            },
+            GameCondition::BattlefieldAggregate {
+                filter: BattlefieldPermanentFilter {
+                    token: None,
+                    any_of: None,
+                    controllers: RelativePlayerSet::Controller,
+                    card_type: Some(CardTypeFilter::BasicLand),
+                    color: None,
+                    name: None,
+                    required_subtypes: Vec::new(),
+                    exclude_source: false,
+                },
+                aggregate: BattlefieldAggregate::Count,
+                min: Some(1),
+                max: None,
+            },
+        ])
+    }
+
+    #[test]
+    fn issue_456_conditional_pair_mana_clauses_match_their_exact_recipe() {
+        for (name, first, second) in ISSUE_456_CONDITIONAL_PAIR_MANA_CLAUSES {
+            let clause = issue_456_clause(first, second);
+            let mut source = context();
+            source.source_name = name.into();
+            let matched = match_clause(&clause, false, &source)
+                .unwrap_or_else(|ambiguity| panic!("{name}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{name} must match activated.tap.conditional_pair_mana"));
+            assert_eq!(
+                matched.id.as_str(),
+                "activated.tap.conditional_pair_mana",
+                "{name}"
+            );
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("{name} must emit an activated ability");
+            };
+            assert_eq!(
+                ability.source_zone,
+                AbilitySourceZone::Battlefield,
+                "{name}"
+            );
+            assert_eq!(ability.costs, vec![AbilityCost::Tap], "{name}");
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::ProduceMana {
+                    options: vec![
+                        parse_mana_amount(first).expect("reviewed color symbol"),
+                        parse_mana_amount(second).expect("reviewed color symbol"),
+                    ],
+                    restriction: None,
+                    conditional: None,
+                }],
+                "{name}"
+            );
+            assert_eq!(ability.conditions, vec![issue_456_condition()], "{name}");
+            assert!(ability.cost_modifiers.is_empty(), "{name}");
+            assert!(ability.targeting.is_none(), "{name}");
+            assert_eq!(ability.timing, ActivationTiming::Normal, "{name}");
+            assert!(ability.activation_limit.is_none(), "{name}");
+        }
+    }
+
+    #[test]
+    fn issue_456_conditional_pair_mana_is_activated_only() {
+        let clause = issue_456_clause('B', 'R');
+        assert!(
+            match_clause(&clause, true, &context())
+                .expect("spell surface check must not be ambiguous")
+                .is_none(),
+            "the conditional pair ability is not a spell clause"
+        );
+    }
+
+    #[test]
+    fn issue_456_conditional_pair_mana_rejects_near_misses() {
+        for negative in [
+            // The handwritten Hidden Lair identity ({U}/{B}) stays unclaimed.
+            issue_456_clause('U', 'B'),
+            // Same-color and colorless pairs.
+            issue_456_clause('B', 'B'),
+            "{T}: Add {C} or {R}. Activate only if this land entered this turn or if you control a basic land.".to_string(),
+            // Reversed and unknown symbol pairs.
+            issue_456_clause('R', 'B'),
+            "{T}: Add {W/U} or {B}. Activate only if this land entered this turn or if you control a basic land.".to_string(),
+            // Subset conditions.
+            "{T}: Add {B} or {R}. Activate only if this land entered this turn.".to_string(),
+            "{T}: Add {B} or {R}. Activate only if you control a basic land.".to_string(),
+            // Timing restriction.
+            "{T}: Add {B} or {R}. Activate only as a sorcery.".to_string(),
+            // Mana-cost prefix.
+            "{1}, {T}: Add {B} or {R}. Activate only if this land entered this turn or if you control a basic land.".to_string(),
+            // Missing trailing period and an appended rider.
+            "{T}: Add {B} or {R}. Activate only if this land entered this turn or if you control a basic land".to_string(),
+            "{T}: Add {B} or {R}. Activate only if this land entered this turn or if you control a basic land. Draw a card.".to_string(),
+        ] {
+            assert!(
+                match_activated_tap_conditional_pair_mana(&negative, &context()).is_none(),
+                "the new family must reject {negative:?}"
+            );
+            issue_318_assert_unmatched(&negative, false);
+        }
+
+        let mut nonland = context();
+        nonland.source_is_land = false;
+        assert!(
+            match_clause(&issue_456_clause('B', 'R'), false, &nonland)
+                .expect("nonland source check must not be ambiguous")
+                .is_none(),
+            "the conditional pair ability is land-source-only"
+        );
+    }
+
+    #[test]
+    fn issue_456_shipped_unconditional_pair_mana_keeps_its_identity() {
+        for (first, second) in [('B', 'R'), ('G', 'W'), ('R', 'G'), ('W', 'U')] {
+            let clause = format!("{{T}}: Add {{{first}}} or {{{second}}}.");
+            let matched = match_clause(&clause, false, &context())
+                .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{clause} must stay consumed by the shipped recipe"));
+            assert_eq!(
+                matched.id.as_str(),
+                "activated.mana.tap_two_or_three_colors",
+                "{clause}"
+            );
+        }
+
+        let hidden_lair = issue_456_clause('U', 'B');
+        assert!(
+            match_clause(&hidden_lair, false, &context())
+                .expect("Hidden Lair clause check must not be ambiguous")
+                .is_none(),
+            "the handwritten Hidden Lair clause must remain unclaimed"
+        );
+        assert!(
+            match_activated_tap_conditional_pair_mana("{T}: Add {B} or {R}.", &context()).is_none(),
+            "the unconditional pair line is owned by the shipped multicolor recipe"
+        );
+    }
+
+    #[test]
+    fn issue_456_recipes_have_stable_ids_and_surfaces() {
+        assert_eq!(
+            issue_318_recipe("activated.tap.conditional_pair_mana").surface,
+            RecipeSurface::ActivatedAbility
+        );
     }
 }

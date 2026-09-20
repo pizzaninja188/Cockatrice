@@ -558,3 +558,5 @@ mod issue_453_newly_eligible_standard;
 mod issue_454_activated_surveil;
 #[path = "scenario/issue_455_etb_opponent_pump.rs"]
 mod issue_455_etb_opponent_pump;
+#[path = "scenario/issue_456_conditional_dual_lands.rs"]
+mod issue_456_conditional_dual_lands;

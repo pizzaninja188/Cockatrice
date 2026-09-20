@@ -589,6 +589,9 @@ dancing_scimitar	0	cast	exercised
 daring_thunder-thief	0	cast	exercised
 dark_deed	0	cast	exercised
 dark_endurance	0	cast	exercised
+dark_fortress	0	ability:0	exercised
+dark_fortress	0	ability:1	exercised
+dark_fortress	0	land	exercised
 dark_remedy	0	cast	exercised
 darkbore_pathway_slitherbore_pathway	0	ability:0	exercised
 darkbore_pathway_slitherbore_pathway	0	land	exercised
@@ -969,6 +972,9 @@ gangly_stompling	0	cast	exercised
 gargantuan_leech	0	cast	exercised
 garruks_companion	0	cast	exercised
 garruks_gorehorn	0	cast	exercised
+gathering_place	0	ability:0	exercised
+gathering_place	0	ability:1	exercised
+gathering_place	0	land	exercised
 gearbane_orangutan	0	cast	exercised
 gearsmith_guardian	0	cast	exercised
 gearsmith_prodigy	0	cast	exercised
@@ -1028,6 +1034,9 @@ glass_golem	0	cast	exercised
 glassworks_shattered_yard	0	cast	exercised
 glassworks_shattered_yard	1	cast	exercised
 gleaming_barrier	0	cast	exercised
+gleaming_bastion	0	ability:0	exercised
+gleaming_bastion	0	ability:1	exercised
+gleaming_bastion	0	land	exercised
 glidedive_duo	0	cast	exercised
 glider_kids	0	cast	exercised
 glimpse_the_core	0	cast	exercised
@@ -2653,6 +2662,9 @@ trade_route_envoy	0	cast	exercised
 trained_caracal	0	cast	exercised
 trained_jackal	0	cast	exercised
 trained_orgg	0	cast	exercised
+training_compound	0	ability:0	exercised
+training_compound	0	ability:1	exercised
+training_compound	0	land	exercised
 tranquil_cove	0	ability:0	exercised
 tranquil_cove	0	land	exercised
 tranquil_expanse	0	ability:0	exercised
