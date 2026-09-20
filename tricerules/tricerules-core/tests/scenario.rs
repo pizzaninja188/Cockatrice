@@ -560,3 +560,5 @@ mod issue_454_activated_surveil;
 mod issue_455_etb_opponent_pump;
 #[path = "scenario/issue_456_conditional_dual_lands.rs"]
 mod issue_456_conditional_dual_lands;
+#[path = "scenario/issue_457_power_up_exhaust.rs"]
+mod issue_457_power_up_exhaust;

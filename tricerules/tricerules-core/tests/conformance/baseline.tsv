@@ -322,6 +322,8 @@ branchloft_pathway_boulderloft_pathway	0	ability:0	exercised
 branchloft_pathway_boulderloft_pathway	0	land	exercised
 branchloft_pathway_boulderloft_pathway	1	ability:0	exercised
 branchloft_pathway_boulderloft_pathway	1	land	exercised
+brave_brawler	0	ability:0	exercised
+brave_brawler	0	cast	exercised
 brazen_scourge	0	cast	exercised
 breakneck_berserker	0	cast	exercised
 breeding_pool	0	ability:0	exercised
@@ -1915,6 +1917,8 @@ prophetic_prism	0	cast	exercised
 prosperity_tycoon	0	ability:0	unsupported: nonmana costs need additional fixture resources
 prosperity_tycoon	0	cast	exercised
 protective_response	0	cast	unsupported: target group 0 needs a richer fixture
+prowcatcher_specialist	0	ability:0	exercised
+prowcatcher_specialist	0	cast	exercised
 prowling_caracal	0	cast	exercised
 pulse_tracker	0	cast	exercised
 punk_frogs	0	cast	exercised
@@ -2197,6 +2201,8 @@ sentinels_of_glen_elendra	0	cast	exercised
 sephiroths_intervention	0	cast	exercised
 seraph_of_dawn	0	cast	exercised
 seraph_of_the_suns	0	cast	exercised
+serpent_specialist	0	ability:0	exercised
+serpent_specialist	0	cast	exercised
 serpents_pass	0	ability:0	exercised
 serpents_pass	0	ability:1	exercised
 serpents_pass	0	land	exercised
@@ -2298,6 +2304,8 @@ skyshroud_troopers	0	ability:0	exercised
 skyshroud_troopers	0	cast	exercised
 skysnare_spider	0	cast	exercised
 skyspear_cavalry	0	cast	exercised
+skystreak_engineer	0	ability:0	exercised
+skystreak_engineer	0	cast	exercised
 skyswirl_harrier	0	cast	exercised
 slash_panther	0	cast	exercised
 slavering_branchsnapper	0	ability:0	unsupported: ability not offered by generic battlefield fixture
@@ -2816,6 +2824,8 @@ volcanic_dragon	0	cast	exercised
 volcanic_island	0	ability:0	exercised
 volcanic_island	0	land	exercised
 volcanic_spite	0	cast	exercised
+volcanic_villain	0	ability:0	exercised
+volcanic_villain	0	cast	exercised
 volunteer_militia	0	cast	exercised
 voracious_varmint	0	ability:0	exercised
 voracious_varmint	0	cast	exercised

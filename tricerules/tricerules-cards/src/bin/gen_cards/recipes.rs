@@ -1,29 +1,29 @@
 use tricerules_cards::primitives::{
-    ActivationLimit, BasePowerToughnessValue, BattlefieldAggregate, BattlefieldCreatureCountFilter,
-    BattlefieldPermanentFilter, CardResultAction, CardResultFilter, CardResultSource,
-    CardSearchZone, CardTypeFilter, CombatRestriction, CombatRestrictionScope, CombatRole,
-    ConditionPlayerSet, CountExpression, CounterRemovalPaymentSource, CreatureScopeController,
-    CreatureScopeFilter, DelayedTokenSacrificeTiming, DiscardQuantity, DrawDiscardOrder,
-    EffectSubject, EntersTappedAffected, EntersWithCountersAffected, EntryCost, EventZone,
-    FaceChangeAction, GameCondition, GraveyardAggregate, GraveyardDestination, GraveyardFilter,
-    GraveyardOwner, HandCardAction, HandCardChooser, HandChoiceVisibility, LibraryPlacement,
-    LifeAmount, LifeChangeKind, ManaRetention, ObjectContributionKind, ObjectPaymentConstraint,
-    PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate, PlayerQuantifier,
-    PlayerRecipient, PowerComparison, PowerToughnessCharacteristic, PtScale, PtScaleBasis,
-    QuantityTerm, RelativePlayerSet, ResolutionBranchDef, ResolutionBranchRequirement,
-    ResolutionBranchSelection, ResolutionCost, ResolvingEffectDuration, ResolvingPermanentModifier,
-    SearchDestination, SearchZoneSelection, SpellCastFilter, SpellCostModifier,
-    SpellManaSpentComparison, StackSpellFilter, StaticAbilityDef, TargetController, TargetFilter,
-    TargetGroupDef, TargetKind, TargetMatchFilter, TargetObjectExclusion, TargetingDef,
-    TargetingSourceFilter, TokenCopySource, TypeLineAddition, ZoneCardFilter, ZoneEventCardinality,
-    ZoneEventDestination,
+    ActivatedCostModifier, ActivationLimit, BasePowerToughnessValue, BattlefieldAggregate,
+    BattlefieldCreatureCountFilter, BattlefieldPermanentFilter, CardResultAction, CardResultFilter,
+    CardResultSource, CardSearchZone, CardTypeFilter, CombatRestriction, CombatRestrictionScope,
+    CombatRole, ConditionPlayerSet, CountExpression, CounterRemovalPaymentSource,
+    CreatureScopeController, CreatureScopeFilter, DelayedTokenSacrificeTiming, DiscardQuantity,
+    DrawDiscardOrder, EffectSubject, EntersTappedAffected, EntersWithCountersAffected, EntryCost,
+    EventZone, FaceChangeAction, GameCondition, GraveyardAggregate, GraveyardDestination,
+    GraveyardFilter, GraveyardOwner, HandCardAction, HandCardChooser, HandChoiceVisibility,
+    LibraryPlacement, LifeAmount, LifeChangeKind, ManaRetention, ObjectContributionKind,
+    ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate,
+    PlayerQuantifier, PlayerRecipient, PowerComparison, PowerToughnessCharacteristic, PtScale,
+    PtScaleBasis, QuantityTerm, RelativePlayerSet, ResolutionBranchDef,
+    ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost,
+    ResolvingEffectDuration, ResolvingPermanentModifier, SearchDestination, SearchZoneSelection,
+    SpellCastFilter, SpellCostModifier, SpellManaSpentComparison, StackSpellFilter,
+    StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
+    TargetMatchFilter, TargetObjectExclusion, TargetingDef, TargetingSourceFilter, TokenCopySource,
+    TypeLineAddition, ZoneCardFilter, ZoneEventCardinality, ZoneEventDestination,
 };
 use tricerules_cards::{
     external_oracle_lines, AbilityCost, AbilityId, AbilityPresentation, AbilitySourceZone,
     ActivatedAbilityDef, ActivationTiming, Amount, BasicLandType, CastTriggerPlayer,
     CharacteristicDefiningAbility, ChoiceId, CounterKind, IdentifiedAbility, Keyword,
-    LibraryPartitionKind, ManaAmount, ManaCost, SpellCastOrigin, SpellEffectKind, TriggerCondition,
-    TriggeredAbilityDef,
+    LibraryPartitionKind, ManaAmount, ManaCost, ManaSymbol, SpellCastOrigin, SpellEffectKind,
+    TriggerCondition, TriggeredAbilityDef,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -11290,6 +11290,98 @@ fn match_activated_mana_put_counter_self(
         }],
         None,
     ))
+}
+
+/// CR 602.2b / 702.193 (Power-up) / 702.177 (Exhaust): one private recognizer for the Power-up
+/// and Exhaust `<Keyword> — {cost}: Put two +1/+1 counters on this creature.` template. Power-up
+/// additionally carries the source-mana-cost reduction conditioned on the exact source object
+/// entering this turn, matching the handwritten `ultron_drone.ron` (Power-up) and
+/// `rebellious_captives.ron` (Exhaust) anchors. The bare sentence without a keyword prefix,
+/// another keyword, a reordered (`{G}{3}`) or duplicated (`{3}{G}{G}`) symbol string, a
+/// generic-only (`{5}`) or `{X}` cost, a compound or non-mana cost, another counter count or
+/// recipient, a timing line, and appended riders stay unsupported, and the template stays bound
+/// to creature sources.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TwoCounterKeyword {
+    PowerUp,
+    Exhaust,
+}
+
+impl TwoCounterKeyword {
+    const fn printed_prefix(self) -> &'static str {
+        match self {
+            Self::PowerUp => "Power-up — ",
+            Self::Exhaust => "Exhaust — ",
+        }
+    }
+
+    fn cost_modifiers(self) -> Vec<ActivatedCostModifier> {
+        match self {
+            Self::PowerUp => vec![ActivatedCostModifier::ConditionalSourceManaCostReduction {
+                condition: GameCondition::PermanentsEnteredThisTurn {
+                    controllers: RelativePlayerSet::All,
+                    filter: PermanentEventFilter {
+                        source_only: true,
+                        ..PermanentEventFilter::default()
+                    },
+                    min: Some(1),
+                    max: None,
+                },
+            }],
+            Self::Exhaust => Vec::new(),
+        }
+    }
+}
+
+/// The reviewed printed family shape: one generic pip followed by one single-color pip
+/// (`{3}{G}`, `{4}{W}`, `{5}{R}`, `{3}{R}`, `{4}{U}`). Reordered, duplicated, generic-only,
+/// colorless, hybrid, Phyrexian, multi-generic, and `{X}` costs all fail closed.
+fn two_counter_printed_cost(text: &str) -> Option<ManaCost> {
+    let cost = exact_mana_cost(text)?;
+    let [ManaSymbol::Generic(_), ManaSymbol::W | ManaSymbol::U | ManaSymbol::B | ManaSymbol::R | ManaSymbol::G] =
+        cost.pips.as_slice()
+    else {
+        return None;
+    };
+    Some(cost)
+}
+
+fn match_two_counter_self_activation(
+    text: &str,
+    context: &RecipeContext,
+    keyword: TwoCounterKeyword,
+) -> Option<RecipeEmission> {
+    if !context.source_is_creature {
+        return None;
+    }
+    let cost = two_counter_printed_cost(
+        text.strip_prefix(keyword.printed_prefix())?
+            .strip_suffix(": Put two +1/+1 counters on this creature.")?,
+    )?;
+    Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        ability_id: context.activated_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        cost_modifiers: keyword.cost_modifiers(),
+        source_zone: AbilitySourceZone::Battlefield,
+        costs: vec![AbilityCost::Mana(cost)],
+        effect: vec![SpellEffectKind::PutCounters {
+            counter: CounterKind::PlusOnePlusOne,
+            count: Amount::Fixed(2),
+            subject: EffectSubject::Source,
+        }],
+        targeting: None,
+        timing: ActivationTiming::Normal,
+        conditions: Vec::new(),
+        activation_limit: Some(ActivationLimit::PerObject { max_activations: 1 }),
+    }))
+}
+
+fn match_power_up_two_counters(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    match_two_counter_self_activation(text, context, TwoCounterKeyword::PowerUp)
+}
+
+fn match_exhaust_two_counters(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    match_two_counter_self_activation(text, context, TwoCounterKeyword::Exhaust)
 }
 
 /// CR 603.2 / 202.3: a mandatory cast trigger using the shipped `WheneverPlayerCastsSpell`
@@ -23567,6 +23659,63 @@ pub(super) static CATALOG: &[Recipe] = &[
             "{3}{G}, {T}: Put a +1/+1 counter on this creature.",
             "{3}{G}: Put a +1/+1 counter on this creature. Activate only as a sorcery.",
             "{3}{G}, Sacrifice this creature: Put a +1/+1 counter on this creature."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.power_up.two_counters"),
+        label: "Power-up pay the printed mana cost to put two +1/+1 counters on this creature",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_power_up_two_counters,
+        // Serpent Specialist, Brave Brawler, and Volcanic Villain are the three reviewed
+        // Standard identities. The shared Power-up/Exhaust recognizer owns only the exact
+        // keyword-prefixed sentence with its one-generic-plus-one-color printed cost; the
+        // keyword-less sentence, another counter count or recipient, riders, reordered
+        // (`{G}{3}`) or duplicated (`{3}{G}{G}`) symbol strings, generic-only costs, and other
+        // keyword spellings stay unsupported.
+        calibration: calibrations!(
+            "Serpent Specialist" => "Power-up — {3}{G}: Put two +1/+1 counters on this creature.",
+            "Brave Brawler" => "Power-up — {4}{W}: Put two +1/+1 counters on this creature.",
+            "Volcanic Villain" => "Power-up — {5}{R}: Put two +1/+1 counters on this creature.";
+            // The bare sentence without a keyword prefix stays unclaimed, as do another counter
+            // count, a target recipient, an appended rider, reordered/duplicated/generic-only
+            // symbol strings, an `{X}` cost, and lowercase or joined keyword spellings.
+            "{3}{G}: Put two +1/+1 counters on this creature.",
+            "Power-up — {3}{G}: Put a +1/+1 counter on this creature.",
+            "Power-up — {3}{G}: Put two +1/+1 counters on target creature.",
+            "Power-up — {3}{G}: Put two +1/+1 counters on this creature. Draw a card.",
+            "Power-up — {3}{G}{G}: Put two +1/+1 counters on this creature.",
+            "Power-up — {G}{3}: Put two +1/+1 counters on this creature.",
+            "Power-up — {5}: Put two +1/+1 counters on this creature.",
+            "Power-up — {X}{G}: Put two +1/+1 counters on this creature.",
+            "power-up — {3}{G}: Put two +1/+1 counters on this creature.",
+            "Powerup — {3}{G}: Put two +1/+1 counters on this creature."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.exhaust.two_counters"),
+        label: "Exhaust pay the printed mana cost to put two +1/+1 counters on this creature",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_exhaust_two_counters,
+        // Prowcatcher Specialist and Skystreak Engineer are the two reviewed Standard
+        // identities. The emission matches the handwritten `rebellious_captives.ron` Exhaust
+        // anchor (counters plus a per-object once limit, no cost modifier). Afterburner Expert's
+        // `{2}{G}{G}` and Hog-Monkey's `{5}` clauses stay unclaimed, and the keyword-less
+        // sentence, another counter count or recipient, and riders stay unsupported.
+        calibration: calibrations!(
+            "Prowcatcher Specialist" => "Exhaust — {3}{R}: Put two +1/+1 counters on this creature.",
+            "Skystreak Engineer" => "Exhaust — {4}{U}: Put two +1/+1 counters on this creature.";
+            // The bare sentence stays unclaimed, as do another counter count, a target recipient,
+            // an appended rider, duplicated/reordered/generic-only symbol strings, an `{X}` cost,
+            // and lowercase keyword spellings.
+            "{3}{R}: Put two +1/+1 counters on this creature.",
+            "Exhaust — {3}{R}: Put a +1/+1 counter on this creature.",
+            "Exhaust — {3}{R}: Put two +1/+1 counters on target creature.",
+            "Exhaust — {3}{R}: Put two +1/+1 counters on this creature. It gains trample until end of turn.",
+            "Exhaust — {2}{G}{G}: Put two +1/+1 counters on this creature.",
+            "Exhaust — {R}{3}: Put two +1/+1 counters on this creature.",
+            "Exhaust — {5}: Put two +1/+1 counters on this creature.",
+            "Exhaust — {X}{R}: Put two +1/+1 counters on this creature.",
+            "exhaust — {3}{R}: Put two +1/+1 counters on this creature."
         ),
     },
     Recipe {
@@ -50581,5 +50730,205 @@ mod tests {
             issue_318_recipe("activated.tap.conditional_pair_mana").surface,
             RecipeSurface::ActivatedAbility
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #457 — the Power-up and Exhaust two-counter activation family.
+    //
+    // Each reviewed identity prints exactly
+    // `<Keyword> — {cost}: Put two +1/+1 counters on this creature.` plus reminder text. The
+    // recognizer owns the reminder-stripped sentence, so the helper below replays the generator's
+    // raw-line-then-stripped-line fallback instead of pre-stripping the fixture input.
+    // -----------------------------------------------------------------------
+
+    /// `(name, recipe id, printed activation cost, complete printed Oracle line)`.
+    const ISSUE_457_TWO_COUNTER_CLAUSES: [(&str, &str, &str, &str); 5] = [
+        (
+            "Serpent Specialist",
+            "activated.power_up.two_counters",
+            "{3}{G}",
+            "Power-up — {3}{G}: Put two +1/+1 counters on this creature. (Activate each power-up ability only once. Reduce the cost by its mana cost if it entered this turn.)",
+        ),
+        (
+            "Brave Brawler",
+            "activated.power_up.two_counters",
+            "{4}{W}",
+            "Power-up — {4}{W}: Put two +1/+1 counters on this creature. (Activate each power-up ability only once. Reduce the cost by its mana cost if it entered this turn.)",
+        ),
+        (
+            "Volcanic Villain",
+            "activated.power_up.two_counters",
+            "{5}{R}",
+            "Power-up — {5}{R}: Put two +1/+1 counters on this creature. (Activate each power-up ability only once. Reduce the cost by its mana cost if it entered this turn.)",
+        ),
+        (
+            "Prowcatcher Specialist",
+            "activated.exhaust.two_counters",
+            "{3}{R}",
+            "Exhaust — {3}{R}: Put two +1/+1 counters on this creature. (Activate each exhaust ability only once.)",
+        ),
+        (
+            "Skystreak Engineer",
+            "activated.exhaust.two_counters",
+            "{4}{U}",
+            "Exhaust — {4}{U}: Put two +1/+1 counters on this creature. (Activate each exhaust ability only once.)",
+        ),
+    ];
+
+    fn issue_457_match_printed_line(name: &str, line: &str) -> Option<RecipeMatch> {
+        let mut source = context();
+        source.source_name = name.into();
+        match_clause(line.trim(), false, &source)
+            .unwrap_or_else(|ambiguity| panic!("{name}: {ambiguity}"))
+            .or_else(|| {
+                match_clause(crate::strip_reminder(line).trim(), false, &source)
+                    .unwrap_or_else(|ambiguity| panic!("{name}: {ambiguity}"))
+            })
+    }
+
+    /// The handwritten anchors (`ultron_drone.ron`, `rebellious_captives.ron`) use this exact
+    /// Power-up reduction shape.
+    fn issue_457_power_up_reduction() -> ActivatedCostModifier {
+        ActivatedCostModifier::ConditionalSourceManaCostReduction {
+            condition: GameCondition::PermanentsEnteredThisTurn {
+                controllers: RelativePlayerSet::All,
+                filter: PermanentEventFilter {
+                    source_only: true,
+                    ..PermanentEventFilter::default()
+                },
+                min: Some(1),
+                max: None,
+            },
+        }
+    }
+
+    #[test]
+    fn issue_457_two_counter_clauses_match_their_exact_recipe() {
+        for (name, recipe_id, cost, line) in ISSUE_457_TWO_COUNTER_CLAUSES {
+            let matched = issue_457_match_printed_line(name, line)
+                .unwrap_or_else(|| panic!("{name} must match {recipe_id}"));
+            assert_eq!(matched.id.as_str(), recipe_id, "{name}");
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("{name} must emit an activated ability");
+            };
+            assert_eq!(ability.ability_id.as_str(), "activated_01", "{name}");
+            assert_eq!(
+                ability.source_zone,
+                AbilitySourceZone::Battlefield,
+                "{name}"
+            );
+            assert_eq!(
+                ability.costs,
+                vec![AbilityCost::Mana(
+                    ManaCost::parse(cost).expect("reviewed printed mana cost")
+                )],
+                "{name}"
+            );
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(2),
+                    subject: EffectSubject::Source,
+                }],
+                "{name}"
+            );
+            assert_eq!(
+                ability.activation_limit,
+                Some(ActivationLimit::PerObject { max_activations: 1 }),
+                "{name}"
+            );
+            assert!(ability.targeting.is_none(), "{name}");
+            assert_eq!(ability.timing, ActivationTiming::Normal, "{name}");
+            assert!(ability.conditions.is_empty(), "{name}");
+            let expected_modifiers = if recipe_id == "activated.power_up.two_counters" {
+                vec![issue_457_power_up_reduction()]
+            } else {
+                Vec::new()
+            };
+            assert_eq!(ability.cost_modifiers, expected_modifiers, "{name}");
+        }
+    }
+
+    #[test]
+    fn issue_457_power_up_and_exhaust_forms_stay_disjoint() {
+        let power_up = "Power-up — {3}{G}: Put two +1/+1 counters on this creature.";
+        let exhaust = "Exhaust — {3}{R}: Put two +1/+1 counters on this creature.";
+        let power_match = issue_457_match_printed_line("Serpent Specialist", power_up)
+            .expect("the Power-up sentence must match its own recipe");
+        assert_eq!(power_match.id.as_str(), "activated.power_up.two_counters");
+        let exhaust_match = issue_457_match_printed_line("Prowcatcher Specialist", exhaust)
+            .expect("the Exhaust sentence must match its own recipe");
+        assert_eq!(exhaust_match.id.as_str(), "activated.exhaust.two_counters");
+        assert_ne!(power_match.id, exhaust_match.id);
+    }
+
+    #[test]
+    fn issue_457_two_counter_family_rejects_near_misses() {
+        for negative in [
+            // The bare sentence without a keyword prefix stays unclaimed.
+            "{3}{G}: Put two +1/+1 counters on this creature.",
+            // Another counter count, a target recipient, and an appended rider.
+            "Power-up — {3}{G}: Put a +1/+1 counter on this creature.",
+            "Power-up — {3}{G}: Put two +1/+1 counters on target creature.",
+            "Power-up — {3}{G}: Put two +1/+1 counters on this creature. Draw a card.",
+            "Exhaust — {3}{R}: Put a +1/+1 counter on this creature.",
+            "Exhaust — {3}{R}: Put two +1/+1 counters on target creature.",
+            "Exhaust — {3}{R}: Put two +1/+1 counters on this creature. It gains trample until end of turn.",
+            // Reordered, duplicated, generic-only, and X-bearing symbol strings. The duplicated
+            // color form keeps Afterburner Expert ({2}{G}{G}) unclaimed and the generic-only form
+            // keeps Hog-Monkey ({5}) unclaimed.
+            "Power-up — {3}{G}{G}: Put two +1/+1 counters on this creature.",
+            "Exhaust — {2}{G}{G}: Put two +1/+1 counters on this creature.",
+            "Power-up — {G}{3}: Put two +1/+1 counters on this creature.",
+            "Power-up — {5}: Put two +1/+1 counters on this creature.",
+            "Exhaust — {5}: Put two +1/+1 counters on this creature.",
+            "Power-up — {X}{G}: Put two +1/+1 counters on this creature.",
+            // Lowercase, joined, and different keyword spellings.
+            "power-up — {3}{G}: Put two +1/+1 counters on this creature.",
+            "Powerup — {3}{G}: Put two +1/+1 counters on this creature.",
+            "exhaust — {3}{R}: Put two +1/+1 counters on this creature.",
+            "Haste — {3}{G}: Put two +1/+1 counters on this creature.",
+        ] {
+            issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_457_two_counter_family_is_creature_source_only() {
+        for (name, line) in [
+            (
+                "Serpent Specialist",
+                "Power-up — {3}{G}: Put two +1/+1 counters on this creature.",
+            ),
+            (
+                "Prowcatcher Specialist",
+                "Exhaust — {3}{R}: Put two +1/+1 counters on this creature.",
+            ),
+        ] {
+            let mut noncreature = context();
+            noncreature.source_name = name.into();
+            noncreature.source_is_creature = false;
+            assert!(
+                match_clause(line, false, &noncreature)
+                    .expect("noncreature source check must not be ambiguous")
+                    .is_none(),
+                "{name} must not match a noncreature source"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_457_recipes_have_stable_ids_and_surfaces() {
+        for id in [
+            "activated.power_up.two_counters",
+            "activated.exhaust.two_counters",
+        ] {
+            assert_eq!(
+                issue_318_recipe(id).surface,
+                RecipeSurface::ActivatedAbility,
+                "{id} surface drifted"
+            );
+        }
     }
 }
