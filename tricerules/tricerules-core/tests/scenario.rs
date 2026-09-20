@@ -564,3 +564,5 @@ mod issue_456_conditional_dual_lands;
 mod issue_457_power_up_exhaust;
 #[path = "scenario/issue_458_pump_and_seven_lands.rs"]
 mod issue_458_pump_and_seven_lands;
+#[path = "scenario/issue_459_devotee_endure_mobilize.rs"]
+mod issue_459_devotee_endure_mobilize;

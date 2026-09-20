@@ -13,6 +13,9 @@ abnormal_endurance	0	cast	exercised
 abrade	0	cast	exercised
 abraded_bluffs	0	ability:0	exercised
 abraded_bluffs	0	land	exercised
+abzan_devotee	0	ability:0	exercised
+abzan_devotee	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+abzan_devotee	0	cast	exercised
 accursed_spirit	0	cast	exercised
 acolyte_of_xathrid	0	ability:0	exercised
 acolyte_of_xathrid	0	cast	exercised
@@ -586,6 +589,7 @@ dai_li_indoctrination	0	cast	exercised
 daily_bugle_reporters	0	cast	exercised
 dakmor_bat	0	cast	exercised
 dakmor_scorpion	0	cast	exercised
+dalkovan_packbeasts	0	cast	exercised
 damage_control_crew	0	cast	exercised
 dancing_scimitar	0	cast	exercised
 daring_thunder-thief	0	cast	exercised
@@ -923,6 +927,7 @@ forsaken_sanctuary	0	ability:0	exercised
 forsaken_sanctuary	0	land	exercised
 fortified_rampart	0	cast	exercised
 fortress_crab	0	cast	exercised
+fortress_kin-guard	0	cast	exercised
 forum_necroscribe	0	cast	exercised
 forum_of_amity	0	ability:0	exercised
 forum_of_amity	0	ability:1	exercised

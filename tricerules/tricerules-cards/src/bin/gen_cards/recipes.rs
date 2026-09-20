@@ -15627,6 +15627,212 @@ fn match_keyword_mobilize_x_graveyard_creature_cards(
 }
 
 // ---------------------------------------------------------------------------
+// Issue #459 — Devotee tri-color mana, fixed Endure, and fixed Mobilize.
+//
+// Three exact templates that already have handwritten implementation anchors. Every recognizer
+// binds the complete normalized Oracle line (or, for Endure, the reminder-stripped sentence) and
+// admits only the reviewed parameter values, so an unreviewed amount, color set, or wording stays
+// unsupported.
+// ---------------------------------------------------------------------------
+
+/// The reviewed three-color mana sets in printed order: Mardu, Abzan, Jeskai, Temur, and Sultai.
+const ISSUE_459_TRI_COLOR_MANA_SETS: [[char; 3]; 5] = [
+    ['R', 'W', 'B'],
+    ['W', 'B', 'G'],
+    ['U', 'R', 'W'],
+    ['G', 'U', 'R'],
+    ['B', 'G', 'U'],
+];
+
+/// One exactly-braced single basic-mana symbol: `{W}` through `{G}`. Multi-symbol and unknown
+/// spellings return `None`, so a duplicate or unreviewed set can never alias an admitted one.
+fn issue_459_mana_symbol(text: &str) -> Option<char> {
+    let inner = text.strip_prefix('{')?.strip_suffix('}')?;
+    let mut characters = inner.chars();
+    let symbol = characters.next()?;
+    characters.next().is_none().then_some(symbol)
+}
+
+/// Issue #459 / CR 602.5b / 605.2 / 106.1b: the exact
+/// `{1}: Add {X}, {Y}, or {Z}. Activate only once each turn.` template prints on the five Devotee
+/// creatures. The ability costs one generic mana, produces exactly one mana of any of the three
+/// printed colors in printed order, and is limited to one activation each turn. Another cost,
+/// another color count or order, an unknown or duplicate symbol, a `{T}` cost, a missing limit,
+/// and appended riders stay unsupported.
+fn match_activated_tri_color_mana_once_each_turn(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_creature {
+        return None;
+    }
+    let body = text
+        .strip_prefix("{1}: Add ")?
+        .strip_suffix(". Activate only once each turn.")?;
+    let (first, rest) = body.split_once(", ")?;
+    let (second, third) = rest.split_once(", or ")?;
+    let colors = [
+        issue_459_mana_symbol(first)?,
+        issue_459_mana_symbol(second)?,
+        issue_459_mana_symbol(third)?,
+    ];
+    if !ISSUE_459_TRI_COLOR_MANA_SETS.contains(&colors) {
+        return None;
+    }
+    Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        ability_id: context.activated_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        cost_modifiers: Vec::new(),
+        source_zone: AbilitySourceZone::Battlefield,
+        costs: vec![AbilityCost::Mana(
+            ManaCost::parse("{1}").expect("static recipe mana cost"),
+        )],
+        effect: vec![SpellEffectKind::ProduceMana {
+            options: colors
+                .into_iter()
+                .map(|symbol| {
+                    parse_mana_amount(symbol).expect("reviewed tri-color set uses basic symbols")
+                })
+                .collect(),
+            restriction: None,
+            conditional: None,
+        }],
+        targeting: None,
+        timing: ActivationTiming::Normal,
+        conditions: Vec::new(),
+        activation_limit: Some(ActivationLimit::PerTurn { max_activations: 1 }),
+    }))
+}
+
+/// The reviewed fixed Endure counts (CR 701.63, verified against the current official rules).
+const ISSUE_459_ENDURE_COUNTS: [u32; 3] = [1, 2, 3];
+
+/// The reviewed per-count branch identities.
+fn issue_459_endure_branch_ids(count: u32) -> (&'static str, &'static str) {
+    match count {
+        1 => (
+            "put_a_1_1_counter_on_source",
+            "create_a_1_1_white_spirit_creature_token",
+        ),
+        2 => (
+            "put_two_1_1_counters_on_source",
+            "create_a_2_2_white_spirit_creature_token",
+        ),
+        3 => (
+            "put_three_1_1_counters_on_source",
+            "create_a_3_3_white_spirit_creature_token",
+        ),
+        _ => unreachable!("the endure recognizer admits only reviewed counts"),
+    }
+}
+
+/// Issue #459 / CR 701.63 / 603.6a / 122.1 / 111.1: the exact
+/// `When this creature enters, it endures N.` sentence prints on Fortress Kin-Guard and the three
+/// handwritten enduring anchors. The entry trigger offers the mandatory counter-or-Spirit choice;
+/// the counter branch is live only while the source can receive counters, and the token branch
+/// always is. The stripped sentence is the matching contract because the parenthetical is the
+/// keyword's standard reminder (fixed by the Comprehensive Rules), not card-specific wording; the
+/// count lives in the sentence. An unreviewed count, a variable, another subject or trigger,
+/// optional wording, and the counter- or token-only substitutes stay unsupported.
+fn match_etb_endure_fixed(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    if !context.source_is_creature {
+        return None;
+    }
+    let count = issue_458_canonical_component(
+        text.strip_prefix("When this creature enters, it endures ")?
+            .strip_suffix('.')?,
+    )?;
+    if !ISSUE_459_ENDURE_COUNTS.contains(&count) {
+        return None;
+    }
+    let (counters_id, token_id) = issue_459_endure_branch_ids(count);
+    Some(triggered_ability_with(
+        context,
+        TriggerCondition::WhenSelfEntersBattlefield,
+        vec![SpellEffectKind::ChooseResolutionBranch {
+            chooser: PlayerRecipient::SourceController,
+            optional: false,
+            selection: ResolutionBranchSelection::PlayerChoice,
+            branches: vec![
+                ResolutionBranchDef {
+                    branch_id: ChoiceId::new(counters_id)
+                        .expect("closed endure branch uses a valid choice ID"),
+                    presentation: context.presentation.clone(),
+                    runtime_fallback: None,
+                    cost: ResolutionCost::None,
+                    requirement: ResolutionBranchRequirement::EffectsApplicable,
+                    effects: vec![SpellEffectKind::PutCounters {
+                        counter: CounterKind::PlusOnePlusOne,
+                        count: Amount::Fixed(count),
+                        subject: EffectSubject::Source,
+                    }],
+                },
+                ResolutionBranchDef {
+                    branch_id: ChoiceId::new(token_id)
+                        .expect("closed endure branch uses a valid choice ID"),
+                    presentation: context.presentation.clone(),
+                    runtime_fallback: None,
+                    cost: ResolutionCost::None,
+                    requirement: ResolutionBranchRequirement::Always,
+                    effects: vec![SpellEffectKind::CreateTokens {
+                        token: format!("spirit_w_{count}_{count}"),
+                        count: Amount::Fixed(1),
+                        who: PlayerRecipient::SourceController,
+                        tapped: false,
+                        sacrifice_timing: None,
+                    }],
+                },
+            ],
+            otherwise: Vec::new(),
+        }],
+    ))
+}
+
+/// The exact printed fixed-mobilize keyword line, parameterized by the reviewed count. The
+/// reminder text is part of the matching contract, so a mutated reminder cannot collapse into
+/// the bare keyword.
+fn issue_459_mobilize_reminder(count: u32) -> Option<String> {
+    let (number, noun, pronoun) = match count {
+        1 => ("a", "token", "it"),
+        2 => ("two", "tokens", "them"),
+        3 => ("three", "tokens", "them"),
+        _ => return None,
+    };
+    Some(format!(
+        "Mobilize {count} (Whenever this creature attacks, create {number} tapped and attacking 1/1 red Warrior creature {noun}. Sacrifice {pronoun} at the beginning of the next end step.)"
+    ))
+}
+
+/// Issue #459 / CR 702.181 / 508.4 / 603.7: the printed `Mobilize N` keyword line with
+/// its complete reminder. The attack trigger creates `N` tapped and attacking 1/1 red Warrior
+/// tokens that were never declared as attackers, sacrificed at the next end step. Only the
+/// reviewed counts 1, 2, and 3 are admitted, and the reminder number word and sacrifice pronoun
+/// must match the count. The dynamic `Mobilize X, where ...` form stays owned by
+/// `keyword.mobilize_x.graveyard_creature_cards`; the bare keyword, an unreviewed amount, and
+/// reminder mutations stay unsupported. `Mobilize` is creature-only.
+fn match_keyword_mobilize_fixed(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    if !context.source_is_creature {
+        return None;
+    }
+    let body = text.strip_prefix("Mobilize ")?;
+    let (count_text, _) = body.split_once(' ')?;
+    let count = issue_458_canonical_component(count_text)?;
+    (text == issue_459_mobilize_reminder(count)?.as_str()).then(|| {
+        triggered_ability_with(
+            context,
+            TriggerCondition::WheneverSelfAttacks {
+                minimum_other_attackers: 0,
+            },
+            vec![SpellEffectKind::CreateAttackingTokens {
+                token: "warrior_r_1_1".into(),
+                count: Amount::Fixed(count),
+                sacrifice_timing: Some(DelayedTokenSacrificeTiming::NextEndStep),
+            }],
+        )
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Issue #372 — static graveyard-count-scaled P/T cohort.
 //
 // Six Standard identities print a static clause whose magnitude is a public graveyard count.
@@ -25711,10 +25917,11 @@ pub(super) static CATALOG: &[Recipe] = &[
         // uses a devotion count and Infantry Shield prints the granted-creature form.
         calibration: singleton_calibrations!(
             "Avenger of the Fallen" => "Mobilize X, where X is the number of creature cards in your graveyard. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)";
-            // The fixed mobilize reminder, another graveyard cohort, permanent cards, a
+            // An unreviewed fixed-mobilize amount, another graveyard cohort, permanent cards, a
             // battlefield cohort, a missing reminder, and an appended instruction stay
-            // unsupported.
-            "Mobilize 2 (Whenever this creature attacks, create two tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+            // unsupported. The reviewed counts 1, 2, and 3 are owned by the fixed-mobilize
+            // family, so amount four is the retained near-miss here.
+            "Mobilize 4 (Whenever this creature attacks, create four tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
             "Mobilize X, where X is the number of creature cards in all graveyards. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
             "Mobilize X, where X is the number of permanent cards in your graveyard. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
             "Mobilize X, where X is the number of creatures you control. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
@@ -26158,6 +26365,89 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Whenever you sacrifice another permanent, target creature you control gets +1/+0 until end of turn.",
             "Whenever you sacrifice another creature, creatures you control get +1/+0 until end of turn.",
             "Whenever you sacrifice another permanent, creatures you control get +1/+0 until end of turn. Draw a card."
+        ),
+    },
+    // Issue #459 exact families. Each recognizer admits only its reviewed parameter values and
+    // keeps the handwritten anchors and the generated identity on the same emission.
+    Recipe {
+        id: RecipeId("activated.tri_color.mana_once_each_turn"),
+        label: "pay one for one of three colors once each turn",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_tri_color_mana_once_each_turn,
+        // Mardu, Jeskai, Temur, and Sultai Devotee are handwritten anchors; Abzan Devotee is
+        // the generated identity (verified against the pinned bulk corpus).
+        calibration: calibrations!(
+            "Mardu Devotee" => "{1}: Add {R}, {W}, or {B}. Activate only once each turn.",
+            "Abzan Devotee" => "{1}: Add {W}, {B}, or {G}. Activate only once each turn.",
+            "Jeskai Devotee" => "{1}: Add {U}, {R}, or {W}. Activate only once each turn.",
+            "Temur Devotee" => "{1}: Add {G}, {U}, or {R}. Activate only once each turn.",
+            "Sultai Devotee" => "{1}: Add {B}, {G}, or {U}. Activate only once each turn.";
+            // Another cost or activation count, two or four colors, an unknown or duplicated
+            // symbol, a `{T}` cost, a missing limit, and appended riders stay unsupported. The
+            // any-color competitor is owned by the shipped any-color recipe.
+            "{2}: Add {W}, {B}, or {G}. Activate only once each turn.",
+            "{1}: Add {W} or {B}. Activate only once each turn.",
+            "{1}: Add {W}, {B}, {G}, or {U}. Activate only once each turn.",
+            "{1}: Add {W}, {B}, or {G}.",
+            "{T}: Add {W}, {B}, or {G}. Activate only once each turn.",
+            "{1}: Add {W}, {W}, or {G}. Activate only once each turn.",
+            "{1}: Add {W}, {B}, or {X}. Activate only once each turn.",
+            "{1}: Add {W}, {B}, or {U}. Activate only once each turn.",
+            "Add {W}, {B}, or {G}. Activate only once each turn.",
+            "{1}: Add {W}, {B}, or {G}. Activate only twice each turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.endure.fixed"),
+        label: "enters and endures a fixed amount",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_endure_fixed,
+        // Fortress Kin-Guard is the generated identity; Kin-Tree Nurturer, Sandskitter Outrider,
+        // and Dusyut Earthcarver are handwritten anchors (verified against the pinned bulk).
+        calibration: calibrations!(
+            "Kin-Tree Nurturer" => "When this creature enters, it endures 1.",
+            "Sandskitter Outrider" => "When this creature enters, it endures 2.",
+            "Dusyut Earthcarver" => "When this creature enters, it endures 3.",
+            "Fortress Kin-Guard" => "When this creature enters, it endures 1.";
+            // Unreviewed counts, variables, other triggers or subjects, optional wording, and the
+            // counter- or token-only substitutes stay unsupported.
+            "When this creature enters, it endures 4.",
+            "When this creature enters, it endures X.",
+            "When this creature enters, it endures 1, where X is the number of counters on this creature.",
+            "When this creature enters, you may have it endure 1.",
+            "When this creature enters, target creature endures 1.",
+            "When this creature enters, put a +1/+1 counter on it.",
+            "When this creature enters, create a 1/1 white Spirit creature token.",
+            "Whenever this creature attacks, it endures 1.",
+            "At the beginning of your second main phase, if this creature is tapped, it endures 1.",
+            "When this creature enters, it endures 1"
+        ),
+    },
+    Recipe {
+        id: RecipeId("keyword.mobilize_fixed"),
+        label: "mobilize a fixed amount",
+        surface: RecipeSurface::KeywordClause,
+        matcher: match_keyword_mobilize_fixed,
+        // Reigning Victor, Dragonback Lancer, Shock Brigade, and Nightblade Brigade are
+        // handwritten anchors; Dalkovan Packbeasts is the generated identity (verified against
+        // the pinned bulk). The dynamic `Mobilize X, where ...` form stays owned by
+        // `keyword.mobilize_x.graveyard_creature_cards`.
+        calibration: calibrations!(
+            "Reigning Victor" => "Mobilize 1 (Whenever this creature attacks, create a tapped and attacking 1/1 red Warrior creature token. Sacrifice it at the beginning of the next end step.)",
+            "Dragonback Lancer" => "Mobilize 1 (Whenever this creature attacks, create a tapped and attacking 1/1 red Warrior creature token. Sacrifice it at the beginning of the next end step.)",
+            "Shock Brigade" => "Mobilize 1 (Whenever this creature attacks, create a tapped and attacking 1/1 red Warrior creature token. Sacrifice it at the beginning of the next end step.)",
+            "Nightblade Brigade" => "Mobilize 1 (Whenever this creature attacks, create a tapped and attacking 1/1 red Warrior creature token. Sacrifice it at the beginning of the next end step.)",
+            "Dalkovan Packbeasts" => "Mobilize 3 (Whenever this creature attacks, create three tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)";
+            // Unreviewed amounts, non-canonical spellings, a mutated reminder, the bare keyword,
+            // and the devotion form stay unsupported.
+            "Mobilize 0 (Whenever this creature attacks, create zero tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+            "Mobilize 4 (Whenever this creature attacks, create four tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+            "Mobilize 1 (Whenever this creature attacks, create a tapped and attacking 1/1 red Warrior creature token. Sacrifice it at the beginning of your next end step.)",
+            "Mobilize 2 (Whenever this creature attacks, create two tapped and attacking 1/1 red Warrior creature tokens. Sacrifice it at the beginning of the next end step.)",
+            "Mobilize 3 (Whenever this creature attacks, create three tapped and attacking 1/1 red Goblin creature tokens. Sacrifice them at the beginning of the next end step.)",
+            "Mobilize 3",
+            "Mobilize 03 (Whenever this creature attacks, create three tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+            "Mobilize X, where X is your devotion to Mardu."
         ),
     },
 ];
@@ -43362,7 +43652,10 @@ mod tests {
             "158d0272-a850-4399-8afa-d0caa143c3cb",
         );
         issue_375_assert_negatives(&[
-            "Mobilize 2 (Whenever this creature attacks, create two tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+            // The fixed `Mobilize N` form for reviewed counts 1, 2, and 3 is owned by issue
+            // #459's `keyword.mobilize_fixed` family, so amount four is the retained near-miss
+            // here.
+            "Mobilize 4 (Whenever this creature attacks, create four tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
             "Mobilize X, where X is the number of creature cards in all graveyards. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
             "Mobilize X, where X is the number of permanent cards in your graveyard. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
             "Mobilize X, where X is the number of creatures you control. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
@@ -51308,6 +51601,546 @@ mod tests {
         assert_eq!(
             issue_318_recipe("static.conditional_self.seven_lands.plus_p_plus_t").surface,
             RecipeSurface::StaticAbility
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #459 — the Devotee tri-color mana, fixed Endure, and fixed
+    // Mobilize generator families.
+    // -----------------------------------------------------------------------
+
+    /// `(name, complete printed Oracle line, options in printed order)`.
+    const ISSUE_459_TRI_COLOR_CLAUSES: [(&str, &str, [ManaAmount; 3]); 5] = [
+        (
+            "Mardu Devotee",
+            "{1}: Add {R}, {W}, or {B}. Activate only once each turn.",
+            [
+                ManaAmount {
+                    w: 0,
+                    u: 0,
+                    b: 0,
+                    r: 1,
+                    g: 0,
+                    c: 0,
+                },
+                ManaAmount {
+                    w: 1,
+                    u: 0,
+                    b: 0,
+                    r: 0,
+                    g: 0,
+                    c: 0,
+                },
+                ManaAmount {
+                    w: 0,
+                    u: 0,
+                    b: 1,
+                    r: 0,
+                    g: 0,
+                    c: 0,
+                },
+            ],
+        ),
+        (
+            "Abzan Devotee",
+            "{1}: Add {W}, {B}, or {G}. Activate only once each turn.",
+            [
+                ManaAmount {
+                    w: 1,
+                    u: 0,
+                    b: 0,
+                    r: 0,
+                    g: 0,
+                    c: 0,
+                },
+                ManaAmount {
+                    w: 0,
+                    u: 0,
+                    b: 1,
+                    r: 0,
+                    g: 0,
+                    c: 0,
+                },
+                ManaAmount {
+                    w: 0,
+                    u: 0,
+                    b: 0,
+                    r: 0,
+                    g: 1,
+                    c: 0,
+                },
+            ],
+        ),
+        (
+            "Jeskai Devotee",
+            "{1}: Add {U}, {R}, or {W}. Activate only once each turn.",
+            [
+                ManaAmount {
+                    w: 0,
+                    u: 1,
+                    b: 0,
+                    r: 0,
+                    g: 0,
+                    c: 0,
+                },
+                ManaAmount {
+                    w: 0,
+                    u: 0,
+                    b: 0,
+                    r: 1,
+                    g: 0,
+                    c: 0,
+                },
+                ManaAmount {
+                    w: 1,
+                    u: 0,
+                    b: 0,
+                    r: 0,
+                    g: 0,
+                    c: 0,
+                },
+            ],
+        ),
+        (
+            "Temur Devotee",
+            "{1}: Add {G}, {U}, or {R}. Activate only once each turn.",
+            [
+                ManaAmount {
+                    w: 0,
+                    u: 0,
+                    b: 0,
+                    r: 0,
+                    g: 1,
+                    c: 0,
+                },
+                ManaAmount {
+                    w: 0,
+                    u: 1,
+                    b: 0,
+                    r: 0,
+                    g: 0,
+                    c: 0,
+                },
+                ManaAmount {
+                    w: 0,
+                    u: 0,
+                    b: 0,
+                    r: 1,
+                    g: 0,
+                    c: 0,
+                },
+            ],
+        ),
+        (
+            "Sultai Devotee",
+            "{1}: Add {B}, {G}, or {U}. Activate only once each turn.",
+            [
+                ManaAmount {
+                    w: 0,
+                    u: 0,
+                    b: 1,
+                    r: 0,
+                    g: 0,
+                    c: 0,
+                },
+                ManaAmount {
+                    w: 0,
+                    u: 0,
+                    b: 0,
+                    r: 0,
+                    g: 1,
+                    c: 0,
+                },
+                ManaAmount {
+                    w: 0,
+                    u: 1,
+                    b: 0,
+                    r: 0,
+                    g: 0,
+                    c: 0,
+                },
+            ],
+        ),
+    ];
+
+    /// `(name, complete printed Oracle line, expected endure count)`. The count is the reviewed
+    /// allowlist; the printed parenthetical is the keyword's standard reminder.
+    const ISSUE_459_ENDURE_CLAUSES: [(&str, &str, u32); 4] = [
+        (
+            "Kin-Tree Nurturer",
+            "When this creature enters, it endures 1. (Put a +1/+1 counter on it or create a 1/1 white Spirit creature token.)",
+            1,
+        ),
+        (
+            "Sandskitter Outrider",
+            "When this creature enters, it endures 2. (Put two +1/+1 counters on it or create a 2/2 white Spirit creature token.)",
+            2,
+        ),
+        (
+            "Dusyut Earthcarver",
+            "When this creature enters, it endures 3. (Put three +1/+1 counters on it or create a 3/3 white Spirit creature token.)",
+            3,
+        ),
+        (
+            "Fortress Kin-Guard",
+            "When this creature enters, it endures 1. (Put a +1/+1 counter on it or create a 1/1 white Spirit creature token.)",
+            1,
+        ),
+    ];
+
+    /// The exact per-count branch identities the endure family emits.
+    fn issue_459_endure_branch_ids(count: u32) -> (&'static str, &'static str) {
+        match count {
+            1 => (
+                "put_a_1_1_counter_on_source",
+                "create_a_1_1_white_spirit_creature_token",
+            ),
+            2 => (
+                "put_two_1_1_counters_on_source",
+                "create_a_2_2_white_spirit_creature_token",
+            ),
+            3 => (
+                "put_three_1_1_counters_on_source",
+                "create_a_3_3_white_spirit_creature_token",
+            ),
+            _ => panic!("unreviewed endure count {count}"),
+        }
+    }
+
+    /// `(name, complete printed Oracle line, expected count)`. The reminder text is part of the
+    /// matching contract, and its number word/pronoun tracks the count.
+    const ISSUE_459_MOBILIZE_CLAUSES: [(&str, &str, u32); 5] = [
+        (
+            "Reigning Victor",
+            "Mobilize 1 (Whenever this creature attacks, create a tapped and attacking 1/1 red Warrior creature token. Sacrifice it at the beginning of the next end step.)",
+            1,
+        ),
+        (
+            "Dragonback Lancer",
+            "Mobilize 1 (Whenever this creature attacks, create a tapped and attacking 1/1 red Warrior creature token. Sacrifice it at the beginning of the next end step.)",
+            1,
+        ),
+        (
+            "Shock Brigade",
+            "Mobilize 1 (Whenever this creature attacks, create a tapped and attacking 1/1 red Warrior creature token. Sacrifice it at the beginning of the next end step.)",
+            1,
+        ),
+        (
+            "Nightblade Brigade",
+            "Mobilize 1 (Whenever this creature attacks, create a tapped and attacking 1/1 red Warrior creature token. Sacrifice it at the beginning of the next end step.)",
+            1,
+        ),
+        (
+            "Dalkovan Packbeasts",
+            "Mobilize 3 (Whenever this creature attacks, create three tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+            3,
+        ),
+    ];
+
+    /// Unreviewed costs, color counts, spellings, and riders stay unclaimed. The any-color
+    /// competitor is owned by the shipped recipe, so it is asserted separately.
+    const ISSUE_459_TRI_COLOR_NEAR_MISSES: [&str; 10] = [
+        "{2}: Add {W}, {B}, or {G}. Activate only once each turn.",
+        "{1}: Add {W} or {B}. Activate only once each turn.",
+        "{1}: Add {W}, {B}, {G}, or {U}. Activate only once each turn.",
+        "{1}: Add {W}, {B}, or {G}.",
+        "{T}: Add {W}, {B}, or {G}. Activate only once each turn.",
+        "{1}: Add {W}, {W}, or {G}. Activate only once each turn.",
+        "{1}: Add {W}, {B}, or {X}. Activate only once each turn.",
+        "{1}: Add {W}, {B}, or {U}. Activate only once each turn.",
+        "Add {W}, {B}, or {G}. Activate only once each turn.",
+        "{1}: Add {W}, {B}, or {G}. Activate only twice each turn.",
+    ];
+
+    /// The printed parenthetical is the keyword's standard reminder, so the recognizer owns the
+    /// stripped sentence. Unreviewed counts, variables, other triggers or subjects, optional
+    /// wording, and the counter/token-only substitutes stay unclaimed.
+    const ISSUE_459_ENDURE_NEAR_MISSES: [&str; 10] = [
+        "When this creature enters, it endures 4.",
+        "When this creature enters, it endures X.",
+        "When this creature enters, it endures 1, where X is the number of counters on this creature.",
+        "When this creature enters, you may have it endure 1.",
+        "When this creature enters, target creature endures 1.",
+        "When this creature enters, put a +1/+1 counter on it.",
+        "When this creature enters, create a 1/1 white Spirit creature token.",
+        "Whenever this creature attacks, it endures 1.",
+        "At the beginning of your second main phase, if this creature is tapped, it endures 1.",
+        "When this creature enters, it endures 1",
+    ];
+
+    /// The dynamic-X form is owned by the shipped recipe; every other amount, spelling, or
+    /// reminder mutation stays unclaimed.
+    const ISSUE_459_MOBILIZE_NEAR_MISSES: [&str; 8] = [
+        "Mobilize 0 (Whenever this creature attacks, create zero tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+        "Mobilize 4 (Whenever this creature attacks, create four tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+        "Mobilize 1 (Whenever this creature attacks, create a tapped and attacking 1/1 red Warrior creature token. Sacrifice it at the beginning of your next end step.)",
+        "Mobilize 2 (Whenever this creature attacks, create two tapped and attacking 1/1 red Warrior creature tokens. Sacrifice it at the beginning of the next end step.)",
+        "Mobilize 3 (Whenever this creature attacks, create three tapped and attacking 1/1 red Goblin creature tokens. Sacrifice them at the beginning of the next end step.)",
+        "Mobilize 3",
+        "Mobilize 03 (Whenever this creature attacks, create three tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+        "Mobilize X, where X is your devotion to Mardu.",
+    ];
+
+    /// Replays the generator's raw-line-then-stripped-line fallback for one Oracle line.
+    fn issue_459_match_printed_line(name: &str, line: &str) -> Option<RecipeMatch> {
+        let mut source = context();
+        source.source_name = name.into();
+        match_clause(line.trim(), false, &source)
+            .unwrap_or_else(|ambiguity| panic!("{name}: {ambiguity}"))
+            .or_else(|| {
+                match_clause(crate::strip_reminder(line).trim(), false, &source)
+                    .unwrap_or_else(|ambiguity| panic!("{name}: {ambiguity}"))
+            })
+    }
+
+    #[test]
+    fn issue_459_reviewed_clauses_match_their_exact_recipes() {
+        for (name, clause, options) in ISSUE_459_TRI_COLOR_CLAUSES {
+            let matched = issue_459_match_printed_line(name, clause)
+                .unwrap_or_else(|| panic!("{name} must match the tri-color mana family"));
+            assert_eq!(
+                matched.id.as_str(),
+                "activated.tri_color.mana_once_each_turn",
+                "{name}"
+            );
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("{name} must emit one activated ability");
+            };
+            assert_eq!(ability.ability_id.as_str(), "activated_01", "{name}");
+            assert_eq!(
+                ability.presentation,
+                AbilityPresentation::OracleLines(vec![1]),
+                "{name}"
+            );
+            assert_eq!(
+                ability.costs,
+                [AbilityCost::Mana(
+                    ManaCost::parse("{1}").expect("static recipe mana cost")
+                )],
+                "{name}"
+            );
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::ProduceMana {
+                    options: options.to_vec(),
+                    restriction: None,
+                    conditional: None,
+                }],
+                "{name}"
+            );
+            assert_eq!(
+                ability.activation_limit,
+                Some(ActivationLimit::PerTurn { max_activations: 1 }),
+                "{name}"
+            );
+            assert_eq!(
+                ability.source_zone,
+                AbilitySourceZone::Battlefield,
+                "{name}"
+            );
+            assert!(ability.targeting.is_none(), "{name}");
+            assert_eq!(ability.timing, ActivationTiming::Normal, "{name}");
+            assert!(ability.conditions.is_empty(), "{name}");
+        }
+
+        for (name, clause, count) in ISSUE_459_ENDURE_CLAUSES {
+            let matched = issue_459_match_printed_line(name, clause)
+                .unwrap_or_else(|| panic!("{name} must match the fixed endure family"));
+            assert_eq!(matched.id.as_str(), "etb.endure.fixed", "{name}");
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("{name} must emit one triggered ability");
+            };
+            assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+            assert_eq!(
+                ability.presentation,
+                AbilityPresentation::OracleLines(vec![1]),
+                "{name}"
+            );
+            let [SpellEffectKind::ChooseResolutionBranch {
+                chooser,
+                optional,
+                selection,
+                branches,
+                otherwise,
+            }] = ability.effect.as_slice()
+            else {
+                panic!("{name} must emit exactly one resolution-branch instruction");
+            };
+            assert_eq!(*chooser, PlayerRecipient::SourceController, "{name}");
+            assert!(!*optional, "{name}");
+            assert_eq!(
+                *selection,
+                ResolutionBranchSelection::PlayerChoice,
+                "{name}"
+            );
+            assert!(otherwise.is_empty(), "{name}");
+            let (counters_id, token_id) = issue_459_endure_branch_ids(count);
+            let [counters, token] = branches.as_slice() else {
+                panic!("{name} must offer exactly the counter and token branches");
+            };
+            assert_eq!(counters.branch_id.as_str(), counters_id, "{name}");
+            assert_eq!(
+                counters.presentation,
+                AbilityPresentation::OracleLines(vec![1]),
+                "{name}"
+            );
+            assert_eq!(
+                counters.requirement,
+                ResolutionBranchRequirement::EffectsApplicable,
+                "{name}"
+            );
+            assert_eq!(counters.cost, ResolutionCost::None, "{name}");
+            assert_eq!(
+                counters.effects,
+                [SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(count),
+                    subject: EffectSubject::Source,
+                }],
+                "{name}"
+            );
+            assert_eq!(token.branch_id.as_str(), token_id, "{name}");
+            assert_eq!(
+                token.presentation,
+                AbilityPresentation::OracleLines(vec![1]),
+                "{name}"
+            );
+            assert_eq!(
+                token.requirement,
+                ResolutionBranchRequirement::Always,
+                "{name}"
+            );
+            assert_eq!(token.cost, ResolutionCost::None, "{name}");
+            assert_eq!(
+                token.effects,
+                [SpellEffectKind::CreateTokens {
+                    token: format!("spirit_w_{count}_{count}"),
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::SourceController,
+                    tapped: false,
+                    sacrifice_timing: None,
+                }],
+                "{name}"
+            );
+        }
+
+        for (name, clause, count) in ISSUE_459_MOBILIZE_CLAUSES {
+            let matched = issue_459_match_printed_line(name, clause)
+                .unwrap_or_else(|| panic!("{name} must match the fixed mobilize family"));
+            assert_eq!(matched.id.as_str(), "keyword.mobilize_fixed", "{name}");
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("{name} must emit one triggered ability");
+            };
+            assert_eq!(
+                ability.trigger,
+                TriggerCondition::WheneverSelfAttacks {
+                    minimum_other_attackers: 0,
+                },
+                "{name}"
+            );
+            assert_eq!(
+                ability.effect,
+                [SpellEffectKind::CreateAttackingTokens {
+                    token: "warrior_r_1_1".into(),
+                    count: Amount::Fixed(count),
+                    sacrifice_timing: Some(DelayedTokenSacrificeTiming::NextEndStep),
+                }],
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_459_families_reject_near_misses() {
+        for negative in ISSUE_459_TRI_COLOR_NEAR_MISSES {
+            assert!(
+                issue_459_match_printed_line("Near Miss", negative).is_none(),
+                "the tri-color mana family must reject {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, false);
+        }
+        for negative in ISSUE_459_ENDURE_NEAR_MISSES {
+            assert!(
+                issue_459_match_printed_line("Near Miss", negative).is_none(),
+                "the fixed endure family must reject {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, false);
+        }
+        for negative in ISSUE_459_MOBILIZE_NEAR_MISSES {
+            assert!(
+                issue_459_match_printed_line("Near Miss", negative).is_none(),
+                "the fixed mobilize family must reject {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_459_owned_forms_stay_with_their_shipped_owners() {
+        // A match here proves the new family did not also claim the string: an overlap would be
+        // reported as an ambiguity error instead.
+        for (clause, owner) in [
+            (
+                "{1}: Add one mana of any color. Activate only once each turn.",
+                "activated.mana.pay_one.any_color.per_turn_one",
+            ),
+            (
+                "Mobilize X, where X is the number of creature cards in your graveyard. (Whenever this creature attacks, create X tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
+                "keyword.mobilize_x.graveyard_creature_cards",
+            ),
+        ] {
+            let matched = match_clause(clause, false, &context())
+                .unwrap_or_else(|ambiguity| {
+                    panic!("owned form must stay unambiguous: {clause}: {ambiguity}")
+                })
+                .unwrap_or_else(|| panic!("owned form must match {owner}"));
+            assert_eq!(matched.id.as_str(), owner, "{clause}");
+        }
+    }
+
+    #[test]
+    fn issue_459_families_stay_creature_only() {
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        for (name, clause, _) in ISSUE_459_TRI_COLOR_CLAUSES {
+            assert!(
+                match_clause(clause, false, &noncreature)
+                    .expect("source-kind check must not be ambiguous")
+                    .is_none(),
+                "{name} must not match a noncreature source"
+            );
+        }
+        for (name, clause, _) in ISSUE_459_ENDURE_CLAUSES {
+            assert!(
+                match_clause(crate::strip_reminder(clause).trim(), false, &noncreature)
+                    .expect("source-kind check must not be ambiguous")
+                    .is_none(),
+                "{name} must not match a noncreature source"
+            );
+        }
+        for (name, clause, _) in ISSUE_459_MOBILIZE_CLAUSES {
+            assert!(
+                match_clause(clause, false, &noncreature)
+                    .expect("source-kind check must not be ambiguous")
+                    .is_none(),
+                "{name} must not match a noncreature source"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_459_recipes_have_stable_ids_and_surfaces() {
+        assert_eq!(
+            issue_318_recipe("activated.tri_color.mana_once_each_turn").surface,
+            RecipeSurface::ActivatedAbility
+        );
+        assert_eq!(
+            issue_318_recipe("etb.endure.fixed").surface,
+            RecipeSurface::EtbAbility
+        );
+        assert_eq!(
+            issue_318_recipe("keyword.mobilize_fixed").surface,
+            RecipeSurface::KeywordClause
         );
     }
 }
