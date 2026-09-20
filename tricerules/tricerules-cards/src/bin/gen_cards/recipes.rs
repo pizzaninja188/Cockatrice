@@ -1206,6 +1206,29 @@ fn attached_modifier(
     keywords: Vec<Keyword>,
     doesnt_untap_during_untap_step: bool,
 ) -> RecipeEmission {
+    attached_modifier_with_options(
+        context,
+        delta_power,
+        delta_toughness,
+        keywords,
+        doesnt_untap_during_untap_step,
+        false,
+        Vec::new(),
+    )
+}
+
+/// Issue #429: the reviewed Aura statics add the shipped layer-6 ability removal and granted
+/// activated abilities to the original fixed-modifier builder. Every other field keeps the
+/// shipped defaults so existing attached-modifier emissions are byte-identical.
+fn attached_modifier_with_options(
+    context: &RecipeContext,
+    delta_power: i32,
+    delta_toughness: i32,
+    keywords: Vec<Keyword>,
+    doesnt_untap_during_untap_step: bool,
+    remove_all_abilities: bool,
+    activated_abilities: Vec<ActivatedAbilityDef>,
+) -> RecipeEmission {
     RecipeEmission::StaticAbility(IdentifiedAbility {
         ability_id: context.static_ability_id.clone(),
         presentation: context.presentation.clone(),
@@ -1222,10 +1245,10 @@ fn attached_modifier(
             toughness_per_match: 0,
             set_power: None,
             set_toughness: None,
-            remove_all_abilities: false,
+            remove_all_abilities,
             keywords,
             triggered_abilities: Vec::new(),
-            activated_abilities: Vec::new(),
+            activated_abilities,
             restriction: Default::default(),
             doesnt_untap_during_untap_step,
             cant_untap: false,
@@ -1730,6 +1753,260 @@ fn match_aura_untap_step_restriction(
     (context.source_is_aura
         && text == "Enchanted creature doesn't untap during its controller's untap step.")
         .then(|| attached_modifier(context, 0, 0, Vec::new(), true))
+}
+
+/// Issue #429 / CR 303.4 / 702.5: "Enchant land" is the land sibling of the shipped creature
+/// attach recipes and emits the same `AuraAttach` shape anchored by Gift of Paradise's shipped
+/// RON. Another permanent type, an ownership scope, or appended text stays unsupported.
+fn match_enchant_land(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
+    (context.source_is_aura && text == "Enchant land").then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::AuraAttach {
+            target: TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                permanent_types: vec![PermanentTypeFilter::Land],
+                ..TargetFilter::default()
+            },
+        })
+    })
+}
+
+/// Issue #429 / CR 303.4 / 702.5: "Enchant artifact or creature" reuses the reviewed union shape
+/// shipped by `aura.enchant.creature_or_vehicle` with the artifact branch in place of Vehicle.
+/// The reversed order, a single type, and broader or narrower scopes stay unsupported.
+fn match_enchant_artifact_or_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_aura && text == "Enchant artifact or creature").then(|| {
+        RecipeEmission::SpellEffect(SpellEffectKind::AuraAttach {
+            target: TargetFilter {
+                any_of: Some(vec![
+                    TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        permanent_types: vec![PermanentTypeFilter::Artifact],
+                        ..TargetFilter::default()
+                    },
+                    TargetFilter {
+                        kind: TargetKind::Creature,
+                        ..TargetFilter::default()
+                    },
+                ]),
+                ..TargetFilter::default()
+            },
+        })
+    })
+}
+
+/// Issue #429 / CR 603.6a / 701.26: the `enchanted permanent` sibling of the shipped
+/// `etb.aura.tap_attached_creature` trigger. Six full-corpus identities print it, including the
+/// four pinned-Standard ones (Flood the Engine, Stop Cold, Stuck in Summoner's Sanctum, Tractor
+/// Beam); the creature-only matcher is deliberately not widened.
+fn match_aura_etb_tap_enchanted_permanent(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_aura && text == "When this Aura enters, tap enchanted permanent.").then(
+        || {
+            triggered_ability(
+                context,
+                SpellEffectKind::Tap {
+                    subject: EffectSubject::AttachedObject,
+                },
+            )
+        },
+    )
+}
+
+/// Issue #429 / CR 613.1f / 613.7: "Enchanted permanent loses all abilities and doesn't untap
+/// during its controller's untap step." is one attached modifier combining the shipped layer-6
+/// ability removal with the shipped untap-step restriction. Stop Cold's 2024-04-12 ruling
+/// (an ability granted after attachment is kept) follows from the existing layer-6 timestamp
+/// handling and is covered by a dedicated scenario. The creature-only matcher stays untouched.
+fn match_aura_remove_abilities_no_untap(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_aura
+        && text
+            == "Enchanted permanent loses all abilities and doesn't untap during its controller's untap step.")
+        .then(|| attached_modifier_with_options(context, 0, 0, Vec::new(), true, true, Vec::new()))
+}
+
+/// Issue #429 / CR 603.6a / 122.1: New Horizons and Ancestral Vengeance print this exact Aura
+/// entry trigger. It mirrors the shipped creature ETB counter trigger with the `you control`
+/// target scope and its own narrow prompt; another counter, count, controller scope, or wording
+/// stays unsupported.
+fn match_aura_etb_plus_one_counter_target_creature_you_control(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_aura
+        && text == "When this Aura enters, put a +1/+1 counter on target creature you control.")
+        .then(|| {
+            let RecipeEmission::TriggeredAbility(mut ability) = triggered_ability(
+                context,
+                SpellEffectKind::PutCounters {
+                    counter: CounterKind::PlusOnePlusOne,
+                    count: Amount::Fixed(1),
+                    subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                        kind: TargetKind::Creature,
+                        controller: TargetController::You,
+                        ..TargetFilter::default()
+                    })),
+                },
+            ) else {
+                unreachable!("triggered_ability always returns a triggered ability")
+            };
+            ability.targeting = Some(exact_targeting(
+                1,
+                1,
+                "Choose target creature you control",
+                vec![0],
+            ));
+            RecipeEmission::TriggeredAbility(ability)
+        })
+}
+
+/// Issue #429 / CR 111.1 / 603.6a: Friendly Neighborhood's Aura entry trigger creates three
+/// predefined 1/1 green and white Human Citizen tokens. The token definition ships at
+/// `data/tokens/human_citizen_gw_1_1.ron`; another count, token, or recipient stays unsupported.
+fn match_aura_etb_three_human_citizen_tokens(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_aura
+        && text
+            == "When this Aura enters, create three 1/1 green and white Human Citizen creature tokens.")
+        .then(|| {
+            triggered_ability(
+                context,
+                SpellEffectKind::CreateTokens {
+                    token: "human_citizen_gw_1_1".into(),
+                    count: Amount::Fixed(3),
+                    who: PlayerRecipient::Controller,
+                    tapped: false,
+                    sacrifice_timing: None,
+                },
+            )
+        })
+}
+
+/// Two identical pips of one color for the shipped five-color option bag.
+fn doubled_mana_amount(symbol: char) -> Option<ManaAmount> {
+    let mut amount = parse_mana_amount(symbol)?;
+    for value in [
+        &mut amount.w,
+        &mut amount.u,
+        &mut amount.b,
+        &mut amount.r,
+        &mut amount.g,
+        &mut amount.c,
+    ] {
+        *value *= 2;
+    }
+    Some(amount)
+}
+
+/// Issue #429 / CR 113.10a / 605.1a / 611.3: New Horizons grants the enchanted land the shipped
+/// Gift of Paradise mana ability (`{T}: Add two mana of any one color.`). The quoted fragment is
+/// a nested Fallback presentation registered in `presentation-exceptions.tsv`; the outer line
+/// maps the printed wording. Another pip count, a fixed color, or a restricted/spend clause
+/// stays unsupported.
+fn match_aura_granted_two_mana_any_one_color(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_aura && text == "Enchanted land has \"{T}: Add two mana of any one color.\"")
+        .then(|| {
+            attached_modifier_with_options(
+                context,
+                0,
+                0,
+                Vec::new(),
+                false,
+                false,
+                vec![ActivatedAbilityDef {
+                    ability_id: context.activated_ability_id.clone(),
+                    presentation: AbilityPresentation::Fallback,
+                    cost_modifiers: Vec::new(),
+                    source_zone: AbilitySourceZone::Battlefield,
+                    costs: vec![AbilityCost::Tap],
+                    effect: vec![SpellEffectKind::ProduceMana {
+                        options: ['W', 'U', 'B', 'R', 'G']
+                            .into_iter()
+                            .map(|symbol| {
+                                doubled_mana_amount(symbol)
+                                    .expect("five-color recipe uses valid symbols")
+                            })
+                            .collect(),
+                        restriction: None,
+                        conditional: None,
+                    }],
+                    targeting: None,
+                    timing: ActivationTiming::Normal,
+                    conditions: Vec::new(),
+                    activation_limit: None,
+                }],
+            )
+        })
+}
+
+/// Issue #429 / CR 113.10a / 602.2b / 611.2c: Friendly Neighborhood grants the enchanted land
+/// `{1}, {T}: Target creature gets +1/+1 until end of turn for each creature you control.
+/// Activate only as a sorcery.` The derived creature count is reevaluated as the granted ability
+/// resolves (2025-09-19 ruling) through the shipped `BattlefieldCreatures` expression, and the
+/// printed sentence maps to `ActivationTiming::SorcerySpeed`. Another count scope, bonus, cost,
+/// or timing stays unsupported.
+fn match_aura_granted_pump_per_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (context.source_is_aura
+        && text
+            == "Enchanted land has \"{1}, {T}: Target creature gets +1/+1 until end of turn for each creature you control. Activate only as a sorcery.\"")
+        .then(|| {
+            attached_modifier_with_options(
+                context,
+                0,
+                0,
+                Vec::new(),
+                false,
+                false,
+                vec![ActivatedAbilityDef {
+                    ability_id: context.activated_ability_id.clone(),
+                    presentation: AbilityPresentation::Fallback,
+                    cost_modifiers: Vec::new(),
+                    source_zone: AbilitySourceZone::Battlefield,
+                    costs: vec![
+                        AbilityCost::Mana(
+                            ManaCost::parse("{1}").expect("granted mana cost uses valid syntax"),
+                        ),
+                        AbilityCost::Tap,
+                    ],
+                    effect: vec![SpellEffectKind::PumpTarget {
+                        power: 0,
+                        toughness: 0,
+                        scale: Some(PtScale {
+                            basis: PtScaleBasis::Amount(Amount::Count(
+                                CountExpression::BattlefieldCreatures {
+                                    filter: BattlefieldCreatureCountFilter {
+                                        controllers: RelativePlayerSet::Controller,
+                                        ..BattlefieldCreatureCountFilter::default()
+                                    },
+                                },
+                            )),
+                            power_per_unit: 1,
+                            toughness_per_unit: 1,
+                        }),
+                        subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    }],
+                    targeting: Some(exact_targeting(1, 1, "Choose target creature", vec![0])),
+                    timing: ActivationTiming::SorcerySpeed,
+                    conditions: Vec::new(),
+                    activation_limit: None,
+                }],
+            )
+        })
 }
 
 fn modal_targeting(prompt: &str, effect_index: u32) -> Option<TargetingDef> {
@@ -18198,6 +18475,34 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("aura.enchant.land"),
+        label: "enchant land",
+        surface: RecipeSurface::AuraSpellClause,
+        matcher: match_enchant_land,
+        calibration: calibrations!(
+            "New Horizons" => "Enchant land",
+            "Friendly Neighborhood" => "Enchant land";
+            "Enchant land you control",
+            "Enchant basic land",
+            "Enchant land or creature",
+            "Enchant land. When this Aura enters, draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("aura.enchant.artifact_or_creature"),
+        label: "enchant artifact or creature",
+        surface: RecipeSurface::AuraSpellClause,
+        matcher: match_enchant_artifact_or_creature,
+        calibration: calibrations!(
+            "Stop Cold" => "Enchant artifact or creature",
+            "Stuck in Summoner's Sanctum" => "Enchant artifact or creature";
+            "Enchant creature or artifact",
+            "Enchant artifact",
+            "Enchant permanent",
+            "Enchant artifact or creature you control"
+        ),
+    },
+    Recipe {
         id: RecipeId("activated.equip.generic_fixed"),
         label: "fixed generic Equip",
         surface: RecipeSurface::ActivatedAbility,
@@ -18373,6 +18678,54 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("etb.aura.tap_attached_permanent"),
+        label: "Aura ETB tap enchanted permanent",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_aura_etb_tap_enchanted_permanent,
+        calibration: calibrations!(
+            "Flood the Engine" => "When this Aura enters, tap enchanted permanent.",
+            "Stop Cold" => "When this Aura enters, tap enchanted permanent.";
+            "When this enchantment enters, tap enchanted permanent.",
+            "When this Aura enters, you may tap enchanted permanent.",
+            "When this Aura enters, tap enchanted land.",
+            "When this Aura enters, untap enchanted permanent.",
+            "When this Aura enters, tap enchanted permanent and draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.aura.plus_one_counter_target_creature_you_control"),
+        label: "Aura ETB put a +1/+1 counter on target creature you control",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_aura_etb_plus_one_counter_target_creature_you_control,
+        calibration: calibrations!(
+            "New Horizons" => "When this Aura enters, put a +1/+1 counter on target creature you control.",
+            "Ancestral Vengeance" => "When this Aura enters, put a +1/+1 counter on target creature you control.";
+            "When this Aura enters, put a +1/+1 counter on target creature.",
+            "When this Aura enters, you may put a +1/+1 counter on target creature you control.",
+            "When this Aura enters, put two +1/+1 counters on target creature you control.",
+            "When this Aura enters, put a +1/+1 counter on target creature an opponent controls.",
+            "When this Aura enters, put a -1/-1 counter on target creature you control.",
+            "When this enchantment enters, put a +1/+1 counter on target creature you control."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.aura.create_tokens.human_citizen_gw_1_1.three"),
+        label: "Aura ETB create three 1/1 green and white Human Citizen tokens",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_aura_etb_three_human_citizen_tokens,
+        // Friendly Neighborhood is the only card in the pinned full Oracle corpus printing this
+        // exact clause; the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Friendly Neighborhood" => "When this Aura enters, create three 1/1 green and white Human Citizen creature tokens.";
+            "When this Aura enters, create two 1/1 green and white Human Citizen creature tokens.",
+            "When this Aura enters, create three 1/1 white Human Soldier creature tokens.",
+            "When this Aura enters, create three 1/1 green and white Human Citizen creature tokens tapped.",
+            "When this Aura enters, create three 1/1 green and white Citizen creature tokens.",
+            "When this enchantment enters, create three 1/1 green and white Human Citizen creature tokens.",
+            "When this Aura enters, create three 1/1 green and white Human Citizen creature tokens. Draw a card."
+        ),
+    },
+    Recipe {
         id: RecipeId("etb.aura.grant_first_strike.attached_until_end_of_turn"),
         label: "Aura ETB grant first strike to enchanted creature until end of turn",
         surface: RecipeSurface::EtbAbility,
@@ -18416,6 +18769,58 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Enchanted creature can't untap.",
             "Enchanted permanent doesn't untap during its controller's untap step.",
             "Equipped creature doesn't untap during its controller's untap step."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.aura.remove_abilities_and_untap_step"),
+        label: "enchanted permanent loses all abilities and doesn't untap",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_aura_remove_abilities_no_untap,
+        calibration: calibrations!(
+            "Flood the Engine" => "Enchanted permanent loses all abilities and doesn't untap during its controller's untap step.",
+            "Stop Cold" => "Enchanted permanent loses all abilities and doesn't untap during its controller's untap step.";
+            "Enchanted creature loses all abilities and doesn't untap during its controller's untap step.",
+            "Enchanted permanent loses all abilities.",
+            "Enchanted permanent doesn't untap during its controller's untap step.",
+            "Enchanted permanent loses all abilities and can't attack or block.",
+            "Enchanted permanent doesn't untap during its controller's untap step and loses all abilities.",
+            "Enchanted permanent loses all abilities and doesn't untap during its controller's untap step. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.aura.attached_activated.mana_two_any_one_color"),
+        label: "enchanted land has a granted two-mana-any-one-color ability",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_aura_granted_two_mana_any_one_color,
+        calibration: calibrations!(
+            "Gift of Paradise" => "Enchanted land has \"{T}: Add two mana of any one color.\"",
+            "New Horizons" => "Enchanted land has \"{T}: Add two mana of any one color.\"";
+            "Enchanted land has \"{T}: Add one mana of any one color.\"",
+            "Enchanted land has \"{T}: Add three mana of any one color.\"",
+            "Enchanted land has \"{T}: Add {G}{G}.\"",
+            "Enchanted land has \"{T}: Add two mana of any color.\"",
+            "Enchanted land has \"{1}, {T}: Add two mana of any one color.\"",
+            "Enchanted land has \"{T}: Add two mana of any one color. Activate only once each turn.\"",
+            "Enchanted creature has \"{T}: Add two mana of any one color.\"",
+            "Enchanted land has \"{T}: Add two mana of any one color.\" Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.aura.attached_activated.pump_per_creature"),
+        label: "enchanted land has a granted per-creature pump ability",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_aura_granted_pump_per_creature,
+        // Friendly Neighborhood is the only card in the pinned full Oracle corpus printing this
+        // exact clause; the singleton is verified, not an unreviewed gap.
+        calibration: singleton_calibrations!(
+            "Friendly Neighborhood" => "Enchanted land has \"{1}, {T}: Target creature gets +1/+1 until end of turn for each creature you control. Activate only as a sorcery.\"";
+            "Enchanted land has \"{1}, {T}: Target creature gets +1/+1 until end of turn for each creature an opponent controls. Activate only as a sorcery.\"",
+            "Enchanted land has \"{2}, {T}: Target creature gets +1/+1 until end of turn for each creature you control. Activate only as a sorcery.\"",
+            "Enchanted land has \"{1}, {T}: Target creature gets +2/+2 until end of turn for each creature you control. Activate only as a sorcery.\"",
+            "Enchanted land has \"{1}, {T}: Target creature gets +1/+1 for each creature you control. Activate only as a sorcery.\"",
+            "Enchanted land has \"{1}, {T}: Target creature gets +1/+1 until end of turn for each creature you control.\"",
+            "Enchanted creature has \"{1}, {T}: Target creature gets +1/+1 until end of turn for each creature you control. Activate only as a sorcery.\"",
+            "Enchanted land has \"{1}, {T}: Target creature gets +1/+1 until end of turn for each creature you control. Activate only as a sorcery.\" Draw a card."
         ),
     },
     Recipe {
@@ -26204,13 +26609,13 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Aether Meltdown" => "Enchant creature or Vehicle",
             "Mists of Littjara" => "Enchant creature or Vehicle";
             // The plain permanent, singular creature, artifact union, restricted-controller,
-            // self-restricted union, and rider forms stay unsupported.
+            // self-restricted union, and rider forms stay unsupported. The artifact-or-creature
+            // union is now owned by `aura.enchant.artifact_or_creature`.
             "Enchant permanent",
             "Enchant Vehicle",
             "Enchant creature an opponent controls",
             "Enchant creature or Vehicle you control",
             "Enchant creature or artifact",
-            "Enchant artifact or creature",
             "Enchant creature or Vehicle. Draw a card."
         ),
     },
@@ -44323,7 +44728,6 @@ mod tests {
             "Enchant creature an opponent controls",
             "Enchant creature or Vehicle you control",
             "Enchant creature or artifact",
-            "Enchant artifact or creature",
             "Enchant creature or Vehicle. Draw a card.",
         ] {
             issue_372_assert_unmatched(negative, "Song of Stupefaction");
@@ -52439,6 +52843,363 @@ mod tests {
             let matched = match_clause(clause, is_spell, &context())
                 .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
                 .unwrap_or_else(|| panic!("{clause} must match {id}"));
+            assert_eq!(matched.id.as_str(), id, "{clause}");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #429 — the reviewed Aura restriction/attach cohort. Each clause is
+    // exact-one matched by its own recipe; the shipped creature-only and
+    // standalone-mana owners keep their identities.
+    // -----------------------------------------------------------------------
+
+    const ISSUE_429_REVIEWED_CLAUSES: [(&str, &str, RecipeSurface); 8] = [
+        (
+            "aura.enchant.land",
+            "Enchant land",
+            RecipeSurface::AuraSpellClause,
+        ),
+        (
+            "aura.enchant.artifact_or_creature",
+            "Enchant artifact or creature",
+            RecipeSurface::AuraSpellClause,
+        ),
+        (
+            "etb.aura.tap_attached_permanent",
+            "When this Aura enters, tap enchanted permanent.",
+            RecipeSurface::EtbAbility,
+        ),
+        (
+            "static.aura.remove_abilities_and_untap_step",
+            "Enchanted permanent loses all abilities and doesn't untap during its controller's untap step.",
+            RecipeSurface::StaticAbility,
+        ),
+        (
+            "etb.aura.plus_one_counter_target_creature_you_control",
+            "When this Aura enters, put a +1/+1 counter on target creature you control.",
+            RecipeSurface::EtbAbility,
+        ),
+        (
+            "etb.aura.create_tokens.human_citizen_gw_1_1.three",
+            "When this Aura enters, create three 1/1 green and white Human Citizen creature tokens.",
+            RecipeSurface::EtbAbility,
+        ),
+        (
+            "static.aura.attached_activated.mana_two_any_one_color",
+            "Enchanted land has \"{T}: Add two mana of any one color.\"",
+            RecipeSurface::StaticAbility,
+        ),
+        (
+            "static.aura.attached_activated.pump_per_creature",
+            "Enchanted land has \"{1}, {T}: Target creature gets +1/+1 until end of turn for each creature you control. Activate only as a sorcery.\"",
+            RecipeSurface::StaticAbility,
+        ),
+    ];
+
+    #[test]
+    fn issue_429_reviewed_clauses_match_their_exact_recipes() {
+        for (id, clause, surface) in ISSUE_429_REVIEWED_CLAUSES {
+            let matched = match_surface_in(CATALOG, clause, surface, &context())
+                .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{clause} must match {id}"));
+            assert_eq!(matched.id.as_str(), id, "{clause}");
+        }
+    }
+
+    fn issue_429_match(id: &str, clause: &str, surface: RecipeSurface) -> RecipeMatch {
+        let matched = match_surface_in(CATALOG, clause, surface, &context())
+            .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+            .unwrap_or_else(|| panic!("{clause} must match {id}"));
+        assert_eq!(matched.id.as_str(), id, "{clause}");
+        matched
+    }
+
+    fn issue_429_aura_attach(target: TargetFilter) -> RecipeEmission {
+        RecipeEmission::SpellEffect(SpellEffectKind::AuraAttach { target })
+    }
+
+    fn issue_429_attached_modifier(
+        remove_all_abilities: bool,
+        doesnt_untap_during_untap_step: bool,
+        activated_abilities: Vec<ActivatedAbilityDef>,
+    ) -> RecipeEmission {
+        RecipeEmission::StaticAbility(IdentifiedAbility {
+            ability_id: AbilityId::new("static_01").unwrap(),
+            presentation: AbilityPresentation::OracleLines(vec![1]),
+            definition: StaticAbilityDef::AttachedModifier {
+                condition: None,
+                add_types: TypeLineAddition::default(),
+                set_types: None,
+                set_name: None,
+                set_colors: None,
+                delta_power: 0,
+                delta_toughness: 0,
+                count: None,
+                power_per_match: 0,
+                toughness_per_match: 0,
+                set_power: None,
+                set_toughness: None,
+                remove_all_abilities,
+                keywords: Vec::new(),
+                triggered_abilities: Vec::new(),
+                activated_abilities,
+                restriction: CombatRestriction::default(),
+                doesnt_untap_during_untap_step,
+                cant_untap: false,
+            },
+        })
+    }
+
+    fn issue_429_triggered(effect: SpellEffectKind) -> RecipeEmission {
+        RecipeEmission::TriggeredAbility(TriggeredAbilityDef {
+            ability_id: AbilityId::new("triggered_01").unwrap(),
+            presentation: AbilityPresentation::OracleLines(vec![1]),
+            trigger: TriggerCondition::WhenSelfEntersBattlefield,
+            effect: vec![effect],
+            modal: None,
+            targeting: None,
+            may: false,
+            intervening_if: None,
+            max_triggers_per_turn: None,
+            triggers_only_once: false,
+        })
+    }
+
+    #[test]
+    fn issue_429_emits_the_reviewed_typed_shapes() {
+        let matched = issue_429_match(
+            "aura.enchant.land",
+            "Enchant land",
+            RecipeSurface::AuraSpellClause,
+        );
+        assert_eq!(
+            matched.emission,
+            issue_429_aura_attach(TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                permanent_types: vec![PermanentTypeFilter::Land],
+                ..TargetFilter::default()
+            })
+        );
+
+        let matched = issue_429_match(
+            "aura.enchant.artifact_or_creature",
+            "Enchant artifact or creature",
+            RecipeSurface::AuraSpellClause,
+        );
+        assert_eq!(
+            matched.emission,
+            issue_429_aura_attach(TargetFilter {
+                any_of: Some(vec![
+                    TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        permanent_types: vec![PermanentTypeFilter::Artifact],
+                        ..TargetFilter::default()
+                    },
+                    TargetFilter {
+                        kind: TargetKind::Creature,
+                        ..TargetFilter::default()
+                    },
+                ]),
+                ..TargetFilter::default()
+            })
+        );
+
+        let matched = issue_429_match(
+            "etb.aura.tap_attached_permanent",
+            "When this Aura enters, tap enchanted permanent.",
+            RecipeSurface::EtbAbility,
+        );
+        assert_eq!(
+            matched.emission,
+            issue_429_triggered(SpellEffectKind::Tap {
+                subject: EffectSubject::AttachedObject,
+            })
+        );
+
+        let matched = issue_429_match(
+            "static.aura.remove_abilities_and_untap_step",
+            "Enchanted permanent loses all abilities and doesn't untap during its controller's untap step.",
+            RecipeSurface::StaticAbility,
+        );
+        assert_eq!(
+            matched.emission,
+            issue_429_attached_modifier(true, true, Vec::new())
+        );
+
+        let mut expected_counter = issue_429_triggered(SpellEffectKind::PutCounters {
+            counter: CounterKind::PlusOnePlusOne,
+            count: Amount::Fixed(1),
+            subject: EffectSubject::Chosen(Box::new(TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..TargetFilter::default()
+            })),
+        });
+        let RecipeEmission::TriggeredAbility(ability) = &mut expected_counter else {
+            unreachable!("counter trigger helper returns a triggered ability")
+        };
+        ability.targeting = Some(exact_targeting(
+            1,
+            1,
+            "Choose target creature you control",
+            vec![0],
+        ));
+        let matched = issue_429_match(
+            "etb.aura.plus_one_counter_target_creature_you_control",
+            "When this Aura enters, put a +1/+1 counter on target creature you control.",
+            RecipeSurface::EtbAbility,
+        );
+        assert_eq!(matched.emission, expected_counter);
+
+        let matched = issue_429_match(
+            "etb.aura.create_tokens.human_citizen_gw_1_1.three",
+            "When this Aura enters, create three 1/1 green and white Human Citizen creature tokens.",
+            RecipeSurface::EtbAbility,
+        );
+        assert_eq!(
+            matched.emission,
+            issue_429_triggered(SpellEffectKind::CreateTokens {
+                token: "human_citizen_gw_1_1".into(),
+                count: Amount::Fixed(3),
+                who: PlayerRecipient::Controller,
+                tapped: false,
+                sacrifice_timing: None,
+            })
+        );
+
+        let two_any_color = ['W', 'U', 'B', 'R', 'G']
+            .into_iter()
+            .map(|symbol| doubled_mana_amount(symbol).unwrap())
+            .collect::<Vec<_>>();
+        let matched = issue_429_match(
+            "static.aura.attached_activated.mana_two_any_one_color",
+            "Enchanted land has \"{T}: Add two mana of any one color.\"",
+            RecipeSurface::StaticAbility,
+        );
+        assert_eq!(
+            matched.emission,
+            issue_429_attached_modifier(
+                false,
+                false,
+                vec![ActivatedAbilityDef {
+                    ability_id: AbilityId::new("activated_01").unwrap(),
+                    presentation: AbilityPresentation::Fallback,
+                    cost_modifiers: Vec::new(),
+                    source_zone: AbilitySourceZone::Battlefield,
+                    costs: vec![AbilityCost::Tap],
+                    effect: vec![SpellEffectKind::ProduceMana {
+                        options: two_any_color,
+                        restriction: None,
+                        conditional: None,
+                    }],
+                    targeting: None,
+                    timing: ActivationTiming::Normal,
+                    conditions: Vec::new(),
+                    activation_limit: None,
+                }]
+            )
+        );
+
+        let matched = issue_429_match(
+            "static.aura.attached_activated.pump_per_creature",
+            "Enchanted land has \"{1}, {T}: Target creature gets +1/+1 until end of turn for each creature you control. Activate only as a sorcery.\"",
+            RecipeSurface::StaticAbility,
+        );
+        assert_eq!(
+            matched.emission,
+            issue_429_attached_modifier(
+                false,
+                false,
+                vec![ActivatedAbilityDef {
+                    ability_id: AbilityId::new("activated_01").unwrap(),
+                    presentation: AbilityPresentation::Fallback,
+                    cost_modifiers: Vec::new(),
+                    source_zone: AbilitySourceZone::Battlefield,
+                    costs: vec![
+                        AbilityCost::Mana(ManaCost::parse("{1}").unwrap()),
+                        AbilityCost::Tap,
+                    ],
+                    effect: vec![SpellEffectKind::PumpTarget {
+                        power: 0,
+                        toughness: 0,
+                        scale: Some(PtScale {
+                            basis: PtScaleBasis::Amount(Amount::Count(
+                                CountExpression::BattlefieldCreatures {
+                                    filter: BattlefieldCreatureCountFilter {
+                                        controllers: RelativePlayerSet::Controller,
+                                        ..BattlefieldCreatureCountFilter::default()
+                                    },
+                                },
+                            )),
+                            power_per_unit: 1,
+                            toughness_per_unit: 1,
+                        }),
+                        subject: EffectSubject::Chosen(Box::new(TargetFilter::default_creature())),
+                    }],
+                    targeting: Some(exact_targeting(1, 1, "Choose target creature", vec![0])),
+                    timing: ActivationTiming::SorcerySpeed,
+                    conditions: Vec::new(),
+                    activation_limit: None,
+                }]
+            )
+        );
+    }
+
+    #[test]
+    fn issue_429_rejects_near_misses() {
+        for (id, _, surface) in ISSUE_429_REVIEWED_CLAUSES {
+            let recipe = CATALOG
+                .iter()
+                .find(|recipe| recipe.id.as_str() == id)
+                .unwrap();
+            for negative in recipe.calibration.negative_near_misses {
+                assert!(
+                    match_surface_in(CATALOG, negative, surface, &context())
+                        .unwrap_or_else(|ambiguity| panic!("{negative}: {ambiguity}"))
+                        .is_none(),
+                    "{negative} must not match {id}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn issue_429_owned_forms_stay_with_their_shipped_owners() {
+        for (id, clause, surface) in [
+            (
+                "aura.enchant.creature",
+                "Enchant creature",
+                RecipeSurface::AuraSpellClause,
+            ),
+            (
+                "aura.enchant.creature_you_control",
+                "Enchant creature you control",
+                RecipeSurface::AuraSpellClause,
+            ),
+            (
+                "aura.enchant.creature_or_vehicle",
+                "Enchant creature or Vehicle",
+                RecipeSurface::AuraSpellClause,
+            ),
+            (
+                "etb.aura.tap_attached_creature",
+                "When this Aura enters, tap enchanted creature.",
+                RecipeSurface::EtbAbility,
+            ),
+            (
+                "static.aura.attached_creature_untap_step",
+                "Enchanted creature doesn't untap during its controller's untap step.",
+                RecipeSurface::StaticAbility,
+            ),
+            (
+                "activated.tap.add_two_mana_any_one_color",
+                "{T}: Add two mana of any one color.",
+                RecipeSurface::ActivatedAbility,
+            ),
+        ] {
+            let matched = match_surface_in(CATALOG, clause, surface, &context())
+                .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{clause} must stay with {id}"));
             assert_eq!(matched.id.as_str(), id, "{clause}");
         }
     }

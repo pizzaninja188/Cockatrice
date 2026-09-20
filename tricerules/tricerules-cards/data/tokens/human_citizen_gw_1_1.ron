@@ -1,0 +1,10 @@
+// 1/1 green and white Human Citizen creature token (Friendly Neighborhood).
+(
+  id: "human_citizen_gw_1_1",
+  name: "Human Citizen",
+  face_id: "human_citizen",
+  types: ["Creature", "Human", "Citizen"],
+  colors: [White, Green],
+  power: 1,
+  toughness: 1,
+)

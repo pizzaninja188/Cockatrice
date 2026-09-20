@@ -894,6 +894,7 @@ fleeting_flight	0	cast	exercised
 flesh_burrower	0	cast	exercised
 flight	0	cast	exercised
 flight-deck_coordinator	0	cast	exercised
+flood_the_engine	0	cast	exercised
 floodpits_drowner	0	ability:0	unsupported: target group 0 needs a richer fixture
 floodpits_drowner	0	cast	exercised
 flow_of_knowledge	0	cast	exercised
@@ -939,6 +940,7 @@ frantic_firebolt	0	cast	exercised
 frantic_strength	0	cast	exercised
 frenzied_raptor	0	cast	exercised
 fresh_volunteers	0	cast	exercised
+friendly_neighborhood	0	cast	exercised
 friendly_teddy	0	cast	exercised
 frilled_cave-wurm	0	cast	exercised
 frilled_sea_serpent	0	ability:0	exercised
@@ -1734,6 +1736,7 @@ nest_robber	0	cast	exercised
 nether_horror	0	cast	exercised
 nettle_swine	0	cast	exercised
 new_generations_technique	0	cast	exercised
+new_horizons	0	cast	exercised
 nezumi_informant	0	cast	exercised
 nezumi_linkbreaker	0	cast	exercised
 nightblade_brigade	0	cast	exercised
@@ -2452,6 +2455,7 @@ stone_by_sunlight	0	cast	exercised
 stone_golem	0	cast	exercised
 stonework_puma	0	cast	exercised
 stony-voiced_goblins	0	cast	exercised
+stop_cold	0	cast	exercised
 storm_crow	0	cast	exercised
 storm_fleet_spy	0	cast	exercised
 stormcarved_coast	0	ability:0	exercised
