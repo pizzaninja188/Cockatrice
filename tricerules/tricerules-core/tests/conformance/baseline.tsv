@@ -839,6 +839,9 @@ ferocious_zheng	0	cast	exercised
 festering_gulch	0	ability:0	exercised
 festering_gulch	0	land	exercised
 field_creeper	0	cast	exercised
+fields_of_strife	0	ability:0	exercised
+fields_of_strife	0	ability:1	exercised
+fields_of_strife	0	land	exercised
 fiery_hellhound	0	ability:0	exercised
 fiery_hellhound	0	cast	exercised
 fiery_temper	0	cast	exercised
@@ -914,6 +917,9 @@ forsaken_sanctuary	0	land	exercised
 fortified_rampart	0	cast	exercised
 fortress_crab	0	cast	exercised
 forum_necroscribe	0	cast	exercised
+forum_of_amity	0	ability:0	exercised
+forum_of_amity	0	ability:1	exercised
+forum_of_amity	0	land	exercised
 foul_orchard	0	ability:0	exercised
 foul_orchard	0	land	exercised
 frantic_firebolt	0	cast	exercised
@@ -1803,6 +1809,9 @@ pacifism	0	cast	exercised
 pack_mastiff	0	ability:0	exercised
 pack_mastiff	0	cast	exercised
 panther_warriors	0	cast	exercised
+paradox_gardens	0	ability:0	exercised
+paradox_gardens	0	ability:1	exercised
+paradox_gardens	0	land	exercised
 pardic_wanderer	0	cast	exercised
 patchwork_beastie	0	cast	exercised
 path_to_redemption	0	ability:0	exercised
@@ -2323,6 +2332,9 @@ soured_springs	0	land	exercised
 sparktongue_dragon	0	cast	exercised
 specimen_freighter	0	ability:0	exercised
 specimen_freighter	0	cast	exercised
+spectacle_summit	0	ability:0	exercised
+spectacle_summit	0	ability:1	exercised
+spectacle_summit	0	land	exercised
 spectacular_tactics	0	cast	exercised
 spectral_rider	0	cast	exercised
 spectral_sailor	0	ability:0	exercised
@@ -2608,8 +2620,14 @@ timid_shieldbearer	0	cast	exercised
 tireless_missionaries	0	cast	exercised
 tishanas_tidebinder	0	cast	exercised
 titanic_growth	0	cast	exercised
+titans_grave	0	ability:0	exercised
+titans_grave	0	ability:1	exercised
+titans_grave	0	land	exercised
 toadstool_admirer	0	ability:0	exercised
 toadstool_admirer	0	cast	exercised
+tocasias_dig_site	0	ability:0	exercised
+tocasias_dig_site	0	ability:1	exercised
+tocasias_dig_site	0	land	exercised
 tolarian_scholar	0	cast	exercised
 tolarian_terror	0	cast	exercised
 tomb_trawler	0	ability:0	exercised
@@ -2918,6 +2936,8 @@ wrecking_crew	0	cast	exercised
 wrench	0	ability:0	exercised
 wrench	0	ability:1	exercised
 wrench	0	cast	exercised
+wretched_doll	0	ability:0	exercised
+wretched_doll	0	cast	exercised
 wu_infantry	0	cast	exercised
 wurmwall_sweeper	0	ability:0	exercised
 wurmwall_sweeper	0	cast	exercised

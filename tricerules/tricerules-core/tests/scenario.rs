@@ -554,3 +554,5 @@ mod issue_452_direct_ron;
 mod issue_452_fixed_damage_family;
 #[path = "scenario/issue_453_newly_eligible_standard.rs"]
 mod issue_453_newly_eligible_standard;
+#[path = "scenario/issue_454_activated_surveil.rs"]
+mod issue_454_activated_surveil;

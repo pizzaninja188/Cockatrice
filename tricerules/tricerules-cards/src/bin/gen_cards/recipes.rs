@@ -10075,6 +10075,49 @@ fn match_activated_tap_surveil_one(text: &str, context: &RecipeContext) -> Optio
     })
 }
 
+/// Issue #454 reviewed fixed-cost activated surveil family. The clause must be exactly
+/// `<mana cost>, {T}: Surveil 1.`; the prefix is parsed with `exact_mana_cost` (rejecting X,
+/// empty, and non-canonical spellings) and admitted only for the reviewed allowlist. The
+/// allowlist deliberately omits `{4}` and no-mana so the shipped
+/// `activated.land.pay_four_tap.surveil_one` and `activated.tap.surveil_one` recipes keep their
+/// exact-one ownership. CR 701.25 / 602.2b: mana plus the tap symbol buys one private
+/// library-partition (surveil) effect.
+fn match_activated_mana_tap_surveil_one(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    const REVIEWED_COSTS: &[&str] = &[
+        "{B}",
+        "{2}{B}{G}",
+        "{2}{G}{U}",
+        "{2}{R}{W}",
+        "{2}{U}{R}",
+        "{2}{W}{B}",
+        "{3}",
+    ];
+    let prefix = text.strip_suffix(", {T}: Surveil 1.")?;
+    let cost = exact_mana_cost(prefix)?;
+    REVIEWED_COSTS.contains(&prefix).then(|| {
+        RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            ability_id: context.activated_ability_id.clone(),
+            presentation: context.presentation.clone(),
+            cost_modifiers: Vec::new(),
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![AbilityCost::Mana(cost), AbilityCost::Tap],
+            effect: vec![SpellEffectKind::LibraryPartition {
+                count: 1,
+                top_min: 0,
+                top_max: None,
+                kind: LibraryPartitionKind::Surveil,
+            }],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: Vec::new(),
+            activation_limit: None,
+        })
+    })
+}
+
 /// CR 611.2a / 514.2: one tap symbol grants haste until cleanup to one mandatory creature target.
 /// Controlled-only, source-only, mana-component, permanent, plural, pump riders, and appended
 /// instructions stay unsupported.
@@ -20794,7 +20837,8 @@ pub(super) static CATALOG: &[Recipe] = &[
         calibration: calibrations!(
             "Savage Mansion" => "{4}, {T}: Surveil 1.",
             "University Campus" => "{4}, {T}: Surveil 1.";
-            "{3}, {T}: Surveil 1.",
+            // `{3}, {T}: Surveil 1.` is now owned by `activated.mana_tap.surveil_one` (Tocasia's
+            // Dig Site); the remaining near-misses keep this recipe's exact-one boundary.
             "{5}, {T}: Surveil 1.",
             "{4}: Surveil 1.",
             "{4}, {T}, Pay 1 life: Surveil 1.",
@@ -22559,6 +22603,37 @@ pub(super) static CATALOG: &[Recipe] = &[
             "{T}: Surveil 1. Activate only as a sorcery.",
             "{T}, Pay 1 life: Surveil 1.",
             "{T}: Surveil 1. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.mana_tap.surveil_one"),
+        label: "pay mana and tap to surveil one",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_mana_tap_surveil_one,
+        // The seven reviewed identities are the #454 cohort: five guild lands printing a
+        // two-color pair cost, Wretched Doll's single-black cost, and Tocasia's Dig Site's
+        // generic cost. `{4}` and no-mana stay with their shipped recipes, so both near-misses
+        // are asserted directly on this matcher in the catalog tests instead of as negatives.
+        calibration: calibrations!(
+            "Titan's Grave" => "{2}{B}{G}, {T}: Surveil 1.",
+            "Paradox Gardens" => "{2}{G}{U}, {T}: Surveil 1.",
+            "Fields of Strife" => "{2}{R}{W}, {T}: Surveil 1.",
+            "Spectacle Summit" => "{2}{U}{R}, {T}: Surveil 1.",
+            "Forum of Amity" => "{2}{W}{B}, {T}: Surveil 1.",
+            "Wretched Doll" => "{B}, {T}: Surveil 1.",
+            "Tocasia's Dig Site" => "{3}, {T}: Surveil 1.";
+            // The observed but unadmitted amount and no-tap forms, a different count or action, a
+            // missing period, a timing restriction, an extra cost, an appended instruction, and
+            // another surveilling player stay unsupported.
+            "{2}, {T}: Surveil 1.",
+            "{2}{B}{G}: Surveil 1.",
+            "{2}{B}{G}, {T}: Surveil 2.",
+            "{2}{B}{G}, {T}: Scry 1.",
+            "{2}{B}{G}, {T}: Surveil 1",
+            "{2}{B}{G}, {T}: Surveil 1. Activate only as a sorcery.",
+            "{2}{B}{G}, {T}, Sacrifice this land: Surveil 1.",
+            "{2}{B}{G}, {T}: Surveil 1. Draw a card.",
+            "{2}{B}{G}, {T}: Target player surveils 1."
         ),
     },
     Recipe {
@@ -34388,6 +34463,135 @@ mod tests {
                     ),
                 "the {negative:?} near-miss must not be claimed by the tap-surveil recipe"
             );
+        }
+    }
+
+    const ISSUE_454_MANA_TAP_SURVEIL_ONE_CLAUSES: [(&str, &str); 7] = [
+        ("Titan's Grave", "{2}{B}{G}, {T}: Surveil 1."),
+        ("Paradox Gardens", "{2}{G}{U}, {T}: Surveil 1."),
+        ("Fields of Strife", "{2}{R}{W}, {T}: Surveil 1."),
+        ("Spectacle Summit", "{2}{U}{R}, {T}: Surveil 1."),
+        ("Forum of Amity", "{2}{W}{B}, {T}: Surveil 1."),
+        ("Wretched Doll", "{B}, {T}: Surveil 1."),
+        ("Tocasia's Dig Site", "{3}, {T}: Surveil 1."),
+    ];
+
+    #[test]
+    fn issue_454_mana_tap_surveil_one_clauses_match_their_exact_recipe() {
+        for (source_name, clause) in ISSUE_454_MANA_TAP_SURVEIL_ONE_CLAUSES {
+            let mut source = context();
+            source.source_name = source_name.into();
+            let matched = match_clause(clause, false, &source)
+                .unwrap_or_else(|ambiguity| panic!("{source_name}: {ambiguity}"))
+                .unwrap_or_else(|| {
+                    panic!("{source_name} must match activated.mana_tap.surveil_one")
+                });
+            assert_eq!(
+                matched.id.as_str(),
+                "activated.mana_tap.surveil_one",
+                "{source_name}"
+            );
+            let RecipeEmission::ActivatedAbility(ability) = matched.emission else {
+                panic!("the surveil activation must emit an activated ability");
+            };
+            let expected_cost = ManaCost::parse(clause.split(", {T}").next().expect("cost prefix"))
+                .expect("fixture mana cost");
+            assert_eq!(
+                ability.source_zone,
+                AbilitySourceZone::Battlefield,
+                "{source_name}"
+            );
+            assert_eq!(
+                ability.costs,
+                vec![AbilityCost::Mana(expected_cost), AbilityCost::Tap],
+                "{source_name}"
+            );
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::LibraryPartition {
+                    count: 1,
+                    top_min: 0,
+                    top_max: None,
+                    kind: LibraryPartitionKind::Surveil,
+                }],
+                "{source_name}"
+            );
+            assert!(ability.targeting.is_none(), "{source_name}");
+            assert_eq!(ability.timing, ActivationTiming::Normal, "{source_name}");
+            assert!(ability.conditions.is_empty(), "{source_name}");
+            assert!(ability.activation_limit.is_none(), "{source_name}");
+        }
+    }
+
+    #[test]
+    fn issue_454_recipes_have_stable_ids_and_surfaces() {
+        assert_eq!(
+            issue_318_recipe("activated.mana_tap.surveil_one").surface,
+            RecipeSurface::ActivatedAbility
+        );
+    }
+
+    #[test]
+    fn issue_454_mana_tap_surveil_one_is_activated_only() {
+        assert!(
+            match_clause("{2}{B}{G}, {T}: Surveil 1.", true, &context())
+                .expect("spell surface check must not be ambiguous")
+                .is_none(),
+            "the surveil activation is not a spell clause"
+        );
+    }
+
+    #[test]
+    fn issue_454_mana_tap_surveil_one_rejects_near_misses() {
+        for negative in [
+            "{2}, {T}: Surveil 1.",
+            "{2}{B}{G}: Surveil 1.",
+            "{2}{B}{G}, {T}: Surveil 2.",
+            "{2}{B}{G}, {T}: Scry 1.",
+            "{2}{B}{G}, {T}: Surveil 1",
+            "{2}{B}{G}, {T}: Surveil 1. Activate only as a sorcery.",
+            "{2}{B}{G}, {T}, Sacrifice this land: Surveil 1.",
+            "{2}{B}{G}, {T}: Surveil 1. Draw a card.",
+            "{2}{B}{G}, {T}: Target player surveils 1.",
+        ] {
+            assert!(
+                match_activated_mana_tap_surveil_one(negative, &context()).is_none(),
+                "the new family must reject {negative:?}"
+            );
+            assert!(
+                match_clause(negative, false, &context())
+                    .unwrap_or_else(|ambiguity| panic!("{negative}: {ambiguity}"))
+                    .is_none(),
+                "unsupported near-miss must remain unmatched: {negative}"
+            );
+        }
+
+        for owned in [
+            "{4}, {T}: Surveil 1.",
+            "{T}: Surveil 1.",
+            "{2}{U/B}: Surveil 1.",
+        ] {
+            assert!(
+                match_activated_mana_tap_surveil_one(owned, &context()).is_none(),
+                "the new family must not claim {owned:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_454_shipped_surveil_recipes_keep_their_identities() {
+        for (clause, expected) in [
+            (
+                "{4}, {T}: Surveil 1.",
+                "activated.land.pay_four_tap.surveil_one",
+            ),
+            ("{T}: Surveil 1.", "activated.tap.surveil_one"),
+            ("{2}{U/B}: Surveil 1.", "activated.mana.hybrid_surveil.one"),
+        ] {
+            let matched = match_clause(clause, false, &context())
+                .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{clause} must stay consumed by {expected}"));
+            assert_eq!(matched.id.as_str(), expected, "{clause}");
         }
     }
 
