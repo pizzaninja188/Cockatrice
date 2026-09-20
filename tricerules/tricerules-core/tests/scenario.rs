@@ -562,3 +562,5 @@ mod issue_455_etb_opponent_pump;
 mod issue_456_conditional_dual_lands;
 #[path = "scenario/issue_457_power_up_exhaust.rs"]
 mod issue_457_power_up_exhaust;
+#[path = "scenario/issue_458_pump_and_seven_lands.rs"]
+mod issue_458_pump_and_seven_lands;

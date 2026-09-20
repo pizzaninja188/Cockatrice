@@ -1016,6 +1016,7 @@ gift_of_paradise	0	cast	exercised
 gifted_aetherborn	0	cast	exercised
 gifts_ungiven	0	cast	exercised
 gigantic_big_bear	0	cast	exercised
+gigantoad	0	cast	exercised
 gigantosaurus	0	cast	exercised
 gilacorn	0	cast	exercised
 gilded_lotus	0	ability:0	exercised
@@ -1659,6 +1660,7 @@ moaning_spirit	0	cast	exercised
 moat_piranhas	0	cast	exercised
 mocking_sprite	0	cast	exercised
 moldering_karok	0	cast	exercised
+moment_of_craving	0	cast	exercised
 moment_of_valor	0	cast	exercised
 monastery_messenger	0	cast	exercised
 mongoose_lizard	0	ability:0	unsupported: ability not offered by generic battlefield fixture
@@ -2167,6 +2169,7 @@ scorch_spitter	0	cast	exercised
 scorching_dragonfire	0	cast	exercised
 scorching_shot	0	cast	exercised
 scoria_elemental	0	cast	exercised
+scorpion_sentinel	0	cast	exercised
 scorpions_sting	0	cast	exercised
 scour_for_scrap	0	cast	exercised
 scoured_barrens	0	ability:0	exercised
@@ -2524,6 +2527,7 @@ sworn_guardian	0	cast	exercised
 sylvan_brushstrider	0	cast	exercised
 synthesizer_labship	0	ability:0	exercised
 synthesizer_labship	0	cast	exercised
+syphon_fuel	0	cast	exercised
 tackle_artist	0	cast	exercised
 taiga	0	ability:0	exercised
 taiga	0	land	exercised

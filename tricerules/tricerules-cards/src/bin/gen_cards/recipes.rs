@@ -1105,6 +1105,57 @@ fn match_spell_creature_minus_two_two(text: &str, _: &RecipeContext) -> Option<R
     })
 }
 
+/// The reviewed `Target creature gets -P/-T until end of turn. You gain 2 life.` pair set.
+/// Both components are stored without their printed minus signs and re-signed at emission.
+const ISSUE_458_PUMP_LIFE_PAIRS: [(u32, u32); 2] = [(2, 2), (6, 6)];
+
+/// One reviewed numeric component, spelled exactly as printed: decimal digits with no sign, no
+/// leading zero, and no trailing characters. A near-miss spelling can therefore never alias an
+/// admitted pair (issue #458).
+fn issue_458_canonical_component(text: &str) -> Option<u32> {
+    if text.is_empty() {
+        return None;
+    }
+    let value = text.parse::<u32>().ok()?;
+    (value.to_string() == text).then_some(value)
+}
+
+/// Issue #458 / CR 611.2a / 613.4c / 514.2 / 608.2c / 118.1: one shared recognizer for the exact
+/// `Target creature gets -P/-T until end of turn. You gain 2 life.` template. It parses the fixed
+/// prefix, the canonical signed pair, and the exact suffix, then admits only the reviewed
+/// `(-2, -2)` and `(-6, -6)` pairs. The resolving spell pumps its single mandatory creature
+/// target and then its controller gains exactly two life, in printed order. `+` deltas, a
+/// variable, other pairs or life amounts, an up-to-one or controller-scoped target, another
+/// duration, non-canonical numeric spellings, and appended riders stay unsupported.
+fn match_spell_pump_creature_minus_p_minus_t_gain_two(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    let body = text
+        .strip_prefix("Target creature gets -")?
+        .strip_suffix(" until end of turn. You gain 2 life.")?;
+    let (power, toughness) = body.split_once('/')?;
+    let power = issue_458_canonical_component(power)?;
+    let toughness = issue_458_canonical_component(toughness.strip_prefix('-')?)?;
+    if !ISSUE_458_PUMP_LIFE_PAIRS.contains(&(power, toughness)) {
+        return None;
+    }
+    Some(RecipeEmission::SpellEffectsWithTargeting {
+        effects: vec![
+            SpellEffectKind::PumpTarget {
+                power: -(power as i32),
+                toughness: -(toughness as i32),
+                scale: None,
+                subject: chosen_creature(TargetController::Any),
+            },
+            SpellEffectKind::GainLife {
+                amount: Amount::Fixed(2),
+            },
+        ],
+        targeting: exact_targeting(1, 1, "Choose target creature", vec![0]),
+    })
+}
+
 fn match_spell_destroy_attacking_or_blocking_creature(
     text: &str,
     _: &RecipeContext,
@@ -12005,6 +12056,67 @@ fn match_static_control_artifact_plus_one_zero_deathtouch(
         })
 }
 
+/// The reviewed `As long as you control seven or more lands, this creature gets +P/+T.` delta
+/// pairs.
+const ISSUE_458_SEVEN_LANDS_PAIRS: [(i32, i32); 2] = [(2, 2), (3, 0)];
+
+/// Issue #458 / CR 604.1 / 604.2 / 611.3 / 613.4c: one shared recognizer for the exact
+/// `As long as you control seven or more lands, this creature gets +P/+T.` template. It parses
+/// the fixed condition prefix, the canonical `+P/+T` pair, and the trailing period, then emits
+/// the shipped live `ConditionalSelfModifier` over a controller-relative land count with
+/// `min: 7`, mirroring the artifact-count anchor. Another threshold or wording, another
+/// permanent type, another delta or keyword, an `each`/team scope, a missing period, and
+/// appended riders stay unsupported. The printed "this creature" wording requires a creature
+/// source.
+fn match_static_seven_lands_plus_p_plus_t(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_creature {
+        return None;
+    }
+    let body = text
+        .strip_prefix("As long as you control seven or more lands, this creature gets +")?
+        .strip_suffix('.')?;
+    let (power, toughness) = body.split_once("/+")?;
+    let power = issue_458_canonical_component(power)? as i32;
+    let toughness = issue_458_canonical_component(toughness)? as i32;
+    if !ISSUE_458_SEVEN_LANDS_PAIRS.contains(&(power, toughness)) {
+        return None;
+    }
+    Some(RecipeEmission::StaticAbility(IdentifiedAbility {
+        ability_id: context.static_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        definition: StaticAbilityDef::ConditionalSelfModifier {
+            condition: GameCondition::BattlefieldAggregate {
+                filter: BattlefieldPermanentFilter {
+                    token: None,
+                    any_of: None,
+                    controllers: RelativePlayerSet::Controller,
+                    card_type: Some(CardTypeFilter::Land),
+                    color: None,
+                    name: None,
+                    required_subtypes: Vec::new(),
+                    exclude_source: false,
+                },
+                aggregate: BattlefieldAggregate::Count,
+                min: Some(7),
+                max: None,
+            },
+            set_types: None,
+            add_types: TypeLineAddition::default(),
+            base_power: None,
+            base_toughness: None,
+            delta_power: power,
+            delta_toughness: toughness,
+            keywords: Vec::new(),
+            activated_abilities: Vec::new(),
+            triggered_abilities: Vec::new(),
+            can_attack_as_though_without_defender: false,
+        },
+    }))
+}
+
 /// Issue #352 exact clause templates. Each template is a reusable typed surface with two real
 /// named positive calibrations verified to print the exact clause in the full pinned Oracle bulk
 /// corpus (via the post-#351 candidate report clusters). Every clause is compared by the complete
@@ -17423,7 +17535,9 @@ pub(super) static CATALOG: &[Recipe] = &[
         calibration: calibrations!(
             "Last Gasp" => "Target creature gets -3/-3 until end of turn.",
             "Scorpion's Sting" => "Target creature gets -3/-3 until end of turn.";
-            "Target creature gets -2/-2 until end of turn. You gain 2 life.",
+            // The "-2/-2 plus gain 2 life" form is owned by issue #458's exact recipe, so an
+            // unreviewed pair with that rider is the retained near-miss here.
+            "Target creature gets -4/-4 until end of turn. You gain 2 life.",
             "Target creature you control gets -3/-3 until end of turn.",
             "Up to one target creature gets -3/-3 until end of turn.",
             "Target creature gets -3/-3 until end of turn. You gain 3 life."
@@ -17644,7 +17758,25 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Target creature gets -5/-5 until end of turn.",
             "Target creature you control gets -2/-2 until end of turn.",
             "Up to one target creature gets -2/-2 until end of turn.",
-            "Target creature gets -2/-2 until end of turn. You gain 2 life."
+            // The "+ then gain 2 life" form is owned by issue #458's exact recipe.
+            "Target creature gets -2/-2 until end of turn. You lose 2 life."
+        ),
+    },
+    Recipe {
+        id: RecipeId("spell.pump.creature.minus_p_minus_t.gain_two_life"),
+        label: "creature gets -P/-T then controller gains two life",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_pump_creature_minus_p_minus_t_gain_two,
+        calibration: calibrations!(
+            "Moment of Craving" => "Target creature gets -2/-2 until end of turn. You gain 2 life.",
+            "Syphon Fuel" => "Target creature gets -6/-6 until end of turn. You gain 2 life.";
+            "Target creature gets -1/-1 until end of turn. You gain 2 life.",
+            "Target creature gets -3/-3 until end of turn. You gain 2 life.",
+            "Target creature gets -X/-X until end of turn. You gain 2 life.",
+            "Target creature gets -2/-2 until end of turn. You gain 3 life.",
+            "Target creature you control gets -2/-2 until end of turn. You gain 2 life.",
+            "Up to one target creature gets -2/-2 until end of turn. You gain 2 life.",
+            "Target creature gets -2/-2 until end of turn. You gain 2 life. Draw a card."
         ),
     },
     Recipe {
@@ -24083,6 +24215,23 @@ pub(super) static CATALOG: &[Recipe] = &[
             "As long as you control an artifact, this creature has deathtouch.",
             "As long as you control a creature, this creature gets +1/+0 and has deathtouch.",
             "As long as you control an artifact, this creature gets +2/+0 and has deathtouch."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.conditional_self.seven_lands.plus_p_plus_t"),
+        label: "while controlling seven or more lands +P/+T",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_seven_lands_plus_p_plus_t,
+        calibration: calibrations!(
+            "Gigantoad" => "As long as you control seven or more lands, this creature gets +2/+2.",
+            "Scorpion Sentinel" => "As long as you control seven or more lands, this creature gets +3/+0.";
+            "As long as you control six or more lands, this creature gets +2/+2.",
+            "As long as you control seven or fewer lands, this creature gets +2/+2.",
+            "As long as you control seven or more lands, another creature gets +2/+2.",
+            "As long as you control seven or more lands, creatures you control get +2/+2.",
+            "As long as you control seven or more lands, this creature gets +2/+2 and has trample.",
+            "As long as you control seven or more lands, this creature gets +3/+3.",
+            "As long as you control seven or more lands, this creature gets +2/+2 until end of turn."
         ),
     },
     Recipe {
@@ -50930,5 +51079,235 @@ mod tests {
                 "{id} surface drifted"
             );
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #458 — the pump-and-life spell and the seven-lands conditional
+    // self-pump families.
+    // -----------------------------------------------------------------------
+
+    /// `(name, recipe id, complete clause, power, toughness)` for the reviewed
+    /// `Target creature gets -P/-T until end of turn. You gain 2 life.` identities.
+    const ISSUE_458_PUMP_LIFE_CLAUSES: [(&str, &str, &str, i32, i32); 2] = [
+        (
+            "Moment of Craving",
+            "spell.pump.creature.minus_p_minus_t.gain_two_life",
+            "Target creature gets -2/-2 until end of turn. You gain 2 life.",
+            -2,
+            -2,
+        ),
+        (
+            "Syphon Fuel",
+            "spell.pump.creature.minus_p_minus_t.gain_two_life",
+            "Target creature gets -6/-6 until end of turn. You gain 2 life.",
+            -6,
+            -6,
+        ),
+    ];
+
+    /// `(name, recipe id, complete clause, power, toughness)` for the reviewed
+    /// `As long as you control seven or more lands, this creature gets +P/+T.` identities.
+    const ISSUE_458_SEVEN_LANDS_CLAUSES: [(&str, &str, &str, i32, i32); 2] = [
+        (
+            "Gigantoad",
+            "static.conditional_self.seven_lands.plus_p_plus_t",
+            "As long as you control seven or more lands, this creature gets +2/+2.",
+            2,
+            2,
+        ),
+        (
+            "Scorpion Sentinel",
+            "static.conditional_self.seven_lands.plus_p_plus_t",
+            "As long as you control seven or more lands, this creature gets +3/+0.",
+            3,
+            0,
+        ),
+    ];
+
+    /// Unreviewed pairs, life amounts, roles, durations, spellings, and riders stay unclaimed.
+    const ISSUE_458_PUMP_LIFE_NEAR_MISSES: [&str; 14] = [
+        "Target creature gets -1/-1 until end of turn. You gain 2 life.",
+        "Target creature gets -3/-3 until end of turn. You gain 2 life.",
+        "Target creature gets -X/-X until end of turn. You gain 2 life.",
+        "Target creature gets +2/+2 until end of turn. You gain 2 life.",
+        "Up to one target creature gets -2/-2 until end of turn. You gain 2 life.",
+        "Target creature you control gets -2/-2 until end of turn. You gain 2 life.",
+        "Target creature gets -2/-2 until end of turn. You gain 3 life.",
+        "Target creature gets -2/-2 until end of turn. You gain 2 life. Draw a card.",
+        "Creatures get -2/-2 until end of turn. You gain 2 life.",
+        "Target creature gets -2/-2 until your next turn. You gain 2 life.",
+        // Non-canonical numeric spellings the shared parser must reject: a leading zero in
+        // either component and an explicit repeated sign.
+        "Target creature gets -02/-2 until end of turn. You gain 2 life.",
+        "Target creature gets -2/-02 until end of turn. You gain 2 life.",
+        "Target creature gets --2/-2 until end of turn. You gain 2 life.",
+        "Target creature gets -2/-2 until end of turn. You lose 2 life.",
+    ];
+
+    /// Unreviewed thresholds, scopes, keyword riders, deltas, durations, and alternate
+    /// wordings stay unclaimed.
+    const ISSUE_458_SEVEN_LANDS_NEAR_MISSES: [&str; 14] = [
+        "As long as you control six or more lands, this creature gets +2/+2.",
+        "As long as you control seven or fewer lands, this creature gets +2/+2.",
+        "As long as you control seven or more lands, another creature gets +2/+2.",
+        "As long as you control seven or more lands, creatures you control get +2/+2.",
+        "As long as you control seven or more lands, this creature gets +2/+2 and has trample.",
+        "As long as you control seven or more lands, this creature gets +3/+3.",
+        "As long as you control seven or more lands, this creature gets +1/+0.",
+        "As long as you control seven or more lands, each creature you control gets +2/+2.",
+        "As long as you control seven or more lands, this creature gets +2/+2 until end of turn.",
+        "As long as you control seven or more lands, this creature gets +2/+2",
+        "As long as an opponent controls seven or more lands, this creature gets +2/+2.",
+        "As long as you control seven or more artifacts, this creature gets +2/+2.",
+        "As long as you control seven or more lands, this creature gets +2/+2. Draw a card.",
+        "As long as you control at least seven lands, this creature gets +2/+2.",
+    ];
+
+    /// The exact reviewed condition: seven or more lands the source's controller controls.
+    fn issue_458_seven_lands_condition() -> GameCondition {
+        GameCondition::BattlefieldAggregate {
+            filter: BattlefieldPermanentFilter {
+                token: None,
+                any_of: None,
+                controllers: RelativePlayerSet::Controller,
+                card_type: Some(CardTypeFilter::Land),
+                color: None,
+                name: None,
+                required_subtypes: Vec::new(),
+                exclude_source: false,
+            },
+            aggregate: BattlefieldAggregate::Count,
+            min: Some(7),
+            max: None,
+        }
+    }
+
+    fn issue_458_seven_lands_definition(power: i32, toughness: i32) -> StaticAbilityDef {
+        StaticAbilityDef::ConditionalSelfModifier {
+            condition: issue_458_seven_lands_condition(),
+            set_types: None,
+            add_types: TypeLineAddition::default(),
+            base_power: None,
+            base_toughness: None,
+            delta_power: power,
+            delta_toughness: toughness,
+            keywords: Vec::new(),
+            activated_abilities: Vec::new(),
+            triggered_abilities: Vec::new(),
+            can_attack_as_though_without_defender: false,
+        }
+    }
+
+    #[test]
+    fn issue_458_pump_life_clauses_match_their_exact_recipe() {
+        for (name, id, clause, power, toughness) in ISSUE_458_PUMP_LIFE_CLAUSES {
+            let mut source = context();
+            source.source_name = name.into();
+            let matched = match_clause(clause, true, &source)
+                .unwrap_or_else(|ambiguity| panic!("{name}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{name} must match {id}"));
+            assert_eq!(matched.id.as_str(), id, "{name}");
+            assert_eq!(
+                matched.emission,
+                RecipeEmission::SpellEffectsWithTargeting {
+                    effects: vec![
+                        SpellEffectKind::PumpTarget {
+                            power,
+                            toughness,
+                            scale: None,
+                            subject: chosen_creature(TargetController::Any),
+                        },
+                        SpellEffectKind::GainLife {
+                            amount: Amount::Fixed(2),
+                        },
+                    ],
+                    targeting: exact_targeting(1, 1, "Choose target creature", vec![0]),
+                },
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_458_seven_lands_clauses_match_their_exact_recipe() {
+        for (name, id, clause, power, toughness) in ISSUE_458_SEVEN_LANDS_CLAUSES {
+            let mut source = context();
+            source.source_name = name.into();
+            let matched = match_clause(clause, false, &source)
+                .unwrap_or_else(|ambiguity| panic!("{name}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{name} must match {id}"));
+            assert_eq!(matched.id.as_str(), id, "{name}");
+            let RecipeEmission::StaticAbility(ability) = matched.emission else {
+                panic!("{name} must emit a static ability");
+            };
+            assert_eq!(ability.ability_id.as_str(), "static_01", "{name}");
+            assert_eq!(
+                ability.presentation,
+                AbilityPresentation::OracleLines(vec![1]),
+                "{name}"
+            );
+            assert_eq!(
+                ability.definition,
+                issue_458_seven_lands_definition(power, toughness),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_458_families_reject_near_misses() {
+        for negative in ISSUE_458_PUMP_LIFE_NEAR_MISSES {
+            assert!(
+                match_spell_pump_creature_minus_p_minus_t_gain_two(negative, &context()).is_none(),
+                "the pump-and-life family must reject {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, true);
+        }
+        for negative in ISSUE_458_SEVEN_LANDS_NEAR_MISSES {
+            assert!(
+                match_static_seven_lands_plus_p_plus_t(negative, &context()).is_none(),
+                "the seven-lands family must reject {negative:?}"
+            );
+            issue_318_assert_unmatched(negative, false);
+        }
+    }
+
+    #[test]
+    fn issue_458_families_stay_disjoint_from_shipped_pump_and_static_recipes() {
+        for (name, _, clause, _, _) in ISSUE_458_PUMP_LIFE_CLAUSES {
+            assert!(
+                match_spell_creature_minus_two_two(clause, &context()).is_none(),
+                "{name} must not fall through to the shipped -2/-2 matcher"
+            );
+            assert!(
+                match_spell_pump(clause, &context()).is_none(),
+                "{name} must not fall through to the parametric +P/+T matcher"
+            );
+        }
+        for (name, _, clause, _, _) in ISSUE_458_SEVEN_LANDS_CLAUSES {
+            assert!(
+                match_static_control_artifact_plus_one_zero_deathtouch(clause, &context())
+                    .is_none(),
+                "{name} must not fall through to the artifact-count matcher"
+            );
+            let mut noncreature = context();
+            noncreature.source_is_creature = false;
+            assert!(
+                match_static_seven_lands_plus_p_plus_t(clause, &noncreature).is_none(),
+                "{name} must not match a noncreature source"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_458_recipes_have_stable_ids_and_surfaces() {
+        assert_eq!(
+            issue_318_recipe("spell.pump.creature.minus_p_minus_t.gain_two_life").surface,
+            RecipeSurface::SpellClause
+        );
+        assert_eq!(
+            issue_318_recipe("static.conditional_self.seven_lands.plus_p_plus_t").surface,
+            RecipeSurface::StaticAbility
+        );
     }
 }
