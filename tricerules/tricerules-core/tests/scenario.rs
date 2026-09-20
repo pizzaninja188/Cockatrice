@@ -552,3 +552,5 @@ mod issue_428_choose_two;
 mod issue_452_direct_ron;
 #[path = "scenario/issue_452_fixed_damage_family.rs"]
 mod issue_452_fixed_damage_family;
+#[path = "scenario/issue_453_newly_eligible_standard.rs"]
+mod issue_453_newly_eligible_standard;

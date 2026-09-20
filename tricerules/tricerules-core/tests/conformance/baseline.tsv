@@ -53,6 +53,7 @@ ajanis_sunstriker	0	cast	exercised
 akawalli,_the_seething_tower	0	cast	exercised
 akki_lavarunner_tok-tok,_volcano_born	0	cast	exercised
 akki_lavarunner_tok-tok,_volcano_born	1	cast	intentional: face unavailable from hand
+al_bhed_salvagers	0	cast	exercised
 alabaster_host_sanctifier	0	cast	exercised
 alabaster_kirin	0	cast	exercised
 alaborn_grenadier	0	cast	exercised
@@ -105,6 +106,7 @@ arborback_stomper	0	cast	exercised
 arcane_epiphany	0	cast	exercised
 archangel	0	cast	exercised
 archers_of_qarsi	0	cast	exercised
+archive_dragon	0	cast	exercised
 archweaver	0	cast	exercised
 ardent_militia	0	cast	exercised
 argothian_enchantress	0	cast	exercised
@@ -225,10 +227,13 @@ benalish_knight	0	cast	exercised
 benders_waterskin	0	ability:0	exercised
 benders_waterskin	0	cast	exercised
 benthic_giant	0	cast	exercised
+bestial_bloodline	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+bestial_bloodline	0	cast	exercised
 bestial_menace	0	cast	exercised
 bestow_greatness	0	cast	exercised
 bifur,_melodic_rider	0	cast	exercised
 bigfin_bouncer	0	cast	exercised
+bilbos_deadly_slice	0	cast	exercised
 billowing_shriekmass	0	cast	exercised
 biosynthic_burst	0	cast	exercised
 birnin_zana_plaza	0	ability:0	exercised
@@ -260,6 +265,8 @@ blood_crypt	0	land	exercised
 blood_glutton	0	cast	exercised
 blood_tithe	0	cast	exercised
 bloodcrazed_paladin	0	cast	exercised
+bloodfell_caves	0	ability:0	exercised
+bloodfell_caves	0	land	exercised
 bloodthirsty_aerialist	0	cast	exercised
 blooming_marsh	0	ability:0	exercised
 blooming_marsh	0	land	exercised
@@ -374,6 +381,10 @@ canopy_spider	0	cast	exercised
 canyon_crawler	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 canyon_crawler	0	cast	exercised
 canyon_minotaur	0	cast	exercised
+capital_city	0	ability:0	exercised
+capital_city	0	ability:1	exercised
+capital_city	0	ability:2	unsupported: ability not offered by generic battlefield fixture
+capital_city	0	land	exercised
 capital_guard	0	cast	exercised
 captain_americas_shield	0	ability:0	exercised
 captain_americas_shield	0	cast	exercised
@@ -994,6 +1005,8 @@ gilacorn	0	cast	exercised
 gilded_lotus	0	ability:0	exercised
 gilded_lotus	0	cast	exercised
 gilded_sentinel	0	cast	exercised
+gingerbread_hunter_puny_snack	0	cast	exercised
+gingerbread_hunter_puny_snack	1	cast	exercised
 gingerbrute	0	ability:0	exercised
 gingerbrute	0	ability:1	exercised
 gingerbrute	0	cast	exercised
@@ -1229,6 +1242,7 @@ hoverstone_pilgrim	0	ability:0	exercised
 hoverstone_pilgrim	0	cast	exercised
 howling_fury	0	cast	exercised
 howling_mine	0	cast	exercised
+huatlis_final_strike	0	cast	exercised
 huatlis_snubhorn	0	cast	exercised
 hulk,_bruce_banner	0	cast	exercised
 hulk_smash!	0	cast	exercised
@@ -1268,6 +1282,7 @@ illvoi_galeblade	0	cast	exercised
 illvoi_light_jammer	0	ability:0	exercised
 illvoi_light_jammer	0	cast	exercised
 illvoi_operative	0	cast	exercised
+impact_tremors	0	cast	exercised
 impale	0	cast	exercised
 imperial_outrider	0	cast	exercised
 imperious_inkmage	0	cast	exercised
@@ -1413,6 +1428,8 @@ kraul_whipcracker	0	cast	exercised
 kravens_cats	0	ability:0	exercised
 kravens_cats	0	cast	exercised
 kree_commandos	0	cast	exercised
+kree_sentinel	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+kree_sentinel	0	cast	exercised
 krenkos_enforcer	0	cast	exercised
 krovikan_scoundrel	0	cast	exercised
 kulrath_zealot	0	ability:0	unsupported: ability not offered by generic battlefield fixture
@@ -1430,6 +1447,7 @@ lakeside_shack	0	ability:0	exercised
 lakeside_shack	0	land	exercised
 land_leeches	0	cast	exercised
 lantern_kami	0	cast	exercised
+large_bear	0	cast	exercised
 larval_scoutlander	0	ability:0	exercised
 larval_scoutlander	0	cast	exercised
 last_gasp	0	cast	exercised
@@ -1466,6 +1484,7 @@ lightning_bolt	0	cast	exercised
 lightning_elemental	0	cast	exercised
 lightning_hounds	0	cast	exercised
 lightning_stormkin	0	cast	exercised
+lightshell_duo	0	cast	exercised
 lightshield_parry	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 lightshield_parry	0	cast	exercised
 lilianas_specter	0	cast	exercised
@@ -1519,6 +1538,7 @@ magebane_lizard	0	cast	exercised
 magic_damper	0	cast	exercised
 magic_pot	0	ability:0	exercised
 magic_pot	0	cast	exercised
+magnificent_end	0	cast	exercised
 magnigoth_sentry	0	cast	exercised
 mahamoti_djinn	0	cast	exercised
 make_obsolete	0	cast	exercised
@@ -1598,6 +1618,8 @@ mind_transfer_protocol	0	cast	exercised
 mindful_biomancer	0	ability:0	exercised
 mindful_biomancer	0	cast	exercised
 mindwhisker	0	cast	exercised
+minecart_daredevil_ride_the_rails	0	cast	exercised
+minecart_daredevil_ride_the_rails	1	cast	exercised
 mineshaft_spider	0	cast	exercised
 minotaur_abomination	0	cast	exercised
 minotaur_aggressor	0	cast	exercised
@@ -1757,6 +1779,7 @@ orazca_frillback	0	cast	exercised
 orazca_raptor	0	cast	exercised
 orb_of_dreams	0	cast	exercised
 order_of_the_sacred_bell	0	cast	exercised
+ordinary_bear	0	cast	exercised
 oreskos_swiftclaw	0	cast	exercised
 origin_of_metalbending	0	cast	exercised
 ornery_dilophosaur	0	cast	exercised
@@ -1871,6 +1894,7 @@ prophetic_prism	0	ability:0	exercised
 prophetic_prism	0	cast	exercised
 prosperity_tycoon	0	ability:0	unsupported: nonmana costs need additional fixture resources
 prosperity_tycoon	0	cast	exercised
+protective_response	0	cast	unsupported: target group 0 needs a richer fixture
 prowling_caracal	0	cast	exercised
 pulse_tracker	0	cast	exercised
 punk_frogs	0	cast	exercised
@@ -1898,6 +1922,8 @@ quill-blade_laureate_twofold_intent	0	cast	exercised
 quill-blade_laureate_twofold_intent	1	cast	intentional: face unavailable from hand
 quilled_slagwurm	0	cast	exercised
 qutrub_forayer	0	cast	exercised
+rabanastre,_royal_city	0	ability:0	exercised
+rabanastre,_royal_city	0	land	exercised
 rabid_bite	0	cast	exercised
 radiant_strike	0	cast	exercised
 ragefire	0	cast	exercised
@@ -1931,6 +1957,7 @@ ratcatcher_trainee_pest_problem	1	cast	exercised
 rattleback_apothecary	0	cast	exercised
 raucous_carnival	0	ability:0	exercised
 raucous_carnival	0	land	exercised
+raucous_theater	0	land	exercised
 raven_of_fell_omens	0	cast	exercised
 ravenous_giant	0	cast	exercised
 ravenous_lindwurm	0	cast	exercised
@@ -2089,6 +2116,8 @@ sapling_nursery	0	ability:0	exercised
 sapling_nursery	0	cast	exercised
 sarkhans_resolve	0	cast	exercised
 satyr_rambler	0	cast	exercised
+savage_land_dinosaur	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+savage_land_dinosaur	0	cast	exercised
 savage_mansion	0	ability:0	exercised
 savage_mansion	0	ability:1	exercised
 savage_mansion	0	land	exercised
@@ -2260,6 +2289,8 @@ slithering_cryptid	0	cast	exercised
 sliver_construct	0	cast	exercised
 slumbering_keepguard	0	ability:0	exercised
 slumbering_keepguard	0	cast	exercised
+smaug,_the_great_calamity_spew_flame	0	cast	exercised
+smaug,_the_great_calamity_spew_flame	1	cast	exercised
 smaugs_fury	0	cast	exercised
 snapping_drake	0	cast	exercised
 snare_thopter	0	cast	exercised
@@ -2375,6 +2406,7 @@ stone-throwing_devils	0	cast	exercised
 stone_by_sunlight	0	cast	exercised
 stone_golem	0	cast	exercised
 stonework_puma	0	cast	exercised
+stony-voiced_goblins	0	cast	exercised
 storm_crow	0	cast	exercised
 storm_fleet_spy	0	cast	exercised
 stormcarved_coast	0	ability:0	exercised
@@ -2563,6 +2595,7 @@ thrill_of_possibility	0	cast	exercised
 thunder_lasso	0	ability:0	exercised
 thunder_lasso	0	cast	exercised
 thunder_salvo	0	cast	exercised
+thundering_falls	0	land	exercised
 thundering_giant	0	cast	exercised
 thundering_tanadon	0	cast	exercised
 ticket_booth_tunnel_of_hate	0	cast	exercised
@@ -2583,6 +2616,8 @@ tomb_trawler	0	ability:0	exercised
 tomb_trawler	0	cast	exercised
 tome_raider	0	cast	exercised
 tome_scour	0	cast	exercised
+topiary_panther	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+topiary_panther	0	cast	exercised
 tor_giant	0	cast	exercised
 tormented_angel	0	cast	exercised
 tormenting_voice	0	cast	exercised
@@ -2753,6 +2788,7 @@ voracious_varmint	0	ability:0	exercised
 voracious_varmint	0	cast	exercised
 voracious_vermin	0	cast	exercised
 vorstclaw	0	cast	exercised
+vote_out	0	cast	exercised
 vow_to_erebor	0	cast	exercised
 vulpine_goliath	0	cast	exercised
 vulshok_berserker	0	cast	exercised

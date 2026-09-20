@@ -560,7 +560,11 @@ fn match_spell_controlled_creature_plus_one_then_power_damage(
                     TargetGroupDef {
                         min: u32::from(!optional_target),
                         max: 1,
-                        prompt: "Choose up to one target creature an opponent controls".into(),
+                        prompt: if optional_target {
+                            "Choose up to one target creature an opponent controls".into()
+                        } else {
+                            "Choose target creature an opponent controls".into()
+                        },
                         effect_indices: vec![1],
                         distinct_from: Vec::new(),
                         same_graveyard: false,
