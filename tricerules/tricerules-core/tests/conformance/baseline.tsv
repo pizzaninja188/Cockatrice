@@ -889,6 +889,7 @@ flametongue_kavu	0	cast	exercised
 flaring_cinder	0	cast	exercised
 flashfreeze	0	cast	exercised
 fleetfoot_dancer	0	cast	exercised
+fleeting_distraction	0	cast	exercised
 fleeting_flight	0	cast	exercised
 flesh_burrower	0	cast	exercised
 flight	0	cast	exercised
@@ -1574,6 +1575,7 @@ makindi_griffin	0	cast	exercised
 malamet_scythe	0	ability:0	exercised
 malamet_scythe	0	cast	exercised
 malamet_veteran	0	cast	exercised
+malamet_war_scribe	0	cast	exercised
 malevolent_chandelier	0	ability:0	exercised
 malevolent_chandelier	0	cast	exercised
 mammoth_bellow	0	cast	exercised
@@ -1823,11 +1825,14 @@ outlaw_medic	0	cast	exercised
 over_the_edge	0	cast	exercised
 overgrown_tomb	0	ability:0	exercised
 overgrown_tomb	0	land	exercised
+overkill	0	cast	exercised
 overrun	0	cast	exercised
 overwhelming_surge	0	cast	exercised
 pacifism	0	cast	exercised
 pack_mastiff	0	ability:0	exercised
 pack_mastiff	0	cast	exercised
+panicked_altisaur	0	ability:0	exercised
+panicked_altisaur	0	cast	exercised
 panther_warriors	0	cast	exercised
 paradox_gardens	0	ability:0	exercised
 paradox_gardens	0	ability:1	exercised
@@ -2764,6 +2769,7 @@ unsummon	0	cast	exercised
 untamed_hunger	0	cast	exercised
 updraft_elemental	0	cast	exercised
 urenis_rebuff	0	cast	exercised
+uthros_psionicist	0	cast	exercised
 uthros_scanship	0	ability:0	exercised
 uthros_scanship	0	cast	exercised
 valiant_guard	0	cast	exercised

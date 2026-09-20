@@ -566,3 +566,5 @@ mod issue_457_power_up_exhaust;
 mod issue_458_pump_and_seven_lands;
 #[path = "scenario/issue_459_devotee_endure_mobilize.rs"]
 mod issue_459_devotee_endure_mobilize;
+#[path = "scenario/issue_460_reviewed_instances.rs"]
+mod issue_460_reviewed_instances;

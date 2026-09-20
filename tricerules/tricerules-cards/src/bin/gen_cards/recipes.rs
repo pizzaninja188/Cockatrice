@@ -17056,6 +17056,161 @@ fn match_firebending_zhao_sacrifice_trigger(
         })
 }
 
+/// Issue #460 family A / CR 611.2a / 613.4c / 514.2 / 608.2b / 115.1a: one private recognizer for
+/// the exact `Target creature gets -P/-T until end of turn.` template. The fixed prefix consumes
+/// the power's printed minus sign, and both numeric components reuse the canonical decimal reader
+/// shared with the ETB opponent-pump family, so `+`-signed, leading-zero, repeated-sign, variable,
+/// and overflow spellings stay rejected. Only the reviewed `(-1, 0)` (Fleeting Distraction) and
+/// `(0, -9999)` (Overkill) deltas are admitted; the shipped `-2/-2`, `-3/-3`, and `-4/-4` instances
+/// keep their own recipes. The controlled/up-to-one scopes and appended riders never reach the
+/// suffix check.
+const ISSUE_460_FIXED_NEGATIVE_PUMP_PAIRS: [(i32, i32); 2] = [(-1, 0), (0, -9999)];
+
+fn match_spell_creature_fixed_negative_pump(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    let body = text
+        .strip_prefix("Target creature gets -")?
+        .strip_suffix(" until end of turn.")?;
+    let (power, toughness) = body.split_once('/')?;
+    let power = i32::try_from(issue_458_canonical_component(power)?).ok()?;
+    let toughness =
+        i32::try_from(issue_458_canonical_component(toughness.strip_prefix('-')?)?).ok()?;
+    let pair = (-power, -toughness);
+    ISSUE_460_FIXED_NEGATIVE_PUMP_PAIRS
+        .contains(&pair)
+        .then(|| RecipeEmission::SpellEffectsWithTargeting {
+            effects: vec![SpellEffectKind::PumpTarget {
+                power: pair.0,
+                toughness: pair.1,
+                scale: None,
+                subject: chosen_creature(TargetController::Any),
+            }],
+            targeting: exact_targeting(1, 1, "Choose target creature", vec![0]),
+        })
+}
+
+/// Issue #460 family B / CR 603.6a / 611.2c / 613.4c / 514.2: one private recognizer for the exact
+/// `When this creature enters, creatures you control get +P/+T until end of turn.` template,
+/// mirroring the handwritten `inspiring_captain.ron` trigger. Only the reviewed `+1/+1` (Inspiring
+/// Captain) and `+2/+1` (Malamet War Scribe) deltas are admitted. `other`/`attacking` scopes,
+/// keyword riders, `your next turn` durations, unsigned or unreviewed deltas, and appended riders
+/// stay unsupported, and the trigger remains bound to creature sources.
+const ISSUE_460_ETB_TEAM_PUMP_PAIRS: [(u32, u32); 2] = [(1, 1), (2, 1)];
+
+fn match_etb_team_pump_creatures_you_control(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_creature {
+        return None;
+    }
+    let body = text
+        .strip_prefix("When this creature enters, creatures you control get +")?
+        .strip_suffix(" until end of turn.")?;
+    let (power, toughness) = body.split_once('/')?;
+    let power = issue_458_canonical_component(power)?;
+    let toughness = issue_458_canonical_component(toughness.strip_prefix('+')?)?;
+    ISSUE_460_ETB_TEAM_PUMP_PAIRS
+        .contains(&(power, toughness))
+        .then(|| {
+            triggered_ability_with(
+                context,
+                TriggerCondition::WhenSelfEntersBattlefield,
+                vec![SpellEffectKind::PumpAll {
+                    filter: creatures_you_control(),
+                    power: power as i32,
+                    toughness: toughness as i32,
+                }],
+            )
+        })
+}
+
+/// Issue #460 family C / CR 602.2 / 118.3 / 120.2b / 120.3a: one private recognizer for the exact
+/// `<cost>: This creature deals N damage to each opponent.` template, mirroring the handwritten
+/// `vindictive_warden.ron` ability. `{T}` and an exact mana cost are the only accepted costs; the
+/// reviewed `({3}, 1)` (Vindictive Warden) and `({T}, 2)` (Panicked Altisaur) pairs are the only
+/// accepted combinations. `target opponent`, `each player`, other counts or costs, a compound cost,
+/// a wrong subject, and appended riders stay unsupported, and the ability stays creature-only.
+const ISSUE_460_ACTIVATED_EACH_OPPONENT_DAMAGE: [(&str, u32); 2] = [("{3}", 1), ("{T}", 2)];
+
+fn match_activated_each_opponent_damage(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    if !context.source_is_creature {
+        return None;
+    }
+    let (cost, amount) = text.split_once(": This creature deals ")?;
+    let amount = issue_458_canonical_component(amount.strip_suffix(" damage to each opponent.")?)?;
+    if !ISSUE_460_ACTIVATED_EACH_OPPONENT_DAMAGE
+        .iter()
+        .any(|(reviewed_cost, reviewed_amount)| {
+            *reviewed_cost == cost && *reviewed_amount == amount
+        })
+    {
+        return None;
+    }
+    let costs = if cost == "{T}" {
+        vec![AbilityCost::Tap]
+    } else {
+        vec![AbilityCost::Mana(exact_mana_cost(cost)?)]
+    };
+    Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        ability_id: context.activated_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        cost_modifiers: Vec::new(),
+        source_zone: AbilitySourceZone::Battlefield,
+        costs,
+        effect: vec![SpellEffectKind::DamagePlayer {
+            amount: Amount::Fixed(amount),
+            who: PlayerRecipient::EachOpponent,
+        }],
+        targeting: None,
+        timing: ActivationTiming::Normal,
+        conditions: Vec::new(),
+        activation_limit: None,
+    }))
+}
+
+/// Issue #460 family D / CR 601.2f: one private recognizer for the exact
+/// `The second spell you cast each turn costs {N} less to cast.` template, mirroring the
+/// handwritten `highspire_bell-ringer.ron` static ability. The reviewed amounts are `1` (Highspire
+/// Bell-Ringer) and `2` (Uthros Psionicist); the condition is the committed controller turn history
+/// of exactly one prior spell this turn. Type-scoped (Mocking Sprite) forms, `first`/`third`/
+/// `each`-spell scopes, opponent scopes, variables, floating restrictions, and appended riders
+/// stay unsupported.
+const ISSUE_460_SECOND_SPELL_REDUCTION_AMOUNTS: [u32; 2] = [1, 2];
+
+fn match_static_spell_reduction_second_spell(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    let amount = text
+        .strip_prefix("The second spell you cast each turn costs {")?
+        .strip_suffix("} less to cast.")?;
+    let amount = issue_458_canonical_component(amount)?;
+    if !ISSUE_460_SECOND_SPELL_REDUCTION_AMOUNTS.contains(&amount) {
+        return None;
+    }
+    Some(RecipeEmission::StaticAbility(IdentifiedAbility {
+        ability_id: context.static_ability_id.clone(),
+        presentation: context.presentation.clone(),
+        definition: StaticAbilityDef::SpellGenericReduction {
+            casters: RelativePlayerSet::Controller,
+            spell_type: None,
+            amount: Amount::Fixed(amount),
+            condition: Some(GameCondition::SpellsCastThisTurn {
+                players: RelativePlayerSet::Controller,
+                filter: SpellCastFilter::default(),
+                min: Some(1),
+                max: Some(1),
+            }),
+        },
+    }))
+}
+
 pub(super) static CATALOG: &[Recipe] = &[
     Recipe {
         id: RecipeId("spell.cost_reduction.graveyard_creature_cards.one"),
@@ -26448,6 +26603,106 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Mobilize 3",
             "Mobilize 03 (Whenever this creature attacks, create three tapped and attacking 1/1 red Warrior creature tokens. Sacrifice them at the beginning of the next end step.)",
             "Mobilize X, where X is your devotion to Mardu."
+        ),
+    },
+    // Issue #460 fixed negative pump, ETB team pump, activated each-opponent damage, and
+    // second-spell cost-reduction families. Each recognizer admits only its reviewed parameter
+    // values and keeps the handwritten anchors on the same typed emission.
+    Recipe {
+        id: RecipeId("spell.pump.creature.fixed_negative_reviewed"),
+        label: "creature gets a reviewed fixed negative pump",
+        surface: RecipeSurface::SpellClause,
+        matcher: match_spell_creature_fixed_negative_pump,
+        calibration: calibrations!(
+            "Fleeting Distraction" => "Target creature gets -1/-0 until end of turn.",
+            "Overkill" => "Target creature gets -0/-9999 until end of turn.";
+            // Positive/allied deltas, the shipped `-2/-2`/`-3/-3`/`-4/-4` pairs, variables,
+            // unreviewed amounts, scoped or optional targets, other durations, non-canonical
+            // spellings, and riders stay unsupported. The shipped pairs are asserted against this
+            // matcher directly in the unit tests rather than listed here: they are already owned
+            // by their own recipes, so the catalog would otherwise report a match.
+            "Target creature gets -X/-X until end of turn.",
+            "Target creature gets -1/-1 until end of turn.",
+            "Target creature gets -0/-10000 until end of turn.",
+            "Target creature gets -1/-0 until end of turn. Draw a card.",
+            "Target creature gets -0/-9999 until end of turn. You gain 1 life.",
+            "Up to one target creature gets -1/-0 until end of turn.",
+            "Target creature you control gets -1/-0 until end of turn.",
+            "Target creature gets -1/+0 until end of turn.",
+            "Target creature gets +0/-9999 until end of turn.",
+            "Target creature gets -0/-9999 until your next turn.",
+            "Target creature gets -01/-0 until end of turn.",
+            "Target creature gets -1/-00 until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.pump_all.creatures_you_control.plus_p_plus_t"),
+        label: "creature ETB pumps the controller's team",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_team_pump_creatures_you_control,
+        calibration: calibrations!(
+            "Inspiring Captain" => "When this creature enters, creatures you control get +1/+1 until end of turn.",
+            "Malamet War Scribe" => "When this creature enters, creatures you control get +2/+1 until end of turn.";
+            // Other/attacking scopes, keyword riders, alternate durations, unreviewed or
+            // non-canonical deltas, an unconditional `Whenever` trigger, and appended riders stay
+            // unsupported.
+            "When this creature enters, other creatures you control get +2/+1 until end of turn.",
+            "When this creature enters, attacking creatures you control get +2/+1 until end of turn.",
+            "When this creature enters, creatures you control get +2/+1 and gain trample until end of turn.",
+            "When this creature enters, creatures you control get +2/+1 until your next turn.",
+            "When this creature enters, creatures you control get +3/+1 until end of turn.",
+            "When this creature enters, creatures you control get +1/+2 until end of turn.",
+            "When this creature enters, creatures you control get +2/+1.",
+            "When this creature enters, creatures get +2/+1 until end of turn.",
+            "Whenever this creature enters, creatures you control get +2/+1 until end of turn.",
+            "When this creature enters, creatures you control get +2/+1 until end of turn. Draw a card.",
+            "When this creature enters, creatures you control get +02/+1 until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("activated.each_opponent.damage"),
+        label: "creature deals a fixed amount of damage to each opponent",
+        surface: RecipeSurface::ActivatedAbility,
+        matcher: match_activated_each_opponent_damage,
+        calibration: calibrations!(
+            "Vindictive Warden" => "{3}: This creature deals 1 damage to each opponent.",
+            "Panicked Altisaur" => "{T}: This creature deals 2 damage to each opponent.";
+            // Unreviewed cost/amount pairs, target/player/opponent scopes, a compound cost, a wrong
+            // subject, other counts, non-canonical amounts, and riders stay unsupported.
+            "{3}: This creature deals 2 damage to each opponent.",
+            "{T}: This creature deals 1 damage to each opponent.",
+            "{1}: This creature deals 1 damage to each opponent.",
+            "{2}: This creature deals 2 damage to each opponent.",
+            "{T}: This creature deals 2 damage to target opponent.",
+            "{T}: This creature deals 2 damage to each player.",
+            "{T}: This creature deals 3 damage to each opponent.",
+            "{T}: This creature deals 2 damage to each opponent. Draw a card.",
+            "{T}, Sacrifice this creature: This creature deals 2 damage to each opponent.",
+            "{T}: It deals 2 damage to each opponent.",
+            "{2}{T}: This creature deals 2 damage to each opponent.",
+            "{T}: This creature deals 02 damage to each opponent."
+        ),
+    },
+    Recipe {
+        id: RecipeId("static.spell_reduction.second_spell.amount"),
+        label: "the controller's second spell each turn costs a reviewed amount less",
+        surface: RecipeSurface::StaticAbility,
+        matcher: match_static_spell_reduction_second_spell,
+        calibration: calibrations!(
+            "Highspire Bell-Ringer" => "The second spell you cast each turn costs {1} less to cast.",
+            "Uthros Psionicist" => "The second spell you cast each turn costs {2} less to cast.";
+            // Other ordinals and scopes, unreviewed or non-canonical amounts, type-scoped forms
+            // owned by Mocking Sprite, variables, and floating restrictions stay unsupported.
+            "The first spell you cast each turn costs {2} less to cast.",
+            "The third spell you cast each turn costs {2} less to cast.",
+            "The second spell you cast each turn costs {3} less to cast.",
+            "The second spell you cast each turn costs {0} less to cast.",
+            "Instant and sorcery spells you cast cost {1} less to cast.",
+            "The second spell an opponent casts each turn costs {2} less to cast.",
+            "The second spell you cast each turn costs {X} less to cast.",
+            "The second spell you cast each turn costs {2} less to cast, but not less than {1}.",
+            "Each spell you cast each turn costs {2} less to cast.",
+            "The second spell you cast each turn costs {02} less to cast."
         ),
     },
 ];
@@ -52142,5 +52397,49 @@ mod tests {
             issue_318_recipe("keyword.mobilize_fixed").surface,
             RecipeSurface::KeywordClause
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #460 — RED: the five reviewed clauses must map to their exact
+    // recipes. Before the four families are registered this test fails with
+    // "must match"; it is the focused regression for the catalog addition.
+    // -----------------------------------------------------------------------
+
+    const ISSUE_460_REVIEWED_CLAUSES: [(&str, &str, bool); 5] = [
+        (
+            "spell.pump.creature.fixed_negative_reviewed",
+            "Target creature gets -1/-0 until end of turn.",
+            true,
+        ),
+        (
+            "spell.pump.creature.fixed_negative_reviewed",
+            "Target creature gets -0/-9999 until end of turn.",
+            true,
+        ),
+        (
+            "etb.pump_all.creatures_you_control.plus_p_plus_t",
+            "When this creature enters, creatures you control get +2/+1 until end of turn.",
+            false,
+        ),
+        (
+            "activated.each_opponent.damage",
+            "{T}: This creature deals 2 damage to each opponent.",
+            false,
+        ),
+        (
+            "static.spell_reduction.second_spell.amount",
+            "The second spell you cast each turn costs {2} less to cast.",
+            false,
+        ),
+    ];
+
+    #[test]
+    fn issue_460_reviewed_clauses_match_their_exact_recipes() {
+        for (id, clause, is_spell) in ISSUE_460_REVIEWED_CLAUSES {
+            let matched = match_clause(clause, is_spell, &context())
+                .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{clause} must match {id}"));
+            assert_eq!(matched.id.as_str(), id, "{clause}");
+        }
     }
 }
