@@ -1338,6 +1338,14 @@ fn parse_rules_text(
                 }
                 parsed.harmonize_cost = Some(cost);
             }
+            RecipeEmission::CastCostGroup(group) => {
+                // One face has at most one additional-cost group; a second group clause stays
+                // unsupported so a face cannot silently accumulate or reorder announced costs.
+                if !parsed.cast_cost_groups.is_empty() {
+                    return Err(RulesParseError::Unsupported);
+                }
+                parsed.cast_cost_groups.push(group);
+            }
             RecipeEmission::ModalAssembly(_)
             | RecipeEmission::TeamworkModalAssembly(_)
             | RecipeEmission::TriggeredModalAssembly(_)

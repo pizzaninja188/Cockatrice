@@ -1,13 +1,14 @@
 use tricerules_cards::primitives::{
     ActivatedCostModifier, ActivationLimit, BasePowerToughnessValue, BattlefieldAggregate,
     BattlefieldCreatureCountFilter, BattlefieldPermanentFilter, CardResultAction, CardResultFilter,
-    CardResultSource, CardSearchZone, CardTypeFilter, CombatRestriction, CombatRestrictionScope,
-    CombatRole, ConditionPlayerSet, CountExpression, CounterRemovalPaymentSource,
-    CreatureScopeController, CreatureScopeFilter, DelayedTokenSacrificeTiming, DiscardQuantity,
-    DrawDiscardOrder, EffectSubject, EntersTappedAffected, EntersWithCountersAffected, EntryCost,
-    EventZone, FaceChangeAction, GameCondition, GraveyardAggregate, GraveyardDestination,
-    GraveyardFilter, GraveyardOwner, HandCardAction, HandCardChooser, HandChoiceVisibility,
-    LibraryPlacement, LifeAmount, LifeChangeKind, ManaRetention, ObjectContributionKind,
+    CardResultSource, CardSearchZone, CardTypeFilter, CastCostGroupDef, CastCostOptionDef,
+    CombatRestriction, CombatRestrictionScope, CombatRole, ConditionPlayerSet, CountExpression,
+    CounterRemovalPaymentSource, CreatureScopeController, CreatureScopeFilter,
+    DelayedTokenSacrificeTiming, DiscardQuantity, DrawDiscardOrder, EffectSubject,
+    EntersTappedAffected, EntersWithCountersAffected, EntryCost, EventZone, FaceChangeAction,
+    GameCondition, GraveyardAggregate, GraveyardDestination, GraveyardFilter, GraveyardOwner,
+    HandCardAction, HandCardChooser, HandChoiceVisibility, LibraryPlacement, LifeAmount,
+    LifeChangeKind, ManaCostChoiceKind, ManaRetention, ObjectCastCostKind, ObjectContributionKind,
     ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate,
     PlayerQuantifier, PlayerRecipient, PowerComparison, PowerToughnessCharacteristic, PtScale,
     PtScaleBasis, QuantityTerm, RelativePlayerSet, ResolutionBranchDef,
@@ -165,6 +166,11 @@ pub(super) enum RecipeEmission {
     FlashbackCost(ManaCost),
     /// CR 702.180: the face-level graveyard alternative cost printed as `Harmonize {cost}`.
     HarmonizeCost(ManaCost),
+    /// Issue #338: one complete `As an additional cost to cast this spell, ...` instruction that
+    /// establishes the face's announced cast-cost group. The clause text itself carries no
+    /// resolution effect; the group's options record the paid objects, mana, life, or blight for
+    /// later rules text and for the cast-cost receipt.
+    CastCostGroup(CastCostGroupDef),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -2007,6 +2013,371 @@ fn match_aura_granted_pump_per_creature(
                 }],
             )
         })
+}
+
+// ---------------------------------------------------------------------------
+// Issue #338 — additional-cost cast assembly. Each reviewed clause is one
+// `As an additional cost to cast this spell, ...` instruction that establishes
+// the face's announced cast-cost group. The group reuses the shipped cast-cost
+// option vocabulary (Blight, DiscardCard, Mana, Behold, TapPermanents,
+// SacrificePermanent) and carries the clause's Oracle-line presentation.
+// ---------------------------------------------------------------------------
+
+const ADDITIONAL_COST_PREFIX: &str = "As an additional cost to cast this spell, ";
+
+fn additional_cost_body(text: &str) -> Option<&str> {
+    text.strip_prefix(ADDITIONAL_COST_PREFIX)?.strip_suffix('.')
+}
+
+fn additional_cost_group(
+    context: &RecipeContext,
+    options: Vec<CastCostOptionDef>,
+) -> RecipeEmission {
+    RecipeEmission::CastCostGroup(CastCostGroupDef {
+        group_id: ChoiceId::new("additional_cost").expect("closed additional-cost group id"),
+        presentation: context.presentation.clone(),
+        min: 1,
+        max: 1,
+        options,
+    })
+}
+
+fn additional_cost_option_presentation(context: &RecipeContext) -> AbilityPresentation {
+    context.presentation.clone()
+}
+
+fn creature_you_control() -> TargetFilter {
+    TargetFilter {
+        kind: TargetKind::Creature,
+        controller: TargetController::You,
+        ..TargetFilter::default()
+    }
+}
+
+fn typed_permanent_you_control(permanent_type: PermanentTypeFilter) -> TargetFilter {
+    TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        controller: TargetController::You,
+        permanent_types: vec![permanent_type],
+        ..TargetFilter::default()
+    }
+}
+
+fn sacrifice_permanent_option(
+    context: &RecipeContext,
+    option_id: &str,
+    filter: TargetFilter,
+) -> CastCostOptionDef {
+    CastCostOptionDef::SacrificePermanent {
+        option_id: ChoiceId::new(option_id).expect("closed additional-cost option id"),
+        presentation: additional_cost_option_presentation(context),
+        kind: ObjectCastCostKind::AdditionalPayment,
+        filter: Box::new(filter),
+    }
+}
+
+fn discard_card_option(context: &RecipeContext, option_id: &str) -> CastCostOptionDef {
+    CastCostOptionDef::DiscardCard {
+        option_id: ChoiceId::new(option_id).expect("closed additional-cost option id"),
+        presentation: additional_cost_option_presentation(context),
+    }
+}
+
+fn mana_option(context: &RecipeContext, option_id: &str, cost: &str) -> Option<CastCostOptionDef> {
+    Some(CastCostOptionDef::Mana {
+        option_id: ChoiceId::new(option_id).ok()?,
+        presentation: additional_cost_option_presentation(context),
+        kind: ManaCostChoiceKind::AdditionalPayment,
+        cost: ManaCost::parse(cost).ok()?,
+    })
+}
+
+fn blight_option(context: &RecipeContext, option_id: &str, count: u32) -> CastCostOptionDef {
+    CastCostOptionDef::Blight {
+        option_id: ChoiceId::new(option_id).expect("closed additional-cost option id"),
+        presentation: additional_cost_option_presentation(context),
+        count,
+    }
+}
+
+fn behold_option(context: &RecipeContext, option_id: &str, subtype: &str) -> CastCostOptionDef {
+    CastCostOptionDef::Behold {
+        option_id: ChoiceId::new(option_id).expect("closed additional-cost option id"),
+        presentation: additional_cost_option_presentation(context),
+        hand_filter: ZoneCardFilter {
+            required_subtypes: vec![subtype.to_string()],
+            ..ZoneCardFilter::default()
+        },
+        permanent_filter: Box::new(TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            controller: TargetController::You,
+            required_subtypes: vec![subtype.to_string()],
+            ..TargetFilter::default()
+        }),
+    }
+}
+
+fn tap_permanents_option(
+    context: &RecipeContext,
+    option_id: &str,
+    count: u32,
+    filter: TargetFilter,
+) -> CastCostOptionDef {
+    CastCostOptionDef::TapPermanents {
+        option_id: ChoiceId::new(option_id).expect("closed additional-cost option id"),
+        presentation: additional_cost_option_presentation(context),
+        kind: ObjectCastCostKind::AdditionalPayment,
+        constraint: ObjectPaymentConstraint::ExactCount(count),
+        filter: Box::new(filter),
+    }
+}
+
+/// CR 601.2b / 601.2f: `As an additional cost to cast this spell, sacrifice a creature.` is one
+/// mandatory announced sacrifice of a controlled creature. Corrupted Conviction and Arbiter of
+/// Woe are the pinned-Standard positives; another count, an optional wording, or an appended
+/// instruction stays unsupported.
+fn match_additional_cost_sacrifice_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (additional_cost_body(text)? == "sacrifice a creature").then(|| {
+        additional_cost_group(
+            context,
+            vec![sacrifice_permanent_option(
+                context,
+                "sacrifice_creature",
+                creature_you_control(),
+            )],
+        )
+    })
+}
+
+/// CR 601.2b: `As an additional cost to cast this spell, discard a card.` is one mandatory hand
+/// discard. Laughing Mad and Thrill of Possibility are the reviewed positives; another count, a
+/// random discard, an optional wording, or an appended instruction stays unsupported.
+fn match_additional_cost_discard_card(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (additional_cost_body(text)? == "discard a card")
+        .then(|| additional_cost_group(context, vec![discard_card_option(context, "discard_card")]))
+}
+
+/// CR 601.2b: `As an additional cost to cast this spell, sacrifice a creature or enchantment.`
+/// is one mandatory sacrifice of a controlled creature or enchantment. Final Vengeance and Final
+/// Flare are the reviewed positives; a third alternative or a mana alternative stays unsupported.
+fn match_additional_cost_sacrifice_creature_or_enchantment(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (additional_cost_body(text)? == "sacrifice a creature or enchantment").then(|| {
+        additional_cost_group(
+            context,
+            vec![sacrifice_permanent_option(
+                context,
+                "sacrifice_creature_or_enchantment",
+                TargetFilter {
+                    any_of: Some(vec![
+                        creature_you_control(),
+                        typed_permanent_you_control(PermanentTypeFilter::Enchantment),
+                    ]),
+                    ..TargetFilter::default()
+                },
+            )],
+        )
+    })
+}
+
+/// CR 601.2b: `As an additional cost to cast this spell, sacrifice an artifact or discard a
+/// card.` is a mandatory choice between sacrificing a controlled artifact and discarding a card.
+/// Demand Answers is the reviewed singleton; a three-way alternative or an appended instruction
+/// stays unsupported.
+fn match_additional_cost_sacrifice_artifact_or_discard_card(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (additional_cost_body(text)? == "sacrifice an artifact or discard a card").then(|| {
+        additional_cost_group(
+            context,
+            vec![
+                sacrifice_permanent_option(
+                    context,
+                    "sacrifice_artifact",
+                    typed_permanent_you_control(PermanentTypeFilter::Artifact),
+                ),
+                discard_card_option(context, "discard_card"),
+            ],
+        )
+    })
+}
+
+/// CR 601.2b: `As an additional cost to cast this spell, discard a card or pay {M}.` is a
+/// mandatory choice between a discard and a fixed mana payment. Pumpkin Bombardment and Titania,
+/// Rugged Rumbler are the reviewed positives; another payment kind or an appended instruction
+/// stays unsupported.
+fn match_additional_cost_discard_card_or_pay(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    let body = additional_cost_body(text)?;
+    let mana = body.strip_prefix("discard a card or pay ")?;
+    let mana_option = mana_option(context, "pay_mana", mana)?;
+    Some(additional_cost_group(
+        context,
+        vec![discard_card_option(context, "discard_card"), mana_option],
+    ))
+}
+
+/// CR 701.30 / 601.2b: `As an additional cost to cast this spell, blight {N} or pay {M}.` is a
+/// mandatory choice between putting N -1/-1 counters on a controlled creature and a fixed mana
+/// payment. Bogslither's Embrace is the reviewed singleton; another blight count, an optional
+/// wording, or an appended instruction stays unsupported.
+fn match_additional_cost_blight_or_pay(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    let body = additional_cost_body(text)?;
+    let rest = body.strip_prefix("blight ")?;
+    let (count, mana) = rest.split_once(" or pay ")?;
+    let count = parse_count_word(count)?;
+    if count == 0 {
+        return None;
+    }
+    let mana_option = mana_option(context, "pay_mana", mana)?;
+    Some(additional_cost_group(
+        context,
+        vec![blight_option(context, "blight", count), mana_option],
+    ))
+}
+
+/// CR 701.4 / 601.2b: `As an additional cost to cast this spell, behold a <Subtype> or pay {M}.`
+/// is a mandatory choice between beholding a matching permanent/hand card and a fixed mana
+/// payment. Kinsbaile Aspirant and Silvergill Mentor are the reviewed positives; a behold-and-
+/// exile form, an optional wording, or an appended instruction stays unsupported.
+fn match_additional_cost_behold_or_pay(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    let body = additional_cost_body(text)?;
+    let rest = body
+        .strip_prefix("behold a ")
+        .or_else(|| body.strip_prefix("behold an "))?;
+    let (subtype, mana) = rest.split_once(" or pay ")?;
+    if subtype.is_empty()
+        || !subtype
+            .chars()
+            .all(|character| character.is_ascii_alphabetic())
+    {
+        return None;
+    }
+    let mana_option = mana_option(context, "pay_mana", mana)?;
+    Some(additional_cost_group(
+        context,
+        vec![behold_option(context, "behold", subtype), mana_option],
+    ))
+}
+
+/// CR 601.2b: `As an additional cost to cast this spell, pay {M} or sacrifice an artifact or
+/// creature.` is a mandatory choice between a fixed mana payment and sacrificing a controlled
+/// artifact or creature. Deadly Precision is the reviewed singleton; another alternative order,
+/// another permanent scope, or an appended instruction stays unsupported.
+fn match_additional_cost_pay_or_sacrifice_artifact_or_creature(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    let body = additional_cost_body(text)?;
+    let mana = body
+        .strip_prefix("pay ")?
+        .strip_suffix(" or sacrifice an artifact or creature")?;
+    let mana_option = mana_option(context, "pay_mana", mana)?;
+    Some(additional_cost_group(
+        context,
+        vec![
+            mana_option,
+            sacrifice_permanent_option(
+                context,
+                "sacrifice_artifact_or_creature",
+                TargetFilter {
+                    any_of: Some(vec![
+                        typed_permanent_you_control(PermanentTypeFilter::Artifact),
+                        creature_you_control(),
+                    ]),
+                    ..TargetFilter::default()
+                },
+            ),
+        ],
+    ))
+}
+
+/// CR 601.2b: `As an additional cost to cast this spell, tap {N} untapped creatures and/or lands
+/// you control.` is one exact-count tap payment over a controlled creature/land union. Fear of
+/// Exposure is the reviewed singleton; another count, another permanent scope, or an appended
+/// instruction stays unsupported.
+fn match_additional_cost_tap_creatures_and_or_lands(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    let body = additional_cost_body(text)?;
+    let rest = body.strip_prefix("tap ")?;
+    let (count, tail) = rest.split_once(' ')?;
+    if tail != "untapped creatures and/or lands you control" {
+        return None;
+    }
+    let count = parse_count_word(count)?;
+    if count == 0 {
+        return None;
+    }
+    Some(additional_cost_group(
+        context,
+        vec![tap_permanents_option(
+            context,
+            "tap_permanents",
+            count,
+            TargetFilter {
+                any_of: Some(vec![
+                    creature_you_control(),
+                    typed_permanent_you_control(PermanentTypeFilter::Land),
+                ]),
+                ..TargetFilter::default()
+            },
+        )],
+    ))
+}
+
+/// CR 601.2b: `As an additional cost to cast this spell, tap {N} untapped artifacts, creatures,
+/// and/or lands you control.` is one exact-count tap payment over a controlled
+/// artifact/creature/land union. Guardian of the Great Door is the reviewed singleton; another
+/// count, another permanent scope, or an appended instruction stays unsupported.
+fn match_additional_cost_tap_artifacts_creatures_and_or_lands(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    let body = additional_cost_body(text)?;
+    let rest = body.strip_prefix("tap ")?;
+    let (count, tail) = rest.split_once(' ')?;
+    if tail != "untapped artifacts, creatures, and/or lands you control" {
+        return None;
+    }
+    let count = parse_count_word(count)?;
+    if count == 0 {
+        return None;
+    }
+    Some(additional_cost_group(
+        context,
+        vec![tap_permanents_option(
+            context,
+            "tap_permanents",
+            count,
+            TargetFilter {
+                any_of: Some(vec![
+                    typed_permanent_you_control(PermanentTypeFilter::Artifact),
+                    creature_you_control(),
+                    typed_permanent_you_control(PermanentTypeFilter::Land),
+                ]),
+                ..TargetFilter::default()
+            },
+        )],
+    ))
 }
 
 fn modal_targeting(prompt: &str, effect_index: u32) -> Option<TargetingDef> {
@@ -23970,6 +24341,162 @@ pub(super) static CATALOG: &[Recipe] = &[
             "Harmonize 4G",
             "Harmonize {4}{G",
             "{4}{G}: Harmonize this card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("additional_cost.sacrifice_creature"),
+        label: "additional cost sacrifice a creature",
+        surface: RecipeSurface::CastMethodClause,
+        matcher: match_additional_cost_sacrifice_creature,
+        calibration: calibrations!(
+            "Corrupted Conviction" => "As an additional cost to cast this spell, sacrifice a creature.",
+            "Arbiter of Woe" => "As an additional cost to cast this spell, sacrifice a creature.";
+            "As an additional cost to cast this spell, sacrifice a creature or pay {3}{B}.",
+            "As an additional cost to cast this spell, sacrifice an artifact or creature.",
+            "As an additional cost to cast this spell, sacrifice a creature that dealt damage this turn.",
+            "As an additional cost to cast this spell, sacrifice two creatures.",
+            "As an additional cost to cast this spell, you may sacrifice a creature.",
+            "As an additional cost to cast this spell, sacrifice a creature. Draw two cards.",
+            "As an additional cost to cast this spell, sacrifice a land."
+        ),
+    },
+    Recipe {
+        id: RecipeId("additional_cost.discard_card"),
+        label: "additional cost discard a card",
+        surface: RecipeSurface::CastMethodClause,
+        matcher: match_additional_cost_discard_card,
+        calibration: calibrations!(
+            "Laughing Mad" => "As an additional cost to cast this spell, discard a card.",
+            "Thrill of Possibility" => "As an additional cost to cast this spell, discard a card.";
+            "As an additional cost to cast this spell, discard a card or sacrifice a permanent.",
+            "As an additional cost to cast this spell, discard two cards.",
+            "As an additional cost to cast this spell, discard a card at random.",
+            "As an additional cost to cast this spell, discard X cards.",
+            "As an additional cost to cast this spell, you may discard a card.",
+            "As an additional cost to cast this spell, discard a card. Draw two cards.",
+            "As an additional cost to cast this spell, discard a nonland card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("additional_cost.sacrifice_creature_or_enchantment"),
+        label: "additional cost sacrifice a creature or enchantment",
+        surface: RecipeSurface::CastMethodClause,
+        matcher: match_additional_cost_sacrifice_creature_or_enchantment,
+        calibration: calibrations!(
+            "Final Vengeance" => "As an additional cost to cast this spell, sacrifice a creature or enchantment.",
+            "Final Flare" => "As an additional cost to cast this spell, sacrifice a creature or enchantment.";
+            "As an additional cost to cast this spell, sacrifice a creature or enchantment or pay {2}.",
+            "As an additional cost to cast this spell, sacrifice a creature or pay {3}{B}.",
+            "As an additional cost to cast this spell, sacrifice an artifact or creature.",
+            "As an additional cost to cast this spell, sacrifice a creature or enchantment. Exile target creature.",
+            "As an additional cost to cast this spell, sacrifice a creature or planeswalker."
+        ),
+    },
+    Recipe {
+        id: RecipeId("additional_cost.sacrifice_artifact_or_discard_card"),
+        label: "additional cost sacrifice an artifact or discard a card",
+        surface: RecipeSurface::CastMethodClause,
+        matcher: match_additional_cost_sacrifice_artifact_or_discard_card,
+        // Demand Answers is the only pinned full-corpus printing of this exact two-way choice.
+        calibration: singleton_calibrations!(
+            "Demand Answers" => "As an additional cost to cast this spell, sacrifice an artifact or discard a card.";
+            "As an additional cost to cast this spell, sacrifice an artifact or creature.",
+            "As an additional cost to cast this spell, sacrifice an artifact or discard a card at random.",
+            "As an additional cost to cast this spell, sacrifice an artifact or discard two cards.",
+            "As an additional cost to cast this spell, sacrifice an artifact and discard a card.",
+            "As an additional cost to cast this spell, sacrifice an artifact.",
+            "As an additional cost to cast this spell, sacrifice an artifact or discard a card. Draw two cards."
+        ),
+    },
+    Recipe {
+        id: RecipeId("additional_cost.discard_card_or_pay"),
+        label: "additional cost discard a card or pay mana",
+        surface: RecipeSurface::CastMethodClause,
+        matcher: match_additional_cost_discard_card_or_pay,
+        calibration: calibrations!(
+            "Pumpkin Bombardment" => "As an additional cost to cast this spell, discard a card or pay {2}.",
+            "Titania, Rugged Rumbler" => "As an additional cost to cast this spell, discard a card or pay {2}.";
+            "As an additional cost to cast this spell, discard a card or pay 3 life.",
+            "As an additional cost to cast this spell, discard two cards or pay {2}.",
+            "As an additional cost to cast this spell, discard a card or sacrifice a permanent.",
+            "As an additional cost to cast this spell, discard a card or pay {2} at the beginning of combat.",
+            "As an additional cost to cast this spell, discard a card or pay {2}. Draw two cards."
+        ),
+    },
+    Recipe {
+        id: RecipeId("additional_cost.blight_or_pay"),
+        label: "additional cost blight or pay mana",
+        surface: RecipeSurface::CastMethodClause,
+        matcher: match_additional_cost_blight_or_pay,
+        calibration: calibrations!(
+            "Bogslither's Embrace" => "As an additional cost to cast this spell, blight 1 or pay {3}.",
+            "Wild Unraveling" => "As an additional cost to cast this spell, blight 2 or pay {1}.";
+            "As an additional cost to cast this spell, you may blight 1.",
+            "As an additional cost to cast this spell, blight 1.",
+            "As an additional cost to cast this spell, blight 1 or pay 3 life.",
+            "As an additional cost to cast this spell, blight 1 or pay {3} and draw a card.",
+            "As an additional cost to cast this spell, blight X. X can't be greater than the greatest toughness among creatures you control."
+        ),
+    },
+    Recipe {
+        id: RecipeId("additional_cost.behold_or_pay"),
+        label: "additional cost behold a subtype or pay mana",
+        surface: RecipeSurface::CastMethodClause,
+        matcher: match_additional_cost_behold_or_pay,
+        calibration: calibrations!(
+            "Kinsbaile Aspirant" => "As an additional cost to cast this spell, behold a Kithkin or pay {2}.",
+            "Silvergill Mentor" => "As an additional cost to cast this spell, behold a Merfolk or pay {2}.";
+            "As an additional cost to cast this spell, behold a Kithkin and exile it.",
+            "As an additional cost to cast this spell, behold a Kithkin.",
+            "As an additional cost to cast this spell, you may behold a Dragon.",
+            "As an additional cost to cast this spell, behold a Kithkin or pay 2 life.",
+            "As an additional cost to cast this spell, behold a Kithkin or pay {2} and draw a card.",
+            "As an additional cost to cast this spell, behold two creatures of that type."
+        ),
+    },
+    Recipe {
+        id: RecipeId("additional_cost.pay_or_sacrifice_artifact_or_creature"),
+        label: "additional cost pay mana or sacrifice an artifact or creature",
+        surface: RecipeSurface::CastMethodClause,
+        matcher: match_additional_cost_pay_or_sacrifice_artifact_or_creature,
+        calibration: calibrations!(
+            "Deadly Precision" => "As an additional cost to cast this spell, pay {4} or sacrifice an artifact or creature.",
+            "Annihilating Glare" => "As an additional cost to cast this spell, pay {4} or sacrifice an artifact or creature.";
+            "As an additional cost to cast this spell, pay {4} or sacrifice a creature.",
+            "As an additional cost to cast this spell, pay {4} or sacrifice an artifact or creature or pay {2}.",
+            "As an additional cost to cast this spell, pay {4} or exile an artifact or creature.",
+            "As an additional cost to cast this spell, pay 4 life or sacrifice an artifact or creature.",
+            "As an additional cost to cast this spell, pay {4} or sacrifice an artifact."
+        ),
+    },
+    Recipe {
+        id: RecipeId("additional_cost.tap_creatures_and_or_lands"),
+        label: "additional cost tap creatures and/or lands",
+        surface: RecipeSurface::CastMethodClause,
+        matcher: match_additional_cost_tap_creatures_and_or_lands,
+        // Fear of Exposure is the only pinned full-corpus printing of this exact tap payment.
+        calibration: singleton_calibrations!(
+            "Fear of Exposure" => "As an additional cost to cast this spell, tap two untapped creatures and/or lands you control.";
+            "As an additional cost to cast this spell, tap two untapped creatures you control.",
+            "As an additional cost to cast this spell, tap two untapped lands you control.",
+            "As an additional cost to cast this spell, tap two untapped creatures and/or lands.",
+            "As an additional cost to cast this spell, tap an untapped creature and/or land you control.",
+            "As an additional cost to cast this spell, tap two untapped creatures and/or lands you control. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("additional_cost.tap_artifacts_creatures_and_or_lands"),
+        label: "additional cost tap artifacts, creatures, and/or lands",
+        surface: RecipeSurface::CastMethodClause,
+        matcher: match_additional_cost_tap_artifacts_creatures_and_or_lands,
+        // Guardian of the Great Door is the only pinned full-corpus printing of this exact tap
+        // payment.
+        calibration: singleton_calibrations!(
+            "Guardian of the Great Door" => "As an additional cost to cast this spell, tap four untapped artifacts, creatures, and/or lands you control.";
+            "As an additional cost to cast this spell, tap four untapped artifacts you control.",
+            "As an additional cost to cast this spell, tap four untapped artifacts, creatures, and lands you control.",
+            "As an additional cost to cast this spell, tap four untapped artifacts, creatures, and/or lands an opponent controls.",
+            "As an additional cost to cast this spell, tap four untapped artifacts, creatures, and/or lands you control. Draw a card."
         ),
     },
     Recipe {
@@ -53201,6 +53728,346 @@ mod tests {
                 .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
                 .unwrap_or_else(|| panic!("{clause} must stay with {id}"));
             assert_eq!(matched.id.as_str(), id, "{clause}");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #338 — additional-cost cast assembly. Each reviewed clause is
+    // exact-one matched and emits a typed announced cast-cost group.
+    // -----------------------------------------------------------------------
+
+    const ISSUE_338_REVIEWED_CLAUSES: [(&str, &str); 12] = [
+        (
+            "additional_cost.sacrifice_creature",
+            "As an additional cost to cast this spell, sacrifice a creature.",
+        ),
+        (
+            "additional_cost.discard_card",
+            "As an additional cost to cast this spell, discard a card.",
+        ),
+        (
+            "additional_cost.sacrifice_creature_or_enchantment",
+            "As an additional cost to cast this spell, sacrifice a creature or enchantment.",
+        ),
+        (
+            "additional_cost.sacrifice_artifact_or_discard_card",
+            "As an additional cost to cast this spell, sacrifice an artifact or discard a card.",
+        ),
+        (
+            "additional_cost.discard_card_or_pay",
+            "As an additional cost to cast this spell, discard a card or pay {2}.",
+        ),
+        (
+            "additional_cost.blight_or_pay",
+            "As an additional cost to cast this spell, blight 1 or pay {3}.",
+        ),
+        (
+            "additional_cost.blight_or_pay",
+            "As an additional cost to cast this spell, blight 2 or pay {1}.",
+        ),
+        (
+            "additional_cost.behold_or_pay",
+            "As an additional cost to cast this spell, behold a Kithkin or pay {2}.",
+        ),
+        (
+            "additional_cost.behold_or_pay",
+            "As an additional cost to cast this spell, behold a Merfolk or pay {2}.",
+        ),
+        (
+            "additional_cost.pay_or_sacrifice_artifact_or_creature",
+            "As an additional cost to cast this spell, pay {4} or sacrifice an artifact or creature.",
+        ),
+        (
+            "additional_cost.tap_creatures_and_or_lands",
+            "As an additional cost to cast this spell, tap two untapped creatures and/or lands you control.",
+        ),
+        (
+            "additional_cost.tap_artifacts_creatures_and_or_lands",
+            "As an additional cost to cast this spell, tap four untapped artifacts, creatures, and/or lands you control.",
+        ),
+    ];
+
+    fn issue_338_match(clause: &str) -> RecipeMatch {
+        match_surface_in(CATALOG, clause, RecipeSurface::CastMethodClause, &context())
+            .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+            .unwrap_or_else(|| panic!("{clause} must match an additional-cost recipe"))
+    }
+
+    fn issue_338_group(options: Vec<CastCostOptionDef>) -> RecipeEmission {
+        RecipeEmission::CastCostGroup(CastCostGroupDef {
+            group_id: ChoiceId::new("additional_cost").unwrap(),
+            presentation: AbilityPresentation::OracleLines(vec![1]),
+            min: 1,
+            max: 1,
+            options,
+        })
+    }
+
+    fn issue_338_option_presentation() -> AbilityPresentation {
+        AbilityPresentation::OracleLines(vec![1])
+    }
+
+    fn issue_338_creature() -> TargetFilter {
+        TargetFilter {
+            kind: TargetKind::Creature,
+            controller: TargetController::You,
+            ..TargetFilter::default()
+        }
+    }
+
+    fn issue_338_artifact() -> TargetFilter {
+        TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            controller: TargetController::You,
+            permanent_types: vec![PermanentTypeFilter::Artifact],
+            ..TargetFilter::default()
+        }
+    }
+
+    fn issue_338_land() -> TargetFilter {
+        TargetFilter {
+            kind: TargetKind::AnyPermanent,
+            controller: TargetController::You,
+            permanent_types: vec![PermanentTypeFilter::Land],
+            ..TargetFilter::default()
+        }
+    }
+
+    fn issue_338_sacrifice(option_id: &str, filter: TargetFilter) -> CastCostOptionDef {
+        CastCostOptionDef::SacrificePermanent {
+            option_id: ChoiceId::new(option_id).unwrap(),
+            presentation: issue_338_option_presentation(),
+            kind: ObjectCastCostKind::AdditionalPayment,
+            filter: Box::new(filter),
+        }
+    }
+
+    fn issue_338_discard() -> CastCostOptionDef {
+        CastCostOptionDef::DiscardCard {
+            option_id: ChoiceId::new("discard_card").unwrap(),
+            presentation: issue_338_option_presentation(),
+        }
+    }
+
+    fn issue_338_mana(option_id: &str, cost: &str) -> CastCostOptionDef {
+        CastCostOptionDef::Mana {
+            option_id: ChoiceId::new(option_id).unwrap(),
+            presentation: issue_338_option_presentation(),
+            kind: ManaCostChoiceKind::AdditionalPayment,
+            cost: ManaCost::parse(cost).unwrap(),
+        }
+    }
+
+    fn issue_338_behold(option_id: &str, subtype: &str) -> CastCostOptionDef {
+        CastCostOptionDef::Behold {
+            option_id: ChoiceId::new(option_id).unwrap(),
+            presentation: issue_338_option_presentation(),
+            hand_filter: ZoneCardFilter {
+                required_subtypes: vec![subtype.to_string()],
+                ..ZoneCardFilter::default()
+            },
+            permanent_filter: Box::new(TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                controller: TargetController::You,
+                required_subtypes: vec![subtype.to_string()],
+                ..TargetFilter::default()
+            }),
+        }
+    }
+
+    fn issue_338_tap(option_id: &str, count: u32, filter: TargetFilter) -> CastCostOptionDef {
+        CastCostOptionDef::TapPermanents {
+            option_id: ChoiceId::new(option_id).unwrap(),
+            presentation: issue_338_option_presentation(),
+            kind: ObjectCastCostKind::AdditionalPayment,
+            constraint: ObjectPaymentConstraint::ExactCount(count),
+            filter: Box::new(filter),
+        }
+    }
+
+    #[test]
+    fn issue_338_reviewed_clauses_match_their_exact_recipes() {
+        for (id, clause) in ISSUE_338_REVIEWED_CLAUSES {
+            let matched = issue_338_match(clause);
+            assert_eq!(matched.id.as_str(), id, "{clause}");
+        }
+    }
+
+    #[test]
+    fn issue_338_emits_the_reviewed_typed_groups() {
+        let matched =
+            issue_338_match("As an additional cost to cast this spell, sacrifice a creature.");
+        assert_eq!(
+            matched.emission,
+            issue_338_group(vec![issue_338_sacrifice(
+                "sacrifice_creature",
+                issue_338_creature()
+            )])
+        );
+
+        let matched = issue_338_match("As an additional cost to cast this spell, discard a card.");
+        assert_eq!(matched.emission, issue_338_group(vec![issue_338_discard()]));
+
+        let matched = issue_338_match(
+            "As an additional cost to cast this spell, sacrifice a creature or enchantment.",
+        );
+        assert_eq!(
+            matched.emission,
+            issue_338_group(vec![issue_338_sacrifice(
+                "sacrifice_creature_or_enchantment",
+                TargetFilter {
+                    any_of: Some(vec![
+                        issue_338_creature(),
+                        TargetFilter {
+                            kind: TargetKind::AnyPermanent,
+                            controller: TargetController::You,
+                            permanent_types: vec![PermanentTypeFilter::Enchantment],
+                            ..TargetFilter::default()
+                        },
+                    ]),
+                    ..TargetFilter::default()
+                }
+            )])
+        );
+
+        let matched = issue_338_match(
+            "As an additional cost to cast this spell, sacrifice an artifact or discard a card.",
+        );
+        assert_eq!(
+            matched.emission,
+            issue_338_group(vec![
+                issue_338_sacrifice("sacrifice_artifact", issue_338_artifact()),
+                issue_338_discard(),
+            ])
+        );
+
+        let matched =
+            issue_338_match("As an additional cost to cast this spell, discard a card or pay {2}.");
+        assert_eq!(
+            matched.emission,
+            issue_338_group(vec![issue_338_discard(), issue_338_mana("pay_mana", "{2}")])
+        );
+
+        let matched =
+            issue_338_match("As an additional cost to cast this spell, blight 1 or pay {3}.");
+        assert_eq!(
+            matched.emission,
+            issue_338_group(vec![
+                CastCostOptionDef::Blight {
+                    option_id: ChoiceId::new("blight").unwrap(),
+                    presentation: issue_338_option_presentation(),
+                    count: 1,
+                },
+                issue_338_mana("pay_mana", "{3}"),
+            ])
+        );
+
+        let matched = issue_338_match(
+            "As an additional cost to cast this spell, behold a Merfolk or pay {2}.",
+        );
+        assert_eq!(
+            matched.emission,
+            issue_338_group(vec![
+                issue_338_behold("behold", "Merfolk"),
+                issue_338_mana("pay_mana", "{2}"),
+            ])
+        );
+
+        let matched = issue_338_match(
+            "As an additional cost to cast this spell, pay {4} or sacrifice an artifact or creature.",
+        );
+        assert_eq!(
+            matched.emission,
+            issue_338_group(vec![
+                issue_338_mana("pay_mana", "{4}"),
+                issue_338_sacrifice(
+                    "sacrifice_artifact_or_creature",
+                    TargetFilter {
+                        any_of: Some(vec![issue_338_artifact(), issue_338_creature()]),
+                        ..TargetFilter::default()
+                    }
+                ),
+            ])
+        );
+
+        let matched = issue_338_match(
+            "As an additional cost to cast this spell, tap two untapped creatures and/or lands you control.",
+        );
+        assert_eq!(
+            matched.emission,
+            issue_338_group(vec![issue_338_tap(
+                "tap_permanents",
+                2,
+                TargetFilter {
+                    any_of: Some(vec![issue_338_creature(), issue_338_land()]),
+                    ..TargetFilter::default()
+                }
+            )])
+        );
+
+        let matched = issue_338_match(
+            "As an additional cost to cast this spell, tap four untapped artifacts, creatures, and/or lands you control.",
+        );
+        assert_eq!(
+            matched.emission,
+            issue_338_group(vec![issue_338_tap(
+                "tap_permanents",
+                4,
+                TargetFilter {
+                    any_of: Some(vec![
+                        issue_338_artifact(),
+                        issue_338_creature(),
+                        issue_338_land(),
+                    ]),
+                    ..TargetFilter::default()
+                }
+            )])
+        );
+    }
+
+    #[test]
+    fn issue_338_rejects_near_misses() {
+        for (id, _) in ISSUE_338_REVIEWED_CLAUSES {
+            let recipe = CATALOG
+                .iter()
+                .find(|recipe| recipe.id.as_str() == id)
+                .unwrap();
+            for negative in recipe.calibration.negative_near_misses {
+                assert!(
+                    match_surface_in(
+                        CATALOG,
+                        negative,
+                        RecipeSurface::CastMethodClause,
+                        &context()
+                    )
+                    .unwrap_or_else(|ambiguity| panic!("{negative}: {ambiguity}"))
+                    .is_none(),
+                    "{negative} must not match {id}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn issue_338_optional_and_variable_forms_stay_unmatched() {
+        for clause in [
+            "As an additional cost to cast this spell, you may blight 1.",
+            "As an additional cost to cast this spell, you may collect evidence 6.",
+            "As an additional cost to cast this spell, discard a card or pay 3 life.",
+            "As an additional cost to cast this spell, pay X life.",
+            "As an additional cost to cast this spell, waterbend {X}.",
+            "As an additional cost to cast this spell, forage or pay {B}.",
+            "As an additional cost to cast this spell, return a permanent you control to its owner's hand.",
+            "As an additional cost to cast this spell, exile a creature you control.",
+            "As an additional cost to cast this spell, exile two cards from your graveyard or pay {1}{W}.",
+            "As an additional cost to cast this spell, sacrifice a creature or pay {3}{B}.",
+        ] {
+            assert!(
+                match_surface_in(CATALOG, clause, RecipeSurface::CastMethodClause, &context())
+                    .unwrap_or_else(|ambiguity| panic!("{clause}: {ambiguity}"))
+                    .is_none(),
+                "{clause} must stay unsupported"
+            );
         }
     }
 }
