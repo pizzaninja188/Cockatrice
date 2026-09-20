@@ -1433,6 +1433,15 @@ impl CardRegistry {
         Ok(registry)
     }
 
+    /// Parse and validate one offline authoring draft against the shipped token namespace.
+    ///
+    /// This deliberately does not merge the draft into the embedded card registry. Authoring
+    /// tools use it to exercise the exact runtime schema and validators while separately
+    /// enforcing identity-collision and promotion policy.
+    pub fn from_authoring_draft(chunk: &str) -> Result<Self, RegistryError> {
+        Self::from_chunks_and_tokens(&[chunk], EMBEDDED_TOKEN_CHUNKS)
+    }
+
     #[cfg(test)]
     fn from_chunks(chunks: &[&str]) -> Result<Self, RegistryError> {
         Self::from_chunks_and_tokens(chunks, &[])

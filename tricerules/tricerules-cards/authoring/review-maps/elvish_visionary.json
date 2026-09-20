@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "exact_name": "Elvish Visionary",
+  "spans": [
+    {
+      "face_id": "elvish_visionary",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario semantic_fixtures::semantic_fixtures_registered_draw_pilot",
+      "covers": "accepted creature cast, ETB trigger creation, bounded resolution, exact one-card draw"
+    },
+    {
+      "test": "issue_448_semantic_mapping::issue_448_registry_rows_preserve_independently_reviewed_card_mappings",
+      "covers": "reviewed identity, characteristics, trigger ID, presentation, trigger, and draw effect"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

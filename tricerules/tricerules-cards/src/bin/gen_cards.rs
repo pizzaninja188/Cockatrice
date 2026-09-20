@@ -48,6 +48,8 @@ mod dependency_report;
 mod presentation_audit;
 #[path = "gen_cards/recipes.rs"]
 mod recipes;
+#[path = "gen_cards/review.rs"]
+mod review;
 #[path = "gen_cards/scaffold.rs"]
 mod scaffold;
 
@@ -92,6 +94,10 @@ struct Args {
     scaffold_batch: Option<PathBuf>,
     scaffold_out_dir: Option<PathBuf>,
     inspect_existing: bool,
+    review_draft: Option<PathBuf>,
+    review_map: Option<PathBuf>,
+    review_out: Option<PathBuf>,
+    review_existing: bool,
     out_dir: PathBuf,
     presentation_registry: PathBuf,
     dry_run: bool,
@@ -118,6 +124,10 @@ fn print_usage() {
          --scaffold-batch <path> emit a deterministic exact-name scaffold batch + manifest\n  \
          --scaffold-out-dir <path> write .ron.scaffold files and manifest instead of stdout\n  \
          --inspect-existing inspect matching implemented cards without emitting replacement scaffolds\n  \
+         --review-draft <path> validate one author-supplied typed RON draft (separate mode)\n  \
+         --review-map <path> explicit source-span review map JSON for --review-draft\n  \
+         --review-out <path> write the deterministic review packet (stdout by default)\n  \
+         --review-existing allow inspect-only review of an already registered matching identity\n  \
          --out-dir <path>   output root (default: data/generated, relative to this crate)\n  \
          --presentation-registry <path> generated Oracle fingerprint TSV\n  \
          --dry-run          report counts + skip reasons, write nothing\n  \
@@ -143,6 +153,10 @@ fn parse_args() -> Result<Args, String> {
     let mut scaffold_batch = None;
     let mut scaffold_out_dir = None;
     let mut inspect_existing = false;
+    let mut review_draft = None;
+    let mut review_map = None;
+    let mut review_out = None;
+    let mut review_existing = false;
     let mut out_dir: Option<PathBuf> = None;
     let mut presentation_registry: Option<PathBuf> = None;
     let mut dry_run = false;
@@ -199,6 +213,22 @@ fn parse_args() -> Result<Args, String> {
                 ))
             }
             "--inspect-existing" => inspect_existing = true,
+            "--review-draft" => {
+                review_draft = Some(PathBuf::from(
+                    it.next().ok_or("--review-draft needs a value")?,
+                ))
+            }
+            "--review-map" => {
+                review_map = Some(PathBuf::from(
+                    it.next().ok_or("--review-map needs a value")?,
+                ))
+            }
+            "--review-out" => {
+                review_out = Some(PathBuf::from(
+                    it.next().ok_or("--review-out needs a value")?,
+                ))
+            }
+            "--review-existing" => review_existing = true,
             "--out-dir" => {
                 out_dir = Some(PathBuf::from(it.next().ok_or("--out-dir needs a value")?))
             }
@@ -247,6 +277,14 @@ fn parse_args() -> Result<Args, String> {
         return Err("--scaffold-card and --scaffold-batch are mutually exclusive".into());
     }
     let scaffolding = scaffold_card.is_some() || scaffold_batch.is_some();
+    let reviewing =
+        review_draft.is_some() || review_map.is_some() || review_out.is_some() || review_existing;
+    if review_draft.is_some() != review_map.is_some() {
+        return Err("--review-draft and --review-map are required together".into());
+    }
+    if (review_out.is_some() || review_existing) && review_draft.is_none() {
+        return Err("--review-out and --review-existing require --review-draft".into());
+    }
     if (dependency_evidence.is_some() || dependency_issues.is_some()) && dependency_report.is_none()
     {
         return Err("dependency evidence/issues require --dependency-report".into());
@@ -257,6 +295,7 @@ fn parse_args() -> Result<Args, String> {
             || scaffolding
             || scaffold_out_dir.is_some()
             || inspect_existing
+            || reviewing
             || oracle_tags.is_some()
             || dry_run
             || check
@@ -287,6 +326,24 @@ fn parse_args() -> Result<Args, String> {
             "scaffold modes cannot be combined with generation, check, candidate-report, Oracle Tags, or presentation-audit modes"
                 .into(),
         );
+    }
+    if reviewing
+        && (candidate_report.is_some()
+            || target_names.is_some()
+            || scaffolding
+            || scaffold_out_dir.is_some()
+            || inspect_existing
+            || oracle_tags.is_some()
+            || dry_run
+            || check
+            || include_new
+            || limit.is_some()
+            || audit_presentation
+            || inspect_card.is_some()
+            || out_dir.is_some()
+            || presentation_registry.is_some())
+    {
+        return Err("--review-draft is a separate offline authoring-review mode".into());
     }
     if candidate_report.is_some()
         && (dry_run
@@ -331,6 +388,10 @@ fn parse_args() -> Result<Args, String> {
         scaffold_batch,
         scaffold_out_dir,
         inspect_existing,
+        review_draft,
+        review_map,
+        review_out,
+        review_existing,
         out_dir,
         presentation_registry,
         dry_run,
@@ -2830,6 +2891,36 @@ fn main() -> ExitCode {
             }
             Err(error) => {
                 eprintln!("error: {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+
+    if let (Some(draft_path), Some(map_path)) = (&args.review_draft, &args.review_map) {
+        let mut cards = Vec::new();
+        if let Err(error) = for_each_gzipped_jsonl(input_path, |card| {
+            cards.push(card);
+            true
+        }) {
+            eprintln!("error: failed to read {}: {error}", args.input);
+            return ExitCode::FAILURE;
+        }
+        return match review::run(
+            cards,
+            draft_path,
+            map_path,
+            args.review_out.as_deref(),
+            &provenance,
+            args.review_existing,
+        ) {
+            Ok(packet) => {
+                if args.review_out.is_none() {
+                    print!("{packet}");
+                }
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("error: review request was refused\n{error}");
                 ExitCode::FAILURE
             }
         };

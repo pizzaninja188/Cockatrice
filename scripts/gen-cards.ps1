@@ -13,6 +13,7 @@
         ./scripts/gen-cards.ps1 --candidate-report build/candidates.json
         ./scripts/gen-cards.ps1 --scaffold-card "Black Lotus"
         ./scripts/gen-cards.ps1 --scaffold-batch selected-cards.txt --scaffold-out-dir build/scaffolds
+        ./scripts/gen-cards.ps1 --review-draft build/direct-ron/card.ron --review-map build/direct-ron/card.review.json
         ./scripts/gen-cards.ps1                      # write the RON files
         cd tricerules; cargo test                    # registry + conformance validate every card
         ./scripts/gen-card-checklist.ps1 --check     # name gate, then review + commit
@@ -23,6 +24,8 @@
     to an exact-name corpus; the file contains one whole-card or face name per nonblank line.
     Scaffold modes copy source-backed clerical fields but leave mechanics unresolved. They write
     to stdout unless --scaffold-out-dir is explicit, never write below data\, and never overwrite.
+    Direct-RON review mode is offline and inspect-only: it validates an author-supplied draft and
+    explicit source-span map, emits a non-proof review packet, and never promotes card data.
 .EXAMPLE
     ./scripts/gen-cards.ps1 --dry-run
 #>

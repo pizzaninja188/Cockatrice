@@ -1,0 +1,32 @@
+{
+  "format_version": 1,
+  "exact_name": "Divination",
+  "spans": [
+    {
+      "face_id": "divination",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario spell_effects::cast_divination_draws_two_cards",
+      "covers": "accepted cast, bounded resolution, exact two-card draw, source graveyard identity"
+    },
+    {
+      "test": "issue_448_semantic_mapping::issue_448_registry_rows_preserve_independently_reviewed_card_mappings",
+      "covers": "reviewed card and face identity, mana cost, and Sorcery type"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

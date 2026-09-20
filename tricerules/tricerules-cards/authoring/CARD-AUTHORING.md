@@ -747,6 +747,70 @@ To turn a reviewed scaffold into authored RON:
 5. Remove both unresolved sentinels, rename the file to `.ron` under `data/`, and complete all
    checks in sections 9 and 10. A scaffold is never evidence that the card is implemented.
 
+### Reviewed direct-RON path
+
+Choose the authoring route in this order:
+
+1. Reuse a shipped exact recipe when it already covers the complete card.
+2. Add or extend a typed recipe family only for a demonstrated repeated Oracle template, with the
+   required positive calibrations and negative near-misses.
+3. Use reviewed direct RON for a supported singleton or unusual composition when every mechanic is
+   already expressible and a new parser family is not justified.
+4. File a scoped runtime blocker when any required cost, timing, choice, target, effect,
+   presentation, or composition semantics are unsupported. Do not partially admit the card.
+
+For the direct-RON route, keep the author-supplied draft outside `data/` and create a version-1 JSON
+review map. Select one pinned source identity with either `oracle_id` or `exact_name`. Cover every
+normalized Oracle line exactly once with either `typed_paths` (JSON pointers into the validated
+runtime-shaped definition) or a nonblank `unresolved_reason`. List explicit primitive references,
+every referenced token ID, and planned semantic fixtures. The tool does not infer any of these.
+
+```powershell
+./scripts/gen-cards.ps1 `
+  --review-draft build/direct-ron/my_card.ron `
+  --review-map build/direct-ron/my_card.review.json `
+  --review-out build/direct-ron/my_card.packet.json
+```
+
+The command is an offline, separate mode. It verifies the pinned bulk SHA, resolves names to one
+Oracle ID, validates source layout and face identity, rejects scaffold sentinels, loads the draft
+through the production registry validators and shipped token namespace, rejects registry ID/name
+collisions, verifies complete nonoverlapping span coverage and typed paths, and refuses drafts or
+outputs under embedded `data/` plus all output overwrites. It records source/rulings links, per-face
+Oracle fingerprints, presentation values, tokens, primitive references, semantic-fixture plans,
+and structurally ranked nearby registered definitions. Nearby definitions are inspect-only; names,
+prose similarity, and rank never establish support.
+
+Packets always set `mechanical_equivalence_proven` to `false`. A structurally valid, fully mapped
+but semantically wrong draft can therefore produce review evidence but can never be described as
+mechanically proven. `promotion_ready_for_human_review` only means there are no explicitly
+unresolved spans and the map records complete-definition review confirmation. The author and an
+independent reviewer still establish Oracle/rulings equivalence and execute the planned semantic
+evidence.
+
+The checked-in Divination and Elvish Visionary maps demonstrate inspect-only review of existing
+definitions without permitting replacement:
+
+```powershell
+./scripts/gen-cards.ps1 --review-existing `
+  --review-draft tricerules/tricerules-cards/data/divination.ron `
+  --review-map tricerules/tricerules-cards/authoring/review-maps/divination.json `
+  --review-out build/direct-ron/divination.packet.json
+
+./scripts/gen-cards.ps1 --review-existing `
+  --review-draft tricerules/tricerules-cards/data/elvish_visionary.ron `
+  --review-map tricerules/tricerules-cards/authoring/review-maps/elvish_visionary.json `
+  --review-out build/direct-ron/elvish_visionary.packet.json
+```
+
+After a draft and packet pass review, promotion remains an explicit authored-card change: copy the
+reviewed draft to its canonical handwritten `.ron` path under `data/`; recheck stable card, face,
+ability, mode, and choice IDs; refresh and review Oracle fingerprints and `CARDS.md`; add the
+complete-definition registry assertions, applicable happy/illegal semantic scenarios, presentation
+and conformance coverage, and checklist evidence; then run the full Rust/card-data gate. Never
+promote an unresolved packet, overwrite an existing identity, add generator provenance to direct
+RON, or let Refresh modify a handwritten card.
+
 ## 9. Track partial implementations
 
 Record a genuine implementation gap as one `card_id<TAB>note` row in
