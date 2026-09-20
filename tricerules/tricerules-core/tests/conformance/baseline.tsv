@@ -69,6 +69,7 @@ altanak,_the_thrice-called	0	ability:0	unsupported: ability not offered by gener
 altanak,_the_thrice-called	0	cast	exercised
 amateur_hero	0	cast	exercised
 amazing_acrobatics	0	cast	exercised
+ambush_gigapede	0	cast	exercised
 ambush_viper	0	cast	exercised
 ambush_wolf	0	cast	exercised
 amphin_cutthroat	0	cast	exercised
@@ -352,6 +353,7 @@ burn,_burn,_tree_and_fern	0	cast	exercised
 burning_curiosity	0	cast	exercised
 burrog_banemaker	0	ability:0	exercised
 burrog_banemaker	0	cast	exercised
+burrog_befuddler	0	cast	exercised
 burst_lightning	0	cast	exercised
 bushwhack	0	cast	exercised
 buzz_bots	0	cast	exercised
@@ -2253,6 +2255,7 @@ silvergill_peddler	0	cast	exercised
 simic_guildgate	0	ability:0	exercised
 simic_guildgate	0	land	exercised
 simic_sky_swallower	0	cast	exercised
+sinister_cryologist	0	cast	exercised
 sinister_hideout	0	ability:0	exercised
 sinister_hideout	0	ability:1	exercised
 sinister_hideout	0	land	exercised

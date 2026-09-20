@@ -556,3 +556,5 @@ mod issue_452_fixed_damage_family;
 mod issue_453_newly_eligible_standard;
 #[path = "scenario/issue_454_activated_surveil.rs"]
 mod issue_454_activated_surveil;
+#[path = "scenario/issue_455_etb_opponent_pump.rs"]
+mod issue_455_etb_opponent_pump;

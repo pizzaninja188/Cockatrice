@@ -4030,27 +4030,86 @@ fn match_self_enters_or_dies_surveil_one(
     Some(RecipeEmission::TriggeredAbilities(vec![enters, dies]))
 }
 
+/// Issue #455: one private typed family owns the complete
+/// `When this creature enters, target creature an opponent controls gets <power>/<toughness>
+/// until end of turn.` ETB grammar. The exact prefix/suffix plus the canonical signed-decimal
+/// parse reject `+`-signed values, `0/0`, leading zeros, overflow, variables, and every
+/// plural/optional/non-opponent/dies/rider form; catalog instances differ only in the gated delta.
+const ETB_OPPONENT_PUMP_PREFIX: &str =
+    "When this creature enters, target creature an opponent controls gets ";
+const ETB_OPPONENT_PUMP_SUFFIX: &str = " until end of turn.";
+
+fn parse_etb_opponent_pump_delta(text: &str) -> Option<(i32, i32)> {
+    let delta = text
+        .strip_prefix(ETB_OPPONENT_PUMP_PREFIX)?
+        .strip_suffix(ETB_OPPONENT_PUMP_SUFFIX)?;
+    let (power, toughness) = delta.split_once('/')?;
+    let power = parse_signed_pump_value(power)?;
+    let toughness = parse_signed_pump_value(toughness)?;
+    (power != 0 || toughness != 0).then_some((power, toughness))
+}
+
+/// Canonical signed decimal only: an optional leading `-` (so `-0` stays valid) followed by at
+/// least one digit, with no leading `+` or redundant zero. `str::parse` alone would accept `+2`
+/// and `04`, which the reviewed corpus never prints.
+fn parse_signed_pump_value(value: &str) -> Option<i32> {
+    let digits = value.strip_prefix('-').unwrap_or(value);
+    if digits.is_empty() || value.starts_with('+') || (digits.len() > 1 && digits.starts_with('0'))
+    {
+        return None;
+    }
+    value.parse().ok()
+}
+
+/// Shared emitter for every reviewed instance: the parsed delta must equal `delta`, which is then
+/// emitted as the same opponent-controller `PumpTarget` through the shipped `targeted_trigger`.
+fn match_etb_pump_opponent_creature(
+    text: &str,
+    context: &RecipeContext,
+    delta: (i32, i32),
+) -> Option<RecipeEmission> {
+    (context.source_is_creature && parse_etb_opponent_pump_delta(text) == Some(delta)).then(|| {
+        targeted_trigger(
+            context,
+            vec![SpellEffectKind::PumpTarget {
+                power: delta.0,
+                toughness: delta.1,
+                scale: None,
+                subject: chosen_creature(TargetController::Opponent),
+            }],
+            1,
+            1,
+            "Choose target creature an opponent controls",
+        )
+    })
+}
+
 fn match_etb_pump_opponent_creature_minus_two_zero(
     text: &str,
     context: &RecipeContext,
 ) -> Option<RecipeEmission> {
-    (context.source_is_creature
-        && text
-            == "When this creature enters, target creature an opponent controls gets -2/-0 until end of turn.")
-        .then(|| {
-            targeted_trigger(
-                context,
-                vec![SpellEffectKind::PumpTarget {
-                    power: -2,
-                    toughness: 0,
-                    scale: None,
-                    subject: chosen_creature(TargetController::Opponent),
-                }],
-                1,
-                1,
-                "Choose target creature an opponent controls",
-            )
-        })
+    match_etb_pump_opponent_creature(text, context, (-2, 0))
+}
+
+fn match_etb_pump_opponent_creature_minus_one_zero(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    match_etb_pump_opponent_creature(text, context, (-1, 0))
+}
+
+fn match_etb_pump_opponent_creature_minus_two_two(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    match_etb_pump_opponent_creature(text, context, (-2, -2))
+}
+
+fn match_etb_pump_opponent_creature_minus_three_zero(
+    text: &str,
+    context: &RecipeContext,
+) -> Option<RecipeEmission> {
+    match_etb_pump_opponent_creature(text, context, (-3, 0))
 }
 
 fn match_etb_target_opponent_discards_one(
@@ -19329,10 +19388,60 @@ pub(super) static CATALOG: &[Recipe] = &[
         calibration: calibrations!(
             "Cogwork Wrestler" => "When this creature enters, target creature an opponent controls gets -2/-0 until end of turn.",
             "Humbling Elder" => "When this creature enters, target creature an opponent controls gets -2/-0 until end of turn.";
-            "When this creature enters, target creature an opponent controls gets -1/-0 until end of turn.",
+            // `-1/-0` moved to its own admitted instance; the remaining shapes stay unsupported.
             "When this creature enters, up to one target creature an opponent controls gets -2/-0 until end of turn.",
             "When this creature enters, target creature gets -2/-0 until end of turn.",
             "When this creature dies, target creature an opponent controls gets -2/-0 until end of turn."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.pump.opponent_creature.minus_one_zero"),
+        label: "creature ETB opposing creature -1/-0",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_pump_opponent_creature_minus_one_zero,
+        calibration: singleton_calibrations!(
+            "Burrog Befuddler" => "When this creature enters, target creature an opponent controls gets -1/-0 until end of turn.";
+            "When this creature enters, target creature an opponent controls gets -1/-1 until end of turn.",
+            "When this creature enters, up to one target creature an opponent controls gets -1/-0 until end of turn.",
+            "When this creature enters, target creature gets -1/-0 until end of turn.",
+            "When this creature dies, target creature an opponent controls gets -1/-0 until end of turn.",
+            "When this creature enters, target creature an opponent controls gets +2/+0 until end of turn.",
+            "When this creature enters, target creature an opponent controls gets -1/-0 until your next turn.",
+            "When this creature enters, target creature an opponent controls gets -1/-0 until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.pump.opponent_creature.minus_two_two"),
+        label: "creature ETB opposing creature -2/-2",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_pump_opponent_creature_minus_two_two,
+        calibration: singleton_calibrations!(
+            "Ambush Gigapede" => "When this creature enters, target creature an opponent controls gets -2/-2 until end of turn.";
+            "When this creature enters, target creature an opponent controls gets -3/-3 until end of turn.",
+            "When this creature enters, target creature an opponent controls gets -0/-2 until end of turn.",
+            "When this creature enters, up to one target creature an opponent controls gets -2/-2 until end of turn.",
+            "When this creature enters, target creature gets -2/-2 until end of turn.",
+            "When this creature dies, target creature an opponent controls gets -2/-2 until end of turn.",
+            "When this creature enters, target creature an opponent controls gets +2/+2 until end of turn.",
+            "When this creature enters, target creature an opponent controls gets -2/-2 until your next turn.",
+            "When this creature enters, target creature an opponent controls gets -2/-2 until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("etb.pump.opponent_creature.minus_three_zero"),
+        label: "creature ETB opposing creature -3/-0",
+        surface: RecipeSurface::EtbAbility,
+        matcher: match_etb_pump_opponent_creature_minus_three_zero,
+        calibration: singleton_calibrations!(
+            "Sinister Cryologist" => "When this creature enters, target creature an opponent controls gets -3/-0 until end of turn.";
+            "When this creature enters, target creature an opponent controls gets -3/-3 until end of turn.",
+            "When this creature enters, target creature an opponent controls gets -0/-2 until end of turn.",
+            "When this creature enters, up to one target creature an opponent controls gets -3/-0 until end of turn.",
+            "When this creature enters, target creature gets -3/-0 until end of turn.",
+            "When this creature dies, target creature an opponent controls gets -3/-0 until end of turn.",
+            "When this creature enters, target creature an opponent controls gets +3/+0 until end of turn.",
+            "When this creature enters, target creature an opponent controls gets -3/-0 until your next turn.",
+            "When this creature enters, target creature an opponent controls gets -3/-0 until end of turn. Draw a card."
         ),
     },
     Recipe {
@@ -50010,6 +50119,184 @@ mod tests {
                     "near-miss must stay unsupported: {near_miss:?}"
                 );
             }
+        }
+    }
+
+    // Issue #455 reviewed ETB opponent-pump identity clauses. The first row is the shipped
+    // `-2/-0` singleton (Cogwork Wrestler, Humbling Elder); the other three are the newly
+    // admitted Standard identities with their own reviewed deltas.
+    const ISSUE_455_ETB_PUMP_CLAUSES: [(&str, &str, &str, i32, i32); 4] = [
+        (
+            "Cogwork Wrestler",
+            "When this creature enters, target creature an opponent controls gets -2/-0 until end of turn.",
+            "etb.pump.opponent_creature.minus_two_zero",
+            -2,
+            0,
+        ),
+        (
+            "Burrog Befuddler",
+            "When this creature enters, target creature an opponent controls gets -1/-0 until end of turn.",
+            "etb.pump.opponent_creature.minus_one_zero",
+            -1,
+            0,
+        ),
+        (
+            "Ambush Gigapede",
+            "When this creature enters, target creature an opponent controls gets -2/-2 until end of turn.",
+            "etb.pump.opponent_creature.minus_two_two",
+            -2,
+            -2,
+        ),
+        (
+            "Sinister Cryologist",
+            "When this creature enters, target creature an opponent controls gets -3/-0 until end of turn.",
+            "etb.pump.opponent_creature.minus_three_zero",
+            -3,
+            0,
+        ),
+    ];
+
+    const ISSUE_455_ETB_PUMP_NEAR_MISSES: [&str; 16] = [
+        "When this creature enters, target creature an opponent controls gets -1/-1 until end of turn.",
+        "When this creature enters, target creature an opponent controls gets -3/-3 until end of turn.",
+        "When this creature enters, target creature an opponent controls gets -0/-2 until end of turn.",
+        "When this creature enters, up to one target creature an opponent controls gets -2/-2 until end of turn.",
+        "When this creature enters, target creature gets -1/-0 until end of turn.",
+        "When this creature dies, target creature an opponent controls gets -1/-0 until end of turn.",
+        "When this creature enters, target creature an opponent controls gets +2/+0 until end of turn.",
+        "When this creature enters, target creature an opponent controls gets -1/-0 until your next turn.",
+        "When this creature enters, target creature an opponent controls gets -1/-0 until end of turn. Draw a card.",
+        "When this creature enters, target creatures an opponent controls get -1/-0 until end of turn.",
+        "When this creature enters, target creature an opponent controls gets 0/0 until end of turn.",
+        "When this creature enters, target creature an opponent controls gets -1/-0 until end of turn",
+        "When another creature enters, target creature an opponent controls gets -1/-0 until end of turn.",
+        // Non-canonical numeric spellings the shared parser must reject: a leading zero, a
+        // zero-delta pair, and an explicit `+` sign.
+        "When this creature enters, target creature an opponent controls gets 04/-0 until end of turn.",
+        "When this creature enters, target creature an opponent controls gets -0/-0 until end of turn.",
+        "When this creature enters, target creature an opponent controls gets +1/-0 until end of turn.",
+    ];
+
+    #[test]
+    fn issue_455_etb_opponent_pump_clauses_match_their_exact_recipe() {
+        for (name, clause, id, _, _) in ISSUE_455_ETB_PUMP_CLAUSES {
+            let mut source = context();
+            source.source_name = name.into();
+            let matched = match_clause(clause, false, &source)
+                .unwrap_or_else(|ambiguity| panic!("{name}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{name} must match {id}"));
+            assert_eq!(matched.id.as_str(), id, "{name}");
+        }
+    }
+
+    #[test]
+    fn issue_455_etb_opponent_pump_keeps_the_shipped_minus_two_zero_identity() {
+        let (name, clause, id, power, toughness) = ISSUE_455_ETB_PUMP_CLAUSES[0];
+        let mut source = context();
+        source.source_name = name.into();
+        let matched = match_clause(clause, false, &source)
+            .unwrap_or_else(|ambiguity| panic!("{name}: {ambiguity}"))
+            .unwrap_or_else(|| panic!("{name} must stay consumed by {id}"));
+        assert_eq!(matched.id.as_str(), id);
+        let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+            panic!("the pump trigger must emit a triggered ability");
+        };
+        assert_eq!(ability.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+        assert_eq!(
+            ability.effect,
+            vec![SpellEffectKind::PumpTarget {
+                power,
+                toughness,
+                scale: None,
+                subject: chosen_creature(TargetController::Opponent),
+            }]
+        );
+    }
+
+    #[test]
+    fn issue_455_etb_opponent_pump_emits_a_typed_opponent_pump_target() {
+        for (name, clause, id, power, toughness) in ISSUE_455_ETB_PUMP_CLAUSES {
+            let mut source = context();
+            source.source_name = name.into();
+            let matched = match_clause(clause, false, &source)
+                .unwrap_or_else(|ambiguity| panic!("{name}: {ambiguity}"))
+                .unwrap_or_else(|| panic!("{name} must match {id}"));
+            assert_eq!(matched.id.as_str(), id, "{name}");
+            let RecipeEmission::TriggeredAbility(ability) = matched.emission else {
+                panic!("{name} must emit a triggered ability");
+            };
+            assert_eq!(
+                ability.trigger,
+                TriggerCondition::WhenSelfEntersBattlefield,
+                "{name}"
+            );
+            assert_eq!(
+                ability.effect,
+                vec![SpellEffectKind::PumpTarget {
+                    power,
+                    toughness,
+                    scale: None,
+                    subject: chosen_creature(TargetController::Opponent),
+                }],
+                "{name}"
+            );
+            assert_eq!(
+                ability.targeting,
+                Some(exact_targeting(
+                    1,
+                    1,
+                    "Choose target creature an opponent controls",
+                    vec![0],
+                )),
+                "{name}"
+            );
+            assert!(!ability.may, "{name}");
+        }
+    }
+
+    #[test]
+    fn issue_455_etb_opponent_pump_rejects_near_misses() {
+        let rejects_family = |text: &str| {
+            [
+                match_etb_pump_opponent_creature_minus_two_zero,
+                match_etb_pump_opponent_creature_minus_one_zero,
+                match_etb_pump_opponent_creature_minus_two_two,
+                match_etb_pump_opponent_creature_minus_three_zero,
+            ]
+            .iter()
+            .all(|matcher| (matcher)(text, &context()).is_none())
+        };
+        for negative in ISSUE_455_ETB_PUMP_NEAR_MISSES {
+            assert!(
+                rejects_family(negative),
+                "the shared ETB pump family must reject {negative:?}"
+            );
+            assert!(
+                match_clause(negative, false, &context())
+                    .unwrap_or_else(|ambiguity| panic!("{negative}: {ambiguity}"))
+                    .is_none(),
+                "unsupported near-miss must remain unmatched: {negative}"
+            );
+        }
+
+        let mut noncreature = context();
+        noncreature.source_is_creature = false;
+        assert!(
+            match_clause(ISSUE_455_ETB_PUMP_CLAUSES[1].1, false, &noncreature)
+                .expect("noncreature source must not be ambiguous")
+                .is_none(),
+            "the pump trigger is creature-source-only"
+        );
+    }
+
+    #[test]
+    fn issue_455_recipes_have_stable_ids_and_surfaces() {
+        for (_, _, id, _, _) in ISSUE_455_ETB_PUMP_CLAUSES {
+            assert_eq!(
+                issue_318_recipe(id).surface,
+                RecipeSurface::EtbAbility,
+                "{id} surface drifted"
+            );
         }
     }
 }
