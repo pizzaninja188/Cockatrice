@@ -1,0 +1,19 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 0217da8e-e74f-4f5c-ab75-f17600f94405.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "rock_soldiers",
+  name: "Rock Soldiers",
+  face_id: "rock_soldiers",
+  mana_cost: "{3}{R}",
+  types: ["Artifact", "Creature", "Elemental", "Soldier"],
+  power: 4,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact], excluded_permanent_types: [Creature])))],
+    targeting: Some((groups: [(min: 0, max: 1, prompt: "Choose up to one target noncreature artifact", effect_indices: [0])])),
+  )],
+)

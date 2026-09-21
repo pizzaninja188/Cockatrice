@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "0217da8e-e74f-4f5c-ab75-f17600f94405",
+  "spans": [
+    {
+      "face_id": "rock_soldiers",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc1_batch::issue_misc1_rock_soldiers",
+      "covers": "the entry trigger destroys up to one target noncreature artifact; an artifact creature and a nonartifact permanent are not legal targets, and choosing no target is legal"
+    },
+    {
+      "test": "issue_misc1_batch::issue_misc1_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of rock_soldiers"
+    },
+    {
+      "test": "issue_misc1_batch::issue_misc1_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for rock_soldiers"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

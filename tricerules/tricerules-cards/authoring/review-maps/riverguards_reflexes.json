@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "0bdebad7-a05e-439a-b5a9-241a2d09f943",
+  "spans": [
+    {
+      "face_id": "riverguards_reflexes",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc1_batch::issue_misc1_riverguards_reflexes",
+      "covers": "a target creature gets +2/+2, gains first strike, and is untapped; the single target group covers all three effects"
+    },
+    {
+      "test": "issue_misc1_batch::issue_misc1_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of riverguards_reflexes"
+    },
+    {
+      "test": "issue_misc1_batch::issue_misc1_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for riverguards_reflexes"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

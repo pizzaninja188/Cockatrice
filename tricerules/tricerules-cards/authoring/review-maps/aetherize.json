@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "7c779721-cd1b-4696-9ae9-68ccc284ed2a",
+  "spans": [
+    {
+      "face_id": "aetherize",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnAllToOwnersHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc1_batch::issue_misc1_aetherize",
+      "covers": "all attacking creatures return to their owners' hands while nonattacking creatures stay"
+    },
+    {
+      "test": "issue_misc1_batch::issue_misc1_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of aetherize"
+    },
+    {
+      "test": "issue_misc1_batch::issue_misc1_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for aetherize"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

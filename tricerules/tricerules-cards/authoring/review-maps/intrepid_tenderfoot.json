@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "94023b23-339a-426e-85cc-cc361ef68754",
+  "spans": [
+    {
+      "face_id": "intrepid_tenderfoot",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc1_batch::issue_misc1_intrepid_tenderfoot",
+      "covers": "the {3} sorcery-speed activated ability puts one +1/+1 counter on the source"
+    },
+    {
+      "test": "issue_misc1_batch::issue_misc1_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of intrepid_tenderfoot"
+    },
+    {
+      "test": "issue_misc1_batch::issue_misc1_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for intrepid_tenderfoot"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

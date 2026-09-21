@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "58916455-844c-4d97-908f-8205bdc117c0",
+  "spans": [
+    {
+      "face_id": "exorcise",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc1_batch::issue_misc1_exorcise",
+      "covers": "a target artifact, enchantment, or creature with power 4 or greater is exiled; a small nonartifact nonenchantment creature is not a legal target"
+    },
+    {
+      "test": "issue_misc1_batch::issue_misc1_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of exorcise"
+    },
+    {
+      "test": "issue_misc1_batch::issue_misc1_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for exorcise"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

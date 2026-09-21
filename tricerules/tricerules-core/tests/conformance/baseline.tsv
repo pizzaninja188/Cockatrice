@@ -34,6 +34,7 @@ aegis_of_the_heavens	0	cast	exercised
 aegis_turtle	0	cast	exercised
 aerial_assault	0	cast	unsupported: target group 0 needs a richer fixture
 aerial_responder	0	cast	exercised
+aetherize	0	cast	exercised
 affa_protector	0	cast	exercised
 affectionate_indrik	0	cast	exercised
 agate-blade_assassin	0	cast	exercised
@@ -825,6 +826,7 @@ evolving_wilds	0	land	exercised
 exclusion_mage	0	cast	exercised
 exdeath,_void_warlock_neo_exdeath,_dimensions_end	0	cast	exercised
 exdeath,_void_warlock_neo_exdeath,_dimensions_end	1	cast	intentional: face unavailable from hand
+exorcise	0	cast	exercised
 exosuit_savior	0	cast	exercised
 expedition_envoy	0	cast	exercised
 exploration	0	cast	exercised
@@ -1385,6 +1387,8 @@ instill_infection	0	cast	exercised
 interjection	0	cast	exercised
 into_the_fae_court	0	cast	exercised
 into_the_roil	0	cast	exercised
+intrepid_tenderfoot	0	ability:0	exercised
+intrepid_tenderfoot	0	cast	exercised
 invasion_of_ulgrotha_grandmother_ravi_sengir	0	cast	exercised
 invasion_of_ulgrotha_grandmother_ravi_sengir	1	cast	intentional: face unavailable from hand
 invasion_reinforcements	0	cast	exercised
@@ -2139,12 +2143,14 @@ riverglide_pathway_lavaglide_pathway	0	ability:0	exercised
 riverglide_pathway_lavaglide_pathway	0	land	exercised
 riverglide_pathway_lavaglide_pathway	1	ability:0	exercised
 riverglide_pathway_lavaglide_pathway	1	land	exercised
+riverguards_reflexes	0	cast	exercised
 riverpyre_verge	0	ability:0	exercised
 riverpyre_verge	0	ability:1	exercised
 riverpyre_verge	0	land	exercised
 riverwalk_technique	0	cast	exercised
 roamers_routine	0	cast	exercised
 roc_hunter	0	cast	exercised
+rock_soldiers	0	cast	exercised
 rocky_rebuke	0	cast	exercised
 roiling_dragonstorm	0	cast	exercised
 romantic_rendezvous	0	cast	exercised

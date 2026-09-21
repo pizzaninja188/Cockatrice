@@ -1,0 +1,16 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 0bdebad7-a05e-439a-b5a9-241a2d09f943.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "riverguards_reflexes",
+  name: "Riverguard's Reflexes",
+  face_id: "riverguards_reflexes",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 2, toughness: 2, subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [FirstStrike]),
+    Untap(subject: Chosen((kind: Creature))),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0, 1, 2])])),
+)
