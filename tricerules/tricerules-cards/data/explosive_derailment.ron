@@ -1,0 +1,50 @@
+// Oracle and rulings checked 2026-09-20 against pinned Scryfall oracle b23dc81d-01bb-4bf0-9932-5d32a6b22cf7.
+// Handwritten typed definition promoted through the reviewed direct-RON path (#359);
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "explosive_derailment",
+  name: "Explosive Derailment",
+  face_id: "explosive_derailment",
+  mana_cost: "{R}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "spree",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 2,
+    options: [
+      Mana(option_id: "damage_creature_cost", presentation: OracleLines([2]), kind: AdditionalPayment, cost: "{2}"),
+      Mana(option_id: "destroy_artifact_cost", presentation: OracleLines([3]), kind: AdditionalPayment, cost: "{2}"),
+    ],
+  )],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 2,
+    modes: [
+      (
+        mode_id: "damage_creature",
+        presentation: OracleLines([2]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "damage_creature_cost")),
+        effects: [DamageTarget(amount: 4, target: (kind: Creature))],
+        targeting: Some((groups: [(
+          min: 1,
+          max: 1,
+          prompt: "Choose target creature",
+          effect_indices: [0],
+        )])),
+      ),
+      (
+        mode_id: "destroy_artifact",
+        presentation: OracleLines([3]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "destroy_artifact_cost")),
+        effects: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact])))],
+        targeting: Some((groups: [(
+          min: 1,
+          max: 1,
+          prompt: "Choose target artifact",
+          effect_indices: [0],
+        )])),
+      ),
+    ],
+  ),
+)

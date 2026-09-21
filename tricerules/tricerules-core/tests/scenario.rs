@@ -512,6 +512,8 @@ mod issue_351_generated_eight_clause_batch;
 mod issue_352_generated_eight_clause_batch;
 #[path = "scenario/issue_358_generated_five_clause_batch.rs"]
 mod issue_358_generated_five_clause_batch;
+#[path = "scenario/issue_359_direct_ron.rs"]
+mod issue_359_direct_ron;
 #[path = "scenario/issue_363_generated_dragonstorm_cohort.rs"]
 mod issue_363_generated_dragonstorm_cohort;
 #[path = "scenario/issue_370_graveyard_count_cost_reduction.rs"]

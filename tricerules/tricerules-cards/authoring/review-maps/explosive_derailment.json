@@ -1,0 +1,106 @@
+{
+  "format_version": 1,
+  "oracle_id": "b23dc81d-01bb-4bf0-9932-5d32a6b22cf7",
+  "spans": [
+    {
+      "face_id": "explosive_derailment",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "explosive_derailment",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/0",
+        "/faces/0/cast_cost_groups/0/options/0"
+      ]
+    },
+    {
+      "face_id": "explosive_derailment",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/1",
+        "/faces/0/cast_cost_groups/0/options/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostGroupDef",
+      "typed_path": "/faces/0/cast_cost_groups/0"
+    },
+    {
+      "symbol": "CastCostOptionDef::Mana",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "ManaCostChoiceKind::AdditionalPayment",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0/Mana/kind"
+    },
+    {
+      "symbol": "ModalDef",
+      "typed_path": "/faces/0/modal_spell"
+    },
+    {
+      "symbol": "ModeDef",
+      "typed_path": "/faces/0/modal_spell/modes/0"
+    },
+    {
+      "symbol": "CastCostOptionRef",
+      "typed_path": "/faces/0/modal_spell/modes/0/linked_cast_cost"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/modal_spell/modes/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+    },
+    {
+      "symbol": "TargetFilter.permanent_types",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0/Destroy/subject/Chosen/permanent_types"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_359_direct_ron::issue_359_explosive_derailment_single_modes_charge_only_the_selected_additional_cost",
+      "covers": "each registered Explosive Derailment mode cast alone: the printed base {R} plus exactly the selected additional {2}; the other mode's cost stays uncharged and its effect never resolves"
+    },
+    {
+      "test": "scenario issue_359_direct_ron::issue_359_explosive_derailment_both_modes_resolve_in_printed_order_and_charge_both_costs",
+      "covers": "both modes announced together (and announced out of order): one damage target and one artifact target are independent groups; the chosen-mode cohort is reordered into printed order, both additional costs are charged, and both effects resolve"
+    },
+    {
+      "test": "scenario issue_359_direct_ron::issue_359_spree_rejects_no_mode_unfunded_and_mismatched_cost_atomically",
+      "covers": "CR 700.2h/601.2h: zero modes, an announced mode with no linked cost, a mode paired with the other mode's cost, and an unpayable announced additional cost are all rejected without partial mutation; the matching funded single-mode cast is the positive control"
+    },
+    {
+      "test": "scenario issue_359_direct_ron::issue_359_spree_mode_local_illegal_targets_are_rejected",
+      "covers": "mode-local target contracts: Explosive Derailment's creature mode rejects lands and its artifact mode rejects creatures"
+    },
+    {
+      "test": "scenario issue_359_direct_ron::issue_359_one_illegal_mode_target_still_resolves_the_other_mode",
+      "covers": "the 2024-04-12 spree ruling and CR 608.2b: with one mode's target illegal the other mode still resolves while the illegal target is unaffected"
+    },
+    {
+      "test": "issue_359_direct_ron::issue_359_explosive_derailment_maps_every_printed_clause",
+      "covers": "reviewed identity, mana cost, type, Spree group/options, mode ids, linked cast costs, per-mode target contracts and ordered effects"
+    },
+    {
+      "test": "issue_359_direct_ron::issue_359_direct_ron_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprints for both faces"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

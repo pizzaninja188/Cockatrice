@@ -808,6 +808,7 @@ expedition_envoy	0	cast	exercised
 exploration	0	cast	exercised
 explosive_apparatus	0	ability:0	exercised
 explosive_apparatus	0	cast	exercised
+explosive_derailment	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 extinguisher_battleship	0	ability:0	exercised
 extinguisher_battleship	0	cast	exercised
 exultant_skymarcher	0	cast	exercised
@@ -2774,6 +2775,7 @@ unending_whisper	0	cast	exercised
 unexpected_assistance	0	cast	exercised
 unflinching_courage	0	cast	exercised
 unforgiving_aim	0	cast	exercised
+unfortunate_accident	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 unholy_indenture	0	cast	exercised
 unholy_strength	0	cast	exercised
 university_campus	0	ability:0	exercised
