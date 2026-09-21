@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 079f0d7f-57a5-4101-a9e3-c5a57148b3fb.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "elder_auntie",
+  name: "Elder Auntie",
+  face_id: "elder_auntie",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Goblin", "Warlock"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "goblin_br_1_1", count: 1)],
+  )],
+)

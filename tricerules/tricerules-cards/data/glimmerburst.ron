@@ -1,0 +1,14 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle a26820b9-3bec-41b2-9812-99e4a2211297.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "glimmerburst",
+  name: "Glimmerburst",
+  face_id: "glimmerburst",
+  mana_cost: "{3}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    Draw(count: 2),
+    CreateTokens(token: "glimmer_w_1_1", count: 1),
+  ],
+)

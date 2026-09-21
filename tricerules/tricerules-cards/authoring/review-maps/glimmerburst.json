@@ -1,0 +1,43 @@
+{
+  "format_version": 1,
+  "oracle_id": "a26820b9-3bec-41b2-9812-99e4a2211297",
+  "spans": [
+    {
+      "face_id": "glimmerburst",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [
+    "glimmer_w_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc3_batch::issue_misc3_glimmerburst",
+      "covers": "the caster draws two cards and creates one registered 1/1 white Glimmer enchantment creature token"
+    },
+    {
+      "test": "issue_misc3_batch::issue_misc3_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of glimmerburst"
+    },
+    {
+      "test": "issue_misc3_batch::issue_misc3_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for glimmerburst"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

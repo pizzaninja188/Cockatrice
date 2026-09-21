@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle b97d21b4-d730-479f-872f-3e1645b66751.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "release_the_dogs",
+  name: "Release the Dogs",
+  face_id: "release_the_dogs",
+  mana_cost: "{3}{W}",
+  types: ["Sorcery"],
+  spell_effect: [CreateTokens(token: "dog_w_1_1", count: 4)],
+)

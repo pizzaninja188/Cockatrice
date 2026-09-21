@@ -1,0 +1,9 @@
+(
+  id: "dog_w_1_1",
+  name: "Dog",
+  face_id: "dog",
+  types: ["Creature", "Dog"],
+  colors: [White],
+  power: 1,
+  toughness: 1,
+)

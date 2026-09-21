@@ -1,0 +1,9 @@
+(
+  id: "glimmer_w_1_1",
+  name: "Glimmer",
+  face_id: "glimmer",
+  types: ["Enchantment", "Creature", "Glimmer"],
+  colors: [White],
+  power: 1,
+  toughness: 1,
+)

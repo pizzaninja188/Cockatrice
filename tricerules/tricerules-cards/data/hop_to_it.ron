@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle e8a9350a-07c1-47ed-8c4f-88e4b3b17545.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "hop_to_it",
+  name: "Hop to It",
+  face_id: "hop_to_it",
+  mana_cost: "{2}{W}",
+  types: ["Sorcery"],
+  spell_effect: [CreateTokens(token: "rabbit_w_1_1", count: 3)],
+)

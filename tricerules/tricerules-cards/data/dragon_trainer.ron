@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 328a0691-9453-4f2d-a9c3-5c69da252d20.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "dragon_trainer",
+  name: "Dragon Trainer",
+  face_id: "dragon_trainer",
+  mana_cost: "{3}{R}{R}",
+  types: ["Creature", "Human"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "dragon_r_4_4_flying", count: 1)],
+  )],
+)

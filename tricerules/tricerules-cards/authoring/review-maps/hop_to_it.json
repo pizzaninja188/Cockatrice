@@ -1,0 +1,38 @@
+{
+  "format_version": 1,
+  "oracle_id": "e8a9350a-07c1-47ed-8c4f-88e4b3b17545",
+  "spans": [
+    {
+      "face_id": "hop_to_it",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [
+    "rabbit_w_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc3_batch::issue_misc3_hop_to_it",
+      "covers": "the spell creates exactly three registered 1/1 white Rabbit tokens"
+    },
+    {
+      "test": "issue_misc3_batch::issue_misc3_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of hop_to_it"
+    },
+    {
+      "test": "issue_misc3_batch::issue_misc3_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for hop_to_it"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

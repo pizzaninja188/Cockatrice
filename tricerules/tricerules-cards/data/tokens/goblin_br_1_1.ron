@@ -1,0 +1,9 @@
+(
+  id: "goblin_br_1_1",
+  name: "Goblin",
+  face_id: "goblin",
+  types: ["Creature", "Goblin"],
+  colors: [Black, Red],
+  power: 1,
+  toughness: 1,
+)

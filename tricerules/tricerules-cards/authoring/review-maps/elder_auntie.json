@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "079f0d7f-57a5-4101-a9e3-c5a57148b3fb",
+  "spans": [
+    {
+      "face_id": "elder_auntie",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "goblin_br_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc3_batch::issue_misc3_elder_auntie",
+      "covers": "the entry trigger creates one registered 1/1 black and red Goblin token"
+    },
+    {
+      "test": "issue_misc3_batch::issue_misc3_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of elder_auntie"
+    },
+    {
+      "test": "issue_misc3_batch::issue_misc3_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for elder_auntie"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

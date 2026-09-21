@@ -714,6 +714,7 @@ drag_to_the_roots	0	cast	exercised
 dragon_fodder	0	cast	exercised
 dragon_moose	0	cast	exercised
 dragon_sniper	0	cast	exercised
+dragon_trainer	0	cast	exercised
 dragonback_lancer	0	cast	exercised
 dragons_eye_sentry	0	cast	exercised
 dragonstorm_globe	0	ability:0	exercised
@@ -772,6 +773,7 @@ eclipsed_merrow	0	cast	exercised
 eddymurk_crab	0	cast	exercised
 edgewall_pack	0	cast	exercised
 ekundu_griffin	0	cast	exercised
+elder_auntie	0	cast	exercised
 elderfang_disciple	0	cast	exercised
 eldrazi_devastator	0	cast	exercised
 elegant_parlor	0	land	exercised
@@ -1088,6 +1090,7 @@ gleaming_bastion	0	ability:1	exercised
 gleaming_bastion	0	land	exercised
 glidedive_duo	0	cast	exercised
 glider_kids	0	cast	exercised
+glimmerburst	0	cast	exercised
 glimpse_the_core	0	cast	exercised
 gloom_pangolin	0	cast	exercised
 gloom_ripper	0	cast	exercised
@@ -1300,6 +1303,7 @@ hollowhenge_beast	0	cast	exercised
 holy_strength	0	cast	exercised
 honey_mammoth	0	cast	exercised
 honor	0	cast	exercised
+hop_to_it	0	cast	exercised
 hornet_cobra	0	cast	exercised
 horrid_vigor	0	cast	exercised
 hostile_minotaur	0	cast	exercised
@@ -2100,6 +2104,7 @@ refute	0	cast	unsupported: target group 0 needs a richer fixture
 regal_unicorn	0	cast	exercised
 regathan_firecat	0	cast	exercised
 reigning_victor	0	cast	exercised
+release_the_dogs	0	cast	exercised
 relic_sloth	0	cast	exercised
 reluctant_dounguard	0	cast	exercised
 renegade_demon	0	cast	exercised

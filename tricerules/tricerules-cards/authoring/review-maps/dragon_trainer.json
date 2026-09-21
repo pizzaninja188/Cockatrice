@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "328a0691-9453-4f2d-a9c3-5c69da252d20",
+  "spans": [
+    {
+      "face_id": "dragon_trainer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "dragon_r_4_4_flying"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc3_batch::issue_misc3_dragon_trainer",
+      "covers": "the entry trigger creates one registered 4/4 red Dragon token with flying"
+    },
+    {
+      "test": "issue_misc3_batch::issue_misc3_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of dragon_trainer"
+    },
+    {
+      "test": "issue_misc3_batch::issue_misc3_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for dragon_trainer"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

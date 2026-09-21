@@ -1,0 +1,38 @@
+{
+  "format_version": 1,
+  "oracle_id": "b97d21b4-d730-479f-872f-3e1645b66751",
+  "spans": [
+    {
+      "face_id": "release_the_dogs",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [
+    "dog_w_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc3_batch::issue_misc3_release_the_dogs",
+      "covers": "the spell creates exactly four registered 1/1 white Dog tokens"
+    },
+    {
+      "test": "issue_misc3_batch::issue_misc3_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of release_the_dogs"
+    },
+    {
+      "test": "issue_misc3_batch::issue_misc3_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for release_the_dogs"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

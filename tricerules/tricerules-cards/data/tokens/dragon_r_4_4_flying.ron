@@ -1,0 +1,10 @@
+(
+  id: "dragon_r_4_4_flying",
+  name: "Dragon",
+  face_id: "dragon",
+  types: ["Creature", "Dragon"],
+  colors: [Red],
+  power: 4,
+  toughness: 4,
+  keywords: [Flying],
+)
