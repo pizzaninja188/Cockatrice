@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 16ab9451-f3da-4f61-8e2b-d9c84e0e5428.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "crackling_cyclops",
+  name: "Crackling Cyclops",
+  face_id: "crackling_cyclops",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Cyclops", "Wizard"],
+  power: 0,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+    effect: [PumpTarget(power: 3, toughness: 0, subject: Source)],
+  )],
+)

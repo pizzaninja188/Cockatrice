@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle bbe740f8-6e7c-4cfd-9134-9bf8d5f48cf5.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "beamsaw_prospector",
+  name: "Beamsaw Prospector",
+  face_id: "beamsaw_prospector",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Human", "Artificer"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [CreateTokens(token: "lander", count: 1)],
+  )],
+)

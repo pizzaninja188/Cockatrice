@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "dda4b515-49c0-43fe-9f6a-36defa326bb1",
+  "spans": [
+    {
+      "face_id": "maalfeld_twins",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "zombie_b_2_2"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_dies_batch::issue_dies_maalfeld_twins",
+      "covers": "the dies trigger creates exactly two registered 2/2 black Zombie tokens"
+    },
+    {
+      "test": "issue_dies_batch::issue_dies_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of maalfeld_twins"
+    },
+    {
+      "test": "issue_dies_batch::issue_dies_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for maalfeld_twins"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

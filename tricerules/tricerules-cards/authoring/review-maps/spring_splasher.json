@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "f1136a22-b202-4688-a44c-a9979c91261a",
+  "spans": [
+    {
+      "face_id": "spring_splasher",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetFilter.controller",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/PumpTarget/subject/Chosen/controller"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_dies_batch::issue_dies_spring_splasher",
+      "covers": "the attack trigger gives a target creature the defending player controls -3/-0, rejects the controller's own creature and the attacking source as illegal targets, and leaves an untargeted creature unchanged"
+    },
+    {
+      "test": "issue_dies_batch::issue_dies_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of spring_splasher"
+    },
+    {
+      "test": "issue_dies_batch::issue_dies_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for spring_splasher"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

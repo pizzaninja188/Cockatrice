@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "c8c88c33-b8df-4b19-b12c-79c9709af8f1",
+  "spans": [
+    {
+      "face_id": "mintstrosity",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "food"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_dies_batch::issue_dies_mintstrosity",
+      "covers": "the dies trigger creates one registered Food artifact token with its sacrifice-for-life ability"
+    },
+    {
+      "test": "issue_dies_batch::issue_dies_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of mintstrosity"
+    },
+    {
+      "test": "issue_dies_batch::issue_dies_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for mintstrosity"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

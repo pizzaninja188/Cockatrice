@@ -217,6 +217,7 @@ battlegrowth	0	cast	exercised
 bay_falcon	0	cast	exercised
 bayou	0	ability:0	exercised
 bayou	0	land	exercised
+beamsaw_prospector	0	cast	exercised
 bear_cub	0	cast	exercised
 bear_trap	0	ability:0	exercised
 bear_trap	0	cast	exercised
@@ -539,6 +540,7 @@ courier_griffin	0	cast	exercised
 courier_hawk	0	cast	exercised
 cowl_prowler	0	cast	exercised
 cracked_skull	0	cast	exercised
+crackling_cyclops	0	cast	exercised
 cragcrown_pathway_timbercrown_pathway	0	ability:0	exercised
 cragcrown_pathway_timbercrown_pathway	0	land	exercised
 cragcrown_pathway_timbercrown_pathway	1	ability:0	exercised
@@ -1164,6 +1166,7 @@ great_furnace	0	ability:0	exercised
 great_furnace	0	land	exercised
 great_hart	0	cast	exercised
 greater_basilisk	0	cast	exercised
+greedy_freebooter	0	cast	exercised
 greenwood_sentinel	0	cast	exercised
 grendel,_spawn_of_knull	0	cast	exercised
 griffin_protector	0	cast	exercised
@@ -1594,6 +1597,7 @@ lush_portico	0	land	exercised
 lys_alana_dignitary	0	ability:0	unsupported: nonmana costs need additional fixture resources
 lys_alana_dignitary	0	cast	unsupported: required cast-cost group needs a specialized fixture
 lys_alana_informant	0	cast	exercised
+maalfeld_twins	0	cast	exercised
 macabre_waltz	0	cast	exercised
 magebane_lizard	0	cast	exercised
 magic_damper	0	cast	exercised
@@ -1688,6 +1692,7 @@ mineshaft_spider	0	cast	exercised
 minotaur_abomination	0	cast	exercised
 minotaur_aggressor	0	cast	exercised
 minotaur_warrior	0	cast	exercised
+mintstrosity	0	cast	exercised
 mischievous_pup	0	cast	exercised
 mischievous_sneakling	0	cast	exercised
 misleading_motes	0	cast	exercised
@@ -2450,6 +2455,7 @@ spirited_companion	0	cast	exercised
 spitfire_lagac	0	cast	exercised
 sporecap_spider	0	cast	exercised
 spring_of_eternal_peace	0	cast	exercised
+spring_splasher	0	cast	exercised
 springleaf_drum	0	ability:0	exercised
 springleaf_drum	0	cast	exercised
 springmane_cervin	0	cast	exercised

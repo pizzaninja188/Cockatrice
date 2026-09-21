@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle d4a9d63a-5a8a-4f51-9e49-43d6dc3234b1.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "greedy_freebooter",
+  name: "Greedy Freebooter",
+  face_id: "greedy_freebooter",
+  mana_cost: "{B}",
+  types: ["Creature", "Human", "Pirate"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [
+      Scry(count: 1),
+      CreateTokens(token: "treasure", count: 1),
+    ],
+  )],
+)

@@ -588,6 +588,8 @@ mod issue_459_devotee_endure_mobilize;
 mod issue_460_reviewed_instances;
 #[path = "scenario/issue_combat_tricks_batch.rs"]
 mod issue_combat_tricks_batch;
+#[path = "scenario/issue_dies_batch.rs"]
+mod issue_dies_batch;
 #[path = "scenario/issue_etb_batch.rs"]
 mod issue_etb_batch;
 #[path = "scenario/issue_look_batch.rs"]

@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "bbe740f8-6e7c-4cfd-9134-9bf8d5f48cf5",
+  "spans": [
+    {
+      "face_id": "beamsaw_prospector",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "lander"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_dies_batch::issue_dies_beamsaw_prospector",
+      "covers": "the dies trigger creates one registered Lander artifact token"
+    },
+    {
+      "test": "issue_dies_batch::issue_dies_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of beamsaw_prospector"
+    },
+    {
+      "test": "issue_dies_batch::issue_dies_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for beamsaw_prospector"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

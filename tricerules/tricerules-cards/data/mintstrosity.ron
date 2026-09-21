@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle c8c88c33-b8df-4b19-b12c-79c9709af8f1.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "mintstrosity",
+  name: "Mintstrosity",
+  face_id: "mintstrosity",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Horror"],
+  power: 3,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [CreateTokens(token: "food", count: 1)],
+  )],
+)

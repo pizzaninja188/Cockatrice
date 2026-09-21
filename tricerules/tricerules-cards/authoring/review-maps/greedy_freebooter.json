@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "d4a9d63a-5a8a-4f51-9e49-43d6dc3234b1",
+  "spans": [
+    {
+      "face_id": "greedy_freebooter",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_dies_batch::issue_dies_greedy_freebooter",
+      "covers": "the dies trigger scrys one card before creating one registered Treasure token, in that order"
+    },
+    {
+      "test": "issue_dies_batch::issue_dies_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of greedy_freebooter"
+    },
+    {
+      "test": "issue_dies_batch::issue_dies_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for greedy_freebooter"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
