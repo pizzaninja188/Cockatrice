@@ -1030,13 +1030,21 @@ gates remain required. No new rules capability or card identity is introduced.
 ### Batch evidence and review discipline
 
 Missing generator recognition is not a runtime blocker. Classify ready cards, unassessed cards,
-generator limitations and genuine runtime blockers separately. Keep one primary issue owner per
-unimplemented Oracle identity and link capability dependencies. Update partially delivered issue
+generator limitations and genuine runtime blockers separately. Routine selection may be tracked
+by the single active batch and generated audit without an issue. Deferred blockers require explicit
+issues with per-identity evidence; keep one primary owner and link capability dependencies.
+Update partially delivered issue
 bodies, not only comments; retain useful research while removing obsolete parser deliverables.
 Do not build recipes that admit no complete cards merely because an old issue asks for them.
-Campaign instructions set batch-size targets; reduce scope for semantic risk. Before implementation,
-each selected unimplemented identity must have exactly one primary issue owner with a complete
-batch scope. Capability links and historical delivered-card mentions are not duplicate ownership.
+Campaign instructions set batch-size targets; reduce scope for semantic risk. Before editing a
+routine batch, state a short semantic preflight in the task: selected Oracle identities and complete
+readiness, source/rulings reviewed, reused primitives and important semantic distinctions, tests
+that distinguish plausible wrong implementations, and exclusions. This replaces a mandatory routine
+issue, not source research or complete-card review. No separate plan file or approval is required.
+Use decision-complete issues when work needs design decisions (new primitives, complex/ambiguous
+compositions or cross-component changes) and for deferred blockers. Reuse existing inventories;
+do not create retrospective issues for completed routine batches. Capability links and historical
+delivered-card mentions are not duplicate ownership. Lack of an issue is not proof of blockage.
 
 `scripts/check-card-evidence.ps1` validates all checked-in review maps against canonical handwritten
 definitions and the pinned source. Map filenames equal the canonical RON filename stem.
@@ -1054,6 +1062,10 @@ specific unresolved correctness risk. Run formatting and focused lint before fre
 Resolve blocking defects and missing required evidence before the final full gate. Optional polish
 may be deferred without another review cycle. Changes after a passing gate require affected
 reverification; avoid optional changes after that gate. Reuse unchanged passing evidence.
+Use focused/package checks during iteration, then the full affected-side gate on stable content.
+Do not routinely run the full suite before review and again inside the final gate. Broaden testing
+early only when failures, changed contracts or concrete unresolved risks justify it. Keep all
+required final checks; a later delivery request alone does not invalidate passing evidence.
 
 The root owns all command execution that can write artifacts, including tests, builds, Cargo,
 formatting, verification, generators, metadata checks and review packets. Independent reviewers

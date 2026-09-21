@@ -8,7 +8,8 @@ Use the host's permitted delegation mechanism and the campaign's configured mode
 
 - Review type: initial review or material delta review.
 - Repository, branch, base SHA and current HEAD.
-- Owning issue(s), exact Oracle identities, changed paths, frozen patch path and SHA-256.
+- Existing issue(s), if any, or the task's routine batch preflight; exact Oracle identities,
+  changed paths, frozen patch path and SHA-256. A routine batch does not need an issue.
 - Pinned source/rulings, typed mappings and relevant validators/runtime consumers.
 - Existing packet/map paths, focused test logs, exit codes, final-gate status, and known risks.
 - For a delta: prior reviewed patch/hash, prior verdict, exact changed paths/hunks, findings

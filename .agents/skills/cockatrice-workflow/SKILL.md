@@ -33,13 +33,16 @@ requirements; this skill routes the work rather than replacing them.
 - Finish a decision-complete plan for the selected candidate. If current code already implements
   a candidate, continue selection within the user's criteria rather than planning duplicate work.
   Keep this phase read-only, including tracker state.
-- During an authorized authoring campaign, establish exactly one primary issue owner for every
-  selected unimplemented Oracle identity before editing card data or tests. Create or update a
-  decision-complete routine issue for a ready batch drawn from the unmapped pool. Distinguish
-  primary ownership from capability dependencies and historical mentions; an ID appearing in two
-  issue bodies is not by itself duplicate ownership. Reconcile genuine duplicate ownership and
-  update remaining-scope lists before selecting affected cards. After delivery, update the owning
-  issue body with implemented identities, commit evidence, and explicit remaining ownership.
+- For routine supported-card batches, satisfy planning with a brief semantic preflight in the
+  task before editing: selected Oracle identities, complete-card readiness, source/rulings reviewed,
+  reused primitives and important semantic distinctions, distinguishing tests, and exclusions.
+  No separate GitHub issue, planning artifact, or approval cycle is required. The single active
+  batch and generated audit track routine selection; absence of an issue is not absence of support.
+- Use decision-complete issues for work requiring design decisions: new primitives, complex or
+  ambiguous compositions, cross-component changes, and deferred blockers. Reuse existing routine
+  inventories when useful. Preserve one primary tracking owner for issue-backed unresolved cards;
+  dependencies and historical mentions are not duplicate ownership. Reconcile affected existing
+  issue scopes after delivery, but do not create retrospective issues for completed routine batches.
 
 ## Implement and verify
 
@@ -65,7 +68,8 @@ requirements; this skill routes the work rather than replacing them.
   IDs, typed emission, positive calibrations and negative near-misses. Preserve existing generated
   cards and checks; do not migrate them solely to standardize routes.
 - Separate ready cards, unassessed cards, generator limitations and genuine runtime blockers.
-  Keep one primary issue owner per unimplemented identity, with links to capability dependencies.
+  Routine cards may be tracked by the active batch and audit without an issue. Deferred blockers
+  need an explicit issue and per-identity evidence, with one primary owner and linked dependencies.
   Update obsolete issue requirements before execution. Let the campaign set batch-size targets;
   reduce scope when semantic risk warrants it. Reuse actual-card semantic
   fixtures with independent expectations; add helpers only for demonstrated repetition.
@@ -78,6 +82,9 @@ requirements; this skill routes the work rather than replacing them.
   same frozen content. Return review findings as rework before treating evidence as final.
   Use default effort for routine authoring and review. Run formatting and focused lint before
   review; resolve required findings before the final gate. Optional polish need not cause rework.
+  Use focused/package checks while iterating; do not habitually run the full suite before review
+  and then repeat it inside the final gate. Broaden early testing when a failure or specific risk
+  warrants it. A full gate remains required on stable final content; reuse valid existing evidence.
   Escalate review depth for demonstrated semantic risk; keep engine and primitive changes on the
   deeper-review path. Reuse prior valid evidence instead of re-running gates solely to measure.
 - For card-authoring review delegations, read and instantiate the
