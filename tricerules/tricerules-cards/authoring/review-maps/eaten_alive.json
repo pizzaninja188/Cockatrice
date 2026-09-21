@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "d437ecc2-2fd3-4ad3-b23e-217f55e58dae",
+  "spans": [
+    {
+      "face_id": "eaten_alive",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "eaten_alive",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostOptionDef::SacrificePermanent",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "CastCostOptionDef::Mana",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_338_direct_ron::issue_338_eaten_alive_accepts_either_payment_and_exiles",
+      "covers": "the sacrifice alternative and the {3}{B} alternative each pay the announced additional cost; the spell exiles a target creature or planeswalker; neither alternative can be omitted"
+    },
+    {
+      "test": "issue_338_direct_ron::issue_338_direct_ron_batch_maps_definitions",
+      "covers": "reviewed identity, cost, types, cast-cost group options and target group of Eaten Alive"
+    },
+    {
+      "test": "issue_338_direct_ron::issue_338_direct_ron_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Eaten Alive"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

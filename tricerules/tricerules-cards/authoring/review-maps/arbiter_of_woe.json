@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "540693f3-985c-4a4a-945c-c957c5aad395",
+  "spans": [
+    {
+      "face_id": "arbiter_of_woe",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "arbiter_of_woe",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "arbiter_of_woe",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostOptionDef::SacrificePermanent",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/2"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/3"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_338_direct_ron::issue_338_arbiter_of_woe_etb_drains_each_opponent",
+      "covers": "sacrificing a creature pays the additional cost; the entry trigger makes each opponent discard a card and lose two life while the controller draws a card and gains two life"
+    },
+    {
+      "test": "issue_338_direct_ron::issue_338_direct_ron_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flying keyword, cast-cost group and entry trigger of Arbiter of Woe"
+    },
+    {
+      "test": "issue_338_direct_ron::issue_338_direct_ron_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Arbiter of Woe"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

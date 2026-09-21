@@ -230,8 +230,6 @@ fn issue_338_excluded_additional_cost_forms_stay_unregistered() {
         ("feed_the_cycle", "Feed the Cycle"),
         ("fear_of_isolation", "Fear of Isolation"),
         ("soaring_stoneglider", "Soaring Stoneglider"),
-        ("eaten_alive", "Eaten Alive"),
-        ("arbiter_of_woe", "Arbiter of Woe"),
         ("champion_of_the_clachan", "Champion of the Clachan"),
     ] {
         assert!(

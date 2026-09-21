@@ -1,0 +1,28 @@
+// Oracle and rulings checked 2026-09-20 against pinned Scryfall oracle 67e6ce99-4883-4713-9822-cb2334765b5b.
+// Handwritten typed definition promoted through the reviewed direct-RON path (#338);
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "duty_beyond_death",
+  name: "Duty Beyond Death",
+  face_id: "duty_beyond_death",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "additional_cost",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 1,
+    options: [
+      SacrificePermanent(
+        option_id: "sacrifice_creature",
+        presentation: OracleLines([1]),
+        kind: AdditionalPayment,
+        filter: (kind: Creature, controller: You),
+      ),
+    ],
+  )],
+  spell_effect: [
+    GrantKeywordsAll(filter: (controller: Some(YouControl)), keywords: [Indestructible]),
+    PutCountersAll(counter: PlusOnePlusOne, count: 1, filter: (controller: Some(YouControl))),
+  ],
+)

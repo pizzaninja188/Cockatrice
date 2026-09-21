@@ -1,0 +1,39 @@
+// Oracle and rulings checked 2026-09-20 against pinned Scryfall oracle d437ecc2-2fd3-4ad3-b23e-217f55e58dae.
+// Handwritten typed definition promoted through the reviewed direct-RON path (#338);
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "eaten_alive",
+  name: "Eaten Alive",
+  face_id: "eaten_alive",
+  mana_cost: "{B}",
+  types: ["Sorcery"],
+  cast_cost_groups: [(
+    group_id: "additional_cost",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 1,
+    options: [
+      SacrificePermanent(
+        option_id: "sacrifice_creature",
+        presentation: OracleLines([1]),
+        kind: AdditionalPayment,
+        filter: (kind: Creature, controller: You),
+      ),
+      Mana(
+        option_id: "pay_mana",
+        presentation: OracleLines([1]),
+        kind: AdditionalPayment,
+        cost: "{3}{B}",
+      ),
+    ],
+  )],
+  spell_effect: [Exile(subject: Chosen((kind: AnyPermanent, permanent_types: [Creature, Planeswalker])))],
+  targeting: Some((
+    groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature or planeswalker",
+      effect_indices: [0],
+    )],
+  )),
+)

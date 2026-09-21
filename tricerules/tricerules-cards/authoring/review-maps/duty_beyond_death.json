@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "67e6ce99-4883-4713-9822-cb2334765b5b",
+  "spans": [
+    {
+      "face_id": "duty_beyond_death",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "duty_beyond_death",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostOptionDef::SacrificePermanent",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywordsAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCountersAll",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_338_direct_ron::issue_338_duty_beyond_death_grants_indestructible_and_a_counter",
+      "covers": "sacrificing a creature pays the additional cost; every creature the caster controls gains indestructible until end of turn and one +1/+1 counter; an opponent's creature receives neither"
+    },
+    {
+      "test": "issue_338_direct_ron::issue_338_direct_ron_batch_maps_definitions",
+      "covers": "reviewed identity, cost, types, cast-cost group and mass keyword/counter effects of Duty Beyond Death"
+    },
+    {
+      "test": "issue_338_direct_ron::issue_338_direct_ron_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Duty Beyond Death"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

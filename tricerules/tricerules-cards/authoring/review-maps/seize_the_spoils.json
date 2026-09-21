@@ -1,0 +1,55 @@
+{
+  "format_version": 1,
+  "oracle_id": "58f83528-9110-4895-b5ea-51b90af30a8d",
+  "spans": [
+    {
+      "face_id": "seize_the_spoils",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "seize_the_spoils",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostOptionDef::DiscardCard",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_338_direct_ron::issue_338_seize_the_spoils_discards_and_draws_with_a_treasure",
+      "covers": "casting without discarding is rejected; discarding a card pays the additional cost; resolution draws two cards and creates one Treasure artifact token controlled by the caster"
+    },
+    {
+      "test": "issue_338_direct_ron::issue_338_direct_ron_batch_maps_definitions",
+      "covers": "reviewed identity, cost, types, cast-cost group and draw/token effects of Seize the Spoils"
+    },
+    {
+      "test": "issue_338_direct_ron::issue_338_direct_ron_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Seize the Spoils"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,38 @@
+// Oracle and rulings checked 2026-09-20 against pinned Scryfall oracle 540693f3-985c-4a4a-945c-c957c5aad395.
+// Handwritten typed definition promoted through the reviewed direct-RON path (#338);
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "arbiter_of_woe",
+  name: "Arbiter of Woe",
+  face_id: "arbiter_of_woe",
+  mana_cost: "{4}{B}{B}",
+  types: ["Creature", "Demon"],
+  power: 5,
+  toughness: 4,
+  keywords: [Flying],
+  cast_cost_groups: [(
+    group_id: "additional_cost",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 1,
+    options: [
+      SacrificePermanent(
+        option_id: "sacrifice_creature",
+        presentation: OracleLines([1]),
+        kind: AdditionalPayment,
+        filter: (kind: Creature, controller: You),
+      ),
+    ],
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([3]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      Discard(who: EachOpponent, quantity: Exact(1)),
+      LoseLife(amount: Fixed(2), who: EachOpponent),
+      Draw(count: 1),
+      GainLife(amount: 2),
+    ],
+  )],
+)

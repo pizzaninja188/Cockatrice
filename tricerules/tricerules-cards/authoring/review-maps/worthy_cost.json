@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "0f8ebf11-b5ec-4f21-8c49-90d569b5a4c5",
+  "spans": [
+    {
+      "face_id": "worthy_cost",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "worthy_cost",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostOptionDef::SacrificePermanent",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_338_direct_ron::issue_338_worthy_cost_pays_a_sacrifice_and_exiles_a_creature_or_planeswalker",
+      "covers": "casting without a legal sacrifice is rejected; sacrificing a creature pays the mandatory additional cost; the spell exiles a target creature and a target planeswalker while a nonmatching permanent is refused"
+    },
+    {
+      "test": "issue_338_direct_ron::issue_338_direct_ron_batch_maps_definitions",
+      "covers": "reviewed identity, cost, types, cast-cost group, spell effect and target group of Worthy Cost"
+    },
+    {
+      "test": "issue_338_direct_ron::issue_338_direct_ron_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Worthy Cost"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
