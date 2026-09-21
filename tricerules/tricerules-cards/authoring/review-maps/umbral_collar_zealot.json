@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "12db6263-75c2-442f-a1a5-7af7915f8f9f",
+  "spans": [
+    {
+      "face_id": "umbral_collar_zealot",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LibraryPartition",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc10_batch::issue_misc10_umbral_collar_zealot_sacrifices_for_surveil",
+      "covers": "sacrificing another creature or artifact offers a surveil 1 choice; the source alone cannot pay"
+    },
+    {
+      "test": "issue_misc10_batch::issue_misc10_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc10_umbral_collar_zealot_sacrifices_for_surveil"
+    },
+    {
+      "test": "issue_misc10_batch::issue_misc10_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc10_umbral_collar_zealot_sacrifices_for_surveil"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,14 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 5f532b7f-cb76-4be7-b361-0106c561dcb2.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "samis_curiosity",
+  name: "Sami's Curiosity",
+  face_id: "samis_curiosity",
+  mana_cost: "{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    GainLife(amount: 2),
+    CreateTokens(token: "lander", count: 1),
+  ],
+)

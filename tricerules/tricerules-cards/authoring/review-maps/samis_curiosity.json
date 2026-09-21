@@ -1,0 +1,43 @@
+{
+  "format_version": 1,
+  "oracle_id": "5f532b7f-cb76-4be7-b361-0106c561dcb2",
+  "spans": [
+    {
+      "face_id": "samis_curiosity",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [
+    "lander"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc10_batch::issue_misc10_samis_curiosity_gains_life_and_makes_a_lander",
+      "covers": "gains 2 life and creates a Lander token"
+    },
+    {
+      "test": "issue_misc10_batch::issue_misc10_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc10_samis_curiosity_gains_life_and_makes_a_lander"
+    },
+    {
+      "test": "issue_misc10_batch::issue_misc10_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc10_samis_curiosity_gains_life_and_makes_a_lander"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

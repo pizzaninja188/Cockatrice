@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "ca1dc6f0-3ec2-4f62-a08a-1395201bd93f",
+  "spans": [
+    {
+      "face_id": "hardened_tactician",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc10_batch::issue_misc10_hardened_tactician_sacrifices_a_token",
+      "covers": "the {1}-and-sacrifice-a-token ability draws a card; a nontoken creature is rejected"
+    },
+    {
+      "test": "issue_misc10_batch::issue_misc10_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc10_hardened_tactician_sacrifices_a_token"
+    },
+    {
+      "test": "issue_misc10_batch::issue_misc10_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc10_hardened_tactician_sacrifices_a_token"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

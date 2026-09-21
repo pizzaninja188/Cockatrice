@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "45ddfa35-7b3c-4916-b231-dc721b7b56d9",
+  "spans": [
+    {
+      "face_id": "bold_biochemist",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "ActivatedCostModifier::ConditionalSourceManaCostReduction",
+      "typed_path": "/faces/0/activated_abilities/0/cost_modifiers/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1"
+    },
+    {
+      "symbol": "ActivationLimit::PerObject",
+      "typed_path": "/faces/0/activated_abilities/0/activation_limit"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc10_batch::issue_misc10_bold_biochemist_power_up_is_once_per_object",
+      "covers": "the power-up ability puts a +1/+1 counter on the source, draws two, is reduced when it entered this turn, and can be activated only once per object"
+    },
+    {
+      "test": "issue_misc10_batch::issue_misc10_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc10_bold_biochemist_power_up_is_once_per_object"
+    },
+    {
+      "test": "issue_misc10_batch::issue_misc10_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc10_bold_biochemist_power_up_is_once_per_object"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

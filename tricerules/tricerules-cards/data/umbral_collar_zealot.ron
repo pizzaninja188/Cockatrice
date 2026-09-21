@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 12db6263-75c2-442f-a1a5-7af7915f8f9f.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "umbral_collar_zealot",
+  name: "Umbral Collar Zealot",
+  face_id: "umbral_collar_zealot",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Human", "Cleric"],
+  power: 3,
+  toughness: 2,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [SacrificePermanent(filter: (any_of: Some([
+      (kind: Creature, controller: You, excluded_objects: [Source]),
+      (kind: AnyPermanent, controller: You, permanent_types: [Artifact], excluded_objects: [Source]),
+    ])))],
+    effect: [LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil)],
+  )],
+)

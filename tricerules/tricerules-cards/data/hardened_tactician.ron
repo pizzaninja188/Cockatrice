@@ -1,0 +1,20 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle ca1dc6f0-3ec2-4f62-a08a-1395201bd93f.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// "Sacrifice a token" is not "another"; the source is a nontoken creature, so it can never
+// sacrifice itself and no source exclusion is needed.
+(
+  id: "hardened_tactician",
+  name: "Hardened Tactician",
+  face_id: "hardened_tactician",
+  mana_cost: "{1}{W}{B}",
+  types: ["Creature", "Human", "Warrior"],
+  power: 2,
+  toughness: 4,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{1}"), SacrificePermanent(filter: (kind: AnyPermanent, controller: You, token: Some(true)))],
+    effect: [Draw(count: 1)],
+  )],
+)

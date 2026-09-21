@@ -598,6 +598,8 @@ mod issue_dmg2_batch;
 mod issue_etb_batch;
 #[path = "scenario/issue_look_batch.rs"]
 mod issue_look_batch;
+#[path = "scenario/issue_misc10_batch.rs"]
+mod issue_misc10_batch;
 #[path = "scenario/issue_misc1_batch.rs"]
 mod issue_misc1_batch;
 #[path = "scenario/issue_misc2_batch.rs"]

@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 7aae54a6-3011-4867-b5ee-21a2111aecc6.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "tunnel_surveyor",
+  name: "Tunnel Surveyor",
+  face_id: "tunnel_surveyor",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Human", "Detective"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "glimmer_w_1_1", count: 1)],
+  )],
+)

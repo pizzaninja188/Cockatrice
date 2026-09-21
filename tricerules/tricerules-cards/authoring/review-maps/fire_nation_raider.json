@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "b37e9bc5-6a2c-4f08-b856-3f8d0d16defb",
+  "spans": [
+    {
+      "face_id": "fire_nation_raider",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::AttackedThisTurn",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc10_batch::issue_misc10_fire_nation_raider_raid_creates_a_clue_only_after_attacking",
+      "covers": "entering creates a Clue only when the controller attacked this turn"
+    },
+    {
+      "test": "issue_misc10_batch::issue_misc10_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc10_fire_nation_raider_raid_creates_a_clue_only_after_attacking"
+    },
+    {
+      "test": "issue_misc10_batch::issue_misc10_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc10_fire_nation_raider_raid_creates_a_clue_only_after_attacking"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

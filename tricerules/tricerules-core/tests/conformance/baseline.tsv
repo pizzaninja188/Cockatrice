@@ -304,6 +304,8 @@ bogwater_lumaret	0	cast	exercised
 boiling_rock_prison	0	ability:0	exercised
 boiling_rock_prison	0	ability:1	exercised
 boiling_rock_prison	0	land	exercised
+bold_biochemist	0	ability:0	exercised
+bold_biochemist	0	cast	exercised
 boltwave	0	cast	exercised
 bombard	0	cast	exercised
 bombur,_gentle_dreamer	0	cast	exercised
@@ -923,6 +925,7 @@ fire_ice	1	cast	exercised
 fire_nation_ambushers	0	cast	exercised
 fire_nation_cadets	0	ability:0	exercised
 fire_nation_cadets	0	cast	exercised
+fire_nation_raider	0	cast	exercised
 fire_nation_soldier	0	cast	exercised
 fire_prophecy	0	cast	exercised
 fire_sages	0	ability:0	exercised
@@ -1248,6 +1251,8 @@ hard-won_jitte	0	cast	exercised
 hardbristle_bandit	0	ability:0	exercised
 hardbristle_bandit	0	cast	exercised
 hardened_escort	0	cast	exercised
+hardened_tactician	0	ability:0	unsupported: nonmana costs need additional fixture resources
+hardened_tactician	0	cast	exercised
 harmonize	0	cast	exercised
 harrier_naga	0	cast	exercised
 haunted_guardian	0	cast	exercised
@@ -2265,6 +2270,7 @@ sagu_wildling_roost_seek	0	cast	exercised
 sagu_wildling_roost_seek	1	cast	exercised
 salt_road_packbeast	0	cast	exercised
 salvager_of_secrets	0	cast	exercised
+samis_curiosity	0	cast	exercised
 sandskitter_outrider	0	cast	exercised
 sandsteppe_citadel	0	ability:0	exercised
 sandsteppe_citadel	0	land	exercised
@@ -2578,6 +2584,8 @@ sterling_supplier	0	cast	exercised
 steward_of_valeron	0	ability:0	exercised
 steward_of_valeron	0	cast	exercised
 stickytongue_sentinel	0	cast	exercised
+sting-slinger	0	ability:0	exercised
+sting-slinger	0	cast	exercised
 stingblade_assassin	0	cast	exercised
 stinging_cave_crawler	0	cast	exercised
 stir_up_trouble	0	cast	unsupported: required cast-cost group needs a specialized fixture
@@ -2869,6 +2877,7 @@ tundra_tank	0	ability:0	unsupported: payment preview rejected: illegal command: 
 tundra_tank	0	cast	exercised
 tundra_wall	0	cast	exercised
 tundra_wolves	0	cast	exercised
+tunnel_surveyor	0	cast	exercised
 turn_inside_out	0	cast	exercised
 turn_to_slag	0	cast	exercised
 turntimber_ascetic	0	cast	exercised
@@ -2889,6 +2898,8 @@ tyrox,_saurid_tyrant	0	cast	exercised
 ukud_cobra	0	cast	exercised
 ultron_drone	0	ability:0	exercised
 ultron_drone	0	cast	exercised
+umbral_collar_zealot	0	ability:0	exercised
+umbral_collar_zealot	0	cast	exercised
 unable_to_scream	0	cast	exercised
 unauthorized_exit	0	cast	exercised
 unburied_earthcarver	0	ability:0	exercised
@@ -3105,6 +3116,8 @@ wild_jhovall	0	cast	exercised
 wild_pack_squad	0	cast	exercised
 wild_unraveling	0	cast	unsupported: target group 0 needs a richer fixture
 wildfire_wickerfolk	0	cast	exercised
+wildheart_invoker	0	ability:0	exercised
+wildheart_invoker	0	cast	exercised
 wildwood_patrol	0	cast	exercised
 willow_elf	0	cast	exercised
 willow_faerie	0	cast	exercised

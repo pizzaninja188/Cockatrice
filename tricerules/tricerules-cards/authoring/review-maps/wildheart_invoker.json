@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "ff8fb796-af5d-4d64-ab3c-7f2469dfa6bf",
+  "spans": [
+    {
+      "face_id": "wildheart_invoker",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc10_batch::issue_misc10_wildheart_invoker_pumps_and_grants_trample",
+      "covers": "the {8} ability gives a target creature +5/+5 and trample"
+    },
+    {
+      "test": "issue_misc10_batch::issue_misc10_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc10_wildheart_invoker_pumps_and_grants_trample"
+    },
+    {
+      "test": "issue_misc10_batch::issue_misc10_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc10_wildheart_invoker_pumps_and_grants_trample"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

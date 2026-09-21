@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "945a4a4d-fdfd-4c39-9975-5b22d17a4e70",
+  "spans": [
+    {
+      "face_id": "sting_slinger",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Blight",
+      "typed_path": "/faces/0/activated_abilities/0/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::DamagePlayer",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc10_batch::issue_misc10_sting_slinger_blights_for_damage",
+      "covers": "the {1}{R}-tap-and-blight-1 ability places a -1/-1 counter and deals 2 damage to each opponent"
+    },
+    {
+      "test": "issue_misc10_batch::issue_misc10_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc10_sting_slinger_blights_for_damage"
+    },
+    {
+      "test": "issue_misc10_batch::issue_misc10_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc10_sting_slinger_blights_for_damage"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "7aae54a6-3011-4867-b5ee-21a2111aecc6",
+  "spans": [
+    {
+      "face_id": "tunnel_surveyor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "glimmer_w_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc10_batch::issue_misc10_tunnel_surveyor_creates_a_glimmer",
+      "covers": "entering creates one 1/1 white Glimmer enchantment creature token"
+    },
+    {
+      "test": "issue_misc10_batch::issue_misc10_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc10_tunnel_surveyor_creates_a_glimmer"
+    },
+    {
+      "test": "issue_misc10_batch::issue_misc10_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc10_tunnel_surveyor_creates_a_glimmer"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
