@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 91967284-6711-4ef3-bb9b-5ba873da8bb2.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "winters_intervention",
+  name: "Winter's Intervention",
+  face_id: "winters_intervention",
+  mana_cost: "{1}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    DamageTarget(amount: 2, target: (kind: Creature)),
+    GainLife(amount: 2),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])])),
+)

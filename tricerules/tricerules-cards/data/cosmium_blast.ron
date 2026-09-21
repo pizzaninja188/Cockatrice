@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 52c96b5a-ce47-4bde-b530-0033b9bfd808.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "cosmium_blast",
+  name: "Cosmium Blast",
+  face_id: "cosmium_blast",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(amount: 4, target: (kind: Creature, combat_role: AttackingOrBlocking))],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target attacking or blocking creature", effect_indices: [0])])),
+)

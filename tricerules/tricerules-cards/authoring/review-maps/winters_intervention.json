@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "91967284-6711-4ef3-bb9b-5ba873da8bb2",
+  "spans": [
+    {
+      "face_id": "winters_intervention",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_dmg2_batch::issue_dmg2_winters_intervention",
+      "covers": "two damage is dealt to a target creature and the caster gains two life; a noncreature is not a legal target"
+    },
+    {
+      "test": "issue_dmg2_batch::issue_dmg2_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of winters_intervention"
+    },
+    {
+      "test": "issue_dmg2_batch::issue_dmg2_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for winters_intervention"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

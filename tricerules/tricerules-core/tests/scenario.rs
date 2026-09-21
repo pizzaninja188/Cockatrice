@@ -592,6 +592,8 @@ mod issue_465_token_blockers;
 mod issue_combat_tricks_batch;
 #[path = "scenario/issue_dies_batch.rs"]
 mod issue_dies_batch;
+#[path = "scenario/issue_dmg2_batch.rs"]
+mod issue_dmg2_batch;
 #[path = "scenario/issue_etb_batch.rs"]
 mod issue_etb_batch;
 #[path = "scenario/issue_look_batch.rs"]

@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "a0cbb1ba-73b1-4418-bbe3-5d1a02007c08",
+  "spans": [
+    {
+      "face_id": "vibrant_outburst",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_dmg2_batch::issue_dmg2_vibrant_outburst",
+      "covers": "three damage is dealt to a chosen any-target and up to one target creature is tapped; the tap target is optional"
+    },
+    {
+      "test": "issue_dmg2_batch::issue_dmg2_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of vibrant_outburst"
+    },
+    {
+      "test": "issue_dmg2_batch::issue_dmg2_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for vibrant_outburst"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

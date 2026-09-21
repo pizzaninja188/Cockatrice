@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "800c258a-cfc4-4a54-a667-065ea8dea69e",
+  "spans": [
+    {
+      "face_id": "lightning_helix",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_dmg2_batch::issue_dmg2_lightning_helix",
+      "covers": "three damage is dealt to a chosen any-target and the caster gains three life; a target that becomes illegal at resolution means no damage and no life"
+    },
+    {
+      "test": "issue_dmg2_batch::issue_dmg2_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of lightning_helix"
+    },
+    {
+      "test": "issue_dmg2_batch::issue_dmg2_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for lightning_helix"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

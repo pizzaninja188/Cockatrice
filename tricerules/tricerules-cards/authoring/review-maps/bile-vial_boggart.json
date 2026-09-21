@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "5a651557-ce08-46ba-aecd-0e4fbfdef3c0",
+  "spans": [
+    {
+      "face_id": "bile_vial_boggart",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_dmg2_batch::issue_dmg2_bile_vial_boggart",
+      "covers": "the dies trigger puts a -1/-1 counter on up to one target creature; declining the optional target leaves no counter"
+    },
+    {
+      "test": "issue_dmg2_batch::issue_dmg2_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of bile-vial_boggart"
+    },
+    {
+      "test": "issue_dmg2_batch::issue_dmg2_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for bile-vial_boggart"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

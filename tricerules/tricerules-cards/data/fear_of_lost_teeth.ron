@@ -1,0 +1,22 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 3724cc42-1bbd-4a11-8469-ab8492ddba52.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "fear_of_lost_teeth",
+  name: "Fear of Lost Teeth",
+  face_id: "fear_of_lost_teeth",
+  mana_cost: "{B}",
+  types: ["Enchantment", "Creature", "Nightmare"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [
+      DamageTarget(amount: 1, target: (kind: AnyTarget)),
+      GainLife(amount: 1),
+    ],
+    targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose any target", effect_indices: [0])])),
+  )],
+)

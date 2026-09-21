@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "e341478e-c3f8-45d9-9430-abe3a58fa2fc",
+  "spans": [
+    {
+      "face_id": "deadly_riposte",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_dmg2_batch::issue_dmg2_deadly_riposte",
+      "covers": "three damage is dealt to a target tapped creature and the caster gains two life; an untapped creature is not a legal target"
+    },
+    {
+      "test": "issue_dmg2_batch::issue_dmg2_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of deadly_riposte"
+    },
+    {
+      "test": "issue_dmg2_batch::issue_dmg2_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for deadly_riposte"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

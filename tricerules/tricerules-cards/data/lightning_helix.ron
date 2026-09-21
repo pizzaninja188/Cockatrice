@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 800c258a-cfc4-4a54-a667-065ea8dea69e.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "lightning_helix",
+  name: "Lightning Helix",
+  face_id: "lightning_helix",
+  mana_cost: "{R}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    DamageTarget(amount: 3, target: (kind: AnyTarget)),
+    GainLife(amount: 3),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose any target", effect_indices: [0])])),
+)

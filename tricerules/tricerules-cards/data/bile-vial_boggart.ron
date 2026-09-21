@@ -1,0 +1,19 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 5a651557-ce08-46ba-aecd-0e4fbfdef3c0.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "bile-vial_boggart",
+  name: "Bile-Vial Boggart",
+  face_id: "bile_vial_boggart",
+  mana_cost: "{B}",
+  types: ["Creature", "Goblin", "Assassin"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [PutCounters(counter: MinusOneMinusOne, count: 1, subject: Chosen((kind: Creature)))],
+    targeting: Some((groups: [(min: 0, max: 1, prompt: "Choose up to one target creature", effect_indices: [0])])),
+  )],
+)

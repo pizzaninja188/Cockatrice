@@ -243,6 +243,7 @@ betrayers_bargain	0	cast	unsupported: required cast-cost group needs a specializ
 bifur,_melodic_rider	0	cast	exercised
 bigfin_bouncer	0	cast	exercised
 bilbos_deadly_slice	0	cast	exercised
+bile-vial_boggart	0	cast	exercised
 billowing_shriekmass	0	cast	exercised
 biosynthic_burst	0	cast	exercised
 birnin_zana_plaza	0	ability:0	exercised
@@ -532,6 +533,7 @@ coral_sword	0	cast	exercised
 corroding_dragonstorm	0	cast	exercised
 corrupt_court_official	0	cast	exercised
 corrupted_conviction	0	cast	unsupported: required cast-cost group needs a specialized fixture
+cosmium_blast	0	cast	unsupported: target group 0 needs a richer fixture
 council_of_advisors	0	cast	exercised
 council_of_echoes	0	cast	exercised
 counsel_of_the_soratami	0	cast	exercised
@@ -632,6 +634,7 @@ dead_weight	0	cast	exercised
 deadly_insect	0	cast	exercised
 deadly_precision	0	cast	unsupported: required cast-cost group needs a specialized fixture
 deadly_recluse	0	cast	exercised
+deadly_riposte	0	cast	unsupported: target group 0 needs a richer fixture
 death_in_the_family	0	cast	exercised
 deathcap_glade	0	ability:0	exercised
 deathcap_glade	0	land	exercised
@@ -850,6 +853,7 @@ fang_of_shigeki	0	cast	exercised
 fangkeepers_familiar	0	cast	exercised
 fangren_hunter	0	cast	exercised
 fear_of_exposure	0	cast	unsupported: required cast-cost group needs a specialized fixture
+fear_of_lost_teeth	0	cast	exercised
 fear_of_surveillance	0	cast	exercised
 fearless_halberdier	0	cast	exercised
 feat_of_resistance	0	cast	exercised
@@ -1551,6 +1555,7 @@ lightfoot_technique	0	cast	exercised
 lightning_angel	0	cast	exercised
 lightning_bolt	0	cast	exercised
 lightning_elemental	0	cast	exercised
+lightning_helix	0	cast	exercised
 lightning_hounds	0	cast	exercised
 lightning_stormkin	0	cast	exercised
 lightning_strike	0	cast	exercised
@@ -2893,6 +2898,7 @@ vibranium_energy_daggers	0	ability:0	exercised
 vibranium_energy_daggers	0	cast	exercised
 vibrant_cityscape	0	ability:0	exercised
 vibrant_cityscape	0	land	exercised
+vibrant_outburst	0	cast	exercised
 vicious_clown	0	cast	exercised
 vigilant_baloth	0	cast	exercised
 village_ironsmith_ironfang	0	cast	exercised
@@ -3038,6 +3044,7 @@ winged_words	0	cast	exercised
 wingspan_stride	0	ability:0	exercised
 wingspan_stride	0	cast	exercised
 winternight_stories	0	cast	exercised
+winters_intervention	0	cast	exercised
 wirewood_elf	0	ability:0	exercised
 wirewood_elf	0	cast	exercised
 wishcoin_crab	0	cast	exercised
