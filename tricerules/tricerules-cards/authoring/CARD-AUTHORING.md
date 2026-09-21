@@ -1034,7 +1034,9 @@ generator limitations and genuine runtime blockers separately. Keep one primary 
 unimplemented Oracle identity and link capability dependencies. Update partially delivered issue
 bodies, not only comments; retain useful research while removing obsolete parser deliverables.
 Do not build recipes that admit no complete cards merely because an old issue asks for them.
-Prefer batches of 5-10 compatible ready cards when available; reduce scope for semantic risk.
+Campaign instructions set batch-size targets; reduce scope for semantic risk. Before implementation,
+each selected unimplemented identity must have exactly one primary issue owner with a complete
+batch scope. Capability links and historical delivered-card mentions are not duplicate ownership.
 
 `scripts/check-card-evidence.ps1` validates all checked-in review maps against canonical handwritten
 definitions and the pinned source. Map filenames equal the canonical RON filename stem.
@@ -1052,6 +1054,26 @@ specific unresolved correctness risk. Run formatting and focused lint before fre
 Resolve blocking defects and missing required evidence before the final full gate. Optional polish
 may be deferred without another review cycle. Changes after a passing gate require affected
 reverification; avoid optional changes after that gate. Reuse unchanged passing evidence.
+
+The root owns all command execution that can write artifacts, including tests, builds, Cargo,
+formatting, verification, generators, metadata checks and review packets. Independent reviewers
+inspect the frozen patch and existing evidence using the workflow skill's
+[reviewer template](../../../.agents/skills/cockatrice-workflow/reviewer-template.md).
+They request missing commands from the root rather than rerunning gates themselves. Independence
+means independent semantic judgment; it does not require duplicate test execution.
+
+Request follow-up review when a fix changes mechanics, targets, costs, choices, identity, timing,
+visibility, or semantic assertions needed to close a required evidence gap, or otherwise invalidates
+the prior verdict. Supply the exact delta and preserve prior review artifacts. The follow-up reviews
+that delta and affected interactions, not the entire batch by default.
+
+Do not routinely request follow-up review for a successful planned final gate, formatting,
+clerical corrections, or evidence wording narrowed to match already-reviewed tests. The root
+checks those changes and runs any affected validation. A wording change that hides missing required
+behavior is not clerical: fix the evidence gap and seek material-delta review. Defer optional
+assertions or polish rather than creating another edit/review/gate cycle; if an optional change is
+made, assess its actual semantic impact and reverify accordingly. These rules do not waive required
+coverage or permit delivery with outstanding correctness defects.
 
 Extend shared semantic fixtures incrementally for repeated setup and assertions demonstrated by
 the selected batch. Preserve independent expectations, actual-card execution, applicable illegal

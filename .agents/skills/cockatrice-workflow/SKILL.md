@@ -33,6 +33,13 @@ requirements; this skill routes the work rather than replacing them.
 - Finish a decision-complete plan for the selected candidate. If current code already implements
   a candidate, continue selection within the user's criteria rather than planning duplicate work.
   Keep this phase read-only, including tracker state.
+- During an authorized authoring campaign, establish exactly one primary issue owner for every
+  selected unimplemented Oracle identity before editing card data or tests. Create or update a
+  decision-complete routine issue for a ready batch drawn from the unmapped pool. Distinguish
+  primary ownership from capability dependencies and historical mentions; an ID appearing in two
+  issue bodies is not by itself duplicate ownership. Reconcile genuine duplicate ownership and
+  update remaining-scope lists before selecting affected cards. After delivery, update the owning
+  issue body with implemented identities, commit evidence, and explicit remaining ownership.
 
 ## Implement and verify
 
@@ -59,8 +66,8 @@ requirements; this skill routes the work rather than replacing them.
   cards and checks; do not migrate them solely to standardize routes.
 - Separate ready cards, unassessed cards, generator limitations and genuine runtime blockers.
   Keep one primary issue owner per unimplemented identity, with links to capability dependencies.
-  Update obsolete issue requirements before execution. Prefer 5-10 compatible ready cards per
-  batch when available, smaller when semantic risk warrants it. Reuse actual-card semantic
+  Update obsolete issue requirements before execution. Let the campaign set batch-size targets;
+  reduce scope when semantic risk warrants it. Reuse actual-card semantic
   fixtures with independent expectations; add helpers only for demonstrated repetition.
 - Follow the [verification ladder](../../../docs/AGENT-VERIFICATION.md): focused red/green tests
   through the quiet runner, then the full affected-side entry point. Choose the affected side
@@ -73,6 +80,13 @@ requirements; this skill routes the work rather than replacing them.
   review; resolve required findings before the final gate. Optional polish need not cause rework.
   Escalate review depth for demonstrated semantic risk; keep engine and primitive changes on the
   deeper-review path. Reuse prior valid evidence instead of re-running gates solely to measure.
+- For card-authoring review delegations, read and instantiate the
+  [reviewer template](reviewer-template.md), including its restrictions. Do not replace them with
+  ambiguous permission for "read-only test runs." Only the root runs Cargo, tests, builds,
+  verification, formatting, generators, Refresh/Check, or packet generation; these commands can
+  write artifacts even when tracked files remain unchanged. Reviewers inspect existing evidence
+  and request missing commands from the root. Follow the authoring guide's material-change
+  criteria for follow-up review; do not request routine confirmation after every batch.
 - When authored cards change generated metadata, explicitly run
   `scripts/update-card-data.ps1 -Mode Refresh` from the root and inspect the generated diff.
   Regeneration from existing local inputs is part of authorized card implementation and needs
