@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "045ece1e-23aa-4122-8726-86b2af4345ba",
+  "spans": [
+    {
+      "face_id": "thirst_for_identity",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc11_batch::issue_misc11_thirst_for_identity_draws_three_then_discards_a_creature",
+      "covers": "draws three cards, rejects an empty discard, and accepts discarding one creature as the resolution-time alternative"
+    },
+    {
+      "test": "issue_misc11_batch::issue_misc11_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, and the exact draw/discard spell effects of Thirst for Identity"
+    },
+    {
+      "test": "issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Thirst for Identity"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

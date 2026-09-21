@@ -1,0 +1,31 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 1f097c91-6c2e-410f-8c8f-c021f39491af.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.6a (entry trigger) and CR 610.3/CR 608.2b: the exiled card returns to the
+// battlefield under its owner's control when the source leaves; if the source has already
+// left, the target is no longer exiled. A token exiled this way ceases to exist.
+(
+  id: "henchbots",
+  name: "Henchbots",
+  face_id: "henchbots",
+  mana_cost: "{4}",
+  types: ["Artifact", "Creature", "Robot"],
+  power: 2,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [ExileUntilSourceLeaves(target: (
+      kind: Creature,
+      tapped: Some(true),
+      controller: Opponent,
+    ))],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target tapped creature an opponent controls",
+      effect_indices: [0],
+    )])),
+  )],
+)

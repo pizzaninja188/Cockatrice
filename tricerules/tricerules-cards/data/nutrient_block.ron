@@ -1,0 +1,26 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 04a0382f-7e4e-4450-ae70-18999379d875.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.12b (indestructible), CR 301.5/701.3 (Food sacrifice), and CR 603.6c/700.4:
+// "put into a graveyard from the battlefield" is the graveyard zone change, so a
+// non-creature permanent uses the same dies-event trigger.
+(
+  id: "nutrient_block",
+  name: "Nutrient Block",
+  face_id: "nutrient_block",
+  mana_cost: "{1}",
+  types: ["Artifact", "Food"],
+  keywords: [Indestructible],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{2}"), Tap, SacrificeSelf],
+    effect: [GainLife(amount: 3)],
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([3]),
+    trigger: WhenSelfDies,
+    effect: [Draw(count: 1)],
+  )],
+)

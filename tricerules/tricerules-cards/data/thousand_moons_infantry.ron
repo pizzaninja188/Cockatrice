@@ -1,0 +1,19 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle f064a39e-ebb3-47b5-bd06-f39b02b95eaf.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 502.3 (untap step) grants an additional untap attempt during each other player's
+// untap step; the permanent still untaps normally during its controller's untap step.
+(
+  id: "thousand_moons_infantry",
+  name: "Thousand Moons Infantry",
+  face_id: "thousand_moons_infantry",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 2,
+  toughness: 4,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: UntapsDuringOtherPlayersUntapSteps,
+  )],
+)

@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "0f1ada92-538b-40cb-9bf3-5c415f5325e6",
+  "spans": [
+    {
+      "face_id": "spotcycle_scouter",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "spotcycle_scouter",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::TapPermanents",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::AddTypes",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc11_batch::issue_misc11_spotcycle_scouter_scries_then_crews",
+      "covers": "entering scries two private cards and Crew 1 taps a creature to animate the Vehicle for the turn"
+    },
+    {
+      "test": "issue_misc11_batch::issue_misc11_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, scry entry trigger, and Crew aggregate tap of Spotcycle Scouter"
+    },
+    {
+      "test": "issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Spotcycle Scouter"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

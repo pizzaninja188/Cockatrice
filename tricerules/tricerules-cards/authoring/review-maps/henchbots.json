@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "1f097c91-6c2e-410f-8c8f-c021f39491af",
+  "spans": [
+    {
+      "face_id": "henchbots",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileUntilSourceLeaves",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc11_batch::issue_misc11_henchbots_exiles_a_tapped_creature_until_it_leaves",
+      "covers": "the entry trigger only targets tapped opponent creatures and returns the exiled card when the source leaves"
+    },
+    {
+      "test": "issue_misc11_batch::issue_misc11_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, entry trigger, exile-until-leaves effect, and targeting of Henchbots"
+    },
+    {
+      "test": "issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Henchbots"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

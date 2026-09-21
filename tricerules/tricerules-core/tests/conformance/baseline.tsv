@@ -46,6 +46,9 @@ agent_of_atlas	0	cast	exercised
 agents_of_hydra	0	cast	exercised
 aggressive_mammoth	0	cast	exercised
 aggressive_negotiations	0	cast	exercised
+agna_qela	0	ability:0	exercised
+agna_qela	0	ability:1	exercised
+agna_qela	0	land	exercised
 air_elemental	0	cast	exercised
 air_response_unit	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
 air_response_unit	0	cast	exercised
@@ -1286,6 +1289,7 @@ heirloom_auntie	0	cast	exercised
 hells_kitchen	0	ability:0	exercised
 hells_kitchen	0	land	exercised
 helpful_hunter	0	cast	exercised
+henchbots	0	cast	exercised
 hengegate_pathway_mistgate_pathway	0	ability:0	exercised
 hengegate_pathway_mistgate_pathway	0	land	exercised
 hengegate_pathway_mistgate_pathway	1	ability:0	exercised
@@ -1874,6 +1878,8 @@ noxious_groodion	0	cast	exercised
 noxious_newt	0	ability:0	exercised
 noxious_newt	0	cast	exercised
 null_group_biological_assets	0	cast	exercised
+nutrient_block	0	ability:0	exercised
+nutrient_block	0	cast	exercised
 nyxborn_brute	0	cast	exercised
 nyxborn_colossus	0	cast	exercised
 nyxborn_courser	0	cast	exercised
@@ -2303,6 +2309,10 @@ scarecrow_guide	0	cast	exercised
 scarlet_witch,_wanda_maximoff	0	cast	exercised
 scarwood_goblins	0	cast	exercised
 scathe_zombies	0	cast	exercised
+scene_of_the_crime	0	ability:0	exercised
+scene_of_the_crime	0	ability:1	exercised
+scene_of_the_crime	0	ability:2	exercised
+scene_of_the_crime	0	land	exercised
 scholar_of_stars	0	cast	exercised
 scion_of_ugin	0	cast	exercised
 scorch_spitter	0	cast	exercised
@@ -2537,6 +2547,8 @@ spirit_mascot	0	cast	exercised
 spirited_companion	0	cast	exercised
 spitfire_lagac	0	cast	exercised
 sporecap_spider	0	cast	exercised
+spotcycle_scouter	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+spotcycle_scouter	0	cast	exercised
 spring_of_eternal_peace	0	cast	exercised
 spring_splasher	0	cast	exercised
 springleaf_drum	0	ability:0	exercised
@@ -2772,6 +2784,7 @@ the_wondrous_wasp	0	cast	exercised
 thieving_magpie	0	cast	exercised
 thieving_otter	0	cast	exercised
 think_twice	0	cast	exercised
+thirst_for_identity	0	cast	exercised
 thorin_oakenshield	0	cast	exercised
 thornhide_wolves	0	cast	exercised
 thornweald_archer	0	cast	exercised
@@ -2781,6 +2794,7 @@ those_who_serve	0	cast	exercised
 thought_shucker	0	ability:0	unsupported: nonmana costs need additional fixture resources
 thought_shucker	0	cast	exercised
 thoughtseize	0	cast	exercised
+thousand_moons_infantry	0	cast	exercised
 thraben_purebloods	0	cast	exercised
 thraben_valiant	0	cast	exercised
 thrashing_brontodon	0	ability:0	exercised
@@ -3097,6 +3111,8 @@ web_up	0	cast	exercised
 wedgelight_rammer	0	ability:0	exercised
 wedgelight_rammer	0	cast	exercised
 weftblade_enhancer	0	cast	exercised
+well-worn_spatula	0	ability:0	exercised
+well-worn_spatula	0	cast	exercised
 west_wind_avatar	0	cast	exercised
 wetland_sambar	0	cast	exercised
 white_auracite	0	ability:0	exercised

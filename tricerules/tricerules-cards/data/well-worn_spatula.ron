@@ -1,0 +1,28 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 3cc333a1-c854-4b7c-8002-910e48222371.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 301.5 / 702.6 (Equipment and equip) and CR 613.4c (attached P/T modification).
+(
+  id: "well-worn_spatula",
+  name: "Well-Worn Spatula",
+  face_id: "well_worn_spatula",
+  mana_cost: "{1}",
+  types: ["Artifact", "Equipment"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [GainLife(amount: 2)],
+  )],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AttachedModifier(delta_power: 1, delta_toughness: 1),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    costs: [Mana("{1}")],
+    effect: [Equip(target: (kind: Creature, controller: You))],
+  )],
+)

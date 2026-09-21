@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "22d0a848-2126-48f0-9050-38daaf93b1d0",
+  "spans": [
+    {
+      "face_id": "agna_qela",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "agna_qela",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "agna_qela",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DrawDiscard",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc11_batch::issue_misc11_agna_qela_enters_tapped_and_loots",
+      "covers": "the land enters tapped without a basic land and untapped with one, then the {2}{U} loot draws and privately discards"
+    },
+    {
+      "test": "issue_misc11_batch::issue_misc11_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, conditional enters-tapped replacement, mana ability, and loot ability of Agna Qel'a"
+    },
+    {
+      "test": "issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Agna Qel'a"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

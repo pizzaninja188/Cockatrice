@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "f064a39e-ebb3-47b5-bd06-f39b02b95eaf",
+  "spans": [
+    {
+      "face_id": "thousand_moons_infantry",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::UntapsDuringOtherPlayersUntapSteps",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc11_batch::issue_misc11_thousand_moons_infantry_untaps_on_another_players_untap_step",
+      "covers": "a tapped Thousand Moons Infantry untaps during an opponent's untap step"
+    },
+    {
+      "test": "issue_misc11_batch::issue_misc11_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, and the untap static ability of Thousand Moons Infantry"
+    },
+    {
+      "test": "issue_misc11_batch::issue_misc11_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Thousand Moons Infantry"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
