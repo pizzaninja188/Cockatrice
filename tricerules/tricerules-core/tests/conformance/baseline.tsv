@@ -17,6 +17,8 @@ abzan_devotee	0	ability:0	exercised
 abzan_devotee	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 abzan_devotee	0	cast	exercised
 accursed_spirit	0	cast	exercised
+acolyte_of_aclazotz	0	ability:0	exercised
+acolyte_of_aclazotz	0	cast	exercised
 acolyte_of_xathrid	0	ability:0	exercised
 acolyte_of_xathrid	0	cast	exercised
 acrobatic_cheerleader	0	cast	exercised
@@ -136,6 +138,7 @@ ascended_lawmage	0	cast	exercised
 asgardian_citadel	0	ability:0	exercised
 asgardian_citadel	0	land	exercised
 ashcoat_bear	0	cast	exercised
+ashioks_reaper	0	cast	exercised
 assault_griffin	0	cast	exercised
 assault_zeppelid	0	cast	exercised
 assert_perfection	0	cast	exercised
@@ -180,6 +183,7 @@ bad_moon	0	cast	exercised
 badgermole	0	cast	exercised
 badlands	0	ability:0	exercised
 badlands	0	land	exercised
+bake_into_a_pie	0	cast	exercised
 balamb_t-rexaur	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 balamb_t-rexaur	0	cast	exercised
 balduvian_barbarians	0	cast	exercised
@@ -206,6 +210,8 @@ baron,_airship_kingdom	0	ability:0	exercised
 baron,_airship_kingdom	0	land	exercised
 barony_vampire	0	cast	exercised
 bartizan_bats	0	cast	exercised
+bartolome_del_presidio	0	ability:0	exercised
+bartolome_del_presidio	0	cast	exercised
 bashful_beastie	0	cast	exercised
 basilisk_collar	0	ability:0	exercised
 basilisk_collar	0	cast	exercised
@@ -215,6 +221,7 @@ bastion_enforcer	0	cast	exercised
 battle_hurda	0	cast	exercised
 battlefield_raptor	0	cast	exercised
 battlegrowth	0	cast	exercised
+battlesong_berserker	0	cast	exercised
 bay_falcon	0	cast	exercised
 bayou	0	ability:0	exercised
 bayou	0	land	exercised
@@ -407,6 +414,7 @@ capital_guard	0	cast	exercised
 captain_americas_shield	0	ability:0	exercised
 captain_americas_shield	0	cast	exercised
 captain_of_the_watch	0	cast	exercised
+captain_storm,_cosmium_raider	0	cast	exercised
 captains_call	0	cast	exercised
 capture_sphere	0	cast	exercised
 caravan_hurda	0	cast	exercised
@@ -463,6 +471,7 @@ chrome_companion	0	cast	exercised
 chupacabra_echo	0	cast	exercised
 cinder_strike	0	cast	exercised
 city_pigeon	0	cast	exercised
+clammy_prowler	0	cast	exercised
 clamorous_ironclad	0	ability:0	unsupported: nonmana costs need additional fixture resources
 clamorous_ironclad	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 clamorous_ironclad	0	cast	exercised

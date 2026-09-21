@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "396cc8ce-9efa-4fc7-90a6-b439b2b021db",
+  "spans": [
+    {
+      "face_id": "battlesong_berserker",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverControllerAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc5_batch::issue_misc5_battlesong_berserker_pumps_and_grants_menace",
+      "covers": "attacking gives a target creature the controller controls +1/+0 and menace; an opponent creature is not a legal target"
+    },
+    {
+      "test": "issue_misc5_batch::issue_misc5_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of battlesong_berserker"
+    },
+    {
+      "test": "issue_misc5_batch::issue_misc5_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for battlesong_berserker"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

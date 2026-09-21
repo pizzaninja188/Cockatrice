@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "431e85e3-15e6-471b-ba71-6058394c9a96",
+  "spans": [
+    {
+      "face_id": "captain_storm_cosmium_raider",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc5_batch::issue_misc5_captain_storm_triggers_on_a_controlled_artifact",
+      "covers": "an artifact the controller controls entering puts a +1/+1 counter on a target Pirate they control; a nonartifact does not trigger and an opponent creature is not a legal target"
+    },
+    {
+      "test": "issue_misc5_batch::issue_misc5_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of captain_storm,_cosmium_raider"
+    },
+    {
+      "test": "issue_misc5_batch::issue_misc5_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for captain_storm,_cosmium_raider"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

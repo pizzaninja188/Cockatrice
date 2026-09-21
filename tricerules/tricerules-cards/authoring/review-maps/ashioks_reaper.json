@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "6f1e5571-ddda-4cea-84ef-36a571d8fd51",
+  "spans": [
+    {
+      "face_id": "ashioks_reaper",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentLeavesBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc5_batch::issue_misc5_ashioks_reaper_draws_for_a_departing_enchantment",
+      "covers": "an enchantment the controller controls leaving the battlefield for a graveyard draws a card; a nonenchantment permanent does not trigger"
+    },
+    {
+      "test": "issue_misc5_batch::issue_misc5_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of ashioks_reaper"
+    },
+    {
+      "test": "issue_misc5_batch::issue_misc5_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for ashioks_reaper"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

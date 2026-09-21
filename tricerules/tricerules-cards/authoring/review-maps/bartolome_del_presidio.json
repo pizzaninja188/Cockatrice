@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "f47e4c56-0a0b-422d-bf3d-7a20ee289f15",
+  "spans": [
+    {
+      "face_id": "bartolome_del_presidio",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc5_batch::issue_misc5_bartolome_del_presidio_grows_after_sacrificing",
+      "covers": "the sacrifice-another-creature-or-artifact ability puts a +1/+1 counter on the source; the source alone cannot pay"
+    },
+    {
+      "test": "issue_misc5_batch::issue_misc5_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of bartolome_del_presidio"
+    },
+    {
+      "test": "issue_misc5_batch::issue_misc5_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for bartolome_del_presidio"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

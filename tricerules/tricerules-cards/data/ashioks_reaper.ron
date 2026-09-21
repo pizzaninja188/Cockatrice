@@ -1,0 +1,24 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 6f1e5571-ddda-4cea-84ef-36a571d8fd51.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// 2023-09-01 ruling: an Enchantment token (such as a Role) is put into its owner's graveyard
+// before ceasing to exist, so the departure is observed and this ability triggers.
+(
+  id: "ashioks_reaper",
+  name: "Ashiok's Reaper",
+  face_id: "ashioks_reaper",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Nightmare"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentLeavesBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Enchantment)),
+      destination: OneOf([Graveyard]),
+    ),
+    effect: [Draw(count: 1)],
+  )],
+)

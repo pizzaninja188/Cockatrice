@@ -1,0 +1,27 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle afe4a60c-747a-439b-bf61-cd323b8dffe7.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "clammy_prowler",
+  name: "Clammy Prowler",
+  face_id: "clammy_prowler",
+  mana_cost: "{3}{U}",
+  types: ["Enchantment", "Creature", "Horror"],
+  power: 2,
+  toughness: 5,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [ApplyCombatRestriction(
+      scope: Chosen((kind: Creature, combat_role: Attacking, excluded_objects: [Source])),
+      restriction: (cant_be_blocked: true),
+    )],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose another target attacking creature",
+      effect_indices: [0],
+    )])),
+  )],
+)

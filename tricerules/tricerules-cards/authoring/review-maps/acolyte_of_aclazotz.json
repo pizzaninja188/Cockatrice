@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "324d2aa8-6dea-4b0d-898d-1e52ed187565",
+  "spans": [
+    {
+      "face_id": "acolyte_of_aclazotz",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc5_batch::issue_misc5_acolyte_of_aclazotz_sacrifices_another_permanent",
+      "covers": "the {T}-and-sacrifice ability makes each opponent lose one life and gains the controller one life; the source alone cannot pay"
+    },
+    {
+      "test": "issue_misc5_batch::issue_misc5_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of acolyte_of_aclazotz"
+    },
+    {
+      "test": "issue_misc5_batch::issue_misc5_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for acolyte_of_aclazotz"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

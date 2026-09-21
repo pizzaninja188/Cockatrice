@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "1b9ec782-0ba1-41f1-bc39-d3302494ecb3",
+  "spans": [
+    {
+      "face_id": "bake_into_a_pie",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [
+    "food"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc5_batch::issue_misc5_bake_into_a_pie_destroys_and_creates_food",
+      "covers": "destroying a target creature creates a Food token; a land is not a legal target"
+    },
+    {
+      "test": "issue_misc5_batch::issue_misc5_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of bake_into_a_pie"
+    },
+    {
+      "test": "issue_misc5_batch::issue_misc5_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for bake_into_a_pie"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

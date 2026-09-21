@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "afe4a60c-747a-439b-bf61-cd323b8dffe7",
+  "spans": [
+    {
+      "face_id": "clammy_prowler",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ApplyCombatRestriction",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc5_batch::issue_misc5_clammy_prowler_makes_another_attacker_unblockable",
+      "covers": "attacking makes another target attacking creature (any controller) unblockable; the source and nonattacking creatures are rejected"
+    },
+    {
+      "test": "issue_misc5_batch::issue_misc5_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of clammy_prowler"
+    },
+    {
+      "test": "issue_misc5_batch::issue_misc5_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for clammy_prowler"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

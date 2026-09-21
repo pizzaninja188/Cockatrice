@@ -1,0 +1,33 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 431e85e3-15e6-471b-ba71-6058394c9a96.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// The card id preserves the comma exactly as `slugify("Captain Storm, Cosmium Raider")` requires.
+(
+  id: "captain_storm,_cosmium_raider",
+  name: "Captain Storm, Cosmium Raider",
+  face_id: "captain_storm_cosmium_raider",
+  mana_cost: "{U}{R}",
+  types: ["Creature", "Human", "Pirate"],
+  supertypes: ["Legendary"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Artifact)),
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((
+      kind: Creature,
+      controller: You,
+      required_subtypes: ["Pirate"],
+    )))],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target Pirate you control",
+      effect_indices: [0],
+    )])),
+  )],
+)
