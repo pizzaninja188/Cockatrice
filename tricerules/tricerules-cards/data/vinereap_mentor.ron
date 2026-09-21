@@ -1,0 +1,28 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle db649e15-24ca-4fd8-9f0b-f1df28c9c57d.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// "When this creature enters or dies" is two independent triggered abilities that share one
+// printed Oracle line, so both map to OracleLines([1]).
+(
+  id: "vinereap_mentor",
+  name: "Vinereap Mentor",
+  face_id: "vinereap_mentor",
+  mana_cost: "{B}{G}",
+  types: ["Creature", "Squirrel", "Druid"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [CreateTokens(token: "food", count: 1)],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfDies,
+      effect: [CreateTokens(token: "food", count: 1)],
+    ),
+  ],
+)

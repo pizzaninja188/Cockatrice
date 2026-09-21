@@ -712,6 +712,7 @@ dismal_backwater	0	land	exercised
 dispelling_exhale	0	cast	unsupported: target group 0 needs a richer fixture
 disruptive_stormbrood_petty_revenge	0	cast	exercised
 disruptive_stormbrood_petty_revenge	1	cast	exercised
+disruptor_wanderglyph	0	cast	exercised
 dive_down	0	cast	exercised
 divert_disaster	0	cast	unsupported: target group 0 needs a richer fixture
 divination	0	cast	exercised
@@ -1466,6 +1467,7 @@ join_the_dead	0	cast	exercised
 joraga_visionary	0	cast	exercised
 joust_through	0	cast	unsupported: target group 0 needs a richer fixture
 juggernaut	0	cast	exercised
+jumbo_cactuar	0	cast	exercised
 jungle_barrier	0	cast	exercised
 jungle_hollow	0	ability:0	exercised
 jungle_hollow	0	land	exercised
@@ -1685,6 +1687,7 @@ mardu_devotee	0	cast	exercised
 marisis_twinclaws	0	cast	exercised
 maritime_guard	0	cast	exercised
 markov_patrician	0	cast	exercised
+mary_jane_watson	0	cast	exercised
 masked_meower	0	ability:0	exercised
 masked_meower	0	cast	exercised
 mass_of_ghouls	0	cast	exercised
@@ -1714,6 +1717,7 @@ merrow_skyswimmer	0	cast	exercised
 mesa_cavalier	0	cast	exercised
 mesa_unicorn	0	cast	exercised
 messenger_falcons	0	cast	exercised
+meteor_golem	0	cast	exercised
 meticulous_archive	0	land	exercised
 meticulous_artisan	0	cast	exercised
 michelangelo,_mutant_bff	0	cast	exercised
@@ -1847,6 +1851,7 @@ ninja_of_the_hand	0	ability:0	exercised
 ninja_of_the_hand	0	cast	exercised
 nip_gwyllion	0	cast	exercised
 no_one_left_behind	0	cast	exercised
+noggle_robber	0	cast	exercised
 nomad_outpost	0	ability:0	exercised
 nomad_outpost	0	land	exercised
 noose_constrictor	0	ability:0	exercised
@@ -2315,6 +2320,7 @@ sea_eagle	0	cast	exercised
 seacoast_drake	0	cast	exercised
 seagraf_skaab	0	cast	exercised
 sear	0	cast	exercised
+seasoned_consultant	0	cast	exercised
 seat_of_the_synod	0	ability:0	exercised
 seat_of_the_synod	0	land	exercised
 sedge_scorpion	0	cast	exercised
@@ -2891,6 +2897,7 @@ uncharted_voyage	0	cast	exercised
 uncomfortable_chill	0	cast	exercised
 undead_minotaur	0	cast	exercised
 undead_servant	0	cast	exercised
+undercity_dire_rat	0	cast	exercised
 undercity_sewers	0	land	exercised
 underdark_basilisk	0	cast	exercised
 underfoot_underdogs	0	ability:0	exercised
@@ -2976,6 +2983,7 @@ vindictive_warden	0	ability:0	exercised
 vindictive_warden	0	cast	exercised
 vine_trellis	0	ability:0	exercised
 vine_trellis	0	cast	exercised
+vinereap_mentor	0	cast	exercised
 violent_urge	0	cast	exercised
 virulent_emissary	0	cast	exercised
 virus_beetle	0	cast	exercised

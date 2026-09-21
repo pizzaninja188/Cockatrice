@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "81dda1a8-72ac-4e69-8367-4f72c445197c",
+  "spans": [
+    {
+      "face_id": "disruptor_wanderglyph",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc9_batch::issue_misc9_disruptor_wanderglyph_exiles_an_opponent_graveyard_card",
+      "covers": "attacking exiles a target card from an opponent's graveyard; the controller's own graveyard is rejected"
+    },
+    {
+      "test": "issue_misc9_batch::issue_misc9_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc9_disruptor_wanderglyph_exiles_an_opponent_graveyard_card"
+    },
+    {
+      "test": "issue_misc9_batch::issue_misc9_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc9_disruptor_wanderglyph_exiles_an_opponent_graveyard_card"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,28 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle d9f11aa1-9219-42a8-85a9-a8f204160706.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "meteor_golem",
+  name: "Meteor Golem",
+  face_id: "meteor_golem",
+  mana_cost: "{7}",
+  types: ["Artifact", "Creature", "Golem"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Destroy(subject: Chosen((
+      kind: AnyPermanent,
+      controller: Opponent,
+      excluded_permanent_types: [Land],
+    )))],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target nonland permanent an opponent controls",
+      effect_indices: [0],
+    )])),
+  )],
+)

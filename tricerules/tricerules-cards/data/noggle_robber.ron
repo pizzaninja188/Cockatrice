@@ -1,0 +1,28 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle a2f33166-6cfc-4dc5-8edc-088bf40f06b5.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// "When this creature enters or dies" is two independent triggered abilities that share one
+// printed Oracle line, so both map to OracleLines([1]).
+(
+  id: "noggle_robber",
+  name: "Noggle Robber",
+  face_id: "noggle_robber",
+  mana_cost: "{1}{R/G}{R/G}",
+  types: ["Creature", "Noggle", "Rogue"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [CreateTokens(token: "treasure", count: 1)],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfDies,
+      effect: [CreateTokens(token: "treasure", count: 1)],
+    ),
+  ],
+)

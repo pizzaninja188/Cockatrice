@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "e0bdfbb4-3060-4492-bd9b-0c47e719400a",
+  "spans": [
+    {
+      "face_id": "jumbo_cactuar",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc9_batch::issue_misc9_jumbo_cactuar_pumps_itself_when_attacking",
+      "covers": "attacking gives the Cactuar +9999/+0 until end of turn"
+    },
+    {
+      "test": "issue_misc9_batch::issue_misc9_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc9_jumbo_cactuar_pumps_itself_when_attacking"
+    },
+    {
+      "test": "issue_misc9_batch::issue_misc9_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc9_jumbo_cactuar_pumps_itself_when_attacking"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

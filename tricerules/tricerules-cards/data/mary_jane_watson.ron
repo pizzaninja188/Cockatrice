@@ -1,0 +1,23 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 6d44c87b-8945-4c39-b034-7690cf483992.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "mary_jane_watson",
+  name: "Mary Jane Watson",
+  face_id: "mary_jane_watson",
+  mana_cost: "{1}{G/W}",
+  types: ["Creature", "Human", "Performer"],
+  supertypes: ["Legendary"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature), required_subtypes: ["Spider"]),
+    ),
+    effect: [Draw(count: 1)],
+    max_triggers_per_turn: Some(1),
+  )],
+)

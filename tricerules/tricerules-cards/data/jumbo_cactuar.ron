@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle e0bdfbb4-3060-4492-bd9b-0c47e719400a.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "jumbo_cactuar",
+  name: "Jumbo Cactuar",
+  face_id: "jumbo_cactuar",
+  mana_cost: "{5}{G}{G}",
+  types: ["Creature", "Plant"],
+  power: 1,
+  toughness: 7,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [PumpTarget(power: 9999, toughness: 0, subject: Source)],
+  )],
+)

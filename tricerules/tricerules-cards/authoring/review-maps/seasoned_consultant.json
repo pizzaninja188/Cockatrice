@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "9ee64b00-6619-451e-bb48-10af107dcb2f",
+  "spans": [
+    {
+      "face_id": "seasoned_consultant",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverControllerAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc9_batch::issue_misc9_seasoned_consultant_pumps_when_three_attack",
+      "covers": "attacking with three or more creatures pumps the Consultant +2/+0; two attackers do not"
+    },
+    {
+      "test": "issue_misc9_batch::issue_misc9_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc9_seasoned_consultant_pumps_when_three_attack"
+    },
+    {
+      "test": "issue_misc9_batch::issue_misc9_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc9_seasoned_consultant_pumps_when_three_attack"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "d9f11aa1-9219-42a8-85a9-a8f204160706",
+  "spans": [
+    {
+      "face_id": "meteor_golem",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc9_batch::issue_misc9_meteor_golem_destroys_an_opponent_nonland_permanent",
+      "covers": "entering destroys a target nonland permanent an opponent controls; a land and the controller's own permanent are rejected"
+    },
+    {
+      "test": "issue_misc9_batch::issue_misc9_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc9_meteor_golem_destroys_an_opponent_nonland_permanent"
+    },
+    {
+      "test": "issue_misc9_batch::issue_misc9_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc9_meteor_golem_destroys_an_opponent_nonland_permanent"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

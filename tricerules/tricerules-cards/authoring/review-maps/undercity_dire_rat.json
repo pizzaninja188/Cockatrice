@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "f09811d0-c5da-4061-aaa7-835ccee3b05a",
+  "spans": [
+    {
+      "face_id": "undercity_dire_rat",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc9_batch::issue_misc9_undercity_dire_rat_makes_a_treasure_when_it_dies",
+      "covers": "dying creates a Treasure token"
+    },
+    {
+      "test": "issue_misc9_batch::issue_misc9_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc9_undercity_dire_rat_makes_a_treasure_when_it_dies"
+    },
+    {
+      "test": "issue_misc9_batch::issue_misc9_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc9_undercity_dire_rat_makes_a_treasure_when_it_dies"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

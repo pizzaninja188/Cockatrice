@@ -1,0 +1,24 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 81dda1a8-72ac-4e69-8367-4f72c445197c.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "disruptor_wanderglyph",
+  name: "Disruptor Wanderglyph",
+  face_id: "disruptor_wanderglyph",
+  mana_cost: "{4}",
+  types: ["Artifact", "Creature", "Golem"],
+  power: 3,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [MoveGraveyardCards(filter: (owner: Opponent), destination: Exile)],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target card from an opponent's graveyard",
+      effect_indices: [0],
+    )])),
+  )],
+)
