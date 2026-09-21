@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 7c07970d-063a-44a1-9761-b80aafa90dac.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "stark_industries_executive",
+  name: "Stark Industries Executive",
+  face_id: "stark_industries_executive",
+  mana_cost: "{R}",
+  types: ["Creature", "Human", "Advisor"],
+  power: 1,
+  toughness: 2,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{2}"), Tap],
+    effect: [CreateTokens(token: "treasure", count: 1)],
+  )],
+)

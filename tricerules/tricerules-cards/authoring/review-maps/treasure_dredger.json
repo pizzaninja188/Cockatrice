@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "9a691e96-fb47-4c23-a063-3b287c51147b",
+  "spans": [
+    {
+      "face_id": "treasure_dredger",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::PayLife",
+      "typed_path": "/faces/0/activated_abilities/0/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc6_batch::issue_misc6_treasure_dredger_pays_life_for_a_treasure",
+      "covers": "the {1}-tap-and-pay-1-life ability creates one Treasure token and costs the controller 1 life"
+    },
+    {
+      "test": "issue_misc6_batch::issue_misc6_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc6_treasure_dredger_pays_life_for_a_treasure"
+    },
+    {
+      "test": "issue_misc6_batch::issue_misc6_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc6_treasure_dredger_pays_life_for_a_treasure"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

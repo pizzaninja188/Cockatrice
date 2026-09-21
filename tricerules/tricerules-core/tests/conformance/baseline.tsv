@@ -343,6 +343,8 @@ branchloft_pathway_boulderloft_pathway	0	ability:0	exercised
 branchloft_pathway_boulderloft_pathway	0	land	exercised
 branchloft_pathway_boulderloft_pathway	1	ability:0	exercised
 branchloft_pathway_boulderloft_pathway	1	land	exercised
+brave-kin_duo	0	ability:0	exercised
+brave-kin_duo	0	cast	exercised
 brave_brawler	0	ability:0	exercised
 brave_brawler	0	cast	exercised
 brazen_scourge	0	cast	exercised
@@ -681,6 +683,8 @@ deranged_whelp	0	cast	exercised
 derelict_attic_widows_walk	0	cast	exercised
 derelict_attic_widows_walk	1	cast	exercised
 desert_drake	0	cast	exercised
+deserters_disciple	0	ability:0	exercised
+deserters_disciple	0	cast	exercised
 deserts_due	0	cast	exercised
 desolation_prowler	0	ability:0	exercised
 desolation_prowler	0	cast	exercised
@@ -930,6 +934,8 @@ first-time_flyer	0	cast	exercised
 fisk_tower	0	ability:0	exercised
 fisk_tower	0	land	exercised
 fists_of_the_anvil	0	cast	exercised
+flame-chain_mauler	0	ability:0	exercised
+flame-chain_mauler	0	cast	exercised
 flame_javelin	0	cast	exercised
 flame_lash	0	cast	exercised
 flameborn_viron	0	cast	exercised
@@ -1929,6 +1935,8 @@ path_to_redemption	0	ability:0	exercised
 path_to_redemption	0	cast	exercised
 pathfinding_axejaw	0	cast	exercised
 patient_instructor	0	cast	exercised
+patriot,_shield_wielder	0	ability:0	exercised
+patriot,_shield_wielder	0	cast	exercised
 pawpatch_formation	0	cast	exercised
 peace_strider	0	cast	exercised
 pearled_unicorn	0	cast	exercised
@@ -2052,6 +2060,8 @@ qutrub_forayer	0	cast	exercised
 rabanastre,_royal_city	0	ability:0	exercised
 rabanastre,_royal_city	0	land	exercised
 rabid_bite	0	cast	exercised
+raccoon_rallier	0	ability:0	exercised
+raccoon_rallier	0	cast	exercised
 radiant_strike	0	cast	exercised
 ragefire	0	cast	exercised
 ragged_playmate	0	ability:0	exercised
@@ -2525,6 +2535,8 @@ starbreach_whale	0	cast	exercised
 starfighter_pilot	0	cast	exercised
 stark_industries	0	ability:0	exercised
 stark_industries	0	land	exercised
+stark_industries_executive	0	ability:0	exercised
+stark_industries_executive	0	cast	exercised
 starlight_snare	0	cast	exercised
 starlit_angel	0	cast	exercised
 starport_security	0	ability:0	exercised
@@ -2814,6 +2826,8 @@ trapped_in_the_screen	0	cast	exercised
 trash_the_town	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 traumatic_critique	0	cast	exercised
 traveling_philosopher	0	cast	exercised
+treasure_dredger	0	ability:0	exercised
+treasure_dredger	0	cast	exercised
 tree_monkey	0	cast	exercised
 tree_of_tales	0	ability:0	exercised
 tree_of_tales	0	land	exercised
@@ -2904,6 +2918,8 @@ vampire_of_the_dire_moon	0	cast	exercised
 vampire_revenant	0	cast	exercised
 vampire_soulcaller	0	cast	exercised
 vampire_spawn	0	cast	exercised
+vampiric_rites	0	ability:0	exercised
+vampiric_rites	0	cast	exercised
 vassal_soul	0	cast	exercised
 vastwood_gorger	0	cast	exercised
 vault_of_whispers	0	ability:0	exercised

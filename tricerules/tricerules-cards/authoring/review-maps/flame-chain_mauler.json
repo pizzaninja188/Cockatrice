@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "d6eef6a7-0cf4-4ee8-90e0-727a283c3be9",
+  "spans": [
+    {
+      "face_id": "flame_chain_mauler",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc6_batch::issue_misc6_flame_chain_mauler_pumps_itself_and_gains_menace",
+      "covers": "the {1}{R} ability gives the source +1/+0 and menace"
+    },
+    {
+      "test": "issue_misc6_batch::issue_misc6_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc6_flame_chain_mauler_pumps_itself_and_gains_menace"
+    },
+    {
+      "test": "issue_misc6_batch::issue_misc6_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc6_flame_chain_mauler_pumps_itself_and_gains_menace"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

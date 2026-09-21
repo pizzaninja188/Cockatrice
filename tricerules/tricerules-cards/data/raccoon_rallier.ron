@@ -1,0 +1,28 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 50c038a4-6546-4a15-a117-176849edaa3d.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "raccoon_rallier",
+  name: "Raccoon Rallier",
+  face_id: "raccoon_rallier",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Raccoon", "Bard"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Tap],
+    effect: [GrantKeywords(
+      subject: Chosen((kind: Creature, controller: You)),
+      keywords: [Haste],
+    )],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature you control",
+      effect_indices: [0],
+    )])),
+    timing: SorcerySpeed,
+  )],
+)

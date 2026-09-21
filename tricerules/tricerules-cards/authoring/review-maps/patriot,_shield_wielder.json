@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "1df7a09f-fbc8-4c2a-a903-bab9e680eda7",
+  "spans": [
+    {
+      "face_id": "patriot_shield_wielder",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc6_batch::issue_misc6_patriot_pumps_and_grants_hexproof_to_another_creature",
+      "covers": "the {2}-and-tap ability gives another target creature the controller controls +2/+0 and hexproof; the source and opponent creatures are rejected"
+    },
+    {
+      "test": "issue_misc6_batch::issue_misc6_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc6_patriot_pumps_and_grants_hexproof_to_another_creature"
+    },
+    {
+      "test": "issue_misc6_batch::issue_misc6_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc6_patriot_pumps_and_grants_hexproof_to_another_creature"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

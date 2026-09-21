@@ -1,0 +1,38 @@
+{
+  "format_version": 1,
+  "oracle_id": "7c07970d-063a-44a1-9761-b80aafa90dac",
+  "spans": [
+    {
+      "face_id": "stark_industries_executive",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc6_batch::issue_misc6_stark_industries_executive_creates_a_treasure",
+      "covers": "the {2}-and-tap ability creates one Treasure token"
+    },
+    {
+      "test": "issue_misc6_batch::issue_misc6_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc6_stark_industries_executive_creates_a_treasure"
+    },
+    {
+      "test": "issue_misc6_batch::issue_misc6_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc6_stark_industries_executive_creates_a_treasure"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

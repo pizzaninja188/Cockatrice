@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 660de988-b6fb-4f36-8006-42af3e7f908d.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// "Sacrifice a creature" is not "another", but the source is an Enchantment, so it can
+// never sacrifice itself; the filter therefore needs no source exclusion.
+(
+  id: "vampiric_rites",
+  name: "Vampiric Rites",
+  face_id: "vampiric_rites",
+  mana_cost: "{B}",
+  types: ["Enchantment"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{1}{B}"), SacrificePermanent(filter: (kind: Creature, controller: You))],
+    effect: [GainLife(amount: 1), Draw(count: 1)],
+  )],
+)

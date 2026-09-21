@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "50c038a4-6546-4a15-a117-176849edaa3d",
+  "spans": [
+    {
+      "face_id": "raccoon_rallier",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc6_batch::issue_misc6_raccoon_rallier_grants_haste_at_sorcery_speed",
+      "covers": "the tap ability grants a target creature the controller controls haste at sorcery speed; an opponent creature is rejected"
+    },
+    {
+      "test": "issue_misc6_batch::issue_misc6_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc6_raccoon_rallier_grants_haste_at_sorcery_speed"
+    },
+    {
+      "test": "issue_misc6_batch::issue_misc6_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc6_raccoon_rallier_grants_haste_at_sorcery_speed"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

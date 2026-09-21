@@ -1,0 +1,34 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 73ca3132-d849-4cf9-beba-75ba09789332.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// 2025-10-02 rulings: the power bound is revalidated as the ability resolves (CR 608.2b), so a
+// target whose power rises above 2 before resolution makes the ability resolve with no effect.
+(
+  id: "deserters_disciple",
+  name: "Deserter's Disciple",
+  face_id: "deserters_disciple",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Human", "Rebel", "Ally"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Tap],
+    effect: [ApplyCombatRestriction(
+      scope: Chosen((
+        kind: Creature,
+        controller: You,
+        power: AtMost(2),
+        excluded_objects: [Source],
+      )),
+      restriction: (cant_be_blocked: true),
+    )],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose another target creature you control with power 2 or less",
+      effect_indices: [0],
+    )])),
+  )],
+)

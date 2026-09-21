@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "73ca3132-d849-4cf9-beba-75ba09789332",
+  "spans": [
+    {
+      "face_id": "deserters_disciple",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ApplyCombatRestriction",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc6_batch::issue_misc6_deserters_disciple_makes_a_small_attacker_unblockable",
+      "covers": "the tap ability makes another target creature the controller controls with power 2 or less unblockable; the source and power-3 creatures are rejected, and a target that grows above power 2 before resolution resolves with no effect"
+    },
+    {
+      "test": "issue_misc6_batch::issue_misc6_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc6_deserters_disciple_makes_a_small_attacker_unblockable"
+    },
+    {
+      "test": "issue_misc6_batch::issue_misc6_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc6_deserters_disciple_makes_a_small_attacker_unblockable"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

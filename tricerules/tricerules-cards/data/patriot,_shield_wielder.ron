@@ -1,0 +1,36 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 1df7a09f-fbc8-4c2a-a903-bab9e680eda7.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "patriot,_shield_wielder",
+  name: "Patriot, Shield Wielder",
+  face_id: "patriot_shield_wielder",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Human", "Hero"],
+  supertypes: ["Legendary"],
+  power: 2,
+  toughness: 2,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{2}"), Tap],
+    effect: [
+      PumpTarget(power: 2, toughness: 0, subject: Chosen((
+        kind: Creature,
+        controller: You,
+        excluded_objects: [Source],
+      ))),
+      GrantKeywords(subject: Chosen((
+        kind: Creature,
+        controller: You,
+        excluded_objects: [Source],
+      )), keywords: [Hexproof]),
+    ],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose another target creature you control",
+      effect_indices: [0, 1],
+    )])),
+  )],
+)
