@@ -1,0 +1,23 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 1cb419cc-d8e4-4676-987f-089cebccc374.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "masterful_flourish",
+  name: "Masterful Flourish",
+  face_id: "masterful_flourish",
+  mana_cost: "{B}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 1, toughness: 0, subject: Chosen((kind: Creature, controller: You))),
+    GrantKeywords(
+      subject: Chosen((kind: Creature, controller: You)),
+      keywords: [Indestructible],
+    ),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature you control",
+    effect_indices: [0, 1],
+  )])),
+)

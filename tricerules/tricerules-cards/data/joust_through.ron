@@ -1,0 +1,22 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 33c21ef1-33eb-447a-a318-a352f163a8a0.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// 2024-11-08 ruling: if the target is illegal at resolution the whole spell does not resolve,
+// so no life is gained (CR 608.2b).
+(
+  id: "joust_through",
+  name: "Joust Through",
+  face_id: "joust_through",
+  mana_cost: "{W}",
+  types: ["Instant"],
+  spell_effect: [
+    DamageTarget(amount: 3, target: (kind: Creature, combat_role: AttackingOrBlocking)),
+    GainLife(amount: 1),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target attacking or blocking creature",
+    effect_indices: [0],
+  )])),
+)

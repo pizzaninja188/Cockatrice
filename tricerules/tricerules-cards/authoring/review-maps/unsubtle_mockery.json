@@ -1,0 +1,47 @@
+{
+  "format_version": 1,
+  "oracle_id": "9d059345-1a2f-4ecb-b419-3873ebadf318",
+  "spans": [
+    {
+      "face_id": "unsubtle_mockery",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0",
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LibraryPartition",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc8_batch::issue_misc8_unsubtle_mockery_deals_four_then_surveils",
+      "covers": "4 damage destroys a 2/2 and then the caster surveils 1"
+    },
+    {
+      "test": "issue_misc8_batch::issue_misc8_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc8_unsubtle_mockery_deals_four_then_surveils"
+    },
+    {
+      "test": "issue_misc8_batch::issue_misc8_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc8_unsubtle_mockery_deals_four_then_surveils"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

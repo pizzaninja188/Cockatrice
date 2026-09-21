@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "211d1c59-0111-48dd-9ff6-d03e7ff2ad5c",
+  "spans": [
+    {
+      "face_id": "kin_tree_severance",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0",
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc8_batch::issue_misc8_kin_tree_severance_exiles_a_large_permanent",
+      "covers": "exiles a target permanent with mana value 3 or greater; a mana-value-2 permanent is rejected"
+    },
+    {
+      "test": "issue_misc8_batch::issue_misc8_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc8_kin_tree_severance_exiles_a_large_permanent"
+    },
+    {
+      "test": "issue_misc8_batch::issue_misc8_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc8_kin_tree_severance_exiles_a_large_permanent"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

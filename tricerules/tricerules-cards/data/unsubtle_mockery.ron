@@ -1,0 +1,22 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 9d059345-1a2f-4ecb-b419-3873ebadf318.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// 2026-03-20 ruling: if the target is illegal at resolution the whole spell does not resolve,
+// so the surveil does not happen (CR 608.2b).
+(
+  id: "unsubtle_mockery",
+  name: "Unsubtle Mockery",
+  face_id: "unsubtle_mockery",
+  mana_cost: "{2}{R}",
+  types: ["Instant"],
+  spell_effect: [
+    DamageTarget(amount: 4, target: (kind: Creature)),
+    LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0],
+  )])),
+)

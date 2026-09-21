@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "ebcd198e-7fbd-46e0-a6d9-ff499e541978",
+  "spans": [
+    {
+      "face_id": "reckless_ransacking",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0",
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc8_batch::issue_misc8_reckless_ransacking_pumps_and_makes_a_treasure",
+      "covers": "a target creature gets +3/+2 and a Treasure token is created"
+    },
+    {
+      "test": "issue_misc8_batch::issue_misc8_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc8_reckless_ransacking_pumps_and_makes_a_treasure"
+    },
+    {
+      "test": "issue_misc8_batch::issue_misc8_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc8_reckless_ransacking_pumps_and_makes_a_treasure"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

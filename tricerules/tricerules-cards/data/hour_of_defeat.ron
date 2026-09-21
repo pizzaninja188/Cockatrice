@@ -1,0 +1,20 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 2774fcb7-8988-4a18-b5ec-7534dd8b2e05.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "hour_of_defeat",
+  name: "Hour of Defeat",
+  face_id: "hour_of_defeat",
+  mana_cost: "{3}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: Creature))),
+    LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0],
+  )])),
+)

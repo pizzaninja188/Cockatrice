@@ -1,0 +1,26 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 38eabfea-5ea5-4baa-8ad6-7a7cb00e1fed.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// 2023-09-01 ruling: the spell may be cast with no target just to create a Food token; if a
+// target is chosen and becomes illegal at resolution, the spell does not resolve (CR 608.2b).
+(
+  id: "spider_food",
+  name: "Spider Food",
+  face_id: "spider_food",
+  mana_cost: "{2}{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Destroy(subject: Chosen((any_of: Some([
+      (kind: AnyPermanent, permanent_types: [Artifact]),
+      (kind: AnyPermanent, permanent_types: [Enchantment]),
+      (kind: Creature, required_keywords: [Flying]),
+    ])))),
+    CreateTokens(token: "food", count: 1),
+  ],
+  targeting: Some((groups: [(
+    min: 0,
+    max: 1,
+    prompt: "Choose up to one target artifact, enchantment, or creature with flying",
+    effect_indices: [0],
+  )])),
+)

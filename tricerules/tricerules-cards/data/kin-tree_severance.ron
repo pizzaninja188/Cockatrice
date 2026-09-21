@@ -1,0 +1,17 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 211d1c59-0111-48dd-9ff6-d03e7ff2ad5c.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "kin-tree_severance",
+  name: "Kin-Tree Severance",
+  face_id: "kin_tree_severance",
+  mana_cost: "{2/W}{2/B}{2/G}",
+  types: ["Instant"],
+  spell_effect: [Exile(subject: Chosen((kind: AnyPermanent, min_mana_value: Some(3))))],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target permanent with mana value 3 or greater",
+    effect_indices: [0],
+  )])),
+)

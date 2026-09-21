@@ -1329,6 +1329,7 @@ horrid_vigor	0	cast	exercised
 hostile_minotaur	0	cast	exercised
 hot_dog_cart	0	ability:0	exercised
 hot_dog_cart	0	cast	exercised
+hour_of_defeat	0	cast	exercised
 hovel_hurler	0	ability:0	unsupported: nonmana costs need additional fixture resources
 hovel_hurler	0	cast	exercised
 hover_barrier	0	cast	exercised
@@ -1463,6 +1464,7 @@ jhovall_rider	0	cast	exercised
 jibbirik_omnivore	0	cast	exercised
 join_the_dead	0	cast	exercised
 joraga_visionary	0	cast	exercised
+joust_through	0	cast	unsupported: target group 0 needs a richer fixture
 juggernaut	0	cast	exercised
 jungle_barrier	0	cast	exercised
 jungle_hollow	0	ability:0	exercised
@@ -1496,6 +1498,7 @@ kessig_recluse	0	cast	exercised
 killers_mask	0	ability:0	exercised
 killers_mask	0	cast	exercised
 kin-tree_nurturer	0	cast	exercised
+kin-tree_severance	0	cast	unsupported: target group 0 needs a richer fixture
 kindercatch	0	cast	exercised
 kindled_fury	0	cast	exercised
 kindled_heroism	0	cast	exercised
@@ -1685,6 +1688,7 @@ markov_patrician	0	cast	exercised
 masked_meower	0	ability:0	exercised
 masked_meower	0	cast	exercised
 mass_of_ghouls	0	cast	exercised
+masterful_flourish	0	cast	exercised
 maximum_overdrive	0	cast	exercised
 meandering_river	0	ability:0	exercised
 meandering_river	0	land	exercised
@@ -2122,6 +2126,7 @@ rebellious_captives	0	ability:0	exercised
 rebellious_captives	0	cast	exercised
 rebellious_strike	0	cast	exercised
 reckless_air_strike	0	cast	exercised
+reckless_ransacking	0	cast	exercised
 reckless_waif_merciless_predator	0	cast	exercised
 reckless_waif_merciless_predator	1	cast	intentional: face unavailable from hand
 reclamation_sage	0	cast	exercised
@@ -2274,6 +2279,7 @@ savannah	0	ability:0	exercised
 savannah	0	land	exercised
 savannah_lions	0	cast	exercised
 savannah_sage	0	cast	exercised
+savor	0	cast	exercised
 say_its_name	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 say_its_name	0	cast	exercised
 sazhs_chocobo	0	cast	exercised
@@ -2502,6 +2508,7 @@ spicy_oatmeal_pizza	0	ability:0	exercised
 spicy_oatmeal_pizza	0	cast	exercised
 spider-bot	0	cast	exercised
 spider-rex,_daring_dino	0	cast	exercised
+spider_food	0	cast	exercised
 spike_jester	0	cast	exercised
 spiked_baloth	0	cast	exercised
 spin_out	0	cast	exercised
@@ -2905,6 +2912,7 @@ university_campus	0	ability:1	exercised
 university_campus	0	land	exercised
 unravel_the_aether	0	cast	exercised
 unscrupulous_agent	0	cast	exercised
+unsubtle_mockery	0	cast	exercised
 unsummon	0	cast	exercised
 untamed_hunger	0	cast	exercised
 updraft_elemental	0	cast	exercised

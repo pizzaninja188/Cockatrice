@@ -1,0 +1,47 @@
+{
+  "format_version": 1,
+  "oracle_id": "2774fcb7-8988-4a18-b5ec-7534dd8b2e05",
+  "spans": [
+    {
+      "face_id": "hour_of_defeat",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0",
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LibraryPartition",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc8_batch::issue_misc8_hour_of_defeat_destroys_then_surveils",
+      "covers": "destroying the target creature then surveilling 1 offers the surveil choice to the caster"
+    },
+    {
+      "test": "issue_misc8_batch::issue_misc8_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc8_hour_of_defeat_destroys_then_surveils"
+    },
+    {
+      "test": "issue_misc8_batch::issue_misc8_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc8_hour_of_defeat_destroys_then_surveils"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

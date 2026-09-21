@@ -1,0 +1,22 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle ebcd198e-7fbd-46e0-a6d9-ff499e541978.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// 2025-11-17 ruling: if the target is illegal at resolution the whole spell does not resolve,
+// so no Treasure token is created (CR 608.2b).
+(
+  id: "reckless_ransacking",
+  name: "Reckless Ransacking",
+  face_id: "reckless_ransacking",
+  mana_cost: "{1}{R}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 3, toughness: 2, subject: Chosen((kind: Creature))),
+    CreateTokens(token: "treasure", count: 1),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0],
+  )])),
+)

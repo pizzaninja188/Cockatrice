@@ -1,0 +1,47 @@
+{
+  "format_version": 1,
+  "oracle_id": "33c21ef1-33eb-447a-a318-a352f163a8a0",
+  "spans": [
+    {
+      "face_id": "joust_through",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0",
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc8_batch::issue_misc8_joust_through_hits_an_attacker_and_gains_life",
+      "covers": "3 damage to a target attacking creature and 1 life to the caster; a nonattacking creature is rejected"
+    },
+    {
+      "test": "issue_misc8_batch::issue_misc8_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc8_joust_through_hits_an_attacker_and_gains_life"
+    },
+    {
+      "test": "issue_misc8_batch::issue_misc8_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc8_joust_through_hits_an_attacker_and_gains_life"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
