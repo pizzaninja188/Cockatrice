@@ -1,0 +1,58 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle bc7f39e1-97bf-4725-a84a-2a04121530c6.
+// Handwritten typed definition promoted through the reviewed direct-RON path (#359);
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// Spree: choose one or more additional mana costs; modes resolve in printed order and cannot
+// repeat (2024-04-12 rulings). The second mode's owner chooses top or bottom of their library.
+(
+  id: "jailbreak_scheme",
+  name: "Jailbreak Scheme",
+  face_id: "jailbreak_scheme",
+  mana_cost: "{U}",
+  types: ["Sorcery"],
+  cast_cost_groups: [(
+    group_id: "spree",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 2,
+    options: [
+      Mana(option_id: "counter_block_cost", presentation: OracleLines([2]), kind: AdditionalPayment, cost: "{3}"),
+      Mana(option_id: "library_choice_cost", presentation: OracleLines([3]), kind: AdditionalPayment, cost: "{2}"),
+    ],
+  )],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 2,
+    modes: [
+      (
+        mode_id: "counter_block",
+        presentation: OracleLines([2]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "counter_block_cost")),
+        effects: [
+          PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature))),
+          ApplyCombatRestriction(scope: Chosen((kind: Creature)), restriction: (cant_be_blocked: true)),
+        ],
+        targeting: Some((groups: [(
+          min: 1,
+          max: 1,
+          prompt: "Choose target creature",
+          effect_indices: [0, 1],
+        )])),
+      ),
+      (
+        mode_id: "library_choice",
+        presentation: OracleLines([3]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "library_choice_cost")),
+        effects: [PutInOwnersLibrary(
+          subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact, Creature])),
+          placement: OwnerChoiceTopOrBottom,
+        )],
+        targeting: Some((groups: [(
+          min: 1,
+          max: 1,
+          prompt: "Choose target artifact or creature",
+          effect_indices: [0],
+        )])),
+      ),
+    ],
+  ),
+)

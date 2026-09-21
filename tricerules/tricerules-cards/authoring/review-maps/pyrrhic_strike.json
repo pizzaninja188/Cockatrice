@@ -1,0 +1,74 @@
+{
+  "format_version": 1,
+  "oracle_id": "5ea1d89c-8650-4373-9835-e369587020ef",
+  "spans": [
+    {
+      "face_id": "pyrrhic_strike",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "pyrrhic_strike",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/modal_spell"
+      ]
+    },
+    {
+      "face_id": "pyrrhic_strike",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/0",
+        "/faces/0/modal_spell/modes/0/targeting"
+      ]
+    },
+    {
+      "face_id": "pyrrhic_strike",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/1",
+        "/faces/0/modal_spell/modes/1/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostOptionDef::Blight",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "ModalDef.all_modes_cast_cost",
+      "typed_path": "/faces/0/modal_spell/all_modes_cast_cost"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_359_direct_ron_batch2::issue_359_pyrrhic_strike_blight_unlocks_both_modes",
+      "covers": "without paying the blight the spell allows exactly one mode, and paying blight 2 (all counters on one creature) is required to choose both modes; the modes destroy a target artifact or enchantment and a target creature with mana value 3 or greater"
+    },
+    {
+      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_maps_definitions",
+      "covers": "reviewed identity, mana cost, optional blight cost, all-modes cast-cost link and both destroy modes of Pyrrhic Strike"
+    },
+    {
+      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Pyrrhic Strike"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

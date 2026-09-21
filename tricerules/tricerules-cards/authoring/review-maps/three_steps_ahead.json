@@ -1,0 +1,73 @@
+{
+  "format_version": 1,
+  "oracle_id": "282dfeaa-6243-4f92-838a-5cb54fa85184",
+  "spans": [
+    {
+      "face_id": "three_steps_ahead",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "three_steps_ahead",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/0",
+        "/faces/0/cast_cost_groups/0/options/0",
+        "/faces/0/modal_spell/modes/0/targeting"
+      ]
+    },
+    {
+      "face_id": "three_steps_ahead",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/1",
+        "/faces/0/cast_cost_groups/0/options/1",
+        "/faces/0/modal_spell/modes/1/targeting"
+      ]
+    },
+    {
+      "face_id": "three_steps_ahead",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/2",
+        "/faces/0/cast_cost_groups/0/options/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokenCopies",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DrawDiscard",
+      "typed_path": "/faces/0/modal_spell/modes/2/effects/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_359_direct_ron_batch2::issue_359_three_steps_ahead_modes_and_linked_costs",
+      "covers": "each mode charges only its own additional cost; the counter mode counters a target spell, the copy mode creates a token copy of a target artifact or creature you control, and the draw-discard mode draws two then discards one"
+    },
+    {
+      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_maps_definitions",
+      "covers": "reviewed identity, mana cost, spree group, three linked modes and their targeting of Three Steps Ahead"
+    },
+    {
+      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Three Steps Ahead"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

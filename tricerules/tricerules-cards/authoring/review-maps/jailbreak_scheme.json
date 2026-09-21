@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "bc7f39e1-97bf-4725-a84a-2a04121530c6",
+  "spans": [
+    {
+      "face_id": "jailbreak_scheme",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "jailbreak_scheme",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/0",
+        "/faces/0/cast_cost_groups/0/options/0",
+        "/faces/0/modal_spell/modes/0/targeting"
+      ]
+    },
+    {
+      "face_id": "jailbreak_scheme",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/1",
+        "/faces/0/cast_cost_groups/0/options/1",
+        "/faces/0/modal_spell/modes/1/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ApplyCombatRestriction",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PutInOwnersLibrary",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_359_direct_ron_batch2::issue_359_jailbreak_scheme_modes_and_linked_costs",
+      "covers": "the first mode puts a +1/+1 counter on a target creature and makes it unblockable this turn, and the second mode makes a target artifact or creature's owner choose top or bottom of their library"
+    },
+    {
+      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_maps_definitions",
+      "covers": "reviewed identity, mana cost, spree group, two linked modes and their targeting of Jailbreak Scheme"
+    },
+    {
+      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Jailbreak Scheme"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

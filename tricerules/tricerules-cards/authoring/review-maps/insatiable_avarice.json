@@ -1,0 +1,63 @@
+{
+  "format_version": 1,
+  "oracle_id": "ad3e705f-da57-4eff-84d7-2072522de988",
+  "spans": [
+    {
+      "face_id": "insatiable_avarice",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "insatiable_avarice",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/0",
+        "/faces/0/cast_cost_groups/0/options/0"
+      ]
+    },
+    {
+      "face_id": "insatiable_avarice",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/1",
+        "/faces/0/cast_cost_groups/0/options/1",
+        "/faces/0/modal_spell/modes/1/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::TargetPlayerDraws",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::TargetPlayerLosesLife",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_359_direct_ron_batch2::issue_359_insatiable_avarice_modes_and_linked_costs",
+      "covers": "the tutor mode searches for one card and puts it on top of the library, and the draw mode makes a target player draw three cards and lose three life"
+    },
+    {
+      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_maps_definitions",
+      "covers": "reviewed identity, mana cost, spree group, two linked modes and their targeting of Insatiable Avarice"
+    },
+    {
+      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Insatiable Avarice"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

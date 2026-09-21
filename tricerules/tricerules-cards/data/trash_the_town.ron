@@ -1,0 +1,73 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle b47f7f1e-2d81-4b1b-870d-4c1a4f020505.
+// Handwritten typed definition promoted through the reviewed direct-RON path (#359);
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// Spree: choose one or more additional mana costs; modes resolve in printed order and cannot
+// repeat (2024-04-12 rulings). The third mode grants a quoted triggered ability until end of turn.
+(
+  id: "trash_the_town",
+  name: "Trash the Town",
+  face_id: "trash_the_town",
+  mana_cost: "{G}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "spree",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 3,
+    options: [
+      Mana(option_id: "counters_cost", presentation: OracleLines([2]), kind: AdditionalPayment, cost: "{2}"),
+      Mana(option_id: "trample_cost", presentation: OracleLines([3]), kind: AdditionalPayment, cost: "{1}"),
+      Mana(option_id: "grant_cost", presentation: OracleLines([4]), kind: AdditionalPayment, cost: "{1}"),
+    ],
+  )],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 3,
+    modes: [
+      (
+        mode_id: "counters",
+        presentation: OracleLines([2]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "counters_cost")),
+        effects: [PutCounters(counter: PlusOnePlusOne, count: 2, subject: Chosen((kind: Creature)))],
+        targeting: Some((groups: [(
+          min: 1,
+          max: 1,
+          prompt: "Choose target creature",
+          effect_indices: [0],
+        )])),
+      ),
+      (
+        mode_id: "trample",
+        presentation: OracleLines([3]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "trample_cost")),
+        effects: [GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Trample])],
+        targeting: Some((groups: [(
+          min: 1,
+          max: 1,
+          prompt: "Choose target creature",
+          effect_indices: [0],
+        )])),
+      ),
+      (
+        mode_id: "grant_draw",
+        presentation: OracleLines([4]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "grant_cost")),
+        effects: [GrantTriggeredAbility(
+          subject: Chosen((kind: Creature)),
+          ability: (
+            ability_id: "granted_01",
+            presentation: Fallback,
+            trigger: WheneverSelfDealsCombatDamageToPlayer,
+            effect: [Draw(count: 2)],
+          ),
+        )],
+        targeting: Some((groups: [(
+          min: 1,
+          max: 1,
+          prompt: "Choose target creature",
+          effect_indices: [0],
+        )])),
+      ),
+    ],
+  ),
+)

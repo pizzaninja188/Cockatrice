@@ -1,0 +1,49 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle ad3e705f-da57-4eff-84d7-2072522de988.
+// Handwritten typed definition promoted through the reviewed direct-RON path (#359);
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// Spree: choose one or more additional mana costs; modes resolve in printed order and cannot
+// repeat (2024-04-12 rulings).
+(
+  id: "insatiable_avarice",
+  name: "Insatiable Avarice",
+  face_id: "insatiable_avarice",
+  mana_cost: "{B}",
+  types: ["Sorcery"],
+  cast_cost_groups: [(
+    group_id: "spree",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 2,
+    options: [
+      Mana(option_id: "tutor_cost", presentation: OracleLines([2]), kind: AdditionalPayment, cost: "{2}"),
+      Mana(option_id: "draw_drain_cost", presentation: OracleLines([3]), kind: AdditionalPayment, cost: "{B}{B}"),
+    ],
+  )],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 2,
+    modes: [
+      (
+        mode_id: "tutor_top",
+        presentation: OracleLines([2]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "tutor_cost")),
+        effects: [SearchLibrary(destination: TopOfLibrary)],
+      ),
+      (
+        mode_id: "draw_drain",
+        presentation: OracleLines([3]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "draw_drain_cost")),
+        effects: [
+          TargetPlayerDraws(count: 3, target: (kind: AnyPlayer)),
+          TargetPlayerLosesLife(amount: 3, target: (kind: AnyPlayer)),
+        ],
+        targeting: Some((groups: [(
+          min: 1,
+          max: 1,
+          prompt: "Choose target player",
+          effect_indices: [0, 1],
+        )])),
+      ),
+    ],
+  ),
+)

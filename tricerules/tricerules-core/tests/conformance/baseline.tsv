@@ -1341,6 +1341,7 @@ infirmary_healer_stream_of_life	0	cast	exercised
 infirmary_healer_stream_of_life	1	cast	intentional: face unavailable from hand
 infuriate	0	cast	exercised
 innocuous_rat	0	cast	exercised
+insatiable_avarice	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 insatiable_harpy	0	cast	exercised
 insatiable_skittermaw	0	cast	exercised
 insectoid_exterminator	0	cast	exercised
@@ -1389,6 +1390,7 @@ jade-cast_sentinel	0	cast	exercised
 jagged_barrens	0	ability:0	exercised
 jagged_barrens	0	land	exercised
 jagwasp_swarm	0	cast	exercised
+jailbreak_scheme	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 jasmine_boreal	0	cast	exercised
 jayemdae_tome	0	ability:0	exercised
 jayemdae_tome	0	cast	exercised
@@ -1966,6 +1968,7 @@ pym_technologies	0	ability:0	exercised
 pym_technologies	0	land	exercised
 pyroclasm	0	cast	exercised
 pyromantic_pilgrim	0	cast	exercised
+pyrrhic_strike	0	cast	exercised
 python	0	cast	exercised
 qilins_blessing	0	cast	exercised
 quakestrider_ceratops	0	cast	exercised
@@ -2660,6 +2663,7 @@ thrashing_brontodon	0	cast	exercised
 threadbind_clique_rip_the_seams	0	cast	exercised
 threadbind_clique_rip_the_seams	1	cast	unsupported: target group 0 needs a richer fixture
 threaten	0	cast	exercised
+three_steps_ahead	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 three_tree_mascot	0	ability:0	exercised
 three_tree_mascot	0	cast	exercised
 three_tree_rootweaver	0	ability:0	exercised
@@ -2723,6 +2727,7 @@ tranquility	0	cast	exercised
 transdimensional_bovine	0	ability:0	exercised
 transdimensional_bovine	0	cast	exercised
 trapped_in_the_screen	0	cast	exercised
+trash_the_town	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 traumatic_critique	0	cast	exercised
 traveling_philosopher	0	cast	exercised
 tree_monkey	0	cast	exercised

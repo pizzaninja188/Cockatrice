@@ -1,0 +1,53 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 5ea1d89c-8650-4373-9835-e369587020ef.
+// Handwritten typed definition promoted through the reviewed direct-RON path (#338);
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 701.30/118.8: the optional blight is an announced additional cost; when it is paid the
+// spell allows both modes instead of one (2025-11-17 rulings).
+(
+  id: "pyrrhic_strike",
+  name: "Pyrrhic Strike",
+  face_id: "pyrrhic_strike",
+  mana_cost: "{2}{W}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "additional_cost",
+    presentation: OracleLines([1]),
+    min: 0,
+    max: 1,
+    options: [
+      Blight(option_id: "blight", presentation: OracleLines([1]), count: 2),
+    ],
+  )],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 2,
+    all_modes_cast_cost: Some((group_id: "additional_cost", option_id: "blight")),
+    modes: [
+      (
+        mode_id: "destroy_artifact_or_enchantment",
+        presentation: OracleLines([3]),
+        effects: [Destroy(subject: Chosen((any_of: Some([
+          (kind: AnyPermanent, permanent_types: [Artifact]),
+          (kind: AnyPermanent, permanent_types: [Enchantment]),
+        ]))))],
+        targeting: Some((groups: [(
+          min: 1,
+          max: 1,
+          prompt: "Choose target artifact or enchantment",
+          effect_indices: [0],
+        )])),
+      ),
+      (
+        mode_id: "destroy_big_creature",
+        presentation: OracleLines([4]),
+        effects: [Destroy(subject: Chosen((kind: Creature, min_mana_value: Some(3))))],
+        targeting: Some((groups: [(
+          min: 1,
+          max: 1,
+          prompt: "Choose target creature with mana value 3 or greater",
+          effect_indices: [0],
+        )])),
+      ),
+    ],
+  ),
+)

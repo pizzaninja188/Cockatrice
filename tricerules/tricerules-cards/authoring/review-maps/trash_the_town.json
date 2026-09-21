@@ -1,0 +1,74 @@
+{
+  "format_version": 1,
+  "oracle_id": "b47f7f1e-2d81-4b1b-870d-4c1a4f020505",
+  "spans": [
+    {
+      "face_id": "trash_the_town",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "trash_the_town",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/0",
+        "/faces/0/cast_cost_groups/0/options/0",
+        "/faces/0/modal_spell/modes/0/targeting"
+      ]
+    },
+    {
+      "face_id": "trash_the_town",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/1",
+        "/faces/0/cast_cost_groups/0/options/1",
+        "/faces/0/modal_spell/modes/1/targeting"
+      ]
+    },
+    {
+      "face_id": "trash_the_town",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/2",
+        "/faces/0/cast_cost_groups/0/options/2",
+        "/faces/0/modal_spell/modes/2/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantTriggeredAbility",
+      "typed_path": "/faces/0/modal_spell/modes/2/effects/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_359_direct_ron_batch2::issue_359_trash_the_town_modes_and_linked_costs",
+      "covers": "the counter mode places exactly two +1/+1 counters on a target creature, the trample mode grants trample until end of turn, and the grant mode grants a quoted combat-damage trigger that draws two cards"
+    },
+    {
+      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_maps_definitions",
+      "covers": "reviewed identity, mana cost, spree group, three linked modes and their targeting of Trash the Town"
+    },
+    {
+      "test": "issue_359_direct_ron_batch2::issue_359_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Trash the Town"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

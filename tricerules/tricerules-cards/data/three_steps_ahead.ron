@@ -1,0 +1,65 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 282dfeaa-6243-4f92-838a-5cb54fa85184.
+// Handwritten typed definition promoted through the reviewed direct-RON path (#359);
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// Spree: choose one or more additional mana costs; modes resolve in printed order, cannot repeat,
+// and mode-local targeting is ignored for unchosen modes (2024-04-12 rulings).
+(
+  id: "three_steps_ahead",
+  name: "Three Steps Ahead",
+  face_id: "three_steps_ahead",
+  mana_cost: "{U}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "spree",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 3,
+    options: [
+      Mana(option_id: "counter_cost", presentation: OracleLines([2]), kind: AdditionalPayment, cost: "{1}{U}"),
+      Mana(option_id: "copy_cost", presentation: OracleLines([3]), kind: AdditionalPayment, cost: "{3}"),
+      Mana(option_id: "draw_discard_cost", presentation: OracleLines([4]), kind: AdditionalPayment, cost: "{2}"),
+    ],
+  )],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 3,
+    modes: [
+      (
+        mode_id: "counter",
+        presentation: OracleLines([2]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "counter_cost")),
+        effects: [CounterTargetSpell()],
+        targeting: Some((groups: [(
+          min: 1,
+          max: 1,
+          prompt: "Choose target spell",
+          effect_indices: [0],
+        )])),
+      ),
+      (
+        mode_id: "copy",
+        presentation: OracleLines([3]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "copy_cost")),
+        effects: [CreateTokenCopies(
+          count: 1,
+          source: Chosen((any_of: Some([
+            (kind: AnyPermanent, controller: You, permanent_types: [Artifact]),
+            (kind: Creature, controller: You),
+          ]))),
+        )],
+        targeting: Some((groups: [(
+          min: 1,
+          max: 1,
+          prompt: "Choose target artifact or creature you control",
+          effect_indices: [0],
+        )])),
+      ),
+      (
+        mode_id: "draw_discard",
+        presentation: OracleLines([4]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "draw_discard_cost")),
+        effects: [DrawDiscard(who: Controller, draw_count: 2, discard_count: 1, order: DrawThenDiscard, optional: false)],
+      ),
+    ],
+  ),
+)
