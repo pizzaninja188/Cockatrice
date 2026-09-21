@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "dca7102e-c020-4fdc-9b59-f186e3e615a5",
+  "spans": [
+    {
+      "face_id": "dusk_rose_reliquary",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "dusk_rose_reliquary",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "dusk_rose_reliquary",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1",
+        "/faces/0/triggered_abilities/1/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostOptionDef::SacrificePermanent",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverSelfBecomesTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CounterTriggeringStackObjectUnlessPays",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileUntilSourceLeaves",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_338_direct_ron_batch2::issue_338_dusk_rose_reliquary_wards_and_exiles_until_it_leaves",
+      "covers": "sacrificing a creature or an artifact pays the additional cost; an opponent's removal targeting the Reliquary triggers Ward {2} with the opponent as payer; the entry trigger exiles a target opposing creature (the shared artifact-or-creature target filter is asserted in the registry map) and returns it to the battlefield when the Reliquary leaves"
+    },
+    {
+      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_maps_definitions",
+      "covers": "reviewed identity, cost, types, Ward trigger and linked-exile entry trigger of Dusk Rose Reliquary"
+    },
+    {
+      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Dusk Rose Reliquary"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

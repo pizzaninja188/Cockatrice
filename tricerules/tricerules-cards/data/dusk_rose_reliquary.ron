@@ -1,0 +1,49 @@
+// Oracle and rulings checked 2026-09-20 against pinned Scryfall oracle dca7102e-c020-4fdc-9b59-f186e3e615a5.
+// Handwritten typed definition promoted through the reviewed direct-RON path (#338);
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "dusk_rose_reliquary",
+  name: "Dusk Rose Reliquary",
+  face_id: "dusk_rose_reliquary",
+  mana_cost: "{W}",
+  types: ["Artifact"],
+  cast_cost_groups: [(
+    group_id: "additional_cost",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 1,
+    options: [
+      SacrificePermanent(
+        option_id: "sacrifice_artifact_or_creature",
+        presentation: OracleLines([1]),
+        kind: AdditionalPayment,
+        filter: (any_of: Some([
+          (kind: AnyPermanent, controller: You, permanent_types: [Artifact]),
+          (kind: Creature, controller: You),
+        ])),
+      ),
+    ],
+  )],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
+      effect: [CounterTriggeringStackObjectUnlessPays(cost: Mana("{2}"))],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([3]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [ExileUntilSourceLeaves(target: (kind: AnyPermanent, controller: Opponent, permanent_types: [Artifact, Creature]))],
+      targeting: Some((
+        groups: [(
+          min: 1,
+          max: 1,
+          prompt: "Choose target artifact or creature an opponent controls",
+          effect_indices: [0],
+        )],
+      )),
+    ),
+  ],
+)

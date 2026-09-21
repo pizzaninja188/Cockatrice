@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "ce7582a2-e014-41fb-8753-00d29cffc81a",
+  "spans": [
+    {
+      "face_id": "lys_alana_dignitary",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "lys_alana_dignitary",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostOptionDef::Behold",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "CastCostOptionDef::Mana",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/1"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "GameCondition::GraveyardAggregate",
+      "typed_path": "/faces/0/activated_abilities/0/conditions/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_338_direct_ron_batch2::issue_338_lys_alana_dignitary_mana_requires_an_elf_in_graveyard",
+      "covers": "beholding an Elf or paying {2} pays the additional cost; the tap mana ability adds {G}{G} only while an Elf card is in the controller's graveyard and is rejected when it is not"
+    },
+    {
+      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_maps_definitions",
+      "covers": "reviewed identity, printed P/T, cost, tap cost, graveyard condition and {G}{G} effect of Lys Alana Dignitary"
+    },
+    {
+      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Lys Alana Dignitary"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

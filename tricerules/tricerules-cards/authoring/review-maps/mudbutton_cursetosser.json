@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "b63e5518-61f3-4cde-a799-5f3ee6aba70b",
+  "spans": [
+    {
+      "face_id": "mudbutton_cursetosser",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "mudbutton_cursetosser",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "mudbutton_cursetosser",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostOptionDef::Behold",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "CastCostOptionDef::Mana",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/1"
+    },
+    {
+      "symbol": "StaticAbilityDef::SelfCombatRestriction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_338_direct_ron_batch2::issue_338_mudbutton_cursetosser_beholds_or_pays_and_punishes_on_death",
+      "covers": "beholding a Goblin or paying {2} pays the additional cost; a Goblin permanent and a Goblin card in hand are legal behold choices while a non-Goblin permanent is rejected; the creature cannot block; when it dies it destroys a target creature an opponent controls with power 2 or less but cannot target a larger creature"
+    },
+    {
+      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_maps_definitions",
+      "covers": "reviewed identity, printed P/T, cost, can't-block static ability and dies trigger of Mudbutton Cursetosser"
+    },
+    {
+      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Mudbutton Cursetosser"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

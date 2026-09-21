@@ -236,6 +236,7 @@ bestial_bloodline	0	ability:0	unsupported: ability not offered by generic battle
 bestial_bloodline	0	cast	exercised
 bestial_menace	0	cast	exercised
 bestow_greatness	0	cast	exercised
+betrayers_bargain	0	cast	unsupported: required cast-cost group needs a specialized fixture
 bifur,_melodic_rider	0	cast	exercised
 bigfin_bouncer	0	cast	exercised
 bilbos_deadly_slice	0	cast	exercised
@@ -731,6 +732,7 @@ due_diligence	0	cast	exercised
 dune_beetle	0	cast	exercised
 durkwood_boars	0	cast	exercised
 dusk_imp	0	cast	exercised
+dusk_rose_reliquary	0	cast	unsupported: required cast-cost group needs a specialized fixture
 duskdale_wurm	0	cast	exercised
 dusyut_earthcarver	0	cast	exercised
 dutiful_servants	0	cast	exercised
@@ -828,6 +830,7 @@ faithbearer_paladin	0	cast	exercised
 falkenrath_reaver	0	cast	exercised
 family_reunion	0	cast	exercised
 fanatic_of_the_harrowing	0	cast	exercised
+fanatical_offering	0	cast	unsupported: required cast-cost group needs a specialized fixture
 fanatical_strength	0	cast	exercised
 fang_of_shigeki	0	cast	exercised
 fangkeepers_familiar	0	cast	exercised
@@ -1574,6 +1577,8 @@ lurking_lizards	0	cast	exercised
 lush_oasis	0	ability:0	exercised
 lush_oasis	0	land	exercised
 lush_portico	0	land	exercised
+lys_alana_dignitary	0	ability:0	unsupported: nonmana costs need additional fixture resources
+lys_alana_dignitary	0	cast	unsupported: required cast-cost group needs a specialized fixture
 lys_alana_informant	0	cast	exercised
 macabre_waltz	0	cast	exercised
 magebane_lizard	0	cast	exercised
@@ -1714,6 +1719,7 @@ mountain	0	ability:0	exercised
 mountain	0	land	exercised
 mountain_bandit	0	cast	exercised
 muck_rats	0	cast	exercised
+mudbutton_cursetosser	0	cast	unsupported: required cast-cost group needs a specialized fixture
 multiversal_passage	0	land	exercised
 murasa_brute	0	cast	exercised
 murder	0	cast	exercised

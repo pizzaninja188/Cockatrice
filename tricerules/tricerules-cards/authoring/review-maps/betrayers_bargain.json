@@ -1,0 +1,62 @@
+{
+  "format_version": 1,
+  "oracle_id": "bfb3d862-d92d-4a4f-9a22-671b55d954fd",
+  "spans": [
+    {
+      "face_id": "betrayers_bargain",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "betrayers_bargain",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostOptionDef::SacrificePermanent",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "CastCostOptionDef::Mana",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/1"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileIfWouldDieThisTurn",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_338_direct_ron_batch2::issue_338_betrayers_bargain_pays_and_exiles_any_fatal_creature",
+      "covers": "sacrificing a creature or an enchantment, or paying {2}, each pay the additional cost; five damage is dealt to the target creature; a creature destroyed by any effect later in the turn is exiled instead, not only when this spell's damage is lethal"
+    },
+    {
+      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_maps_definitions",
+      "covers": "reviewed identity, cost, types, cast-cost group options, damage/exile effects and target group of Betrayer's Bargain"
+    },
+    {
+      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Betrayer's Bargain"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

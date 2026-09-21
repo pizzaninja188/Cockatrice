@@ -1,0 +1,55 @@
+{
+  "format_version": 1,
+  "oracle_id": "3e5402bf-ce7b-4c23-9333-0acdcf349caf",
+  "spans": [
+    {
+      "face_id": "fanatical_offering",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "fanatical_offering",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostOptionDef::SacrificePermanent",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [
+    "map"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_338_direct_ron_batch2::issue_338_fanatical_offering_sacrifices_and_makes_a_map",
+      "covers": "casting without the sacrifice is rejected; sacrificing an artifact or a creature each pay the mandatory additional cost; resolution draws two cards and creates one Map artifact token controlled by the caster"
+    },
+    {
+      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_maps_definitions",
+      "covers": "reviewed identity, cost, types, cast-cost group and draw/Map effects of Fanatical Offering"
+    },
+    {
+      "test": "issue_338_direct_ron_batch2::issue_338_direct_ron_batch2_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Fanatical Offering"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

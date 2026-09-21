@@ -1,0 +1,44 @@
+// Oracle and rulings checked 2026-09-20 against pinned Scryfall oracle ce7582a2-e014-41fb-8753-00d29cffc81a.
+// Handwritten typed definition promoted through the reviewed direct-RON path (#338);
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "lys_alana_dignitary",
+  name: "Lys Alana Dignitary",
+  face_id: "lys_alana_dignitary",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Elf", "Advisor"],
+  power: 2,
+  toughness: 3,
+  cast_cost_groups: [(
+    group_id: "additional_cost",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 1,
+    options: [
+      Behold(
+        option_id: "behold",
+        presentation: OracleLines([1]),
+        hand_filter: (required_subtypes: ["Elf"]),
+        permanent_filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Elf"]),
+      ),
+      Mana(
+        option_id: "pay_mana",
+        presentation: OracleLines([1]),
+        kind: AdditionalPayment,
+        cost: "{2}",
+      ),
+    ],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Tap],
+    conditions: [GraveyardAggregate(
+      owners: Controller,
+      aggregate: CardCount,
+      filter: Some((required_subtypes: ["Elf"])),
+      min: Some(1),
+    )],
+    effect: [ProduceMana(options: [(g: 2)])],
+  )],
+)

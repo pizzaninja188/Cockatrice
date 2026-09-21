@@ -1,0 +1,31 @@
+// Oracle and rulings checked 2026-09-20 against pinned Scryfall oracle 3e5402bf-ce7b-4c23-9333-0acdcf349caf.
+// Handwritten typed definition promoted through the reviewed direct-RON path (#338);
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "fanatical_offering",
+  name: "Fanatical Offering",
+  face_id: "fanatical_offering",
+  mana_cost: "{1}{B}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "additional_cost",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 1,
+    options: [
+      SacrificePermanent(
+        option_id: "sacrifice_artifact_or_creature",
+        presentation: OracleLines([1]),
+        kind: AdditionalPayment,
+        filter: (any_of: Some([
+          (kind: AnyPermanent, controller: You, permanent_types: [Artifact]),
+          (kind: Creature, controller: You),
+        ])),
+      ),
+    ],
+  )],
+  spell_effect: [
+    Draw(count: 2),
+    CreateTokens(token: "map", count: 1),
+  ],
+)
