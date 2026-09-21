@@ -16,6 +16,13 @@ function New-WorkflowFixture {
         $source = Join-Path $sourceRepo "scripts\$name"
         if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination (Join-Path $root "scripts\$name") }
     }
+    Set-Content -LiteralPath (Join-Path $root 'scripts/check-card-evidence.ps1') -Value @'
+param([string] $OracleBulk)
+if (-not (Test-Path -LiteralPath $OracleBulk)) { exit 13 }
+if (Test-Path -LiteralPath (Join-Path $PSScriptRoot '../bad-evidence')) { Write-Output 'invalid evidence reference'; exit 13 }
+Write-Output 'fixture evidence check'
+exit 0
+'@
     Set-Content -LiteralPath (Join-Path $root 'oracle-cards.jsonl.gz') -Value 'fixture'
     Set-Content -LiteralPath (Join-Path $root 'oracle-cards.jsonl.gz.meta.json') -Value '{}'
     Set-Content -LiteralPath (Join-Path $root 'cards.xml') -Value '<fixture/>'

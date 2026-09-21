@@ -40,19 +40,28 @@ requirements; this skill routes the work rather than replacing them.
   [card authoring guide](../../../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md).
   Use its Oracle/rulings research, complete-support boundary, presentation mappings, and blocker
   tracking. Do not substitute nearby legacy RON for the guide.
+- Apply the guide's [format scope and rules correctness](../../../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#format-scope-and-rules-correctness)
+  boundary: campaign format filters select work, not primitive semantics. Check relevant
+  cross-cohort interactions without requiring unrelated card authoring or exhaustive searches.
+  Follow campaign scope for broader admissions and report their coverage separately.
 - Preflight the complete card before writing anything: enumerate every face, clause, cost, target,
-  choice, token, and presentation prerequisite, and route by demonstrated repetition — extend a
-  typed family for a shared exact template, use reviewed direct RON for a supported
-  singleton/unusual composition, and file a scoped blocker for missing runtime, choice, target,
+  choice, token, and presentation prerequisite. Use reviewed handwritten RON by default for
+  supported cards, including repeated templates; reuse a shipped complete recipe when convenient.
+  Missing generator recognition is not a runtime blocker. File a blocker for missing runtime, choice, target,
   or presentation contracts. An empty route reports its limitation; it never authorizes widening
   a grammar. A recognized clause or recipe name is not evidence of complete support.
 - For an unsupported data-only card or batch, use the source-backed scaffold mode to populate only
   clerical source fields. Keep scaffolds outside embedded `data/`; mechanically author and review
   every unresolved field before removing both sentinels and promoting a file to `.ron`.
-- When at least two real cards share one exact Oracle template, extend the typed Rust recipe catalog
-  with a stable recipe id, the correct surface, typed emission, two named positive calibrations,
-  and reviewed negative near-misses. The catalog must remain fail-closed and must not become an
-  external or stringly rules DSL.
+- New recipe development needs a concrete expected throughput benefit for a named cohort;
+  two matching cards alone do not justify it. Actual generator changes still require stable recipe
+  IDs, typed emission, positive calibrations and negative near-misses. Preserve existing generated
+  cards and checks; do not migrate them solely to standardize routes.
+- Separate ready cards, unassessed cards, generator limitations and genuine runtime blockers.
+  Keep one primary issue owner per unimplemented identity, with links to capability dependencies.
+  Update obsolete issue requirements before execution. Prefer 5-10 compatible ready cards per
+  batch when available, smaller when semantic risk warrants it. Reuse actual-card semantic
+  fixtures with independent expectations; add helpers only for demonstrated repetition.
 - Follow the [verification ladder](../../../docs/AGENT-VERIFICATION.md): focused red/green tests
   through the quiet runner, then the full affected-side entry point. Choose the affected side
   from the actual contract, not merely changed file extensions. Use Preview if the selected
@@ -60,6 +69,8 @@ requirements; this skill routes the work rather than replacing them.
 - Freeze the intended patch before independent review: snapshot and hash the diff, give a
   read-only reviewer that exact patch plus its evidence, and run the focused and full gates on the
   same frozen content. Return review findings as rework before treating evidence as final.
+  Use default effort for routine authoring and review. Run formatting and focused lint before
+  review; resolve required findings before the final gate. Optional polish need not cause rework.
   Escalate review depth for demonstrated semantic risk; keep engine and primitive changes on the
   deeper-review path. Reuse prior valid evidence instead of re-running gates solely to measure.
 - When authored cards change generated metadata, explicitly run

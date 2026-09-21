@@ -40,6 +40,11 @@ try {
     Assert-Workflow ([IO.File]::ReadAllText($checklist) -eq 'preserve this checklist') 'Failed validation overwrote checklist.'
     Assert-Workflow ($result.Output -match 'unmatched card name') 'Name-validation failure log was hidden.'
 
+    Set-Content -LiteralPath (Join-Path $fixture 'bad-evidence') -Value 'invalid'
+    $result = Invoke-WorkflowFixture $fixture 'update-card-data.ps1' $arguments
+    Assert-Workflow ($result.ExitCode -eq 13) 'Evidence failure exit code was lost.'
+    Assert-Workflow ($result.Output -match 'invalid evidence reference') 'Evidence failure log was hidden.'
+
     $callCount = @(Read-WorkflowTrace $fixture).Count
     $result = Invoke-WorkflowFixture $fixture 'update-card-data.ps1' @('-CardsXml', 'missing.xml')
     Assert-Workflow ($result.ExitCode -ne 0) 'Missing input was accepted.'

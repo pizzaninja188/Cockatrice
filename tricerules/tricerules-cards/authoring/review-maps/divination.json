@@ -24,7 +24,7 @@
       "covers": "accepted cast, bounded resolution, exact two-card draw, source graveyard identity"
     },
     {
-      "test": "issue_448_semantic_mapping::issue_448_registry_rows_preserve_independently_reviewed_card_mappings",
+      "test": "issue_448_semantic_mapping::pilot_draw_mappings_are_exact",
       "covers": "reviewed card and face identity, mana cost, and Sorcery type"
     }
   ],

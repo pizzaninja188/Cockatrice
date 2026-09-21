@@ -662,6 +662,24 @@ fn build_packet(
     provenance: &str,
     inspect_existing: bool,
 ) -> Result<String, String> {
+    build_packet_from_sources(
+        &deduplicate(cards)?,
+        draft_path,
+        draft,
+        map,
+        provenance,
+        inspect_existing,
+    )
+}
+
+fn build_packet_from_sources(
+    cards: &BTreeMap<String, Value>,
+    draft_path: &Path,
+    draft: &str,
+    map: &str,
+    provenance: &str,
+    inspect_existing: bool,
+) -> Result<String, String> {
     if draft.contains("__mechanics_unresolved")
         || draft.contains("__presentation_review_unresolved")
     {
@@ -669,8 +687,7 @@ fn build_packet(
     }
     let review: ReviewMap = serde_json::from_str(map)
         .map_err(|error| format!("cannot parse review map JSON: {error}"))?;
-    let cards = deduplicate(cards)?;
-    let (oracle_id, source) = select_source(&cards, &review)?;
+    let (oracle_id, source) = select_source(cards, &review)?;
     let draft_registry = CardRegistry::from_authoring_draft(draft)
         .map_err(|error| format!("draft failed registry validation: {error}"))?;
     let definitions = draft_registry.definitions().collect::<Vec<_>>();
@@ -819,6 +836,53 @@ pub(super) fn run(
     inspect_existing: bool,
 ) -> Result<String, String> {
     let data_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data");
+    if map_path.is_dir() {
+        if !inspect_existing || !draft_path.is_dir() {
+            return Err("batch review requires --review-existing and a draft directory".into());
+        }
+        let output = output_path.ok_or("batch review requires an output directory")?;
+        let sources = deduplicate(cards)?;
+        let mut maps = fs::read_dir(map_path)
+            .map_err(|error| error.to_string())?
+            .map(|entry| entry.map(|entry| entry.path()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?;
+        maps.retain(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "json")
+        });
+        maps.sort();
+        if maps.is_empty() {
+            return Err("batch review found no JSON maps".into());
+        }
+        for map in &maps {
+            let stem = map.file_stem().ok_or("review map has no filename stem")?;
+            let draft = draft_path.join(stem).with_extension("ron");
+            let packet = build_packet_from_sources(
+                &sources,
+                &draft,
+                &fs::read_to_string(&draft)
+                    .map_err(|error| format!("{}: {error}", draft.display()))?,
+                &fs::read_to_string(map).map_err(|error| format!("{}: {error}", map.display()))?,
+                provenance,
+                true,
+            )?;
+            let evidence: Value =
+                serde_json::from_str(&packet).map_err(|error| error.to_string())?;
+            if evidence["promotion_ready_for_human_review"] != true {
+                return Err(format!(
+                    "{}: checked-in map has unresolved or unconfirmed review",
+                    map.display()
+                ));
+            }
+            write_new(
+                &output.join(stem).with_extension("packet.json"),
+                packet.as_bytes(),
+                &data_dir,
+            )?;
+        }
+        return Ok(format!("Validated {} existing review maps.\n", maps.len()));
+    }
     let draft_absolute = normalized_absolute(draft_path)?;
     if !inspect_existing && is_within(&draft_absolute, &normalized_absolute(&data_dir)?) {
         return Err("authoring drafts must remain outside embedded card data".into());
@@ -849,6 +913,68 @@ pub(super) fn run(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn batch_existing_review_validates_each_map_and_refuses_overwrite() {
+        let root = std::env::temp_dir().join(format!(
+            "card-review-batch-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let maps = root.join("maps");
+        let drafts = root.join("drafts");
+        let output = root.join("output");
+        fs::create_dir_all(&maps).unwrap();
+        fs::create_dir_all(&drafts).unwrap();
+        let sources = || vec![source("oracle-divination", "Divination", "Draw two cards.")];
+        assert!(
+            run(sources(), &drafts, &maps, Some(&output), "fixture", true)
+                .unwrap_err()
+                .contains("no JSON maps")
+        );
+        for name in ["first", "second"] {
+            fs::write(drafts.join(format!("{name}.ron")), draft("Divination", 2)).unwrap();
+            fs::write(
+                maps.join(format!("{name}.json")),
+                map(
+                    "Divination",
+                    json!([
+                        {"face_id": "divination", "start_line": 1, "end_line": 1,
+                         "typed_paths": ["/faces/0/spell_effect/0"]}
+                    ]),
+                ),
+            )
+            .unwrap();
+        }
+        run(sources(), &drafts, &maps, Some(&output), "fixture", true).unwrap();
+        assert!(output.join("first.packet.json").is_file());
+        assert!(output.join("second.packet.json").is_file());
+        assert!(
+            run(sources(), &drafts, &maps, Some(&output), "fixture", true)
+                .unwrap_err()
+                .contains("refusing to overwrite")
+        );
+        let first_map = maps.join("first.json");
+        let unconfirmed = fs::read_to_string(&first_map).unwrap().replace(
+            "\"complete_definition_review_confirmed\":true",
+            "\"complete_definition_review_confirmed\":false",
+        );
+        fs::write(&first_map, unconfirmed).unwrap();
+        assert!(run(
+            sources(),
+            &drafts,
+            &maps,
+            Some(&root.join("unconfirmed")),
+            "fixture",
+            true
+        )
+        .unwrap_err()
+        .contains("unresolved or unconfirmed"));
+        fs::remove_dir_all(&root).unwrap();
+    }
 
     fn source(oracle_id: &str, name: &str, oracle_text: &str) -> Value {
         json!({

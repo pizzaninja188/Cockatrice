@@ -52,6 +52,21 @@ There are two card databases, and they must not be mixed:
 - An unimplemented mainboard card must continue to block ruled game start through `ValidateDeck`;
   never add a silent casual fallback.
 
+### Format scope and rules correctness
+
+Format legality controls campaign selection, not engine semantics. Implement reusable primitives
+according to the rules behavior they represent, without format-specific assumptions. Verify
+relevant interactions beyond the selected cohort when they could expose an incomplete
+implementation. Passing the selected cards' tests does not establish correctness for every
+consumer of a primitive. Use concrete non-Standard examples or regressions when they reveal a
+relevant distinction; this does not require authoring unrelated cards or exhaustively searching
+the corpus. Preserve format-specific rules where the rules themselves require them.
+
+Campaign instructions set the coverage priority and permission to include additional cards.
+Any admitted card still requires complete-card preflight, review, and applicable semantic evidence.
+When a campaign admits cards outside its target format, report target-format and broader coverage
+separately; broader additions do not satisfy missing target-format coverage.
+
 ## 3. Choose the lowest implementation tier
 
 Use the lowest tier that completely expresses the behavior:
@@ -541,8 +556,8 @@ never accept unrelated bulk churn.
 
 ### Extend the exact-recipe catalog
 
-When at least two real cards share one exact Oracle template and existing typed primitives express
-the complete behavior, add a recipe to
+When a named repeated template has a demonstrated throughput benefit from generation and existing
+typed primitives express the complete behavior, a justified recipe can be added to
 [`recipes.rs`](../src/bin/gen_cards/recipes.rs). Keep recipes in typed Rust; do not add an external
 or stringly rules DSL.
 
@@ -789,10 +804,11 @@ To turn a reviewed scaffold into authored RON:
 Choose the authoring route in this order:
 
 1. Reuse a shipped exact recipe when it already covers the complete card.
-2. Add or extend a typed recipe family only for a demonstrated repeated Oracle template, with the
-   required positive calibrations and negative near-misses.
-3. Use reviewed direct RON for a supported singleton or unusual composition when every mechanic is
-   already expressible and a new parser family is not justified.
+2. Otherwise use reviewed handwritten RON for supported cards, including repeated templates.
+   Two matching cards alone do not justify a new parser or recipe family.
+3. Develop a new typed recipe only with a concrete expected throughput benefit for a named cohort.
+   Actual generator changes retain positive calibrations and negative near-misses; handwritten
+   additions do not need matcher tests. Preserve existing generated cards and their checks.
 4. File a scoped runtime blocker when any required cost, timing, choice, target, effect,
    presentation, or composition semantics are unsupported. Do not partially admit the card.
 
@@ -886,8 +902,8 @@ independent read-only review) established the following as the default campaign 
    target, choice, token, and presentation prerequisite. Classify each remaining requirement
    against the actual emitter/validator/consumer/tests. A recognized clause, recipe name, or
    effect enum is never evidence of complete support.
-2. **Route by demonstrated repetition.** Shared exact templates with typed parameters extend the
-   family catalog; supported singletons and unusual compositions use direct RON; any needed
+2. **Prefer direct authoring for supported cards.** Reuse complete shipped recipes; otherwise use
+   handwritten RON, even for shared templates. New recipes need a throughput justification. Any needed
    runtime, choice, target, or presentation contract becomes a scoped blocker. Do not partially
    admit a card to keep a batch moving, and do not widen a grammar because a route's candidate
    set came back empty.
@@ -1010,6 +1026,37 @@ Visibility/public-offer proof is N/A for this internal fixture extraction, with 
 retained. Runtime, protobuf, relay, Qt and freeform contracts are unchanged, so C++/GUI gates are
 N/A. Focused fixture/registry tests, existing conformance, generator tests and full Rust/card-data
 gates remain required. No new rules capability or card identity is introduced.
+
+### Batch evidence and review discipline
+
+Missing generator recognition is not a runtime blocker. Classify ready cards, unassessed cards,
+generator limitations and genuine runtime blockers separately. Keep one primary issue owner per
+unimplemented Oracle identity and link capability dependencies. Update partially delivered issue
+bodies, not only comments; retain useful research while removing obsolete parser deliverables.
+Do not build recipes that admit no complete cards merely because an old issue asks for them.
+Prefer batches of 5-10 compatible ready cards when available; reduce scope for semantic risk.
+
+`scripts/check-card-evidence.ps1` validates all checked-in review maps against canonical handwritten
+definitions and the pinned source. Map filenames equal the canonical RON filename stem.
+The checker uses directory-mode `--review-existing` to load and deduplicate the corpus once for
+the entire batch, with packets written outside data. Checked-in maps must be fully resolved and
+confirmed; review output remains evidence, never proof of mechanical equivalence.
+Semantic references use `scenario module::test` for tricerules-core or `integration_target::test`
+for tricerules-cards. The gate resolves exact Cargo identifiers and rejects missing or ignored
+tests. Canonical CardData Check includes it. Listing is not proof of execution: the full Rust suite
+must pass on the same content, and review must confirm the cases exercise the named cards and
+clauses. Draft packets may still describe planned fixtures before tests exist.
+
+Use default effort for routine implementation and independent read-only review; escalate for a
+specific unresolved correctness risk. Run formatting and focused lint before freezing the patch.
+Resolve blocking defects and missing required evidence before the final full gate. Optional polish
+may be deferred without another review cycle. Changes after a passing gate require affected
+reverification; avoid optional changes after that gate. Reuse unchanged passing evidence.
+
+Extend shared semantic fixtures incrementally for repeated setup and assertions demonstrated by
+the selected batch. Preserve independent expectations, actual-card execution, applicable illegal
+paths and dedicated interaction regressions. Do not introduce a generic test DSL or derive expected
+behavior from production RON. Keep routine authoring separate from new engine primitives.
 
 ### Completion checklist
 

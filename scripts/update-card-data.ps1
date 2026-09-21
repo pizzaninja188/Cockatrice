@@ -38,6 +38,8 @@ function Invoke-CardTool {
 }
 
 function Test-CanonicalCardData {
+    $code = Invoke-CardTool 'Direct-RON evidence check' 'check-card-evidence.ps1' @('-OracleBulk', $OracleBulk)
+    if ($code -ne 0) { return $code }
     $code = Invoke-CardTool 'Generated card check' 'gen-cards.ps1' @('--input', $OracleBulk, '--check')
     if ($code -ne 0) { return $code }
     $code = Invoke-CardTool 'Checklist name validation' 'gen-card-checklist.ps1' @(

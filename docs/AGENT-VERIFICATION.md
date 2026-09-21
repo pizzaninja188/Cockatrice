@@ -98,7 +98,9 @@ For card additions, explicitly refresh and review generated changes before final
 ./scripts/update-card-data.ps1 -Mode Check
 ```
 
-Check is the default. It runs the canonical generator check and validates a temporary checklist,
+Check is the default. It first validates checked-in direct-RON maps and exact non-ignored Cargo
+test references with `scripts/check-card-evidence.ps1`. Listing is not execution evidence: the full
+Rust suite must also pass on the same content. It runs the generator check and validates a temporary checklist,
 then compares that checklist with `tricerules/CARDS.md`, ignoring only CRLF/LF differences. It
 writes only build artifacts. Refresh updates existing generated RON and fingerprints, validates
 the new checklist before replacing `CARDS.md`, then runs Check. Review all resulting changes;
