@@ -1,0 +1,97 @@
+{
+  "format_version": 1,
+  "oracle_id": "c3731735-2b78-4a15-bff4-4d8559401f68",
+  "spans": [
+    {
+      "face_id": "sunset_saboteur",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "sunset_saboteur",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "sunset_saboteur",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1",
+        "/faces/0/triggered_abilities/1/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Menace",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverSelfBecomesTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CounterTriggeringStackObjectUnlessPays",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ResolutionCost::DiscardCard",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/CounterTriggeringStackObjectUnlessPays/cost"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    },
+    {
+      "symbol": "TargetFilter.controller",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0/PutCounters/subject/Chosen/controller"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/1/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_430_direct_ron::issue_430_ward_pays_a_discard_to_preserve_an_opposing_spell_and_ability",
+      "covers": "Ward-Discard triggers for an opposing spell and an opposing activated ability: the targeting object's controller is the payer, one legal hand discard preserves that exact stack object, and the discarded card moves to its owner's graveyard"
+    },
+    {
+      "test": "scenario issue_430_direct_ron::issue_430_ward_decline_and_unpayable_discard_counter_the_targeting_object",
+      "covers": "declining and being unable to discard both counter the targeting spell while the Saboteur survives; the empty-hand case auto-counters without a prompt"
+    },
+    {
+      "test": "scenario issue_430_direct_ron::issue_430_ward_ignores_its_controllers_own_targeting",
+      "covers": "the source controller targeting its own Sunset Saboteur (CR 702.21) does not trigger Ward"
+    },
+    {
+      "test": "scenario issue_430_direct_ron::issue_430_ward_private_discard_rejects_a_stale_card_and_moves_the_selected_physical_card",
+      "covers": "the discard choice is authorized for the targeting spell's controller only; a stale physical card is rejected without clearing the choice; the selected card moves to its owner's graveyard"
+    },
+    {
+      "test": "scenario issue_430_direct_ron::issue_430_attack_trigger_places_one_counter_on_a_legal_opponent_creature_only",
+      "covers": "the self-attack trigger offers only creature targets an opponent controls, places exactly one +1/+1 counter, rejects the controller's own creatures and the source, and a stale target is revalidated away at resolution"
+    },
+    {
+      "test": "issue_430_direct_ron::issue_430_sunset_saboteur_maps_menace_ward_and_attack_trigger",
+      "covers": "reviewed identity, printed P/T, the Menace keyword, Ward trigger/payment, and the controller-relative attack trigger and target group"
+    },
+    {
+      "test": "issue_430_direct_ron::issue_430_direct_ron_fingerprint_matches_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for the face"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

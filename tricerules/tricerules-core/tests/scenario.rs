@@ -556,6 +556,8 @@ mod issue_427_firebending;
 mod issue_428_choose_two;
 #[path = "scenario/issue_429_aura_restriction.rs"]
 mod issue_429_aura_restriction;
+#[path = "scenario/issue_430_direct_ron.rs"]
+mod issue_430_direct_ron;
 #[path = "scenario/issue_452_direct_ron.rs"]
 mod issue_452_direct_ron;
 #[path = "scenario/issue_452_fixed_damage_family.rs"]

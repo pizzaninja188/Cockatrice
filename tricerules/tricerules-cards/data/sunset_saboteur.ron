@@ -1,0 +1,33 @@
+// Oracle and rulings checked 2026-09-20 against pinned Scryfall oracle c3731735-2b78-4a15-bff4-4d8559401f68.
+// Handwritten typed definition promoted through the reviewed direct-RON path (#430);
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "sunset_saboteur",
+  name: "Sunset Saboteur",
+  face_id: "sunset_saboteur",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Human", "Rogue"],
+  power: 4,
+  toughness: 1,
+  keywords: [Menace],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WheneverSelfBecomesTarget(source: SpellOrAbility, source_controller: Opponent),
+      effect: [CounterTriggeringStackObjectUnlessPays(cost: DiscardCard(filter: None))],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([3]),
+      trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+      effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature, controller: Opponent)))],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target creature an opponent controls",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)
