@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "c65e804b-9222-4fa8-88d1-df06a3279f22",
+  "spans": [
+    {
+      "face_id": "flame_lash",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_removal_batch::issue_removal_flame_lash",
+      "covers": "four damage is dealt to a chosen any-target (creature or player)"
+    },
+    {
+      "test": "issue_removal_batch::issue_removal_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of flame_lash"
+    },
+    {
+      "test": "issue_removal_batch::issue_removal_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for flame_lash"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

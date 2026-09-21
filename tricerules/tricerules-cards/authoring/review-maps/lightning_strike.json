@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "f34b9bc4-7bfe-47fd-ba23-4eeeb46026eb",
+  "spans": [
+    {
+      "face_id": "lightning_strike",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_removal_batch::issue_removal_lightning_strike",
+      "covers": "three damage is dealt to a chosen any-target (creature or player)"
+    },
+    {
+      "test": "issue_removal_batch::issue_removal_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of lightning_strike"
+    },
+    {
+      "test": "issue_removal_batch::issue_removal_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for lightning_strike"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

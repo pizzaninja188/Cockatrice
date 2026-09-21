@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle b134a9e6-b004-4833-b298-10529f5a85b8.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "eriettes_lullaby",
+  name: "Eriette's Lullaby",
+  face_id: "eriettes_lullaby",
+  mana_cost: "{1}{W}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: Creature, tapped: Some(true)))),
+    GainLife(amount: 2),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target tapped creature", effect_indices: [0])])),
+)

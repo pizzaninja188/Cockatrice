@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "cf09b0af-3cf1-4486-8f65-8cfd2410314a",
+  "spans": [
+    {
+      "face_id": "deathmark",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_removal_batch::issue_removal_deathmark",
+      "covers": "a green or white creature is destroyed while a creature of another color is not a legal target"
+    },
+    {
+      "test": "issue_removal_batch::issue_removal_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of deathmark"
+    },
+    {
+      "test": "issue_removal_batch::issue_removal_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for deathmark"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle cf09b0af-3cf1-4486-8f65-8cfd2410314a.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "deathmark",
+  name: "Deathmark",
+  face_id: "deathmark",
+  mana_cost: "{B}",
+  types: ["Sorcery"],
+  spell_effect: [Destroy(subject: Chosen((any_of: Some([
+    (kind: Creature, is_color: Some(Green)),
+    (kind: Creature, is_color: Some(White)),
+  ]))))],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target green or white creature", effect_indices: [0])])),
+)

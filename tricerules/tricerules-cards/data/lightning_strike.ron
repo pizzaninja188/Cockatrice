@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle f34b9bc4-7bfe-47fd-ba23-4eeeb46026eb.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "lightning_strike",
+  name: "Lightning Strike",
+  face_id: "lightning_strike",
+  mana_cost: "{1}{R}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+)

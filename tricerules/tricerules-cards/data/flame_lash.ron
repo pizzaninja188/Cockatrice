@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle c65e804b-9222-4fa8-88d1-df06a3279f22.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "flame_lash",
+  name: "Flame Lash",
+  face_id: "flame_lash",
+  mana_cost: "{3}{R}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(amount: 4, target: (kind: AnyTarget))],
+)

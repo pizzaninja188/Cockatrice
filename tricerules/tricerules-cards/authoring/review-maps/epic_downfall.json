@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "ed5d6aba-0b8d-48b3-a84c-618f45fb67b1",
+  "spans": [
+    {
+      "face_id": "epic_downfall",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_removal_batch::issue_removal_epic_downfall",
+      "covers": "a creature with mana value 3 or greater is exiled while a mana value 2 creature is not a legal target"
+    },
+    {
+      "test": "issue_removal_batch::issue_removal_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of epic_downfall"
+    },
+    {
+      "test": "issue_removal_batch::issue_removal_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for epic_downfall"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

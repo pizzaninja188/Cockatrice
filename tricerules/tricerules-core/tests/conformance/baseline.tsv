@@ -632,10 +632,12 @@ dead_weight	0	cast	exercised
 deadly_insect	0	cast	exercised
 deadly_precision	0	cast	unsupported: required cast-cost group needs a specialized fixture
 deadly_recluse	0	cast	exercised
+death_in_the_family	0	cast	exercised
 deathcap_glade	0	ability:0	exercised
 deathcap_glade	0	land	exercised
 deathcap_marionette	0	cast	exercised
 deathgaze_cockatrice	0	cast	exercised
+deathmark	0	cast	exercised
 debris_field_crusher	0	ability:0	exercised
 debris_field_crusher	0	ability:1	exercised
 debris_field_crusher	0	cast	exercised
@@ -796,7 +798,9 @@ enter_the_enigma	0	cast	exercised
 enterprising_scallywag	0	cast	exercised
 environmental_scientist	0	cast	exercised
 epf_point_squad	0	cast	exercised
+epic_downfall	0	cast	unsupported: target group 0 needs a richer fixture
 epic_fight	0	cast	exercised
+eriettes_lullaby	0	cast	unsupported: target group 0 needs a richer fixture
 eroded_canyon	0	ability:0	exercised
 eroded_canyon	0	land	exercised
 erratic_apparition	0	cast	exercised
@@ -905,6 +909,7 @@ fisk_tower	0	ability:0	exercised
 fisk_tower	0	land	exercised
 fists_of_the_anvil	0	cast	exercised
 flame_javelin	0	cast	exercised
+flame_lash	0	cast	exercised
 flameborn_viron	0	cast	exercised
 flamecache_gecko	0	ability:0	exercised
 flamecache_gecko	0	cast	exercised
@@ -1151,6 +1156,7 @@ grab_the_prize	0	cast	exercised
 graduation_day	0	cast	exercised
 gran_pulse_ochu	0	ability:0	exercised
 gran_pulse_ochu	0	cast	exercised
+grapple_with_death	0	cast	exercised
 grappler_spider	0	cast	exercised
 grasping_longneck	0	cast	exercised
 gravblade_heavy	0	cast	exercised
@@ -1547,6 +1553,7 @@ lightning_bolt	0	cast	exercised
 lightning_elemental	0	cast	exercised
 lightning_hounds	0	cast	exercised
 lightning_stormkin	0	cast	exercised
+lightning_strike	0	cast	exercised
 lightshell_duo	0	cast	exercised
 lightshield_parry	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 lightshield_parry	0	cast	exercised
@@ -2083,6 +2090,7 @@ relic_sloth	0	cast	exercised
 reluctant_dounguard	0	cast	exercised
 renegade_demon	0	cast	exercised
 renegade_troops	0	cast	exercised
+repel_calamity	0	cast	unsupported: target group 0 needs a richer fixture
 repulsor_rays	0	cast	exercised
 reputable_merchant	0	cast	exercised
 requiting_hex	0	cast	exercised
@@ -2261,6 +2269,7 @@ segovian_angel	0	cast	exercised
 seismic_monstrosaur	0	ability:0	exercised
 seismic_monstrosaur	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 seismic_monstrosaur	0	cast	exercised
+seismic_rupture	0	cast	exercised
 seize_the_spoils	0	cast	unsupported: required cast-cost group needs a specialized fixture
 seized_from_slumber	0	cast	exercised
 selesnya_guildgate	0	ability:0	exercised

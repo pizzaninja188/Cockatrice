@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "3b1f1a57-d83a-443f-b190-03df63d2bfe6",
+  "spans": [
+    {
+      "face_id": "seismic_rupture",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_removal_batch::issue_removal_seismic_rupture",
+      "covers": "two damage is dealt to each creature without flying and no damage to creatures with flying"
+    },
+    {
+      "test": "issue_removal_batch::issue_removal_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of seismic_rupture"
+    },
+    {
+      "test": "issue_removal_batch::issue_removal_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for seismic_rupture"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

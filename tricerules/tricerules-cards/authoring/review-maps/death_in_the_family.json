@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "f599471a-31a6-4fb0-bf27-c5b707e1db6a",
+  "spans": [
+    {
+      "face_id": "death_in_the_family",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_removal_batch::issue_removal_death_in_the_family",
+      "covers": "a creature with mana value 3 or less is exiled while a mana value 4 creature is not a legal target"
+    },
+    {
+      "test": "issue_removal_batch::issue_removal_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of death_in_the_family"
+    },
+    {
+      "test": "issue_removal_batch::issue_removal_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for death_in_the_family"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

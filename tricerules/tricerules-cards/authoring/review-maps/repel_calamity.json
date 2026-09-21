@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "ba58f508-8036-496c-8a2f-c1e410165e93",
+  "spans": [
+    {
+      "face_id": "repel_calamity",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_removal_batch::issue_removal_repel_calamity",
+      "covers": "a creature whose power or whose toughness is at least 4 is destroyed while a 3/3 is not a legal target"
+    },
+    {
+      "test": "issue_removal_batch::issue_removal_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of repel_calamity"
+    },
+    {
+      "test": "issue_removal_batch::issue_removal_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for repel_calamity"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

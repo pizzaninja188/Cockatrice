@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 3b1f1a57-d83a-443f-b190-03df63d2bfe6.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "seismic_rupture",
+  name: "Seismic Rupture",
+  face_id: "seismic_rupture",
+  mana_cost: "{2}{R}",
+  types: ["Sorcery"],
+  spell_effect: [DamageAll(amount: 2, kind: (kind: Creature, excluded_keywords: [Flying]))],
+)

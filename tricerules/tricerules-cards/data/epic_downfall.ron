@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle ed5d6aba-0b8d-48b3-a84c-618f45fb67b1.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "epic_downfall",
+  name: "Epic Downfall",
+  face_id: "epic_downfall",
+  mana_cost: "{1}{B}",
+  types: ["Sorcery"],
+  spell_effect: [Exile(subject: Chosen((kind: Creature, min_mana_value: Some(3))))],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature with mana value 3 or greater", effect_indices: [0])])),
+)

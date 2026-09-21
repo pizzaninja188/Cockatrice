@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "dced5cab-1438-4264-b44c-54dc37ec73d3",
+  "spans": [
+    {
+      "face_id": "grapple_with_death",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_removal_batch::issue_removal_grapple_with_death",
+      "covers": "an artifact or creature is destroyed and its controller gains one life, while a nonartifact noncreature permanent is not a legal target"
+    },
+    {
+      "test": "issue_removal_batch::issue_removal_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of grapple_with_death"
+    },
+    {
+      "test": "issue_removal_batch::issue_removal_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for grapple_with_death"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
