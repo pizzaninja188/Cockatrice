@@ -1,0 +1,51 @@
+{
+  "format_version": 1,
+  "oracle_id": "a272f15d-caa2-40e9-894f-19638bd5f375",
+  "spans": [
+    {
+      "face_id": "plunge_into_winter",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc2_batch::issue_misc2_plunge_into_winter",
+      "covers": "up to one target creature is tapped, then the caster scrys one and draws a card; casting with no target is legal"
+    },
+    {
+      "test": "issue_misc2_batch::issue_misc2_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of plunge_into_winter"
+    },
+    {
+      "test": "issue_misc2_batch::issue_misc2_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for plunge_into_winter"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

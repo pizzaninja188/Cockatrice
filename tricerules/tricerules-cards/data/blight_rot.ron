@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle cf5b1cf9-dcd3-44d1-b8b2-338651ebb2a1.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "blight_rot",
+  name: "Blight Rot",
+  face_id: "blight_rot",
+  mana_cost: "{2}{B}",
+  types: ["Instant"],
+  spell_effect: [PutCounters(counter: MinusOneMinusOne, count: 4, subject: Chosen((kind: Creature)))],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])])),
+)

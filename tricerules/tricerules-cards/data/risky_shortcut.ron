@@ -1,0 +1,14 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle a7c55495-6aca-4d17-b61a-cab8fa38b9f4.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "risky_shortcut",
+  name: "Risky Shortcut",
+  face_id: "risky_shortcut",
+  mana_cost: "{2}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Draw(count: 2),
+    LoseLife(amount: Fixed(2), who: EachPlayer),
+  ],
+)

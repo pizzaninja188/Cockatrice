@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 3428287b-cfd5-45bc-b5f9-1e3f5a425a68.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "mind_spring",
+  name: "Mind Spring",
+  face_id: "mind_spring",
+  mana_cost: "{X}{U}{U}",
+  types: ["Sorcery"],
+  spell_effect: [Draw(count: "X")],
+)

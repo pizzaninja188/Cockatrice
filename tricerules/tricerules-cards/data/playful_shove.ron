@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 2094fb68-3859-401f-97f2-c8bae64a4822.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "playful_shove",
+  name: "Playful Shove",
+  face_id: "playful_shove",
+  mana_cost: "{1}{R}",
+  types: ["Sorcery"],
+  spell_effect: [
+    DamageTarget(amount: 1, target: (kind: AnyTarget)),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose any target", effect_indices: [0])])),
+)

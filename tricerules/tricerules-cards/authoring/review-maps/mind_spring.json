@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "3428287b-cfd5-45bc-b5f9-1e3f5a425a68",
+  "spans": [
+    {
+      "face_id": "mind_spring",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc2_batch::issue_misc2_mind_spring",
+      "covers": "the caster draws a number of cards equal to the announced X"
+    },
+    {
+      "test": "issue_misc2_batch::issue_misc2_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of mind_spring"
+    },
+    {
+      "test": "issue_misc2_batch::issue_misc2_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for mind_spring"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

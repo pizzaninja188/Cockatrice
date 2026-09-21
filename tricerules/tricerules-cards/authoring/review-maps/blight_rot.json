@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "cf5b1cf9-dcd3-44d1-b8b2-338651ebb2a1",
+  "spans": [
+    {
+      "face_id": "blight_rot",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc2_batch::issue_misc2_blight_rot",
+      "covers": "four -1/-1 counters are put on a target creature"
+    },
+    {
+      "test": "issue_misc2_batch::issue_misc2_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of blight_rot"
+    },
+    {
+      "test": "issue_misc2_batch::issue_misc2_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for blight_rot"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

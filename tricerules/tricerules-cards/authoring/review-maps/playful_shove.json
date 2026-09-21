@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "2094fb68-3859-401f-97f2-c8bae64a4822",
+  "spans": [
+    {
+      "face_id": "playful_shove",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "playful_shove",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc2_batch::issue_misc2_playful_shove",
+      "covers": "one damage is dealt to a chosen any-target and its controller draws a card"
+    },
+    {
+      "test": "issue_misc2_batch::issue_misc2_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of playful_shove"
+    },
+    {
+      "test": "issue_misc2_batch::issue_misc2_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for playful_shove"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

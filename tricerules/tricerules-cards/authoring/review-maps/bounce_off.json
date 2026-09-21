@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "d9c29e6e-5949-4599-bf74-b9539e753f76",
+  "spans": [
+    {
+      "face_id": "bounce_off",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc2_batch::issue_misc2_bounce_off",
+      "covers": "a target creature or Vehicle returns to its owner's hand while other permanents are not legal targets"
+    },
+    {
+      "test": "issue_misc2_batch::issue_misc2_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and effects of bounce_off"
+    },
+    {
+      "test": "issue_misc2_batch::issue_misc2_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for bounce_off"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

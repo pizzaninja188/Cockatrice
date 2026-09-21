@@ -1,0 +1,16 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle a272f15d-caa2-40e9-894f-19638bd5f375.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "plunge_into_winter",
+  name: "Plunge into Winter",
+  face_id: "plunge_into_winter",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    Tap(subject: Chosen((kind: Creature))),
+    Scry(count: 1),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(min: 0, max: 1, prompt: "Choose up to one target creature", effect_indices: [0])])),
+)
