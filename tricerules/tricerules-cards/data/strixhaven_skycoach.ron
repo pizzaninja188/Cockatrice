@@ -1,7 +1,7 @@
 // Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle e286a191-39d4-4073-b844-11d2aba911b4.
 // Handwritten typed definition promoted through the reviewed direct-RON path;
 // review map and packet evidence live under authoring/review-maps and build/direct-ron.
-// CR 702.9 (flying), CR 603.6a (entry trigger), CR 701.20 (optional basic-land search), and
+// CR 702.9 (flying), CR 603.6a (entry trigger), CR 701.23 (search), and
 // CR 702.122 (crew).
 (
   id: "strixhaven_skycoach",

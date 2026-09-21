@@ -1,8 +1,8 @@
 // Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 9a18fb98-796a-43b1-8157-e3afca53a1c0.
 // Handwritten typed definition promoted through the reviewed direct-RON path;
 // review map and packet evidence live under authoring/review-maps and build/direct-ron.
-// CR 609.3/701.6 (return to hand), CR 608.2b (an illegal target makes the whole spell not
-// resolve, so the draw does not happen), and CR 609.3 (this spell can't be countered).
+// CR 115.3/608.2b (return target nonland permanent; an illegal target makes the whole spell not
+// resolve, so the draw does not happen), and CR 701.5 (countering).
 (
   id: "eject",
   name: "Eject",

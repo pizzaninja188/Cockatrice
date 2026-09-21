@@ -1,7 +1,7 @@
 // Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 1a33a5c2-5aa1-48e5-95a8-d52cdce980de.
 // Handwritten typed definition promoted through the reviewed direct-RON path;
 // review map and packet evidence live under authoring/review-maps and build/direct-ron.
-// CR 601.2f/608.2i: the reduction counts creatures declared as attackers this turn, whether or
+// CR 601.2f/508.1: the reduction counts creatures declared as attackers this turn, whether or
 // not they are still on the battlefield, and cannot reduce the generic cost below {0}.
 (
   id: "rowdy_research",

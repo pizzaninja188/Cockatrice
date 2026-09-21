@@ -1,7 +1,7 @@
 // Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle bb67d0a4-864e-4f46-8538-fdd920bf0197.
 // Handwritten typed definition promoted through the reviewed direct-RON path;
 // review map and packet evidence live under authoring/review-maps and build/direct-ron.
-// CR 603.6a (entry trigger), CR 701.8 (optional rummage), CR 301.5/702.6 (Equipment and
+// CR 603.6a (entry trigger), CR 701.9 (discard), CR 301.5/702.6 (Equipment and
 // equip), and CR 613.4c (attached P/T modification).
 (
   id: "ragged_short_spear",

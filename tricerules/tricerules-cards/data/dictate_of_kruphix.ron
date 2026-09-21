@@ -1,7 +1,7 @@
 // Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle be74a4c1-d569-4203-b28a-3e2ac6a82990.
 // Handwritten typed definition promoted through the reviewed direct-RON path;
 // review map and packet evidence live under authoring/review-maps and build/direct-ron.
-// CR 702.8 (flash) and CR 603.3/121.1: each player's own draw step makes that player, not the
+// CR 702.8 (flash) and CR 121.1 (draw): each player's own draw step makes that player, not the
 // enchantment's controller, draw the additional card.
 (
   id: "dictate_of_kruphix",
