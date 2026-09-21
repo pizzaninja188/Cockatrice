@@ -743,6 +743,7 @@ duskdale_wurm	0	cast	exercised
 dusyut_earthcarver	0	cast	exercised
 dutiful_servants	0	cast	exercised
 duty_beyond_death	0	cast	unsupported: required cast-cost group needs a specialized fixture
+dwarven_castle_guard	0	cast	exercised
 dwarven_priest	0	cast	exercised
 dwarven_provisioner	0	ability:0	exercised
 dwarven_provisioner	0	cast	exercised
@@ -2220,6 +2221,7 @@ say_its_name	0	cast	exercised
 sazhs_chocobo	0	cast	exercised
 scaled_behemoth	0	cast	exercised
 scaled_wurm	0	cast	exercised
+scalestorm_summoner	0	cast	exercised
 scarblade_scout	0	cast	exercised
 scarecrow_guide	0	ability:0	exercised
 scarecrow_guide	0	cast	exercised
@@ -2597,6 +2599,7 @@ swords_to_plowshares	0	cast	exercised
 swordwise_centaur	0	cast	exercised
 sworn_guardian	0	cast	exercised
 sylvan_brushstrider	0	cast	exercised
+synapse_necromage	0	cast	exercised
 synthesizer_labship	0	ability:0	exercised
 synthesizer_labship	0	cast	exercised
 syphon_fuel	0	cast	exercised

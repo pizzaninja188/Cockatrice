@@ -1,0 +1,9 @@
+(
+  id: "dinosaur_r_3_1",
+  name: "Dinosaur",
+  face_id: "dinosaur",
+  types: ["Creature", "Dinosaur"],
+  colors: [Red],
+  power: 3,
+  toughness: 1,
+)

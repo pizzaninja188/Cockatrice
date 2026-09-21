@@ -1,0 +1,8 @@
+(
+  id: "hero_c_1_1",
+  name: "Hero",
+  face_id: "hero",
+  types: ["Creature", "Hero"],
+  power: 1,
+  toughness: 1,
+)

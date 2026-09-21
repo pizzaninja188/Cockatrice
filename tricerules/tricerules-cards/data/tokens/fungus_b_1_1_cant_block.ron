@@ -1,0 +1,10 @@
+(
+  id: "fungus_b_1_1_cant_block",
+  name: "Fungus",
+  face_id: "fungus",
+  types: ["Creature", "Fungus"],
+  colors: [Black],
+  power: 1,
+  toughness: 1,
+  static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: SelfCombatRestriction(restriction: (cant_block: true)))],
+)

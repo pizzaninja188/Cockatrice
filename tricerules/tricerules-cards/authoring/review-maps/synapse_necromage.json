@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "f5eace41-0f53-4084-8bec-1e079c04287b",
+  "spans": [
+    {
+      "face_id": "synapse_necromage",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "fungus_b_1_1_cant_block"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_465_token_blockers::issue_465_synapse_necromage",
+      "covers": "the dies trigger creates exactly two registered 1/1 black Fungus tokens that cannot block"
+    },
+    {
+      "test": "issue_465_token_blockers::issue_465_token_blockers_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of synapse_necromage"
+    },
+    {
+      "test": "issue_465_token_blockers::issue_465_token_blockers_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for synapse_necromage"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle f5eace41-0f53-4084-8bec-1e079c04287b.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "synapse_necromage",
+  name: "Synapse Necromage",
+  face_id: "synapse_necromage",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Fungus", "Wizard"],
+  power: 3,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [CreateTokens(token: "fungus_b_1_1_cant_block", count: 2)],
+  )],
+)

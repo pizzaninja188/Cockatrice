@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "55ede1d4-593d-433c-943a-4db12eeb5fa8",
+  "spans": [
+    {
+      "face_id": "scalestorm_summoner",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseResolutionBranch",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldAggregate",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/requirement"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0"
+    }
+  ],
+  "tokens": [
+    "dinosaur_r_3_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_465_token_blockers::issue_465_scalestorm_summoner",
+      "covers": "the attack trigger is placed even with no creature that has power 4 or greater, creates a registered 3/1 red Dinosaur token only when the controller has one as the ability resolves (power added in response qualifies), and creates none when the last such creature leaves before resolution"
+    },
+    {
+      "test": "issue_465_token_blockers::issue_465_token_blockers_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of scalestorm_summoner"
+    },
+    {
+      "test": "issue_465_token_blockers::issue_465_token_blockers_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for scalestorm_summoner"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

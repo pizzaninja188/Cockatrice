@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "b51e0ae3-126b-4b7e-9dd1-818a5b8e512a",
+  "spans": [
+    {
+      "face_id": "dwarven_castle_guard",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "hero_c_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_465_token_blockers::issue_465_dwarven_castle_guard",
+      "covers": "the dies trigger creates one registered 1/1 colorless Hero creature token"
+    },
+    {
+      "test": "issue_465_token_blockers::issue_465_token_blockers_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of dwarven_castle_guard"
+    },
+    {
+      "test": "issue_465_token_blockers::issue_465_token_blockers_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for dwarven_castle_guard"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
