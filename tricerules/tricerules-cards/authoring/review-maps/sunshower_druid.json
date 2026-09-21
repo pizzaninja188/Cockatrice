@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "7a70faf5-cc04-402b-92e3-67746788f510",
+  "spans": [
+    {
+      "face_id": "sunshower_druid",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_etb_batch::issue_etb_sunshower_druid",
+      "covers": "the entry trigger puts one +1/+1 counter on a target creature and gains one life; if the target is illegal at resolution the trigger does not resolve and no life is gained"
+    },
+    {
+      "test": "issue_etb_batch::issue_etb_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of sunshower_druid"
+    },
+    {
+      "test": "issue_etb_batch::issue_etb_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for sunshower_druid"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

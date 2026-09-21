@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "87f1a840-021c-4699-a2c4-f2926daf98eb",
+  "spans": [
+    {
+      "face_id": "hero_in_training",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldCreatureCount",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1/ChooseResolutionBranch/branches/0/requirement"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1/ChooseResolutionBranch/branches/0/effects/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_etb_batch::issue_etb_hero_in_training",
+      "covers": "the entry trigger draws a card and gains two life only when the controller has another Hero"
+    },
+    {
+      "test": "issue_etb_batch::issue_etb_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of hero_in_training"
+    },
+    {
+      "test": "issue_etb_batch::issue_etb_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for hero_in_training"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

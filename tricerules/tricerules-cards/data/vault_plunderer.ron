@@ -1,0 +1,22 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 80e5d768-cc1f-48f8-b0fe-ed974e4d1a56.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "vault_plunderer",
+  name: "Vault Plunderer",
+  face_id: "vault_plunderer",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Human", "Rogue"],
+  power: 3,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      TargetPlayerDraws(count: 1, target: (kind: AnyPlayer)),
+      TargetPlayerLosesLife(amount: 1, target: (kind: AnyPlayer)),
+    ],
+    targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target player", effect_indices: [0, 1])])),
+  )],
+)

@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 467d6acb-9a3c-433f-836d-54e0e670b7d0.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "head_of_the_homestead",
+  name: "Head of the Homestead",
+  face_id: "head_of_the_homestead",
+  mana_cost: "{3}{G/W}{G/W}",
+  types: ["Creature", "Rabbit", "Citizen"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "rabbit_w_1_1", count: 2)],
+  )],
+)

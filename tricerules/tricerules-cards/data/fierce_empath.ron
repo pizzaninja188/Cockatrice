@@ -1,0 +1,24 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 5104053a-d394-4b00-82a4-60fd9f051a6e.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "fierce_empath",
+  name: "Fierce Empath",
+  face_id: "fierce_empath",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Elf"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [SearchLibrary(
+      optional: true,
+      filter: Some((card_type: Some(Creature), min_mana_value: Some(6))),
+      destination: Hand,
+      shuffle: true,
+      reveal: true,
+    )],
+  )],
+)

@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 31816924-1430-4581-86e8-325e2ca16217.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "agents_of_hydra",
+  name: "Agents of HYDRA",
+  face_id: "agents_of_hydra",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Human", "Spy", "Villain"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [CreateTokens(token: "villain_b_2_1_menace", count: 1)],
+  )],
+)

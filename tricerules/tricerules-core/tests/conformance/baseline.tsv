@@ -40,6 +40,7 @@ agate-blade_assassin	0	cast	exercised
 ageless_guardian	0	cast	exercised
 agent_maria_hill	0	cast	exercised
 agent_of_atlas	0	cast	exercised
+agents_of_hydra	0	cast	exercised
 aggressive_mammoth	0	cast	exercised
 aggressive_negotiations	0	cast	exercised
 air_elemental	0	cast	exercised
@@ -868,6 +869,7 @@ field_creeper	0	cast	exercised
 fields_of_strife	0	ability:0	exercised
 fields_of_strife	0	ability:1	exercised
 fields_of_strife	0	land	exercised
+fierce_empath	0	cast	exercised
 fiery_hellhound	0	ability:0	exercised
 fiery_hellhound	0	cast	exercised
 fiery_temper	0	cast	exercised
@@ -1209,6 +1211,7 @@ hawkeater_moth	0	cast	exercised
 hawkeye,_clint_barton	0	cast	exercised
 haywire_mite	0	ability:0	exercised
 haywire_mite	0	cast	exercised
+head_of_the_homestead	0	cast	exercised
 headless_horseman	0	cast	exercised
 headwater_sentries	0	cast	exercised
 healer_of_the_glade	0	cast	exercised
@@ -1242,6 +1245,7 @@ hercules,_prince_of_power	0	ability:0	exercised
 hercules,_prince_of_power	0	cast	exercised
 heritage_reclamation	0	cast	exercised
 hermetic_study	0	cast	exercised
+hero_in_training	0	cast	exercised
 heros_downfall	0	cast	exercised
 hexplate_golem	0	cast	exercised
 hidden_grotto	0	ability:0	exercised
@@ -1941,6 +1945,7 @@ prayer_of_binding	0	cast	exercised
 preordain	0	cast	exercised
 pretending_poxbearers	0	cast	exercised
 prey_upon	0	cast	exercised
+prickly_pair	0	cast	exercised
 prideful_feastling	0	cast	exercised
 prideful_parent	0	cast	exercised
 pridemalkin	0	cast	exercised
@@ -2284,6 +2289,7 @@ shepherd_of_the_lost	0	cast	exercised
 shepherding_spirits	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 shepherding_spirits	0	cast	exercised
 shining_aerosaur	0	cast	exercised
+shinra_reinforcements	0	cast	exercised
 shipwreck_dowser	0	cast	exercised
 shivan_dragon	0	ability:0	exercised
 shivan_dragon	0	cast	exercised
@@ -2544,6 +2550,7 @@ sundown_pass	0	ability:0	exercised
 sundown_pass	0	land	exercised
 sungrace_pegasus	0	cast	exercised
 sunset_saboteur	0	cast	exercised
+sunshower_druid	0	cast	exercised
 sunspire_griffin	0	cast	exercised
 suntail_hawk	0	cast	exercised
 super_speed	0	cast	exercised
@@ -2835,6 +2842,7 @@ vassal_soul	0	cast	exercised
 vastwood_gorger	0	cast	exercised
 vault_of_whispers	0	ability:0	exercised
 vault_of_whispers	0	land	exercised
+vault_plunderer	0	cast	exercised
 vault_skirge	0	cast	exercised
 vector,_imperial_capital	0	ability:0	exercised
 vector,_imperial_capital	0	land	exercised

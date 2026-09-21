@@ -1,0 +1,38 @@
+{
+  "format_version": 1,
+  "oracle_id": "467d6acb-9a3c-433f-836d-54e0e670b7d0",
+  "spans": [
+    {
+      "face_id": "head_of_the_homestead",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "rabbit_w_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_etb_batch::issue_etb_head_of_the_homestead",
+      "covers": "the entry trigger creates two registered 1/1 white Rabbit tokens"
+    },
+    {
+      "test": "issue_etb_batch::issue_etb_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of head_of_the_homestead"
+    },
+    {
+      "test": "issue_etb_batch::issue_etb_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for head_of_the_homestead"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

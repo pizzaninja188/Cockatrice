@@ -1,0 +1,38 @@
+{
+  "format_version": 1,
+  "oracle_id": "4ce8e0d0-6a3e-4c47-a7b7-c1b1ea1b9426",
+  "spans": [
+    {
+      "face_id": "prickly_pair",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "mercenary_r_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_etb_batch::issue_etb_prickly_pair",
+      "covers": "the entry trigger creates one registered 1/1 red Mercenary token"
+    },
+    {
+      "test": "issue_etb_batch::issue_etb_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of prickly_pair"
+    },
+    {
+      "test": "issue_etb_batch::issue_etb_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for prickly_pair"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

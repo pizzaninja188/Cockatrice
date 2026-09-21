@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "6cfe63ac-3581-461b-8ed3-3e231851e3f8",
+  "spans": [
+    {
+      "face_id": "shinra_reinforcements",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Mill",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_etb_batch::issue_etb_shinra_reinforcements",
+      "covers": "the entry trigger mills exactly the top three cards and gains exactly three life"
+    },
+    {
+      "test": "issue_etb_batch::issue_etb_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of shinra_reinforcements"
+    },
+    {
+      "test": "issue_etb_batch::issue_etb_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for shinra_reinforcements"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

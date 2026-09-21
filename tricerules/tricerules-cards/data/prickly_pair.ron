@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 4ce8e0d0-6a3e-4c47-a7b7-c1b1ea1b9426.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "prickly_pair",
+  name: "Prickly Pair",
+  face_id: "prickly_pair",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Plant", "Mercenary"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "mercenary_r_1_1", count: 1)],
+  )],
+)
