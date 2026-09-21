@@ -2,7 +2,7 @@
 // Handwritten typed definition promoted through the reviewed direct-RON path;
 // review map and packet evidence live under authoring/review-maps and build/direct-ron.
 // CR 614.1c (enters tapped), CR 605 (mana abilities), CR 106.1b (any-color mana), and
-// CR 301.5/701.3 with CR 118.12a (sacrifice-as-cost to draw).
+// CR 205.3 (Clue subtype) and CR 701.21 (sacrifice) with CR 118.12a (sacrifice-as-cost to draw).
 (
   id: "scene_of_the_crime",
   name: "Scene of the Crime",

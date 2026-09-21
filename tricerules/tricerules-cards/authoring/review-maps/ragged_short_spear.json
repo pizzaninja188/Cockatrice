@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "bb67d0a4-864e-4f46-8538-fdd920bf0197",
+  "spans": [
+    {
+      "face_id": "ragged_short_spear",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "ragged_short_spear",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "ragged_short_spear",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DrawDiscard",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc13_batch::issue_misc13_ragged_short_spear_rummages_and_equips_for_two_power",
+      "covers": "the optional entry rummage discards a private card then draws two, and equip grants +2/+0"
+    },
+    {
+      "test": "issue_misc13_batch::issue_misc13_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, optional entry rummage, attached +2/+0, and equip of Ragged Short Spear"
+    },
+    {
+      "test": "issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Ragged Short Spear"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

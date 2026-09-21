@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "1a33a5c2-5aa1-48e5-95a8-d52cdce980de",
+  "spans": [
+    {
+      "face_id": "rowdy_research",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cost_modifiers/0"
+      ]
+    },
+    {
+      "face_id": "rowdy_research",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellCostModifier::GenericReduction",
+      "typed_path": "/faces/0/cost_modifiers/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc13_batch::issue_misc13_rowdy_research_reduces_per_attacker_and_draws_three",
+      "covers": "the cost is reduced by one per declared attacker and the spell draws three cards"
+    },
+    {
+      "test": "issue_misc13_batch::issue_misc13_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, per-attacker generic reduction, and draw three of Rowdy Research"
+    },
+    {
+      "test": "issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Rowdy Research"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

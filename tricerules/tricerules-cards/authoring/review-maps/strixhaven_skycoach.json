@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "e286a191-39d4-4073-b844-11d2aba911b4",
+  "spans": [
+    {
+      "face_id": "strixhaven_skycoach",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "strixhaven_skycoach",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "strixhaven_skycoach",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseResolutionBranch",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::TapPermanents",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc13_batch::issue_misc13_strixhaven_skycoach_searches_and_crews",
+      "covers": "the optional entry branch searches a basic land into hand and Crew 2 animates the Vehicle"
+    },
+    {
+      "test": "issue_misc13_batch::issue_misc13_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flying, the optional basic-land search entry trigger, and Crew 2 of Strixhaven Skycoach"
+    },
+    {
+      "test": "issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Strixhaven Skycoach"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

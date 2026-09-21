@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "53a4d9ee-6dfa-4a8b-a1e4-7f671a666188",
+  "spans": [
+    {
+      "face_id": "aurons_inspiration",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "aurons_inspiration",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc13_batch::issue_misc13_aurons_inspiration_pumps_attackers_and_flashbacks",
+      "covers": "attacking creatures get +2/+0 and the card can be flashback-cast from the graveyard, then is exiled"
+    },
+    {
+      "test": "issue_misc13_batch::issue_misc13_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, attacking-creature pump, and the flashback alternative cost of Auron's Inspiration"
+    },
+    {
+      "test": "issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Auron's Inspiration"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

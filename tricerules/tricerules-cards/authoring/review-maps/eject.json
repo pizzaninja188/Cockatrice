@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "9a18fb98-796a-43b1-8157-e3afca53a1c0",
+  "spans": [
+    {
+      "face_id": "eject",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "eject",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "eject",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SpellCannotBeCountered",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc13_batch::issue_misc13_eject_cannot_be_countered_and_bounces_a_nonland_permanent",
+      "covers": "Eject survives an opposing counterspell, bounces a nonland permanent, draws, and rejects a land target"
+    },
+    {
+      "test": "issue_misc13_batch::issue_misc13_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, can't-be-countered, the nonland-permanent bounce and its targeting, and the draw of Eject"
+    },
+    {
+      "test": "issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Eject"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

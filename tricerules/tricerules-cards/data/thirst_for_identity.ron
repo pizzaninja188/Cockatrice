@@ -1,7 +1,7 @@
 // Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 045ece1e-23aa-4122-8726-86b2af4345ba.
 // Handwritten typed definition promoted through the reviewed direct-RON path;
 // review map and packet evidence live under authoring/review-maps and build/direct-ron.
-// CR 121.1 (draw), CR 701.8 (discard), and CR 118.12a (the one-card discard is a
+// CR 121.1 (draw), CR 701.9 (discard), and CR 118.12a (the one-card discard is a
 // resolution-time alternative, not a cast cost).
 (
   id: "thirst_for_identity",

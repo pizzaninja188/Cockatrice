@@ -1,0 +1,27 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 9a18fb98-796a-43b1-8157-e3afca53a1c0.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 609.3/701.6 (return to hand), CR 608.2b (an illegal target makes the whole spell not
+// resolve, so the draw does not happen), and CR 609.3 (this spell can't be countered).
+(
+  id: "eject",
+  name: "Eject",
+  face_id: "eject",
+  mana_cost: "{3}{U}",
+  types: ["Instant"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: SpellCannotBeCountered,
+  )],
+  spell_effect: [
+    ReturnToOwnersHand(subject: Chosen((kind: AnyPermanent, excluded_permanent_types: [Land]))),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target nonland permanent",
+    effect_indices: [0],
+  )])),
+)

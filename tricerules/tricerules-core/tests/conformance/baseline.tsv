@@ -151,6 +151,7 @@ atmospheric_greenhouse	0	cast	exercised
 attentive_sunscribe	0	cast	exercised
 attercop	0	cast	exercised
 audacious_thief	0	cast	exercised
+aurons_inspiration	0	cast	exercised
 auroral_procession	0	cast	exercised
 avacynian_priest	0	ability:0	exercised
 avacynian_priest	0	cast	exercised
@@ -694,10 +695,14 @@ deserts_due	0	cast	exercised
 desolation_prowler	0	ability:0	exercised
 desolation_prowler	0	cast	exercised
 destructive_tampering	0	cast	exercised
+detention_chariot	0	ability:0	unsupported: nonmana costs need additional fixture resources
+detention_chariot	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+detention_chariot	0	cast	exercised
 devilthorn_fox	0	cast	exercised
 devoted_hero	0	cast	exercised
 devout_monk	0	cast	exercised
 diabolic_edict	0	cast	exercised
+dictate_of_kruphix	0	cast	exercised
 didact_echo	0	cast	exercised
 dimension_x	0	ability:0	exercised
 dimension_x	0	land	exercised
@@ -793,6 +798,7 @@ eclipsed_elf	0	cast	exercised
 eclipsed_merrow	0	cast	exercised
 eddymurk_crab	0	cast	exercised
 edgewall_pack	0	cast	exercised
+eject	0	cast	exercised
 ekundu_griffin	0	cast	exercised
 elder_auntie	0	cast	exercised
 elderfang_disciple	0	cast	exercised
@@ -2059,6 +2065,7 @@ protective_response	0	cast	unsupported: target group 0 needs a richer fixture
 prowcatcher_specialist	0	ability:0	exercised
 prowcatcher_specialist	0	cast	exercised
 prowling_caracal	0	cast	exercised
+pterafractyl	0	cast	exercised
 pulse_tracker	0	cast	exercised
 pumpkin_bombardment	0	cast	unsupported: required cast-cost group needs a specialized fixture
 punk_frogs	0	cast	exercised
@@ -2096,6 +2103,8 @@ radiant_strike	0	cast	exercised
 ragefire	0	cast	exercised
 ragged_playmate	0	ability:0	exercised
 ragged_playmate	0	cast	exercised
+ragged_short_spear	0	ability:0	exercised
+ragged_short_spear	0	cast	exercised
 raging_bull	0	cast	exercised
 raging_cougar	0	cast	exercised
 raging_goblin	0	cast	exercised
@@ -2242,6 +2251,7 @@ rover_blades	0	ability:1	unsupported: payment preview rejected: illegal command:
 rover_blades	0	cast	exercised
 roving_harper	0	cast	exercised
 rowan_treefolk	0	cast	exercised
+rowdy_research	0	cast	exercised
 rowdy_snowballers	0	cast	exercised
 royal_assassin	0	ability:0	unsupported: target group 0 needs a richer fixture
 royal_assassin	0	cast	exercised
@@ -2643,6 +2653,8 @@ streetbreaker_wurm	0	cast	exercised
 striped_bears	0	cast	exercised
 strix_lookout	0	ability:0	exercised
 strix_lookout	0	cast	exercised
+strixhaven_skycoach	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+strixhaven_skycoach	0	cast	exercised
 submerged_boneyard	0	ability:0	exercised
 submerged_boneyard	0	land	exercised
 subterranean_cavern	0	ability:0	exercised

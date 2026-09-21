@@ -1,7 +1,7 @@
 // Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 2343ebff-edf4-4132-ad9e-7800f8014072.
 // Handwritten typed definition promoted through the reviewed direct-RON path;
 // review map and packet evidence live under authoring/review-maps and build/direct-ron.
-// CR 115.1a/115.3 (targeted artifact), CR 701.7 (destroy), and CR 702.29 (cycling is a
+// CR 115.1a/115.3 (targeted artifact), CR 701.8 (destroy), and CR 702.29 (cycling is a
 // hand-zone activated ability that discards this card as a cost).
 (
   id: "skycrash",

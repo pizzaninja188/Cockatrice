@@ -1,7 +1,7 @@
 // Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 68930fb6-d833-40cf-8917-1a1bf60edbe3.
 // Handwritten typed definition promoted through the reviewed direct-RON path;
 // review map and packet evidence live under authoring/review-maps and build/direct-ron.
-// CR 303.4 (Auras), CR 702.8 (flash), CR 702.19 (reach), and CR 603.6c/700.4: the
+// CR 303.4 (Auras), CR 702.8 (flash), CR 702.17 (reach), and CR 603.6c/700.4: the
 // self-graveyard trigger fires only for a battlefield-to-graveyard move. An Aura spell
 // countered or fizzled from the stack is put into the graveyard from the stack and does not
 // trigger it (2024-04-12 ruling).

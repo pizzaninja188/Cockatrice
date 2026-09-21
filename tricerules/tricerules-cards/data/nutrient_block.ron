@@ -1,7 +1,7 @@
 // Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 04a0382f-7e4e-4450-ae70-18999379d875.
 // Handwritten typed definition promoted through the reviewed direct-RON path;
 // review map and packet evidence live under authoring/review-maps and build/direct-ron.
-// CR 702.12b (indestructible), CR 301.5/701.3 (Food sacrifice), and CR 603.6c/700.4:
+// CR 702.12b (indestructible), CR 205.3 (Food subtype) and CR 701.21 (sacrifice), and CR 603.6c/700.4:
 // "put into a graveyard from the battlefield" is the graveyard zone change, so a
 // non-creature permanent uses the same dies-event trigger.
 (

@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "be74a4c1-d569-4203-b28a-3e2ac6a82990",
+  "spans": [
+    {
+      "face_id": "dictate_of_kruphix",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "dictate_of_kruphix",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfDrawStep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc13_batch::issue_misc13_dictate_of_kruphix_draws_for_each_player",
+      "covers": "each player draws an additional card in their own draw step while the controller does not draw on the opponent's step"
+    },
+    {
+      "test": "issue_misc13_batch::issue_misc13_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flash, and the each-player draw-step trigger of Dictate of Kruphix"
+    },
+    {
+      "test": "issue_misc13_batch::issue_misc13_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Dictate of Kruphix"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,26 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle cca03b76-dd3c-4228-b97a-f7fa20819b2e.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.9 (flying), CR 614.1c/122.6 (enters with X counters, X from the chosen value), and
+// CR 603.6a (entry trigger).
+(
+  id: "pterafractyl",
+  name: "Pterafractyl",
+  face_id: "pterafractyl",
+  mana_cost: "{X}{G}{U}",
+  types: ["Creature", "Dinosaur", "Fractal"],
+  power: 1,
+  toughness: 0,
+  keywords: [Flying],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: EntersWithCounters(counter: PlusOnePlusOne, amount: "X"),
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([3]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [GainLife(amount: 2)],
+  )],
+)

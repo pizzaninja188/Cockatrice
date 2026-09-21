@@ -1,0 +1,14 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 53a4d9ee-6dfa-4a8b-a1e4-7f671a666188.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 508.1k/611.2c/613.4c (snapshot attacking creatures as this resolves) and CR 702.34
+// (flashback is an alternate cast from the graveyard that exiles the card afterward).
+(
+  id: "aurons_inspiration",
+  name: "Auron's Inspiration",
+  face_id: "aurons_inspiration",
+  mana_cost: "{2}{W}",
+  flashback_cost: Some("{2}{W}{W}"),
+  types: ["Instant"],
+  spell_effect: [PumpAll(filter: (attacking: true), power: 2, toughness: 0)],
+)
