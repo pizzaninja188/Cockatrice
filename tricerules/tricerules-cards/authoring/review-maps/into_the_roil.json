@@ -1,0 +1,90 @@
+{
+  "format_version": 1,
+  "oracle_id": "c2898bbd-82a4-4d26-b6ee-169b0ebe71b4",
+  "spans": [
+    {
+      "face_id": "into_the_roil",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "into_the_roil",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting/groups/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostGroupDef",
+      "typed_path": "/faces/0/cast_cost_groups/0"
+    },
+    {
+      "symbol": "CastCostOptionDef::Mana",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter.excluded_permanent_types",
+      "typed_path": "/faces/0/spell_effect/0/ReturnToOwnersHand/subject/Chosen/excluded_permanent_types"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "Amount::CastCost",
+      "typed_path": "/faces/0/spell_effect/1/Draw/count"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_294_direct_ron::issue_294_base_and_kicked_casts_bounce_then_optionally_draw",
+      "covers": "base and kicked casts of the registered card; the additional {1}{U} is paid at cast time with a stable receipt; the shared target returns to its owner's hand; exactly one draw happens only when kicked"
+    },
+    {
+      "test": "scenario issue_294_direct_ron::issue_294_return_uses_the_owner_not_the_controller",
+      "covers": "CR 400.3 owner-relative return for a permanent owned by P0 and controlled by P1"
+    },
+    {
+      "test": "scenario issue_294_direct_ron::issue_294_rejects_land_targets_and_unfunded_kicker_atomically",
+      "covers": "land targets and an unfunded announced kicker are rejected without partial mutation; a funded base cast is then accepted as a positive control"
+    },
+    {
+      "test": "scenario issue_294_direct_ron::issue_294_an_illegal_sole_target_prevents_bounce_and_kicked_draw",
+      "covers": "CR 608.2b sole-target invalidation before resolution fizzles the kicked spell with no draw"
+    },
+    {
+      "test": "scenario issue_294_direct_ron::issue_294_a_countered_kicked_cast_never_bounces_or_draws",
+      "covers": "a countered kicked cast never resolves and never draws while the cast-time kicker payment stays spent"
+    },
+    {
+      "test": "scenario issue_294_direct_ron::issue_294_a_copy_of_a_kicked_spell_is_kicked_without_repaying",
+      "covers": "CR 707.10 copy keeps the announced kicker receipt, resolves kicked for its controller, and never repays the additional cost"
+    },
+    {
+      "test": "issue_294_direct_ron::issue_294_direct_ron_registers_both_reviewed_handwritten_cards",
+      "covers": "reviewed identity, mana cost, type, colors, kicker group/option, ordered effects, and the shared sole nonland-permanent target group"
+    },
+    {
+      "test": "issue_294_direct_ron::issue_294_direct_ron_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprints for both faces"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

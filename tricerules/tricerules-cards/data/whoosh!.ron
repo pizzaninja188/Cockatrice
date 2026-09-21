@@ -1,0 +1,22 @@
+// Oracle and rulings checked 2026-09-20 against pinned Scryfall oracle 855353e2-b686-482a-b987-c6ae456f088c.
+// Handwritten typed definition promoted through the reviewed direct-RON path (#294);
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "whoosh!",
+  name: "Whoosh!",
+  face_id: "whoosh",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "kicker",
+    presentation: OracleLines([1]),
+    min: 0,
+    max: 1,
+    options: [Mana(option_id: "kicker", presentation: OracleLines([1]), kind: Kicker, cost: "{1}{U}")],
+  )],
+  spell_effect: [
+    ReturnToOwnersHand(subject: Chosen((kind: AnyPermanent, excluded_permanent_types: [Land]))),
+    Draw(who: Controller, count: CastCost(cast_cost: (group_id: "kicker", option_id: "kicker"), when_true: 1, otherwise: 0)),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target nonland permanent", effect_indices: [0])])),
+)
