@@ -1177,6 +1177,7 @@ gongaga,_reactor_town	0	ability:0	exercised
 gongaga,_reactor_town	0	land	exercised
 goobbue_gardener	0	ability:0	exercised
 goobbue_gardener	0	cast	exercised
+good-fortune_unicorn	0	cast	exercised
 gore_swine	0	cast	exercised
 gorehorn_raider	0	cast	exercised
 gorging_vulture	0	cast	exercised
@@ -1232,6 +1233,7 @@ gurmag_nightwatch	0	cast	exercised
 gurmag_swiftwing	0	cast	exercised
 gutless_plunderer	0	cast	exercised
 gutter_skulk	0	cast	exercised
+guttersnipe	0	cast	exercised
 halberdier	0	cast	exercised
 hallowed_fountain	0	ability:0	exercised
 hallowed_fountain	0	land	exercised
@@ -1580,6 +1582,7 @@ library_of_leng	0	cast	exercised
 life_goes_on	0	cast	exercised
 lifecreed_duo	0	cast	exercised
 lightfoot_technique	0	cast	exercised
+lightless_evangel	0	cast	exercised
 lightning_angel	0	cast	exercised
 lightning_bolt	0	cast	exercised
 lightning_elemental	0	cast	exercised
@@ -1652,6 +1655,7 @@ make_your_move	0	cast	exercised
 makeshift_battalion	0	cast	exercised
 makindi_aeronaut	0	cast	exercised
 makindi_griffin	0	cast	exercised
+malamet_brawler	0	cast	exercised
 malamet_scythe	0	ability:0	exercised
 malamet_scythe	0	cast	exercised
 malamet_veteran	0	cast	exercised
@@ -1764,6 +1768,7 @@ monstrous_growth	0	cast	exercised
 moon-vigil_adherents	0	cast	exercised
 moon_heron	0	cast	exercised
 moon_sprite	0	cast	exercised
+moonglove_extractor	0	cast	exercised
 moonglove_winnower	0	cast	exercised
 moonlit_lamenter	0	ability:0	unsupported: nonmana costs need additional fixture resources
 moonlit_lamenter	0	cast	exercised
@@ -1842,6 +1847,7 @@ nomad_outpost	0	ability:0	exercised
 nomad_outpost	0	land	exercised
 noose_constrictor	0	ability:0	exercised
 noose_constrictor	0	cast	exercised
+nori,_teller_of_tales	0	cast	exercised
 north_pole_gates	0	ability:0	exercised
 north_pole_gates	0	ability:1	exercised
 north_pole_gates	0	land	exercised
@@ -2508,6 +2514,7 @@ spiral_into_solitude	0	cast	exercised
 spire_monitor	0	cast	exercised
 spirebluff_canal	0	ability:0	exercised
 spirebluff_canal	0	land	exercised
+spirit_mascot	0	cast	exercised
 spirited_companion	0	cast	exercised
 spitfire_lagac	0	cast	exercised
 sporecap_spider	0	cast	exercised
@@ -2675,6 +2682,7 @@ talruum_minotaur	0	cast	exercised
 tangle_mantis	0	cast	exercised
 tangle_spider	0	cast	exercised
 tanglespan_lookout	0	cast	exercised
+tanufel_rimespeaker	0	cast	exercised
 taoist_hermit	0	cast	exercised
 tasseled_dromedary	0	cast	exercised
 tatterkite	0	cast	exercised

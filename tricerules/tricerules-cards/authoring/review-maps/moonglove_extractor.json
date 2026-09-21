@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "980affa7-6308-4acd-af64-f804e574a89b",
+  "spans": [
+    {
+      "face_id": "moonglove_extractor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc7_batch::issue_misc7_moonglove_extractor_draws_and_loses_life_on_attack",
+      "covers": "attacking draws a card and loses the controller 1 life"
+    },
+    {
+      "test": "issue_misc7_batch::issue_misc7_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc7_moonglove_extractor_draws_and_loses_life_on_attack"
+    },
+    {
+      "test": "issue_misc7_batch::issue_misc7_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc7_moonglove_extractor_draws_and_loses_life_on_attack"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

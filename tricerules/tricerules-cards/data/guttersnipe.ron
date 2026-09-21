@@ -1,0 +1,23 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle c6bdaf76-6a03-4695-9c4b-f040e73435af.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// 2024-11-08 rulings: the trigger resolves before the spell that caused it and fires even if
+// that spell is countered; in Two-Headed Giant each opposing team member is an opponent.
+(
+  id: "guttersnipe",
+  name: "Guttersnipe",
+  face_id: "guttersnipe",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Goblin", "Shaman"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerCastsSpell(
+      caster: Controller,
+      filter: (card_type: Some(InstantOrSorcery)),
+    ),
+    effect: [DamagePlayer(amount: 2, who: EachOpponent)],
+  )],
+)

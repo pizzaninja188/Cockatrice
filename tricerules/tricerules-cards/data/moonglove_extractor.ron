@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 980affa7-6308-4acd-af64-f804e574a89b.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "moonglove_extractor",
+  name: "Moonglove Extractor",
+  face_id: "moonglove_extractor",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Elf", "Warlock"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [Draw(count: 1), LoseLife(amount: Fixed(1))],
+  )],
+)

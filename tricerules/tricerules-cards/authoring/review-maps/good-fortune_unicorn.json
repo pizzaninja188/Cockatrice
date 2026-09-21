@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "1e0cdff3-3ec5-41fc-8053-f072bae156b3",
+  "spans": [
+    {
+      "face_id": "good_fortune_unicorn",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc7_batch::issue_misc7_good_fortune_unicorn_counters_an_entering_creature",
+      "covers": "another creature the controller controls entering puts a +1/+1 counter on that creature; the source and noncreatures are excluded"
+    },
+    {
+      "test": "issue_misc7_batch::issue_misc7_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc7_good_fortune_unicorn_counters_an_entering_creature"
+    },
+    {
+      "test": "issue_misc7_batch::issue_misc7_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc7_good_fortune_unicorn_counters_an_entering_creature"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

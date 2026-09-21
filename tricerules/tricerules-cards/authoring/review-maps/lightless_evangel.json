@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "b162ccf8-e0c2-46ae-84e7-dff2b6fceec1",
+  "spans": [
+    {
+      "face_id": "lightless_evangel",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPlayerSacrificesPermanent",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc7_batch::issue_misc7_lightless_evangel_counters_on_a_sacrifice",
+      "covers": "sacrificing another creature or artifact puts a +1/+1 counter on the source; sacrificing a land does not"
+    },
+    {
+      "test": "issue_misc7_batch::issue_misc7_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc7_lightless_evangel_counters_on_a_sacrifice"
+    },
+    {
+      "test": "issue_misc7_batch::issue_misc7_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc7_lightless_evangel_counters_on_a_sacrifice"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 1e0cdff3-3ec5-41fc-8053-f072bae156b3.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "good-fortune_unicorn",
+  name: "Good-Fortune Unicorn",
+  face_id: "good_fortune_unicorn",
+  mana_cost: "{1}{G}{W}",
+  types: ["Creature", "Unicorn"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature), exclude_source: true),
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: TriggerObject)],
+  )],
+)

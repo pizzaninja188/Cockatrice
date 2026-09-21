@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "06905dfb-b2df-4849-8848-fd3c964aa8c9",
+  "spans": [
+    {
+      "face_id": "malamet_brawler",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc7_batch::issue_misc7_malamet_brawler_grants_trample_to_an_attacker",
+      "covers": "attacking grants a target attacking creature trample; a nonattacking creature is rejected"
+    },
+    {
+      "test": "issue_misc7_batch::issue_misc7_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc7_malamet_brawler_grants_trample_to_an_attacker"
+    },
+    {
+      "test": "issue_misc7_batch::issue_misc7_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc7_malamet_brawler_grants_trample_to_an_attacker"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "34c572b2-dccf-43d9-a9c4-846653ad22da",
+  "spans": [
+    {
+      "face_id": "spirit_mascot",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverCardsLeaveGraveyard",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc7_batch::issue_misc7_spirit_mascot_counters_when_a_card_leaves_the_graveyard",
+      "covers": "a card leaving the controller's graveyard puts a +1/+1 counter on the source; a card leaving an opponent's graveyard does not"
+    },
+    {
+      "test": "issue_misc7_batch::issue_misc7_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of issue_misc7_spirit_mascot_counters_when_a_card_leaves_the_graveyard"
+    },
+    {
+      "test": "issue_misc7_batch::issue_misc7_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for issue_misc7_spirit_mascot_counters_when_a_card_leaves_the_graveyard"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

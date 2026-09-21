@@ -1,0 +1,28 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 03253076-9add-4efb-9227-b0a062c86534.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "nori,_teller_of_tales",
+  name: "Nori, Teller of Tales",
+  face_id: "nori_teller_of_tales",
+  mana_cost: "{1}{R/W}",
+  types: ["Creature", "Dwarf", "Bard"],
+  supertypes: ["Legendary"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [GrantKeywords(
+      subject: Chosen((kind: Creature, combat_role: Attacking)),
+      keywords: [FirstStrike],
+    )],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target attacking creature",
+      effect_indices: [0],
+    )])),
+  )],
+)

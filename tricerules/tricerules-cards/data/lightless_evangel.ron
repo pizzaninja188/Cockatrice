@@ -1,0 +1,24 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle b162ccf8-e0c2-46ae-84e7-dff2b6fceec1.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "lightless_evangel",
+  name: "Lightless Evangel",
+  face_id: "lightless_evangel",
+  mana_cost: "{1}{B}",
+  types: ["Creature", "Vampire", "Cleric"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerSacrificesPermanent(
+      player: Controller,
+      filter: (exclude_source: true, any_of: Some([
+        (permanent_type: Some(Creature)),
+        (permanent_type: Some(Artifact)),
+      ])),
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

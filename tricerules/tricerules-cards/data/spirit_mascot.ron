@@ -1,0 +1,23 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 34c572b2-dccf-43d9-a9c4-846653ad22da.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// 2026-03-20 ruling: simultaneous departures are one event, so `cardinality: OneOrMore`
+// groups them into a single trigger.
+(
+  id: "spirit_mascot",
+  name: "Spirit Mascot",
+  face_id: "spirit_mascot",
+  mana_cost: "{R}{W}",
+  types: ["Creature", "Spirit", "Ox"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverCardsLeaveGraveyard(
+      owner: Controller,
+      cardinality: OneOrMore,
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

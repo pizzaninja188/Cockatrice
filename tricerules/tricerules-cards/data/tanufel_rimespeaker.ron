@@ -1,0 +1,22 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle bf8de96b-0a75-4459-a123-dcf95e1b89f2.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// 2025-11-17 ruling: an {X} in a mana cost uses the chosen value of X for the spell's mana value.
+(
+  id: "tanufel_rimespeaker",
+  name: "Tanufel Rimespeaker",
+  face_id: "tanufel_rimespeaker",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Elemental", "Wizard"],
+  power: 2,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerCastsSpell(
+      caster: Controller,
+      filter: (min_mana_value: Some(4)),
+    ),
+    effect: [Draw(count: 1)],
+  )],
+)
