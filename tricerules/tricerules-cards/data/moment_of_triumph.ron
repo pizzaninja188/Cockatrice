@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 57579799-2582-417f-9864-4560cac39ac3.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "moment_of_triumph",
+  name: "Moment of Triumph",
+  face_id: "moment_of_triumph",
+  mana_cost: "{W}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 2, toughness: 2, subject: Chosen((kind: Creature))),
+    GainLife(amount: 2),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])])),
+)

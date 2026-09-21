@@ -22,6 +22,7 @@ acolyte_of_xathrid	0	cast	exercised
 acrobatic_cheerleader	0	cast	exercised
 acrobatic_leap	0	cast	exercised
 act_of_treason	0	cast	exercised
+adamant_will	0	cast	exercised
 adorned_crocodile	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 adorned_crocodile	0	cast	exercised
 adult_gold_dragon	0	cast	exercised
@@ -278,6 +279,7 @@ blooming_marsh	0	ability:0	exercised
 blooming_marsh	0	land	exercised
 blooming_stinger	0	cast	exercised
 blossombind	0	cast	exercised
+blossoming_defense	0	cast	exercised
 blossoming_sands	0	ability:0	exercised
 blossoming_sands	0	land	exercised
 boar-q-pine	0	cast	exercised
@@ -1527,6 +1529,7 @@ library_larcenist	0	cast	exercised
 library_of_leng	0	cast	exercised
 life_goes_on	0	cast	exercised
 lifecreed_duo	0	cast	exercised
+lightfoot_technique	0	cast	exercised
 lightning_angel	0	cast	exercised
 lightning_bolt	0	cast	exercised
 lightning_elemental	0	cast	exercised
@@ -1625,6 +1628,7 @@ markov_patrician	0	cast	exercised
 masked_meower	0	ability:0	exercised
 masked_meower	0	cast	exercised
 mass_of_ghouls	0	cast	exercised
+maximum_overdrive	0	cast	exercised
 meandering_river	0	ability:0	exercised
 meandering_river	0	land	exercised
 mechan_navigator	0	cast	exercised
@@ -1692,6 +1696,7 @@ moat_piranhas	0	cast	exercised
 mocking_sprite	0	cast	exercised
 moldering_karok	0	cast	exercised
 moment_of_craving	0	cast	exercised
+moment_of_triumph	0	cast	exercised
 moment_of_valor	0	cast	exercised
 monastery_messenger	0	cast	exercised
 mongoose_lizard	0	ability:0	unsupported: ability not offered by generic battlefield fixture
@@ -1711,6 +1716,7 @@ moorish_cavalry	0	cast	exercised
 morcants_eyes	0	ability:0	exercised
 morcants_eyes	0	cast	exercised
 moriok_reaver	0	cast	exercised
+mortify	0	cast	exercised
 moss_kami	0	cast	exercised
 moss_monster	0	cast	exercised
 moss_viper	0	cast	exercised
@@ -1855,6 +1861,7 @@ over_the_edge	0	cast	exercised
 overgrown_tomb	0	ability:0	exercised
 overgrown_tomb	0	land	exercised
 overkill	0	cast	exercised
+overprotect	0	cast	exercised
 overrun	0	cast	exercised
 overwhelming_surge	0	cast	exercised
 pacifism	0	cast	exercised
@@ -2367,6 +2374,7 @@ slumbering_keepguard	0	cast	exercised
 smaug,_the_great_calamity_spew_flame	0	cast	exercised
 smaug,_the_great_calamity_spew_flame	1	cast	exercised
 smaugs_fury	0	cast	exercised
+snakeskin_veil	0	cast	exercised
 snapping_drake	0	cast	exercised
 snare_thopter	0	cast	exercised
 snarespinner	0	cast	exercised
@@ -2579,6 +2587,7 @@ taiga	0	land	exercised
 tajuru_blightblade	0	cast	exercised
 tajuru_pathwarden	0	cast	exercised
 tajuru_snarecaster	0	cast	exercised
+take_up_the_shield	0	cast	exercised
 talas_air_ship	0	cast	exercised
 talas_merchant	0	cast	exercised
 talas_scout	0	cast	exercised
@@ -3001,6 +3010,7 @@ wishcoin_crab	0	cast	exercised
 wistful_selkie	0	cast	exercised
 witchs_familiar	0	cast	exercised
 witchstalker_frenzy	0	cast	exercised
+withering_torment	0	cast	exercised
 witness_protection	0	cast	exercised
 woodland_druid	0	cast	exercised
 woodland_mystic	0	ability:0	exercised

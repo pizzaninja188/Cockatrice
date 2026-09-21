@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 1e6a24be-8281-41c1-a5ba-b68f0ef1d7b8.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "snakeskin_veil",
+  name: "Snakeskin Veil",
+  face_id: "snakeskin_veil",
+  mana_cost: "{G}",
+  types: ["Instant"],
+  spell_effect: [
+    PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature, controller: You))),
+    GrantKeywords(subject: Chosen((kind: Creature, controller: You)), keywords: [Hexproof]),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature you control", effect_indices: [0, 1])])),
+)

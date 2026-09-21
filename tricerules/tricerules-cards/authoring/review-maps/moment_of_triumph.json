@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "57579799-2582-417f-9864-4560cac39ac3",
+  "spans": [
+    {
+      "face_id": "moment_of_triumph",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_combat_tricks_batch::issue_combat_tricks_moment_of_triumph",
+      "covers": "gives a target creature +2/+2 until end of turn and gains exactly two life; if the target is illegal at resolution the spell does not resolve and no life is gained"
+    },
+    {
+      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_maps_definitions",
+      "covers": "reviewed identity, mana cost, types, effects and target group of moment_of_triumph"
+    },
+    {
+      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for moment_of_triumph"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

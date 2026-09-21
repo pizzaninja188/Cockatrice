@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle c8c3a293-ae6d-4c52-be2d-2d4b6a8edb66.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "overprotect",
+  name: "Overprotect",
+  face_id: "overprotect",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 3, toughness: 3, subject: Chosen((kind: Creature, controller: You))),
+    GrantKeywords(subject: Chosen((kind: Creature, controller: You)), keywords: [Trample, Hexproof, Indestructible]),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature you control", effect_indices: [0, 1])])),
+)

@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "5a851367-1c4a-4cc9-a9c3-3d2775986b4c",
+  "spans": [
+    {
+      "face_id": "blossoming_defense",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_combat_tricks_batch::issue_combat_tricks_blossoming_defense",
+      "covers": "gives a target creature you control +2/+2 and hexproof; an opponent's creature is not a legal target"
+    },
+    {
+      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_maps_definitions",
+      "covers": "reviewed identity, mana cost, types, effects and target group of blossoming_defense"
+    },
+    {
+      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for blossoming_defense"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

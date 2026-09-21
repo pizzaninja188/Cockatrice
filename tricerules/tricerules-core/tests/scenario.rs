@@ -586,3 +586,5 @@ mod issue_458_pump_and_seven_lands;
 mod issue_459_devotee_endure_mobilize;
 #[path = "scenario/issue_460_reviewed_instances.rs"]
 mod issue_460_reviewed_instances;
+#[path = "scenario/issue_combat_tricks_batch.rs"]
+mod issue_combat_tricks_batch;

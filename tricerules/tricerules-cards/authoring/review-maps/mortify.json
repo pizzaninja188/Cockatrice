@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "faa01ed1-ccfa-4e58-951f-cd81f9068027",
+  "spans": [
+    {
+      "face_id": "mortify",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_combat_tricks_batch::issue_combat_tricks_mortify",
+      "covers": "destroys a target creature or enchantment (a noncreature, nonenchantment permanent is illegal)"
+    },
+    {
+      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_maps_definitions",
+      "covers": "reviewed identity, mana cost, types, effects and target group of mortify"
+    },
+    {
+      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for mortify"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

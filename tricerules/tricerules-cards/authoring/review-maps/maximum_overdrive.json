@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "f0e85b74-12fb-4d63-853e-7a3f41f731b4",
+  "spans": [
+    {
+      "face_id": "maximum_overdrive",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_combat_tricks_batch::issue_combat_tricks_maximum_overdrive",
+      "covers": "puts one +1/+1 counter on a target creature and grants deathtouch and indestructible until end of turn"
+    },
+    {
+      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_maps_definitions",
+      "covers": "reviewed identity, mana cost, types, effects and target group of maximum_overdrive"
+    },
+    {
+      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for maximum_overdrive"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "ffce81c5-1b58-4882-a4e7-6f8d7cb170de",
+  "spans": [
+    {
+      "face_id": "withering_torment",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_combat_tricks_batch::issue_combat_tricks_withering_torment",
+      "covers": "destroys a target creature or a target enchantment and its controller loses exactly two life; if the target is illegal at resolution the spell does not resolve and no life is lost"
+    },
+    {
+      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_maps_definitions",
+      "covers": "reviewed identity, mana cost, types, effects and target group of withering_torment"
+    },
+    {
+      "test": "issue_combat_tricks_batch::issue_combat_tricks_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for withering_torment"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
