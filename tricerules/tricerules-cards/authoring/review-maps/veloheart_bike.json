@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "fa123b21-518a-4f1d-9629-c44576d45f21",
+  "spans": [
+    {
+      "face_id": "veloheart_bike",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "veloheart_bike",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "veloheart_bike",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::TapPermanents",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::AddTypes",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc12_batch::issue_misc12_veloheart_bike_gains_life_makes_mana_and_crews",
+      "covers": "entering gains 2 life, the mana ability adds one mana of any color, and Crew 2 animates the Vehicle"
+    },
+    {
+      "test": "issue_misc12_batch::issue_misc12_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, entry life trigger, any-color mana ability, and Crew 2 of Veloheart Bike"
+    },
+    {
+      "test": "issue_misc12_batch::issue_misc12_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Veloheart Bike"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

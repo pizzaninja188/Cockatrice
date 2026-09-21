@@ -1,0 +1,26 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle f9dce026-2653-4793-b949-357b08a936ea.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 115.1a (targeted creature), CR 611.2c/613.4c (until-end-of-turn P/T), and CR 702.29
+// (cycling is a hand-zone activated ability that discards this card as a cost).
+(
+  id: "locust_spray",
+  name: "Locust Spray",
+  face_id: "locust_spray",
+  mana_cost: "{B}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: -1, toughness: -1, subject: Chosen((kind: Creature)))],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0],
+  )])),
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    source_zone: Hand,
+    costs: [Mana("{B}"), DiscardSelf],
+    effect: [Draw(count: 1)],
+  )],
+)

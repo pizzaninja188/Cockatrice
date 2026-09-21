@@ -1116,6 +1116,8 @@ gleaming_bastion	0	land	exercised
 glidedive_duo	0	cast	exercised
 glider_kids	0	cast	exercised
 glimmerburst	0	cast	exercised
+glimmerlight	0	ability:0	exercised
+glimmerlight	0	cast	exercised
 glimpse_the_core	0	cast	exercised
 gloom_pangolin	0	cast	exercised
 gloom_ripper	0	cast	exercised
@@ -1625,6 +1627,8 @@ llanowar_visionary	0	cast	exercised
 lluwen,_imperfect_naturalist	0	ability:0	exercised
 lluwen,_imperfect_naturalist	0	cast	exercised
 loamdragger_giant	0	cast	exercised
+locust_spray	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
+locust_spray	0	cast	exercised
 lofty_dreams	0	cast	exercised
 lone_missionary	0	cast	exercised
 lonely_arroyo	0	ability:0	exercised
@@ -2133,6 +2137,7 @@ razorfield_thresher	0	cast	exercised
 razorfoot_griffin	0	cast	exercised
 razortrap_gorge	0	ability:0	exercised
 razortrap_gorge	0	land	exercised
+reach_for_the_sky	0	cast	exercised
 reach_through_mists	0	cast	exercised
 reanimate	0	cast	exercised
 reaping_willow	0	ability:0	unsupported: nonmana costs need additional fixture resources
@@ -2189,6 +2194,8 @@ riot_devils	0	cast	exercised
 rip-clan_crasher	0	cast	exercised
 ripchain_razorkin	0	ability:0	exercised
 ripchain_razorkin	0	cast	exercised
+ripclaw_wrangler	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+ripclaw_wrangler	0	cast	exercised
 ripscale_predator	0	cast	exercised
 riptide_turtle	0	cast	exercised
 risen_sanctuary	0	cast	exercised
@@ -2448,6 +2455,8 @@ skyblade_of_the_legion	0	cast	exercised
 skybox_ferry	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
 skybox_ferry	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 skybox_ferry	0	cast	exercised
+skycrash	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
+skycrash	0	cast	exercised
 skyhunter_patrol	0	cast	exercised
 skyhunter_prowler	0	cast	exercised
 skyhunter_skirmisher	0	cast	exercised
@@ -2976,6 +2985,9 @@ vault_plunderer	0	cast	exercised
 vault_skirge	0	cast	exercised
 vector,_imperial_capital	0	ability:0	exercised
 vector,_imperial_capital	0	land	exercised
+veloheart_bike	0	ability:0	exercised
+veloheart_bike	0	ability:1	unsupported: payment preview rejected: illegal command: missing tap cost selection
+veloheart_bike	0	cast	exercised
 venerable_lammasu	0	cast	exercised
 venerable_monk	0	cast	exercised
 vengeful_tracker	0	cast	exercised

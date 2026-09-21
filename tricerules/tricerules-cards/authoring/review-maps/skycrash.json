@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "2343ebff-edf4-4132-ad9e-7800f8014072",
+  "spans": [
+    {
+      "face_id": "skycrash",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "skycrash",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc12_batch::issue_misc12_skycrash_destroys_an_artifact_and_cycles",
+      "covers": "destroys a targeted artifact, rejects an untargeted cast, and cycles {R} from hand for a card"
+    },
+    {
+      "test": "issue_misc12_batch::issue_misc12_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, targeted artifact destruction and targeting, and the Cycling {R} hand ability of Skycrash"
+    },
+    {
+      "test": "issue_misc12_batch::issue_misc12_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Skycrash"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

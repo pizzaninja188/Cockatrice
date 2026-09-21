@@ -1,0 +1,80 @@
+{
+  "format_version": 1,
+  "oracle_id": "68930fb6-d833-40cf-8917-1a1bf60edbe3",
+  "spans": [
+    {
+      "face_id": "reach_for_the_sky",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "reach_for_the_sky",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "reach_for_the_sky",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "reach_for_the_sky",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc12_batch::issue_misc12_reach_for_the_sky_pumps_and_draws_when_it_leaves",
+      "covers": "the Aura grants +3/+2 and reach, then draws a card when it is put into the graveyard from the battlefield"
+    },
+    {
+      "test": "scenario issue_misc12_batch::issue_misc12_reach_for_the_sky_does_not_trigger_when_it_fizzles_from_the_stack",
+      "covers": "per the 2024-04-12 ruling, a fizzled Aura put into the graveyard from the stack does not draw a card"
+    },
+    {
+      "test": "issue_misc12_batch::issue_misc12_batch_maps_definitions",
+      "covers": "reviewed identity, Flash, Aura attach, attached +3/+2 reach, and the self-graveyard draw of Reach for the Sky"
+    },
+    {
+      "test": "issue_misc12_batch::issue_misc12_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Reach for the Sky"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

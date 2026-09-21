@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "6b2ffdb8-3681-4d64-ac03-8c860082e60e",
+  "spans": [
+    {
+      "face_id": "ripclaw_wrangler",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "ripclaw_wrangler",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::TapPermanents",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::AddTypes",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc12_batch::issue_misc12_ripclaw_wrangler_makes_each_opponent_discard",
+      "covers": "the entry trigger makes each opponent privately discard a card in APNAP order"
+    },
+    {
+      "test": "issue_misc12_batch::issue_misc12_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, untargeted entry discard trigger, and Crew 2 of Ripclaw Wrangler"
+    },
+    {
+      "test": "issue_misc12_batch::issue_misc12_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Ripclaw Wrangler"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

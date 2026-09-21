@@ -1,0 +1,66 @@
+{
+  "format_version": 1,
+  "oracle_id": "8fd88b98-9899-4bc0-a4b7-7ef6fba36dfd",
+  "spans": [
+    {
+      "face_id": "glimmerlight",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "glimmerlight",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "glimmerlight",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "glimmer_w_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc12_batch::issue_misc12_glimmerlight_makes_a_glimmer_and_equips",
+      "covers": "entering creates a 1/1 white Glimmer enchantment creature token and equipping attaches for +1/+1"
+    },
+    {
+      "test": "issue_misc12_batch::issue_misc12_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, entry token trigger, attached modifier, and equip ability of Glimmerlight"
+    },
+    {
+      "test": "issue_misc12_batch::issue_misc12_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Glimmerlight"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
