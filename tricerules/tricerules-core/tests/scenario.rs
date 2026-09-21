@@ -590,3 +590,5 @@ mod issue_460_reviewed_instances;
 mod issue_combat_tricks_batch;
 #[path = "scenario/issue_etb_batch.rs"]
 mod issue_etb_batch;
+#[path = "scenario/issue_look_batch.rs"]
+mod issue_look_batch;

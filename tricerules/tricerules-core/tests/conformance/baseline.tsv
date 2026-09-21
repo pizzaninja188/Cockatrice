@@ -755,6 +755,9 @@ earthshaking_si	0	cast	exercised
 east_wind_avatar	0	cast	exercised
 eaten_alive	0	cast	unsupported: required cast-cost group needs a specialized fixture
 echo_of_dusk	0	cast	exercised
+eclipsed_boggart	0	cast	exercised
+eclipsed_elf	0	cast	exercised
+eclipsed_merrow	0	cast	exercised
 eddymurk_crab	0	cast	exercised
 edgewall_pack	0	cast	exercised
 ekundu_griffin	0	cast	exercised
@@ -971,6 +974,7 @@ frog_butler	0	cast	exercised
 front_porch_sentries	0	cast	exercised
 frontier_bivouac	0	ability:0	exercised
 frontier_bivouac	0	land	exercised
+frontier_seeker	0	cast	exercised
 frontline_rush	0	cast	exercised
 frost_breath	0	cast	exercised
 frost_ogre	0	cast	exercised
@@ -1664,6 +1668,7 @@ midnight_assassin	0	cast	exercised
 midnight_haunting	0	cast	exercised
 midnight_tilling	0	cast	exercised
 might_of_oaks	0	cast	exercised
+might_of_the_ancestors	0	cast	exercised
 mightform_harmonizer	0	cast	exercised
 migrating_ketradon	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 migrating_ketradon	0	cast	exercised
@@ -2472,6 +2477,7 @@ starlit_angel	0	cast	exercised
 starport_security	0	ability:0	exercised
 starport_security	0	cast	exercised
 startled_relic_sloth	0	cast	exercised
+staunch_crewmate	0	cast	exercised
 staunch_shieldmate	0	cast	exercised
 steadfast_guard	0	cast	exercised
 steadfast_paladin	0	cast	exercised
@@ -2605,6 +2611,7 @@ tangle_spider	0	cast	exercised
 taoist_hermit	0	cast	exercised
 tasseled_dromedary	0	cast	exercised
 tatterkite	0	cast	exercised
+tatyova,_benthic_druid	0	cast	exercised
 tcri_building	0	ability:0	exercised
 tcri_building	0	land	exercised
 teapot_slinger	0	cast	exercised
@@ -2995,6 +3002,7 @@ wild_colos	0	cast	exercised
 wild_elephant	0	cast	exercised
 wild_griffin	0	cast	exercised
 wild_jhovall	0	cast	exercised
+wild_pack_squad	0	cast	exercised
 wild_unraveling	0	cast	unsupported: target group 0 needs a richer fixture
 wildfire_wickerfolk	0	cast	exercised
 wildwood_patrol	0	cast	exercised

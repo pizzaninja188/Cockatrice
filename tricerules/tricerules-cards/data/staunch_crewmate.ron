@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 8ab49974-3f06-4b6b-a416-d6f872b3887f.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "staunch_crewmate",
+  name: "Staunch Crewmate",
+  face_id: "staunch_crewmate",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Human", "Pirate"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [LookChooseToHand(count: 4, filter: Some((any_of: Some([(card_type: Some(Artifact)), (required_subtypes: ["Pirate"])]))), bottom_order: Random)],
+  )],
+)

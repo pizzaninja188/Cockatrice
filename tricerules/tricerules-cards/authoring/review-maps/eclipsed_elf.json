@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "7c89ef4d-b375-4644-ac8b-034effdbe98c",
+  "spans": [
+    {
+      "face_id": "eclipsed_elf",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LookChooseToHand",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_look_batch::issue_look_eclipsed_elf",
+      "covers": "the entry trigger looks at the top four cards and may reveal an Elf, Swamp, or Forest card to hand, putting the rest on the bottom in a random order"
+    },
+    {
+      "test": "issue_look_batch::issue_look_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of eclipsed_elf"
+    },
+    {
+      "test": "issue_look_batch::issue_look_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for eclipsed_elf"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

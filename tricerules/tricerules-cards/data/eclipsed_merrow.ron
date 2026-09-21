@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle a3a00b62-f07e-44ef-8d97-22a3e7a06f72.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "eclipsed_merrow",
+  name: "Eclipsed Merrow",
+  face_id: "eclipsed_merrow",
+  mana_cost: "{W/U}{W/U}{W/U}",
+  types: ["Creature", "Merfolk", "Scout"],
+  power: 2,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [LookChooseToHand(count: 4, filter: Some((any_of: Some([(required_subtypes: ["Merfolk"]), (required_subtypes: ["Plains"]), (required_subtypes: ["Island"])]))), bottom_order: Random)],
+  )],
+)

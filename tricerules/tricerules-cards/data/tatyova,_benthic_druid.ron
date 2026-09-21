@@ -1,0 +1,22 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 0715e860-3b3b-4331-9718-207973e94fee.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "tatyova,_benthic_druid",
+  name: "Tatyova, Benthic Druid",
+  face_id: "tatyova_benthic_druid",
+  mana_cost: "{3}{G}{U}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Merfolk", "Druid"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(controller: Controller, filter: (permanent_type: Some(Land))),
+    effect: [
+      GainLife(amount: 1),
+      Draw(count: 1),
+    ],
+  )],
+)

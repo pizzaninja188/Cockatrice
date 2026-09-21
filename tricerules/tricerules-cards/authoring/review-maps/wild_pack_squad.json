@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "294b2aa7-cb46-46bd-8241-69b26d73aa2d",
+  "spans": [
+    {
+      "face_id": "wild_pack_squad",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::AtBeginningOfCombat",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_look_batch::issue_look_wild_pack_squad",
+      "covers": "at the beginning of combat the controller may grant up to one target creature first strike and vigilance until end of turn"
+    },
+    {
+      "test": "issue_look_batch::issue_look_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of wild_pack_squad"
+    },
+    {
+      "test": "issue_look_batch::issue_look_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for wild_pack_squad"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

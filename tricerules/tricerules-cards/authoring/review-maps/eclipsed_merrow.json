@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "a3a00b62-f07e-44ef-8d97-22a3e7a06f72",
+  "spans": [
+    {
+      "face_id": "eclipsed_merrow",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LookChooseToHand",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_look_batch::issue_look_eclipsed_merrow",
+      "covers": "the entry trigger looks at the top four cards and may reveal a Merfolk, Plains, or Island card to hand, putting the rest on the bottom in a random order"
+    },
+    {
+      "test": "issue_look_batch::issue_look_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of eclipsed_merrow"
+    },
+    {
+      "test": "issue_look_batch::issue_look_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for eclipsed_merrow"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

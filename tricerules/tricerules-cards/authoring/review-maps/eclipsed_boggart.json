@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "9cc3b91b-ad70-4b01-b718-fda3819f84d0",
+  "spans": [
+    {
+      "face_id": "eclipsed_boggart",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LookChooseToHand",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_look_batch::issue_look_eclipsed_boggart",
+      "covers": "the entry trigger looks at the top four cards and may reveal a Goblin, Swamp, or Mountain card to hand, putting the rest on the bottom in a random order"
+    },
+    {
+      "test": "issue_look_batch::issue_look_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of eclipsed_boggart"
+    },
+    {
+      "test": "issue_look_batch::issue_look_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for eclipsed_boggart"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

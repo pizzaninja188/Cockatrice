@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "5e4107ce-8450-4501-9cb3-a6344ef320f1",
+  "spans": [
+    {
+      "face_id": "might_of_the_ancestors",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::AtBeginningOfCombat",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_look_batch::issue_look_might_of_the_ancestors",
+      "covers": "at the beginning of combat a target creature you control gets +2/+0 and gains vigilance until end of turn, and an opponent's creature is not a legal target"
+    },
+    {
+      "test": "issue_look_batch::issue_look_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of might_of_the_ancestors"
+    },
+    {
+      "test": "issue_look_batch::issue_look_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for might_of_the_ancestors"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

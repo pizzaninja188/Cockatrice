@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 466cf331-2d9c-4ebc-84f6-30c890e1b637.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "frontier_seeker",
+  name: "Frontier Seeker",
+  face_id: "frontier_seeker",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Human", "Scout"],
+  power: 2,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [LookChooseToHand(count: 5, filter: Some((any_of: Some([(card_type: Some(Creature), required_subtypes: ["Mount"]), (required_subtypes: ["Plains"])]))), bottom_order: Random)],
+  )],
+)

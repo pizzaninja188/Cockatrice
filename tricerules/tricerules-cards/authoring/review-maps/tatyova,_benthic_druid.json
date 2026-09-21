@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "0715e860-3b3b-4331-9718-207973e94fee",
+  "spans": [
+    {
+      "face_id": "tatyova_benthic_druid",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_look_batch::issue_look_tatyova_benthic_druid",
+      "covers": "a land entering under the controller's control gains one life and draws a card; a nonland permanent entering does not trigger it"
+    },
+    {
+      "test": "issue_look_batch::issue_look_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of Tatyova, Benthic Druid"
+    },
+    {
+      "test": "issue_look_batch::issue_look_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Tatyova, Benthic Druid"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

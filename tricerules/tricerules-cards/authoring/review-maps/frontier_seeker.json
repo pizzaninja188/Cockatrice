@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "466cf331-2d9c-4ebc-84f6-30c890e1b637",
+  "spans": [
+    {
+      "face_id": "frontier_seeker",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LookChooseToHand",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ZoneCardFilter.any_of",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/LookChooseToHand/filter/any_of"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_look_batch::issue_look_frontier_seeker",
+      "covers": "the entry trigger looks at the top five cards and may reveal a Mount creature or Plains card to hand, putting the rest on the bottom in a random order; a plain creature card is rejected"
+    },
+    {
+      "test": "issue_look_batch::issue_look_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of frontier_seeker"
+    },
+    {
+      "test": "issue_look_batch::issue_look_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for frontier_seeker"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

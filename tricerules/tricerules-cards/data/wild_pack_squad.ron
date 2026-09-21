@@ -1,0 +1,19 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 294b2aa7-cb46-46bd-8241-69b26d73aa2d.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "wild_pack_squad",
+  name: "Wild Pack Squad",
+  face_id: "wild_pack_squad",
+  mana_cost: "{2}{W}",
+  types: ["Creature", "Human", "Mercenary"],
+  power: 2,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: AtBeginningOfCombat(player: Controller),
+    effect: [GrantKeywords(subject: Chosen((kind: Creature)), keywords: [FirstStrike, Vigilance])],
+    targeting: Some((groups: [(min: 0, max: 1, prompt: "Choose up to one target creature", effect_indices: [0])])),
+  )],
+)

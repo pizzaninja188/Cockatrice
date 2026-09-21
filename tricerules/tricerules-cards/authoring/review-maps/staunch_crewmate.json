@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "8ab49974-3f06-4b6b-a416-d6f872b3887f",
+  "spans": [
+    {
+      "face_id": "staunch_crewmate",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LookChooseToHand",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_look_batch::issue_look_staunch_crewmate",
+      "covers": "the entry trigger looks at the top four cards and may reveal an artifact or Pirate card to hand, putting the rest on the bottom in a random order"
+    },
+    {
+      "test": "issue_look_batch::issue_look_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics, trigger and effects of staunch_crewmate"
+    },
+    {
+      "test": "issue_look_batch::issue_look_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for staunch_crewmate"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

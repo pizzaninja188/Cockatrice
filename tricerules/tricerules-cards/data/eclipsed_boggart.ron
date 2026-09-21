@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 9cc3b91b-ad70-4b01-b718-fda3819f84d0.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "eclipsed_boggart",
+  name: "Eclipsed Boggart",
+  face_id: "eclipsed_boggart",
+  mana_cost: "{B/R}{B/R}{B/R}",
+  types: ["Creature", "Goblin", "Scout"],
+  power: 2,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [LookChooseToHand(count: 4, filter: Some((any_of: Some([(required_subtypes: ["Goblin"]), (required_subtypes: ["Swamp"]), (required_subtypes: ["Mountain"])]))), bottom_order: Random)],
+  )],
+)
