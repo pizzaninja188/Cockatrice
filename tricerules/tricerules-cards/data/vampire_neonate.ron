@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle c0045925-25bf-403c-b721-5f05ba30985b.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "vampire_neonate",
+  name: "Vampire Neonate",
+  face_id: "vampire_neonate",
+  mana_cost: "{B}",
+  types: ["Creature", "Vampire"],
+  power: 0,
+  toughness: 3,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{2}"), Tap],
+    effect: [
+      LoseLife(amount: Fixed(1), who: EachOpponent),
+      GainLife(amount: 1),
+    ],
+  )],
+)

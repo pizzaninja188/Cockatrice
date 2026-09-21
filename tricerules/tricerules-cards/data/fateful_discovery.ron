@@ -1,0 +1,19 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 72c6174c-fa2c-4ff2-b76e-eb6e890e97c9.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "fateful_discovery",
+  name: "Fateful Discovery",
+  face_id: "fateful_discovery",
+  mana_cost: "{3}{U}{U}",
+  types: ["Enchantment"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Artifact)),
+    ),
+    effect: [Draw(count: 1)],
+  )],
+)

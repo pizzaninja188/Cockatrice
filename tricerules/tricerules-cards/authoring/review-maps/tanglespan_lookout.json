@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "d6a767c2-8bc8-4686-899a-0ba3a525977a",
+  "spans": [
+    {
+      "face_id": "tanglespan_lookout",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc4_batch::issue_misc4_tanglespan_lookout",
+      "covers": "the controller draws a card when an Aura they control enters, and not when their non-Aura permanent enters"
+    },
+    {
+      "test": "issue_misc4_batch::issue_misc4_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of tanglespan_lookout"
+    },
+    {
+      "test": "issue_misc4_batch::issue_misc4_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for tanglespan_lookout"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

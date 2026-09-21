@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle d6a767c2-8bc8-4686-899a-0ba3a525977a.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "tanglespan_lookout",
+  name: "Tanglespan Lookout",
+  face_id: "tanglespan_lookout",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Satyr"],
+  power: 2,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Enchantment), required_subtypes: ["Aura"]),
+    ),
+    effect: [Draw(count: 1)],
+  )],
+)

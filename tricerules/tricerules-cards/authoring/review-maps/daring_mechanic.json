@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "9b1d79b7-a812-4f48-9be0-789294da3b56",
+  "spans": [
+    {
+      "face_id": "daring_mechanic",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc4_batch::issue_misc4_daring_mechanic",
+      "covers": "the {3}{W} ability puts a +1/+1 counter on a target Vehicle (the Mount branch is asserted structurally); another creature is not a legal target"
+    },
+    {
+      "test": "issue_misc4_batch::issue_misc4_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of daring_mechanic"
+    },
+    {
+      "test": "issue_misc4_batch::issue_misc4_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for daring_mechanic"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

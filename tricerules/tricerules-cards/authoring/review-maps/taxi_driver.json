@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "a17a92f7-e95c-4d0e-a43e-7e6b41a59139",
+  "spans": [
+    {
+      "face_id": "taxi_driver",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc4_batch::issue_misc4_taxi_driver",
+      "covers": "the {1}-and-tap ability grants a target creature haste until end of turn; a noncreature is not a legal target"
+    },
+    {
+      "test": "issue_misc4_batch::issue_misc4_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of taxi_driver"
+    },
+    {
+      "test": "issue_misc4_batch::issue_misc4_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for taxi_driver"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

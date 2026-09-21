@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "c0045925-25bf-403c-b721-5f05ba30985b",
+  "spans": [
+    {
+      "face_id": "vampire_neonate",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc4_batch::issue_misc4_vampire_neonate",
+      "covers": "the {2}-and-tap ability makes each opponent lose one life and gains the controller one life"
+    },
+    {
+      "test": "issue_misc4_batch::issue_misc4_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of vampire_neonate"
+    },
+    {
+      "test": "issue_misc4_batch::issue_misc4_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for vampire_neonate"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

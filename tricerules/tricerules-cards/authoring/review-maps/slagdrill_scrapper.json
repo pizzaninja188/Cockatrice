@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "7f1edf4c-46a1-426d-8ce9-757a4c27367d",
+  "spans": [
+    {
+      "face_id": "slagdrill_scrapper",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/2"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc4_batch::issue_misc4_slagdrill_scrapper",
+      "covers": "the {2}-tap-and-sacrifice ability draws a card after sacrificing a land (the artifact branch is asserted structurally); the source itself is not a legal sacrifice"
+    },
+    {
+      "test": "issue_misc4_batch::issue_misc4_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of slagdrill_scrapper"
+    },
+    {
+      "test": "issue_misc4_batch::issue_misc4_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for slagdrill_scrapper"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "72c6174c-fa2c-4ff2-b76e-eb6e890e97c9",
+  "spans": [
+    {
+      "face_id": "fateful_discovery",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc4_batch::issue_misc4_fateful_discovery",
+      "covers": "the controller draws a card when an artifact they control enters, and not when a non-artifact permanent enters"
+    },
+    {
+      "test": "issue_misc4_batch::issue_misc4_batch_maps_definitions",
+      "covers": "reviewed identity, characteristics and abilities of fateful_discovery"
+    },
+    {
+      "test": "issue_misc4_batch::issue_misc4_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for fateful_discovery"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

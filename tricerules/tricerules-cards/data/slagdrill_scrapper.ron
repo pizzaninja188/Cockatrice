@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle 7f1edf4c-46a1-426d-8ce9-757a4c27367d.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+(
+  id: "slagdrill_scrapper",
+  name: "Slagdrill Scrapper",
+  face_id: "slagdrill_scrapper",
+  mana_cost: "{R}",
+  types: ["Artifact", "Creature", "Robot", "Scout"],
+  power: 1,
+  toughness: 2,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{2}"), Tap, SacrificePermanent(filter: (any_of: Some([
+      (kind: AnyPermanent, controller: You, permanent_types: [Artifact], excluded_objects: [Source]),
+      (kind: AnyPermanent, controller: You, permanent_types: [Land]),
+    ])))],
+    effect: [Draw(count: 1)],
+  )],
+)
