@@ -1,0 +1,29 @@
+// Oracle and rulings checked 2026-09-21 against pinned Scryfall oracle ef4c478c-7019-4ec0-8edf-2a3078a8e97a.
+// Handwritten typed definition promoted through the reviewed direct-RON path (#376);
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// The 2024-09-20 ruling: the cost is locked at announcement, so the delirium reduction is
+// evaluated only while determining the total cost.
+(
+  id: "drag_to_the_roots",
+  name: "Drag to the Roots",
+  face_id: "drag_to_the_roots",
+  mana_cost: "{2}{B}{G}",
+  types: ["Instant"],
+  cost_modifiers: [ConditionalGenericReduction(
+    amount: 2,
+    condition: GraveyardAggregate(
+      owners: Controller,
+      aggregate: DistinctCardTypes,
+      min: Some(4),
+    ),
+  )],
+  spell_effect: [Destroy(subject: Chosen((kind: AnyPermanent, excluded_permanent_types: [Land])))],
+  targeting: Some((
+    groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target nonland permanent",
+      effect_indices: [0],
+    )],
+  )),
+)

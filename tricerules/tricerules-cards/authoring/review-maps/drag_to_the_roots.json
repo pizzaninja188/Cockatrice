@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "ef4c478c-7019-4ec0-8edf-2a3078a8e97a",
+  "spans": [
+    {
+      "face_id": "drag_to_the_roots",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cost_modifiers/0"
+      ]
+    },
+    {
+      "face_id": "drag_to_the_roots",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellCostModifier::ConditionalGenericReduction",
+      "typed_path": "/faces/0/cost_modifiers/0"
+    },
+    {
+      "symbol": "GameCondition::GraveyardAggregate",
+      "typed_path": "/faces/0/cost_modifiers/0/ConditionalGenericReduction/condition"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter.excluded_permanent_types",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen/excluded_permanent_types"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_338_direct_ron_batch3::issue_338_drag_to_the_roots_delirium_reduction_and_nonland_target",
+      "covers": "the delirium reduction applies at {2} less with four card types and not with three; the spell destroys a target nonland permanent but cannot target a land"
+    },
+    {
+      "test": "issue_338_direct_ron_batch3::issue_338_direct_ron_batch3_maps_definitions",
+      "covers": "reviewed identity, delirium cost reduction and nonland destroy of Drag to the Roots"
+    },
+    {
+      "test": "issue_338_direct_ron_batch3::issue_338_direct_ron_batch3_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Drag to the Roots"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

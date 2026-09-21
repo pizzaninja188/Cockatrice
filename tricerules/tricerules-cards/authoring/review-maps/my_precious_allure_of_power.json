@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "2e728381-6db0-4c66-883d-82d718fef833",
+  "spans": [
+    {
+      "face_id": "my_precious",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "my_precious",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "allure_of_power",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/1/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "allure_of_power",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/1/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::PayLife",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CastCostOptionDef::SacrificePermanent",
+      "typed_path": "/faces/1/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/1/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_338_direct_ron_batch3::issue_338_my_precious_equip_and_adventure",
+      "covers": "equipping for {2} and 2 life grants the equipped creature hexproof and makes it unblockable; the Adventure face sacrifices a creature to draw two, and resolves to exile for later casting as the permanent"
+    },
+    {
+      "test": "issue_338_direct_ron_batch3::issue_338_direct_ron_batch3_maps_definitions",
+      "covers": "reviewed identity, faces, attached hexproof/unblockable modifier, equip cost and Adventure cost/effect of My Precious // Allure of Power"
+    },
+    {
+      "test": "issue_338_direct_ron_batch3::issue_338_direct_ron_batch3_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprints for both faces of My Precious // Allure of Power"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

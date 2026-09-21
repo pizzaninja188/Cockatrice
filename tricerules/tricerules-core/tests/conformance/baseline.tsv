@@ -697,6 +697,7 @@ donatellos_technique	0	cast	exercised
 doom_blade	0	cast	exercised
 douser_of_lights	0	cast	exercised
 downwind_ambusher	0	cast	exercised
+drag_to_the_roots	0	cast	exercised
 dragon_fodder	0	cast	exercised
 dragon_moose	0	cast	exercised
 dragon_sniper	0	cast	exercised
@@ -1734,6 +1735,9 @@ mutagenic_growth	0	cast	exercised
 mutant_town	0	ability:0	exercised
 mutant_town	0	land	exercised
 mutant_town_musicians	0	cast	exercised
+my_precious_allure_of_power	0	ability:0	exercised
+my_precious_allure_of_power	0	cast	exercised
+my_precious_allure_of_power	1	cast	unsupported: required cast-cost group needs a specialized fixture
 mysterios_phantasm	0	cast	exercised
 mystic_archaeologist	0	ability:0	exercised
 mystic_archaeologist	0	cast	exercised
