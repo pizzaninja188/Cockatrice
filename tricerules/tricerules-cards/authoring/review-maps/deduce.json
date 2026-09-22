@@ -1,0 +1,39 @@
+{
+  "format_version": 1,
+  "oracle_id": "eeae4161-9f35-45df-8b3c-c55e37f49cd1",
+  "spans": [
+    {
+      "face_id": "deduce",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc34_batch::issue_misc34_deduce_semantics",
+      "covers": "actual registered deduce resolution, controller scope, and effect ordering"
+    },
+    {
+      "test": "issue_misc34_batch::issue_misc34_registers_five_exact_card_identities",
+      "covers": "printed characteristics for deduce"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

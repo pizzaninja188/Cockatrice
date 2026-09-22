@@ -1,0 +1,12 @@
+// Pinned Oracle df4ef2f8-2591-4be3-b905-4f9ff9c538ea; rulings checked 2026-09-22.
+(
+  id: "the_crystals_chosen",
+  name: "The Crystal's Chosen",
+  face_id: "the_crystal_s_chosen",
+  mana_cost: "{5}{W}{W}",
+  types: ["Sorcery"],
+  spell_effect: [
+    CreateTokens(token: "hero_c_1_1", count: 4),
+    PutCountersAll(counter: PlusOnePlusOne, count: 1, filter: (controller: Some(YouControl))),
+  ],
+)

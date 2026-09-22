@@ -700,6 +700,7 @@ debris_field_crusher	0	ability:1	exercised
 debris_field_crusher	0	cast	exercised
 decode_transmissions	0	cast	exercised
 decoy_ploy	0	cast	unsupported: face not offered by generic hand fixture
+deduce	0	cast	exercised
 deep_goblin_skulltaker	0	cast	exercised
 deer-dog	0	cast	exercised
 defiant_elf	0	cast	exercised
@@ -1378,6 +1379,7 @@ hermetic_study	0	cast	exercised
 hermitic_nautilus	0	ability:0	exercised
 hermitic_nautilus	0	cast	exercised
 hero_in_training	0	cast	exercised
+heroic_reinforcements	0	cast	exercised
 heros_downfall	0	cast	exercised
 hexplate_golem	0	cast	exercised
 hidden_grotto	0	ability:0	exercised
@@ -1762,6 +1764,7 @@ magitek_armor	0	cast	exercised
 magnificent_end	0	cast	exercised
 magnigoth_sentry	0	cast	exercised
 mahamoti_djinn	0	cast	exercised
+make_a_stand	0	cast	exercised
 make_obsolete	0	cast	exercised
 make_your_move	0	cast	exercised
 makeshift_battalion	0	cast	exercised
@@ -2025,6 +2028,7 @@ ominous_asylum	0	land	exercised
 omni-cheese_pizza	0	ability:0	exercised
 omni-cheese_pizza	0	ability:1	exercised
 omni-cheese_pizza	0	cast	exercised
+on_the_job	0	cast	exercised
 onakke_ogre	0	cast	exercised
 ooze_patrol	0	cast	exercised
 ooze_spill	0	cast	unsupported: target group 0 needs a richer fixture
@@ -2942,6 +2946,7 @@ thaumaton_torpedo	0	cast	exercised
 thawbringer	0	cast	exercised
 the_arkenstone_seek_the_heart	0	cast	exercised
 the_arkenstone_seek_the_heart	1	cast	exercised
+the_crystals_chosen	0	cast	exercised
 the_fabulous_frog-man	0	cast	exercised
 the_final_days	0	cast	exercised
 the_lion-turtle	0	ability:0	exercised

@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "c442e8b0-a0a4-4839-8049-125b91b15c99",
+  "spans": [
+    {
+      "face_id": "heroic_reinforcements",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywordsAll",
+      "typed_path": "/faces/0/spell_effect/2"
+    }
+  ],
+  "tokens": [
+    "soldier_w_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc34_batch::issue_misc34_heroic_reinforcements_semantics",
+      "covers": "actual registered heroic_reinforcements resolution, controller scope, and effect ordering"
+    },
+    {
+      "test": "issue_misc34_batch::issue_misc34_registers_five_exact_card_identities",
+      "covers": "printed characteristics for heroic_reinforcements"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

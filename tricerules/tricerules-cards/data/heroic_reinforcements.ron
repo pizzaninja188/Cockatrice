@@ -1,0 +1,13 @@
+// Pinned Oracle c442e8b0-a0a4-4839-8049-125b91b15c99; ruling checked 2026-09-22.
+(
+  id: "heroic_reinforcements",
+  name: "Heroic Reinforcements",
+  face_id: "heroic_reinforcements",
+  mana_cost: "{2}{R}{W}",
+  types: ["Sorcery"],
+  spell_effect: [
+    CreateTokens(token: "soldier_w_1_1", count: 2),
+    PumpAll(filter: (controller: YouControl), power: 1, toughness: 1),
+    GrantKeywordsAll(filter: (controller: YouControl), keywords: [Haste]),
+  ],
+)

@@ -1,0 +1,12 @@
+// Pinned paper Oracle eeae4161-9f35-45df-8b3c-c55e37f49cd1; rulings checked 2026-09-22.
+(
+  id: "deduce",
+  name: "Deduce",
+  face_id: "deduce",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    Draw(who: Controller, count: 1),
+    CreateTokens(token: "clue", count: 1),
+  ],
+)

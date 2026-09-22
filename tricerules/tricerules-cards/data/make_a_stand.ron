@@ -1,0 +1,12 @@
+// Pinned Oracle 531f78d5-5004-4b02-99c7-b390cb342fd9; rulings checked 2026-09-22.
+(
+  id: "make_a_stand",
+  name: "Make a Stand",
+  face_id: "make_a_stand",
+  mana_cost: "{2}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpAll(filter: (controller: YouControl), power: 1, toughness: 0),
+    GrantKeywordsAll(filter: (controller: YouControl), keywords: [Indestructible]),
+  ],
+)

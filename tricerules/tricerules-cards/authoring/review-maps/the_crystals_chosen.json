@@ -1,0 +1,39 @@
+{
+  "format_version": 1,
+  "oracle_id": "df4ef2f8-2591-4be3-b905-4f9ff9c538ea",
+  "spans": [
+    {
+      "face_id": "the_crystal_s_chosen",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCountersAll",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [
+    "hero_c_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc34_batch::issue_misc34_the_crystals_chosen_semantics",
+      "covers": "actual registered the_crystals_chosen resolution, controller scope, and effect ordering"
+    },
+    {
+      "test": "issue_misc34_batch::issue_misc34_registers_five_exact_card_identities",
+      "covers": "printed characteristics for the_crystals_chosen"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

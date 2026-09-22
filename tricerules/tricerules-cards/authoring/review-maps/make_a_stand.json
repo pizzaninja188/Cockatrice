@@ -1,0 +1,37 @@
+{
+  "format_version": 1,
+  "oracle_id": "531f78d5-5004-4b02-99c7-b390cb342fd9",
+  "spans": [
+    {
+      "face_id": "make_a_stand",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywordsAll",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc34_batch::issue_misc34_make_a_stand_semantics",
+      "covers": "actual registered make_a_stand resolution, controller scope, and effect ordering"
+    },
+    {
+      "test": "issue_misc34_batch::issue_misc34_registers_five_exact_card_identities",
+      "covers": "printed characteristics for make_a_stand"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
