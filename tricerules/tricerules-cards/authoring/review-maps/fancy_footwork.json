@@ -1,0 +1,27 @@
+{
+  "format_version": 1,
+  "oracle_id": "c5648a32-98b0-4625-aae1-ae56e0ef0197",
+  "spans": [
+    {
+      "face_id": "fancy_footwork",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {"symbol": "SpellEffectKind::Untap", "typed_path": "/faces/0/spell_effect/0"},
+    {"symbol": "SpellEffectKind::PumpTarget", "typed_path": "/faces/0/spell_effect/1"},
+    {"symbol": "TargetingDef", "typed_path": "/faces/0/targeting"}
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "scenario issue_misc40_batch::issue_486_fancy_footwork", "covers": "one or two targets, partial legality, fully illegal resolution, untap and +2/+2"},
+    {"test": "issue_486_fancy_footwork::issue_486_fancy_footwork_identity", "covers": "exact Oracle identity and complete typed effects"}
+  ],
+  "complete_definition_review_confirmed": true
+}

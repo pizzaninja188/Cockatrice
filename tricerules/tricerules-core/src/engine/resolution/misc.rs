@@ -270,8 +270,7 @@ pub(super) fn untap(
     let SpellEffectKind::Untap { subject } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let tid = resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject);
-    if let Some(tid) = tid {
+    for tid in cx.resolve_battlefield_subjects(&subject) {
         let on_battlefield = cx
             .engine
             .state

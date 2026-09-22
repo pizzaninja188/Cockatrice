@@ -44,6 +44,63 @@ fn remove_target(e: &mut GameEngine, oid: u32) {
 }
 
 #[test]
+fn issue_486_fancy_footwork() {
+    let mut two = engine(846_001);
+    let first = inject_creature_on_battlefield(&mut two, 0, "grizzly_bears");
+    let second = inject_creature_on_battlefield(&mut two, 1, "grizzly_bears");
+    two.state.objects.get_mut(&first).unwrap().tapped = true;
+    two.state.objects.get_mut(&second).unwrap().tapped = true;
+    let mut second_target = target_object(second)[0];
+    second_target.group_index = 0;
+    cast_and_resolve(
+        &mut two,
+        "fancy_footwork",
+        vec![target_object(first)[0], second_target],
+    );
+    for oid in [first, second] {
+        assert!(!two.state.objects[&oid].tapped, "{oid} remains tapped");
+        assert_eq!(two.effective_power(oid), Some(4));
+        assert_eq!(two.effective_toughness(oid), Some(4));
+    }
+
+    let mut one = engine(846_002);
+    let only = inject_creature_on_battlefield(&mut one, 0, "grizzly_bears");
+    one.state.objects.get_mut(&only).unwrap().tapped = true;
+    cast_and_resolve(&mut one, "fancy_footwork", target_object(only));
+    assert!(!one.state.objects[&only].tapped);
+    assert_eq!(one.effective_power(only), Some(4));
+
+    let mut partial = engine(846_003);
+    let gone = inject_creature_on_battlefield(&mut partial, 0, "grizzly_bears");
+    let survivor = inject_creature_on_battlefield(&mut partial, 1, "grizzly_bears");
+    partial.state.objects.get_mut(&survivor).unwrap().tapped = true;
+    cast_only(
+        &mut partial,
+        "fancy_footwork",
+        vec![target_object(gone)[0], target_object(survivor)[0]],
+    );
+    remove_target(&mut partial, gone);
+    resolve_entire_stack_two_player(&mut partial);
+    assert!(!partial.state.objects[&survivor].tapped);
+    assert_eq!(partial.effective_power(survivor), Some(4));
+
+    let mut illegal = engine(846_004);
+    let a = inject_creature_on_battlefield(&mut illegal, 0, "grizzly_bears");
+    let b = inject_creature_on_battlefield(&mut illegal, 1, "grizzly_bears");
+    cast_only(
+        &mut illegal,
+        "fancy_footwork",
+        vec![target_object(a)[0], target_object(b)[0]],
+    );
+    remove_target(&mut illegal, a);
+    remove_target(&mut illegal, b);
+    resolve_entire_stack_two_player(&mut illegal);
+    assert!(illegal.state.stack.is_empty());
+    assert_eq!(illegal.effective_power(a), Some(2));
+    assert_eq!(illegal.effective_power(b), Some(2));
+}
+
+#[test]
 fn issue_misc40_mabels_mettle() {
     let mut e = engine(840_001);
     let first = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");

@@ -1,0 +1,13 @@
+// Oracle and rulings checked against pinned Scryfall Oracle ID c5648a32-98b0-4625-aae1-ae56e0ef0197 on 2026-09-22; no card-specific rulings.
+(
+  id: "fancy_footwork",
+  name: "Fancy Footwork",
+  face_id: "fancy_footwork",
+  mana_cost: "{2}{W}",
+  types: ["Instant", "Lesson"],
+  spell_effect: [
+    Untap(subject: Chosen((kind: Creature))),
+    PumpTarget(power: 2, toughness: 2, subject: Chosen((kind: Creature))),
+  ],
+  targeting: Some((groups: [(min: 1, max: 2, prompt: "Choose one or two target creatures", effect_indices: [0, 1])])),
+)
