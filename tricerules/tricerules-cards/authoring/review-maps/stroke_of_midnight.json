@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "9a107e48-3d50-4941-95b1-10f2b29a4245",
+  "spans": [
+    {
+      "face_id": "stroke_of_midnight",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [
+    "human_w_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc32_batch::issue_misc32_stroke_of_midnight_recipient",
+      "covers": "legal indestructible nonland target still gives its controller a Human, while illegal targets give none"
+    },
+    {
+      "test": "issue_misc32_batch::issue_misc32_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, and absent numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

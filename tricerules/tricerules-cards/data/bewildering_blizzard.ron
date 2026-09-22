@@ -1,0 +1,11 @@
+(
+  id: "bewildering_blizzard",
+  name: "Bewildering Blizzard",
+  face_id: "bewildering_blizzard",
+  mana_cost: "{4}{U}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    Draw(count: 3),
+    PumpAll(filter: (controller: Opponents), power: -3, toughness: 0),
+  ],
+)

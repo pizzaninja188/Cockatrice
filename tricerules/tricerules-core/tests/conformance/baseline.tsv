@@ -261,6 +261,7 @@ bestial_bloodline	0	cast	exercised
 bestial_menace	0	cast	exercised
 bestow_greatness	0	cast	exercised
 betrayers_bargain	0	cast	unsupported: required cast-cost group needs a specialized fixture
+bewildering_blizzard	0	cast	exercised
 bifur,_melodic_rider	0	cast	exercised
 bigfin_bouncer	0	cast	exercised
 bilbos_deadly_slice	0	cast	exercised
@@ -662,6 +663,7 @@ darkbore_pathway_slitherbore_pathway	0	ability:0	exercised
 darkbore_pathway_slitherbore_pathway	0	land	exercised
 darkbore_pathway_slitherbore_pathway	1	ability:0	exercised
 darkbore_pathway_slitherbore_pathway	1	land	exercised
+darkness_descends	0	cast	exercised
 darksteel_citadel	0	ability:0	exercised
 darksteel_citadel	0	land	exercised
 darksteel_myr	0	cast	exercised
@@ -1267,6 +1269,7 @@ gravblade_heavy	0	cast	exercised
 gravedigger	0	cast	exercised
 gravelgill_scoundrel	0	cast	exercised
 graveshifter	0	cast	exercised
+gravkill	0	cast	exercised
 gravpack_monoist	0	cast	exercised
 gray_ogre	0	cast	exercised
 grazing_whiptail	0	cast	exercised
@@ -2135,6 +2138,7 @@ pouncing_cheetah	0	cast	exercised
 prakhata_club_security	0	cast	exercised
 prayer_of_binding	0	cast	exercised
 preordain	0	cast	exercised
+preposterous_proportions	0	cast	exercised
 pretending_poxbearers	0	cast	exercised
 prey_upon	0	cast	exercised
 prickly_pair	0	cast	exercised
@@ -2787,6 +2791,7 @@ strix_lookout	0	ability:0	exercised
 strix_lookout	0	cast	exercised
 strixhaven_skycoach	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
 strixhaven_skycoach	0	cast	exercised
+stroke_of_midnight	0	cast	exercised
 submerged_boneyard	0	ability:0	exercised
 submerged_boneyard	0	land	exercised
 subterranean_cavern	0	ability:0	exercised

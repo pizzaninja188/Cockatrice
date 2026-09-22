@@ -1,0 +1,37 @@
+{
+  "format_version": 1,
+  "oracle_id": "84469042-d48d-409f-a2c9-047058f13bc5",
+  "spans": [
+    {
+      "face_id": "bewildering_blizzard",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc32_batch::issue_misc32_bewildering_blizzard_scope",
+      "covers": "draw three, then only current opposing creatures get -3/-0 through end of turn"
+    },
+    {
+      "test": "issue_misc32_batch::issue_misc32_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, and absent numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

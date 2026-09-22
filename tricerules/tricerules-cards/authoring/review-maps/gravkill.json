@@ -1,0 +1,37 @@
+{
+  "format_version": 1,
+  "oracle_id": "15c6837c-775b-4b4a-a2f7-9fd79215fa05",
+  "spans": [
+    {
+      "face_id": "gravkill",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc32_batch::issue_misc32_gravkill_target_union",
+      "covers": "creature and noncreature Spacecraft are legal, and a non-Spacecraft artifact is illegal"
+    },
+    {
+      "test": "issue_misc32_batch::issue_misc32_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, and absent numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,37 @@
+{
+  "format_version": 1,
+  "oracle_id": "1e03aad2-6426-4d18-a0e5-bc3d8e6b7b11",
+  "spans": [
+    {
+      "face_id": "preposterous_proportions",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywordsAll",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc32_batch::issue_misc32_preposterous_proportions_snapshot",
+      "covers": "only creatures controlled at resolution receive +10/+10 and vigilance through end of turn"
+    },
+    {
+      "test": "issue_misc32_batch::issue_misc32_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, and absent numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,11 @@
+(
+  id: "preposterous_proportions",
+  name: "Preposterous Proportions",
+  face_id: "preposterous_proportions",
+  mana_cost: "{5}{G}{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    PumpAll(filter: (controller: YouControl), power: 10, toughness: 10),
+    GrantKeywordsAll(filter: (controller: YouControl), keywords: [Vigilance]),
+  ],
+)

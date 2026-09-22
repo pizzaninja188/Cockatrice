@@ -1,0 +1,8 @@
+(
+  id: "darkness_descends",
+  name: "Darkness Descends",
+  face_id: "darkness_descends",
+  mana_cost: "{2}{B}{B}",
+  types: ["Sorcery"],
+  spell_effect: [PutCountersAll(counter: MinusOneMinusOne, count: 2)],
+)

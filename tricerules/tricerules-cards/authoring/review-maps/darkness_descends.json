@@ -1,0 +1,32 @@
+{
+  "format_version": 1,
+  "oracle_id": "a3435757-d049-4aaf-a2cb-897dd4940997",
+  "spans": [
+    {
+      "face_id": "darkness_descends",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PutCountersAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc32_batch::issue_misc32_darkness_descends_all_creatures",
+      "covers": "both players creatures receive two -1/-1 counters while noncreatures do not"
+    },
+    {
+      "test": "issue_misc32_batch::issue_misc32_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, and absent numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
