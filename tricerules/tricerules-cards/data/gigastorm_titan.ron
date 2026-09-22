@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle ef06e10c-553b-45b8-abf0-1d2e87c22128.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 601.2f: a conditional generic reduction locked while determining the total cost; the
+// current spell is not yet recorded as cast, so the condition reads prior casts this turn.
+(
+  id: "gigastorm_titan",
+  name: "Gigastorm Titan",
+  face_id: "gigastorm_titan",
+  mana_cost: "{4}{U}",
+  types: ["Creature", "Elemental"],
+  power: 4,
+  toughness: 4,
+  cost_modifiers: [ConditionalGenericReduction(
+    amount: 3,
+    condition: SpellsCastThisTurn(players: Controller, min: Some(1)),
+  )],
+)

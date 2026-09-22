@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "ef06e10c-553b-45b8-abf0-1d2e87c22128",
+  "spans": [
+    {
+      "face_id": "gigastorm_titan",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cost_modifiers/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellCostModifier::ConditionalGenericReduction",
+      "typed_path": "/faces/0/cost_modifiers/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc16_batch::issue_misc16_gigastorm_titan_costs_less_after_another_spell",
+      "covers": "a prior spell this turn makes the {3} generic reduction apply; without one the reduced cost is unpayable"
+    },
+    {
+      "test": "issue_misc16_batch::issue_misc16_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, and the conditional reduction of Gigastorm Titan"
+    },
+    {
+      "test": "issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Gigastorm Titan"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

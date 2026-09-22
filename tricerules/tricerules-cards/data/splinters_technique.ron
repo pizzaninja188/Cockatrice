@@ -1,0 +1,19 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 532ee9c3-391c-44db-8ed5-a1d28fd7f876.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.190 (sneak: cast during the declare blockers step for the sneak cost by returning an
+// unblocked attacker) and CR 701.23 (search your library for any card, then shuffle).
+(
+  id: "splinters_technique",
+  name: "Splinter's Technique",
+  face_id: "splinters_technique",
+  mana_cost: "{3}{B}",
+  sneak_cost: Some("{1}{B}"),
+  types: ["Sorcery"],
+  spell_effect: [SearchLibrary(
+    filter: None,
+    destination: Hand,
+    shuffle: true,
+    reveal: false,
+  )],
+)

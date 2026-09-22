@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "ea4c5b8f-a5ff-47dd-8e47-5ae7b21926b4",
+  "spans": [
+    {
+      "face_id": "fountainport_bell",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "fountainport_bell",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseResolutionBranch",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc16_batch::issue_misc16_fountainport_bell_searches_and_sacrifices_to_draw",
+      "covers": "the optional entry branch searches a basic land onto the top of the library and the sacrifice ability draws a card"
+    },
+    {
+      "test": "issue_misc16_batch::issue_misc16_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the optional basic-land search entry trigger, and the sacrifice-to-draw ability of Fountainport Bell"
+    },
+    {
+      "test": "issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Fountainport Bell"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

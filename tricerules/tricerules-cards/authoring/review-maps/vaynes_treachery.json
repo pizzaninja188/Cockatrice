@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "oracle_id": "93af8f9d-6877-4cb8-a744-c89186db22e1",
+  "spans": [
+    {
+      "face_id": "vaynes_treachery",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0"
+      ]
+    },
+    {
+      "face_id": "vaynes_treachery",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostOptionDef::SacrificePermanent",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ConditionalCastCost",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc16_batch::issue_misc16_vaynes_treachery_scales_with_kicker",
+      "covers": "an unkicked cast gives -2/-2; the kicked cast sacrifices an artifact or creature and gives -6/-6"
+    },
+    {
+      "test": "issue_misc16_batch::issue_misc16_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the kicker sacrifice cast-cost group, the base and conditional pumps, and the shared target of Vayne's Treachery"
+    },
+    {
+      "test": "issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Vayne's Treachery"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

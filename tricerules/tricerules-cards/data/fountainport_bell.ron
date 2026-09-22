@@ -1,0 +1,37 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle ea4c5b8f-a5ff-47dd-8e47-5ae7b21926b4.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.6a (entry trigger), CR 701.23 (optional basic-land search onto the top of the library),
+// and CR 701.21 with CR 118.12a (sacrifice-as-cost to draw).
+(
+  id: "fountainport_bell",
+  name: "Fountainport Bell",
+  face_id: "fountainport_bell",
+  mana_cost: "{1}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [ChooseResolutionBranch(
+      optional: true,
+      branches: [(
+        branch_id: "search_for_a_basic_land",
+        presentation: Fallback,
+        cost: None,
+        effects: [SearchLibrary(
+          filter: Some((card_type: Some(BasicLand))),
+          destination: TopOfLibrary,
+          shuffle: true,
+          reveal: true,
+        )],
+      )],
+    )],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{1}"), SacrificeSelf],
+    effect: [Draw(count: 1)],
+  )],
+)

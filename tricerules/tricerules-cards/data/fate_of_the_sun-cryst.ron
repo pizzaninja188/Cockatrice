@@ -1,0 +1,23 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 0ffeec93-89d7-42c2-8abf-802e9f6dc992.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 601.2f and CR 118.7a: the reduction is determined from the announced target and applies once.
+// CR 701.8: destroy a targeted nonland permanent.
+(
+  id: "fate_of_the_sun-cryst",
+  name: "Fate of the Sun-Cryst",
+  face_id: "fate_of_the_sun_cryst",
+  mana_cost: "{4}{W}",
+  types: ["Instant"],
+  cost_modifiers: [TargetMatchGenericReduction(
+    amount: 2,
+    filter: Battlefield((kind: Creature, tapped: Some(true))),
+  )],
+  spell_effect: [Destroy(subject: Chosen((kind: AnyPermanent, excluded_permanent_types: [Land])))],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target nonland permanent",
+    effect_indices: [0],
+  )])),
+)

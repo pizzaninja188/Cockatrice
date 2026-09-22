@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "2b15d571-2f90-44f7-9153-20ed51253045",
+  "spans": [
+    {
+      "face_id": "debris_beetle",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "debris_beetle",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "debris_beetle",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::AddTypes",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc16_batch::issue_misc16_debris_beetle_drains_on_entry",
+      "covers": "entering makes each opponent lose 3 life while the controller gains 3 life"
+    },
+    {
+      "test": "issue_misc16_batch::issue_misc16_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Trample, the entry drain, and Crew 2 of Debris Beetle"
+    },
+    {
+      "test": "issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Debris Beetle"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

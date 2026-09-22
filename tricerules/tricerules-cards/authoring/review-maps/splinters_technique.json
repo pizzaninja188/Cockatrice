@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "532ee9c3-391c-44db-8ed5-a1d28fd7f876",
+  "spans": [
+    {
+      "face_id": "splinters_technique",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/sneak_cost"
+      ]
+    },
+    {
+      "face_id": "splinters_technique",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "sneak_cost",
+      "typed_path": "/faces/0/sneak_cost"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc16_batch::issue_misc16_splinters_technique_tutors_a_card",
+      "covers": "the spell searches the library for a card and puts it into hand"
+    },
+    {
+      "test": "issue_misc16_batch::issue_misc16_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the sneak alternative cost, and the unrestricted tutor of Splinter's Technique"
+    },
+    {
+      "test": "issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Splinter's Technique"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "0ffeec93-89d7-42c2-8abf-802e9f6dc992",
+  "spans": [
+    {
+      "face_id": "fate_of_the_sun_cryst",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cost_modifiers/0"
+      ]
+    },
+    {
+      "face_id": "fate_of_the_sun_cryst",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellCostModifier::TargetMatchGenericReduction",
+      "typed_path": "/faces/0/cost_modifiers/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc16_batch::issue_misc16_fate_of_the_sun_cryst_costs_less_on_a_tapped_target",
+      "covers": "a tapped creature target makes the {2} reduction apply and the nonland permanent is destroyed; an untapped target gets no reduction"
+    },
+    {
+      "test": "issue_misc16_batch::issue_misc16_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the tapped-creature cost reduction, the nonland-permanent destroy effect, and targeting of Fate of the Sun-Cryst"
+    },
+    {
+      "test": "issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Fate of the Sun-Cryst"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

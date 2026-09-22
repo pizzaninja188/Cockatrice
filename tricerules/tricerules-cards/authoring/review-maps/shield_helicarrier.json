@@ -1,0 +1,66 @@
+{
+  "format_version": 1,
+  "oracle_id": "0f2335bf-6a13-4483-997a-fd19d30c4d48",
+  "spans": [
+    {
+      "face_id": "s_h_i_e_l_d_helicarrier",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "s_h_i_e_l_d_helicarrier",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "s_h_i_e_l_d_helicarrier",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::AddTypes",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "soldier_w_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc16_batch::issue_misc16_shield_helicarrier_makes_two_soldiers",
+      "covers": "entering creates two 1/1 white Soldier creature tokens"
+    },
+    {
+      "test": "issue_misc16_batch::issue_misc16_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flying, the two-Soldier entry trigger, and Crew 6 of S.H.I.E.L.D. Helicarrier"
+    },
+    {
+      "test": "issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for S.H.I.E.L.D. Helicarrier"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

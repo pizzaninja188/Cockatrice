@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "c6cd520c-106b-4ee5-bc02-6c5fbdbc78dd",
+  "spans": [
+    {
+      "face_id": "barrels_of_blasting_jelly",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "barrels_of_blasting_jelly",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1",
+        "/faces/0/activated_abilities/1/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ActivationLimit::PerTurn",
+      "typed_path": "/faces/0/activated_abilities/0/activation_limit"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/1/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc16_batch::issue_misc16_barrels_of_blasting_jelly_limits_mana_and_deals_damage",
+      "covers": "the {1} mana ability adds one mana of any color and cannot be activated again that turn; the sacrifice ability deals 5 damage to a targeted creature"
+    },
+    {
+      "test": "issue_misc16_batch::issue_misc16_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the once-per-turn any-color mana ability, and the sacrifice damage ability of Barrels of Blasting Jelly"
+    },
+    {
+      "test": "issue_misc16_batch::issue_misc16_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Barrels of Blasting Jelly"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
