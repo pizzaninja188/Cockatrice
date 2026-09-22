@@ -1,0 +1,21 @@
+{
+  "format_version": 1,
+  "oracle_id": "bb8c6dd2-1abe-4eb2-be1f-b0c078e5f257",
+  "spans": [
+    { "face_id": "turtle_blimp", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/keywords"] },
+    { "face_id": "turtle_blimp", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/triggered_abilities/0"] },
+    { "face_id": "turtle_blimp", "start_line": 3, "end_line": 3, "typed_paths": ["/faces/0/activated_abilities/0"] }
+  ],
+  "primitive_references": [
+    { "symbol": "TriggerCondition::WhenSelfEntersBattlefield", "typed_path": "/faces/0/triggered_abilities/0/trigger" },
+    { "symbol": "SpellEffectKind::CreateTokens", "typed_path": "/faces/0/triggered_abilities/0/effect/0" },
+    { "symbol": "ActivatedCost::TapPermanents", "typed_path": "/faces/0/activated_abilities/0/costs/0" },
+    { "symbol": "SpellEffectKind::AddTypes", "typed_path": "/faces/0/activated_abilities/0/effect/0" }
+  ],
+  "tokens": ["mutant_r_2_2"],
+  "semantic_fixtures": [
+    { "test": "scenario issue_misc25_batch::issue_misc25_turtle_blimp_creates_mutant_and_crews_with_two_power", "covers": "real entry creates the red Mutant; one power cannot crew, two power taps the creature and animates the flying Vehicle" },
+    { "test": "issue_misc25_batch::issue_misc25_batch_registers_five_exact_oracle_identities", "covers": "printed Vehicle identity, cost and power/toughness" }
+  ],
+  "complete_definition_review_confirmed": true
+}

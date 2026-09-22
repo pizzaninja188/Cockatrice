@@ -1,0 +1,18 @@
+{
+  "format_version": 1,
+  "oracle_id": "192dd1e2-b6c2-432a-a1b4-e52ff39b3db2",
+  "spans": [
+    { "face_id": "news_helicopter", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/keywords"] },
+    { "face_id": "news_helicopter", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/triggered_abilities/0"] }
+  ],
+  "primitive_references": [
+    { "symbol": "TriggerCondition::WhenSelfEntersBattlefield", "typed_path": "/faces/0/triggered_abilities/0/trigger" },
+    { "symbol": "SpellEffectKind::CreateTokens", "typed_path": "/faces/0/triggered_abilities/0/effect/0" }
+  ],
+  "tokens": ["human_citizen_gw_1_1"],
+  "semantic_fixtures": [
+    { "test": "scenario issue_misc25_batch::issue_misc25_news_helicopter_creates_one_exact_human_citizen", "covers": "the real entry creates one exact green-white Human Citizen token and the Construct has flying" },
+    { "test": "issue_misc25_batch::issue_misc25_batch_registers_five_exact_oracle_identities", "covers": "printed identity, type, cost and power/toughness" }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 192dd1e2-b6c2-432a-a1b4-e52ff39b3db2; no card-specific rulings.
+// Reviewed direct-RON mapping: authoring/review-maps/news_helicopter.json.
+(
+  id: "news_helicopter",
+  name: "News Helicopter",
+  face_id: "news_helicopter",
+  mana_cost: "{3}",
+  types: ["Artifact", "Creature", "Construct"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "human_citizen_gw_1_1", count: 1)],
+  )],
+)

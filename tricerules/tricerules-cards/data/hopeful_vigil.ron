@@ -1,0 +1,30 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 33fff722-5cc5-4d0e-b788-166b3edb1223; no card-specific rulings.
+// Reviewed direct-RON mapping: authoring/review-maps/hopeful_vigil.json.
+// WhenSelfDies observes any permanent moving from battlefield to graveyard.
+(
+  id: "hopeful_vigil",
+  name: "Hopeful Vigil",
+  face_id: "hopeful_vigil",
+  mana_cost: "{1}{W}",
+  types: ["Enchantment"],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [CreateTokens(token: "knight_w_2_2_vigilance", count: 1)],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfDies,
+      effect: [Scry(count: 2)],
+    ),
+  ],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    costs: [Mana("{2}{W}"), SacrificeSelf],
+    effect: [None],
+  )],
+)

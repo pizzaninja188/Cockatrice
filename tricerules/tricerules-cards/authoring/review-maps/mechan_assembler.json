@@ -1,0 +1,17 @@
+{
+  "format_version": 1,
+  "oracle_id": "2c2ef1ed-2f93-48c5-bf86-e46318599aeb",
+  "spans": [
+    { "face_id": "mechan_assembler", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/triggered_abilities/0"] }
+  ],
+  "primitive_references": [
+    { "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield", "typed_path": "/faces/0/triggered_abilities/0/trigger" },
+    { "symbol": "SpellEffectKind::CreateTokens", "typed_path": "/faces/0/triggered_abilities/0/effect/0" }
+  ],
+  "tokens": ["robot_c_2_2"],
+  "semantic_fixtures": [
+    { "test": "scenario issue_misc25_batch::issue_misc25_mechan_assembler_excludes_itself_and_caps_artifact_entries", "covers": "its own entry produces nothing; another artifact entry makes one Robot; further artifact and Robot entries in that turn make no extra tokens" },
+    { "test": "issue_misc25_batch::issue_misc25_batch_registers_five_exact_oracle_identities", "covers": "printed Robot Artificer identity, cost and power/toughness" }
+  ],
+  "complete_definition_review_confirmed": true
+}

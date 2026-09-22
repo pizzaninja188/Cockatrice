@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 2c2ef1ed-2f93-48c5-bf86-e46318599aeb; no card-specific rulings.
+// Reviewed direct-RON mapping: authoring/review-maps/mechan_assembler.json.
+(
+  id: "mechan_assembler",
+  name: "Mechan Assembler",
+  face_id: "mechan_assembler",
+  mana_cost: "{4}{U}",
+  types: ["Artifact", "Creature", "Robot", "Artificer"],
+  power: 4,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Artifact), exclude_source: true),
+    ),
+    effect: [CreateTokens(token: "robot_c_2_2", count: 1)],
+    max_triggers_per_turn: Some(1),
+  )],
+)

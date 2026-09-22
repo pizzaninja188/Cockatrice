@@ -1379,6 +1379,8 @@ holy_strength	0	cast	exercised
 honey_mammoth	0	cast	exercised
 honor	0	cast	exercised
 hop_to_it	0	cast	exercised
+hopeful_vigil	0	ability:0	exercised
+hopeful_vigil	0	cast	exercised
 hornet_cobra	0	cast	exercised
 horrid_vigor	0	cast	exercised
 hostile_minotaur	0	cast	exercised
@@ -1765,6 +1767,7 @@ masterful_flourish	0	cast	exercised
 maximum_overdrive	0	cast	exercised
 meandering_river	0	ability:0	exercised
 meandering_river	0	land	exercised
+mechan_assembler	0	cast	exercised
 mechan_navigator	0	cast	exercised
 mechan_shieldmate	0	cast	exercised
 meditation_pools	0	ability:0	exercised
@@ -1799,6 +1802,7 @@ midnight_tilling	0	cast	exercised
 might_of_oaks	0	cast	exercised
 might_of_the_ancestors	0	cast	exercised
 mightform_harmonizer	0	cast	exercised
+mighty_mutanimals	0	cast	exercised
 migrating_ketradon	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 migrating_ketradon	0	cast	exercised
 millennial_gargoyle	0	cast	exercised
@@ -1912,6 +1916,7 @@ nether_horror	0	cast	exercised
 nettle_swine	0	cast	exercised
 new_generations_technique	0	cast	exercised
 new_horizons	0	cast	exercised
+news_helicopter	0	cast	exercised
 nezumi_informant	0	cast	exercised
 nezumi_linkbreaker	0	cast	exercised
 nightblade_brigade	0	cast	exercised
@@ -3007,6 +3012,8 @@ turn_to_slag	0	cast	exercised
 turntimber_ascetic	0	cast	exercised
 turret_ogre	0	cast	exercised
 turtle-seals	0	cast	exercised
+turtle_blimp	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+turtle_blimp	0	cast	exercised
 tusked_colossodon	0	cast	exercised
 twinblade_assassins	0	cast	exercised
 twinblade_blessing	0	cast	exercised

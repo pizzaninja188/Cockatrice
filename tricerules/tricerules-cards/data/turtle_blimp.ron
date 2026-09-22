@@ -1,0 +1,28 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle bb8c6dd2-1abe-4eb2-be1f-b0c078e5f257; no card-specific rulings.
+// Reviewed direct-RON mapping: authoring/review-maps/turtle_blimp.json.
+(
+  id: "turtle_blimp",
+  name: "Turtle Blimp",
+  face_id: "turtle_blimp",
+  mana_cost: "{5}",
+  types: ["Artifact", "Vehicle"],
+  power: 3,
+  toughness: 4,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "mutant_r_2_2", count: 1)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    costs: [TapPermanents(
+      constraint: AggregateMinimum(minimum: 2, contribution: CurrentPower),
+      filter: (kind: Creature, controller: You),
+      exclude_source: true,
+    )],
+    effect: [AddTypes(subject: Source, addition: (card_types: [Creature]))],
+  )],
+)
