@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 19b5c94b-b4fa-41a9-b649-51c4e6f03602.
+// Handwritten typed definition reviewed through direct-RON path.
+(
+  id: "might_of_the_meek",
+  name: "Might of the Meek",
+  face_id: "might_of_the_meek",
+  mana_cost: "{R}",
+  types: ["Instant"],
+  spell_effect: [
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Trample]),
+    PumpTarget(power: 0, toughness: 0, subject: Chosen((kind: Creature)), scale: (
+      basis: Amount(Conditional(
+        condition: BattlefieldAggregate(filter: (controllers: Controller, required_subtypes: ["Mouse"]), aggregate: Count, min: Some(1)),
+        when_true: 1, otherwise: 0,
+      )),
+      power_per_unit: 1, toughness_per_unit: 0,
+    )),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0, 1])])),
+)

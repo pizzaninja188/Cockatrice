@@ -1,0 +1,13 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 41c15160-ee8c-42e3-bc6c-593b8c8ae335.
+// Handwritten typed definition reviewed through direct-RON path.
+(
+  id: "crash_through",
+  name: "Crash Through",
+  face_id: "crash_through",
+  mana_cost: "{R}",
+  types: ["Sorcery"],
+  spell_effect: [
+    GrantKeywordsAll(filter: (controller: YouControl), keywords: [Trample]),
+    Draw(count: 1),
+  ],
+)

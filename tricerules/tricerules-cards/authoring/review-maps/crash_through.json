@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "41c15160-ee8c-42e3-bc6c-593b8c8ae335",
+  "spans": [
+    {
+      "face_id": "crash_through",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "crash_through",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GrantKeywordsAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc38_batch::issue_misc38_crash_through",
+      "covers": "existing creatures get trample, later creatures do not; draw even with no creatures"
+    },
+    {
+      "test": "issue_misc38_batch::issue_misc38_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, absent numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

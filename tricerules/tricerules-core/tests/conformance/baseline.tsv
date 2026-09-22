@@ -597,6 +597,7 @@ cragcrown_pathway_timbercrown_pathway	1	ability:0	exercised
 cragcrown_pathway_timbercrown_pathway	1	land	exercised
 crash_and_burn	0	cast	exercised
 crash_of_rhinos	0	cast	exercised
+crash_through	0	cast	exercised
 craw_wurm	0	cast	exercised
 crazed_goblin	0	cast	exercised
 crazed_skirge	0	cast	exercised
@@ -841,6 +842,7 @@ eclipsed_merrow	0	cast	exercised
 eddymurk_crab	0	cast	exercised
 edge_rover	0	cast	exercised
 edgewall_pack	0	cast	exercised
+efflorescence	0	cast	exercised
 eject	0	cast	exercised
 ekundu_griffin	0	cast	exercised
 elder_auntie	0	cast	exercised
@@ -1846,6 +1848,7 @@ midnight_haunting	0	cast	exercised
 midnight_tilling	0	cast	exercised
 might_of_oaks	0	cast	exercised
 might_of_the_ancestors	0	cast	exercised
+might_of_the_meek	0	cast	exercised
 mightform_harmonizer	0	cast	exercised
 mighty_mutanimals	0	cast	exercised
 migrating_ketradon	0	ability:0	unsupported: ability not offered by generic battlefield fixture
@@ -2092,6 +2095,7 @@ peace_strider	0	cast	exercised
 pearled_unicorn	0	cast	exercised
 peculiar_lighthouse	0	ability:0	exercised
 peculiar_lighthouse	0	land	exercised
+pedal_to_the_metal	0	cast	exercised
 peerless_ropemaster	0	cast	exercised
 pegasus_charger	0	cast	exercised
 pegasus_courser	0	cast	exercised
@@ -2889,6 +2893,7 @@ taiga	0	land	exercised
 tajuru_blightblade	0	cast	exercised
 tajuru_pathwarden	0	cast	exercised
 tajuru_snarecaster	0	cast	exercised
+take_the_fall	0	cast	exercised
 take_up_the_shield	0	cast	exercised
 talas_air_ship	0	cast	exercised
 talas_merchant	0	cast	exercised

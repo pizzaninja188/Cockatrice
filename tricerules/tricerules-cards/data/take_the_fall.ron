@@ -1,0 +1,29 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 279f3aa5-5807-4797-8cd1-e009984a3691.
+// Handwritten typed definition reviewed through direct-RON path.
+(
+  id: "take_the_fall",
+  name: "Take the Fall",
+  face_id: "take_the_fall",
+  mana_cost: "{U}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: -1, toughness: 0, subject: Chosen((kind: Creature)), scale: (
+      basis: Amount(Conditional(
+        condition: BattlefieldAggregate(
+          filter: (controllers: Controller, any_of: Some([
+            (controllers: Controller, required_subtypes: ["Assassin"]),
+            (controllers: Controller, required_subtypes: ["Mercenary"]),
+            (controllers: Controller, required_subtypes: ["Pirate"]),
+            (controllers: Controller, required_subtypes: ["Rogue"]),
+            (controllers: Controller, required_subtypes: ["Warlock"]),
+          ])),
+          aggregate: Count, min: Some(1),
+        ),
+        when_true: 3, otherwise: 0,
+      )),
+      power_per_unit: -1, toughness_per_unit: 0,
+    )),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])])),
+)

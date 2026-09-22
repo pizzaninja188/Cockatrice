@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "22196948-9f30-4fcd-b43b-c7f81a0f4f36",
+  "spans": [
+    {
+      "face_id": "pedal_to_the_metal",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc38_batch::issue_misc38_pedal_to_the_metal",
+      "covers": "actual cast X scales power while first strike remains at X zero and positive"
+    },
+    {
+      "test": "issue_misc38_batch::issue_misc38_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, absent numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
