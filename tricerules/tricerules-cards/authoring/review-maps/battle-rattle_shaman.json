@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "72dc807b-35fb-4d69-ae4c-04eed0646170",
+  "spans": [
+    {
+      "face_id": "battle_rattle_shaman",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::AtBeginningOfCombat",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc18_batch::issue_misc18_battle_rattle_shaman_pumps_at_beginning_of_combat",
+      "covers": "the beginning-of-combat trigger lets the controller give a targeted creature +2/+0 until end of turn"
+    },
+    {
+      "test": "issue_misc18_batch::issue_misc18_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the optional beginning-of-combat pump, and its targeting of Battle-Rattle Shaman"
+    },
+    {
+      "test": "issue_misc18_batch::issue_misc18_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Battle-Rattle Shaman"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,31 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle e76ae81f-729c-4def-ae83-6870a696cbe8.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.8 (flash), CR 702.51 (convoke), CR 603.6a (entry trigger), and CR 115.3 (the "up to
+// one other" bounce can target any nonland permanent except the source itself).
+(
+  id: "disruptor_of_currents",
+  name: "Disruptor of Currents",
+  face_id: "disruptor_of_currents",
+  mana_cost: "{3}{U}{U}",
+  types: ["Creature", "Merfolk", "Wizard"],
+  power: 3,
+  toughness: 3,
+  keywords: [Flash, Convoke],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([3]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [ReturnToOwnersHand(subject: Chosen((
+      kind: AnyPermanent,
+      excluded_permanent_types: [Land],
+      excluded_objects: [Source],
+    )))],
+    targeting: Some((groups: [(
+      min: 0,
+      max: 1,
+      prompt: "Choose up to one other target nonland permanent",
+      effect_indices: [0],
+    )])),
+  )],
+)

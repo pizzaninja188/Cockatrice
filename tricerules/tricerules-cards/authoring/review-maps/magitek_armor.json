@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "oracle_id": "0e9d8e12-b9da-4452-a758-5caffd8a752e",
+  "spans": [
+    {
+      "face_id": "magitek_armor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "magitek_armor",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::TapPermanents",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::AddTypes",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "hero_c_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc18_batch::issue_misc18_magitek_armor_creates_a_hero_on_entry",
+      "covers": "entering creates one 1/1 colorless Hero creature token"
+    },
+    {
+      "test": "issue_misc18_batch::issue_misc18_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the entry Hero token, and Crew 1 of Magitek Armor"
+    },
+    {
+      "test": "issue_misc18_batch::issue_misc18_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Magitek Armor"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

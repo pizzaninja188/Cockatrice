@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "f328012f-4696-47bb-ab43-247bdcb13f03",
+  "spans": [
+    {
+      "face_id": "dragoons_wyvern",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "dragoons_wyvern",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "hero_c_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc18_batch::issue_misc18_dragoons_wyvern_creates_a_hero_and_flies",
+      "covers": "the Drake has flying and entering creates one 1/1 colorless Hero creature token"
+    },
+    {
+      "test": "issue_misc18_batch::issue_misc18_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flying, and the entry Hero token of Dragoon's Wyvern"
+    },
+    {
+      "test": "issue_misc18_batch::issue_misc18_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Dragoon's Wyvern"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

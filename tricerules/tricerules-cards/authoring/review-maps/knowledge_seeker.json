@@ -1,0 +1,70 @@
+{
+  "format_version": 1,
+  "oracle_id": "bdc2d980-ca14-4040-a9a1-786d724dc65c",
+  "spans": [
+    {
+      "face_id": "knowledge_seeker",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "knowledge_seeker",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "knowledge_seeker",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Vigilance",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPlayerDrawsNthCard",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc18_batch::issue_misc18_knowledge_seeker_counts_the_second_draw_and_makes_a_clue_on_death",
+      "covers": "the second card drawn in a turn adds a +1/+1 counter, the Seeker has vigilance, and its death creates one Clue token"
+    },
+    {
+      "test": "issue_misc18_batch::issue_misc18_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Vigilance, the second-draw counter, and the dies Clue token of Knowledge Seeker"
+    },
+    {
+      "test": "issue_misc18_batch::issue_misc18_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Knowledge Seeker"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

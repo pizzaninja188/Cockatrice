@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "679480aa-f9ad-4a6c-bd79-db9f9f75433d",
+  "spans": [
+    {
+      "face_id": "bespoke_bo",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    },
+    {
+      "face_id": "bespoke_bo",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "bespoke_bo",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc18_batch::issue_misc18_bespoke_bo_bounces_and_pumps_the_equipped_creature",
+      "covers": "the entry trigger returns an opponent's nonland permanent to hand and equipping for {3} gives the equipped creature +2/+1 and vigilance"
+    },
+    {
+      "test": "issue_misc18_batch::issue_misc18_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the up-to-one-other nonland bounce, the +2/+1 vigilance modifier, and equip {3} of Bespoke Bō"
+    },
+    {
+      "test": "issue_misc18_batch::issue_misc18_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Bespoke Bō"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

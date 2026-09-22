@@ -225,6 +225,7 @@ basilisk_collar	0	cast	exercised
 basking_capybara	0	cast	exercised
 bassara_tower_archer	0	cast	exercised
 bastion_enforcer	0	cast	exercised
+battle-rattle_shaman	0	cast	exercised
 battle_hurda	0	cast	exercised
 battlefield_raptor	0	cast	exercised
 battlegrowth	0	cast	exercised
@@ -250,6 +251,8 @@ benalish_knight	0	cast	exercised
 benders_waterskin	0	ability:0	exercised
 benders_waterskin	0	cast	exercised
 benthic_giant	0	cast	exercised
+bespoke_bō	0	ability:0	exercised
+bespoke_bō	0	cast	exercised
 bestial_bloodline	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 bestial_bloodline	0	cast	exercised
 bestial_menace	0	cast	exercised
@@ -732,6 +735,7 @@ dismal_backwater	0	land	exercised
 dispelling_exhale	0	cast	unsupported: target group 0 needs a richer fixture
 disruptive_stormbrood_petty_revenge	0	cast	exercised
 disruptive_stormbrood_petty_revenge	1	cast	exercised
+disruptor_of_currents	0	cast	exercised
 disruptor_wanderglyph	0	cast	exercised
 dive_down	0	cast	exercised
 divert_disaster	0	cast	unsupported: target group 0 needs a richer fixture
@@ -755,6 +759,7 @@ dragonback_lancer	0	cast	exercised
 dragons_eye_sentry	0	cast	exercised
 dragonstorm_globe	0	ability:0	exercised
 dragonstorm_globe	0	cast	exercised
+dragoons_wyvern	0	cast	exercised
 drakewing_krasis	0	cast	exercised
 dreaded_bat-cloud	0	cast	exercised
 dreadwing_scavenger	0	cast	exercised
@@ -947,6 +952,8 @@ fire_nation_cadets	0	ability:0	exercised
 fire_nation_cadets	0	cast	exercised
 fire_nation_raider	0	cast	exercised
 fire_nation_soldier	0	cast	exercised
+fire_nation_warship	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+fire_nation_warship	0	cast	exercised
 fire_prophecy	0	cast	exercised
 fire_sages	0	ability:0	exercised
 fire_sages	0	cast	exercised
@@ -1559,6 +1566,7 @@ knight_of_new_benalia	0	cast	exercised
 knight_of_the_keep	0	cast	exercised
 knight_of_the_tusk	0	cast	exercised
 knightfisher	0	cast	exercised
+knowledge_seeker	0	cast	exercised
 koala-sheep	0	cast	exercised
 kodama_of_the_north_tree	0	cast	exercised
 kokusho,_the_evening_star	0	cast	exercised
@@ -1697,6 +1705,8 @@ magebane_lizard	0	cast	exercised
 magic_damper	0	cast	exercised
 magic_pot	0	ability:0	exercised
 magic_pot	0	cast	exercised
+magitek_armor	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+magitek_armor	0	cast	exercised
 magnificent_end	0	cast	exercised
 magnigoth_sentry	0	cast	exercised
 mahamoti_djinn	0	cast	exercised

@@ -1,0 +1,39 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 679480aa-f9ad-4a6c-bd79-db9f9f75433d.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.6a (entry trigger), CR 115.3 (the "up to one other" bounce excludes the source), CR 301.5/
+// 702.6 (Equipment and equip), and CR 613.4c (attached +2/+1 and vigilance).
+(
+  id: "bespoke_bō",
+  name: "Bespoke Bō",
+  face_id: "bespoke_bo",
+  mana_cost: "{2}{U}",
+  types: ["Artifact", "Equipment"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [ReturnToOwnersHand(subject: Chosen((
+      kind: AnyPermanent,
+      excluded_permanent_types: [Land],
+      excluded_objects: [Source],
+    )))],
+    targeting: Some((groups: [(
+      min: 0,
+      max: 1,
+      prompt: "Choose up to one other target nonland permanent",
+      effect_indices: [0],
+    )])),
+  )],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AttachedModifier(delta_power: 2, delta_toughness: 1, keywords: [Vigilance]),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    costs: [Mana("{3}")],
+    effect: [Equip(target: (kind: Creature, controller: You))],
+  )],
+)

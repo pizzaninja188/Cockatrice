@@ -1,0 +1,20 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle f328012f-4696-47bb-ab43-247bdcb13f03.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.9 (flying), CR 603.6a (entry trigger), and CR 111.10 (the Hero token).
+(
+  id: "dragoons_wyvern",
+  name: "Dragoon's Wyvern",
+  face_id: "dragoons_wyvern",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Drake"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "hero_c_1_1", count: 1)],
+  )],
+)
