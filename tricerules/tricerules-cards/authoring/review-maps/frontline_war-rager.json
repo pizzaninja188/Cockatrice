@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "610d006a-3ceb-4136-b92b-a500c74d06b0",
+  "spans": [
+    {
+      "face_id": "frontline_war_rager",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::AtBeginningOfEndStep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldCreatureCount",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc21_batch::issue_misc21_frontline_war_rager_counts_itself_up",
+      "covers": "with two tapped creatures the end-step trigger puts a +1/+1 counter on the War-Rager"
+    },
+    {
+      "test": "issue_misc21_batch::issue_misc21_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the two-tapped-creatures condition, and the +1/+1 counter of Frontline War-Rager"
+    },
+    {
+      "test": "issue_misc21_batch::issue_misc21_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Frontline War-Rager"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "69892dc7-4087-447c-a41c-99cf3d5c0c12",
+  "spans": [
+    {
+      "face_id": "dawnstrike_vanguard",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "dawnstrike_vanguard",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Lifelink",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfEndStep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldCreatureCount",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCountersAll",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc21_batch::issue_misc21_dawnstrike_vanguard_pumps_each_other_creature",
+      "covers": "with two tapped creatures the end-step trigger puts a +1/+1 counter on each other creature you control (not the Vanguard) and the Vanguard has lifelink"
+    },
+    {
+      "test": "issue_misc21_batch::issue_misc21_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Lifelink, the two-tapped-creatures condition, and the team-wide counter of Dawnstrike Vanguard"
+    },
+    {
+      "test": "issue_misc21_batch::issue_misc21_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Dawnstrike Vanguard"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,24 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 610d006a-3ceb-4136-b92b-a500c74d06b0.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.4/700.11 (an intervening-if condition), CR 513.1/603.2b (the end-step trigger), and
+// CR 122.1 (+1/+1 counter on the source).
+(
+  id: "frontline_war-rager",
+  name: "Frontline War-Rager",
+  face_id: "frontline_war_rager",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Kavu", "Soldier"],
+  power: 2,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: AtBeginningOfEndStep(player: Controller),
+    intervening_if: Some(BattlefieldCreatureCount(
+      filter: (controllers: Controller, tapped: Some(true)),
+      min: Some(2),
+    )),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

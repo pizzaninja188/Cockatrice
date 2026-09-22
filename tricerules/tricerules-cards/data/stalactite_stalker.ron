@@ -1,0 +1,40 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle c8c28807-8abf-4f91-81f3-1d7d9e856c25.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.110 (menace), CR 603.4/700.11 (descend as an intervening-if), CR 513.1/603.2b (the
+// end-step trigger), CR 122.1 (+1/+1 counter), CR 701.21 (sacrifice cost), and CR 608.2h (the
+// power-scaled -X/-X reads the Stalker's last-known power).
+(
+  id: "stalactite_stalker",
+  name: "Stalactite Stalker",
+  face_id: "stalactite_stalker",
+  mana_cost: "{B}",
+  types: ["Creature", "Goblin", "Rogue"],
+  power: 1,
+  toughness: 1,
+  keywords: [Menace],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: AtBeginningOfEndStep(player: Controller),
+    intervening_if: Some(PermanentCardsEnteredGraveyardThisTurn(players: Controller, min: Some(1))),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    costs: [Mana("{2}{B}"), SacrificeSelf],
+    effect: [PumpTarget(
+      power: 0,
+      toughness: 0,
+      subject: Chosen((kind: Creature)),
+      scale: Some((basis: Amount(Count(SourcePower)), power_per_unit: -1, toughness_per_unit: -1)),
+    )],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature",
+      effect_indices: [0],
+    )])),
+  )],
+)

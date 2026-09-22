@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "e6f379ad-96b1-46c3-bbc6-a8cb57156a7f",
+  "spans": [
+    {
+      "face_id": "ruin_lurker_bat",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "ruin_lurker_bat",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Keyword::Lifelink",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfEndStep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::PermanentCardsEnteredGraveyardThisTurn",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc21_batch::issue_misc21_ruin_lurker_bat_scries_when_descended",
+      "covers": "a permanent card entering the graveyard satisfies Descend and the end-step trigger parks a scry 1 library-top choice; the Bat has flying and lifelink"
+    },
+    {
+      "test": "issue_misc21_batch::issue_misc21_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flying, Lifelink, the Descend condition, and the scry 1 of Ruin-Lurker Bat"
+    },
+    {
+      "test": "issue_misc21_batch::issue_misc21_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Ruin-Lurker Bat"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

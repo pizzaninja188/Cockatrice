@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "0c0940c6-8126-4d58-809e-871cf8588ef9",
+  "spans": [
+    {
+      "face_id": "starlit_soothsayer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "starlit_soothsayer",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfEndStep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::LifeChangedThisTurn",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::LibraryPartition",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc21_batch::issue_misc21_starlit_soothsayer_surveils_after_a_life_change",
+      "covers": "a controller life change this turn satisfies the intervening-if and the end-step trigger parks a surveil 1 choice; the Soothsayer has flying"
+    },
+    {
+      "test": "issue_misc21_batch::issue_misc21_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flying, the life-change condition, and the surveil 1 of Starlit Soothsayer"
+    },
+    {
+      "test": "issue_misc21_batch::issue_misc21_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Starlit Soothsayer"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

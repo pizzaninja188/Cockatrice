@@ -658,6 +658,7 @@ dawns_light_archer	0	cast	exercised
 dawnsire,_sunstar_dreadnought	0	ability:0	exercised
 dawnsire,_sunstar_dreadnought	0	cast	exercised
 dawnstrike_paladin	0	cast	exercised
+dawnstrike_vanguard	0	cast	exercised
 dawnwing_marshal	0	ability:0	exercised
 dawnwing_marshal	0	cast	exercised
 day_of_judgment	0	cast	exercised
@@ -1051,6 +1052,7 @@ frontier_bivouac	0	ability:0	exercised
 frontier_bivouac	0	land	exercised
 frontier_seeker	0	cast	exercised
 frontline_rush	0	cast	exercised
+frontline_war-rager	0	cast	exercised
 frost_breath	0	cast	exercised
 frost_ogre	0	cast	exercised
 frostbridge_guard	0	ability:0	exercised
@@ -2313,6 +2315,7 @@ rubble_slinger	0	cast	exercised
 rubbleback_rhino	0	cast	exercised
 rugged_highlands	0	ability:0	exercised
 rugged_highlands	0	land	exercised
+ruin-lurker_bat	0	cast	exercised
 ruination_wurm	0	cast	exercised
 rumble_arena	0	ability:0	exercised
 rumble_arena	0	ability:1	exercised
@@ -2351,6 +2354,7 @@ sagu_wildling_roost_seek	0	cast	exercised
 sagu_wildling_roost_seek	1	cast	exercised
 salt_road_packbeast	0	cast	exercised
 salvager_of_secrets	0	cast	exercised
+sami,_ships_engineer	0	cast	exercised
 samis_curiosity	0	cast	exercised
 sandskitter_outrider	0	cast	exercised
 sandsteppe_citadel	0	ability:0	exercised
@@ -2644,6 +2648,8 @@ squires_lightblade	0	cast	exercised
 squirrelanoids	0	cast	exercised
 stab	0	cast	exercised
 staggering_size	0	cast	exercised
+stalactite_stalker	0	ability:0	exercised
+stalactite_stalker	0	cast	exercised
 stall_out	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 stall_out	0	cast	exercised
 stampeding_rhino	0	cast	exercised
@@ -2659,6 +2665,7 @@ stark_industries_executive	0	ability:0	exercised
 stark_industries_executive	0	cast	exercised
 starlight_snare	0	cast	exercised
 starlit_angel	0	cast	exercised
+starlit_soothsayer	0	cast	exercised
 starport_security	0	ability:0	exercised
 starport_security	0	cast	exercised
 startled_relic_sloth	0	cast	exercised

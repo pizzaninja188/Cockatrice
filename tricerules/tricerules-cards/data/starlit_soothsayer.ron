@@ -1,0 +1,26 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 0c0940c6-8126-4d58-809e-871cf8588ef9.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.9 (flying), CR 603.4/700.11 (an intervening-if condition), CR 513.1/603.2b (the end-step
+// trigger), CR 119 (life change history), and CR 701.25 (surveil).
+(
+  id: "starlit_soothsayer",
+  name: "Starlit Soothsayer",
+  face_id: "starlit_soothsayer",
+  mana_cost: "{2}{B}",
+  types: ["Creature", "Bat", "Cleric"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: AtBeginningOfEndStep(player: Controller),
+    intervening_if: Some(LifeChangedThisTurn(
+      players: Relative(Controller),
+      change: Either,
+      quantifier: Any,
+    )),
+    effect: [LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil)],
+  )],
+)

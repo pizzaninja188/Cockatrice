@@ -1,0 +1,24 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 470c16c5-b078-47f5-89b0-42991e1f7157.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.4/700.11 (an intervening-if condition) and CR 513.1/603.2b (the end-step trigger).
+(
+  id: "sami,_ships_engineer",
+  name: "Sami, Ship's Engineer",
+  face_id: "sami_ships_engineer",
+  mana_cost: "{2}{R}{W}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Artificer"],
+  power: 2,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: AtBeginningOfEndStep(player: Controller),
+    intervening_if: Some(BattlefieldCreatureCount(
+      filter: (controllers: Controller, tapped: Some(true)),
+      min: Some(2),
+    )),
+    effect: [CreateTokens(token: "robot_c_2_2", count: 1, tapped: true)],
+  )],
+)

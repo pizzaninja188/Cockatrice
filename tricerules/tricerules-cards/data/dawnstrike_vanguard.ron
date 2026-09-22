@@ -1,0 +1,29 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 69892dc7-4087-447c-a41c-99cf3d5c0c12.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.15 (lifelink), CR 603.4/700.11 (an intervening-if condition), CR 513.1/603.2b (the
+// end-step trigger), and CR 122.1 (a +1/+1 counter on each other creature you control).
+(
+  id: "dawnstrike_vanguard",
+  name: "Dawnstrike Vanguard",
+  face_id: "dawnstrike_vanguard",
+  mana_cost: "{5}{W}",
+  types: ["Creature", "Human", "Knight"],
+  power: 4,
+  toughness: 5,
+  keywords: [Lifelink],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: AtBeginningOfEndStep(player: Controller),
+    intervening_if: Some(BattlefieldCreatureCount(
+      filter: (controllers: Controller, tapped: Some(true)),
+      min: Some(2),
+    )),
+    effect: [PutCountersAll(
+      counter: PlusOnePlusOne,
+      count: 1,
+      filter: (controller: Some(YouControl), exclude_self: true),
+    )],
+  )],
+)

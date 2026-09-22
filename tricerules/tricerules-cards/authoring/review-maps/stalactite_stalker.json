@@ -1,0 +1,77 @@
+{
+  "format_version": 1,
+  "oracle_id": "c8c28807-8abf-4f91-81f3-1d7d9e856c25",
+  "spans": [
+    {
+      "face_id": "stalactite_stalker",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "stalactite_stalker",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "stalactite_stalker",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Menace",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfEndStep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::PermanentCardsEnteredGraveyardThisTurn",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc21_batch::issue_misc21_stalactite_stalker_descends_and_scales_its_activation",
+      "covers": "a permanent card entering the graveyard satisfies Descend for the end-step +1/+1 counter, and the sacrifice activation gives -X/-X where X is the Stalker's power"
+    },
+    {
+      "test": "issue_misc21_batch::issue_misc21_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Menace, the Descend condition, the +1/+1 counter, and the power-scaled activation of Stalactite Stalker"
+    },
+    {
+      "test": "issue_misc21_batch::issue_misc21_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Stalactite Stalker"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
