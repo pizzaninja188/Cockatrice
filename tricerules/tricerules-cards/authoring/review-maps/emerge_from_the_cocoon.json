@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "fed2127c-7174-4863-ad6a-1847c96bbd3f",
+  "spans": [
+    {
+      "face_id": "emerge_from_the_cocoon",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc19_batch::issue_misc19_emerge_from_the_cocoon_reanimates_and_gains_life",
+      "covers": "the spell returns a targeted creature card from the graveyard to the battlefield and gains 3 life"
+    },
+    {
+      "test": "issue_misc19_batch::issue_misc19_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the creature-card reanimation, and the life gain of Emerge from the Cocoon"
+    },
+    {
+      "test": "issue_misc19_batch::issue_misc19_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Emerge from the Cocoon"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

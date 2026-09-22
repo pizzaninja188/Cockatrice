@@ -1,0 +1,25 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle d7aaffed-a143-49d6-a516-b9bc8b503aee.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.6a (entry trigger) and CR 115.3 (the "up to one" bounce targets a tapped creature).
+(
+  id: "peerless_ropemaster",
+  name: "Peerless Ropemaster",
+  face_id: "peerless_ropemaster",
+  mana_cost: "{4}{U}",
+  types: ["Creature", "Human", "Rogue"],
+  power: 4,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [ReturnToOwnersHand(subject: Chosen((kind: Creature, tapped: Some(true))))],
+    targeting: Some((groups: [(
+      min: 0,
+      max: 1,
+      prompt: "Choose up to one target tapped creature",
+      effect_indices: [0],
+    )])),
+  )],
+)

@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle fed2127c-7174-4863-ad6a-1847c96bbd3f.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 701.8 (the graveyard return creates a new object), CR 400.7/608.2b, and CR 119.3 (life gain).
+(
+  id: "emerge_from_the_cocoon",
+  name: "Emerge from the Cocoon",
+  face_id: "emerge_from_the_cocoon",
+  mana_cost: "{4}{W}",
+  types: ["Sorcery"],
+  spell_effect: [
+    MoveGraveyardCards(
+      filter: (owner: Controller, card: Some((card_type: Some(Creature)))),
+      destination: Battlefield(tapped: false),
+    ),
+    GainLife(amount: 3),
+  ],
+)

@@ -616,6 +616,8 @@ mod issue_misc16_batch;
 mod issue_misc17_batch;
 #[path = "scenario/issue_misc18_batch.rs"]
 mod issue_misc18_batch;
+#[path = "scenario/issue_misc19_batch.rs"]
+mod issue_misc19_batch;
 #[path = "scenario/issue_misc1_batch.rs"]
 mod issue_misc1_batch;
 #[path = "scenario/issue_misc2_batch.rs"]

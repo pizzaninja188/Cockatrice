@@ -1,0 +1,30 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 0a56a33b-033f-4398-8dc1-e531be059710.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.6a (entry trigger), CR 120.3 (damage), and CR 609.2: the entry damage only targets a
+// creature an opponent controls that was already dealt damage this turn.
+(
+  id: "unsparing_boltcaster",
+  name: "Unsparing Boltcaster",
+  face_id: "unsparing_boltcaster",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Ogre", "Wizard"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [DamageTarget(amount: 5, target: (
+      kind: Creature,
+      controller: Opponent,
+      was_dealt_damage_this_turn: Some(true),
+    ))],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature an opponent controls that was dealt damage this turn",
+      effect_indices: [0],
+    )])),
+  )],
+)

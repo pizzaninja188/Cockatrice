@@ -1,0 +1,32 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 71b81f3f-6092-4819-8529-e27bccfcf088.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.6a (entry trigger) and CR 115.3: the fetched ruling confirms Food is an artifact type,
+// so "creature or Food card" matches a creature card or any card with the Food subtype.
+(
+  id: "ragamuffin_raptor",
+  name: "Ragamuffin Raptor",
+  face_id: "ragamuffin_raptor",
+  mana_cost: "{4}{G}",
+  types: ["Creature", "Dinosaur"],
+  power: 4,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [MoveGraveyardCards(
+      filter: (owner: Controller, card: Some((any_of: Some([
+        (card_type: Some(Creature)),
+        (required_subtypes: ["Food"]),
+      ])))),
+      destination: Hand,
+    )],
+    targeting: Some((groups: [(
+      min: 0,
+      max: 1,
+      prompt: "Choose up to one target creature or Food card in your graveyard",
+      effect_indices: [0],
+    )])),
+  )],
+)

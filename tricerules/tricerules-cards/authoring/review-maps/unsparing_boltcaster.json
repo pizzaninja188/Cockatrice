@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "0a56a33b-033f-4398-8dc1-e531be059710",
+  "spans": [
+    {
+      "face_id": "unsparing_boltcaster",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc19_batch::issue_misc19_unsparing_boltcaster_needs_a_damaged_target",
+      "covers": "the entry trigger deals 5 damage to an opponent's creature already dealt damage this turn and rejects an undamaged creature"
+    },
+    {
+      "test": "issue_misc19_batch::issue_misc19_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the dealt-damage-this-turn entry damage, and its targeting of Unsparing Boltcaster"
+    },
+    {
+      "test": "issue_misc19_batch::issue_misc19_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Unsparing Boltcaster"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

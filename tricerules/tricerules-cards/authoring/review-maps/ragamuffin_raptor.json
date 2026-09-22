@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "71b81f3f-6092-4819-8529-e27bccfcf088",
+  "spans": [
+    {
+      "face_id": "ragamuffin_raptor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc19_batch::issue_misc19_ragamuffin_raptor_returns_a_creature_or_food_card",
+      "covers": "the entry trigger returns a creature card from the graveyard to hand and rejects a land card"
+    },
+    {
+      "test": "issue_misc19_batch::issue_misc19_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the creature-or-Food graveyard return, and its targeting of Ragamuffin Raptor"
+    },
+    {
+      "test": "issue_misc19_batch::issue_misc19_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Ragamuffin Raptor"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

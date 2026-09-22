@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "5a96b93b-bae6-48fb-87f5-05f3ffcf7ba9",
+  "spans": [
+    {
+      "face_id": "defibrillating_current",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc19_batch::issue_misc19_defibrillating_current_damages_and_gains_life",
+      "covers": "the spell deals 4 damage to a targeted creature and gains 2 life, and rejects a land as a target"
+    },
+    {
+      "test": "issue_misc19_batch::issue_misc19_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the creature-or-planeswalker damage, the life gain, and targeting of Defibrillating Current"
+    },
+    {
+      "test": "issue_misc19_batch::issue_misc19_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Defibrillating Current"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

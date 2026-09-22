@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "42fa99ab-d35f-4439-ab00-fe99bad626ac",
+  "spans": [
+    {
+      "face_id": "starfield_shepherd",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "starfield_shepherd",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "starfield_shepherd",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/warp_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "warp_cost",
+      "typed_path": "/faces/0/warp_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc19_batch::issue_misc19_starfield_shepherd_filters_its_search",
+      "covers": "the entry search offers a basic Plains and a mana-value-1 creature but excludes a non-Plains basic and a mana-value-2 creature"
+    },
+    {
+      "test": "issue_misc19_batch::issue_misc19_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flying, the two-branch entry search, and Warp {1}{W} of Starfield Shepherd"
+    },
+    {
+      "test": "issue_misc19_batch::issue_misc19_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Starfield Shepherd"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

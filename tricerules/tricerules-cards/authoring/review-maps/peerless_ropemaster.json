@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "d7aaffed-a143-49d6-a516-b9bc8b503aee",
+  "spans": [
+    {
+      "face_id": "peerless_ropemaster",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc19_batch::issue_misc19_peerless_ropemaster_bounces_only_a_tapped_creature",
+      "covers": "the entry trigger returns a tapped creature to its owner's hand and rejects an untapped creature"
+    },
+    {
+      "test": "issue_misc19_batch::issue_misc19_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the up-to-one tapped-creature bounce, and its targeting of Peerless Ropemaster"
+    },
+    {
+      "test": "issue_misc19_batch::issue_misc19_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Peerless Ropemaster"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,25 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 14aefe99-fb60-4f1c-a71f-7ffbe94c8b13.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.9 (flying), CR 603.6a (entry trigger), and CR 701.23 (unrestricted tutor).
+(
+  id: "rune-scarred_demon",
+  name: "Rune-Scarred Demon",
+  face_id: "rune_scarred_demon",
+  mana_cost: "{5}{B}{B}",
+  types: ["Creature", "Demon"],
+  power: 6,
+  toughness: 6,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [SearchLibrary(
+      filter: None,
+      destination: Hand,
+      shuffle: true,
+      reveal: false,
+    )],
+  )],
+)

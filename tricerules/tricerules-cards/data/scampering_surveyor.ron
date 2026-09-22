@@ -1,0 +1,27 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 63c8f510-eba8-4f00-9f80-fbbc74801a4a.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.6a (entry trigger) and CR 701.23 (search a basic land or Cave onto the battlefield tapped).
+(
+  id: "scampering_surveyor",
+  name: "Scampering Surveyor",
+  face_id: "scampering_surveyor",
+  mana_cost: "{4}",
+  types: ["Artifact", "Creature", "Gnome"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [SearchLibrary(
+      filter: Some((any_of: Some([
+        (card_type: Some(BasicLand)),
+        (card_type: Some(Land), required_subtypes: ["Cave"]),
+      ]))),
+      destination: Battlefield(tapped: true),
+      shuffle: true,
+      reveal: false,
+    )],
+  )],
+)

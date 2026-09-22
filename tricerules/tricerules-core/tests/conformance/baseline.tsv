@@ -685,6 +685,7 @@ deep_goblin_skulltaker	0	cast	exercised
 deer-dog	0	cast	exercised
 defiant_elf	0	cast	exercised
 defiant_khenra	0	cast	exercised
+defibrillating_current	0	cast	exercised
 deft_duelist	0	cast	exercised
 deglamer	0	cast	exercised
 delta_bloodflies	0	cast	exercised
@@ -838,6 +839,7 @@ elvish_regrower	0	cast	exercised
 elvish_visionary	0	cast	exercised
 elvish_warrior	0	cast	exercised
 embermouth_sentinel	0	cast	exercised
+emerge_from_the_cocoon	0	cast	exercised
 encroaching_dragonstorm	0	cast	exercised
 endless_one	0	cast	exercised
 enduring_curiosity	0	cast	exercised
@@ -2018,6 +2020,7 @@ peace_strider	0	cast	exercised
 pearled_unicorn	0	cast	exercised
 peculiar_lighthouse	0	ability:0	exercised
 peculiar_lighthouse	0	land	exercised
+peerless_ropemaster	0	cast	exercised
 pegasus_charger	0	cast	exercised
 pegasus_courser	0	cast	exercised
 pelakka_wurm	0	cast	exercised
@@ -2141,6 +2144,7 @@ rabid_bite	0	cast	exercised
 raccoon_rallier	0	ability:0	exercised
 raccoon_rallier	0	cast	exercised
 radiant_strike	0	cast	exercised
+ragamuffin_raptor	0	cast	exercised
 ragefire	0	cast	exercised
 ragged_playmate	0	ability:0	exercised
 ragged_playmate	0	cast	exercised
@@ -2311,6 +2315,7 @@ run_afoul	0	cast	exercised
 run_behind	0	cast	exercised
 runaway_boulder	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 runaway_boulder	0	cast	exercised
+rune-scarred_demon	0	cast	exercised
 rune-sealed_wall	0	ability:0	exercised
 rune-sealed_wall	0	cast	exercised
 runeclaw_bear	0	cast	exercised
@@ -2366,6 +2371,7 @@ sazhs_chocobo	0	cast	exercised
 scaled_behemoth	0	cast	exercised
 scaled_wurm	0	cast	exercised
 scalestorm_summoner	0	cast	exercised
+scampering_surveyor	0	cast	exercised
 scarblade_scout	0	cast	exercised
 scarecrow_guide	0	ability:0	exercised
 scarecrow_guide	0	cast	exercised
@@ -2638,6 +2644,7 @@ stand_up_for_yourself	0	cast	unsupported: target group 0 needs a richer fixture
 standing_troops	0	cast	exercised
 star_charter	0	cast	exercised
 starbreach_whale	0	cast	exercised
+starfield_shepherd	0	cast	exercised
 starfighter_pilot	0	cast	exercised
 stark_industries	0	ability:0	exercised
 stark_industries	0	land	exercised
@@ -3016,6 +3023,7 @@ university_campus	0	ability:1	exercised
 university_campus	0	land	exercised
 unravel_the_aether	0	cast	exercised
 unscrupulous_agent	0	cast	exercised
+unsparing_boltcaster	0	cast	exercised
 unsubtle_mockery	0	cast	exercised
 unsummon	0	cast	exercised
 untamed_hunger	0	cast	exercised

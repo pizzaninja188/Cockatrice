@@ -1,0 +1,30 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 42fa99ab-d35f-4439-ab00-fe99bad626ac.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.9 (flying), CR 702.185 (warp), CR 603.6a (entry trigger), and CR 701.23: the fetched
+// ruling confirms {X} in a searched card's mana cost counts as 0 for its mana value.
+(
+  id: "starfield_shepherd",
+  name: "Starfield Shepherd",
+  face_id: "starfield_shepherd",
+  mana_cost: "{3}{W}{W}",
+  warp_cost: Some("{1}{W}"),
+  types: ["Creature", "Angel"],
+  power: 3,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [SearchLibrary(
+      filter: Some((any_of: Some([
+        (card_type: Some(BasicLand), required_subtypes: ["Plains"]),
+        (card_type: Some(Creature), max_mana_value: Some(1)),
+      ]))),
+      destination: Hand,
+      shuffle: true,
+      reveal: true,
+    )],
+  )],
+)

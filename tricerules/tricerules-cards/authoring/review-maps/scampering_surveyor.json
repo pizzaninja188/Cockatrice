@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "63c8f510-eba8-4f00-9f80-fbbc74801a4a",
+  "spans": [
+    {
+      "face_id": "scampering_surveyor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc19_batch::issue_misc19_scampering_surveyor_ramps_a_basic_or_cave_tapped",
+      "covers": "the entry search offers a basic land and a Cave land but not a creature, and the chosen land enters tapped"
+    },
+    {
+      "test": "issue_misc19_batch::issue_misc19_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, and the basic-land-or-Cave entry search onto the battlefield tapped of Scampering Surveyor"
+    },
+    {
+      "test": "issue_misc19_batch::issue_misc19_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Scampering Surveyor"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

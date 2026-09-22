@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "14aefe99-fb60-4f1c-a71f-7ffbe94c8b13",
+  "spans": [
+    {
+      "face_id": "rune_scarred_demon",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "rune_scarred_demon",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc19_batch::issue_misc19_rune_scarred_demon_tutors_any_card",
+      "covers": "the entry trigger offers every library card and puts the chosen one into hand; the Demon has flying"
+    },
+    {
+      "test": "issue_misc19_batch::issue_misc19_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flying, and the unrestricted entry tutor of Rune-Scarred Demon"
+    },
+    {
+      "test": "issue_misc19_batch::issue_misc19_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Rune-Scarred Demon"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
