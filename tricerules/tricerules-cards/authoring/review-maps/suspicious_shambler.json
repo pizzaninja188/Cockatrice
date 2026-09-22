@@ -1,0 +1,38 @@
+{
+  "format_version": 1,
+  "oracle_id": "ea6ee33f-0cba-4e96-817f-dc89c9064ead",
+  "spans": [
+    {
+      "face_id": "suspicious_shambler",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "ActivatedCost::ExileSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "zombie_b_2_2"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc28_batch::issue_misc28_graveyard_sources_pay_exile_before_tokens_and_enforce_timing",
+      "covers": "actual registered card exercises its token count, source zone, costs, timing, and crew or life result as applicable"
+    },
+    {
+      "test": "issue_misc28_batch::issue_misc28_registers_five_exact_card_identities",
+      "covers": "printed card layout, cost, type, and power/toughness"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

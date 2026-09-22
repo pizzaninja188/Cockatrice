@@ -1,0 +1,26 @@
+// Pinned Oracle 21aaecc7-b9ec-4068-8e47-4dffaa12f102; Scryfall text/rulings checked 2026-09-22 (no card-specific rulings).
+(
+  id: "broadcast_rambler",
+  name: "Broadcast Rambler",
+  face_id: "broadcast_rambler",
+  mana_cost: "{4}{W}",
+  types: ["Artifact", "Vehicle"],
+  power: 5,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "thopter_c_1_1_flying", count: 1)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [TapPermanents(
+      constraint: AggregateMinimum(minimum: 1, contribution: CurrentPower),
+      filter: (kind: Creature, controller: You),
+      exclude_source: true,
+    )],
+    effect: [AddTypes(subject: Source, addition: (card_types: [Creature]))],
+  )],
+)

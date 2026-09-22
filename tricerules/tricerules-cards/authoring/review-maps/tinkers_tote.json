@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "cd1e6225-31b7-4a70-81ab-681abe860328",
+  "spans": [
+    {
+      "face_id": "tinkers_tote",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "tinkers_tote",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ActivatedCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "gnome_c_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc28_batch::issue_misc28_envoy_and_tote_activation_semantics",
+      "covers": "actual registered card exercises its token count, source zone, costs, timing, and crew or life result as applicable"
+    },
+    {
+      "test": "issue_misc28_batch::issue_misc28_registers_five_exact_card_identities",
+      "covers": "printed card layout, cost, type, and power/toughness"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

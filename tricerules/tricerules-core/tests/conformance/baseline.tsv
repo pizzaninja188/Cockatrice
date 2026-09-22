@@ -375,6 +375,8 @@ brilliant_plan	0	cast	exercised
 bristlepack_sentry	0	cast	exercised
 bristling_backwoods	0	ability:0	exercised
 bristling_backwoods	0	land	exercised
+broadcast_rambler	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
+broadcast_rambler	0	cast	exercised
 broadside_barrage	0	cast	exercised
 broken_wings	0	cast	exercised
 bronze_sable	0	cast	exercised
@@ -861,6 +863,8 @@ enormous_baloth	0	cast	exercised
 enter_the_enigma	0	cast	exercised
 enterprising_scallywag	0	cast	exercised
 environmental_scientist	0	cast	exercised
+envoy_of_okinec_ahau	0	ability:0	exercised
+envoy_of_okinec_ahau	0	cast	exercised
 epf_point_squad	0	cast	exercised
 epic_downfall	0	cast	unsupported: target group 0 needs a richer fixture
 epic_fight	0	cast	exercised
@@ -878,6 +882,8 @@ esper_origins_summon:_esper_maduin	1	cast	intentional: face unavailable from han
 essence_scatter	0	cast	unsupported: target group 0 needs a richer fixture
 etched_cornfield	0	ability:0	exercised
 etched_cornfield	0	land	exercised
+eternal_student	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+eternal_student	0	cast	exercised
 eumidian_terrabotanist	0	cast	exercised
 evils_thrall	0	cast	exercised
 eviscerate	0	cast	exercised
@@ -2801,6 +2807,8 @@ surrak,_elusive_hunter	0	cast	exercised
 surveillance_room	0	ability:0	exercised
 surveillance_room	0	ability:1	exercised
 surveillance_room	0	land	exercised
+suspicious_shambler	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+suspicious_shambler	0	cast	exercised
 susur_secundi,_void_altar	0	ability:0	exercised
 susur_secundi,_void_altar	0	ability:1	exercised
 susur_secundi,_void_altar	0	land	exercised
@@ -2949,6 +2957,8 @@ tidehollow_strix	0	cast	exercised
 tidings	0	cast	exercised
 timid_shieldbearer	0	ability:0	exercised
 timid_shieldbearer	0	cast	exercised
+tinkers_tote	0	ability:0	exercised
+tinkers_tote	0	cast	exercised
 tireless_missionaries	0	cast	exercised
 tishanas_tidebinder	0	cast	exercised
 titanic_growth	0	cast	exercised

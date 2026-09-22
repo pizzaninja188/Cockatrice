@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "21aaecc7-b9ec-4068-8e47-4dffaa12f102",
+  "spans": [
+    {
+      "face_id": "broadcast_rambler",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "broadcast_rambler",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ActivatedCost::TapPermanents",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::AddTypes",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "thopter_c_1_1_flying"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc28_batch::issue_misc28_rambler_uses_own_thopter_to_crew",
+      "covers": "actual registered card exercises its token count, source zone, costs, timing, and crew or life result as applicable"
+    },
+    {
+      "test": "issue_misc28_batch::issue_misc28_registers_five_exact_card_identities",
+      "covers": "printed card layout, cost, type, and power/toughness"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

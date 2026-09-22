@@ -1,0 +1,18 @@
+// Pinned Oracle ea6ee33f-0cba-4e96-817f-dc89c9064ead; Scryfall text/rulings checked 2026-09-22 (no card-specific rulings).
+(
+  id: "suspicious_shambler",
+  name: "Suspicious Shambler",
+  face_id: "suspicious_shambler",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Zombie"],
+  power: 4,
+  toughness: 2,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    source_zone: Graveyard,
+    costs: [Mana("{4}{B}{B}"), ExileSelf],
+    effect: [CreateTokens(token: "zombie_b_2_2", count: 2)],
+    timing: SorcerySpeed,
+  )],
+)
