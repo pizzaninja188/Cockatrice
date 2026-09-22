@@ -1,0 +1,14 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 1657be64-b38f-4074-a743-bf558dc57901.
+// Handwritten typed definition reviewed through direct-RON path.
+(
+  id: "harsh_annotation",
+  name: "Harsh Annotation",
+  face_id: "harsh_annotation",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: Creature))),
+    CreateTokens(token: "inkling_wb_1_1_flying", count: 1, who: ControllerOfTargetGroup(group_index: 0)),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])])),
+)

@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "1657be64-b38f-4074-a743-bf558dc57901",
+  "spans": [
+    {
+      "face_id": "harsh_annotation",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [
+    "inkling_wb_1_1_flying"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc37_batch::issue_misc37_harsh_annotation",
+      "covers": "target creature destroyed, its controller receives Inkling; legal indestructible and illegal target cases"
+    },
+    {
+      "test": "issue_misc37_batch::issue_misc37_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, absent numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

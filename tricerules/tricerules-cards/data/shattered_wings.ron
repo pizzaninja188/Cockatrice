@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 709b9f76-0ea5-456c-b1db-2cf517370fde.
+// Handwritten typed definition reviewed through direct-RON path.
+(
+  id: "shattered_wings",
+  name: "Shattered Wings",
+  face_id: "shattered_wings",
+  mana_cost: "{2}{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Destroy(subject: Chosen((any_of: Some([
+      (kind: AnyPermanent, permanent_types: [Artifact]),
+      (kind: AnyPermanent, permanent_types: [Enchantment]),
+      (kind: Creature, required_keywords: [Flying]),
+    ])))),
+    LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target artifact, enchantment, or creature with flying", effect_indices: [0])])),
+)

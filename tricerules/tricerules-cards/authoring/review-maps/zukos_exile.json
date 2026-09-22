@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "5cf18398-9552-415e-a61f-2c149e35ec3d",
+  "spans": [
+    {
+      "face_id": "zukos_exile",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc37_batch::issue_misc37_zukos_exile",
+      "covers": "artifact/creature/enchantment union, post-exile controller Clue, illegal target no token"
+    },
+    {
+      "test": "issue_misc37_batch::issue_misc37_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, absent numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

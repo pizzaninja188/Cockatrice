@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "709b9f76-0ea5-456c-b1db-2cf517370fde",
+  "spans": [
+    {
+      "face_id": "shattered_wings",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LibraryPartition",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc37_batch::issue_misc37_shattered_wings",
+      "covers": "target union, actual surveil choice, illegal target no surveil"
+    },
+    {
+      "test": "issue_misc37_batch::issue_misc37_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, absent numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

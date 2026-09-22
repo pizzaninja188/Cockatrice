@@ -735,6 +735,7 @@ detention_chariot	0	ability:1	unsupported: ability not offered by generic battle
 detention_chariot	0	cast	exercised
 devilthorn_fox	0	cast	exercised
 devoted_hero	0	cast	exercised
+devout_decree	0	cast	unsupported: target group 0 needs a richer fixture
 devout_monk	0	cast	exercised
 diabolic_edict	0	cast	exercised
 dictate_of_kruphix	0	cast	exercised
@@ -1335,6 +1336,7 @@ hardened_tactician	0	cast	exercised
 harmonize	0	cast	exercised
 harried_spearguard	0	cast	exercised
 harrier_naga	0	cast	exercised
+harsh_annotation	0	cast	exercised
 haunted_guardian	0	cast	exercised
 havenwood_wurm	0	cast	exercised
 havoc_devils	0	cast	exercised
@@ -1485,6 +1487,7 @@ incurable_ogre	0	cast	exercised
 independent_troops	0	cast	exercised
 indestructibility	0	cast	exercised
 indomitable_ancients	0	cast	exercised
+inevitable_defeat	0	cast	exercised
 infectious_horror	0	cast	exercised
 infernal_scarring	0	cast	exercised
 infestation_sage	0	cast	exercised
@@ -2535,6 +2538,7 @@ shattered_acolyte	0	ability:0	exercised
 shattered_acolyte	0	cast	exercised
 shattered_sanctum	0	ability:0	exercised
 shattered_sanctum	0	land	exercised
+shattered_wings	0	cast	exercised
 shatterskull_giant	0	cast	exercised
 shatterskull_recruit	0	cast	exercised
 shatterstorm	0	cast	exercised
@@ -3395,3 +3399,4 @@ zog,_triceraton_castaway	0	ability:0	unsupported: ability not offered by generic
 zog,_triceraton_castaway	0	cast	exercised
 zombie_goliath	0	cast	exercised
 zombify	0	cast	exercised
+zukos_exile	0	cast	exercised

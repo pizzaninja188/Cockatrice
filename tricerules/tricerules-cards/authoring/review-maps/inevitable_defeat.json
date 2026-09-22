@@ -1,0 +1,59 @@
+{
+  "format_version": 1,
+  "oracle_id": "d68439b5-7011-4b1d-a7da-14ef0f4d9994",
+  "spans": [
+    {
+      "face_id": "inevitable_defeat",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "inevitable_defeat",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SpellCannotBeCountered",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc37_batch::issue_misc37_inevitable_defeat",
+      "covers": "uncounterability, target controller loses 3 after exile, caster gains 3, illegal target no life changes"
+    },
+    {
+      "test": "issue_misc37_batch::issue_misc37_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, absent numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

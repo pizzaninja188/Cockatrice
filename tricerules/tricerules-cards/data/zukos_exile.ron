@@ -1,0 +1,14 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 5cf18398-9552-415e-a61f-2c149e35ec3d.
+// Handwritten typed definition reviewed through direct-RON path.
+(
+  id: "zukos_exile",
+  name: "Zuko's Exile",
+  face_id: "zukos_exile",
+  mana_cost: "{5}",
+  types: ["Instant", "Lesson"],
+  spell_effect: [
+    Exile(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact, Creature, Enchantment]))),
+    CreateTokens(token: "clue", count: 1, who: ControllerOfTargetGroup(group_index: 0)),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target artifact, creature, or enchantment", effect_indices: [0])])),
+)

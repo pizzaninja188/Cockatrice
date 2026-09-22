@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "92f8c8b1-1fd5-4e80-b8a9-51671937aaf2",
+  "spans": [
+    {
+      "face_id": "devout_decree",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc37_batch::issue_misc37_devout_decree",
+      "covers": "color/type intersection, actual scry choice, illegal target no scry"
+    },
+    {
+      "test": "issue_misc37_batch::issue_misc37_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, absent numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

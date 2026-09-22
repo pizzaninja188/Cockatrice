@@ -1,0 +1,16 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle d68439b5-7011-4b1d-a7da-14ef0f4d9994.
+// Handwritten typed definition reviewed through direct-RON path.
+(
+  id: "inevitable_defeat",
+  name: "Inevitable Defeat",
+  face_id: "inevitable_defeat",
+  mana_cost: "{1}{R}{W}{B}",
+  types: ["Instant"],
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: SpellCannotBeCountered)],
+  spell_effect: [
+    Exile(subject: Chosen((kind: AnyPermanent, excluded_permanent_types: [Land]))),
+    LoseLife(amount: Fixed(3), who: ControllerOfTargetGroup(group_index: 0)),
+    GainLife(amount: 3),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target nonland permanent", effect_indices: [0])])),
+)
