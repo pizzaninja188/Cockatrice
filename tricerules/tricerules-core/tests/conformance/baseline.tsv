@@ -811,6 +811,7 @@ dwarven_provisioner	0	cast	exercised
 dwarven_trader	0	cast	exercised
 dwynens_elite	0	cast	exercised
 eager_cadet	0	cast	exercised
+eager_glyphmage	0	cast	exercised
 eager_trufflesnout	0	cast	exercised
 eagle_of_the_watch	0	cast	exercised
 earth_elemental	0	cast	exercised
@@ -1276,6 +1277,7 @@ gryff_vanguard	0	cast	exercised
 guadosalam,_farplane_gateway	0	ability:0	exercised
 guadosalam,_farplane_gateway	0	land	exercised
 guard_duty	0	cast	exercised
+guarded_heir	0	cast	exercised
 guardian_lions	0	cast	exercised
 guardian_of_the_great_door	0	cast	unsupported: required cast-cost group needs a specialized fixture
 guardians_of_meletis	0	cast	exercised
@@ -1774,6 +1776,7 @@ meandering_river	0	land	exercised
 mechan_assembler	0	cast	exercised
 mechan_navigator	0	cast	exercised
 mechan_shieldmate	0	cast	exercised
+mechanized_ninja_cavalry	0	cast	exercised
 meditation_pools	0	ability:0	exercised
 meditation_pools	0	ability:1	exercised
 meditation_pools	0	land	exercised
@@ -1929,6 +1932,7 @@ nightveil_predator	0	cast	exercised
 nightwhorl_hermit	0	cast	exercised
 nimble_birdsticker	0	cast	exercised
 nimble_innovator	0	cast	exercised
+nimble_thopterist	0	cast	exercised
 nimbus_of_the_isles	0	cast	exercised
 ninja_of_the_hand	0	ability:0	exercised
 ninja_of_the_hand	0	cast	exercised
@@ -1978,6 +1982,7 @@ oin_the_brave	0	cast	exercised
 okos_accomplices	0	cast	exercised
 old_ghastbark	0	cast	exercised
 oltec_archaeologists	0	cast	exercised
+oltec_cloud_guard	0	cast	exercised
 omashu_city	0	ability:0	exercised
 omashu_city	0	ability:1	exercised
 omashu_city	0	land	exercised

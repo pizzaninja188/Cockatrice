@@ -1,0 +1,10 @@
+// 1/1 colorless Thopter artifact creature token with flying (Nimble Thopterist).
+(
+  id: "thopter_c_1_1_flying",
+  name: "Thopter",
+  face_id: "thopter",
+  types: ["Artifact", "Creature", "Thopter"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+)

@@ -1,0 +1,17 @@
+// Pinned Oracle 63e79a6f-ed98-480a-a740-d44e111046f7; Scryfall text/rulings checked 2026-09-22 (no card-specific rulings).
+(
+  id: "guarded_heir",
+  name: "Guarded Heir",
+  face_id: "guarded_heir",
+  mana_cost: "{5}{W}",
+  types: ["Creature", "Human", "Noble"],
+  power: 1,
+  toughness: 1,
+  keywords: [Lifelink],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "knight_w_3_3", count: 2)],
+  )],
+)

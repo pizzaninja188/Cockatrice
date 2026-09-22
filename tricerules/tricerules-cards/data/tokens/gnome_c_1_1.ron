@@ -1,0 +1,9 @@
+// 1/1 colorless Gnome artifact creature token (Oltec Cloud Guard).
+(
+  id: "gnome_c_1_1",
+  name: "Gnome",
+  face_id: "gnome",
+  types: ["Artifact", "Creature", "Gnome"],
+  power: 1,
+  toughness: 1,
+)

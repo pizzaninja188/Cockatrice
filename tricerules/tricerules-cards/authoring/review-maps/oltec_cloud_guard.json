@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "922a8e27-a367-40c6-84df-86ed32f71c7c",
+  "spans": [
+    {
+      "face_id": "oltec_cloud_guard",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "oltec_cloud_guard",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "gnome_c_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc27_batch::issue_misc27_entry_triggers_create_exact_token_identities",
+      "covers": "each actual card creates the exact owned token count with its printed type, color, size, and flying where applicable"
+    },
+    {
+      "test": "issue_misc27_batch::issue_misc27_registers_five_exact_card_identities",
+      "covers": "printed card characteristics, mana cost, and source keywords"
+    },
+    {
+      "test": "issue_misc27_batch::issue_misc27_token_templates_match_printed_characteristics",
+      "covers": "referenced token registry templates and printed token characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

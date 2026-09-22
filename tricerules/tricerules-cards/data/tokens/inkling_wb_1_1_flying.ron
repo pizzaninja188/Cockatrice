@@ -1,0 +1,11 @@
+// 1/1 white and black Inkling creature token with flying (Eager Glyphmage).
+(
+  id: "inkling_wb_1_1_flying",
+  name: "Inkling",
+  face_id: "inkling",
+  types: ["Creature", "Inkling"],
+  colors: [White, Black],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+)

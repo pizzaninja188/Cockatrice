@@ -1,0 +1,9 @@
+// 1/1 colorless Robot artifact creature token (Mechanized Ninja Cavalry).
+(
+  id: "robot_c_1_1",
+  name: "Robot",
+  face_id: "robot",
+  types: ["Artifact", "Creature", "Robot"],
+  power: 1,
+  toughness: 1,
+)

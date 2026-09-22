@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "63e79a6f-ed98-480a-a740-d44e111046f7",
+  "spans": [
+    {
+      "face_id": "guarded_heir",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "guarded_heir",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Lifelink",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "knight_w_3_3"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc27_batch::issue_misc27_entry_triggers_create_exact_token_identities",
+      "covers": "each actual card creates the exact owned token count with its printed type, color, size, and flying where applicable"
+    },
+    {
+      "test": "issue_misc27_batch::issue_misc27_registers_five_exact_card_identities",
+      "covers": "printed card characteristics, mana cost, and source keywords"
+    },
+    {
+      "test": "issue_misc27_batch::issue_misc27_token_templates_match_printed_characteristics",
+      "covers": "referenced token registry templates and printed token characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

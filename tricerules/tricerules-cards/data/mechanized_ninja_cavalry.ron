@@ -1,0 +1,16 @@
+// Pinned Oracle 2db8dda3-8136-4cf2-ba2d-ecc344a36725; Scryfall text/rulings checked 2026-09-22 (no card-specific rulings).
+(
+  id: "mechanized_ninja_cavalry",
+  name: "Mechanized Ninja Cavalry",
+  face_id: "mechanized_ninja_cavalry",
+  mana_cost: "{1}{R/W}",
+  types: ["Artifact", "Creature", "Robot", "Ninja"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "robot_c_1_1", count: 1)],
+  )],
+)

@@ -1,0 +1,17 @@
+// Pinned Oracle 922a8e27-a367-40c6-84df-86ed32f71c7c; Scryfall text/rulings checked 2026-09-22 (no card-specific rulings).
+(
+  id: "oltec_cloud_guard",
+  name: "Oltec Cloud Guard",
+  face_id: "oltec_cloud_guard",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 3,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "gnome_c_1_1", count: 1)],
+  )],
+)

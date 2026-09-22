@@ -1,0 +1,16 @@
+// Pinned Oracle 070aa6c7-4741-47de-b68a-629aa4201ac0; Scryfall text/rulings checked 2026-09-22 (no card-specific rulings).
+(
+  id: "eager_glyphmage",
+  name: "Eager Glyphmage",
+  face_id: "eager_glyphmage",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Cat", "Cleric"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "inkling_wb_1_1_flying", count: 1)],
+  )],
+)

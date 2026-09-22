@@ -1,0 +1,16 @@
+// Pinned Oracle 01813091-75e8-431b-ba3f-b1ea1ba20a3b; Scryfall text/rulings checked 2026-09-22 (no card-specific rulings).
+(
+  id: "nimble_thopterist",
+  name: "Nimble Thopterist",
+  face_id: "nimble_thopterist",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Vedalken", "Artificer"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "thopter_c_1_1_flying", count: 1)],
+  )],
+)

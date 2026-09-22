@@ -1,0 +1,10 @@
+// 3/3 white Knight creature token without abilities (Guarded Heir).
+(
+  id: "knight_w_3_3",
+  name: "Knight",
+  face_id: "knight",
+  types: ["Creature", "Knight"],
+  colors: [White],
+  power: 3,
+  toughness: 3,
+)
