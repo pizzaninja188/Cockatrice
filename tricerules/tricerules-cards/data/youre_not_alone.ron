@@ -1,0 +1,16 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 9dbc2fc8-ed42-4534-9676-bf0695cd518c.
+(
+  id: "youre_not_alone",
+  name: "You're Not Alone",
+  face_id: "you_re_not_alone",
+  mana_cost: "{W}",
+  types: ["Instant"],
+  spell_effect: [PumpTarget(power: 0, toughness: 0, subject: Chosen((kind: Creature)), scale: (
+    basis: Amount(Conditional(
+      condition: BattlefieldCreatureCount(filter: (controllers: Controller), min: Some(3)),
+      when_true: 4, otherwise: 2,
+    )),
+    power_per_unit: 1, toughness_per_unit: 1,
+  ))],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])])),
+)

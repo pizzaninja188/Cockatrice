@@ -1,0 +1,37 @@
+{
+  "format_version": 1,
+  "oracle_id": "9dbc2fc8-ed42-4534-9676-bf0695cd518c",
+  "spans": [
+    {
+      "face_id": "you_re_not_alone",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc39_batch::issue_misc39_youre_not_alone",
+      "covers": "two versus three own creatures at resolution; +2/+2 versus +4/+4 instead"
+    },
+    {
+      "test": "issue_misc39_batch::issue_misc39_registers_six_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and absent numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "a8cdcaa0-8e25-4c17-b5ce-16f72b535123",
+  "spans": [
+    {
+      "face_id": "thoughtweft_charge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Conditional",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc39_batch::issue_misc39_thoughtweft_charge",
+      "covers": "entry history scoped to own creatures; draw only on legal target"
+    },
+    {
+      "test": "issue_misc39_batch::issue_misc39_registers_six_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and absent numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

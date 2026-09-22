@@ -1,0 +1,13 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle b77764fe-bc79-410a-995a-ac392f5b46b8.
+(
+  id: "impolite_entrance",
+  name: "Impolite Entrance",
+  face_id: "impolite_entrance",
+  mana_cost: "{R}",
+  types: ["Sorcery"],
+  spell_effect: [
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Trample, Haste]),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])])),
+)

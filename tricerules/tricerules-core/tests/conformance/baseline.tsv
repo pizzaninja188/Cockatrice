@@ -809,6 +809,7 @@ druid_of_the_spade	0	cast	exercised
 dryad_arbor	0	land	exercised
 dual-sun_adepts	0	ability:0	exercised
 dual-sun_adepts	0	cast	exercised
+dual-sun_technique	0	cast	exercised
 dual_shot	0	cast	exercised
 dub	0	cast	exercised
 due_diligence	0	cast	exercised
@@ -1137,6 +1138,7 @@ genghis_frog	0	cast	exercised
 germinating_wurm	0	cast	exercised
 gerrards_irregulars	0	cast	exercised
 gerrards_verdict	0	cast	exercised
+get_a_leg_up	0	cast	exercised
 get_out	0	cast	exercised
 ghirapur_osprey	0	cast	exercised
 ghitu_lavarunner	0	cast	exercised
@@ -1483,6 +1485,7 @@ impact_tremors	0	cast	exercised
 impale	0	cast	exercised
 imperial_outrider	0	cast	exercised
 imperious_inkmage	0	cast	exercised
+impolite_entrance	0	cast	exercised
 impossible_inferno	0	cast	exercised
 impractical_joke	0	cast	exercised
 incurable_ogre	0	cast	exercised
@@ -2984,6 +2987,7 @@ those_who_serve	0	cast	exercised
 thought_shucker	0	ability:0	unsupported: nonmana costs need additional fixture resources
 thought_shucker	0	cast	exercised
 thoughtseize	0	cast	exercised
+thoughtweft_charge	0	cast	exercised
 thousand_moons_infantry	0	cast	exercised
 thraben_purebloods	0	cast	exercised
 thraben_valiant	0	cast	exercised
@@ -3005,6 +3009,7 @@ thunder_salvo	0	cast	exercised
 thundering_falls	0	land	exercised
 thundering_giant	0	cast	exercised
 thundering_tanadon	0	cast	exercised
+thwip!	0	cast	exercised
 ticket_booth_tunnel_of_hate	0	cast	exercised
 ticket_booth_tunnel_of_hate	1	cast	exercised
 tidecaller_mentor	0	cast	exercised
@@ -3389,6 +3394,7 @@ yip_yip!	0	cast	exercised
 yoked_ox	0	cast	exercised
 yotian_medic	0	cast	exercised
 yotian_soldier	0	cast	exercised
+youre_not_alone	0	cast	exercised
 youthful_knight	0	cast	exercised
 youthful_valkyrie	0	cast	exercised
 yuyan_archers	0	cast	exercised

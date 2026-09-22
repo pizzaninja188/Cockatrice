@@ -1,0 +1,16 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle a8cdcaa0-8e25-4c17-b5ce-16f72b535123.
+(
+  id: "thoughtweft_charge",
+  name: "Thoughtweft Charge",
+  face_id: "thoughtweft_charge",
+  mana_cost: "{1}{G}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: 3, toughness: 3, subject: Chosen((kind: Creature))),
+    Conditional(
+      condition: PermanentsEnteredThisTurn(controllers: Controller, filter: (permanent_type: Some(Creature)), min: Some(1)),
+      effect: Draw(count: 1),
+    ),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])])),
+)

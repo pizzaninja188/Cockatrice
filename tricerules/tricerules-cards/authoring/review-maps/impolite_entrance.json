@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "b77764fe-bc79-410a-995a-ac392f5b46b8",
+  "spans": [
+    {
+      "face_id": "impolite_entrance",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "impolite_entrance",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc39_batch::issue_misc39_impolite_entrance",
+      "covers": "trample and haste for target, draw only on legal target"
+    },
+    {
+      "test": "issue_misc39_batch::issue_misc39_registers_six_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and absent numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

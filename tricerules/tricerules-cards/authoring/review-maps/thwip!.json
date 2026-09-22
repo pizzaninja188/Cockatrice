@@ -1,0 +1,47 @@
+{
+  "format_version": 1,
+  "oracle_id": "f7d11254-b48a-4016-a035-c0d6642fdfae",
+  "spans": [
+    {
+      "face_id": "thwip",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc39_batch::issue_misc39_thwip",
+      "covers": "Spider target gains two life regardless of controller; non-Spider zero"
+    },
+    {
+      "test": "issue_misc39_batch::issue_misc39_registers_six_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line and absent numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
