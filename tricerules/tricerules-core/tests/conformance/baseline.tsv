@@ -40,6 +40,7 @@ aetherize	0	cast	exercised
 affa_protector	0	cast	exercised
 affectionate_indrik	0	cast	exercised
 agate-blade_assassin	0	cast	exercised
+agate_assault	0	cast	exercised
 ageless_guardian	0	cast	exercised
 agent_maria_hill	0	cast	exercised
 agent_of_atlas	0	cast	exercised
@@ -2423,6 +2424,7 @@ rune-sealed_wall	0	cast	exercised
 runeclaw_bear	0	cast	exercised
 russet_wolves	0	cast	exercised
 rustwing_falcon	0	cast	exercised
+rydias_return	0	cast	exercised
 s.h.i.e.l.d._deployment_drone	0	cast	exercised
 s.h.i.e.l.d._helicarrier	0	ability:0	unsupported: nonmana costs need additional fixture resources
 s.h.i.e.l.d._helicarrier	0	cast	exercised
@@ -2486,6 +2488,7 @@ scene_of_the_crime	0	ability:1	exercised
 scene_of_the_crime	0	ability:2	exercised
 scene_of_the_crime	0	land	exercised
 scholar_of_stars	0	cast	exercised
+school_daze	0	cast	exercised
 scion_of_ugin	0	cast	exercised
 scorch_spitter	0	cast	exercised
 scorching_dragonfire	0	cast	exercised
@@ -2733,6 +2736,7 @@ spirebluff_canal	0	land	exercised
 spirit_mascot	0	cast	exercised
 spirited_companion	0	cast	exercised
 spitfire_lagac	0	cast	exercised
+splatter_technique	0	cast	exercised
 splinters_technique	0	cast	exercised
 split_up	0	cast	exercised
 sporecap_spider	0	cast	exercised
@@ -2865,6 +2869,7 @@ super_speed	0	cast	exercised
 super_suit	0	ability:0	exercised
 super_suit	0	cast	exercised
 super_villain_lockup	0	cast	exercised
+suplex	0	cast	exercised
 sure_strike	0	cast	exercised
 surly_farrier	0	ability:0	exercised
 surly_farrier	0	cast	exercised

@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "7b89b7d2-c724-4d5d-9f0b-7d3302ad1168",
+  "spans": [
+    {
+      "face_id": "agate_assault",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/modal_spell"
+      ]
+    },
+    {
+      "face_id": "agate_assault",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/0"
+      ]
+    },
+    {
+      "face_id": "agate_assault",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "ModalDef",
+      "typed_path": "/faces/0/modal_spell"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileIfWouldDieThisTurn",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/modal_spell/modes/0/targeting"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/modal_spell/modes/1/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc42_batch::issue_misc42_damage_then_exile_modes",
+      "covers": "four damage and later death replacement versus artifact exile and illegal land"
+    },
+    {
+      "test": "issue_misc42_batch::issue_misc42_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost and type line"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

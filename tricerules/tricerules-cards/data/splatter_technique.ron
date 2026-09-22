@@ -1,0 +1,10 @@
+// Pinned Oracle 2620dcfe-8738-4f81-b23d-0c1c60cf9047; rulings checked 2026-09-22.
+(
+  id: "splatter_technique", name: "Splatter Technique", face_id: "splatter_technique",
+  mana_cost: "{1}{U}{U}{R}{R}", types: ["Sorcery"],
+  modal_spell: (min_modes: 1, max_modes: 1, modes: [
+    (mode_id: "mode_01", presentation: OracleLines([2]), effects: [Draw(count: 4)]),
+    (mode_id: "mode_02", presentation: OracleLines([3]),
+      effects: [DamageAll(amount: 4, kind: (any_of: Some([(kind: Creature), (kind: AnyPermanent, permanent_types: [Planeswalker])]))) ]),
+  ]),
+)

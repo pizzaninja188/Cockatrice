@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "2620dcfe-8738-4f81-b23d-0c1c60cf9047",
+  "spans": [
+    {
+      "face_id": "splatter_technique",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/modal_spell"
+      ]
+    },
+    {
+      "face_id": "splatter_technique",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/0"
+      ]
+    },
+    {
+      "face_id": "splatter_technique",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "ModalDef",
+      "typed_path": "/faces/0/modal_spell"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageAll",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc42_batch::issue_misc42_splatter_technique",
+      "covers": "draw four versus damage to both players creatures and planeswalker, not artifact or players"
+    },
+    {
+      "test": "issue_misc42_batch::issue_misc42_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost and type line"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "af2275ea-1085-4145-aa6b-36924d53d88a",
+  "spans": [
+    {
+      "face_id": "school_daze",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/modal_spell"
+      ]
+    },
+    {
+      "face_id": "school_daze",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/0"
+      ]
+    },
+    {
+      "face_id": "school_daze",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "ModalDef",
+      "typed_path": "/faces/0/modal_spell"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/modal_spell/modes/1/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc42_batch::issue_misc42_school_daze",
+      "covers": "draw three versus target-spell counter and draw one, required stack target, and no draw after the sole target is countered first"
+    },
+    {
+      "test": "issue_misc42_batch::issue_misc42_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost and type line"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

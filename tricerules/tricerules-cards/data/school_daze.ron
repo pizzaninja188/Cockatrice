@@ -1,0 +1,11 @@
+// Pinned Oracle af2275ea-1085-4145-aa6b-36924d53d88a; rulings checked 2026-09-22.
+(
+  id: "school_daze", name: "School Daze", face_id: "school_daze",
+  mana_cost: "{3}{U}{U}", types: ["Instant"],
+  modal_spell: (min_modes: 1, max_modes: 1, modes: [
+    (mode_id: "mode_01", presentation: OracleLines([2]), effects: [Draw(count: 3)]),
+    (mode_id: "mode_02", presentation: OracleLines([3]),
+      effects: [CounterTargetSpell(spell_filter: ()), Draw(count: 1)],
+      targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target spell", effect_indices: [0])]))),
+  ]),
+)

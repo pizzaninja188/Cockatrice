@@ -1,0 +1,12 @@
+// Pinned Oracle 0d007479-c5e8-4aa1-b53e-fa962783deee; rulings checked 2026-09-22.
+(
+  id: "rydias_return", name: "Rydia's Return", face_id: "rydias_return",
+  mana_cost: "{3}{G}{G}", types: ["Sorcery"],
+  modal_spell: (min_modes: 1, max_modes: 1, modes: [
+    (mode_id: "mode_01", presentation: OracleLines([2]),
+      effects: [PumpAll(filter: (controller: YouControl), power: 3, toughness: 3)]),
+    (mode_id: "mode_02", presentation: OracleLines([3]),
+      effects: [MoveGraveyardCards(filter: (owner: Controller, card: Some((any_of: Some([(card_type: Some(Land)), (card_type: Some(NonlandPermanent))])))), destination: Hand)],
+      targeting: Some((groups: [(min: 0, max: 2, prompt: "Choose up to two target permanent cards from your graveyard", effect_indices: [0])]))),
+  ]),
+)
