@@ -230,6 +230,7 @@ bassara_tower_archer	0	cast	exercised
 bastion_enforcer	0	cast	exercised
 battle-rattle_shaman	0	cast	exercised
 battle_hurda	0	cast	exercised
+battle_menu	0	cast	exercised
 battlefield_raptor	0	cast	exercised
 battlegrowth	0	cast	exercised
 battlesong_berserker	0	cast	exercised
@@ -1207,6 +1208,7 @@ gloomlake_verge	0	ability:1	exercised
 gloomlake_verge	0	land	exercised
 glorious_anthem	0	cast	exercised
 glorious_charge	0	cast	exercised
+glorious_decay	0	cast	exercised
 glory_seeker	0	cast	exercised
 gnarlbark_elm	0	ability:0	unsupported: nonmana costs need additional fixture resources
 gnarlbark_elm	0	cast	exercised
@@ -2600,6 +2602,7 @@ silverclaw_griffin	0	cast	exercised
 silvercoat_lion	0	cast	exercised
 silvergill_mentor	0	cast	unsupported: required cast-cost group needs a specialized fixture
 silvergill_peddler	0	cast	exercised
+silverquill_charm	0	cast	exercised
 simic_guildgate	0	ability:0	exercised
 simic_guildgate	0	land	exercised
 simic_sky_swallower	0	cast	exercised
@@ -2648,6 +2651,7 @@ skystreak_engineer	0	cast	exercised
 skyswirl_harrier	0	cast	exercised
 slagdrill_scrapper	0	ability:0	exercised
 slagdrill_scrapper	0	cast	exercised
+slagstorm	0	cast	exercised
 slash_panther	0	cast	exercised
 slavering_branchsnapper	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 slavering_branchsnapper	0	cast	exercised
@@ -2730,6 +2734,7 @@ spirit_mascot	0	cast	exercised
 spirited_companion	0	cast	exercised
 spitfire_lagac	0	cast	exercised
 splinters_technique	0	cast	exercised
+split_up	0	cast	exercised
 sporecap_spider	0	cast	exercised
 spotcycle_scouter	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
 spotcycle_scouter	0	cast	exercised
@@ -2985,6 +2990,7 @@ thieving_otter	0	cast	exercised
 think_twice	0	cast	exercised
 thirst_for_identity	0	cast	exercised
 thorin_oakenshield	0	cast	exercised
+thorins_last_stand	0	cast	exercised
 thornhide_wolves	0	cast	exercised
 thornweald_archer	0	cast	exercised
 thornwood_falls	0	ability:0	exercised

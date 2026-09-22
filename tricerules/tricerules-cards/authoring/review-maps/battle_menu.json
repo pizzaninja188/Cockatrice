@@ -1,0 +1,90 @@
+{
+  "format_version": 1,
+  "oracle_id": "8af57b80-bbc6-47ce-83f6-34ae8e2f5bd5",
+  "spans": [
+    {
+      "face_id": "battle_menu",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/modal_spell"
+      ]
+    },
+    {
+      "face_id": "battle_menu",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/0"
+      ]
+    },
+    {
+      "face_id": "battle_menu",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/1"
+      ]
+    },
+    {
+      "face_id": "battle_menu",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/2"
+      ]
+    },
+    {
+      "face_id": "battle_menu",
+      "start_line": 5,
+      "end_line": 5,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/3"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "ModalDef",
+      "typed_path": "/faces/0/modal_spell"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/modal_spell/modes/1/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/modal_spell/modes/2/effects/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/modal_spell/modes/2/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/modal_spell/modes/3/effects/0"
+    }
+  ],
+  "tokens": [
+    "knight_w_2_2"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc41_batch::issue_misc41_battle_menu",
+      "covers": "four exclusive modes, target filters, token and life"
+    },
+    {
+      "test": "issue_misc41_batch::issue_misc41_registers_six_exact_card_identities",
+      "covers": "printed identity, layout, mana cost and type line"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 2ed1879a-83b8-48df-a6d2-fe28e912b4c5.
+(
+  id: "slagstorm",
+  name: "Slagstorm",
+  face_id: "slagstorm",
+  mana_cost: "{1}{R}{R}",
+  types: ["Sorcery"],
+  modal_spell: (min_modes: 1, max_modes: 1, modes: [
+    (mode_id: "mode_01", presentation: OracleLines([2]), effects: [DamageAll(amount: 3, kind: (kind: Creature))]),
+    (mode_id: "mode_02", presentation: OracleLines([3]), effects: [DamagePlayer(amount: 3, who: EachPlayer)]),
+  ]),
+)

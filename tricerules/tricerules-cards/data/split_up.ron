@@ -1,0 +1,12 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 2e82520a-9da3-49ae-b5c8-37e7ac8853fe.
+(
+  id: "split_up",
+  name: "Split Up",
+  face_id: "split_up",
+  mana_cost: "{1}{W}{W}",
+  types: ["Sorcery"],
+  modal_spell: (min_modes: 1, max_modes: 1, modes: [
+    (mode_id: "mode_01", presentation: OracleLines([2]), effects: [DestroyAll(kind: (kind: Creature, tapped: Some(true)))]),
+    (mode_id: "mode_02", presentation: OracleLines([3]), effects: [DestroyAll(kind: (kind: Creature, tapped: Some(false)))]),
+  ]),
+)

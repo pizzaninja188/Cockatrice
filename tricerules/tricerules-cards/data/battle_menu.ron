@@ -1,0 +1,14 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 8af57b80-bbc6-47ce-83f6-34ae8e2f5bd5.
+(
+  id: "battle_menu",
+  name: "Battle Menu",
+  face_id: "battle_menu",
+  mana_cost: "{1}{W}",
+  types: ["Instant"],
+  modal_spell: (min_modes: 1, max_modes: 1, modes: [
+    (mode_id: "mode_01", presentation: OracleLines([2]), effects: [CreateTokens(token: "knight_w_2_2", count: 1)]),
+    (mode_id: "mode_02", presentation: OracleLines([3]), effects: [PumpTarget(power: 0, toughness: 4, subject: Chosen((kind: Creature)))], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])]))),
+    (mode_id: "mode_03", presentation: OracleLines([4]), effects: [Destroy(subject: Chosen((kind: Creature, power: Some(AtLeast(4)))))], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature with power 4 or greater", effect_indices: [0])]))),
+    (mode_id: "mode_04", presentation: OracleLines([5]), effects: [GainLife(amount: 4)]),
+  ]),
+)

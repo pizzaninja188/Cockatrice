@@ -1,0 +1,13 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle d985b12e-2731-4ccf-9f51-90218b20b42a.
+(
+  id: "silverquill_charm",
+  name: "Silverquill Charm",
+  face_id: "silverquill_charm",
+  mana_cost: "{W}{B}",
+  types: ["Instant"],
+  modal_spell: (min_modes: 1, max_modes: 1, modes: [
+    (mode_id: "mode_01", presentation: OracleLines([2]), effects: [PutCounters(counter: PlusOnePlusOne, count: 2, subject: Chosen((kind: Creature)))], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])]))),
+    (mode_id: "mode_02", presentation: OracleLines([3]), effects: [Exile(subject: Chosen((kind: Creature, power: Some(AtMost(2)))))], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature with power 2 or less", effect_indices: [0])]))),
+    (mode_id: "mode_03", presentation: OracleLines([4]), effects: [LoseLife(amount: Fixed(3), who: EachOpponent), GainLife(amount: 3)]),
+  ]),
+)

@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 3c4da169-1e50-4790-abdc-214e7b8a2ad5.
+(
+  id: "thorins_last_stand",
+  name: "Thorin's Last Stand",
+  face_id: "thorins_last_stand",
+  mana_cost: "{2}{W}{W}",
+  types: ["Instant"],
+  modal_spell: (min_modes: 1, max_modes: 1, modes: [
+    (mode_id: "mode_01", presentation: OracleLines([2]), effects: [PumpAll(filter: (controller: YouControl), power: 2, toughness: 1)]),
+    (mode_id: "mode_02", presentation: OracleLines([3]), effects: [
+      Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact, Enchantment]))),
+      GainLife(amount: 2),
+    ], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target artifact or enchantment", effect_indices: [0])]))),
+  ]),
+)
