@@ -1,0 +1,25 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 09669283-eb14-46a2-b37a-51d7a52da891.
+// CR 702.172 (Spree), 601.2f-h, 700.2h, 115, 608.2b, 701.7, 122.
+(
+  id: "requisition_raid",
+  name: "Requisition Raid",
+  face_id: "requisition_raid",
+  mana_cost: "{W}",
+  types: ["Sorcery"],
+  cast_cost_groups: [(
+    group_id: "spree", presentation: OracleLines([1]), min: 1, max: 3,
+    options: [
+      Mana(option_id: "artifact_cost", presentation: OracleLines([2]), kind: AdditionalPayment, cost: "{1}"),
+      Mana(option_id: "enchantment_cost", presentation: OracleLines([3]), kind: AdditionalPayment, cost: "{1}"),
+      Mana(option_id: "counters_cost", presentation: OracleLines([4]), kind: AdditionalPayment, cost: "{1}"),
+    ],
+  )],
+  modal_spell: (
+    min_modes: 1, max_modes: 3,
+    modes: [
+      (mode_id: "destroy_artifact", presentation: OracleLines([2]), linked_cast_cost: Some((group_id: "spree", option_id: "artifact_cost")), effects: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact])))], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target artifact", effect_indices: [0])]))),
+      (mode_id: "destroy_enchantment", presentation: OracleLines([3]), linked_cast_cost: Some((group_id: "spree", option_id: "enchantment_cost")), effects: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Enchantment])))], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target enchantment", effect_indices: [0])]))),
+      (mode_id: "put_counters", presentation: OracleLines([4]), linked_cast_cost: Some((group_id: "spree", option_id: "counters_cost")), effects: [PutCountersAll(counter: PlusOnePlusOne, count: 1, filter: (controller: Some(TargetedPlayer(group_index: 0, kind: AnyPlayer))))], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target player", effect_indices: [0], player: Some(AnyPlayer))]))),
+    ],
+  ),
+)

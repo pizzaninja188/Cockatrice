@@ -1,0 +1,14 @@
+// Oracle checked 2026-09-22 against pinned Scryfall oracle b793141d-581c-4cc7-b09f-1fe8bd5536c5.
+// CR 115, 608.2b, 613.4, 701.25 (surveil).
+(
+  id: "neutralize_the_guards",
+  name: "Neutralize the Guards",
+  face_id: "neutralize_the_guards",
+  mana_cost: "{2}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpAll(filter: (controller: Some(TargetedPlayer(group_index: 0, kind: OpponentPlayer))), power: -1, toughness: -1),
+    LibraryPartition(count: 2, top_min: 0, top_max: None, kind: Surveil),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target opponent", effect_indices: [0], player: Some(OpponentPlayer))])),
+)

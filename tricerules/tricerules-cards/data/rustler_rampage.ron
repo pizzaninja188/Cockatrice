@@ -1,0 +1,23 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle ef0c0f28-e1ee-42a1-9878-95a0ceb0a9fa.
+// CR 702.172 (Spree), 601.2f-h, 700.2h, 115, 608.2b, 701.21.
+(
+  id: "rustler_rampage",
+  name: "Rustler Rampage",
+  face_id: "rustler_rampage",
+  mana_cost: "{W}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "spree", presentation: OracleLines([1]), min: 1, max: 2,
+    options: [
+      Mana(option_id: "untap_cost", presentation: OracleLines([2]), kind: AdditionalPayment, cost: "{1}"),
+      Mana(option_id: "double_strike_cost", presentation: OracleLines([3]), kind: AdditionalPayment, cost: "{1}"),
+    ],
+  )],
+  modal_spell: (
+    min_modes: 1, max_modes: 2,
+    modes: [
+      (mode_id: "untap_creatures", presentation: OracleLines([2]), linked_cast_cost: Some((group_id: "spree", option_id: "untap_cost")), effects: [UntapAll(players: TargetedPlayer(group_index: 0, kind: AnyPlayer), filter: (kind: Creature))], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target player", effect_indices: [0], player: Some(AnyPlayer))]))),
+      (mode_id: "double_strike", presentation: OracleLines([3]), linked_cast_cost: Some((group_id: "spree", option_id: "double_strike_cost")), effects: [GrantKeywords(subject: Chosen((kind: Creature)), keywords: [DoubleStrike])], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])]))),
+    ],
+  ),
+)

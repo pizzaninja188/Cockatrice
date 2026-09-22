@@ -1450,6 +1450,7 @@ hover_barrier	0	cast	exercised
 hovermyr	0	cast	exercised
 hoverstone_pilgrim	0	ability:0	exercised
 hoverstone_pilgrim	0	cast	exercised
+how_to_start_a_riot	0	cast	exercised
 howling_fury	0	cast	exercised
 howling_mine	0	cast	exercised
 huatlis_final_strike	0	cast	exercised
@@ -1986,6 +1987,7 @@ nessian_courser	0	cast	exercised
 nest_robber	0	cast	exercised
 nether_horror	0	cast	exercised
 nettle_swine	0	cast	exercised
+neutralize_the_guards	0	cast	exercised
 new_generations_technique	0	cast	exercised
 new_horizons	0	cast	exercised
 news_helicopter	0	cast	exercised
@@ -2334,6 +2336,7 @@ renegade_troops	0	cast	exercised
 repel_calamity	0	cast	unsupported: target group 0 needs a richer fixture
 repulsor_rays	0	cast	exercised
 reputable_merchant	0	cast	exercised
+requisition_raid	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 requiting_hex	0	cast	exercised
 reroute_systems	0	cast	exercised
 rescue_leopard	0	cast	exercised
@@ -2436,6 +2439,7 @@ rune-sealed_wall	0	ability:0	exercised
 rune-sealed_wall	0	cast	exercised
 runeclaw_bear	0	cast	exercised
 russet_wolves	0	cast	exercised
+rustler_rampage	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 rustwing_falcon	0	cast	exercised
 rydias_return	0	cast	exercised
 s.h.i.e.l.d._deployment_drone	0	cast	exercised
