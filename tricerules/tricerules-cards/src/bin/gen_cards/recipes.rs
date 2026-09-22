@@ -4349,6 +4349,125 @@ fn match_modal_target_player_draw_one(text: &str, _: &RecipeContext) -> Option<R
     })
 }
 
+fn targeted_mass_controller() -> CreatureScopeFilter {
+    CreatureScopeFilter {
+        controller: Some(CreatureScopeController::TargetedPlayer {
+            group_index: 0,
+            kind: TargetKind::AnyPlayer,
+        }),
+        ..CreatureScopeFilter::default()
+    }
+}
+
+fn targeted_mass_players() -> RelativePlayerSet {
+    RelativePlayerSet::TargetedPlayer {
+        group_index: 0,
+        kind: TargetKind::AnyPlayer,
+    }
+}
+
+fn match_modal_ashling_targeted_damage(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Ashling's Command deals 2 damage to each creature target player controls.").then(
+        || {
+            modal_mode(
+                vec![SpellEffectKind::DamageAll {
+                    amount: Amount::Fixed(2),
+                    players: targeted_mass_players(),
+                    kind: TargetFilter::default_creature(),
+                }],
+                modal_targeting("Choose target player", 0),
+            )
+        },
+    )
+}
+
+fn match_modal_grub_targeted_pump_haste(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Creatures target player controls get +1/+1 and gain haste until end of turn.").then(
+        || {
+            modal_mode(
+                vec![
+                    SpellEffectKind::PumpAll {
+                        filter: targeted_mass_controller(),
+                        power: 1,
+                        toughness: 1,
+                    },
+                    SpellEffectKind::GrantKeywordsAll {
+                        filter: targeted_mass_controller(),
+                        keywords: vec![Keyword::Haste],
+                    },
+                ],
+                modal_targeting_groups(vec![("Choose target player", vec![0, 1])]),
+            )
+        },
+    )
+}
+
+fn match_modal_sygg_targeted_lifelink(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Creatures target player controls gain lifelink until end of turn.").then(|| {
+        modal_mode(
+            vec![SpellEffectKind::GrantKeywordsAll {
+                filter: targeted_mass_controller(),
+                keywords: vec![Keyword::Lifelink],
+            }],
+            modal_targeting("Choose target player", 0),
+        )
+    })
+}
+
+fn match_modal_trystan_targeted_pump_untap(
+    text: &str,
+    _: &RecipeContext,
+) -> Option<RecipeEmission> {
+    (text == "Creatures target player controls get +3/+3 until end of turn. Untap them.").then(
+        || {
+            modal_mode(
+                vec![
+                    SpellEffectKind::PumpAll {
+                        filter: targeted_mass_controller(),
+                        power: 3,
+                        toughness: 3,
+                    },
+                    SpellEffectKind::UntapAll {
+                        players: targeted_mass_players(),
+                        filter: TargetFilter::default_creature(),
+                    },
+                ],
+                modal_targeting_groups(vec![("Choose target player", vec![0, 1])]),
+            )
+        },
+    )
+}
+
+fn match_modal_trystan_return_permanents(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
+    (text == "Return one or two target permanent cards from your graveyard to your hand.").then(
+        || {
+            modal_mode(
+                vec![SpellEffectKind::MoveGraveyardCards {
+                    filter: GraveyardFilter {
+                        card: Some(ZoneCardFilter {
+                            excluded_card_types: vec![
+                                CardTypeFilter::Instant,
+                                CardTypeFilter::Sorcery,
+                            ],
+                            ..ZoneCardFilter::default()
+                        }),
+                        ..GraveyardFilter::default()
+                    },
+                    destination: GraveyardDestination::Hand,
+                    linked_exile_id: None,
+                }],
+                modal_targeting_range(
+                    "Choose one or two target permanent cards from your graveyard",
+                    1,
+                    2,
+                    vec![0],
+                    false,
+                ),
+            )
+        },
+    )
+}
+
 /// Issue #428 / CR 611.2a / 613.4c: the controlled-creature `+3/+3` mode. The unrestricted
 /// `modal_mode.pump.creature.plus_three_plus_three` owns `Target creature gets +3/+3 ...`;
 /// this recipe adds the printed "you control" controller restriction.
@@ -20649,6 +20768,71 @@ pub(super) static CATALOG: &[Recipe] = &[
         ),
     },
     Recipe {
+        id: RecipeId("modal_mode.damage.each_creature_target_player_controls.two"),
+        label: "Ashling's targeted-player creature damage mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_ashling_targeted_damage,
+        calibration: singleton_calibrations!(
+            "Ashling's Command" => "Ashling's Command deals 2 damage to each creature target player controls.";
+            "Ashling's Command deals 2 damage to each creature.",
+            "Ashling's Command deals 2 damage to each creature an opponent controls.",
+            "Ashling's Command deals 3 damage to each creature target player controls.",
+            "Ashling's Command deals 2 damage to each creature target player controls. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.pump.team.plus_one_plus_one.haste.target_player"),
+        label: "Grub's targeted-player pump and haste mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_grub_targeted_pump_haste,
+        calibration: singleton_calibrations!(
+            "Grub's Command" => "Creatures target player controls get +1/+1 and gain haste until end of turn.";
+            "Creatures you control get +1/+1 and gain haste until end of turn.",
+            "Creatures target player controls get +2/+2 and gain haste until end of turn.",
+            "Creatures target player controls get +1/+1 and gain lifelink until end of turn.",
+            "Creatures target player controls get +1/+1 and gain haste until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.team.lifelink.target_player"),
+        label: "Sygg's targeted-player lifelink mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_sygg_targeted_lifelink,
+        calibration: singleton_calibrations!(
+            "Sygg's Command" => "Creatures target player controls gain lifelink until end of turn.";
+            "Creatures you control gain lifelink until end of turn.",
+            "Creatures target player controls gain haste until end of turn.",
+            "Creatures target player controls gain lifelink.",
+            "Creatures target player controls gain lifelink until end of turn. Draw a card."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.pump.team.plus_three_plus_three.untap.target_player"),
+        label: "Trystan's targeted-player pump and untap mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_trystan_targeted_pump_untap,
+        calibration: singleton_calibrations!(
+            "Trystan's Command" => "Creatures target player controls get +3/+3 until end of turn. Untap them.";
+            "Creatures you control get +3/+3 until end of turn. Untap them.",
+            "Creatures target player controls get +2/+2 until end of turn. Untap them.",
+            "Creatures target player controls get +3/+3 until end of turn.",
+            "Creatures target player controls get +3/+3 until end of turn. Tap them."
+        ),
+    },
+    Recipe {
+        id: RecipeId("modal_mode.return.one_or_two.permanent_cards.graveyard_to_hand"),
+        label: "Trystan's bounded permanent-card return mode",
+        surface: RecipeSurface::ModalMode,
+        matcher: match_modal_trystan_return_permanents,
+        calibration: singleton_calibrations!(
+            "Trystan's Command" => "Return one or two target permanent cards from your graveyard to your hand.";
+            "Return one target permanent card from your graveyard to your hand.",
+            "Return up to two target permanent cards from your graveyard to your hand.",
+            "Return one or two target instant cards from your graveyard to your hand.",
+            "Return one or two target permanent cards from a graveyard to your hand."
+        ),
+    },
+    Recipe {
         id: RecipeId("modal_mode.pump.controlled.plus_three_plus_three"),
         label: "controlled creature plus three plus three mode",
         surface: RecipeSurface::ModalMode,
@@ -27890,10 +28074,15 @@ pub(super) fn reviewed_modal_mode_pair(
         ["modal_mode.create_token.rat.cant_block", "modal_mode.sacrifice_another.scry_two_draw_one", "modal_mode.grant.team.menace"] => {
             Some((1, 1))
         }
-        // Issue #428 exact choose-two sets, in printed bullet order. Return from the Wilds is
-        // the only fully shipped choose-two identity; the five Command sets stay absent because
-        // their remaining bullets lack shipped vocabulary, so no partial set may generate.
+        // Issue #428/#444 exact choose-two sets, in printed bullet order. The other Commands
+        // remain absent while #445 or #446 still owns a required bullet.
         ["modal_mode.search.basic_land.tapped", "modal_mode.create_token.human_w_1_1", "modal_mode.create_food"] => {
+            Some((2, 2))
+        }
+        ["modal_mode.create_token_copy.chosen_merfolk", "modal_mode.team.lifelink.target_player", "modal_mode.target_player.draw_one", "modal_mode.tap.stun_counter"] => {
+            Some((2, 2))
+        }
+        ["modal_mode.create_token_copy.chosen_elf", "modal_mode.return.one_or_two.permanent_cards.graveyard_to_hand", "modal_mode.destroy.creature_or_enchantment", "modal_mode.pump.team.plus_three_plus_three.untap.target_player"] => {
             Some((2, 2))
         }
         _ => None,
@@ -52004,6 +52193,58 @@ mod tests {
                     "near-miss must stay unsupported: {near_miss:?}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn issue_444_targeted_mass_modes_are_exact_and_bound_to_player_groups() {
+        for (line, expected_id, effect_count) in [
+            (
+                "Ashling's Command deals 2 damage to each creature target player controls.",
+                "modal_mode.damage.each_creature_target_player_controls.two",
+                1,
+            ),
+            (
+                "Creatures target player controls get +1/+1 and gain haste until end of turn.",
+                "modal_mode.pump.team.plus_one_plus_one.haste.target_player",
+                2,
+            ),
+            (
+                "Creatures target player controls gain lifelink until end of turn.",
+                "modal_mode.team.lifelink.target_player",
+                1,
+            ),
+            (
+                "Creatures target player controls get +3/+3 until end of turn. Untap them.",
+                "modal_mode.pump.team.plus_three_plus_three.untap.target_player",
+                2,
+            ),
+        ] {
+            let (id, emission) = issue_428_modal_mode_emission(line);
+            assert_eq!(id, expected_id);
+            assert_eq!(emission.effects.len(), effect_count);
+            let group = &emission
+                .targeting
+                .as_ref()
+                .expect("player target group")
+                .groups[0];
+            assert_eq!(
+                (group.min, group.max, group.effect_indices.len()),
+                (1, 1, effect_count)
+            );
+            assert!(emission
+                .effects
+                .iter()
+                .all(|effect| effect.target_roles().len() == 1));
+        }
+        for wrong in [
+            "Creatures you control gain lifelink until end of turn.",
+            "Creatures target player controls gain haste until end of turn.",
+            "Creatures target player controls get +2/+2 until end of turn. Untap them.",
+            "Ashling's Command deals 3 damage to each creature target player controls.",
+            "Creatures target player controls get +1/+1 and gain haste until end of turn. Draw a card.",
+        ] {
+            assert!(issue_428_modal_mode(wrong).is_none(), "near miss {wrong}");
         }
     }
 

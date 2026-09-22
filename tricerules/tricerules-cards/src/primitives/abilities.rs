@@ -1398,6 +1398,11 @@ pub enum CreatureScopeController {
     /// Only creatures controlled by opponents of the source's controller ("creatures your
     /// opponents control"). Untargeted and player-set-generic.
     Opponents,
+    /// Only for resolving one-shot effects, bound to a player target group.
+    TargetedPlayer {
+        group_index: u32,
+        kind: super::TargetKind,
+    },
 }
 
 /// Which creatures a static ability or resolving one-shot effect applies to (CR 611/613).

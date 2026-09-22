@@ -31,7 +31,7 @@ fn modal(card_id: &str) -> ModalDef {
 }
 
 #[test]
-fn issue_428_registers_return_from_the_wilds_and_nothing_else() {
+fn issue_428_registers_return_from_the_wilds_and_keeps_unfinished_commands_out() {
     let registry = CardRegistry::global();
     let definition = registry
         .get("return_from_the_wilds")
@@ -80,13 +80,7 @@ fn issue_428_registers_return_from_the_wilds_and_nothing_else() {
         "every printed mode is untargeted"
     );
 
-    for excluded in [
-        "ashlings_command",
-        "brigids_command",
-        "grubs_command",
-        "syggs_command",
-        "trystans_command",
-    ] {
+    for excluded in ["ashlings_command", "brigids_command", "grubs_command"] {
         assert!(
             registry.get(excluded).is_none(),
             "{excluded} must stay unregistered while a printed mode lacks shipped vocabulary"

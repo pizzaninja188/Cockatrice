@@ -18,6 +18,24 @@ use crate::{
     choice_fallback, AbilityLinkId, AbilityPresentation, ChoiceId, ManaCost, SearchResultId,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
+
+static ANY_PLAYER_MASS_TARGET: LazyLock<TargetFilter> = LazyLock::new(|| TargetFilter {
+    kind: TargetKind::AnyPlayer,
+    ..TargetFilter::default()
+});
+static OPPONENT_PLAYER_MASS_TARGET: LazyLock<TargetFilter> = LazyLock::new(|| TargetFilter {
+    kind: TargetKind::OpponentPlayer,
+    ..TargetFilter::default()
+});
+
+fn mass_player_target(kind: TargetKind) -> Option<&'static TargetFilter> {
+    match kind {
+        TargetKind::AnyPlayer => Some(&ANY_PLAYER_MASS_TARGET),
+        TargetKind::OpponentPlayer => Some(&OPPONENT_PLAYER_MASS_TARGET),
+        _ => None,
+    }
+}
 
 fn default_one() -> u32 {
     1
@@ -2276,6 +2294,11 @@ pub struct ConditionalManaOutput {
 pub enum RelativePlayerSet {
     Controller,
     Opponents,
+    /// One legal player target from the authored group, resolved when the instruction runs.
+    TargetedPlayer {
+        group_index: u32,
+        kind: TargetKind,
+    },
     #[default]
     All,
 }
@@ -2336,6 +2359,50 @@ pub fn earthbend_target_filter() -> &'static TargetFilter {
 }
 
 impl SpellEffectKind {
+    pub(crate) fn targeted_mass_scope(&self) -> Option<(u32, TargetKind)> {
+        match self {
+            Self::DamageAll {
+                players: RelativePlayerSet::TargetedPlayer { group_index, kind },
+                ..
+            }
+            | Self::TapAll {
+                players: RelativePlayerSet::TargetedPlayer { group_index, kind },
+                ..
+            }
+            | Self::UntapAll {
+                players: RelativePlayerSet::TargetedPlayer { group_index, kind },
+                ..
+            }
+            | Self::PumpAll {
+                filter:
+                    CreatureScopeFilter {
+                        controller:
+                            Some(super::CreatureScopeController::TargetedPlayer { group_index, kind }),
+                        ..
+                    },
+                ..
+            }
+            | Self::GrantKeywordsAll {
+                filter:
+                    CreatureScopeFilter {
+                        controller:
+                            Some(super::CreatureScopeController::TargetedPlayer { group_index, kind }),
+                        ..
+                    },
+                ..
+            }
+            | Self::PutCountersAll {
+                filter:
+                    CreatureScopeFilter {
+                        controller:
+                            Some(super::CreatureScopeController::TargetedPlayer { group_index, kind }),
+                        ..
+                    },
+                ..
+            } => Some((*group_index, *kind)),
+            _ => None,
+        }
+    }
     pub(crate) fn uses_attached_object_subject(&self) -> bool {
         matches!(
             self,
@@ -2518,6 +2585,11 @@ impl SpellEffectKind {
     /// new primitive cannot compile until it explicitly declares its target roles (or lack of
     /// them). Group cardinality and role binding are compiled by [`super::TargetSchema`].
     pub fn target_roles(&self) -> Vec<TargetRole<'_>> {
+        if let Some((_, kind)) = self.targeted_mass_scope() {
+            return mass_player_target(kind)
+                .map(|target| vec![TargetRole::Filtered(target)])
+                .unwrap_or_default();
+        }
         match self {
             SpellEffectKind::Conditional { effect, .. }
             | SpellEffectKind::ConditionalCastCost { effect, .. } => effect.target_roles(),
@@ -3127,6 +3199,11 @@ impl SpellEffectKind {
     /// `context` distinguishes spells from abilities so source-bound subjects are
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
+        if let Some((_, kind)) = self.targeted_mass_scope() {
+            if mass_player_target(kind).is_none() {
+                return Err("targeted mass scope requires AnyPlayer or OpponentPlayer".into());
+            }
+        }
         if context == EffectContext::Spell && self.requires_triggering_spell_context() {
             return Err("spells cannot reference triggering-spell mana spending".into());
         }

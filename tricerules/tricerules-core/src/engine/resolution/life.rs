@@ -361,6 +361,7 @@ mod tests {
                         RelativePlayerSet::All => true,
                         RelativePlayerSet::Controller => player == controller,
                         RelativePlayerSet::Opponents => player != controller,
+                        RelativePlayerSet::TargetedPlayer { .. } => false,
                     };
                     let before =
                         engine.state.players[engine.state.player_idx(player).unwrap()].life;

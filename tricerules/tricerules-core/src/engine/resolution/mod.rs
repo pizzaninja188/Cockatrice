@@ -2638,6 +2638,48 @@ pub(super) fn snapshot_creature_scope(
         .collect()
 }
 
+fn scoped_player_target(
+    engine: &GameEngine,
+    targets: &[ObjectId],
+    target_group_indices: &[u32],
+    group_index: u32,
+) -> Option<PlayerId> {
+    targets
+        .iter()
+        .zip(target_group_indices)
+        .find_map(|(&id, &group)| (group == group_index).then_some(id as PlayerId))
+        .filter(|&player| {
+            engine
+                .state
+                .player_idx(player)
+                .is_some_and(|idx| !engine.state.players[idx].has_lost)
+        })
+}
+
+pub(super) fn snapshot_mass_creature_scope(
+    engine: &GameEngine,
+    filter: &CreatureScopeFilter,
+    controller: PlayerId,
+    source: ObjectId,
+    targets: &[ObjectId],
+    target_group_indices: &[u32],
+) -> Vec<ObjectId> {
+    let Some(CreatureScopeController::TargetedPlayer { group_index, .. }) = filter.controller
+    else {
+        return snapshot_creature_scope(engine, filter, controller, source);
+    };
+    let Some(player) = scoped_player_target(engine, targets, target_group_indices, group_index)
+    else {
+        return Vec::new();
+    };
+    let mut ordinary = filter.clone();
+    ordinary.controller = None;
+    snapshot_creature_scope(engine, &ordinary, controller, source)
+        .into_iter()
+        .filter(|&oid| engine.controller_of(oid) == Some(player))
+        .collect()
+}
+
 /// The semantic discard seam for one self-contained discard. Direct exile and ordinary zone moves
 /// never call it. Multi-card instructions commit each card through [`GameEngine::commit_discard`]
 /// and publish one batch through [`GameEngine::fire_discard_batches`] instead.

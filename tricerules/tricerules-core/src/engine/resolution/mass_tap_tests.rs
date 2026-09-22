@@ -1,7 +1,8 @@
 //! CR 115.10 / 608.2h / 613 / 701.26: shared untargeted selection, separate tap/untap actions.
 use super::*;
 use tricerules_cards::primitives::{
-    Color, ControllerReference, PermanentTypeFilter, TypeLineAddition,
+    Color, ControllerReference, CounterKind, CreatureScopeController, CreatureScopeFilter,
+    PermanentTypeFilter, TypeLineAddition,
 };
 
 fn setup() -> GameEngine {
@@ -53,6 +54,15 @@ fn modify(engine: &mut GameEngine, oid: ObjectId, kind: ContinuousEffectKind) {
 }
 
 fn resolve(engine: &mut GameEngine, effect: SpellEffectKind) {
+    resolve_with_target(engine, effect, &[], &[]);
+}
+
+fn resolve_with_target(
+    engine: &mut GameEngine,
+    effect: SpellEffectKind,
+    targets: &[ObjectId],
+    groups: &[u32],
+) {
     let top = StackItem {
         id: u32::MAX,
         controller: 3,
@@ -88,10 +98,10 @@ fn resolve(engine: &mut GameEngine, effect: SpellEffectKind) {
     let mut cx = EffectCx {
         engine,
         events: &mut events,
-        targets: &[],
+        targets,
         targets_by_role: &[],
         target_damage: &[],
-        target_group_indices: &[],
+        target_group_indices: groups,
         top: &top,
         controller: 3,
         affected_player: 3,
@@ -103,9 +113,133 @@ fn resolve(engine: &mut GameEngine, effect: SpellEffectKind) {
     let outcome = match effect {
         SpellEffectKind::TapAll { .. } => tap_all(&mut cx, effect),
         SpellEffectKind::UntapAll { .. } => untap_all(&mut cx, effect),
-        _ => panic!("mass tap/untap fixture only"),
+        SpellEffectKind::DamageAll { .. } => damage_all(&mut cx, effect),
+        SpellEffectKind::PutCountersAll { .. } => {
+            super::super::pump_counters::put_counters_all(&mut cx, effect)
+        }
+        _ => panic!("mass-effect fixture only"),
     };
     assert_eq!(outcome.expect("resolution"), EffectOutcome::Continue);
+}
+
+#[test]
+fn issue_444_targeted_mass_damage_marks_only_chosen_players_creatures() {
+    let mut engine = setup();
+    let ours = deploy(&mut engine, 0, "grizzly_bears");
+    let chosen = deploy(&mut engine, 1, "grizzly_bears");
+    let other = deploy(&mut engine, 2, "grizzly_bears");
+    resolve_with_target(
+        &mut engine,
+        SpellEffectKind::DamageAll {
+            amount: 1.into(),
+            players: RelativePlayerSet::TargetedPlayer {
+                group_index: 0,
+                kind: TargetKind::AnyPlayer,
+            },
+            kind: TargetFilter::default_creature(),
+        },
+        &[11],
+        &[0],
+    );
+    assert_eq!(engine.state.objects[&chosen].damage, 1);
+    assert_eq!(engine.state.objects[&ours].damage, 0);
+    assert_eq!(engine.state.objects[&other].damage, 0);
+}
+
+#[test]
+fn issue_444_targeted_mass_counters_use_chosen_player_at_resolution() {
+    let mut engine = setup();
+    let ours = deploy(&mut engine, 0, "grizzly_bears");
+    let chosen = deploy(&mut engine, 1, "grizzly_bears");
+    let other = deploy(&mut engine, 2, "grizzly_bears");
+    modify(
+        &mut engine,
+        other,
+        ContinuousEffectKind::Layer2Control {
+            controller: ControllerReference::Fixed(11),
+        },
+    );
+    resolve_with_target(
+        &mut engine,
+        SpellEffectKind::PutCountersAll {
+            counter: CounterKind::PlusOnePlusOne,
+            count: 1.into(),
+            filter: CreatureScopeFilter {
+                controller: Some(CreatureScopeController::TargetedPlayer {
+                    group_index: 0,
+                    kind: TargetKind::AnyPlayer,
+                }),
+                ..CreatureScopeFilter::default()
+            },
+        },
+        &[11],
+        &[0],
+    );
+    assert_eq!(
+        engine.state.objects[&ours].counter_count(CounterKind::PlusOnePlusOne),
+        0
+    );
+    assert_eq!(
+        engine.state.objects[&chosen].counter_count(CounterKind::PlusOnePlusOne),
+        1
+    );
+    assert_eq!(
+        engine.state.objects[&other].counter_count(CounterKind::PlusOnePlusOne),
+        1
+    );
+}
+
+#[test]
+fn issue_444_targeted_player_scope_uses_current_multiplayer_control() {
+    let mut engine = setup();
+    let caster = deploy(&mut engine, 0, "grizzly_bears");
+    let chosen = deploy(&mut engine, 1, "grizzly_bears");
+    let other = deploy(&mut engine, 2, "grizzly_bears");
+    let scope = RelativePlayerSet::TargetedPlayer {
+        group_index: 0,
+        kind: TargetKind::AnyPlayer,
+    };
+    let filter = TargetFilter::default_creature();
+    let chosen_player = [11];
+    assert_eq!(
+        scoped_battlefield_objects(&engine, 3, scope, &filter, &chosen_player, &[0]),
+        [chosen]
+    );
+    modify(
+        &mut engine,
+        other,
+        ContinuousEffectKind::Layer2Control {
+            controller: ControllerReference::Fixed(11),
+        },
+    );
+    assert_eq!(
+        scoped_battlefield_objects(&engine, 3, scope, &filter, &chosen_player, &[0]),
+        [chosen, other]
+    );
+    resolve_with_target(
+        &mut engine,
+        SpellEffectKind::TapAll {
+            players: scope,
+            filter: filter.clone(),
+        },
+        &chosen_player,
+        &[0],
+    );
+    assert!(!engine.state.objects[&caster].tapped);
+    assert!(engine.state.objects[&chosen].tapped && engine.state.objects[&other].tapped);
+    resolve_with_target(
+        &mut engine,
+        SpellEffectKind::UntapAll {
+            players: scope,
+            filter,
+        },
+        &[],
+        &[],
+    );
+    assert!(
+        engine.state.objects[&chosen].tapped && engine.state.objects[&other].tapped,
+        "an invalidated player target cannot fall back to the caster or all players"
+    );
 }
 
 #[test]
@@ -116,7 +250,7 @@ fn scopes_use_current_controllers_in_deterministic_battlefield_order() {
     let opponent = deploy(&mut engine, 2, "grizzly_bears");
     let filter = TargetFilter::default_creature();
     assert_eq!(
-        scoped_battlefield_objects(&engine, 3, RelativePlayerSet::Opponents, &filter),
+        scoped_battlefield_objects(&engine, 3, RelativePlayerSet::Opponents, &filter, &[], &[]),
         vec![stolen, opponent]
     );
     modify(
@@ -133,7 +267,7 @@ fn scopes_use_current_controllers_in_deterministic_battlefield_order() {
         (RelativePlayerSet::All, vec![ours, stolen, opponent]),
     ] {
         assert_eq!(
-            scoped_battlefield_objects(&engine, 3, players, &filter),
+            scoped_battlefield_objects(&engine, 3, players, &filter, &[], &[]),
             expected
         );
         resolve(
@@ -170,7 +304,7 @@ fn current_types_colors_and_protection_drive_untargeted_selection() {
         ..TargetFilter::default_creature()
     };
     assert_eq!(
-        scoped_battlefield_objects(&engine, 3, RelativePlayerSet::All, &filter),
+        scoped_battlefield_objects(&engine, 3, RelativePlayerSet::All, &filter, &[], &[]),
         vec![bear, thopter]
     );
     modify(
@@ -197,7 +331,7 @@ fn current_types_colors_and_protection_drive_untargeted_selection() {
         ContinuousEffectKind::Layer6AddKeyword(Keyword::Shroud),
     );
     assert_eq!(
-        scoped_battlefield_objects(&engine, 3, RelativePlayerSet::All, &filter),
+        scoped_battlefield_objects(&engine, 3, RelativePlayerSet::All, &filter, &[], &[]),
         vec![land, thopter]
     );
     resolve(
@@ -237,7 +371,7 @@ fn overlapping_filters_and_no_ops_preserve_one_tap_action() {
         ..Default::default()
     };
     assert_eq!(
-        scoped_battlefield_objects(&engine, 3, RelativePlayerSet::Opponents, &filter),
+        scoped_battlefield_objects(&engine, 3, RelativePlayerSet::Opponents, &filter, &[], &[]),
         vec![thopter, sword]
     );
     engine.state.objects.get_mut(&thopter).unwrap().tapped = true;

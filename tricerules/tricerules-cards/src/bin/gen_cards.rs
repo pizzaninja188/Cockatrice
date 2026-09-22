@@ -4564,7 +4564,7 @@ mod tests {
     }
 
     #[test]
-    fn issue_428_choose_two_cohort_generates_only_the_fully_shipped_identity() {
+    fn issue_428_choose_two_cohort_remains_fail_closed_for_unfinished_commands() {
         const RETURN_FROM_THE_WILDS: &str = "Choose two —\n• Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.\n• Create a 1/1 white Human creature token.\n• Create a Food token. (It's an artifact with \"{2}, {T}, Sacrifice this token: You gain 3 life.\")";
         let card = normal_card(
             "Return from the Wilds",
@@ -4607,9 +4607,7 @@ mod tests {
             ]
         );
 
-        // The five Command identities each print at least one bullet with no shipped vocabulary
-        // (target-player token creation, target-player mass pump/damage/untap, or the
-        // mill-and-return-each receipt), so no partial modal card may generate.
+        // #445 and #446 still own a missing bullet for these three Commands.
         for (name, mana, type_line, oracle_text) in [
             (
                 "Ashling's Command",
@@ -4629,24 +4627,27 @@ mod tests {
                 "Kindred Sorcery — Goblin",
                 "Choose two —\n• Create a token that's a copy of target Goblin you control.\n• Creatures target player controls get +1/+1 and gain haste until end of turn.\n• Destroy target artifact or creature.\n• Target player mills five cards, then puts each Goblin card milled this way into their hand.",
             ),
-            (
-                "Sygg's Command",
-                "{1}{W}{U}",
-                "Kindred Sorcery — Merfolk",
-                "Choose two —\n• Create a token that's a copy of target Merfolk you control.\n• Creatures target player controls gain lifelink until end of turn.\n• Target player draws a card.\n• Tap target creature. Put a stun counter on it.",
-            ),
-            (
-                "Trystan's Command",
-                "{4}{B}{G}",
-                "Kindred Sorcery — Elf",
-                "Choose two —\n• Create a token that's a copy of target Elf you control.\n• Return one or two target permanent cards from your graveyard to your hand.\n• Destroy target creature or enchantment.\n• Creatures target player controls get +3/+3 until end of turn. Untap them.",
-            ),
         ] {
             let card = normal_card(name, mana, type_line, oracle_text, None);
             assert!(
                 evaluate_fresh(&card).is_err(),
                 "{name} must stay unregistered while a printed mode lacks shipped vocabulary"
             );
+        }
+
+        for (name, mana, type_line, oracle_text) in [
+            ("Sygg's Command", "{1}{W}{U}", "Kindred Sorcery — Merfolk",
+             "Choose two —\n• Create a token that's a copy of target Merfolk you control.\n• Creatures target player controls gain lifelink until end of turn.\n• Target player draws a card.\n• Tap target creature. Put a stun counter on it."),
+            ("Trystan's Command", "{4}{B}{G}", "Kindred Sorcery — Elf",
+             "Choose two —\n• Create a token that's a copy of target Elf you control.\n• Return one or two target permanent cards from your graveyard to your hand.\n• Destroy target creature or enchantment.\n• Creatures target player controls get +3/+3 until end of turn. Untap them."),
+        ] {
+            let generated = evaluate_fresh(&normal_card(name, mana, type_line, oracle_text, None))
+                .unwrap_or_else(|error| panic!("{name} should qualify: {error:?}"));
+            let modal = modal_spell_of(&generated);
+            assert_eq!((modal.min_modes, modal.max_modes, modal.modes.len()), (2, 2, 4));
+            assert_eq!(modal.modes.iter().map(|mode| mode.presentation.clone()).collect::<Vec<_>>(),
+                [AbilityPresentation::OracleLines(vec![2]), AbilityPresentation::OracleLines(vec![3]),
+                 AbilityPresentation::OracleLines(vec![4]), AbilityPresentation::OracleLines(vec![5])]);
         }
 
         for (name, oracle_text) in [

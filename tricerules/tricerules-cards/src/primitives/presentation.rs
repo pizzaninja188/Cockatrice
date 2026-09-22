@@ -48,7 +48,7 @@ fn simple_target(filter: &TargetFilter) -> Option<String> {
     };
     // Do not silently drop power, subtype, exclusion, or other constraints from a label.
     let simple = TargetFilter {
-        kind: filter.kind.clone(),
+        kind: filter.kind,
         controller: filter.controller,
         ..TargetFilter::default()
     };

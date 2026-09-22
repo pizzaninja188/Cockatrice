@@ -1332,6 +1332,7 @@ pub(super) fn creature_matches_scope(
             Some(CreatureScopeController::Opponents) => {
                 state.are_opponents(characteristics.controller, reference_player)
             }
+            Some(CreatureScopeController::TargetedPlayer { .. }) => false,
         }
         && characteristics.is_creature()
         && filter

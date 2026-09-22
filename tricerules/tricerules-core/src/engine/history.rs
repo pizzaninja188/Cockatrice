@@ -383,6 +383,7 @@ pub(super) fn relative_player_set_contains(
         RelativePlayerSet::Controller => candidate == reference,
         RelativePlayerSet::Opponents => state.are_opponents(candidate, reference),
         RelativePlayerSet::All => true,
+        RelativePlayerSet::TargetedPlayer { .. } => false,
     }
 }
 

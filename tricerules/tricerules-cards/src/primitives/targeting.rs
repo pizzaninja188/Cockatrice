@@ -237,6 +237,26 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
             groups,
             effect_role_counts,
         };
+        for (effect_index, effect) in effects.iter().enumerate() {
+            let Some((group_index, kind)) = effect.targeted_mass_scope() else {
+                continue;
+            };
+            if !matches!(kind, TargetKind::AnyPlayer | TargetKind::OpponentPlayer) {
+                return Err("targeted mass scope requires a player target kind".into());
+            }
+            if targeting.is_none() {
+                return Err("targeted mass scope requires an authored target group".into());
+            }
+            let group = schema.groups.get(group_index as usize).ok_or_else(|| {
+                "targeted mass scope references an absent target group".to_string()
+            })?;
+            if group.min != 1 || group.max != 1 || !group.bindings.iter().any(|binding| {
+                binding.effect_index == effect_index
+                    && matches!(binding.role, TargetRole::Filtered(filter) if filter.is_player())
+            }) {
+                return Err("targeted mass scope requires exactly one player target".into());
+            }
+        }
         schema.validate_player_recipient_groups(effects)?;
         schema.validate_permanent_choice_constraints(effects)?;
         for group in &schema.groups {
@@ -410,7 +430,7 @@ impl TargetingDef {
 }
 
 /// Base kind for a [`TargetFilter`] — what category of object is targeted.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum TargetKind {
     /// Player, creature, planeswalker, or battle (CR 115.4).
     #[default]
@@ -1224,6 +1244,40 @@ mod tests {
             };
             assert!(TargetingDef::validate_optional(Some(&targeting), &effects).is_err());
         }
+    }
+
+    #[test]
+    fn issue_444_mass_scope_requires_exact_player_group() {
+        let effects: Vec<SpellEffectKind> = ron::from_str(
+            "[DamageAll(amount: 2, players: TargetedPlayer(group_index: 0, kind: AnyPlayer))]",
+        )
+        .expect("targeted mass scope parses");
+        assert!(
+            TargetSchema::compile(&effects, None).is_err(),
+            "absent group"
+        );
+        let group = |min, max| TargetingDef {
+            groups: vec![TargetGroupDef {
+                min,
+                max,
+                prompt: "Choose target player".into(),
+                effect_indices: vec![0],
+                distinct_from: Vec::new(),
+                same_graveyard: false,
+                cast_cost_expansion: None,
+            }],
+        };
+        assert!(TargetSchema::compile(&effects, Some(&group(1, 1))).is_ok());
+        assert!(TargetSchema::compile(&effects, Some(&group(0, 1))).is_err());
+        assert!(TargetSchema::compile(&effects, Some(&group(1, 2))).is_err());
+        let wrong: Vec<SpellEffectKind> = ron::from_str(
+            "[DamageAll(amount: 2, players: TargetedPlayer(group_index: 0, kind: Creature))]",
+        )
+        .expect("wrong kind parses for validation");
+        assert!(wrong[0]
+            .validate(super::super::EffectContext::Spell)
+            .is_err());
+        assert!(TargetSchema::compile(&wrong, Some(&group(1, 1))).is_err());
     }
 
     #[test]

@@ -483,6 +483,7 @@ impl GameEngine {
                 RelativePlayerSet::Controller => actor == source_controller,
                 RelativePlayerSet::Opponents => self.state.are_opponents(actor, source_controller),
                 RelativePlayerSet::All => true,
+                RelativePlayerSet::TargetedPlayer { .. } => false,
             };
             let Some(face) = self.effective_face(source_id) else {
                 return total;
@@ -574,6 +575,7 @@ impl GameEngine {
                             self.state.are_opponents(target_player, source_controller)
                         }
                         RelativePlayerSet::All => true,
+                        RelativePlayerSet::TargetedPlayer { .. } => false,
                     }
             }
         }
@@ -650,6 +652,7 @@ impl GameEngine {
                         self.state.are_opponents(actor, source_controller)
                     }
                     RelativePlayerSet::All => true,
+                    RelativePlayerSet::TargetedPlayer { .. } => false,
                 };
                 let action_matches =
                     matches!(actions, TargetingCostAction::SpellsAndActivatedAbilities)
@@ -855,6 +858,7 @@ impl GameEngine {
                             self.state.are_opponents(player, source_controller)
                         }
                         RelativePlayerSet::All => true,
+                        RelativePlayerSet::TargetedPlayer { .. } => false,
                     };
                     if !caster_matches
                         || spell_type.is_some_and(|card_type| !face.matches_card_type(card_type))

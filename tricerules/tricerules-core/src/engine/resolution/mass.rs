@@ -174,7 +174,15 @@ fn scoped_battlefield_objects(
     controller: PlayerId,
     players: RelativePlayerSet,
     filter: &TargetFilter,
+    targets: &[ObjectId],
+    target_group_indices: &[u32],
 ) -> Vec<ObjectId> {
+    let targeted_player = match players {
+        RelativePlayerSet::TargetedPlayer { group_index, .. } => {
+            scoped_player_target(engine, targets, target_group_indices, group_index)
+        }
+        _ => None,
+    };
     battlefield_objects_matching(engine, filter)
         .into_iter()
         .filter(|oid| {
@@ -186,6 +194,9 @@ fn scoped_battlefield_objects(
                         .state
                         .are_opponents(characteristics.controller, controller),
                     RelativePlayerSet::All => true,
+                    RelativePlayerSet::TargetedPlayer { .. } => {
+                        targeted_player == Some(characteristics.controller)
+                    }
                 })
         })
         .collect()
@@ -198,7 +209,14 @@ pub(super) fn tap_all(
     let SpellEffectKind::TapAll { players, filter } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let affected = scoped_battlefield_objects(cx.engine, cx.controller, players, &filter);
+    let affected = scoped_battlefield_objects(
+        cx.engine,
+        cx.controller,
+        players,
+        &filter,
+        cx.targets,
+        cx.target_group_indices,
+    );
     let tap_events = cx.engine.tap_permanents(cx.controller, &affected);
     let tapped = tap_events.len();
     cx.engine.fire_triggers(&tap_events);
@@ -217,7 +235,14 @@ pub(super) fn untap_all(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let engine = &mut *cx.engine;
-    let affected = scoped_battlefield_objects(engine, cx.controller, players, &filter);
+    let affected = scoped_battlefield_objects(
+        engine,
+        cx.controller,
+        players,
+        &filter,
+        cx.targets,
+        cx.target_group_indices,
+    );
     let mut untapped = 0;
     for oid in affected {
         if attempt_untap(engine, oid) == UntapOutcome::Untapped {
@@ -259,7 +284,14 @@ pub(super) fn damage_all(
     // CR 119: deal damage to each matching permanent. Marking damage mirrors
     // DamageTarget; lethal-damage destruction is left to state-based actions
     // (CR 704.5g), which run immediately after this spell resolves.
-    let affected = scoped_battlefield_objects(engine, cx.controller, players, &kind);
+    let affected = scoped_battlefield_objects(
+        engine,
+        cx.controller,
+        players,
+        &kind,
+        cx.targets,
+        cx.target_group_indices,
+    );
     let damage: Vec<_> = affected
         .into_iter()
         .map(|tid| crate::engine::damage::DamageSpec {
