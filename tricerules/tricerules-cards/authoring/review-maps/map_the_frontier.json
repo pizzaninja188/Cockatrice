@@ -1,0 +1,32 @@
+{
+  "format_version": 1,
+  "oracle_id": "11a46cb6-ab01-4630-9541-782db2ef3b91",
+  "spans": [
+    {
+      "face_id": "map_the_frontier",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc45_batch::issue_misc45_map_and_route_search_basic_or_named_land_types_tapped",
+      "covers": "up-to-two private search, basic-or-Desert filter, illegal exclusion, tapped battlefield entry, and shuffle continuation"
+    },
+    {
+      "test": "issue_misc45_batch::issue_misc45_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost and type line"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

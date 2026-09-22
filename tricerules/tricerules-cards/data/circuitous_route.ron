@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 30afacd9-4680-4aac-8c22-584f9418822d.
+// CR 701.23: a qualified hidden-zone search may find zero, one, or two cards; the library is then shuffled.
+(
+  id: "circuitous_route",
+  name: "Circuitous Route",
+  face_id: "circuitous_route",
+  mana_cost: "{3}{G}",
+  types: ["Sorcery"],
+  spell_effect: [SearchLibrary(
+    count: 2,
+    filter: Some((any_of: Some([
+      (card_type: Some(BasicLand)),
+      (required_subtypes: ["Gate"]),
+    ]))),
+    destination: Battlefield(tapped: true),
+    shuffle: true,
+  )],
+)

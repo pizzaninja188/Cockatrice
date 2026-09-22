@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 11a46cb6-ab01-4630-9541-782db2ef3b91.
+// CR 701.23: a qualified hidden-zone search may find zero, one, or two cards; the library is then shuffled.
+(
+  id: "map_the_frontier",
+  name: "Map the Frontier",
+  face_id: "map_the_frontier",
+  mana_cost: "{3}{G}",
+  types: ["Sorcery"],
+  spell_effect: [SearchLibrary(
+    count: 2,
+    filter: Some((any_of: Some([
+      (card_type: Some(BasicLand)),
+      (required_subtypes: ["Desert"]),
+    ]))),
+    destination: Battlefield(tapped: true),
+    shuffle: true,
+  )],
+)

@@ -155,6 +155,7 @@ attercop	0	cast	exercised
 audacious_thief	0	cast	exercised
 aurons_inspiration	0	cast	exercised
 auroral_procession	0	cast	exercised
+auspicious_arrival	0	cast	exercised
 avacynian_priest	0	ability:0	exercised
 avacynian_priest	0	cast	exercised
 avacyns_pilgrim	0	ability:0	exercised
@@ -506,6 +507,7 @@ chrome_companion	0	ability:0	exercised
 chrome_companion	0	cast	exercised
 chupacabra_echo	0	cast	exercised
 cinder_strike	0	cast	exercised
+circuitous_route	0	cast	exercised
 city_pigeon	0	cast	exercised
 clachan_festival	0	ability:0	exercised
 clachan_festival	0	cast	exercised
@@ -1312,6 +1314,7 @@ grizzled_leotau	0	cast	exercised
 grizzled_outrider	0	cast	exercised
 grizzly_bears	0	cast	exercised
 grounded_for_life	0	cast	exercised
+grow_extra_arms	0	cast	exercised
 grow_from_the_ashes	0	cast	exercised
 growth_cycle	0	cast	exercised
 gruul_guildgate	0	ability:0	exercised
@@ -1808,6 +1811,7 @@ maned_serval	0	cast	exercised
 manhole_missile	0	cast	exercised
 manifest_dread	0	cast	exercised
 mantis_rider	0	cast	exercised
+map_the_frontier	0	cast	exercised
 marauding_blight-priest	0	cast	exercised
 marauding_brinefang	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 marauding_brinefang	0	cast	exercised
@@ -2378,6 +2382,7 @@ riverpyre_verge	0	ability:0	exercised
 riverpyre_verge	0	ability:1	exercised
 riverpyre_verge	0	land	exercised
 riverwalk_technique	0	cast	exercised
+roadside_blowout	0	cast	exercised
 roamers_routine	0	cast	exercised
 roc_hunter	0	cast	exercised
 rock_soldiers	0	cast	exercised
