@@ -1,0 +1,24 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle d604c75e-9d81-49de-80bc-08f4ef3ee975.
+// CR 602.1b/602.5 (activation condition), CR 119.3 (life), and CR 605.1a (mana ability).
+(
+  id: "potioners_trove",
+  name: "Potioner's Trove",
+  face_id: "potioners_trove",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [GainLife(amount: 2)],
+      conditions: [SpellsCastThisTurn(players: Controller, filter: (card_type: Some(InstantOrSorcery)), min: Some(1))],
+    ),
+  ],
+)

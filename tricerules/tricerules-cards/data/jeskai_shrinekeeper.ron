@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle bb50b4f4-f0da-4283-821b-6d74bd20752f.
+// CR 510.2/603.2 (combat-damage trigger), CR 702.9/702.10 (flying/haste), CR 119.3/121.1 (life/draw).
+(
+  id: "jeskai_shrinekeeper",
+  name: "Jeskai Shrinekeeper",
+  face_id: "jeskai_shrinekeeper",
+  mana_cost: "{2}{U}{R}{W}",
+  types: ["Creature", "Dragon"],
+  power: 3,
+  toughness: 3,
+  keywords: [Flying, Haste],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverSelfDealsCombatDamageToPlayer,
+    effect: [GainLife(amount: 1), Draw(count: 1)],
+  )],
+)

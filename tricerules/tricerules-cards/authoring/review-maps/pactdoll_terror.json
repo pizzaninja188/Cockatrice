@@ -1,0 +1,18 @@
+{
+  "format_version": 1,
+  "oracle_id": "e02fff6b-9ee4-474f-97fc-d70d4bc8001b",
+  "spans": [
+    { "face_id": "pactdoll_terror", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/triggered_abilities/0"] }
+  ],
+  "primitive_references": [
+    { "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield", "typed_path": "/faces/0/triggered_abilities/0/trigger" },
+    { "symbol": "SpellEffectKind::LoseLife", "typed_path": "/faces/0/triggered_abilities/0/effect/0" },
+    { "symbol": "SpellEffectKind::GainLife", "typed_path": "/faces/0/triggered_abilities/0/effect/1" }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    { "test": "scenario issue_misc24_batch::issue_misc24_pactdoll_counts_self_and_own_artifacts_only", "covers": "self entry and a later own artifact each cause one drain; an own nonartifact and an opponent's artifact do not" },
+    { "test": "issue_misc24_batch::issue_misc24_batch_maps_printed_cards_and_distinct_life_triggers", "covers": "printed identity, self-inclusive artifact watcher, and fixed one-life gain separately from each-opponent life loss" }
+  ],
+  "complete_definition_review_confirmed": true
+}

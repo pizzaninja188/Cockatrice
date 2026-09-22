@@ -1,0 +1,22 @@
+{
+  "format_version": 1,
+  "oracle_id": "36415fe3-6bf3-4fec-909c-6c16584c44eb",
+  "spans": [
+    { "face_id": "shroudstomper", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/keywords"] },
+    { "face_id": "shroudstomper", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/triggered_abilities/0", "/faces/0/triggered_abilities/1"] }
+  ],
+  "primitive_references": [
+    { "symbol": "Keyword::Deathtouch", "typed_path": "/faces/0/keywords" },
+    { "symbol": "TriggerCondition::WhenSelfEntersBattlefield", "typed_path": "/faces/0/triggered_abilities/0/trigger" },
+    { "symbol": "TriggerCondition::WheneverSelfAttacks", "typed_path": "/faces/0/triggered_abilities/1/trigger" },
+    { "symbol": "SpellEffectKind::LoseLife", "typed_path": "/faces/0/triggered_abilities/0/effect/0" },
+    { "symbol": "SpellEffectKind::GainLife", "typed_path": "/faces/0/triggered_abilities/0/effect/1" },
+    { "symbol": "SpellEffectKind::Draw", "typed_path": "/faces/0/triggered_abilities/0/effect/2" }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    { "test": "scenario issue_misc24_batch::issue_misc24_shroudstomper_has_entry_and_attack_occurrences", "covers": "actual entry and attack occurrences each make every opponent lose two life while its controller gains two life and draws one card" },
+    { "test": "issue_misc24_batch::issue_misc24_batch_maps_printed_cards_and_distinct_life_triggers", "covers": "printed identity, deathtouch, and distinct entry and self-attack triggers" }
+  ],
+  "complete_definition_review_confirmed": true
+}

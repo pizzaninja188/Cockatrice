@@ -1515,6 +1515,7 @@ jeong_jeongs_deserters	0	cast	exercised
 jeskai_brushmaster	0	cast	exercised
 jeskai_devotee	0	ability:0	exercised
 jeskai_devotee	0	cast	exercised
+jeskai_shrinekeeper	0	cast	exercised
 jhessian_lookout	0	cast	exercised
 jhovall_queen	0	cast	exercised
 jhovall_rider	0	cast	exercised
@@ -2014,6 +2015,7 @@ overwhelming_surge	0	cast	exercised
 pacifism	0	cast	exercised
 pack_mastiff	0	ability:0	exercised
 pack_mastiff	0	cast	exercised
+pactdoll_terror	0	cast	exercised
 panicked_altisaur	0	ability:0	exercised
 panicked_altisaur	0	cast	exercised
 panther_warriors	0	cast	exercised
@@ -2089,6 +2091,9 @@ pond_prophet	0	cast	exercised
 porcelain_legionnaire	0	cast	exercised
 portcullis_vine	0	ability:0	exercised
 portcullis_vine	0	cast	exercised
+potioners_trove	0	ability:0	exercised
+potioners_trove	0	ability:1	unsupported: nonmana costs need additional fixture resources
+potioners_trove	0	cast	exercised
 pouncing_cheetah	0	cast	exercised
 prakhata_club_security	0	cast	exercised
 prayer_of_binding	0	cast	exercised
@@ -2498,6 +2503,7 @@ shredder,_unrelenting	0	cast	exercised
 shredders_revenge	0	cast	exercised
 shredders_technique	0	cast	exercised
 shrike_force	0	cast	exercised
+shroudstomper	0	cast	exercised
 shu_elite_infantry	0	cast	exercised
 shu_foot_soldiers	0	cast	exercised
 shu_grain_caravan	0	cast	exercised
@@ -3289,6 +3295,7 @@ wretched_doll	0	cast	exercised
 wu_infantry	0	cast	exercised
 wurmwall_sweeper	0	ability:0	exercised
 wurmwall_sweeper	0	cast	exercised
+wylie_duke,_atiin_hero	0	cast	exercised
 xande,_dark_mage	0	cast	exercised
 yargle,_glutton_of_urborg	0	cast	exercised
 yargle_and_multani	0	cast	exercised

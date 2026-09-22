@@ -1,0 +1,20 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle e02fff6b-9ee4-474f-97fc-d70d4bc8001b.
+// CR 603.6a (self-inclusive artifact-entry watcher) and CR 119.3 (fixed life loss and gain).
+(
+  id: "pactdoll_terror",
+  name: "Pactdoll Terror",
+  face_id: "pactdoll_terror",
+  mana_cost: "{3}{B}",
+  types: ["Artifact", "Creature", "Toy"],
+  power: 3,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Artifact)),
+    ),
+    effect: [LoseLife(amount: Fixed(1), who: EachOpponent), GainLife(amount: 1)],
+  )],
+)

@@ -1,0 +1,19 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle b3ac27d6-7e18-404d-9af2-b03897a5f1d9.
+// CR 603.2 (tap trigger), CR 702.20 (vigilance), CR 119.3 (life), and CR 121.1 (draw).
+(
+  id: "wylie_duke,_atiin_hero",
+  name: "Wylie Duke, Atiin Hero",
+  face_id: "wylie_duke_atiin_hero",
+  mana_cost: "{1}{G}{W}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Ranger"],
+  power: 4,
+  toughness: 2,
+  keywords: [Vigilance],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverSelfBecomesTapped,
+    effect: [GainLife(amount: 1), Draw(count: 1)],
+  )],
+)

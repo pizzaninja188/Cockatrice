@@ -1,0 +1,21 @@
+{
+  "format_version": 1,
+  "oracle_id": "bb50b4f4-f0da-4283-821b-6d74bd20752f",
+  "spans": [
+    { "face_id": "jeskai_shrinekeeper", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/keywords"] },
+    { "face_id": "jeskai_shrinekeeper", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/triggered_abilities/0"] }
+  ],
+  "primitive_references": [
+    { "symbol": "Keyword::Flying", "typed_path": "/faces/0/keywords" },
+    { "symbol": "Keyword::Haste", "typed_path": "/faces/0/keywords" },
+    { "symbol": "TriggerCondition::WheneverSelfDealsCombatDamageToPlayer", "typed_path": "/faces/0/triggered_abilities/0/trigger" },
+    { "symbol": "SpellEffectKind::GainLife", "typed_path": "/faces/0/triggered_abilities/0/effect/0" },
+    { "symbol": "SpellEffectKind::Draw", "typed_path": "/faces/0/triggered_abilities/0/effect/1" }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    { "test": "scenario issue_misc24_batch::issue_misc24_jeskai_shrinekeeper_rewards_combat_damage_to_player", "covers": "attacking alone gives no reward; three combat damage to a player triggers one life and one draw" },
+    { "test": "issue_misc24_batch::issue_misc24_batch_maps_printed_cards_and_distinct_life_triggers", "covers": "printed identity, flying, haste, and the self combat-damage trigger" }
+  ],
+  "complete_definition_review_confirmed": true
+}

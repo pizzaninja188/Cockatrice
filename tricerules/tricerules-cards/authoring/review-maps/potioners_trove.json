@@ -1,0 +1,19 @@
+{
+  "format_version": 1,
+  "oracle_id": "d604c75e-9d81-49de-80bc-08f4ef3ee975",
+  "spans": [
+    { "face_id": "potioners_trove", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/activated_abilities/0"] },
+    { "face_id": "potioners_trove", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/activated_abilities/1"] }
+  ],
+  "primitive_references": [
+    { "symbol": "SpellEffectKind::ProduceMana", "typed_path": "/faces/0/activated_abilities/0/effect/0" },
+    { "symbol": "SpellEffectKind::GainLife", "typed_path": "/faces/0/activated_abilities/1/effect/0" },
+    { "symbol": "GameCondition::SpellsCastThisTurn", "typed_path": "/faces/0/activated_abilities/1/conditions/0" }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    { "test": "scenario issue_misc24_batch::issue_misc24_potioners_trove_requires_own_instant_or_sorcery_for_life", "covers": "the life activation rejects no spell, an own creature, and an opponent's instant; an own instant enables it and gains two life, while the independent mana activation has no spell prerequisite" },
+    { "test": "issue_misc24_batch::issue_misc24_batch_maps_printed_cards_and_distinct_life_triggers", "covers": "printed identity and two activated abilities with a condition on the life activation" }
+  ],
+  "complete_definition_review_confirmed": true
+}

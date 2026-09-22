@@ -1,0 +1,26 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 36415fe3-6bf3-4fec-909c-6c16584c44eb.
+// CR 603.6a/508.3a (entry and attack triggers), CR 702.2 (deathtouch), CR 119.3/121.1 (life/draw).
+(
+  id: "shroudstomper",
+  name: "Shroudstomper",
+  face_id: "shroudstomper",
+  mana_cost: "{3}{W}{W}{B}{B}",
+  types: ["Creature", "Elemental"],
+  power: 5,
+  toughness: 5,
+  keywords: [Deathtouch],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [LoseLife(amount: Fixed(2), who: EachOpponent), GainLife(amount: 2), Draw(count: 1)],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+      effect: [LoseLife(amount: Fixed(2), who: EachOpponent), GainLife(amount: 2), Draw(count: 1)],
+    ),
+  ],
+)
