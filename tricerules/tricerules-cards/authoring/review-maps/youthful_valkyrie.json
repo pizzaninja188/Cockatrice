@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "6d37ba4b-ff56-4eec-9dc2-2d7f357dc9c9",
+  "spans": [
+    {
+      "face_id": "youthful_valkyrie",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "youthful_valkyrie",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc17_batch::issue_misc17_youthful_valkyrie_watches_other_angels",
+      "covers": "another Angel you control entering adds a +1/+1 counter, the Valkyrie does not trigger on its own entry, and a non-Angel does not trigger it"
+    },
+    {
+      "test": "issue_misc17_batch::issue_misc17_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flying, the self-excluding Angel-entry watcher, and its +1/+1 counter of Youthful Valkyrie"
+    },
+    {
+      "test": "issue_misc17_batch::issue_misc17_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Youthful Valkyrie"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

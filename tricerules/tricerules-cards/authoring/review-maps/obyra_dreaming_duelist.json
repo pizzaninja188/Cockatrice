@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "4162e60f-9d70-4b8c-a838-df57b83c208d",
+  "spans": [
+    {
+      "face_id": "obyra_dreaming_duelist",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "obyra_dreaming_duelist",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc17_batch::issue_misc17_obyra_drains_each_opponent_for_other_faeries",
+      "covers": "another Faerie you control entering makes each opponent lose 1 life while a non-Faerie does not"
+    },
+    {
+      "test": "issue_misc17_batch::issue_misc17_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flash, Flying, the self-excluding Faerie-entry watcher, and its each-opponent life loss of Obyra, Dreaming Duelist"
+    },
+    {
+      "test": "issue_misc17_batch::issue_misc17_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Obyra, Dreaming Duelist"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

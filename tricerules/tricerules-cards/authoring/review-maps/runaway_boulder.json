@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "57f15861-82cf-4faf-827c-9bc7f4844d2a",
+  "spans": [
+    {
+      "face_id": "runaway_boulder",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "runaway_boulder",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    },
+    {
+      "face_id": "runaway_boulder",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc17_batch::issue_misc17_runaway_boulder_deals_six_to_an_opponent_creature",
+      "covers": "the entry trigger deals 6 damage to a targeted creature an opponent controls (a 7/7 survives), only an opponent's creature is a legal target, and the Cycling {2} hand ability discards the card to draw"
+    },
+    {
+      "test": "issue_misc17_batch::issue_misc17_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flash, the opponent-creature damage trigger, and the Cycling {2} hand ability of Runaway Boulder"
+    },
+    {
+      "test": "issue_misc17_batch::issue_misc17_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Runaway Boulder"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

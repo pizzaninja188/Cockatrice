@@ -1,0 +1,26 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 04669a6f-6299-465b-a26e-6cae37cdc081.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.6a (entry trigger) and CR 702.11 (hexproof until end of turn).
+(
+  id: "plumecreed_escort",
+  name: "Plumecreed Escort",
+  face_id: "plumecreed_escort",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Bird", "Scout"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flash, Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([3]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [GrantKeywords(subject: Chosen((kind: Creature, controller: You)), keywords: [Hexproof])],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature you control",
+      effect_indices: [0],
+    )])),
+  )],
+)

@@ -1355,6 +1355,7 @@ hivespine_wolverine	0	cast	exercised
 hoarding_recluse	0	cast	exercised
 hobgoblin_dragoon	0	cast	exercised
 hollowhenge_beast	0	cast	exercised
+holy_cow	0	cast	exercised
 holy_strength	0	cast	exercised
 honey_mammoth	0	cast	exercised
 honor	0	cast	exercised
@@ -1380,6 +1381,8 @@ hulk_smash!	0	cast	exercised
 hulking_bugbear	0	cast	exercised
 hulking_devil	0	cast	exercised
 hullcarver	0	cast	exercised
+hulldrifter	0	ability:0	unsupported: nonmana costs need additional fixture resources
+hulldrifter	0	cast	exercised
 humble_budoka	0	cast	exercised
 humbling_elder	0	cast	exercised
 humongulus	0	cast	exercised
@@ -1661,6 +1664,7 @@ lofty_dreams	0	cast	exercised
 lone_missionary	0	cast	exercised
 lonely_arroyo	0	ability:0	exercised
 lonely_arroyo	0	land	exercised
+long-bodied_grey_dog	0	cast	exercised
 long_lake_nuisance	0	cast	exercised
 longbow_archer	0	cast	exercised
 looming_altisaur	0	cast	exercised
@@ -1759,6 +1763,8 @@ mesa_cavalier	0	cast	exercised
 mesa_unicorn	0	cast	exercised
 messenger_falcons	0	cast	exercised
 meteor_golem	0	cast	exercised
+meteor_sword	0	ability:0	exercised
+meteor_sword	0	cast	exercised
 meticulous_archive	0	land	exercised
 meticulous_artisan	0	cast	exercised
 michelangelo,_mutant_bff	0	cast	exercised
@@ -1923,6 +1929,7 @@ oakgnarl_warrior	0	cast	exercised
 oasis_gardener	0	ability:0	exercised
 oasis_gardener	0	cast	exercised
 obsidian_giant	0	cast	exercised
+obyra,_dreaming_duelist	0	cast	exercised
 obyras_attendants_desperate_parry	0	cast	exercised
 obyras_attendants_desperate_parry	1	cast	exercised
 octopus_form	0	cast	exercised
@@ -2046,6 +2053,7 @@ platypus-bear	0	cast	exercised
 playful_shove	0	cast	exercised
 plover_knights	0	cast	exercised
 plow_through	0	cast	exercised
+plumecreed_escort	0	cast	exercised
 plumeveil	0	cast	exercised
 plundering_pirate	0	cast	exercised
 plunge_into_winter	0	cast	exercised
@@ -2291,6 +2299,8 @@ rumble_arena	0	land	exercised
 rumbling_baloth	0	cast	exercised
 run_afoul	0	cast	exercised
 run_behind	0	cast	exercised
+runaway_boulder	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+runaway_boulder	0	cast	exercised
 rune-sealed_wall	0	ability:0	exercised
 rune-sealed_wall	0	cast	exercised
 runeclaw_bear	0	cast	exercised
@@ -2816,6 +2826,7 @@ terramorphic_expanse	0	ability:0	exercised
 terramorphic_expanse	0	land	exercised
 terrian,_world_tyrant	0	cast	exercised
 territorial_roc	0	cast	exercised
+terror_of_mount_velus	0	cast	exercised
 terror_of_the_fairgrounds	0	cast	exercised
 textbook_tabulator	0	cast	exercised
 thaumaton_torpedo	0	ability:0	exercised
@@ -3241,6 +3252,7 @@ yoked_ox	0	cast	exercised
 yotian_medic	0	cast	exercised
 yotian_soldier	0	cast	exercised
 youthful_knight	0	cast	exercised
+youthful_valkyrie	0	cast	exercised
 yuyan_archers	0	cast	exercised
 zealous_guardian	0	cast	exercised
 zealous_lorecaster	0	cast	exercised

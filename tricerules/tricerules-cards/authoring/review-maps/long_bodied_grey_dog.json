@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "oracle_id": "6f83da19-fd89-44ec-88f3-0c3fddfbd1b2",
+  "spans": [
+    {
+      "face_id": "long_bodied_grey_dog",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "long_bodied_grey_dog",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Keyword::Reach",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc17_batch::issue_misc17_long_bodied_grey_dog_creates_a_tapped_treasure",
+      "covers": "the entry trigger creates exactly one Treasure token and it enters tapped"
+    },
+    {
+      "test": "issue_misc17_batch::issue_misc17_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flash, Reach, and the tapped Treasure entry token of Long-Bodied Grey Dog"
+    },
+    {
+      "test": "issue_misc17_batch::issue_misc17_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Long-Bodied Grey Dog"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

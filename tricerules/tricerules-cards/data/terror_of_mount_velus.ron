@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 8161248c-16a3-47db-a3ae-cdfd878d49e0.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.6a (entry trigger) and CR 702.4 (double strike). The fetched ruling confirms the
+// grant affects only creatures you control at the time it resolves.
+(
+  id: "terror_of_mount_velus",
+  name: "Terror of Mount Velus",
+  face_id: "terror_of_mount_velus",
+  mana_cost: "{5}{R}{R}",
+  types: ["Creature", "Dragon"],
+  power: 5,
+  toughness: 5,
+  keywords: [Flying, DoubleStrike],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([3]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [GrantKeywordsAll(filter: (controller: Some(YouControl)), keywords: [DoubleStrike])],
+  )],
+)

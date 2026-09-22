@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "8161248c-16a3-47db-a3ae-cdfd878d49e0",
+  "spans": [
+    {
+      "face_id": "terror_of_mount_velus",
+      "start_line": 1,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "terror_of_mount_velus",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Keyword::DoubleStrike",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywordsAll",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc17_batch::issue_misc17_terror_of_mount_velus_grants_the_team_double_strike",
+      "covers": "the entry trigger grants double strike to each creature you control (including the Dragon) and not to an opponent's creature"
+    },
+    {
+      "test": "issue_misc17_batch::issue_misc17_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flying, Double strike, and the mass double-strike entry grant of Terror of Mount Velus"
+    },
+    {
+      "test": "issue_misc17_batch::issue_misc17_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Terror of Mount Velus"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,24 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 6d37ba4b-ff56-4eec-9dc2-2d7f357dc9c9.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.6a with CR 603.6d (a permanent-entry watcher excluding the source itself).
+(
+  id: "youthful_valkyrie",
+  name: "Youthful Valkyrie",
+  face_id: "youthful_valkyrie",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Angel"],
+  power: 1,
+  toughness: 3,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature), exclude_source: true),
+      creature_filter: Some((required_subtypes: ["Angel"])),
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

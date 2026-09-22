@@ -1,0 +1,32 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 57f15861-82cf-4faf-827c-9bc7f4844d2a.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.6a (entry trigger), CR 120.3 (the entry damage), and CR 702.29 (cycling is a
+// hand-zone activated ability that discards this card as a cost).
+(
+  id: "runaway_boulder",
+  name: "Runaway Boulder",
+  face_id: "runaway_boulder",
+  mana_cost: "{6}",
+  types: ["Artifact"],
+  keywords: [Flash],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [DamageTarget(amount: 6, target: (kind: Creature, controller: Opponent))],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature an opponent controls",
+      effect_indices: [0],
+    )])),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    source_zone: Hand,
+    costs: [Mana("{2}"), DiscardSelf],
+    effect: [Draw(count: 1)],
+  )],
+)

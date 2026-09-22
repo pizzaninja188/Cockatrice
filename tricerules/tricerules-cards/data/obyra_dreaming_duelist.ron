@@ -1,0 +1,26 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 4162e60f-9d70-4b8c-a838-df57b83c208d.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.6a with CR 603.6d (a permanent-entry watcher excluding the source itself) and
+// CR 119.3 (each opponent loses 1 life).
+(
+  id: "obyra,_dreaming_duelist",
+  name: "Obyra, Dreaming Duelist",
+  face_id: "obyra_dreaming_duelist",
+  mana_cost: "{U}{B}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Faerie", "Warrior"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flash, Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([3]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature), exclude_source: true),
+      creature_filter: Some((required_subtypes: ["Faerie"])),
+    ),
+    effect: [LoseLife(amount: Fixed(1), who: EachOpponent)],
+  )],
+)
