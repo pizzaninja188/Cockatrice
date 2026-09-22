@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "05852d99-8f30-4318-913c-d0b1eaf8c222",
+  "spans": [
+    {
+      "face_id": "bristlepack_sentry",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "bristlepack_sentry",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Defender",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "StaticAbilityDef::ConditionalSelfModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc14_batch::issue_misc14_bristlepack_sentry_needs_a_power_four_creature_to_attack",
+      "covers": "a controlled power-4 creature unlocks the attack while defender otherwise keeps it out of combat"
+    },
+    {
+      "test": "issue_misc14_batch::issue_misc14_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Defender, and the maximum-power condition of Bristlepack Sentry"
+    },
+    {
+      "test": "issue_misc14_batch::issue_misc14_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Bristlepack Sentry"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

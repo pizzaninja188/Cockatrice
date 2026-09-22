@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "c1f1ba17-b5e8-4bb3-a767-befd52e2db72",
+  "spans": [
+    {
+      "face_id": "kavaron_skywarden",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "kavaron_skywarden",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Reach",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfEndStep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::Void",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc14_batch::issue_misc14_kavaron_skywarden_counts_void_at_end_step",
+      "covers": "a nonland permanent leaving the battlefield this turn satisfies the Void intervening-if and adds a +1/+1 counter, while with nothing leaving it adds none"
+    },
+    {
+      "test": "issue_misc14_batch::issue_misc14_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Reach, and the Void end-step counter trigger of Kavaron Skywarden"
+    },
+    {
+      "test": "issue_misc14_batch::issue_misc14_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Kavaron Skywarden"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

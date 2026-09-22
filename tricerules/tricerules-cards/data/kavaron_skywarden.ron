@@ -1,0 +1,22 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle c1f1ba17-b5e8-4bb3-a767-befd52e2db72.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.17 (reach) and CR 603.4: the Void intervening-if holds when a nonland permanent left the
+// battlefield or a spell was cast for its warp cost this turn, by any player.
+(
+  id: "kavaron_skywarden",
+  name: "Kavaron Skywarden",
+  face_id: "kavaron_skywarden",
+  mana_cost: "{4}{R}",
+  types: ["Creature", "Kavu", "Soldier"],
+  power: 4,
+  toughness: 5,
+  keywords: [Reach],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: AtBeginningOfEndStep(player: Controller),
+    intervening_if: Some(Void),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

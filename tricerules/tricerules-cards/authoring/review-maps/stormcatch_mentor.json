@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "b2252471-01ca-4d58-aa99-4ab0aa5eae12",
+  "spans": [
+    {
+      "face_id": "stormcatch_mentor",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "stormcatch_mentor",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "stormcatch_mentor",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPlayerCastsSpell",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::SpellGenericReduction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc14_batch::issue_misc14_stormcatch_mentor_has_prowess_and_reduces_instants",
+      "covers": "casting a noncreature spell pumps the Mentor (prowess), and the reduction makes {2}{U} castable with {1}{U} while without the Mentor it is not"
+    },
+    {
+      "test": "issue_misc14_batch::issue_misc14_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Haste, the prowess trigger, and the instant/sorcery generic reduction of Stormcatch Mentor"
+    },
+    {
+      "test": "issue_misc14_batch::issue_misc14_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Stormcatch Mentor"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

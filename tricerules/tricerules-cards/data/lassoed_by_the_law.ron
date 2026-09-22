@@ -1,0 +1,37 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 9457f3c1-a087-46cd-a8be-cf665466b77c.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.6a (entry triggers) and CR 610.3/608.2b: if the source leaves before the first trigger
+// resolves the target is never exiled (2024-04-12 ruling). The Mercenary token's granted ability
+// is part of the registered token definition.
+(
+  id: "lassoed_by_the_law",
+  name: "Lassoed by the Law",
+  face_id: "lassoed_by_the_law",
+  mana_cost: "{3}{W}",
+  types: ["Enchantment"],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [ExileUntilSourceLeaves(target: (
+        kind: AnyPermanent,
+        controller: Opponent,
+        excluded_permanent_types: [Land],
+      ))],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target nonland permanent an opponent controls",
+        effect_indices: [0],
+      )])),
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [CreateTokens(token: "mercenary_r_1_1", count: 1)],
+    ),
+  ],
+)

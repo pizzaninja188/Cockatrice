@@ -1,0 +1,37 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle dc367b23-d1f4-4c5c-b300-a44a726e3f74.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 700.2a/c (modal choice and one mode), CR 701.8 (destroy), and CR 400.7/608.2b: returning a
+// creature card from the graveyard puts a new object onto the battlefield.
+(
+  id: "live_or_die",
+  name: "Live or Die",
+  face_id: "live_or_die",
+  mana_cost: "{3}{B}{B}",
+  types: ["Instant"],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 1,
+    modes: [
+      (
+        mode_id: "mode_01",
+        presentation: OracleLines([2]),
+        effects: [MoveGraveyardCards(
+          filter: (owner: Controller, card: Some((card_type: Some(Creature)))),
+          destination: Battlefield(tapped: false),
+        )],
+      ),
+      (
+        mode_id: "mode_02",
+        presentation: OracleLines([3]),
+        effects: [Destroy(subject: Chosen((kind: Creature)))],
+        targeting: Some((groups: [(
+          min: 1,
+          max: 1,
+          prompt: "Choose target creature",
+          effect_indices: [0],
+        )])),
+      ),
+    ],
+  ),
+)

@@ -1,0 +1,22 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 701c8624-70d8-49df-84b1-d7b2a8e83552.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.19 (trample) and CR 603.4/700.11: descend is a turn-long fact about permanent cards put
+// into the controller's graveyard from anywhere, checked once as the end step begins.
+(
+  id: "child_of_the_volcano",
+  name: "Child of the Volcano",
+  face_id: "child_of_the_volcano",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Elemental"],
+  power: 3,
+  toughness: 3,
+  keywords: [Trample],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: AtBeginningOfEndStep(player: Controller),
+    intervening_if: Some(PermanentCardsEnteredGraveyardThisTurn(players: Controller, min: Some(1))),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

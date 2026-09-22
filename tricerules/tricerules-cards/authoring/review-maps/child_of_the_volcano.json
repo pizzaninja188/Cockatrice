@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "701c8624-70d8-49df-84b1-d7b2a8e83552",
+  "spans": [
+    {
+      "face_id": "child_of_the_volcano",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "child_of_the_volcano",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfEndStep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::PermanentCardsEnteredGraveyardThisTurn",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc14_batch::issue_misc14_child_of_the_volcano_counts_on_descend_at_end_step",
+      "covers": "a permanent card put into the graveyard this turn makes the end-step intervening-if hold and add a +1/+1 counter, while no descent adds none"
+    },
+    {
+      "test": "issue_misc14_batch::issue_misc14_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Trample, and the descend end-step counter trigger of Child of the Volcano"
+    },
+    {
+      "test": "issue_misc14_batch::issue_misc14_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Child of the Volcano"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

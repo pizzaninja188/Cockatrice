@@ -1,0 +1,33 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle b2252471-01ca-4d58-aa99-4ab0aa5eae12.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.10 (haste), CR 702.108 (prowess), and CR 601.2f: the reduction applies only to the
+// generic component of the controller's instant and sorcery spells.
+(
+  id: "stormcatch_mentor",
+  name: "Stormcatch Mentor",
+  face_id: "stormcatch_mentor",
+  mana_cost: "{U}{R}",
+  types: ["Creature", "Otter", "Wizard"],
+  power: 1,
+  toughness: 1,
+  keywords: [Haste],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPlayerCastsSpell(
+      caster: Controller,
+      filter: (card_type: Some(Noncreature)),
+    ),
+    effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+  )],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([3]),
+    definition: SpellGenericReduction(
+      casters: Controller,
+      spell_type: Some(InstantOrSorcery),
+      amount: 1,
+    ),
+  )],
+)

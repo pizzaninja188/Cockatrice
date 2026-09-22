@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "dc367b23-d1f4-4c5c-b300-a44a726e3f74",
+  "spans": [
+    {
+      "face_id": "live_or_die",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/modal_spell"
+      ]
+    },
+    {
+      "face_id": "live_or_die",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/0"
+      ]
+    },
+    {
+      "face_id": "live_or_die",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "ModalDef",
+      "typed_path": "/faces/0/modal_spell"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/modal_spell/modes/1/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc14_batch::issue_misc14_live_or_die_modes_reanimate_or_destroy",
+      "covers": "the reanimate mode returns a targeted creature card from the graveyard to the battlefield and the destroy mode destroys a targeted creature"
+    },
+    {
+      "test": "issue_misc14_batch::issue_misc14_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the one-mode modal header, and both mode effects of Live or Die"
+    },
+    {
+      "test": "issue_misc14_batch::issue_misc14_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Live or Die"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

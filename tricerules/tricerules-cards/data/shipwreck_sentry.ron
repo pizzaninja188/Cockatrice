@@ -1,0 +1,27 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle f05575f8-4961-4780-83fc-3584d9146a14.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.3 (defender) and CR 702.3b: the entry fact stays true even if the artifact later stops
+// being an artifact or leaves the battlefield (2023-11-10 ruling).
+(
+  id: "shipwreck_sentry",
+  name: "Shipwreck Sentry",
+  face_id: "shipwreck_sentry",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Human", "Pirate"],
+  power: 3,
+  toughness: 3,
+  keywords: [Defender],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: ConditionalSelfModifier(
+      condition: PermanentsEnteredThisTurn(
+        controllers: Controller,
+        filter: (permanent_type: Some(Artifact)),
+        min: Some(1),
+      ),
+      can_attack_as_though_without_defender: true,
+    ),
+  )],
+)

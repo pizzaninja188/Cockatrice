@@ -1,0 +1,27 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 05852d99-8f30-4318-913c-d0b1eaf8c222.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.3 (defender) and CR 702.3b with CR 611.2c: the attack permission is reevaluated from the
+// controller's battlefield aggregate, so raising this creature's own power to 4 satisfies it.
+(
+  id: "bristlepack_sentry",
+  name: "Bristlepack Sentry",
+  face_id: "bristlepack_sentry",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Plant", "Wolf"],
+  power: 3,
+  toughness: 3,
+  keywords: [Defender],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: ConditionalSelfModifier(
+      condition: BattlefieldAggregate(
+        filter: (controllers: Controller, card_type: Some(Creature)),
+        aggregate: MaximumPower,
+        min: Some(4),
+      ),
+      can_attack_as_though_without_defender: true,
+    ),
+  )],
+)

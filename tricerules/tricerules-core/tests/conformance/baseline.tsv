@@ -365,6 +365,7 @@ brightclimb_pathway_grimclimb_pathway	1	land	exercised
 brightwood_tracker	0	ability:0	exercised
 brightwood_tracker	0	cast	exercised
 brilliant_plan	0	cast	exercised
+bristlepack_sentry	0	cast	exercised
 bristling_backwoods	0	ability:0	exercised
 bristling_backwoods	0	land	exercised
 broadside_barrage	0	cast	exercised
@@ -470,6 +471,7 @@ charity_extractor	0	cast	exercised
 charmed_sleep	0	cast	exercised
 chase_inspiration	0	cast	exercised
 child_of_night	0	cast	exercised
+child_of_the_volcano	0	cast	exercised
 chitin_gravestalker	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 chitin_gravestalker	0	cast	exercised
 chitinous_graspling	0	cast	exercised
@@ -1505,6 +1507,7 @@ kav_landseeker	0	cast	exercised
 kavaron,_memorial_world	0	ability:0	exercised
 kavaron,_memorial_world	0	ability:1	exercised
 kavaron,_memorial_world	0	land	exercised
+kavaron_skywarden	0	cast	exercised
 kavu_climber	0	cast	exercised
 kederekt_creeper	0	cast	exercised
 keen-eyed_archers	0	cast	exercised
@@ -1573,6 +1576,7 @@ lantern_kami	0	cast	exercised
 large_bear	0	cast	exercised
 larval_scoutlander	0	ability:0	exercised
 larval_scoutlander	0	cast	exercised
+lassoed_by_the_law	0	cast	exercised
 last_gasp	0	cast	exercised
 lasyd_prowler	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 lasyd_prowler	0	cast	exercised
@@ -1621,6 +1625,7 @@ lilianas_steward	0	cast	exercised
 liminal_hold	0	cast	exercised
 liquimetal_coating	0	ability:0	exercised
 liquimetal_coating	0	cast	exercised
+live_or_die	0	cast	exercised
 living_phone	0	cast	exercised
 living_tempest	0	cast	exercised
 lizard_warrior	0	cast	exercised
@@ -2407,6 +2412,7 @@ shepherding_spirits	0	cast	exercised
 shining_aerosaur	0	cast	exercised
 shinra_reinforcements	0	cast	exercised
 shipwreck_dowser	0	cast	exercised
+shipwreck_sentry	0	cast	exercised
 shivan_dragon	0	ability:0	exercised
 shivan_dragon	0	cast	exercised
 shock	0	cast	exercised
@@ -2634,6 +2640,7 @@ storm_crow	0	cast	exercised
 storm_fleet_spy	0	cast	exercised
 stormcarved_coast	0	ability:0	exercised
 stormcarved_coast	0	land	exercised
+stormcatch_mentor	0	cast	exercised
 stormcloud_spirit	0	cast	exercised
 stormfront_pegasus	0	cast	exercised
 stormkeld_vanguard_bear_down	0	cast	exercised

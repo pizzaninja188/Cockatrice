@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "f05575f8-4961-4780-83fc-3584d9146a14",
+  "spans": [
+    {
+      "face_id": "shipwreck_sentry",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "shipwreck_sentry",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Defender",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "StaticAbilityDef::ConditionalSelfModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc14_batch::issue_misc14_shipwreck_sentry_needs_an_artifact_entry_to_attack",
+      "covers": "an artifact entering under the controller's control this turn unlocks the attack while defender otherwise keeps it out of combat"
+    },
+    {
+      "test": "issue_misc14_batch::issue_misc14_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Defender, and the artifact-entered-this-turn condition of Shipwreck Sentry"
+    },
+    {
+      "test": "issue_misc14_batch::issue_misc14_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Shipwreck Sentry"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

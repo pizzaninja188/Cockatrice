@@ -1,0 +1,59 @@
+{
+  "format_version": 1,
+  "oracle_id": "9457f3c1-a087-46cd-a8be-cf665466b77c",
+  "spans": [
+    {
+      "face_id": "lassoed_by_the_law",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    },
+    {
+      "face_id": "lassoed_by_the_law",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileUntilSourceLeaves",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [
+    "mercenary_r_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc14_batch::issue_misc14_lassoed_by_the_law_exiles_and_makes_a_mercenary",
+      "covers": "the entry triggers exile an opponent's nonland permanent until the source leaves (returning it) and create a Mercenary token"
+    },
+    {
+      "test": "issue_misc14_batch::issue_misc14_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the exile-until-leaves trigger with targeting, and the Mercenary token trigger of Lassoed by the Law"
+    },
+    {
+      "test": "issue_misc14_batch::issue_misc14_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Lassoed by the Law"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
