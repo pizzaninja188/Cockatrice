@@ -1,0 +1,51 @@
+{
+  "format_version": 1,
+  "oracle_id": "87f82d15-5b6b-400f-8a15-d45a2a735f7d",
+  "spans": [
+    {
+      "face_id": "experimental_confectioner",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "experimental_confectioner",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPlayerSacrificesPermanent",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [
+    "food",
+    "rat_b_1_1_cant_block"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc30_batch::issue_misc30_confectioner_observes_nontoken_food_sacrifice",
+      "covers": "ETB Food; both nontoken Food and Food-token sacrifices create a Rat, while non-Food sacrifice does not"
+    },
+    {
+      "test": "issue_misc30_batch::issue_misc30_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, and numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

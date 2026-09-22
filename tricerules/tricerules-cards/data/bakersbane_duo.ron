@@ -1,0 +1,17 @@
+// Pinned Oracle ecd9a0a4-1dfa-4d91-8339-062e2be4e5d9; Scryfall text/six rulings checked 2026-09-22.
+// CR 700.14: expend 4 observes the fourth mana actually spent on spells this turn.
+(
+  id: "bakersbane_duo", name: "Bakersbane Duo", face_id: "bakersbane_duo",
+  mana_cost: "{1}{G}", types: ["Creature", "Squirrel", "Raccoon"], power: 2, toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield,
+      effect: [CreateTokens(token: "food", count: 1)],
+    ),
+    (
+      ability_id: "triggered_02", presentation: OracleLines([2]),
+      trigger: WheneverPlayerExpendsMana(amount: 4),
+      effect: [PumpTarget(power: 1, toughness: 1, subject: Source)],
+    ),
+  ],
+)

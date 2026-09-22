@@ -1,0 +1,14 @@
+// Pinned Oracle 5396045d-744b-435e-8324-a1bfbb03449d; Scryfall text/three Kindred rulings checked 2026-09-22.
+// Kindred is retained as a card type; Kithkin is the creature-type subtype of this enchantment.
+(
+  id: "clachan_festival", name: "Clachan Festival", face_id: "clachan_festival",
+  mana_cost: "{2}{W}", types: ["Kindred", "Enchantment", "Kithkin"],
+  triggered_abilities: [(
+    ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "kithkin_gw_1_1", count: 2)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01", presentation: OracleLines([2]), costs: [Mana("{4}{W}")],
+    effect: [CreateTokens(token: "kithkin_gw_1_1", count: 1)],
+  )],
+)

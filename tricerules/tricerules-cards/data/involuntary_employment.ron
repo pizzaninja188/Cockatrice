@@ -1,0 +1,13 @@
+// Pinned Oracle 7e86fb1e-9987-43ba-b59e-0cb03bbdedb6; Scryfall text/rulings checked 2026-09-22 (none).
+// CR 608.2b: an illegal sole target prevents every instruction, including Treasure creation.
+(
+  id: "involuntary_employment", name: "Involuntary Employment", face_id: "involuntary_employment",
+  mana_cost: "{3}{R}", types: ["Sorcery"],
+  spell_effect: [
+    GainControl(target: (kind: Creature), duration: UntilEndOfTurn),
+    Untap(subject: Chosen((kind: Creature))),
+    GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Haste]),
+    CreateTokens(token: "treasure", count: 1),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0, 1, 2])])),
+)

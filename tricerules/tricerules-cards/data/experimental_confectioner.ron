@@ -1,0 +1,17 @@
+// Pinned Oracle 87f82d15-5b6b-400f-8a15-d45a2a735f7d; Scryfall text/four Food rulings checked 2026-09-22.
+// Food is an artifact subtype; token status is intentionally unrestricted.
+(
+  id: "experimental_confectioner", name: "Experimental Confectioner", face_id: "experimental_confectioner",
+  mana_cost: "{2}{B}", types: ["Creature", "Human", "Peasant"], power: 2, toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield,
+      effect: [CreateTokens(token: "food", count: 1)],
+    ),
+    (
+      ability_id: "triggered_02", presentation: OracleLines([2]),
+      trigger: WheneverPlayerSacrificesPermanent(player: Controller, filter: (required_subtypes: ["Food"])),
+      effect: [CreateTokens(token: "rat_b_1_1_cant_block", count: 1)],
+    ),
+  ],
+)

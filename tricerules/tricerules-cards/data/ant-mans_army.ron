@@ -1,0 +1,13 @@
+// Pinned Oracle 34c0f75d-10a9-428d-b202-3defb3949090; Scryfall text/rulings checked 2026-09-22 (none).
+// The entry choice is mandatory; branch IDs provide stable choice identity.
+(
+  id: "ant-mans_army", name: "Ant-Man's Army", face_id: "ant_mans_army",
+  mana_cost: "{2}{G}", types: ["Creature", "Insect"], power: 3, toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield,
+    effect: [ChooseResolutionBranch(optional: false, branches: [
+      (branch_id: "create_food", presentation: Fallback, cost: None, effects: [CreateTokens(token: "food", count: 1)]),
+      (branch_id: "create_treasure", presentation: Fallback, cost: None, effects: [CreateTokens(token: "treasure", count: 1)]),
+    ])],
+  )],
+)

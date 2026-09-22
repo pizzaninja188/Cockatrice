@@ -1,0 +1,39 @@
+{
+  "format_version": 1,
+  "oracle_id": "34c0f75d-10a9-428d-b202-3defb3949090",
+  "spans": [
+    {
+      "face_id": "ant_mans_army",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseResolutionBranch",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "food",
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc30_batch::issue_misc30_ant_mans_choice_is_exactly_one_token",
+      "covers": "mandatory ETB choice yields exactly one of Food or Treasure"
+    },
+    {
+      "test": "issue_misc30_batch::issue_misc30_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, and numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

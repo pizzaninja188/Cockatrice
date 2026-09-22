@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "7e86fb1e-9987-43ba-b59e-0cb03bbdedb6",
+  "spans": [
+    {
+      "face_id": "involuntary_employment",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2",
+        "/faces/0/spell_effect/3"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::GainControl",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/3"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc30_batch::issue_misc30_involuntary_control_then_revert_and_fizzle",
+      "covers": "temporary control, untap, haste, Treasure, end-step reversion and illegal-target fizzle"
+    },
+    {
+      "test": "issue_misc30_batch::issue_misc30_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, and numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

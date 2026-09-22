@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "5396045d-744b-435e-8324-a1bfbb03449d",
+  "spans": [
+    {
+      "face_id": "clachan_festival",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "clachan_festival",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "kithkin_gw_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc30_batch::issue_misc30_clachan_kindred_and_token_counts",
+      "covers": "Kindred enchantment ETB creates two exact Kithkin and five-mana ability creates one"
+    },
+    {
+      "test": "issue_misc30_batch::issue_misc30_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, and numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
