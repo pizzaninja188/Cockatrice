@@ -1,0 +1,53 @@
+{
+  "format_version": 1,
+  "oracle_id": "3b46800b-711b-4cbb-b296-26115b4f6839",
+  "spans": [
+    {
+      "face_id": "visions_of_villainy",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cost_modifiers"
+      ]
+    },
+    {
+      "face_id": "visions_of_villainy",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CostModifier::ConditionalGenericReduction",
+      "typed_path": "/faces/0/cost_modifiers/0"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldAggregate",
+      "typed_path": "/faces/0/cost_modifiers/0/ConditionalGenericReduction/condition"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc44_batch::issue_misc44_visions_of_villainy",
+      "covers": "Villain-controlled generic reduction plus draw two and two life loss"
+    },
+    {
+      "test": "issue_misc44_batch::issue_misc44_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost and type line"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "49f0da4a-e046-4220-b90e-e105a5f2ef00",
+  "spans": [
+    {
+      "face_id": "incinerating_blast",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "incinerating_blast",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DrawDiscard",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc44_batch::issue_misc44_incinerating_blast",
+      "covers": "six damage, optional discard then draw, decline, and illegal-target fizzle"
+    },
+    {
+      "test": "issue_misc44_batch::issue_misc44_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost and type line"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

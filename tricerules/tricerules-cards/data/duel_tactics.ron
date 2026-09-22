@@ -1,0 +1,10 @@
+// Pinned Oracle 262c5ac9-af41-42d1-a53a-8a671eedd5a6; rulings checked 2026-09-22.
+(
+  id: "duel_tactics", name: "Duel Tactics", face_id: "duel_tactics",
+  mana_cost: "{R}", flashback_cost: Some("{1}{R}"), types: ["Sorcery"],
+  spell_effect: [
+    DamageTarget(amount: 1, target: (kind: Creature)),
+    ApplyCombatRestriction(scope: Chosen((kind: Creature)), restriction: (cant_block: true)),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0, 1])])),
+)

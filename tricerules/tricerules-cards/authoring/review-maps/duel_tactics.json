@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "262c5ac9-af41-42d1-a53a-8a671eedd5a6",
+  "spans": [
+    {
+      "face_id": "duel_tactics",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    },
+    {
+      "face_id": "duel_tactics",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ApplyCombatRestriction",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc44_batch::issue_misc44_duel_tactics",
+      "covers": "one damage and cant-block on one target plus graveyard flashback exile"
+    },
+    {
+      "test": "issue_misc44_batch::issue_misc44_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost and type line"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

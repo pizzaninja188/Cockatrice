@@ -820,6 +820,7 @@ dual-sun_technique	0	cast	exercised
 dual_shot	0	cast	exercised
 dub	0	cast	exercised
 due_diligence	0	cast	exercised
+duel_tactics	0	cast	exercised
 dune_beetle	0	cast	exercised
 durkwood_boars	0	cast	exercised
 dusk_imp	0	cast	exercised
@@ -1496,6 +1497,7 @@ imperious_inkmage	0	cast	exercised
 impolite_entrance	0	cast	exercised
 impossible_inferno	0	cast	exercised
 impractical_joke	0	cast	exercised
+incinerating_blast	0	cast	exercised
 incurable_ogre	0	cast	exercised
 independent_troops	0	cast	exercised
 indestructibility	0	cast	exercised
@@ -1839,6 +1841,7 @@ meltstriders_gear	0	ability:0	exercised
 meltstriders_gear	0	cast	exercised
 meltstriders_resolve	0	cast	exercised
 memory_guardian	0	cast	exercised
+mental_modulation	0	cast	exercised
 mentor_of_the_meek	0	cast	exercised
 merchant_of_many_hats	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 merchant_of_many_hats	0	cast	exercised
@@ -2665,6 +2668,7 @@ slavering_branchsnapper	0	cast	exercised
 sledge-class_seedship	0	ability:0	exercised
 sledge-class_seedship	0	cast	exercised
 sleight_of_hand	0	cast	exercised
+slick_sequence	0	cast	exercised
 slippery_bogle	0	cast	exercised
 slithering_cryptid	0	cast	exercised
 sliver_construct	0	cast	exercised
@@ -3240,6 +3244,7 @@ vinereap_mentor	0	cast	exercised
 violent_urge	0	cast	exercised
 virulent_emissary	0	cast	exercised
 virus_beetle	0	cast	exercised
+visions_of_villainy	0	cast	exercised
 vitalize	0	cast	exercised
 viv_vision,_teen_synthezoid	0	ability:0	exercised
 viv_vision,_teen_synthezoid	0	cast	exercised

@@ -1,0 +1,14 @@
+// Pinned Oracle 3b46800b-711b-4cbb-b296-26115b4f6839; rulings checked 2026-09-22.
+(
+  id: "visions_of_villainy", name: "Visions of Villainy", face_id: "visions_of_villainy",
+  mana_cost: "{2}{B}", types: ["Instant"],
+  cost_modifiers: [ConditionalGenericReduction(
+    amount: 1,
+    condition: BattlefieldAggregate(
+      filter: (controllers: Controller, required_subtypes: ["Villain"]),
+      aggregate: Count,
+      min: Some(1),
+    ),
+  )],
+  spell_effect: [Draw(count: 2), LoseLife(amount: Fixed(2))],
+)

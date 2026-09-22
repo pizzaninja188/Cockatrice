@@ -1,0 +1,10 @@
+// Pinned Oracle 49f0da4a-e046-4220-b90e-e105a5f2ef00; rulings checked 2026-09-22.
+(
+  id: "incinerating_blast", name: "Incinerating Blast", face_id: "incinerating_blast",
+  mana_cost: "{4}{R}", types: ["Sorcery"],
+  spell_effect: [
+    DamageTarget(amount: 6, target: (kind: Creature)),
+    DrawDiscard(draw_count: 1, discard_count: 1, order: DiscardThenDraw, optional: true),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])])),
+)

@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "4ac8c118-3942-4c92-856c-20d764283650",
+  "spans": [
+    {
+      "face_id": "slick_sequence",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "GameCondition::SpellsCastThisTurn",
+      "typed_path": "/faces/0/spell_effect/1/Draw/count/Conditional/condition"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc44_batch::issue_misc44_slick_sequence",
+      "covers": "two damage to a permanent or player and resolution-time draw after another spell"
+    },
+    {
+      "test": "issue_misc44_batch::issue_misc44_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost and type line"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

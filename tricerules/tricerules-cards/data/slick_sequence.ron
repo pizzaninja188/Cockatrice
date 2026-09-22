@@ -1,0 +1,14 @@
+// Pinned Oracle 4ac8c118-3942-4c92-856c-20d764283650; ruling checked 2026-09-22.
+(
+  id: "slick_sequence", name: "Slick Sequence", face_id: "slick_sequence",
+  mana_cost: "{U}{R}", types: ["Instant"],
+  spell_effect: [
+    DamageTarget(amount: 2, target: (kind: AnyTarget)),
+    Draw(count: Conditional(
+      condition: SpellsCastThisTurn(players: Controller, min: Some(2)),
+      when_true: 1,
+      otherwise: 0,
+    )),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose any target", effect_indices: [0])])),
+)

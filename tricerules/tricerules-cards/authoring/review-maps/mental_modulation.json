@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "448d9391-9d15-4aa1-87b3-a1d755666c03",
+  "spans": [
+    {
+      "face_id": "mental_modulation",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cost_modifiers"
+      ]
+    },
+    {
+      "face_id": "mental_modulation",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "mental_modulation",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CostModifier::ConditionalGenericReduction",
+      "typed_path": "/faces/0/cost_modifiers/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Tap",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc44_batch::issue_misc44_mental_modulation",
+      "covers": "your-turn generic reduction, artifact and creature targets, draw, and illegal-target fizzle"
+    },
+    {
+      "test": "issue_misc44_batch::issue_misc44_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost and type line"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
