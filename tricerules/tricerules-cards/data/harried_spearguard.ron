@@ -1,0 +1,21 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle e3542d0f-fcee-4df7-aa95-b55138caa2ab.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.10 (haste), CR 603.6c (dies trigger), and CR 111.10 (the 1/1 black Rat token that can't
+// block).
+(
+  id: "harried_spearguard",
+  name: "Harried Spearguard",
+  face_id: "harried_spearguard",
+  mana_cost: "{R}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 1,
+  toughness: 1,
+  keywords: [Haste],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfDies,
+    effect: [CreateTokens(token: "rat_b_1_1_cant_block", count: 1, who: Controller)],
+  )],
+)

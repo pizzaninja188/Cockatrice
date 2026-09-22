@@ -1,0 +1,24 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 7c179e54-3beb-4761-bddf-41fa98b082db.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.6c (dies trigger), CR 701.8/400.7/608.2b (the graveyard return creates a new object), and
+// CR 115.3 (the target). The fetched ruling confirms a mana-value-2-or-less creature card may be
+// returned and may target a card that died simultaneously with the Driver.
+(
+  id: "driver_of_the_dead",
+  name: "Driver of the Dead",
+  face_id: "driver_of_the_dead",
+  mana_cost: "{3}{B}",
+  types: ["Creature", "Vampire"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [MoveGraveyardCards(
+      filter: (owner: Controller, card: Some((card_type: Some(Creature), max_mana_value: Some(2)))),
+      destination: Battlefield(tapped: false),
+    )],
+  )],
+)

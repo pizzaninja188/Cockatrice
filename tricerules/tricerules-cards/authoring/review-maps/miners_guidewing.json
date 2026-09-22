@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "eb161d0b-e534-463c-b1d1-7210bfba5d28",
+  "spans": [
+    {
+      "face_id": "miners_guidewing",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "miners_guidewing",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Keyword::Vigilance",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Explore",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc22_batch::issue_misc22_miners_guidewing_makes_a_creature_explore",
+      "covers": "the dies trigger makes a target creature you control explore (the revealed land goes to hand) and rejects an opponent's creature"
+    },
+    {
+      "test": "issue_misc22_batch::issue_misc22_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flying, Vigilance, the targeted Explore, and its targeting of Miner's Guidewing"
+    },
+    {
+      "test": "issue_misc22_batch::issue_misc22_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Miner's Guidewing"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

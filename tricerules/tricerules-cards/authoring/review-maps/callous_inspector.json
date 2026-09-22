@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "oracle_id": "5d950fd4-8956-4b1a-ab0f-ab31bcffce4e",
+  "spans": [
+    {
+      "face_id": "callous_inspector",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "callous_inspector",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Menace",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DamagePlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc22_batch::issue_misc22_callous_inspector_deals_damage_and_makes_a_clue",
+      "covers": "the dies trigger makes the source deal 1 damage to its controller and creates one Clue token"
+    },
+    {
+      "test": "issue_misc22_batch::issue_misc22_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Menace, the 1 damage to you, and the Clue token of Callous Inspector"
+    },
+    {
+      "test": "issue_misc22_batch::issue_misc22_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Callous Inspector"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

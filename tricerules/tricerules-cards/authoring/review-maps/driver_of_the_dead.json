@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "7c179e54-3beb-4761-bddf-41fa98b082db",
+  "spans": [
+    {
+      "face_id": "driver_of_the_dead",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc22_batch::issue_misc22_driver_of_the_dead_reanimates_a_small_creature",
+      "covers": "the dies trigger returns a targeted mana-value-2-or-less creature card to the battlefield and rejects a mana-value-4 creature card"
+    },
+    {
+      "test": "issue_misc22_batch::issue_misc22_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, and the mana-value-2-or-less graveyard return of Driver of the Dead"
+    },
+    {
+      "test": "issue_misc22_batch::issue_misc22_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Driver of the Dead"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "b907d375-b715-446b-8966-79959feb9f58",
+  "spans": [
+    {
+      "face_id": "edge_rover",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "edge_rover",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Reach",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "lander"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc22_batch::issue_misc22_edge_rover_makes_a_lander_for_each_player",
+      "covers": "the dies trigger creates one Lander token for each player and the Rover has reach"
+    },
+    {
+      "test": "issue_misc22_batch::issue_misc22_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Reach, and the each-player Lander token of Edge Rover"
+    },
+    {
+      "test": "issue_misc22_batch::issue_misc22_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Edge Rover"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

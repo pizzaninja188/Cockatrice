@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "e3542d0f-fcee-4df7-aa95-b55138caa2ab",
+  "spans": [
+    {
+      "face_id": "harried_spearguard",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "harried_spearguard",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "rat_b_1_1_cant_block"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc22_batch::issue_misc22_harried_spearguard_makes_a_rat",
+      "covers": "the dies trigger creates a 1/1 black Rat token that can't block and the Spearguard has haste"
+    },
+    {
+      "test": "issue_misc22_batch::issue_misc22_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Haste, and the dies Rat token of Harried Spearguard"
+    },
+    {
+      "test": "issue_misc22_batch::issue_misc22_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Harried Spearguard"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

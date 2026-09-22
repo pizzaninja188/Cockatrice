@@ -406,6 +406,7 @@ caged_zombie	0	ability:0	unsupported: nonmana costs need additional fixture reso
 caged_zombie	0	cast	exercised
 calamitous_cave-in	0	cast	exercised
 call_the_cavalry	0	cast	exercised
+callous_inspector	0	cast	exercised
 campus_guide	0	cast	exercised
 canal_monitor	0	cast	exercised
 cancel	0	cast	unsupported: target group 0 needs a richer fixture
@@ -773,6 +774,7 @@ dreamroot_cascade	0	ability:0	exercised
 dreamroot_cascade	0	land	exercised
 dreg_reaver	0	cast	exercised
 drill_too_deep	0	cast	exercised
+driver_of_the_dead	0	cast	exercised
 drix_fatemaker	0	cast	exercised
 dromoka_warrior	0	cast	exercised
 dross_crocodile	0	cast	exercised
@@ -816,6 +818,7 @@ eclipsed_boggart	0	cast	exercised
 eclipsed_elf	0	cast	exercised
 eclipsed_merrow	0	cast	exercised
 eddymurk_crab	0	cast	exercised
+edge_rover	0	cast	exercised
 edgewall_pack	0	cast	exercised
 eject	0	cast	exercised
 ekundu_griffin	0	cast	exercised
@@ -1294,6 +1297,7 @@ hardened_escort	0	cast	exercised
 hardened_tactician	0	ability:0	unsupported: nonmana costs need additional fixture resources
 hardened_tactician	0	cast	exercised
 harmonize	0	cast	exercised
+harried_spearguard	0	cast	exercised
 harrier_naga	0	cast	exercised
 haunted_guardian	0	cast	exercised
 havenwood_wurm	0	cast	exercised
@@ -1807,6 +1811,7 @@ mindful_biomancer	0	cast	exercised
 mindwhisker	0	cast	exercised
 minecart_daredevil_ride_the_rails	0	cast	exercised
 minecart_daredevil_ride_the_rails	1	cast	exercised
+miners_guidewing	0	cast	exercised
 mineshaft_spider	0	cast	exercised
 minotaur_abomination	0	cast	exercised
 minotaur_aggressor	0	cast	exercised
@@ -2515,6 +2520,7 @@ sinister_hideout	0	ability:1	exercised
 sinister_hideout	0	land	exercised
 sisters_of_the_flame	0	ability:0	exercised
 sisters_of_the_flame	0	cast	exercised
+sizzling_changeling	0	cast	exercised
 skateboard	0	ability:0	exercised
 skateboard	0	cast	exercised
 skeletal_crocodile	0	cast	exercised

@@ -1,0 +1,26 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 60ad7aaa-8ce6-4449-8e8d-4ccf925010db.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.73 (changeling as a characteristic-defining ability), CR 603.6c (dies trigger), and
+// CR 601.2/118.9: the fetched ruling and the primitive's contract confirm the exiled card may be
+// played until the end of the controller's next turn.
+(
+  id: "sizzling_changeling",
+  name: "Sizzling Changeling",
+  face_id: "sizzling_changeling",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Shapeshifter"],
+  power: 3,
+  toughness: 2,
+  characteristic_defining_abilities: [(
+    ability_id: "characteristic_01",
+    presentation: OracleLines([1]),
+    definition: Changeling,
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfDies,
+    effect: [ExileTopWithPlayPermission(player: Controller)],
+  )],
+)

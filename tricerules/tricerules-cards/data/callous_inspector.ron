@@ -1,0 +1,24 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 5d950fd4-8956-4b1a-ab0f-ab31bcffce4e.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.110 (menace), CR 603.6c (dies trigger), CR 120.3 (the 1 damage the source deals to you),
+// and CR 111.10: the fetched ruling confirms the Clue token is not an investigate.
+(
+  id: "callous_inspector",
+  name: "Callous Inspector",
+  face_id: "callous_inspector",
+  mana_cost: "{B}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 1,
+  toughness: 1,
+  keywords: [Menace],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfDies,
+    effect: [
+      DamagePlayer(amount: 1, who: Controller),
+      CreateTokens(token: "clue", count: 1),
+    ],
+  )],
+)

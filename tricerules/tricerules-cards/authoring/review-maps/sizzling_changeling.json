@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "60ad7aaa-8ce6-4449-8e8d-4ccf925010db",
+  "spans": [
+    {
+      "face_id": "sizzling_changeling",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/characteristic_defining_abilities/0"
+      ]
+    },
+    {
+      "face_id": "sizzling_changeling",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CharacteristicDefiningAbility::Changeling",
+      "typed_path": "/faces/0/characteristic_defining_abilities/0/definition"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileTopWithPlayPermission",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc22_batch::issue_misc22_sizzling_changeling_exiles_and_grants_play",
+      "covers": "the dies trigger exiles the exact top card of the controller's library; the play-until-the-end-of-your-next-turn permission is the shared ExileTopWithPlayPermission primitive, exercised by the exile-play regression"
+    },
+    {
+      "test": "issue_misc22_batch::issue_misc22_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the Changeling characteristic-defining ability, and the exile-top play permission of Sizzling Changeling"
+    },
+    {
+      "test": "issue_misc22_batch::issue_misc22_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Sizzling Changeling"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
