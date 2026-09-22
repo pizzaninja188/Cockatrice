@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "51a6819d-c8fb-4f52-ab0c-4ae845728ed2",
+  "spans": [
+    {
+      "face_id": "redrock_sentinel",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "redrock_sentinel",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1"
+    },
+    {
+      "symbol": "ActivatedCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/2"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc29_batch::issue_misc29_sentinel_land_cost",
+      "covers": "defender keyword; land and tap costs paid before resolution; draw and Treasure follow, repeated tapped activation rejected"
+    },
+    {
+      "test": "issue_misc29_batch::issue_misc29_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, cost, type, and numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

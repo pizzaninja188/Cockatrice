@@ -1,0 +1,11 @@
+// Pinned Oracle 51a6819d-c8fb-4f52-ab0c-4ae845728ed2; Scryfall text/rulings checked 2026-09-22 (none).
+(
+  id: "redrock_sentinel", name: "Redrock Sentinel", face_id: "redrock_sentinel",
+  mana_cost: "{3}", types: ["Artifact", "Creature", "Golem"], power: 2, toughness: 4,
+  keywords: [Defender],
+  activated_abilities: [(
+    ability_id: "activated_01", presentation: OracleLines([2]),
+    costs: [Mana("{2}"), Tap, SacrificePermanent(filter: (kind: AnyPermanent, controller: You, permanent_types: [Land]))],
+    effect: [Draw(count: 1), CreateTokens(token: "treasure", count: 1)],
+  )],
+)

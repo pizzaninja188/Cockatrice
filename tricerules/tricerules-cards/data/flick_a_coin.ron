@@ -1,0 +1,12 @@
+// Pinned Oracle 990583ef-5bf4-4e14-a8f1-61d32c6a75df; Scryfall text/ruling checked 2026-09-22.
+// CR 608.2b: if its sole target becomes illegal, no Treasure is created and no card is drawn.
+(
+  id: "flick_a_coin", name: "Flick a Coin", face_id: "flick_a_coin",
+  mana_cost: "{2}{R}", types: ["Instant"],
+  spell_effect: [
+    DamageTarget(amount: 1, target: (kind: AnyTarget)),
+    CreateTokens(token: "treasure", count: 1),
+    Draw(count: 1),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose any target", effect_indices: [0])])),
+)

@@ -1,0 +1,47 @@
+{
+  "format_version": 1,
+  "oracle_id": "990583ef-5bf4-4e14-a8f1-61d32c6a75df",
+  "spans": [
+    {
+      "face_id": "flick_a_coin",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    },
+    {
+      "face_id": "flick_a_coin",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc29_batch::issue_misc29_flick_resolution_and_illegal_target",
+      "covers": "one damage, Treasure and draw in order; illegal sole target prevents all effects"
+    },
+    {
+      "test": "issue_misc29_batch::issue_misc29_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, cost, type, and numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "635b854d-de71-4c85-9755-8c97bf3cba36",
+  "spans": [
+    {
+      "face_id": "sweettooth_witch",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "sweettooth_witch",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ActivatedCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::TargetPlayerLosesLife",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "food"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc29_batch::issue_misc29_witch_food_sacrifice_and_target",
+      "covers": "ETB Food; nontoken Food accepted and non-Food refused as sacrifice cost, no double payment, targeted life loss after resolution"
+    },
+    {
+      "test": "issue_misc29_batch::issue_misc29_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, cost, type, and numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

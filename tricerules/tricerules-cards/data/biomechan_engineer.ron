@@ -1,0 +1,13 @@
+// Pinned Oracle b395925b-2456-454e-9262-3b55c9f2799a; Scryfall text/rulings checked 2026-09-22 (none).
+(
+  id: "biomechan_engineer", name: "Biomechan Engineer", face_id: "biomechan_engineer",
+  mana_cost: "{G}{U}", types: ["Creature", "Insect", "Artificer"], power: 2, toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "lander", count: 1)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01", presentation: OracleLines([2]), costs: [Mana("{8}")],
+    effect: [Draw(count: 2), CreateTokens(token: "robot_c_2_2", count: 1)],
+  )],
+)

@@ -1,0 +1,47 @@
+{
+  "format_version": 1,
+  "oracle_id": "b395925b-2456-454e-9262-3b55c9f2799a",
+  "spans": [
+    {
+      "face_id": "biomechan_engineer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "biomechan_engineer",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "lander",
+    "robot_c_2_2"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc29_batch::issue_misc29_biomechan_tokens_and_draw",
+      "covers": "ETB Lander to controller; eight-mana activation draws two and creates one 2/2 Robot"
+    },
+    {
+      "test": "issue_misc29_batch::issue_misc29_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, cost, type, and numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

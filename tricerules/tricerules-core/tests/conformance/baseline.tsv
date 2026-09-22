@@ -263,6 +263,8 @@ bigfin_bouncer	0	cast	exercised
 bilbos_deadly_slice	0	cast	exercised
 bile-vial_boggart	0	cast	exercised
 billowing_shriekmass	0	cast	exercised
+biomechan_engineer	0	ability:0	exercised
+biomechan_engineer	0	cast	exercised
 biosynthic_burst	0	cast	exercised
 birnin_zana_plaza	0	ability:0	exercised
 birnin_zana_plaza	0	land	exercised
@@ -356,6 +358,7 @@ branchloft_pathway_boulderloft_pathway	0	ability:0	exercised
 branchloft_pathway_boulderloft_pathway	0	land	exercised
 branchloft_pathway_boulderloft_pathway	1	ability:0	exercised
 branchloft_pathway_boulderloft_pathway	1	land	exercised
+brasss_bounty	0	cast	exercised
 brave-kin_duo	0	ability:0	exercised
 brave-kin_duo	0	cast	exercised
 brave_brawler	0	ability:0	exercised
@@ -1001,6 +1004,7 @@ fleetfoot_dancer	0	cast	exercised
 fleeting_distraction	0	cast	exercised
 fleeting_flight	0	cast	exercised
 flesh_burrower	0	cast	exercised
+flick_a_coin	0	cast	exercised
 flight	0	cast	exercised
 flight-deck_coordinator	0	cast	exercised
 flood_the_engine	0	cast	exercised
@@ -2250,6 +2254,8 @@ reckless_waif_merciless_predator	1	cast	intentional: face unavailable from hand
 reclamation_sage	0	cast	exercised
 red_tiger_mechan	0	cast	exercised
 redcap_thief	0	cast	exercised
+redrock_sentinel	0	ability:0	exercised
+redrock_sentinel	0	cast	exercised
 redwood_treefolk	0	cast	exercised
 refute	0	cast	unsupported: target group 0 needs a richer fixture
 regal_unicorn	0	cast	exercised
@@ -2817,6 +2823,8 @@ swab_goblin	0	cast	exercised
 swallowed_by_leviathan	0	cast	unsupported: target group 0 needs a richer fixture
 swamp	0	ability:0	exercised
 swamp	0	land	exercised
+sweettooth_witch	0	ability:0	unsupported: nonmana costs need additional fixture resources
+sweettooth_witch	0	cast	exercised
 swift_spinner	0	cast	exercised
 swiftblade_vindicator	0	cast	exercised
 swiftfoot_boots	0	ability:0	exercised

@@ -1,0 +1,7 @@
+// Pinned Oracle 63b0538e-aa94-4e23-adf1-704cbf5bc3e5; Scryfall text/rulings checked 2026-09-22 (none).
+// Count lands controlled when this spell resolves, including nontoken and token lands.
+(
+  id: "brasss_bounty", name: "Brass's Bounty", face_id: "brasss_bounty",
+  mana_cost: "{6}{R}", types: ["Sorcery"],
+  spell_effect: [CreateTokens(token: "treasure", count: Count(BattlefieldPermanents(filter: (controllers: Controller, card_type: Some(Land)))))],
+)
