@@ -1,0 +1,18 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 73733fa5-d292-40ec-8f17-05ba5feb40ab; no card-specific rulings.
+// Reviewed direct-RON mapping: authoring/review-maps/reckless_lackey.json.
+(
+  id: "reckless_lackey",
+  name: "Reckless Lackey",
+  face_id: "reckless_lackey",
+  mana_cost: "{R}",
+  types: ["Creature", "Goblin", "Pirate"],
+  power: 1,
+  toughness: 2,
+  keywords: [FirstStrike, Haste],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{2}{R}"), SacrificeSelf],
+    effect: [Draw(count: 1), CreateTokens(token: "treasure", count: 1)],
+  )],
+)

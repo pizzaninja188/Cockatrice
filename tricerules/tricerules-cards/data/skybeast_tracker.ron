@@ -1,0 +1,19 @@
+// Oracle and four card-specific rulings checked 2026-09-22 against pinned Scryfall oracle 2c53a913-8a99-4a15-9c47-e79af026dc05.
+// Reviewed direct-RON mapping: authoring/review-maps/skybeast_tracker.json.
+// Cast-spell mana value includes announced X; a copied spell is not cast.
+(
+  id: "skybeast_tracker",
+  name: "Skybeast Tracker",
+  face_id: "skybeast_tracker",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Giant", "Archer"],
+  power: 2,
+  toughness: 4,
+  keywords: [Reach],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (min_mana_value: Some(5))),
+    effect: [CreateTokens(token: "food", count: 1)],
+  )],
+)

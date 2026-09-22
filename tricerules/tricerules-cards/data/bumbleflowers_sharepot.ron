@@ -1,0 +1,28 @@
+// Oracle and three Food rulings checked 2026-09-22 against pinned Scryfall oracle 6e152529-64b4-472c-8e50-99095af6af99.
+// Reviewed direct-RON mapping: authoring/review-maps/bumbleflowers_sharepot.json.
+(
+  id: "bumbleflowers_sharepot",
+  name: "Bumbleflower's Sharepot",
+  face_id: "bumbleflowers_sharepot",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "food", count: 1)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{5}"), Tap, SacrificeSelf],
+    effect: [Destroy(subject: Chosen((kind: AnyPermanent, excluded_permanent_types: [Land])))],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target nonland permanent",
+      effect_indices: [0],
+    )])),
+    timing: SorcerySpeed,
+  )],
+)

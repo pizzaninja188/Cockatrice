@@ -1,0 +1,18 @@
+{
+  "format_version": 1,
+  "oracle_id": "a7ec13c6-7ade-433a-b5a2-047854eef486",
+  "spans": [
+    { "face_id": "corsair_captain", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/triggered_abilities/0"] },
+    { "face_id": "corsair_captain", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/static_abilities/0"] }
+  ],
+  "primitive_references": [
+    { "symbol": "SpellEffectKind::CreateTokens", "typed_path": "/faces/0/triggered_abilities/0/effect/0" },
+    { "symbol": "StaticAbilityDef::AnthemPt", "typed_path": "/faces/0/static_abilities/0/definition" }
+  ],
+  "tokens": ["treasure"],
+  "semantic_fixtures": [
+    { "test": "scenario issue_misc26_batch::issue_misc26_corsair_captain_buffs_only_other_controlled_pirates", "covers": "real entry creates Treasure, other controlled Pirates get +1/+1 while source and opponent do not, and the effect ends when Captain leaves" },
+    { "test": "issue_misc26_batch::issue_misc26_batch_registers_five_exact_oracle_identities", "covers": "printed Human Pirate identity, cost and power/toughness" }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,19 @@
+{
+  "format_version": 1,
+  "oracle_id": "6e152529-64b4-472c-8e50-99095af6af99",
+  "spans": [
+    { "face_id": "bumbleflowers_sharepot", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/triggered_abilities/0"] },
+    { "face_id": "bumbleflowers_sharepot", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/activated_abilities/0"] }
+  ],
+  "primitive_references": [
+    { "symbol": "SpellEffectKind::CreateTokens", "typed_path": "/faces/0/triggered_abilities/0/effect/0" },
+    { "symbol": "ActivatedCost::SacrificeSelf", "typed_path": "/faces/0/activated_abilities/0/costs/2" },
+    { "symbol": "SpellEffectKind::Destroy", "typed_path": "/faces/0/activated_abilities/0/effect/0" }
+  ],
+  "tokens": ["food"],
+  "semantic_fixtures": [
+    { "test": "scenario issue_misc26_batch::issue_misc26_sharepot_creates_food_then_rejects_land_target_and_destroys_creature", "covers": "real entry creates Food; land target rejects before cost; valid activation sacrifices source and destroys creature; beginning-combat activation rejects" },
+    { "test": "issue_misc26_batch::issue_misc26_batch_registers_five_exact_oracle_identities", "covers": "printed artifact identity and mana cost" }
+  ],
+  "complete_definition_review_confirmed": true
+}

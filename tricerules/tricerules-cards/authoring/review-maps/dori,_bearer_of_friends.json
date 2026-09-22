@@ -1,0 +1,18 @@
+{
+  "format_version": 1,
+  "oracle_id": "58acd6b2-730c-4472-a34a-f2784977aca8",
+  "spans": [
+    { "face_id": "dori_bearer_of_friends", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/keywords"] },
+    { "face_id": "dori_bearer_of_friends", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/triggered_abilities/0"] }
+  ],
+  "primitive_references": [
+    { "symbol": "TriggerCondition::WhenSelfEntersBattlefield", "typed_path": "/faces/0/triggered_abilities/0/trigger" },
+    { "symbol": "SpellEffectKind::CreateTokens", "typed_path": "/faces/0/triggered_abilities/0/effect/0" }
+  ],
+  "tokens": ["treasure"],
+  "semantic_fixtures": [
+    { "test": "scenario issue_misc26_batch::issue_misc26_dori_creates_treasure_on_entry_and_has_trample", "covers": "real entry creates one Treasure for its controller and Dori has trample" },
+    { "test": "issue_misc26_batch::issue_misc26_batch_registers_five_exact_oracle_identities", "covers": "printed legendary Dwarf Warrior name, cost and power/toughness" }
+  ],
+  "complete_definition_review_confirmed": true
+}

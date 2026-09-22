@@ -1,0 +1,27 @@
+// Oracle and ruling checked 2026-09-22 against pinned Scryfall oracle a7ec13c6-7ade-433a-b5a2-047854eef486.
+// Reviewed direct-RON mapping: authoring/review-maps/corsair_captain.json.
+// The anthem is continuously reevaluated, including when Corsair Captain leaves.
+(
+  id: "corsair_captain",
+  name: "Corsair Captain",
+  face_id: "corsair_captain",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Human", "Pirate"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "treasure", count: 1)],
+  )],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AnthemPt(
+      filter: (controller: YouControl, subtype: "Pirate", exclude_self: true),
+      delta_power: 1,
+      delta_toughness: 1,
+    ),
+  )],
+)

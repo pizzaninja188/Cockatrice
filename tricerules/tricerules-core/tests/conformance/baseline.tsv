@@ -384,6 +384,8 @@ brute_force	0	cast	exercised
 bull_cerodon	0	cast	exercised
 bull_rush	0	cast	exercised
 bulwark_giant	0	cast	exercised
+bumbleflowers_sharepot	0	ability:0	exercised
+bumbleflowers_sharepot	0	cast	exercised
 bump_in_the_night	0	cast	exercised
 burdened_stoneback	0	ability:0	unsupported: nonmana costs need additional fixture resources
 burdened_stoneback	0	cast	exercised
@@ -566,6 +568,7 @@ coral_sword	0	cast	exercised
 corroding_dragonstorm	0	cast	exercised
 corrupt_court_official	0	cast	exercised
 corrupted_conviction	0	cast	unsupported: required cast-cost group needs a specialized fixture
+corsair_captain	0	cast	exercised
 cosmium_blast	0	cast	unsupported: target group 0 needs a richer fixture
 council_of_advisors	0	cast	exercised
 council_of_echoes	0	cast	exercised
@@ -754,6 +757,7 @@ dockworker_drone	0	cast	exercised
 donatello,_turtle_techie	0	cast	exercised
 donatellos_technique	0	cast	exercised
 doom_blade	0	cast	exercised
+dori,_bearer_of_friends	0	cast	exercised
 douser_of_lights	0	cast	exercised
 downwind_ambusher	0	cast	exercised
 drag_to_the_roots	0	cast	exercised
@@ -2227,6 +2231,8 @@ rebellious_captives	0	ability:0	exercised
 rebellious_captives	0	cast	exercised
 rebellious_strike	0	cast	exercised
 reckless_air_strike	0	cast	exercised
+reckless_lackey	0	ability:0	exercised
+reckless_lackey	0	cast	exercised
 reckless_ransacking	0	cast	exercised
 reckless_waif_merciless_predator	0	cast	exercised
 reckless_waif_merciless_predator	1	cast	intentional: face unavailable from hand
@@ -2546,6 +2552,7 @@ skullcap_snail	0	cast	exercised
 sky_ruin_drake	0	cast	exercised
 sky_spirit	0	cast	exercised
 sky_terror	0	cast	exercised
+skybeast_tracker	0	cast	exercised
 skyblade_of_the_legion	0	cast	exercised
 skybox_ferry	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
 skybox_ferry	0	ability:1	unsupported: ability not offered by generic battlefield fixture

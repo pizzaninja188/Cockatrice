@@ -1,0 +1,19 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 58acd6b2-730c-4472-a34a-f2784977aca8; no card-specific rulings.
+// Reviewed direct-RON mapping: authoring/review-maps/dori,_bearer_of_friends.json.
+(
+  id: "dori,_bearer_of_friends",
+  name: "Dori, Bearer of Friends",
+  face_id: "dori_bearer_of_friends",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Dwarf", "Warrior"],
+  supertypes: ["Legendary"],
+  power: 3,
+  toughness: 2,
+  keywords: [Trample],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "treasure", count: 1)],
+  )],
+)
