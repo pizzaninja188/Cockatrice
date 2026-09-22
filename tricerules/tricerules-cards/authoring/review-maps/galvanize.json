@@ -1,0 +1,37 @@
+{
+  "format_version": 1,
+  "oracle_id": "9b44c005-6799-47fd-8b0d-7179b5281d78",
+  "spans": [
+    {
+      "face_id": "galvanize",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc33_batch::issue_misc33_galvanize_semantics",
+      "covers": "actual registered galvanize resolution and target behavior"
+    },
+    {
+      "test": "issue_misc33_batch::issue_misc33_registers_seven_exact_card_identities",
+      "covers": "printed characteristics for galvanize"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

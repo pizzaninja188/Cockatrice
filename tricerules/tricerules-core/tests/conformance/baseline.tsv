@@ -851,6 +851,7 @@ elfsworn_giant	0	cast	exercised
 elite_interceptor_rejoinder	0	cast	exercised
 elite_interceptor_rejoinder	1	cast	intentional: face unavailable from hand
 elite_vanguard	0	cast	exercised
+elspeths_smite	0	cast	unsupported: target group 0 needs a richer fixture
 elven_passage	0	ability:0	exercised
 elven_passage	0	land	exercised
 elvenkings_harper	0	ability:0	exercised
@@ -942,6 +943,7 @@ feat_of_resistance	0	cast	exercised
 feather_of_flight	0	cast	exercised
 featherbrained_filcher	0	cast	exercised
 feed_the_cauldron	0	cast	exercised
+feed_the_flames	0	cast	exercised
 feisty_spikeling	0	cast	exercised
 feiyi_snake	0	cast	exercised
 felhide_minotaur	0	cast	exercised
@@ -1107,6 +1109,7 @@ gallant_citizen	0	cast	exercised
 gallant_pie-wielder	0	cast	exercised
 gallant_strike	0	ability:0	unsupported: nonbattlefield activated ability needs a zone fixture
 gallant_strike	0	cast	unsupported: target group 0 needs a richer fixture
+galvanize	0	cast	exercised
 galvanizing_sawship	0	ability:0	exercised
 galvanizing_sawship	0	cast	exercised
 gangly_stompling	0	cast	exercised
@@ -1508,6 +1511,7 @@ intrepid_tenderfoot	0	cast	exercised
 invasion_of_ulgrotha_grandmother_ravi_sengir	0	cast	exercised
 invasion_of_ulgrotha_grandmother_ravi_sengir	1	cast	intentional: face unavailable from hand
 invasion_reinforcements	0	cast	exercised
+invasive_maneuvers	0	cast	exercised
 involuntary_employment	0	cast	exercised
 iroass_champion	0	cast	exercised
 irohs_demonstration	0	cast	exercised
@@ -1930,6 +1934,7 @@ mystic_monastery	0	ability:0	exercised
 mystic_monastery	0	land	exercised
 mystical_tutor	0	cast	exercised
 naga_eternal	0	cast	exercised
+narsets_rebuke	0	cast	exercised
 nebula_dragon	0	cast	exercised
 needlepeak_spider	0	cast	exercised
 needleshot_gourna	0	cast	exercised
@@ -1993,6 +1998,7 @@ oakenform	0	cast	exercised
 oakgnarl_warrior	0	cast	exercised
 oasis_gardener	0	ability:0	exercised
 oasis_gardener	0	cast	exercised
+obliterating_bolt	0	cast	exercised
 obsidian_giant	0	cast	exercised
 obyra,_dreaming_duelist	0	cast	exercised
 obyras_attendants_desperate_parry	0	cast	exercised
@@ -2379,6 +2385,7 @@ rumble_arena	0	ability:0	exercised
 rumble_arena	0	ability:1	exercised
 rumble_arena	0	land	exercised
 rumbling_baloth	0	cast	exercised
+rumbling_rockslide	0	cast	exercised
 run_afoul	0	cast	exercised
 run_behind	0	cast	exercised
 runaway_boulder	0	ability:0	unsupported: ability not offered by generic battlefield fixture

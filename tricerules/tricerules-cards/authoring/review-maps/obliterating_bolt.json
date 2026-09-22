@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "57fe941c-a830-4570-afe2-18f93c7a7b84",
+  "spans": [
+    {
+      "face_id": "obliterating_bolt",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileIfWouldDieThisTurn",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc33_batch::issue_misc33_obliterating_bolt_semantics",
+      "covers": "actual registered obliterating_bolt resolution and target behavior"
+    },
+    {
+      "test": "issue_misc33_batch::issue_misc33_registers_seven_exact_card_identities",
+      "covers": "printed characteristics for obliterating_bolt"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,37 @@
+{
+  "format_version": 1,
+  "oracle_id": "4c376349-1a50-4215-8a40-f702da81eb7b",
+  "spans": [
+    {
+      "face_id": "invasive_maneuvers",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc33_batch::issue_misc33_invasive_maneuvers_semantics",
+      "covers": "actual registered invasive_maneuvers resolution and target behavior"
+    },
+    {
+      "test": "issue_misc33_batch::issue_misc33_registers_seven_exact_card_identities",
+      "covers": "printed characteristics for invasive_maneuvers"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

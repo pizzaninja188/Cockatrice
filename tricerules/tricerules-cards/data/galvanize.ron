@@ -1,0 +1,13 @@
+// Pinned Oracle 9b44c005-6799-47fd-8b0d-7179b5281d78; rulings checked 2026-09-22.
+(
+  id: "galvanize",
+  name: "Galvanize",
+  face_id: "galvanize",
+  mana_cost: "{1}{R}",
+  types: ["Instant"],
+  spell_effect: [DamageTarget(
+    amount: Conditional(condition: CardsDrawnThisTurn(players: Controller, min: Some(2)), when_true: 5, otherwise: 3),
+    target: (kind: Creature),
+  )],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])])),
+)

@@ -1,0 +1,37 @@
+{
+  "format_version": 1,
+  "oracle_id": "0909cbce-b4a0-42bb-8a97-47eeb99606c0",
+  "spans": [
+    {
+      "face_id": "rumbling_rockslide",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc33_batch::issue_misc33_rumbling_rockslide_semantics",
+      "covers": "actual registered rumbling_rockslide resolution and target behavior"
+    },
+    {
+      "test": "issue_misc33_batch::issue_misc33_registers_seven_exact_card_identities",
+      "covers": "printed characteristics for rumbling_rockslide"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

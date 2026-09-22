@@ -1,0 +1,14 @@
+// Pinned Oracle 247075c5-62f8-41a1-91b3-562ff0aabb30; rulings checked 2026-09-22.
+(
+  id: "narsets_rebuke",
+  name: "Narset's Rebuke",
+  face_id: "narset_s_rebuke",
+  mana_cost: "{4}{R}",
+  types: ["Instant"],
+  spell_effect: [
+    DamageTarget(amount: 5, target: (kind: Creature)),
+    AddMana(amount: (u: 1, r: 1, w: 1), retention: EndOfStep),
+    ExileIfWouldDieThisTurn(target: (kind: Creature)),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0, 2])])),
+)
