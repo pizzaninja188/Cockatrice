@@ -1,0 +1,16 @@
+// Pinned Oracle a61267d2-2cc7-4208-a365-581d56b92e1c and rulings reviewed 2026-09-22.
+(
+  id: "badlands_revival",
+  name: "Badlands Revival",
+  face_id: "badlands_revival",
+  mana_cost: "{3}{B}{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    MoveGraveyardCards(filter: (owner: Controller, card: Some((card_type: Some(Creature)))), destination: Battlefield(tapped: false)),
+    MoveGraveyardCards(filter: (owner: Controller, card: Some((any_of: Some([(card_type: Some(Land)), (card_type: Some(NonlandPermanent))])))), destination: Hand),
+  ],
+  targeting: Some((groups: [
+    (min: 0, max: 1, prompt: "Choose up to one target creature card from your graveyard", effect_indices: [0]),
+    (min: 0, max: 1, prompt: "Choose up to one target permanent card from your graveyard", effect_indices: [1]),
+  ])),
+)

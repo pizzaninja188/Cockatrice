@@ -1,0 +1,37 @@
+{
+  "format_version": 1,
+  "oracle_id": "a61267d2-2cc7-4208-a365-581d56b92e1c",
+  "spans": [
+    {
+      "face_id": "badlands_revival",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc36_batch::issue_misc36_badlands_revival_semantics",
+      "covers": "registered-card cast, target groups, resolution order, and Oracle outcome"
+    },
+    {
+      "test": "issue_misc36_batch::issue_misc36_registers_three_exact_card_identities",
+      "covers": "printed identity and characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

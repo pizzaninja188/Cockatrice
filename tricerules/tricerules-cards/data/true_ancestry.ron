@@ -1,0 +1,16 @@
+// Pinned Oracle 26c2dd96-07e7-4294-9431-96d5aeff3761 and rulings reviewed 2026-09-22.
+(
+  id: "true_ancestry",
+  name: "True Ancestry",
+  face_id: "true_ancestry",
+  mana_cost: "{1}{G}",
+  types: ["Sorcery", "Lesson"],
+  spell_effect: [
+    MoveGraveyardCards(
+      filter: (owner: Controller, card: Some((any_of: Some([(card_type: Some(Land)), (card_type: Some(NonlandPermanent))])))),
+      destination: Hand,
+    ),
+    CreateTokens(token: "clue", count: 1),
+  ],
+  targeting: Some((groups: [(min: 0, max: 1, prompt: "Choose up to one target permanent card from your graveyard", effect_indices: [0])])),
+)

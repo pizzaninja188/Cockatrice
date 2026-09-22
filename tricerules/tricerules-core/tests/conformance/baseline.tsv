@@ -188,6 +188,7 @@ bad_moon	0	cast	exercised
 badgermole	0	cast	exercised
 badlands	0	ability:0	exercised
 badlands	0	land	exercised
+badlands_revival	0	cast	exercised
 bake_into_a_pie	0	cast	exercised
 bakersbane_duo	0	cast	exercised
 balamb_t-rexaur	0	ability:0	unsupported: ability not offered by generic battlefield fixture
@@ -2185,6 +2186,7 @@ prowcatcher_specialist	0	cast	exercised
 prowling_caracal	0	cast	exercised
 pterafractyl	0	cast	exercised
 pull_from_the_grave	0	cast	exercised
+pull_through_the_weft	0	cast	exercised
 pulse_tracker	0	cast	exercised
 pumpkin_bombardment	0	cast	unsupported: required cast-cost group needs a specialized fixture
 punk_frogs	0	cast	exercised
@@ -3063,6 +3065,7 @@ triton_shorethief	0	cast	exercised
 trokin_high_guard	0	cast	exercised
 tropical_island	0	ability:0	exercised
 tropical_island	0	land	exercised
+true_ancestry	0	cast	exercised
 trufflesnout	0	cast	exercised
 trumpet_blast	0	cast	exercised
 trusty_packbeast	0	cast	exercised

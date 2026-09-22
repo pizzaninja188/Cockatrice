@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "26c2dd96-07e7-4294-9431-96d5aeff3761",
+  "spans": [
+    {
+      "face_id": "true_ancestry",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "true_ancestry",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [
+    "clue"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc36_batch::issue_misc36_true_ancestry_semantics",
+      "covers": "registered-card cast, target groups, resolution order, and Oracle outcome"
+    },
+    {
+      "test": "issue_misc36_batch::issue_misc36_registers_three_exact_card_identities",
+      "covers": "printed identity and characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,16 @@
+// Pinned Oracle 37bd9e54-c93e-4fec-9b21-6940da75ab7a and rulings reviewed 2026-09-22.
+(
+  id: "pull_through_the_weft",
+  name: "Pull Through the Weft",
+  face_id: "pull_through_the_weft",
+  mana_cost: "{3}{G}{G}",
+  types: ["Sorcery"],
+  spell_effect: [
+    MoveGraveyardCards(filter: (owner: Controller, card: Some((card_type: Some(NonlandPermanent)))), destination: Hand),
+    MoveGraveyardCards(filter: (owner: Controller, card: Some((card_type: Some(Land)))), destination: Battlefield(tapped: true)),
+  ],
+  targeting: Some((groups: [
+    (min: 0, max: 2, prompt: "Choose up to two target nonland permanent cards from your graveyard", effect_indices: [0]),
+    (min: 0, max: 2, prompt: "Choose up to two target land cards from your graveyard", effect_indices: [1]),
+  ])),
+)
