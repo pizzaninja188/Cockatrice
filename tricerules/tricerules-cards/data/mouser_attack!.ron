@@ -1,0 +1,19 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle bae5dc68-1fd1-428d-bee7-c238e07b21ea.
+(
+  id: "mouser_attack!",
+  name: "Mouser Attack!",
+  face_id: "mouser_attack",
+  mana_cost: "{1}{R}",
+  types: ["Instant"],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 1,
+    modes: [
+      (mode_id: "mode_01", presentation: OracleLines([2]), effects: [CreateTokens(token: "robot_c_1_1", count: 1)]),
+      (mode_id: "mode_02", presentation: OracleLines([3]), effects: [
+        PumpTarget(power: 3, toughness: 0, subject: Chosen((kind: Creature))),
+        GrantKeywords(subject: Chosen((kind: Creature)), keywords: [FirstStrike]),
+      ], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0, 1])]))),
+    ],
+  ),
+)

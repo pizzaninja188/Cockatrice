@@ -1,0 +1,16 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 2a483d95-ff99-40b4-9071-6e78585090d5.
+(
+  id: "combat_tutorial",
+  name: "Combat Tutorial",
+  face_id: "combat_tutorial",
+  mana_cost: "{2}{U}",
+  types: ["Sorcery"],
+  spell_effect: [
+    TargetPlayerDraws(count: 2, target: (kind: AnyPlayer)),
+    PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((kind: Creature, controller: You))),
+  ],
+  targeting: Some((groups: [
+    (min: 1, max: 1, prompt: "Choose target player", effect_indices: [0]),
+    (min: 0, max: 1, prompt: "Choose up to one target creature you control", effect_indices: [1]),
+  ])),
+)

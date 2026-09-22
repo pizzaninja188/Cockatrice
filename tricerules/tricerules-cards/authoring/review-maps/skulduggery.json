@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "9100530e-2bd0-487e-a4eb-13dabd55b678",
+  "spans": [
+    {
+      "face_id": "skulduggery",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc40_batch::issue_misc40_skulduggery",
+      "covers": "mandatory own and opposing targets; one illegal target leaves the other effect"
+    },
+    {
+      "test": "issue_misc40_batch::issue_misc40_registers_six_exact_card_identities",
+      "covers": "printed identity, layout, mana cost and type line"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

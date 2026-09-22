@@ -1,0 +1,47 @@
+{
+  "format_version": 1,
+  "oracle_id": "b45afde2-eaaf-4174-8082-d344efa54c44",
+  "spans": [
+    {
+      "face_id": "cost_of_brilliance",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::TargetPlayerDraws",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::TargetPlayerLosesLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc40_batch::issue_misc40_cost_of_brilliance",
+      "covers": "same target player draws two then loses two; optional any creature receives counter"
+    },
+    {
+      "test": "issue_misc40_batch::issue_misc40_registers_six_exact_card_identities",
+      "covers": "printed identity, layout, mana cost and type line"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

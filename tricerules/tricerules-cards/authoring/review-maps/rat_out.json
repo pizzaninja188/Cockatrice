@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "37043e1e-4556-45f7-9484-15dd8ed5272b",
+  "spans": [
+    {
+      "face_id": "rat_out",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [
+    "rat_b_1_1_cant_block"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc40_batch::issue_misc40_rat_out",
+      "covers": "zero-target token versus targeted minus one; illegal chosen target prevents token"
+    },
+    {
+      "test": "issue_misc40_batch::issue_misc40_registers_six_exact_card_identities",
+      "covers": "printed identity, layout, mana cost and type line"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

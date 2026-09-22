@@ -545,6 +545,7 @@ colossal_dreadmaw	0	cast	exercised
 colossapede	0	cast	exercised
 colossification	0	cast	exercised
 colossodon_yearling	0	cast	exercised
+combat_tutorial	0	cast	exercised
 combustion_technique	0	cast	exercised
 command_bridge	0	ability:0	exercised
 command_bridge	0	land	exercised
@@ -582,6 +583,7 @@ corrupt_court_official	0	cast	exercised
 corrupted_conviction	0	cast	unsupported: required cast-cost group needs a specialized fixture
 corsair_captain	0	cast	exercised
 cosmium_blast	0	cast	unsupported: target group 0 needs a richer fixture
+cost_of_brilliance	0	cast	exercised
 council_of_advisors	0	cast	exercised
 council_of_echoes	0	cast	exercised
 counsel_of_the_soratami	0	cast	exercised
@@ -1764,6 +1766,7 @@ lys_alana_dignitary	0	ability:0	unsupported: nonmana costs need additional fixtu
 lys_alana_dignitary	0	cast	unsupported: required cast-cost group needs a specialized fixture
 lys_alana_informant	0	cast	exercised
 maalfeld_twins	0	cast	exercised
+mabels_mettle	0	cast	exercised
 macabre_waltz	0	cast	exercised
 machinesmith_automaton	0	cast	exercised
 magebane_lizard	0	cast	exercised
@@ -1926,6 +1929,7 @@ mountain	0	ability:0	exercised
 mountain	0	land	exercised
 mountain_bandit	0	cast	exercised
 mourners_surprise	0	cast	exercised
+mouser_attack!	0	cast	exercised
 muck_rats	0	cast	exercised
 mudbutton_cursetosser	0	cast	unsupported: required cast-cost group needs a specialized fixture
 multiversal_passage	0	land	exercised
@@ -2262,6 +2266,7 @@ rampaging_spiketail	0	ability:0	unsupported: ability not offered by generic batt
 rampaging_spiketail	0	cast	exercised
 rapacious_dragon	0	cast	exercised
 raptor_companion	0	cast	exercised
+rat_out	0	cast	exercised
 ratcatcher_trainee_pest_problem	0	cast	exercised
 ratcatcher_trainee_pest_problem	1	cast	exercised
 rattleback_apothecary	0	cast	exercised
@@ -2611,6 +2616,7 @@ skeletal_crocodile	0	cast	exercised
 skeletal_snake	0	cast	exercised
 skeleton_archer	0	cast	exercised
 skirmish_rhino	0	cast	exercised
+skulduggery	0	cast	exercised
 skullcap_snail	0	cast	exercised
 sky_ruin_drake	0	cast	exercised
 sky_spirit	0	cast	exercised

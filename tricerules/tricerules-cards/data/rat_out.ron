@@ -1,0 +1,13 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 37043e1e-4556-45f7-9484-15dd8ed5272b.
+(
+  id: "rat_out",
+  name: "Rat Out",
+  face_id: "rat_out",
+  mana_cost: "{B}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(power: -1, toughness: -1, subject: Chosen((kind: Creature))),
+    CreateTokens(token: "rat_b_1_1_cant_block", count: 1),
+  ],
+  targeting: Some((groups: [(min: 0, max: 1, prompt: "Choose up to one target creature", effect_indices: [0])])),
+)

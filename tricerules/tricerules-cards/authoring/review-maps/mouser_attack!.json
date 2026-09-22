@@ -1,0 +1,66 @@
+{
+  "format_version": 1,
+  "oracle_id": "bae5dc68-1fd1-428d-bee7-c238e07b21ea",
+  "spans": [
+    {
+      "face_id": "mouser_attack",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/modal_spell"
+      ]
+    },
+    {
+      "face_id": "mouser_attack",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/0"
+      ]
+    },
+    {
+      "face_id": "mouser_attack",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "ModalDef",
+      "typed_path": "/faces/0/modal_spell"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/modal_spell/modes/1/targeting"
+    }
+  ],
+  "tokens": [
+    "robot_c_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc40_batch::issue_misc40_mouser_attack",
+      "covers": "one chosen mode: targetless Robot creation or targeted +3/+0 and first strike"
+    },
+    {
+      "test": "issue_misc40_batch::issue_misc40_registers_six_exact_card_identities",
+      "covers": "printed identity, layout, mana cost and type line"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

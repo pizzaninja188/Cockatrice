@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "c657626f-7444-4c26-842c-dda9b9656fa3",
+  "spans": [
+    {
+      "face_id": "mabel_s_mettle",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc40_batch::issue_misc40_mabels_mettle",
+      "covers": "mandatory +2/+2 and distinct optional other +1/+1; partial legality"
+    },
+    {
+      "test": "issue_misc40_batch::issue_misc40_registers_six_exact_card_identities",
+      "covers": "printed identity, layout, mana cost and type line"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
