@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "cb5ed146-5079-46ef-a3e0-e584fa4467f6",
+  "spans": [
+    {
+      "face_id": "spectral_interference",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc43_batch::issue_misc43_spectral_interference",
+      "covers": "artifact-spell soft counter with four-mana payment offer and nonartifact noncreature rejection"
+    },
+    {
+      "test": "issue_misc43_batch::issue_misc43_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost and type line"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

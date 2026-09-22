@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "d605d9d1-c01a-4ef6-89f9-06fae8cd57e6",
+  "spans": [
+    {
+      "face_id": "calamitous_tide",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DrawDiscard",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc43_batch::issue_misc43_calamitous_tide",
+      "covers": "two owner-specific returns, zero targets, draw then discard, and all-targets-illegal fizzle"
+    },
+    {
+      "test": "issue_misc43_batch::issue_misc43_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost and type line"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

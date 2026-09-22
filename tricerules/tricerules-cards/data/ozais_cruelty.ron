@@ -1,0 +1,10 @@
+// Pinned Oracle aba5c046-2f8c-4749-b347-9a7d8cb1c865; rulings checked 2026-09-22.
+(
+  id: "ozais_cruelty", name: "Ozai's Cruelty", face_id: "ozais_cruelty",
+  mana_cost: "{2}{B}", types: ["Sorcery", "Lesson"],
+  spell_effect: [
+    DamageTarget(amount: 2, target: (kind: AnyPlayer)),
+    ChooseHandCards(action: Discard, count: 2, target: (kind: AnyPlayer)),
+  ],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target player", effect_indices: [0, 1])])),
+)

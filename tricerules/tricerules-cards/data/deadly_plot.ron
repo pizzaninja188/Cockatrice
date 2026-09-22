@@ -1,0 +1,13 @@
+// Pinned Oracle 6178715c-870d-4710-b758-66e080804ee3; rulings checked 2026-09-22.
+(
+  id: "deadly_plot", name: "Deadly Plot", face_id: "deadly_plot",
+  mana_cost: "{3}{B}", types: ["Instant"],
+  modal_spell: (min_modes: 1, max_modes: 1, modes: [
+    (mode_id: "mode_01", presentation: OracleLines([2]),
+      effects: [Destroy(subject: Chosen((any_of: Some([(kind: Creature), (kind: AnyPermanent, permanent_types: [Planeswalker])]))))],
+      targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature or planeswalker", effect_indices: [0])]))),
+    (mode_id: "mode_02", presentation: OracleLines([3]),
+      effects: [MoveGraveyardCards(filter: (owner: Controller, card: Some((card_type: Some(Creature), required_subtypes: ["Zombie"]))), destination: Battlefield(tapped: true))],
+      targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target Zombie creature card from your graveyard", effect_indices: [0])]))),
+  ]),
+)

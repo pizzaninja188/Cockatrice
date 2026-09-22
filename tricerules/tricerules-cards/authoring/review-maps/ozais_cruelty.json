@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "aba5c046-2f8c-4749-b347-9a7d8cb1c865",
+  "spans": [
+    {
+      "face_id": "ozais_cruelty",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseHandCards",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc43_batch::issue_misc43_ozais_cruelty",
+      "covers": "target-player damage followed by that players own two-card discard choice"
+    },
+    {
+      "test": "issue_misc43_batch::issue_misc43_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost and type line"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

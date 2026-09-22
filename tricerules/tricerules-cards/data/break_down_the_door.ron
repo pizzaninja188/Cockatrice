@@ -1,0 +1,14 @@
+// Pinned Oracle a11d8372-87fb-40a2-b638-314c6a5af03b; rulings checked 2026-09-22.
+(
+  id: "break_down_the_door", name: "Break Down the Door", face_id: "break_down_the_door",
+  mana_cost: "{2}{G}", types: ["Instant"],
+  modal_spell: (min_modes: 1, max_modes: 1, modes: [
+    (mode_id: "mode_01", presentation: OracleLines([2]),
+      effects: [Exile(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact])))],
+      targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target artifact", effect_indices: [0])]))),
+    (mode_id: "mode_02", presentation: OracleLines([3]),
+      effects: [Exile(subject: Chosen((kind: AnyPermanent, permanent_types: [Enchantment])))],
+      targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target enchantment", effect_indices: [0])]))),
+    (mode_id: "mode_03", presentation: OracleLines([4]), effects: [ManifestDread]),
+  ]),
+)

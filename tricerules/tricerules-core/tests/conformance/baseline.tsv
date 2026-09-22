@@ -371,6 +371,7 @@ brave-kin_duo	0	cast	exercised
 brave_brawler	0	ability:0	exercised
 brave_brawler	0	cast	exercised
 brazen_scourge	0	cast	exercised
+break_down_the_door	0	cast	exercised
 breakneck_berserker	0	cast	exercised
 breeding_pool	0	ability:0	exercised
 breeding_pool	0	land	exercised
@@ -420,6 +421,7 @@ caelorna,_coral_tyrant	0	cast	exercised
 caged_zombie	0	ability:0	unsupported: nonmana costs need additional fixture resources
 caged_zombie	0	cast	exercised
 calamitous_cave-in	0	cast	exercised
+calamitous_tide	0	cast	exercised
 call_the_cavalry	0	cast	exercised
 callous_inspector	0	cast	exercised
 campus_guide	0	cast	exercised
@@ -690,6 +692,7 @@ daybreak_charger	0	cast	exercised
 dazzling_angel	0	cast	exercised
 dead_weight	0	cast	exercised
 deadly_insect	0	cast	exercised
+deadly_plot	0	cast	exercised
 deadly_precision	0	cast	unsupported: required cast-cost group needs a specialized fixture
 deadly_recluse	0	cast	exercised
 deadly_riposte	0	cast	unsupported: target group 0 needs a richer fixture
@@ -2082,6 +2085,7 @@ overkill	0	cast	exercised
 overprotect	0	cast	exercised
 overrun	0	cast	exercised
 overwhelming_surge	0	cast	exercised
+ozais_cruelty	0	cast	exercised
 pacifism	0	cast	exercised
 pack_mastiff	0	ability:0	exercised
 pack_mastiff	0	cast	exercised
@@ -2707,6 +2711,7 @@ spectacle_summit	0	ability:0	exercised
 spectacle_summit	0	ability:1	exercised
 spectacle_summit	0	land	exercised
 spectacular_tactics	0	cast	exercised
+spectral_interference	0	cast	unsupported: target group 0 needs a richer fixture
 spectral_rider	0	cast	exercised
 spectral_sailor	0	ability:0	exercised
 spectral_sailor	0	cast	exercised

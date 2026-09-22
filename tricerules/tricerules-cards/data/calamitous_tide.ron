@@ -1,0 +1,10 @@
+// Pinned Oracle d605d9d1-c01a-4ef6-89f9-06fae8cd57e6; rulings checked 2026-09-22.
+(
+  id: "calamitous_tide", name: "Calamitous Tide", face_id: "calamitous_tide",
+  mana_cost: "{4}{U}{U}", types: ["Sorcery"],
+  spell_effect: [
+    ReturnToOwnersHand(subject: Chosen((kind: Creature))),
+    DrawDiscard(draw_count: 2, discard_count: 1, order: DrawThenDiscard),
+  ],
+  targeting: Some((groups: [(min: 0, max: 2, prompt: "Choose up to two target creatures", effect_indices: [0])])),
+)
