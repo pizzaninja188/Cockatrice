@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "5d575b78-3d7b-4860-abc3-e99e429279a1",
+  "spans": [
+    {
+      "face_id": "mine_raider",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "mine_raider",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "GameCondition::BattlefieldAggregate",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc31_batch::issue_misc31_mine_raider_another_outlaw",
+      "covers": "another outlaw of any listed subtype; self and opponent exclusions; intervening condition at trigger and resolution"
+    },
+    {
+      "test": "issue_misc31_batch::issue_misc31_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, and numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

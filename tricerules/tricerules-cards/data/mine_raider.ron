@@ -1,0 +1,21 @@
+// Pinned Oracle 5d575b78-3d7b-4860-abc3-e99e429279a1; Scryfall text and three rulings checked 2026-09-22.
+// An outlaw is any permanent with at least one listed subtype; another excludes this source.
+(
+  id: "mine_raider", name: "Mine Raider", face_id: "mine_raider",
+  mana_cost: "{2}{R}", types: ["Creature", "Human", "Rogue"], power: 3, toughness: 2,
+  keywords: [Trample],
+  triggered_abilities: [(
+    ability_id: "triggered_01", presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    intervening_if: Some(BattlefieldAggregate(
+      filter: (controllers: Controller, exclude_source: true, any_of: Some([
+        (controllers: Controller, required_subtypes: ["Assassin"]),
+        (controllers: Controller, required_subtypes: ["Mercenary"]),
+        (controllers: Controller, required_subtypes: ["Pirate"]),
+        (controllers: Controller, required_subtypes: ["Rogue"]),
+        (controllers: Controller, required_subtypes: ["Warlock"]),
+      ])), aggregate: Count, min: Some(1),
+    )),
+    effect: [CreateTokens(token: "treasure", count: 1)],
+  )],
+)

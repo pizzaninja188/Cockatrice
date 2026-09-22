@@ -1,0 +1,55 @@
+{
+  "format_version": 1,
+  "oracle_id": "c53b7602-5e36-4900-896c-844bf6eac22e",
+  "spans": [
+    {
+      "face_id": "smaug_the_magnificent",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0",
+        "/faces/0/keywords/1"
+      ]
+    },
+    {
+      "face_id": "smaug_the_magnificent",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "smaug_the_magnificent",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc31_batch::issue_misc31_smaug_treasure_count",
+      "covers": "attack trigger targets any target and uses live Treasure count; upkeep creates one Treasure"
+    },
+    {
+      "test": "issue_misc31_batch::issue_misc31_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, and numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

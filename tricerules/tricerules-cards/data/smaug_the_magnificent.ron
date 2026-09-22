@@ -1,0 +1,22 @@
+// Pinned Oracle c53b7602-5e36-4900-896c-844bf6eac22e; Scryfall text/rulings checked 2026-09-22 (none).
+// Treasure count is live at attack-trigger resolution; the trigger targets any damageable recipient.
+(
+  id: "smaug_the_magnificent", name: "Smaug the Magnificent", face_id: "smaug_the_magnificent",
+  mana_cost: "{2}{R}{R}", supertypes: ["Legendary"], types: ["Creature", "Dragon"], power: 4, toughness: 3,
+  keywords: [Flying, Haste],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01", presentation: OracleLines([2]),
+      trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+      effect: [DamageTarget(
+        amount: Count(BattlefieldPermanents(filter: (controllers: Controller, required_subtypes: ["Treasure"]))),
+        target: (kind: AnyTarget),
+      )],
+    ),
+    (
+      ability_id: "triggered_02", presentation: OracleLines([3]),
+      trigger: AtBeginningOfUpkeep(player: Controller),
+      effect: [CreateTokens(token: "treasure", count: 1)],
+    ),
+  ],
+)

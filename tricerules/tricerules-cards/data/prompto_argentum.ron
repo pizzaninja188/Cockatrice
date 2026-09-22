@@ -1,0 +1,13 @@
+// Pinned Oracle e13d7600-0924-42eb-9d65-aa18548624a7; Scryfall text and ruling checked 2026-09-22.
+// The cast event freezes actual mana paid, not printed mana value; this trigger resolves before its spell.
+(
+  id: "prompto_argentum", name: "Prompto Argentum", face_id: "prompto_argentum",
+  mana_cost: "{1}{R}", supertypes: ["Legendary"], types: ["Creature", "Human", "Scout"], power: 2, toughness: 2,
+  keywords: [Haste],
+  triggered_abilities: [(
+    ability_id: "triggered_01", presentation: OracleLines([2]),
+    trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Noncreature))),
+    intervening_if: Some(TriggeringSpellManaSpent(comparison: AtLeast(4))),
+    effect: [CreateTokens(token: "treasure", count: 1)],
+  )],
+)

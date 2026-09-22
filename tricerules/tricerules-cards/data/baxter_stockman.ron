@@ -1,0 +1,22 @@
+// Pinned Oracle e610bfd4-d064-410b-929c-1d9dd82828b1; Scryfall text/rulings checked 2026-09-22 (none).
+// Beginning-of-combat trigger targets one artifact creature controlled by this ability's controller.
+(
+  id: "baxter_stockman", name: "Baxter Stockman", face_id: "baxter_stockman",
+  mana_cost: "{3}{U}{R}", supertypes: ["Legendary"], types: ["Creature", "Human", "Scientist"], power: 3, toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01", presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [CreateTokens(token: "robot_c_1_1", count: 1)],
+    ),
+    (
+      ability_id: "triggered_02", presentation: OracleLines([2]),
+      trigger: AtBeginningOfCombat(player: Controller),
+      effect: [
+        PumpTarget(power: 3, toughness: 0, subject: Chosen((kind: Creature, controller: You, permanent_types: [Artifact]))),
+        GrantKeywords(subject: Chosen((kind: Creature, controller: You, permanent_types: [Artifact])), keywords: [FirstStrike, Vigilance]),
+      ],
+      targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target artifact creature you control", effect_indices: [0, 1])])),
+    ),
+  ],
+)

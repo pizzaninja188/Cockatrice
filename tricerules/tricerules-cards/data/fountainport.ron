@@ -1,0 +1,12 @@
+// Pinned Oracle 94e8b0a9-44a1-4dce-8d44-78681ae638a1; Scryfall text/rulings checked 2026-09-22 (none).
+// The token sacrifice is a cost, so a nontoken permanent cannot pay it.
+(
+  id: "fountainport", name: "Fountainport", face_id: "fountainport",
+  mana_cost: "", types: ["Land"],
+  activated_abilities: [
+    (ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(c: 1)])]),
+    (ability_id: "activated_02", presentation: OracleLines([2]), costs: [Mana("{2}"), Tap, SacrificePermanent(filter: (kind: AnyPermanent, controller: You, token: Some(true)))], effect: [Draw(count: 1)]),
+    (ability_id: "activated_03", presentation: OracleLines([3]), costs: [Mana("{3}"), Tap, PayLife(amount: 1)], effect: [CreateTokens(token: "fish_u_1_1", count: 1)]),
+    (ability_id: "activated_04", presentation: OracleLines([4]), costs: [Mana("{4}"), Tap], effect: [CreateTokens(token: "treasure", count: 1)]),
+  ],
+)

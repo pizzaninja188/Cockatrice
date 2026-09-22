@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "e610bfd4-d064-410b-929c-1d9dd82828b1",
+  "spans": [
+    {
+      "face_id": "baxter_stockman",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "baxter_stockman",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfCombat",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/1"
+    }
+  ],
+  "tokens": [
+    "robot_c_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc31_batch::issue_misc31_baxter_combat_target",
+      "covers": "entry Robot; beginning of own combat targets artifact creature, rejecting nonartifact; +3/+0 and first strike/vigilance expire at end of turn"
+    },
+    {
+      "test": "issue_misc31_batch::issue_misc31_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, and numeric characteristics"
+    },
+    {
+      "test": "scenario issue_128_phase_triggers::riling_dawnbreaker_is_controller_turn_only_and_does_not_retroactively_observe_combat",
+      "covers": "shared AtBeginningOfCombat player Controller trigger excludes opponent combat"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

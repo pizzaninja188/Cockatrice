@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "e13d7600-0924-42eb-9d65-aa18548624a7",
+  "spans": [
+    {
+      "face_id": "prompto_argentum",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "prompto_argentum",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPlayerCastsSpell",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::TriggeringSpellManaSpent",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc31_batch::issue_misc31_prompto_actual_mana_spent",
+      "covers": "three-mana noncreature cast does not trigger; seven-mana noncreature cast creates Treasure before its spell; creature cast does not trigger"
+    },
+    {
+      "test": "issue_misc31_batch::issue_misc31_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, and numeric characteristics"
+    },
+    {
+      "test": "scenario issue_181_spell_mana_spent::tackle_artist_uses_the_total_kicked_cost_not_printed_mana_value",
+      "covers": "shared TriggeringSpellManaSpent predicate observes actual paid mana including kicker, distinct from printed mana value"
+    },
+    {
+      "test": "scenario issue_316_generated_single_clause_cohort::issue_316_firebrand_archer_pings_each_opponent_once_per_owner_noncreature_cast",
+      "covers": "shared WheneverPlayerCastsSpell caster Controller filter excludes opponents casts"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

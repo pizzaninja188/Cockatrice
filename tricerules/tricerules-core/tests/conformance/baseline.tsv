@@ -232,6 +232,7 @@ battle_hurda	0	cast	exercised
 battlefield_raptor	0	cast	exercised
 battlegrowth	0	cast	exercised
 battlesong_berserker	0	cast	exercised
+baxter_stockman	0	cast	exercised
 bay_falcon	0	cast	exercised
 bayou	0	ability:0	exercised
 bayou	0	land	exercised
@@ -1054,6 +1055,11 @@ forum_of_amity	0	ability:1	exercised
 forum_of_amity	0	land	exercised
 foul_orchard	0	ability:0	exercised
 foul_orchard	0	land	exercised
+fountainport	0	ability:0	exercised
+fountainport	0	ability:1	unsupported: nonmana costs need additional fixture resources
+fountainport	0	ability:2	exercised
+fountainport	0	ability:3	exercised
+fountainport	0	land	exercised
 fountainport_bell	0	ability:0	exercised
 fountainport_bell	0	cast	exercised
 frantic_firebolt	0	cast	exercised
@@ -1839,6 +1845,7 @@ mind_transfer_protocol	0	cast	exercised
 mindful_biomancer	0	ability:0	exercised
 mindful_biomancer	0	cast	exercised
 mindwhisker	0	cast	exercised
+mine_raider	0	cast	exercised
 minecart_daredevil_ride_the_rails	0	cast	exercised
 minecart_daredevil_ride_the_rails	1	cast	exercised
 miners_guidewing	0	cast	exercised
@@ -2150,6 +2157,7 @@ project_deathlok_soldier	0	cast	exercised
 promising_vein	0	ability:0	exercised
 promising_vein	0	ability:1	exercised
 promising_vein	0	land	exercised
+prompto_argentum	0	cast	exercised
 prophetic_prism	0	ability:0	exercised
 prophetic_prism	0	cast	exercised
 prosperity_tycoon	0	ability:0	unsupported: nonmana costs need additional fixture resources
@@ -2615,6 +2623,7 @@ slumbering_keepguard	0	ability:0	exercised
 slumbering_keepguard	0	cast	exercised
 smaug,_the_great_calamity_spew_flame	0	cast	exercised
 smaug,_the_great_calamity_spew_flame	1	cast	exercised
+smaug_the_magnificent	0	cast	exercised
 smaugs_fury	0	cast	exercised
 snakeskin_veil	0	cast	exercised
 snapping_drake	0	cast	exercised

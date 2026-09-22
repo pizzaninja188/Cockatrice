@@ -1,0 +1,63 @@
+{
+  "format_version": 1,
+  "oracle_id": "94e8b0a9-44a1-4dce-8d44-78681ae638a1",
+  "spans": [
+    {
+      "face_id": "fountainport",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "fountainport",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    },
+    {
+      "face_id": "fountainport",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2"
+      ]
+    },
+    {
+      "face_id": "fountainport",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/activated_abilities/3"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2"
+    },
+    {
+      "symbol": "AbilityCost::PayLife",
+      "typed_path": "/faces/0/activated_abilities/2/costs/2"
+    }
+  ],
+  "tokens": [
+    "fish_u_1_1",
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc31_batch::issue_misc31_fountainport_four_abilities",
+      "covers": "colorless mana, token sacrifice draw, pay-life Fish, and Treasure abilities with tap/mana costs"
+    },
+    {
+      "test": "issue_misc31_batch::issue_misc31_registers_five_exact_card_identities",
+      "covers": "printed identity, layout, mana cost, type line, and numeric characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
