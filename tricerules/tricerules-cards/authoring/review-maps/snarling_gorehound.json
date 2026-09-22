@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "d2b1c5eb-06f0-4ec4-9446-791faac099a7",
+  "spans": [
+    {
+      "face_id": "snarling_gorehound",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "snarling_gorehound",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Menace",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::LibraryPartition",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc23_batch::issue_misc23_snarling_gorehound_surveils_on_a_small_enterer",
+      "covers": "a power-2-or-less creature you control entering parks a surveil 1 choice, while a power-4 creature does not; the Gorehound has menace"
+    },
+    {
+      "test": "issue_misc23_batch::issue_misc23_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Menace, the power-AtMost(2) entry watcher, and the surveil 1 of Snarling Gorehound"
+    },
+    {
+      "test": "issue_misc23_batch::issue_misc23_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Snarling Gorehound"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

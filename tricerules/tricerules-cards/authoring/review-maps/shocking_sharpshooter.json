@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "fbb7735f-ec91-4ed4-b735-d94a76e68a80",
+  "spans": [
+    {
+      "face_id": "shocking_sharpshooter",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "shocking_sharpshooter",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Reach",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc23_batch::issue_misc23_shocking_sharpshooter_damages_a_target_opponent",
+      "covers": "another creature you control entering makes the Sharpshooter deal 1 damage to a target opponent; the Sharpshooter has reach"
+    },
+    {
+      "test": "issue_misc23_batch::issue_misc23_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Reach, the creature entry watcher, and the 1 damage to a target opponent of Shocking Sharpshooter"
+    },
+    {
+      "test": "issue_misc23_batch::issue_misc23_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Shocking Sharpshooter"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

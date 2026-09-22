@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "6557813b-4ee7-4881-a37c-10c8ea097360",
+  "spans": [
+    {
+      "face_id": "wartime_protestors",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "wartime_protestors",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc23_batch::issue_misc23_wartime_protestors_count_and_hastes_the_ally",
+      "covers": "another Ally you control entering puts a +1/+1 counter on that creature and grants it haste, while a non-Ally does not trigger; the Protestors have haste"
+    },
+    {
+      "test": "issue_misc23_batch::issue_misc23_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Haste, the Ally entry watcher, and the counter-plus-haste on the enterer of Wartime Protestors"
+    },
+    {
+      "test": "issue_misc23_batch::issue_misc23_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Wartime Protestors"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

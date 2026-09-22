@@ -1,0 +1,30 @@
+// Oracle and rulings checked 2026-09-23 against pinned Scryfall oracle 16e9c452-6288-4da8-813d-2eb6b7a538c3.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.19 (trample) and CR 603.6a/603.6d (an exclude-self permanent-entry watcher). The fetched
+// ruling confirms it triggers once per qualifying permanent entering alongside it. "Frog, Rabbit,
+// Raccoon, or Squirrel" is a disjunction authored through the permanent-event filter's any_of.
+(
+  id: "valley_mightcaller",
+  name: "Valley Mightcaller",
+  face_id: "valley_mightcaller",
+  mana_cost: "{G}",
+  types: ["Creature", "Frog", "Warrior"],
+  power: 1,
+  toughness: 1,
+  keywords: [Trample],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature), exclude_source: true, any_of: Some([
+        (permanent_type: Some(Creature), required_subtypes: ["Frog"]),
+        (permanent_type: Some(Creature), required_subtypes: ["Rabbit"]),
+        (permanent_type: Some(Creature), required_subtypes: ["Raccoon"]),
+        (permanent_type: Some(Creature), required_subtypes: ["Squirrel"]),
+      ])),
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

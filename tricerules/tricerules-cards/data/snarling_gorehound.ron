@@ -1,0 +1,26 @@
+// Oracle and rulings checked 2026-09-23 against pinned Scryfall oracle d2b1c5eb-06f0-4ec4-9446-791faac099a7.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.110 (menace), CR 603.6a/603.6d (an exclude-self permanent-entry watcher), and CR 701.25
+// (surveil). The fetched ruling confirms the power check uses the entering creature's power at
+// entry (counters included).
+(
+  id: "snarling_gorehound",
+  name: "Snarling Gorehound",
+  face_id: "snarling_gorehound",
+  mana_cost: "{B}",
+  types: ["Creature", "Dog"],
+  power: 1,
+  toughness: 1,
+  keywords: [Menace],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature), exclude_source: true),
+      creature_filter: Some((power: Some(AtMost(2)))),
+    ),
+    effect: [LibraryPartition(count: 1, top_min: 0, top_max: None, kind: Surveil)],
+  )],
+)

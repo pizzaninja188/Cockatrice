@@ -307,6 +307,7 @@ blossoming_sands	0	land	exercised
 boar-q-pine	0	cast	exercised
 bog_imp	0	cast	exercised
 boggart_brute	0	cast	exercised
+boggart_cursecrafter	0	cast	exercised
 boggart_prankster	0	cast	exercised
 bogslithers_embrace	0	cast	unsupported: required cast-cost group needs a specialized fixture
 bogstomper	0	cast	exercised
@@ -1713,6 +1714,7 @@ lys_alana_dignitary	0	cast	unsupported: required cast-cost group needs a special
 lys_alana_informant	0	cast	exercised
 maalfeld_twins	0	cast	exercised
 macabre_waltz	0	cast	exercised
+machinesmith_automaton	0	cast	exercised
 magebane_lizard	0	cast	exercised
 magic_damper	0	cast	exercised
 magic_pot	0	ability:0	exercised
@@ -2448,6 +2450,7 @@ serpents_pass	0	ability:0	exercised
 serpents_pass	0	ability:1	exercised
 serpents_pass	0	land	exercised
 serra_angel	0	cast	exercised
+serra_redeemer	0	cast	exercised
 serra_sphinx	0	cast	exercised
 serra_zealot	0	cast	exercised
 servant_of_the_stinger	0	cast	exercised
@@ -2480,6 +2483,7 @@ shivan_dragon	0	ability:0	exercised
 shivan_dragon	0	cast	exercised
 shock	0	cast	exercised
 shock_brigade	0	cast	exercised
+shocking_sharpshooter	0	cast	exercised
 shoot_the_sheriff	0	cast	exercised
 shopkeepers_bane	0	cast	exercised
 shore_lurker	0	cast	exercised
@@ -2575,6 +2579,7 @@ snakeskin_veil	0	cast	exercised
 snapping_drake	0	cast	exercised
 snare_thopter	0	cast	exercised
 snarespinner	0	cast	exercised
+snarling_gorehound	0	cast	exercised
 sneering_shadewriter	0	cast	exercised
 snow-covered_wastes	0	ability:0	exercised
 snow-covered_wastes	0	land	exercised
@@ -3055,6 +3060,7 @@ uthros_scanship	0	cast	exercised
 valiant_guard	0	cast	exercised
 valkyrie_aerial_unit	0	cast	exercised
 valkyrior_skyrider	0	cast	exercised
+valley_mightcaller	0	cast	exercised
 valorous_stance	0	cast	exercised
 vampire_champion	0	cast	exercised
 vampire_interloper	0	cast	exercised
@@ -3189,6 +3195,7 @@ warren_elder	0	ability:0	exercised
 warren_elder	0	cast	exercised
 warriors_of_wakanda	0	cast	exercised
 warship_scout	0	cast	exercised
+wartime_protestors	0	cast	exercised
 wary_farmer	0	cast	exercised
 wary_okapi	0	cast	exercised
 wary_thespian	0	cast	exercised

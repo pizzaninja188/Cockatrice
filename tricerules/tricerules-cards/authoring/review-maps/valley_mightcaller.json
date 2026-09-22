@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "16e9c452-6288-4da8-813d-2eb6b7a538c3",
+  "spans": [
+    {
+      "face_id": "valley_mightcaller",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "valley_mightcaller",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc23_batch::issue_misc23_valley_mightcaller_counts_a_qualifying_subtype",
+      "covers": "another Frog you control entering adds a +1/+1 counter, while a non-listed subtype does not; the Mightcaller has trample"
+    },
+    {
+      "test": "issue_misc23_batch::issue_misc23_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Trample, the four-branch Frog/Rabbit/Raccoon/Squirrel entry watcher, and its +1/+1 counter of Valley Mightcaller"
+    },
+    {
+      "test": "issue_misc23_batch::issue_misc23_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Valley Mightcaller"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

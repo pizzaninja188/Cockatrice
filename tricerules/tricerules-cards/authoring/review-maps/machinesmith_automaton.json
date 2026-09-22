@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "945e8443-9647-4eab-b091-ee8e7bc347f5",
+  "spans": [
+    {
+      "face_id": "machinesmith_automaton",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "machinesmith_automaton",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Trample",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc23_batch::issue_misc23_machinesmith_automaton_counts_another_artifact",
+      "covers": "another artifact you control entering puts a +1/+1 counter on the Automaton, while a nonartifact does not trigger; the Automaton has trample"
+    },
+    {
+      "test": "issue_misc23_batch::issue_misc23_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Trample, the another-artifact entry watcher, and the +1/+1 counter on the source of Machinesmith Automaton"
+    },
+    {
+      "test": "issue_misc23_batch::issue_misc23_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Machinesmith Automaton"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

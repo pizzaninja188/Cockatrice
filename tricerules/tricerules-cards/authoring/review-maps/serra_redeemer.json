@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "39bb051f-1ca7-4d9b-b33b-7f559f816e3e",
+  "spans": [
+    {
+      "face_id": "serra_redeemer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "serra_redeemer",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc23_batch::issue_misc23_serra_redeemer_counts_the_small_enterer",
+      "covers": "a power-2-or-less creature entering puts two +1/+1 counters on that entering creature and a power-4 creature does not trigger; the Redeemer has flying"
+    },
+    {
+      "test": "issue_misc23_batch::issue_misc23_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flying, the power-AtMost(2) entry watcher, and the two counters on the enterer of Serra Redeemer"
+    },
+    {
+      "test": "issue_misc23_batch::issue_misc23_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Serra Redeemer"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

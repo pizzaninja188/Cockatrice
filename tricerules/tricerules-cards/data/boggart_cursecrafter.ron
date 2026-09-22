@@ -1,0 +1,25 @@
+// Oracle and rulings checked 2026-09-23 against pinned Scryfall oracle 5d58aefe-a3df-4e0a-b679-b967cd5fd2c6.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.2 (deathtouch), CR 603.6c/603.6d (an exclude-self "another Goblin dies" watcher), and
+// CR 119.3/120.3 (1 damage to each opponent). The fetched ruling confirms it triggers once per
+// other Goblin dying in the same event. The Goblin subtype lives on the permanent-event filter.
+(
+  id: "boggart_cursecrafter",
+  name: "Boggart Cursecrafter",
+  face_id: "boggart_cursecrafter",
+  mana_cost: "{B}{R}",
+  types: ["Creature", "Goblin", "Warlock"],
+  power: 2,
+  toughness: 3,
+  keywords: [Deathtouch],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverCreatureDies(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature), exclude_source: true, any_subtypes: ["Goblin"]),
+    ),
+    effect: [DamagePlayer(amount: 1, who: EachOpponent)],
+  )],
+)

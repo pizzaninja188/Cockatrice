@@ -1,0 +1,28 @@
+// Oracle and rulings checked 2026-09-23 against pinned Scryfall oracle 6557813b-4ee7-4881-a37c-10c8ea097360.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.10 (haste) and CR 603.6a/603.6d (an exclude-self permanent-entry watcher). The counter and
+// the until-end-of-turn haste both apply to the entering creature.
+(
+  id: "wartime_protestors",
+  name: "Wartime Protestors",
+  face_id: "wartime_protestors",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Human", "Rebel", "Ally"],
+  power: 4,
+  toughness: 4,
+  keywords: [Haste],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature), exclude_source: true),
+      creature_filter: Some((required_subtypes: ["Ally"])),
+    ),
+    effect: [
+      PutCounters(counter: PlusOnePlusOne, count: 1, subject: TriggerObject),
+      GrantKeywords(subject: TriggerObject, keywords: [Haste]),
+    ],
+  )],
+)

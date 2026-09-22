@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "5d58aefe-a3df-4e0a-b679-b967cd5fd2c6",
+  "spans": [
+    {
+      "face_id": "boggart_cursecrafter",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "boggart_cursecrafter",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Deathtouch",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverCreatureDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DamagePlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc23_batch::issue_misc23_boggart_cursecrafter_punishes_a_goblin_death",
+      "covers": "another Goblin you control dying deals 1 damage to each opponent, while a non-Goblin death does not trigger; the Cursecrafter has deathtouch"
+    },
+    {
+      "test": "issue_misc23_batch::issue_misc23_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Deathtouch, the another-Goblin-dies watcher, and the 1 damage to each opponent of Boggart Cursecrafter"
+    },
+    {
+      "test": "issue_misc23_batch::issue_misc23_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Boggart Cursecrafter"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

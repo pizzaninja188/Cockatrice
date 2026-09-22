@@ -1,0 +1,25 @@
+// Oracle and rulings checked 2026-09-23 against pinned Scryfall oracle 39bb051f-1ca7-4d9b-b33b-7f559f816e3e.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.9 (flying) and CR 603.6a/603.6d (an exclude-self permanent-entry watcher). The fetched
+// ruling confirms the power check uses the entering creature's power at entry (counters included).
+(
+  id: "serra_redeemer",
+  name: "Serra Redeemer",
+  face_id: "serra_redeemer",
+  mana_cost: "{3}{W}{W}",
+  types: ["Creature", "Angel", "Soldier"],
+  power: 2,
+  toughness: 4,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature), exclude_source: true),
+      creature_filter: Some((power: Some(AtMost(2)))),
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 2, subject: TriggerObject)],
+  )],
+)

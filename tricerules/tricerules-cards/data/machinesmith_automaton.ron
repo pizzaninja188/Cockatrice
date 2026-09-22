@@ -1,0 +1,24 @@
+// Oracle and rulings checked 2026-09-23 against pinned Scryfall oracle 945e8443-9647-4eab-b091-ee8e7bc347f5.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.19 (trample) and CR 603.6a/603.6d: "another artifact you control enters" watches any
+// artifact permanent (the source is itself an artifact, excluded by exclude_source).
+(
+  id: "machinesmith_automaton",
+  name: "Machinesmith Automaton",
+  face_id: "machinesmith_automaton",
+  mana_cost: "{2}{R}",
+  types: ["Artifact", "Creature", "Robot", "Villain"],
+  power: 2,
+  toughness: 2,
+  keywords: [Trample],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Artifact), exclude_source: true),
+    ),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)
