@@ -1,0 +1,19 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 97b2fb8b-0c69-4ed2-b2d0-8a780f9b5b97.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 508.3 (attack trigger) and CR 611.2c/613.4c (until-end-of-turn team P/T).
+(
+  id: "dauntless_veteran",
+  name: "Dauntless Veteran",
+  face_id: "dauntless_veteran",
+  mana_cost: "{1}{W}{W}",
+  types: ["Creature", "Human", "Soldier"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [PumpAll(filter: (controller: YouControl), power: 1, toughness: 1)],
+  )],
+)

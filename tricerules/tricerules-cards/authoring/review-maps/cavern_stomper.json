@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "94657522-9977-4d2b-8eb6-f1e64e82cd0f",
+  "spans": [
+    {
+      "face_id": "cavern_stomper",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "cavern_stomper",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ApplyCombatRestriction",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc15_batch::issue_misc15_cavern_stomper_scries_and_shrinks_its_blockers",
+      "covers": "the activated ability prevents power-2-or-less creatures from blocking while a power-3 creature may still block"
+    },
+    {
+      "test": "issue_misc15_batch::issue_misc15_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the entry scry, and the activated blocker restriction of Cavern Stomper"
+    },
+    {
+      "test": "issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Cavern Stomper"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

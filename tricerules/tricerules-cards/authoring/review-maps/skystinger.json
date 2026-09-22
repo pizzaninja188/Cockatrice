@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "6bb7419b-e085-4616-8e5c-4ed08cb2b4c1",
+  "spans": [
+    {
+      "face_id": "skystinger",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "skystinger",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Reach",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverSelfBlocksCreature",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc15_batch::issue_misc15_skystinger_pumps_when_blocking_a_flyer",
+      "covers": "Reach lets the source block a Flying attacker and the block trigger adds +5/+0"
+    },
+    {
+      "test": "issue_misc15_batch::issue_misc15_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Reach, and the flying-blocker filter of Skystinger"
+    },
+    {
+      "test": "issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Skystinger"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

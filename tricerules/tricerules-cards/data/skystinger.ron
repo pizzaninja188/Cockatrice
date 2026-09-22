@@ -1,0 +1,20 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 6bb7419b-e085-4616-8e5c-4ed08cb2b4c1.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.17 (reach), CR 509.1/509.3b (block trigger), and CR 611.2c: the source pumps itself.
+(
+  id: "skystinger",
+  name: "Skystinger",
+  face_id: "skystinger",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Insect", "Warrior"],
+  power: 3,
+  toughness: 3,
+  keywords: [Reach],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverSelfBlocksCreature(attacker: (required_keywords: [Flying])),
+    effect: [PumpTarget(power: 5, toughness: 0, subject: Source)],
+  )],
+)

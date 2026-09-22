@@ -1,0 +1,23 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 69e8333a-bddf-49e2-9c39-3dc46fec81e0.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.17 (reach) and CR 603.6a with CR 611.2c: landfall pumps only the source until end of turn.
+(
+  id: "remnant_elemental",
+  name: "Remnant Elemental",
+  face_id: "remnant_elemental",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Elemental"],
+  power: 0,
+  toughness: 4,
+  keywords: [Reach],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Land)),
+    ),
+    effect: [PumpTarget(power: 2, toughness: 0, subject: Source)],
+  )],
+)

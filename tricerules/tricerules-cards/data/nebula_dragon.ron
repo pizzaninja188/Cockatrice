@@ -1,0 +1,26 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 724b4a59-9c69-4f2b-a436-72183c62f1ff.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.9 (flying), CR 603.6a (entry trigger), and CR 115.1a/120.3 (targeted damage from the source).
+(
+  id: "nebula_dragon",
+  name: "Nebula Dragon",
+  face_id: "nebula_dragon",
+  mana_cost: "{6}{R}",
+  types: ["Creature", "Dragon"],
+  power: 4,
+  toughness: 4,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [DamageTarget(amount: 3, target: (kind: AnyTarget))],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose any target",
+      effect_indices: [0],
+    )])),
+  )],
+)

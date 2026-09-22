@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "6bda307b-1508-4582-952b-c690db85e045",
+  "spans": [
+    {
+      "face_id": "hermitic_nautilus",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "hermitic_nautilus",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Vigilance",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc15_batch::issue_misc15_hermitic_nautilus_pumps_itself",
+      "covers": "the {1}{U} ability gives the source +3/-3 until end of turn"
+    },
+    {
+      "test": "issue_misc15_batch::issue_misc15_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Vigilance, and the self-pump ability of Hermitic Nautilus"
+    },
+    {
+      "test": "issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Hermitic Nautilus"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

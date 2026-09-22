@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "bd4151cc-743a-40f0-9e51-1f67555d9ab3",
+  "spans": [
+    {
+      "face_id": "lion_heart",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    },
+    {
+      "face_id": "lion_heart",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "lion_heart",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc15_batch::issue_misc15_lion_heart_deals_damage_and_equips",
+      "covers": "entering deals 2 damage from the Equipment to a chosen target and equipping grants +2/+1"
+    },
+    {
+      "test": "issue_misc15_batch::issue_misc15_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, entry damage with targeting, attached +2/+1, and equip {2} of Lion Heart"
+    },
+    {
+      "test": "issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Lion Heart"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

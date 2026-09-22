@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "e6a93240-8578-479e-b5e7-73f51b141cc8",
+  "spans": [
+    {
+      "face_id": "friendly_ghost",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "friendly_ghost",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc15_batch::issue_misc15_friendly_ghost_pumps_a_target_on_entry",
+      "covers": "the entry trigger gives a chosen creature +2/+4 until end of turn"
+    },
+    {
+      "test": "issue_misc15_batch::issue_misc15_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flying, and the targeted entry pump of Friendly Ghost"
+    },
+    {
+      "test": "issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Friendly Ghost"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

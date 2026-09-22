@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "69e8333a-bddf-49e2-9c39-3dc46fec81e0",
+  "spans": [
+    {
+      "face_id": "remnant_elemental",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "remnant_elemental",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Reach",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc15_batch::issue_misc15_remnant_elemental_pumps_on_landfall",
+      "covers": "a land entering under the controller's control pumps the source +2/+0 while toughness is unchanged"
+    },
+    {
+      "test": "issue_misc15_batch::issue_misc15_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Reach, and the landfall self-pump of Remnant Elemental"
+    },
+    {
+      "test": "issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Remnant Elemental"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

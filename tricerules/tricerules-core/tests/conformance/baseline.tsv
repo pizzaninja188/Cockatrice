@@ -442,6 +442,8 @@ cathar_commando	0	cast	exercised
 cathedral_sanctifier	0	cast	exercised
 caustic_exhale	0	cast	unsupported: required cast-cost group needs a specialized fixture
 cavalry_drillmaster	0	cast	exercised
+cavern_stomper	0	ability:0	exercised
+cavern_stomper	0	cast	exercised
 celestial_enforcer	0	ability:0	unsupported: nonmana costs need additional fixture resources
 celestial_enforcer	0	cast	exercised
 cenote_scout	0	cast	exercised
@@ -641,6 +643,7 @@ darkbore_pathway_slitherbore_pathway	1	land	exercised
 darksteel_citadel	0	ability:0	exercised
 darksteel_citadel	0	land	exercised
 darksteel_myr	0	cast	exercised
+dauntless_veteran	0	cast	exercised
 dawn_gryff	0	cast	exercised
 dawnhand_eulogist	0	cast	exercised
 dawning_angel	0	cast	exercised
@@ -1012,6 +1015,7 @@ frantic_firebolt	0	cast	exercised
 frantic_strength	0	cast	exercised
 frenzied_raptor	0	cast	exercised
 fresh_volunteers	0	cast	exercised
+friendly_ghost	0	cast	exercised
 friendly_neighborhood	0	cast	exercised
 friendly_teddy	0	cast	exercised
 frilled_cave-wurm	0	cast	exercised
@@ -1310,6 +1314,8 @@ hercules,_prince_of_power	0	ability:0	exercised
 hercules,_prince_of_power	0	cast	exercised
 heritage_reclamation	0	cast	exercised
 hermetic_study	0	cast	exercised
+hermitic_nautilus	0	ability:0	exercised
+hermitic_nautilus	0	cast	exercised
 hero_in_training	0	cast	exercised
 heros_downfall	0	cast	exercised
 hexplate_golem	0	cast	exercised
@@ -1623,6 +1629,8 @@ lilianas_specter	0	cast	exercised
 lilianas_steward	0	ability:0	exercised
 lilianas_steward	0	cast	exercised
 liminal_hold	0	cast	exercised
+lion_heart	0	ability:0	exercised
+lion_heart	0	cast	exercised
 liquimetal_coating	0	ability:0	exercised
 liquimetal_coating	0	cast	exercised
 live_or_die	0	cast	exercised
@@ -1844,6 +1852,7 @@ mystic_monastery	0	ability:0	exercised
 mystic_monastery	0	land	exercised
 mystical_tutor	0	cast	exercised
 naga_eternal	0	cast	exercised
+nebula_dragon	0	cast	exercised
 needlepeak_spider	0	cast	exercised
 needleshot_gourna	0	cast	exercised
 needlethorn_drake	0	cast	exercised
@@ -2175,6 +2184,7 @@ reigning_victor	0	cast	exercised
 release_the_dogs	0	cast	exercised
 relic_sloth	0	cast	exercised
 reluctant_dounguard	0	cast	exercised
+remnant_elemental	0	cast	exercised
 renegade_demon	0	cast	exercised
 renegade_troops	0	cast	exercised
 repel_calamity	0	cast	unsupported: target group 0 needs a richer fixture
@@ -2487,6 +2497,7 @@ skyshroud_troopers	0	ability:0	exercised
 skyshroud_troopers	0	cast	exercised
 skysnare_spider	0	cast	exercised
 skyspear_cavalry	0	cast	exercised
+skystinger	0	cast	exercised
 skystreak_engineer	0	ability:0	exercised
 skystreak_engineer	0	cast	exercised
 skyswirl_harrier	0	cast	exercised

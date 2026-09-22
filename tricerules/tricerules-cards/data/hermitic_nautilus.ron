@@ -1,0 +1,20 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 6bda307b-1508-4582-952b-c690db85e045.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.20 (vigilance) and CR 611.2c/613.4c: the activated ability modifies its own P/T.
+(
+  id: "hermitic_nautilus",
+  name: "Hermitic Nautilus",
+  face_id: "hermitic_nautilus",
+  mana_cost: "{1}{U}",
+  types: ["Artifact", "Creature", "Nautilus"],
+  power: 1,
+  toughness: 4,
+  keywords: [Vigilance],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{1}{U}")],
+    effect: [PumpTarget(power: 3, toughness: -3, subject: Source)],
+  )],
+)

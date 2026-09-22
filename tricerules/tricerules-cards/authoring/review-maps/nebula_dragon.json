@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "724b4a59-9c69-4f2b-a436-72183c62f1ff",
+  "spans": [
+    {
+      "face_id": "nebula_dragon",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "nebula_dragon",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc15_batch::issue_misc15_nebula_dragon_deals_three_to_any_target",
+      "covers": "the entry trigger deals 3 damage from the Dragon to a chosen target"
+    },
+    {
+      "test": "issue_misc15_batch::issue_misc15_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flying, the entry damage effect, and targeting of Nebula Dragon"
+    },
+    {
+      "test": "issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Nebula Dragon"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

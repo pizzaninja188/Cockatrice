@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "97b2fb8b-0c69-4ed2-b2d0-8a780f9b5b97",
+  "spans": [
+    {
+      "face_id": "dauntless_veteran",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc15_batch::issue_misc15_dauntless_veteran_pumps_the_team_when_attacking",
+      "covers": "attacking gives each creature you control +1/+1 until end of turn"
+    },
+    {
+      "test": "issue_misc15_batch::issue_misc15_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, and the attack team-pump trigger of Dauntless Veteran"
+    },
+    {
+      "test": "issue_misc15_batch::issue_misc15_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Dauntless Veteran"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

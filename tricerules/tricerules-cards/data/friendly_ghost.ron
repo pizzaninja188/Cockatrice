@@ -1,0 +1,20 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle e6a93240-8578-479e-b5e7-73f51b141cc8.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.9 (flying), CR 603.6a (entry trigger), and CR 611.2c/613.4c (targeted until-end-of-turn P/T).
+(
+  id: "friendly_ghost",
+  name: "Friendly Ghost",
+  face_id: "friendly_ghost",
+  mana_cost: "{3}{W}",
+  types: ["Creature", "Spirit"],
+  power: 2,
+  toughness: 4,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [PumpTarget(power: 2, toughness: 4, subject: Chosen((kind: Creature)))],
+  )],
+)
