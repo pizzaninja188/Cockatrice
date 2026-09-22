@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "8973bd99-20f8-4867-90ef-50392147ee1b",
+  "spans": [
+    {
+      "face_id": "wood_elves",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc20_batch::issue_misc20_wood_elves_ramps_a_forest",
+      "covers": "the entry search offers a Forest but not an Island and puts the chosen Forest onto the battlefield"
+    },
+    {
+      "test": "issue_misc20_batch::issue_misc20_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, and the Forest entry search onto the battlefield of Wood Elves"
+    },
+    {
+      "test": "issue_misc20_batch::issue_misc20_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Wood Elves"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

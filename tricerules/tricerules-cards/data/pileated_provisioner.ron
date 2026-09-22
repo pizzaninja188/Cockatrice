@@ -1,0 +1,31 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 0534e20d-8352-4d9f-a617-378070602673.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.9 (flying), CR 603.6a (entry trigger), and CR 122.1 (+1/+1 counter on a creature without
+// flying).
+(
+  id: "pileated_provisioner",
+  name: "Pileated Provisioner",
+  face_id: "pileated_provisioner",
+  mana_cost: "{4}{W}",
+  types: ["Creature", "Bird", "Scout"],
+  power: 3,
+  toughness: 4,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Chosen((
+      kind: Creature,
+      controller: You,
+      excluded_keywords: [Flying],
+    )))],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature you control without flying",
+      effect_indices: [0],
+    )])),
+  )],
+)

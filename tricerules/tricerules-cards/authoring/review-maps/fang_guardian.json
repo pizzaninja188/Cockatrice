@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "1e0b9767-8e51-4021-a8fb-22259e2f5347",
+  "spans": [
+    {
+      "face_id": "fang_guardian",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "fang_guardian",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc20_batch::issue_misc20_fang_guardian_pumps_another_permanent",
+      "covers": "the entry trigger gives another target creature or Vehicle you control +2/+2, and the Guardian cannot target itself"
+    },
+    {
+      "test": "issue_misc20_batch::issue_misc20_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flash, the two-branch +2/+2 pump, and its targeting of Fang Guardian"
+    },
+    {
+      "test": "issue_misc20_batch::issue_misc20_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Fang Guardian"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

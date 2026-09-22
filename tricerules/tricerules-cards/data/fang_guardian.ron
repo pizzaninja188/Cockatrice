@@ -1,0 +1,30 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 1e0b9767-8e51-4021-a8fb-22259e2f5347.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 702.8 (flash), CR 603.6a (entry trigger), the rules Glossary term "another", and CR 611.2c
+// (until-end-of-turn P/T). "Creature or Vehicle" is a union over creatures and Vehicles.
+(
+  id: "fang_guardian",
+  name: "Fang Guardian",
+  face_id: "fang_guardian",
+  mana_cost: "{3}{G}",
+  types: ["Creature", "Ape", "Druid"],
+  power: 4,
+  toughness: 2,
+  keywords: [Flash],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [PumpTarget(power: 2, toughness: 2, subject: Chosen((any_of: Some([
+      (kind: Creature, controller: You, excluded_objects: [Source]),
+      (kind: AnyPermanent, controller: You, required_subtypes: ["Vehicle"], excluded_objects: [Source]),
+    ]))))],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose another target creature or Vehicle you control",
+      effect_indices: [0],
+    )])),
+  )],
+)

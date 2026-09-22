@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "41f6d6d9-3fe5-44b0-904d-1cb90d36f2b6",
+  "spans": [
+    {
+      "face_id": "rampaging_spiketail",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    },
+    {
+      "face_id": "rampaging_spiketail",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc20_batch::issue_misc20_rampaging_spiketail_pumps_and_cycles",
+      "covers": "the entry trigger gives a chosen creature +2/+0 and indestructible, and Swampcycling {2} discards the card to search up a Swamp"
+    },
+    {
+      "test": "issue_misc20_batch::issue_misc20_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, the entry pump-and-indestructible, and the Swampcycling {2} hand ability of Rampaging Spiketail"
+    },
+    {
+      "test": "issue_misc20_batch::issue_misc20_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Rampaging Spiketail"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

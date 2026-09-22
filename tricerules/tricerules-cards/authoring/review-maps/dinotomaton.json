@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "443f2272-6475-4966-8ca2-717d4cf208ee",
+  "spans": [
+    {
+      "face_id": "dinotomaton",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "dinotomaton",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Menace",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc20_batch::issue_misc20_dinotomaton_grants_menace",
+      "covers": "the Dinotomaton has menace and its entry trigger grants menace to a chosen creature you control"
+    },
+    {
+      "test": "issue_misc20_batch::issue_misc20_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Menace, and the targeted menace entry grant of Dinotomaton"
+    },
+    {
+      "test": "issue_misc20_batch::issue_misc20_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Dinotomaton"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

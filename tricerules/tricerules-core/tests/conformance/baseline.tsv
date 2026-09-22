@@ -505,6 +505,7 @@ clone	0	cast	exercised
 cloud_crusader	0	cast	exercised
 cloud_manta	0	cast	exercised
 cloud_of_darkness	0	cast	exercised
+cloudblazer	0	cast	exercised
 cloudbound_moogle	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 cloudbound_moogle	0	cast	exercised
 cloudcrown_oak	0	cast	exercised
@@ -722,6 +723,7 @@ dimension_x	0	ability:0	exercised
 dimension_x	0	land	exercised
 dimir_guildgate	0	ability:0	exercised
 dimir_guildgate	0	land	exercised
+dinotomaton	0	cast	exercised
 direct_hit	0	cast	exercised
 diregraf_ghoul	0	cast	exercised
 diresight	0	cast	exercised
@@ -899,6 +901,7 @@ family_reunion	0	cast	exercised
 fanatic_of_the_harrowing	0	cast	exercised
 fanatical_offering	0	cast	unsupported: required cast-cost group needs a specialized fixture
 fanatical_strength	0	cast	exercised
+fang_guardian	0	cast	exercised
 fang_of_shigeki	0	cast	exercised
 fangkeepers_familiar	0	cast	exercised
 fangren_hunter	0	cast	exercised
@@ -1683,6 +1686,7 @@ lord_skitters_butcher	0	cast	exercised
 los_diablos_missile_base	0	ability:0	exercised
 los_diablos_missile_base	0	land	exercised
 lost_days	0	cast	exercised
+lotusguard_disciple	0	cast	exercised
 loxodon_convert	0	cast	exercised
 loxodon_line_breaker	0	cast	exercised
 loxodon_wayfarer	0	cast	exercised
@@ -2039,6 +2043,7 @@ phytoburst	0	cast	exercised
 piggy_bank	0	cast	exercised
 pigment_wrangler_striking_palette	0	cast	exercised
 pigment_wrangler_striking_palette	1	cast	intentional: face unavailable from hand
+pileated_provisioner	0	cast	exercised
 pilfer	0	cast	exercised
 pilgrim_of_the_fires	0	cast	exercised
 pillar_launch	0	cast	exercised
@@ -2171,6 +2176,8 @@ rambunctious_mutt	0	cast	exercised
 rampaging_ceratops	0	cast	exercised
 rampaging_ferocidon	0	cast	exercised
 rampaging_soulrager	0	cast	exercised
+rampaging_spiketail	0	ability:0	unsupported: ability not offered by generic battlefield fixture
+rampaging_spiketail	0	cast	exercised
 rapacious_dragon	0	cast	exercised
 raptor_companion	0	cast	exercised
 ratcatcher_trainee_pest_problem	0	cast	exercised
@@ -3242,6 +3249,7 @@ witchs_familiar	0	cast	exercised
 witchstalker_frenzy	0	cast	exercised
 withering_torment	0	cast	exercised
 witness_protection	0	cast	exercised
+wood_elves	0	cast	exercised
 woodland_druid	0	cast	exercised
 woodland_mystic	0	ability:0	exercised
 woodland_mystic	0	cast	exercised

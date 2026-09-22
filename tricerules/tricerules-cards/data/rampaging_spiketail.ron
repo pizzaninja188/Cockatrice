@@ -1,0 +1,44 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 41f6d6d9-3fe5-44b0-904d-1cb90d36f2b6.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.6a (entry trigger), CR 611.2c/613.4c (until-end-of-turn P/T and keyword grant), and
+// CR 702.29 (Swampcycling is a hand-zone activated ability that discards this card as a cost).
+(
+  id: "rampaging_spiketail",
+  name: "Rampaging Spiketail",
+  face_id: "rampaging_spiketail",
+  mana_cost: "{4}{B}{B}",
+  types: ["Creature", "Dinosaur"],
+  power: 5,
+  toughness: 6,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      PumpTarget(power: 2, toughness: 0, subject: Chosen((kind: Creature, controller: You))),
+      GrantKeywords(
+        subject: Chosen((kind: Creature, controller: You)),
+        keywords: [Indestructible],
+      ),
+    ],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature you control",
+      effect_indices: [0, 1],
+    )])),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    source_zone: Hand,
+    costs: [Mana("{2}"), DiscardSelf],
+    effect: [SearchLibrary(
+      filter: Some((required_subtypes: ["Swamp"])),
+      destination: Hand,
+      shuffle: true,
+      reveal: true,
+    )],
+  )],
+)

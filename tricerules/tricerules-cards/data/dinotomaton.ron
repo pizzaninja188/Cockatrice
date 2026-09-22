@@ -1,0 +1,29 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 443f2272-6475-4966-8ca2-717d4cf208ee.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.6a (entry trigger) and CR 702.111 (menace).
+(
+  id: "dinotomaton",
+  name: "Dinotomaton",
+  face_id: "dinotomaton",
+  mana_cost: "{3}{R}",
+  types: ["Artifact", "Creature", "Dinosaur", "Gnome"],
+  power: 4,
+  toughness: 3,
+  keywords: [Menace],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [GrantKeywords(
+      subject: Chosen((kind: Creature, controller: You)),
+      keywords: [Menace],
+    )],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature you control",
+      effect_indices: [0],
+    )])),
+  )],
+)

@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "f84d1291-1f82-4b67-a26e-b79624b4ce1d",
+  "spans": [
+    {
+      "face_id": "cloudblazer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "cloudblazer",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc20_batch::issue_misc20_cloudblazer_gains_life_and_draws",
+      "covers": "the entry trigger gains 2 life and draws two cards"
+    },
+    {
+      "test": "issue_misc20_batch::issue_misc20_batch_maps_definitions",
+      "covers": "reviewed identity, printed characteristics, Flying, and the entry gain-life-and-draw of Cloudblazer"
+    },
+    {
+      "test": "issue_misc20_batch::issue_misc20_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Cloudblazer"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

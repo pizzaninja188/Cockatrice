@@ -1,0 +1,25 @@
+// Oracle and rulings checked 2026-09-22 against pinned Scryfall oracle 8973bd99-20f8-4867-90ef-50392147ee1b.
+// Handwritten typed definition promoted through the reviewed direct-RON path;
+// review map and packet evidence live under authoring/review-maps and build/direct-ron.
+// CR 603.6a (entry trigger) and CR 701.23: the fetched ruling confirms a filtered search may
+// fail to find, so the land is not mandatory.
+(
+  id: "wood_elves",
+  name: "Wood Elves",
+  face_id: "wood_elves",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Elf", "Scout"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [SearchLibrary(
+      filter: Some((required_subtypes: ["Forest"])),
+      destination: Battlefield(tapped: false),
+      shuffle: true,
+      reveal: false,
+    )],
+  )],
+)
