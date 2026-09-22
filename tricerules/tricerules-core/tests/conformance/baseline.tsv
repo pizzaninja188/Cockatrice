@@ -1341,6 +1341,7 @@ hawkeater_moth	0	cast	exercised
 hawkeye,_clint_barton	0	cast	exercised
 haywire_mite	0	ability:0	exercised
 haywire_mite	0	cast	exercised
+hazels_nocturne	0	cast	exercised
 head_of_the_homestead	0	cast	exercised
 headless_horseman	0	cast	exercised
 headwater_sentries	0	cast	exercised
@@ -1365,6 +1366,7 @@ heirloom_auntie	0	cast	exercised
 hells_kitchen	0	ability:0	exercised
 hells_kitchen	0	land	exercised
 helpful_hunter	0	cast	exercised
+helping_hand	0	cast	exercised
 henchbots	0	cast	exercised
 hengegate_pathway_mistgate_pathway	0	ability:0	exercised
 hengegate_pathway_mistgate_pathway	0	land	exercised
@@ -1913,6 +1915,7 @@ mosscoat_goriak	0	cast	exercised
 mountain	0	ability:0	exercised
 mountain	0	land	exercised
 mountain_bandit	0	cast	exercised
+mourners_surprise	0	cast	exercised
 muck_rats	0	cast	exercised
 mudbutton_cursetosser	0	cast	unsupported: required cast-cost group needs a specialized fixture
 multiversal_passage	0	land	exercised
@@ -2181,6 +2184,7 @@ prowcatcher_specialist	0	ability:0	exercised
 prowcatcher_specialist	0	cast	exercised
 prowling_caracal	0	cast	exercised
 pterafractyl	0	cast	exercised
+pull_from_the_grave	0	cast	exercised
 pulse_tracker	0	cast	exercised
 pumpkin_bombardment	0	cast	unsupported: required cast-cost group needs a specialized fixture
 punk_frogs	0	cast	exercised

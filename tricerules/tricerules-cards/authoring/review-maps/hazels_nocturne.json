@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "2a74a055-ff7f-434b-8dfb-d9fb72579cee",
+  "spans": [
+    {
+      "face_id": "hazels_nocturne",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/2"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc35_batch::issue_misc35_hazels_nocturne_semantics",
+      "covers": "registered-card cast, targeting, resolution, and Oracle outcome"
+    },
+    {
+      "test": "issue_misc35_batch::issue_misc35_registers_four_exact_card_identities",
+      "covers": "printed identity and characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

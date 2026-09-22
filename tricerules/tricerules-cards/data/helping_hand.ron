@@ -1,0 +1,12 @@
+// Pinned Oracle 170a5dbc-6a43-4715-9501-178b1eb7b08c and rulings reviewed 2026-09-22.
+(
+  id: "helping_hand",
+  name: "Helping Hand",
+  face_id: "helping_hand",
+  mana_cost: "{W}",
+  types: ["Sorcery"],
+  spell_effect: [MoveGraveyardCards(
+    filter: (owner: Controller, card: Some((card_type: Some(Creature), max_mana_value: Some(3)))),
+    destination: Battlefield(tapped: true),
+  )],
+)

@@ -1,0 +1,13 @@
+// Pinned Oracle c5373026-8b43-42a7-aa69-a1b0f1619795 and rulings reviewed 2026-09-22.
+(
+  id: "pull_from_the_grave",
+  name: "Pull from the Grave",
+  face_id: "pull_from_the_grave",
+  mana_cost: "{2}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    MoveGraveyardCards(filter: (owner: Controller, card: Some((card_type: Some(Creature)))), destination: Hand),
+    GainLife(amount: 2),
+  ],
+  targeting: Some((groups: [(min: 0, max: 2, prompt: "Choose up to two target creature cards from your graveyard", effect_indices: [0])])),
+)

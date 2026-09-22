@@ -1,0 +1,32 @@
+{
+  "format_version": 1,
+  "oracle_id": "170a5dbc-6a43-4715-9501-178b1eb7b08c",
+  "spans": [
+    {
+      "face_id": "helping_hand",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc35_batch::issue_misc35_helping_hand_semantics",
+      "covers": "registered-card cast, targeting, resolution, and Oracle outcome"
+    },
+    {
+      "test": "issue_misc35_batch::issue_misc35_registers_four_exact_card_identities",
+      "covers": "printed identity and characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

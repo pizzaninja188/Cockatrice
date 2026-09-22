@@ -1,0 +1,13 @@
+// Pinned Oracle 567fa6e0-fc7b-4502-9c51-f2538c411003 and rulings reviewed 2026-09-22.
+(
+  id: "mourners_surprise",
+  name: "Mourner's Surprise",
+  face_id: "mourners_surprise",
+  mana_cost: "{1}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    MoveGraveyardCards(filter: (owner: Controller, card: Some((card_type: Some(Creature)))), destination: Hand),
+    CreateTokens(token: "mercenary_r_1_1", count: 1),
+  ],
+  targeting: Some((groups: [(min: 0, max: 1, prompt: "Choose up to one target creature card from your graveyard", effect_indices: [0])])),
+)

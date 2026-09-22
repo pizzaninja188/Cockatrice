@@ -1,0 +1,37 @@
+{
+  "format_version": 1,
+  "oracle_id": "c5373026-8b43-42a7-aa69-a1b0f1619795",
+  "spans": [
+    {
+      "face_id": "pull_from_the_grave",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_misc35_batch::issue_misc35_pull_from_the_grave_semantics",
+      "covers": "registered-card cast, targeting, resolution, and Oracle outcome"
+    },
+    {
+      "test": "issue_misc35_batch::issue_misc35_registers_four_exact_card_identities",
+      "covers": "printed identity and characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

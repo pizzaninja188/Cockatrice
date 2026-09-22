@@ -1,0 +1,14 @@
+// Pinned Oracle 2a74a055-ff7f-434b-8dfb-d9fb72579cee and rulings reviewed 2026-09-22.
+(
+  id: "hazels_nocturne",
+  name: "Hazel's Nocturne",
+  face_id: "hazels_nocturne",
+  mana_cost: "{3}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    MoveGraveyardCards(filter: (owner: Controller, card: Some((card_type: Some(Creature)))), destination: Hand),
+    LoseLife(amount: Fixed(2), who: EachOpponent),
+    GainLife(amount: 2),
+  ],
+  targeting: Some((groups: [(min: 0, max: 2, prompt: "Choose up to two target creature cards from your graveyard", effect_indices: [0])])),
+)
