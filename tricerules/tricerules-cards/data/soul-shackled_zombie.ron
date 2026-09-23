@@ -29,7 +29,7 @@
               min: Some(1),
             ),
             effects: [
-              DamagePlayer(amount: 2, who: EachOpponent),
+              LoseLife(amount: Fixed(2), who: EachOpponent),
               GainLife(amount: 2),
             ],
           ),

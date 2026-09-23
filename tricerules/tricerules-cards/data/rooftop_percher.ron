@@ -1,4 +1,3 @@
-// Partial: target selection currently requires one graveyard; see authoring/partial-cards.tsv.
 (
   id: "rooftop_percher",
   name: "Rooftop Percher",
@@ -20,9 +19,9 @@
     targeting: Some((groups: [(
       min: 0,
       max: 2,
-      prompt: "Choose up to two target cards from a single graveyard",
+      prompt: "Choose up to two target cards from graveyards",
       effect_indices: [0],
-      same_graveyard: true,
+      same_graveyard: false,
     )])),
   )],
 )

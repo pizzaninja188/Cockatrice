@@ -112,6 +112,7 @@ fn soul_shackled_zombie_drains_only_when_a_creature_was_actually_exiled() {
     let mut drain = engine(107_020);
     let creature = inject_graveyard_card(&mut drain, 1, "grizzly_bears");
     let noncreature = inject_graveyard_card(&mut drain, 1, "forest");
+    drain.state.add_damage_prevention_shield(1, 2);
     cast_creature(&mut drain, "soul-shackled_zombie");
     drain
         .apply_command(0, &choose_trigger_targets(&[creature, noncreature]))
@@ -119,6 +120,11 @@ fn soul_shackled_zombie_drains_only_when_a_creature_was_actually_exiled() {
     pass_both_players(&mut drain);
     assert_eq!(drain.state.players[0].life, 22);
     assert_eq!(drain.state.players[1].life, 18);
+    assert_eq!(
+        drain.state.remaining_damage_prevention(1),
+        2,
+        "losing life does not use or consume a damage prevention shield"
+    );
 
     let mut no_drain = engine(107_021);
     let stale_creature = inject_graveyard_card(&mut no_drain, 1, "grizzly_bears");
@@ -147,4 +153,43 @@ fn soul_shackled_zombie_drains_only_when_a_creature_was_actually_exiled() {
     );
     assert_eq!(no_drain.state.players[0].life, 20);
     assert_eq!(no_drain.state.players[1].life, 20);
+}
+
+#[test]
+fn rooftop_percher_accepts_targets_from_different_graveyards() {
+    let mut engine = engine(107_030);
+    let own = inject_graveyard_card(&mut engine, 0, "grizzly_bears");
+    let opposing = inject_graveyard_card(&mut engine, 1, "storm_crow");
+    cast_creature(&mut engine, "rooftop_percher");
+
+    let published = engine.initial_response_batch();
+    let targets = published.legal_by_player[&0]
+        .valid_targets_by_ability
+        .values()
+        .next()
+        .expect("pending Rooftop Percher targets");
+    assert_eq!((targets.groups[0].min, targets.groups[0].max), (0, 2));
+    assert!(!targets.groups[0].same_graveyard);
+    engine
+        .apply_command(0, &choose_trigger_targets(&[own, opposing]))
+        .expect("choose one target from each graveyard");
+    pass_both_players(&mut engine);
+
+    assert_eq!(engine.state.objects[&own].zone, Zone::Exile);
+    assert_eq!(engine.state.objects[&opposing].zone, Zone::Exile);
+    assert_eq!(engine.state.players[0].life, 23);
+}
+
+#[test]
+fn rooftop_percher_can_choose_no_targets_and_still_gain_life() {
+    let mut engine = engine(107_031);
+    let unchosen = inject_graveyard_card(&mut engine, 1, "grizzly_bears");
+    cast_creature(&mut engine, "rooftop_percher");
+    engine
+        .apply_command(0, &choose_trigger_targets(&[]))
+        .expect("decline all optional targets");
+    pass_both_players(&mut engine);
+
+    assert_eq!(engine.state.objects[&unchosen].zone, Zone::Graveyard);
+    assert_eq!(engine.state.players[0].life, 23);
 }
