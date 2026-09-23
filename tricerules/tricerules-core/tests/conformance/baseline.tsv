@@ -465,6 +465,7 @@ catacomb_slug	0	cast	exercised
 cathar_commando	0	ability:0	exercised
 cathar_commando	0	cast	exercised
 cathedral_sanctifier	0	cast	exercised
+caught_in_the_crossfire	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 caustic_exhale	0	cast	unsupported: required cast-cost group needs a specialized fixture
 cavalry_drillmaster	0	cast	exercised
 cavern_stomper	0	ability:0	exercised

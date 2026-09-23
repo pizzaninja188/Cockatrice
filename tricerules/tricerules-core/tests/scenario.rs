@@ -522,6 +522,8 @@ mod issue_358_generated_five_clause_batch;
 mod issue_359_direct_ron;
 #[path = "scenario/issue_359_direct_ron_batch2.rs"]
 mod issue_359_direct_ron_batch2;
+#[path = "scenario/issue_359_direct_ron_batch3.rs"]
+mod issue_359_direct_ron_batch3;
 #[path = "scenario/issue_360_tiered_cards.rs"]
 mod issue_360_tiered_cards;
 #[path = "scenario/issue_363_generated_dragonstorm_cohort.rs"]

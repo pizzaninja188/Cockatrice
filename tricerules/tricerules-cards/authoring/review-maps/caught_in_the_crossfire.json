@@ -1,0 +1,104 @@
+{
+  "format_version": 1,
+  "oracle_id": "d262f3e1-b5bc-4dab-86c2-cd89c2419e54",
+  "spans": [
+    {
+      "face_id": "caught_in_the_crossfire",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/cast_cost_groups/0"]
+    },
+    {
+      "face_id": "caught_in_the_crossfire",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0/options/0",
+        "/faces/0/modal_spell/modes/0"
+      ]
+    },
+    {
+      "face_id": "caught_in_the_crossfire",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0/options/1",
+        "/faces/0/modal_spell/modes/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostGroupDef",
+      "typed_path": "/faces/0/cast_cost_groups/0"
+    },
+    {
+      "symbol": "CastCostOptionDef::Mana",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "ManaCostChoiceKind::AdditionalPayment",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0/Mana/kind"
+    },
+    {
+      "symbol": "CastCostOptionDef::Mana",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/1"
+    },
+    {
+      "symbol": "ManaCostChoiceKind::AdditionalPayment",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/1/Mana/kind"
+    },
+    {
+      "symbol": "ModalDef",
+      "typed_path": "/faces/0/modal_spell"
+    },
+    {
+      "symbol": "ModeDef",
+      "typed_path": "/faces/0/modal_spell/modes/0"
+    },
+    {
+      "symbol": "CastCostOptionRef",
+      "typed_path": "/faces/0/modal_spell/modes/0/linked_cast_cost"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageAll",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/0/DamageAll/kind"
+    },
+    {
+      "symbol": "ModeDef",
+      "typed_path": "/faces/0/modal_spell/modes/1"
+    },
+    {
+      "symbol": "CastCostOptionRef",
+      "typed_path": "/faces/0/modal_spell/modes/1/linked_cast_cost"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageAll",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0/DamageAll/kind"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_359_direct_ron_batch3::issue_359_caught_in_the_crossfire_modes_partition_all_creatures_and_charge_selected_costs",
+      "covers": "each mode alone and both together; all five outlaw subtypes including Changeling are damaged exactly once, non-outlaws and noncreatures are excluded by the matching mode, both players are covered, and only linked additional costs are paid"
+    },
+    {
+      "test": "issue_359_direct_ron_batch3::issue_359_caught_in_the_crossfire_maps_both_printed_clauses",
+      "covers": "registered identity, face, mana cost, type and color; Spree options and links; targetless DamageAll definitions and exact outlaw subtype union/complement"
+    },
+    {
+      "test": "issue_359_direct_ron_batch3::issue_359_caught_in_the_crossfire_fingerprint_matches_the_pinned_oracle_text",
+      "covers": "the generated normalized Oracle fingerprint for this pinned identity"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

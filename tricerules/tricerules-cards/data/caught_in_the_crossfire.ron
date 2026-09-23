@@ -1,0 +1,46 @@
+// Oracle and rulings checked against the pinned Scryfall snapshot on 2026-09-22. CR 702.172a,
+// 601.2b/f-h, 608.2c, 120.2b, and 120.3e govern Spree payments, instruction order, and damage.
+(
+  id: "caught_in_the_crossfire",
+  name: "Caught in the Crossfire",
+  face_id: "caught_in_the_crossfire",
+  mana_cost: "{R}{R}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "spree",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 2,
+    options: [
+      Mana(option_id: "outlaws_cost", presentation: OracleLines([2]), kind: AdditionalPayment, cost: "{1}"),
+      Mana(option_id: "non_outlaws_cost", presentation: OracleLines([3]), kind: AdditionalPayment, cost: "{1}"),
+    ],
+  )],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 2,
+    modes: [
+      (
+        mode_id: "outlaws",
+        presentation: OracleLines([2]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "outlaws_cost")),
+        effects: [DamageAll(amount: 2, kind: (any_of: Some([
+          (kind: Creature, required_subtypes: ["Assassin"]),
+          (kind: Creature, required_subtypes: ["Mercenary"]),
+          (kind: Creature, required_subtypes: ["Pirate"]),
+          (kind: Creature, required_subtypes: ["Rogue"]),
+          (kind: Creature, required_subtypes: ["Warlock"]),
+        ])))],
+      ),
+      (
+        mode_id: "non_outlaws",
+        presentation: OracleLines([3]),
+        linked_cast_cost: Some((group_id: "spree", option_id: "non_outlaws_cost")),
+        effects: [DamageAll(amount: 2, kind: (
+          kind: Creature,
+          excluded_subtypes: ["Assassin", "Mercenary", "Pirate", "Rogue", "Warlock"],
+        ))],
+      ),
+    ],
+  ),
+)
