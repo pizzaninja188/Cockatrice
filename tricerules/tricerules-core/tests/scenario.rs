@@ -338,6 +338,8 @@ mod issue_298_generated_aura_etb_keywords;
 mod issue_299_generated_mercenary;
 #[path = "scenario/issue_300_generated_land_sacrifice_draw.rs"]
 mod issue_300_generated_land_sacrifice_draw;
+#[path = "scenario/issue_481_conditional_library_choices.rs"]
+mod issue_481_conditional_library_choices;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]

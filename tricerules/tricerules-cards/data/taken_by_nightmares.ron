@@ -1,0 +1,27 @@
+// Pinned Oracle e5557c9f-e4c2-41af-9fcc-371409e1dec6. Issue #481's Scryfall ruling lookup on
+// 2026-09-22 returned no card-specific rulings. CR 608.2b/c and 701.22 govern target resolution,
+// effect order, and the conditional Scry choice.
+(
+  id: "taken_by_nightmares",
+  name: "Taken by Nightmares",
+  face_id: "taken_by_nightmares",
+  mana_cost: "{2}{B}{B}",
+  types: ["Instant"],
+  spell_effect: [
+    Exile(subject: Chosen((kind: Creature))),
+    Conditional(
+      condition: BattlefieldAggregate(
+        filter: (controllers: Controller, card_type: Some(Enchantment)),
+        aggregate: Count,
+        min: Some(1),
+      ),
+      effect: Scry(count: 2),
+    ),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0],
+  )])),
+)

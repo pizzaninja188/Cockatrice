@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "e5557c9f-e4c2-41af-9fcc-371409e1dec6",
+  "spans": [
+    {
+      "face_id": "taken_by_nightmares",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter.kind",
+      "typed_path": "/faces/0/spell_effect/0/Exile/subject/Chosen/kind"
+    },
+    {
+      "symbol": "SpellEffectKind::Conditional",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldAggregate",
+      "typed_path": "/faces/0/spell_effect/1/Conditional/condition/BattlefieldAggregate"
+    },
+    {
+      "symbol": "SpellEffectKind::Scry",
+      "typed_path": "/faces/0/spell_effect/1/Conditional/effect/Scry"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_481_conditional_library_choices::taken_by_nightmares_checks_enchantment_at_resolution_and_resumes_after_scry",
+      "covers": "the controller gains an enchantment before resolution; target exile precedes Scry 2; both Scry choices complete and the spell resumes without rechecking the condition"
+    },
+    {
+      "test": "scenario issue_481_conditional_library_choices::taken_by_nightmares_ignores_an_opponents_enchantment",
+      "covers": "an opponent's enchantment does not satisfy the spell controller's condition"
+    },
+    {
+      "test": "scenario issue_481_conditional_library_choices::taken_by_nightmares_with_an_illegal_target_does_not_scry",
+      "covers": "CR 608.2b: an illegal only target prevents both exile and conditional Scry"
+    },
+    {
+      "test": "issue_481_conditional_library_choices::issue_481_registers_both_complete_cards_and_exact_conditional_effects",
+      "covers": "complete card identity, face constants, target group, ordered exile and conditional Scry payload"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

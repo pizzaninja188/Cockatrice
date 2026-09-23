@@ -1606,6 +1606,13 @@ impl GameEngine {
                                 effect @ SpellEffectKind::Draw { .. } => {
                                     zones::draw(&mut cx, effect)?
                                 }
+                                effect @ SpellEffectKind::Scry { .. } => {
+                                    zones::scry(&mut cx, effect)?
+                                }
+                                effect @ SpellEffectKind::LibraryPartition {
+                                    kind: LibraryPartitionKind::Surveil,
+                                    ..
+                                } => zones::library_partition(&mut cx, effect)?,
                                 effect @ SpellEffectKind::Untap { .. } => {
                                     misc::untap(&mut cx, effect)?
                                 }

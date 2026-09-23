@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "fe4bbe82-1d6b-4f3d-8cc0-f6df22d9e9fb",
+  "spans": [
+    {
+      "face_id": "failed_fording",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter.excluded_permanent_types",
+      "typed_path": "/faces/0/spell_effect/0/ReturnToOwnersHand/subject/Chosen/excluded_permanent_types"
+    },
+    {
+      "symbol": "SpellEffectKind::Conditional",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "GameCondition::BattlefieldAggregate",
+      "typed_path": "/faces/0/spell_effect/1/Conditional/condition/BattlefieldAggregate"
+    },
+    {
+      "symbol": "SpellEffectKind::LibraryPartition(kind: Surveil)",
+      "typed_path": "/faces/0/spell_effect/1/Conditional/effect/LibraryPartition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_481_conditional_library_choices::failed_fording_checks_desert_at_resolution_then_surveils",
+      "covers": "the controller gains a Desert before resolution; target returns to its owner's hand before Surveil 1; the selected card moves to the graveyard and the spell resumes"
+    },
+    {
+      "test": "scenario issue_481_conditional_library_choices::failed_fording_ignores_an_opponents_desert",
+      "covers": "an opponent's Desert does not satisfy the spell controller's condition"
+    },
+    {
+      "test": "scenario issue_481_conditional_library_choices::failed_fording_with_an_illegal_target_does_not_surveil",
+      "covers": "CR 608.2b and the 2024-04-12 ruling: an illegal only target prevents the conditional Surveil"
+    },
+    {
+      "test": "issue_481_conditional_library_choices::issue_481_registers_both_complete_cards_and_exact_conditional_effects",
+      "covers": "complete card identity, face constants, nonland target restriction, ordered return and conditional Surveil payload"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

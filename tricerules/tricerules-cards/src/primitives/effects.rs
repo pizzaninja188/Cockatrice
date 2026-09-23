@@ -845,8 +845,11 @@ impl CreatureTypeChange {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpellEffectKind {
-    /// Apply one ordinary non-suspending instruction only when a current engine-side condition
-    /// holds. Target roles come solely from `effect`; `condition` never narrows initial legality.
+    /// Apply one allowlisted instruction only when a current engine-side condition holds. The
+    /// instruction may suspend for its existing library choice (Scry or Surveil), whose ordinary
+    /// stack-resolution continuation resumes the effect list after the choice. Target roles come
+    /// solely from `effect`; `condition` never narrows initial legality. Taken by Nightmares and
+    /// Failed Fording exercise the conditional Scry and Surveil forms respectively.
     Conditional {
         condition: GameCondition,
         effect: Box<SpellEffectKind>,
@@ -3504,12 +3507,17 @@ impl SpellEffectKind {
                         | SpellEffectKind::GrantKeywords { .. }
                         | SpellEffectKind::ChoosePermanents { .. }
                         | SpellEffectKind::Draw { .. }
+                        | SpellEffectKind::Scry { .. }
+                        | SpellEffectKind::LibraryPartition {
+                            kind: LibraryPartitionKind::Surveil,
+                            ..
+                        }
                         | SpellEffectKind::Untap { .. }
                         | SpellEffectKind::RemoveAllAbilities { .. }
                         | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
                 ) {
                     return Err(
-                        "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, Draw, Untap, and RemoveAllAbilities effects"
+                        "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, Draw, Scry, Surveil, Untap, and RemoveAllAbilities effects"
                             .into(),
                     );
                 }
