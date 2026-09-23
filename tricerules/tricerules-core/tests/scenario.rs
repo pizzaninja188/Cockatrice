@@ -8,6 +8,9 @@
 #[path = "scenario/semantic_fixtures.rs"]
 mod semantic_fixtures;
 
+#[path = "scenario/anti_venom.rs"]
+mod anti_venom;
+
 #[path = "scenario/issue_231_spell_filters.rs"]
 mod issue_231_spell_filters;
 #[path = "scenario/issue_236_hydro_man.rs"]

@@ -1,6 +1,5 @@
 # Authoring/checklist metadata only. Rules RON and the runtime registry do not load these notes.
 sorcerer_of_the_fang	Activated ability omits the tap cost and incorrectly limits planeswalker targets to opponents' planeswalkers.
-anti-venom,_horrifying_healer	Cast-conditioned ETB creature reanimation trigger is not implemented
 cackling_counterpart	Copy-with-modifications remain unsupported.
 gifts_ungiven	1v1 opponent is the automatic target (no separate target step for multi-player)
 juggernaut	can't be blocked by Walls not enforced

@@ -1,5 +1,4 @@
-// Anti-Venom, Horrifying Healer — Marvel's Spider-Man. The cast-conditioned ETB reanimation
-// trigger is deferred; its static CR 615 prevention effect is fully data-driven.
+// Scryfall card/rulings checked 2026-09-23; no card-specific rulings. CR 603.4, 603.6a, 608.2a-b.
 (
   id: "anti-venom,_horrifying_healer",
   name: "Anti-Venom, Horrifying Healer",
@@ -9,6 +8,22 @@
   types: ["Creature", "Symbiote", "Hero"],
   power: 5,
   toughness: 5,
+  triggered_abilities: [(
+    ability_id: "return_creature_if_cast",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    intervening_if: Some(SelfWasCast),
+    effect: [MoveGraveyardCards(
+      filter: (owner: Controller, card: Some((card_type: Some(Creature)))),
+      destination: Battlefield(tapped: false),
+    )],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature card in your graveyard",
+      effect_indices: [0],
+    )])),
+  )],
   static_abilities: [
     (ability_id: "static_01", presentation: OracleLines([2]), definition: PreventDamage(
       subject: Source,
