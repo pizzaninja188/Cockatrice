@@ -256,6 +256,14 @@ fn source_faces(card: &Value) -> Vec<&Value> {
         .unwrap_or_else(|| vec![card])
 }
 
+fn is_token_identity(card: &Value) -> bool {
+    str_field(card, "layout").contains("token")
+        || str_field(card, "type_line")
+            .split_whitespace()
+            .next()
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("token"))
+}
+
 fn identity_hash(card: &Value) -> String {
     // Include all generator-relevant characteristics and exact text (including reminders),
     // not printing IDs/art/URLs. Conflicting legality snapshots also fail closed.
@@ -628,6 +636,9 @@ fn build(
     capabilities.sort_by(|a, b| a.id.cmp(&b.id));
     let mut names = BTreeMap::<String, usize>::new();
     for card in unique.values() {
+        if is_token_identity(card) {
+            continue;
+        }
         *names
             .entry(super::normalize_name(str_field(card, "name")))
             .or_default() += 1;
@@ -700,23 +711,33 @@ fn build(
                 }
             }
         }
-        let collision = names[&super::normalize_name(&name)] > 1;
+        let token_identity = is_token_identity(&card);
+        let collision = !token_identity && names[&super::normalize_name(&name)] > 1;
         if collision {
             unresolved.push(Scope::Card);
         }
-        let status = if collision { None } else { registry.get(&name) }
-            .cloned()
-            .unwrap_or(RegistryStatus {
+        let status = if token_identity {
+            RegistryStatus {
                 definition_id: None,
-                origin: if collision {
-                    "ambiguous_identity"
-                } else {
-                    "absent"
-                }
-                .into(),
+                origin: "non_card_identity".into(),
                 partial_note: None,
                 declared_full: false,
-            });
+            }
+        } else {
+            (if collision { None } else { registry.get(&name) })
+                .cloned()
+                .unwrap_or(RegistryStatus {
+                    definition_id: None,
+                    origin: if collision {
+                        "ambiguous_identity"
+                    } else {
+                        "absent"
+                    }
+                    .into(),
+                    partial_note: None,
+                    declared_full: false,
+                })
+        };
         // Partial metadata cannot be waived with an empty reviewed dependency set.
         if status.partial_note.is_some() && remaining.is_empty() {
             unresolved.push(Scope::Card);
@@ -1264,6 +1285,50 @@ mod tests {
             .identities
             .iter()
             .all(|c| c.registry.origin == "ambiguous_identity" && !c.analysis_complete));
+    }
+
+    #[test]
+    fn token_identity_does_not_make_the_playable_card_name_ambiguous() {
+        let playable = card("llanowar", "Llanowar Elves");
+        let mut token = card("llanowar-token", "Llanowar Elves");
+        token["layout"] = "token".into();
+        token["type_line"] = "Token Creature — Elf Druid".into();
+        token["legalities"]["standard"] = "not_legal".into();
+        let registry = BTreeMap::from([(
+            "Llanowar Elves".into(),
+            RegistryStatus {
+                definition_id: Some("llanowar_elves".into()),
+                origin: "generated".into(),
+                partial_note: None,
+                declared_full: true,
+            },
+        )]);
+
+        let report = build(
+            vec![playable, token],
+            snapshot(),
+            "fixture",
+            &registry,
+            None,
+        )
+        .unwrap();
+        let playable = report
+            .identities
+            .iter()
+            .find(|identity| identity.oracle_id == "llanowar")
+            .unwrap();
+        assert_eq!(playable.registry.origin, "generated");
+        assert_eq!(
+            playable.registry.definition_id.as_deref(),
+            Some("llanowar_elves")
+        );
+        let token = report
+            .identities
+            .iter()
+            .find(|identity| identity.oracle_id == "llanowar-token")
+            .unwrap();
+        assert_eq!(token.registry.origin, "non_card_identity");
+        assert!(!token.registry.declared_full);
     }
 
     #[test]
