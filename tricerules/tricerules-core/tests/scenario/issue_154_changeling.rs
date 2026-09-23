@@ -58,7 +58,7 @@ fn issue_154_authors_the_seven_changeling_cards() {
     assert!(core_face.is_artifact);
     assert!(!core_face.is_creature);
     assert!(core_face.has_subtype("Elf"));
-    assert_eq!(core_face.activated_abilities.len(), 1);
+    assert_eq!(core_face.activated_abilities.len(), 2);
 }
 
 #[test]

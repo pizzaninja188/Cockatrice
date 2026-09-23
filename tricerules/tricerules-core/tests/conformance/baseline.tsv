@@ -995,6 +995,7 @@ final_showdown	0	cast	unsupported: modal fixture cannot satisfy required selecta
 final_vengeance	0	cast	unsupported: required cast-cost group needs a specialized fixture
 finishing_blow	0	cast	exercised
 firdoch_core	0	ability:0	exercised
+firdoch_core	0	ability:1	exercised
 firdoch_core	0	cast	exercised
 fire-rim_form	0	cast	exercised
 fire_elemental	0	cast	exercised

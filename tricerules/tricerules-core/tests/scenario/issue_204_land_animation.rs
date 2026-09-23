@@ -1,13 +1,14 @@
 //! Issue #204: duration-aware land self-animation.
 //!
-//! Oracle and rulings were verified 2026-09-03 for Restless Reef and Soulstone Sanctuary.
-//! Governing rules: CR 205.1b, 205.3m, 302.6, 611.2a, 613.1d-f, 613.4b, and 613.7.
+//! Oracle and rulings were verified 2026-09-03 for Restless Reef and Soulstone Sanctuary, and
+//! 2026-09-23 for Firdoch Core.
+//! Governing rules: CR 205.1b, 205.3m, 302.6, 611.2a, 613.1d-f, 613.4b-c, and 613.7.
 
 use crate::helpers::*;
 use tricerules_cards::primitives::{
     ContinuousEffectKind, EffectDuration, PermanentTypeFilter, TypeLineAddition,
 };
-use tricerules_cards::{CardRegistry, Color, Keyword};
+use tricerules_cards::{CardRegistry, Color, CounterKind, Keyword};
 use tricerules_core::state::{AffectedScope, ContinuousEffect};
 use tricerules_core::{TurnStep, Zone};
 use tricerules_proto::ruled::v1::dev_command::Dev;
@@ -117,6 +118,111 @@ fn land_self_animation_cards_are_registered() {
             "issue #204 card {card_id} must be registered"
         );
     }
+}
+
+#[test]
+fn firdoch_core_becomes_a_temporary_four_four_artifact_creature() {
+    let mut engine = engine_with_card(204_010, "firdoch_core");
+    let core = move_ready_to_battlefield(&mut engine, 0, "firdoch_core");
+    let unanimated = engine.characteristics(core).expect("Firdoch Core");
+    assert!(unanimated.has_type("Artifact"));
+    assert!(unanimated.has_type("Kindred") && unanimated.has_type("Shapeshifter"));
+    assert!(!unanimated.is_creature());
+    assert!(
+        unanimated.has_type("Elf"),
+        "Changeling applies before animation"
+    );
+
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            c: 4,
+            ..Default::default()
+        },
+    );
+    apply_ability(&mut engine, 0, core, 1, vec![]).expect("activate Firdoch Core");
+    resolve_entire_stack_two_player(&mut engine);
+
+    let animated = engine.characteristics(core).expect("animated Firdoch Core");
+    assert!(animated.has_type("Artifact") && animated.is_creature());
+    assert!(animated.has_type("Kindred") && animated.has_type("Shapeshifter"));
+    assert!(
+        animated.has_type("Elf"),
+        "the animation retains Changeling types"
+    );
+    assert_eq!((animated.power, animated.toughness), (Some(4), Some(4)));
+
+    end_active_turn(&mut engine, 0);
+    let expired = engine.characteristics(core).expect("expired Firdoch Core");
+    assert!(expired.has_type("Artifact"));
+    assert!(expired.has_type("Kindred") && expired.has_type("Shapeshifter"));
+    assert!(!expired.is_creature());
+    assert!(expired.has_type("Elf"));
+    assert_eq!((expired.power, expired.toughness), (None, None));
+}
+
+#[test]
+fn firdoch_core_animation_obeys_the_base_power_toughness_ruling() {
+    let mut engine = engine_with_card(204_011, "firdoch_core");
+    let core = move_ready_to_battlefield(&mut engine, 0, "firdoch_core");
+    add_effect(
+        &mut engine,
+        core,
+        ContinuousEffectKind::Layer7bSetPt {
+            power: 2,
+            toughness: 2,
+        },
+        EffectDuration::Indefinite,
+    );
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            c: 4,
+            ..Default::default()
+        },
+    );
+    apply_ability(&mut engine, 0, core, 1, vec![]).expect("activate Firdoch Core");
+    resolve_entire_stack_two_player(&mut engine);
+
+    let after_animation = engine.characteristics(core).expect("animated Firdoch Core");
+    assert!(after_animation.is_creature());
+    assert_eq!(
+        (after_animation.power, after_animation.toughness),
+        (Some(4), Some(4)),
+        "Firdoch Core replaces an earlier base P/T-setting effect"
+    );
+
+    engine
+        .state
+        .objects
+        .get_mut(&core)
+        .expect("Firdoch Core")
+        .add_counters(CounterKind::PlusOnePlusOne, 1, engine.state.command_index);
+    let with_counter = engine
+        .characteristics(core)
+        .expect("countered Firdoch Core");
+    assert_eq!(
+        (with_counter.power, with_counter.toughness),
+        (Some(5), Some(5))
+    );
+
+    add_effect(
+        &mut engine,
+        core,
+        ContinuousEffectKind::Layer7bSetPt {
+            power: 2,
+            toughness: 3,
+        },
+        EffectDuration::Indefinite,
+    );
+    let after_later_effect = engine.characteristics(core).expect("later P/T setting");
+    assert_eq!(
+        (after_later_effect.power, after_later_effect.toughness),
+        (Some(3), Some(4)),
+        "a later base P/T-setting effect overwrites Firdoch Core before counters apply"
+    );
 }
 
 #[test]

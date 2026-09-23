@@ -1,5 +1,5 @@
-// Oracle checked 2026-08-26. The temporary animation is deliberately deferred until the
-// continuous-effect vocabulary can set type, base power, and base toughness for one duration.
+// Oracle checked 2026-09-23. Firdoch Core shares the source-bound AnimateSelf operation used by
+// Restless Reef and Soulstone Sanctuary, adding Creature while preserving its printed types.
 (
   id: "firdoch_core",
   name: "Firdoch Core",
@@ -12,5 +12,14 @@
     presentation: OracleLines([2]),
     costs: [Tap],
     effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+  ), (
+    ability_id: "activated_02",
+    presentation: OracleLines([3]),
+    costs: [Mana("{4}")],
+    effect: [AnimateSelf(
+      base_power: 4,
+      base_toughness: 4,
+      duration: UntilEndOfTurn,
+    )],
   )],
 )
