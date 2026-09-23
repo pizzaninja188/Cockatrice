@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "9d63ba8a-a5cd-4fdb-bba3-95612be0077c",
+  "spans": [
+    {
+      "start_line": 1,
+      "face_id": "long_goodbye",
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ],
+      "end_line": 1
+    },
+    {
+      "start_line": 2,
+      "face_id": "long_goodbye",
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ],
+      "end_line": 2
+    }
+  ],
+  "primitive_references": [
+    {
+      "typed_path": "/faces/0/static_abilities/0/definition",
+      "symbol": "StaticAbilityDef::SpellCannotBeCountered"
+    },
+    {
+      "typed_path": "/faces/0/spell_effect/0",
+      "symbol": "SpellEffectKind::Destroy"
+    },
+    {
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen",
+      "symbol": "TargetFilter"
+    },
+    {
+      "typed_path": "/faces/0/targeting",
+      "symbol": "TargetingDef"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "covers": "legal low-mana-value creature and planeswalker targets; reject above-three target; declining Ward leaves the uncounterable spell to destroy its target",
+      "test": "scenario issue_misc47_batch::issue_misc47_long_goodbye_enforces_types_mana_value_and_uncounterable_ward"
+    },
+    {
+      "covers": "typed effect, ability, identity, costs and target wiring",
+      "test": "issue_misc47_batch::issue_misc47_maps_each_uncounterable_spell_to_its_complete_effect"
+    },
+    {
+      "covers": "registered identity and printed characteristics",
+      "test": "issue_misc47_batch::issue_misc47_uncounterable_removal_cards_are_registered"
+    },
+    {
+      "test": "issue_misc47_batch::issue_misc47_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "normalized Oracle fingerprint matches the pinned source"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

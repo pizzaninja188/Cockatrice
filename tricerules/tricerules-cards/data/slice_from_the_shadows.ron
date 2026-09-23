@@ -1,0 +1,27 @@
+// Pinned Scryfall Oracle 4d31d3f4-4748-4713-808f-24699fcd7b10; source SHA-256 9611b5d93b20478a0ee46bae8b20a9eb39ee980f0ef4f5f6f6aaa8f7ab010ab2.
+// Oracle text and ward ruling checked against the Murders at Karlov Manor official release notes.
+// CR 107.3 (X chosen on casting), 613.4 (P/T modification), 701.6 (counter), 702.21 (ward), 704.5f (zero toughness).
+(
+  id: "slice_from_the_shadows",
+  name: "Slice from the Shadows",
+  face_id: "slice_from_the_shadows",
+  mana_cost: "{X}{B}",
+  types: ["Instant"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: SpellCannotBeCountered,
+  )],
+  spell_effect: [PumpTarget(
+    power: 0,
+    toughness: 0,
+    scale: Some((basis: Amount("X"), power_per_unit: -1, toughness_per_unit: -1)),
+    subject: Chosen((kind: Creature)),
+  )],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0],
+  )])),
+)

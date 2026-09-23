@@ -1754,6 +1754,7 @@ lone_missionary	0	cast	exercised
 lonely_arroyo	0	ability:0	exercised
 lonely_arroyo	0	land	exercised
 long-bodied_grey_dog	0	cast	exercised
+long_goodbye	0	cast	exercised
 long_lake_nuisance	0	cast	exercised
 longbow_archer	0	cast	exercised
 looming_altisaur	0	cast	exercised
@@ -2682,6 +2683,7 @@ slavering_branchsnapper	0	cast	exercised
 sledge-class_seedship	0	ability:0	exercised
 sledge-class_seedship	0	cast	exercised
 sleight_of_hand	0	cast	exercised
+slice_from_the_shadows	0	cast	exercised
 slick_sequence	0	cast	exercised
 slippery_bogle	0	cast	exercised
 slithering_cryptid	0	cast	exercised
@@ -2900,6 +2902,7 @@ surrak,_elusive_hunter	0	cast	exercised
 surveillance_room	0	ability:0	exercised
 surveillance_room	0	ability:1	exercised
 surveillance_room	0	land	exercised
+suspicious_detonation	0	cast	exercised
 suspicious_shambler	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 suspicious_shambler	0	cast	exercised
 susur_secundi,_void_altar	0	ability:0	exercised

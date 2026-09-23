@@ -1,0 +1,73 @@
+{
+  "format_version": 1,
+  "oracle_id": "91f7672c-3090-48f4-8586-0426341c3159",
+  "spans": [
+    {
+      "start_line": 1,
+      "face_id": "suspicious_detonation",
+      "typed_paths": [
+        "/faces/0/cost_modifiers/0"
+      ],
+      "end_line": 1
+    },
+    {
+      "start_line": 2,
+      "face_id": "suspicious_detonation",
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ],
+      "end_line": 2
+    },
+    {
+      "start_line": 3,
+      "face_id": "suspicious_detonation",
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ],
+      "end_line": 3
+    }
+  ],
+  "primitive_references": [
+    {
+      "typed_path": "/faces/0/cost_modifiers/0",
+      "symbol": "SpellCostModifier::ConditionalGenericReduction"
+    },
+    {
+      "typed_path": "/faces/0/cost_modifiers/0/ConditionalGenericReduction/condition",
+      "symbol": "GameCondition::PermanentsSacrificedThisTurn"
+    },
+    {
+      "typed_path": "/faces/0/static_abilities/0/definition",
+      "symbol": "StaticAbilityDef::SpellCannotBeCountered"
+    },
+    {
+      "typed_path": "/faces/0/spell_effect/0",
+      "symbol": "SpellEffectKind::DamageTarget"
+    },
+    {
+      "typed_path": "/faces/0/targeting",
+      "symbol": "TargetingDef"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "covers": "cost remains {4}{R} absent a controller artifact sacrifice; reduces by {3} after one; opponent sacrifice does not qualify; deals 4 to target creature",
+      "test": "scenario issue_misc47_batch::issue_misc47_suspicious_detonation_uses_only_controller_artifact_sacrifices_this_turn"
+    },
+    {
+      "covers": "typed effect, ability, identity, costs and target wiring",
+      "test": "issue_misc47_batch::issue_misc47_maps_each_uncounterable_spell_to_its_complete_effect"
+    },
+    {
+      "covers": "registered identity and printed characteristics",
+      "test": "issue_misc47_batch::issue_misc47_uncounterable_removal_cards_are_registered"
+    },
+    {
+      "test": "issue_misc47_batch::issue_misc47_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "normalized Oracle fingerprint matches the pinned source"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

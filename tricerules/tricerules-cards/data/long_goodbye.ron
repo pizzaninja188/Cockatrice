@@ -1,0 +1,26 @@
+// Pinned Scryfall Oracle 9d63ba8a-a5cd-4fdb-bba3-95612be0077c; source SHA-256 9611b5d93b20478a0ee46bae8b20a9eb39ee980f0ef4f5f6f6aaa8f7ab010ab2.
+// Oracle text and ward ruling checked against the Murders at Karlov Manor official release notes.
+// CR 115 (target legality), 202.3 (mana value), 701.6 (counter), 701.8 (destroy), 702.21 (ward).
+(
+  id: "long_goodbye",
+  name: "Long Goodbye",
+  face_id: "long_goodbye",
+  mana_cost: "{1}{B}",
+  types: ["Instant"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: SpellCannotBeCountered,
+  )],
+  spell_effect: [Destroy(subject: Chosen((
+    kind: AnyPermanent,
+    permanent_types: [Creature, Planeswalker],
+    max_mana_value: Some(3),
+  )))],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature or planeswalker with mana value 3 or less",
+    effect_indices: [0],
+  )])),
+)

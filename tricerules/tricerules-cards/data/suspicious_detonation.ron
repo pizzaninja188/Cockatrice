@@ -1,0 +1,30 @@
+// Pinned Scryfall Oracle 91f7672c-3090-48f4-8586-0426341c3159; source SHA-256 9611b5d93b20478a0ee46bae8b20a9eb39ee980f0ef4f5f6f6aaa8f7ab010ab2.
+// Oracle text and ward ruling checked against the Murders at Karlov Manor official release notes.
+// CR 601.2f (cost reductions locked before costs are paid), 701.6 (counter), 702.21 (ward), 120.3 (damage).
+(
+  id: "suspicious_detonation",
+  name: "Suspicious Detonation",
+  face_id: "suspicious_detonation",
+  mana_cost: "{4}{R}",
+  types: ["Sorcery"],
+  cost_modifiers: [ConditionalGenericReduction(
+    amount: 3,
+    condition: PermanentsSacrificedThisTurn(
+      players: Controller,
+      permanent_type: Some(Artifact),
+      min: Some(1),
+    ),
+  )],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: SpellCannotBeCountered,
+  )],
+  spell_effect: [DamageTarget(amount: 4, target: (kind: Creature))],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0],
+  )])),
+)
