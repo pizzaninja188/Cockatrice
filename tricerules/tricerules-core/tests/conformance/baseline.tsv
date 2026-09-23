@@ -756,6 +756,7 @@ dimension_x	0	land	exercised
 dimir_guildgate	0	ability:0	exercised
 dimir_guildgate	0	land	exercised
 dinotomaton	0	cast	exercised
+diplomatic_relations	0	cast	exercised
 direct_hit	0	cast	exercised
 diregraf_ghoul	0	cast	exercised
 diresight	0	cast	exercised
@@ -2253,6 +2254,7 @@ qutrub_forayer	0	cast	exercised
 rabanastre,_royal_city	0	ability:0	exercised
 rabanastre,_royal_city	0	land	exercised
 rabid_bite	0	cast	exercised
+rabid_gnaw	0	cast	exercised
 raccoon_rallier	0	ability:0	exercised
 raccoon_rallier	0	cast	exercised
 radiant_strike	0	cast	exercised

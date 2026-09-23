@@ -1,0 +1,37 @@
+(
+  id: "diplomatic_relations",
+  name: "Diplomatic Relations",
+  face_id: "diplomatic_relations",
+  mana_cost: "{2}{G}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(
+      power: 1,
+      toughness: 0,
+      subject: Chosen((kind: Creature, controller: You)),
+    ),
+    GrantKeywords(
+      subject: Chosen((kind: Creature, controller: You)),
+      keywords: [Vigilance],
+    ),
+    CreatureDealsDamageEqualToPower(
+      source: (kind: Creature, controller: You),
+      target: (kind: Creature, controller: Opponent),
+    ),
+  ],
+  targeting: Some((groups: [
+    (
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature you control",
+      effect_indices: [0, 1, 2],
+    ),
+    (
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature an opponent controls",
+      effect_indices: [2],
+      distinct_from: [0],
+    ),
+  ])),
+)

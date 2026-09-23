@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "077ae62d-ed94-4365-a8b7-97fd99cff028",
+  "spans": [
+    {
+      "start_line": 1,
+      "end_line": 1,
+      "face_id": "rabid_gnaw",
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "typed_path": "/faces/0/spell_effect/0",
+      "symbol": "SpellEffectKind::PumpTarget"
+    },
+    {
+      "typed_path": "/faces/0/spell_effect/1",
+      "symbol": "SpellEffectKind::CreatureDealsDamageEqualToPower"
+    },
+    {
+      "typed_path": "/faces/0/targeting",
+      "symbol": "TargetingDef"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "covers": "buffed current power is the damage amount; a now-illegal source target prevents all effects; an illegal damage target leaves the legal source buff",
+      "test": "scenario issue_misc48_batch::issue_misc48_rabid_gnaw_uses_the_buffed_power_and_revalidates_both_targets"
+    },
+    {
+      "covers": "the direct-RON target filters, effect order, damage source and two mandatory target groups",
+      "test": "issue_misc48_batch::issue_misc48_maps_buffs_and_power_damage_to_the_same_creature_targets"
+    },
+    {
+      "covers": "registered identity, mana cost and Instant characteristics",
+      "test": "issue_misc48_batch::issue_misc48_two_target_power_damage_spells_are_registered"
+    },
+    {
+      "covers": "normalized Oracle fingerprint matches the pinned source",
+      "test": "issue_misc48_batch::issue_misc48_batch_fingerprints_match_the_pinned_oracle_text"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

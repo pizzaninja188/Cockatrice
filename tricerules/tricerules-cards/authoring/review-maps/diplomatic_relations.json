@@ -1,0 +1,55 @@
+{
+  "format_version": 1,
+  "oracle_id": "57b75be4-9229-4a48-a59e-a0f812f38637",
+  "spans": [
+    {
+      "start_line": 1,
+      "end_line": 1,
+      "face_id": "diplomatic_relations",
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "typed_path": "/faces/0/spell_effect/0",
+      "symbol": "SpellEffectKind::PumpTarget"
+    },
+    {
+      "typed_path": "/faces/0/spell_effect/1",
+      "symbol": "SpellEffectKind::GrantKeywords"
+    },
+    {
+      "typed_path": "/faces/0/spell_effect/2",
+      "symbol": "SpellEffectKind::CreatureDealsDamageEqualToPower"
+    },
+    {
+      "typed_path": "/faces/0/targeting",
+      "symbol": "TargetingDef"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "covers": "buffed current power determines damage; vigilance and pump both resolve for the own-creature target; target filters require opponent-controlled damage target",
+      "test": "scenario issue_misc48_batch::issue_misc48_diplomatic_relations_grants_vigilance_and_damages_an_opponent_creature"
+    },
+    {
+      "covers": "the direct-RON target filters, effect order, vigilance grant and two mandatory target groups",
+      "test": "issue_misc48_batch::issue_misc48_maps_buffs_and_power_damage_to_the_same_creature_targets"
+    },
+    {
+      "covers": "registered identity, mana cost and Instant characteristics",
+      "test": "issue_misc48_batch::issue_misc48_two_target_power_damage_spells_are_registered"
+    },
+    {
+      "covers": "normalized Oracle fingerprint matches the pinned source",
+      "test": "issue_misc48_batch::issue_misc48_batch_fingerprints_match_the_pinned_oracle_text"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
