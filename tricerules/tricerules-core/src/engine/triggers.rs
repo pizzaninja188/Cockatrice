@@ -1368,12 +1368,13 @@ impl GameEngine {
             }
             GameEvent::DamageDealt { event } => {
                 let source_id = event.source.object_id;
-                let source_generation = self
-                    .state
-                    .zone_change_generation
-                    .get(&source_id)
-                    .copied()
-                    .unwrap_or(0);
+                let source_generation = event.source.zone_change_generation.unwrap_or_else(|| {
+                    self.state
+                        .zone_change_generation
+                        .get(&source_id)
+                        .copied()
+                        .unwrap_or(0)
+                });
                 let source_ref = TriggerObjectRef {
                     object_id: source_id,
                     zone_change_generation: source_generation,
@@ -3374,6 +3375,30 @@ mod tests {
                 zone_change_generation: 0,
                 controller_at_event: 1,
             }
+        );
+        let captured_generation_event = event(DamageClassification::Combat, 1, 2, &["Creature"]);
+        let mut captured_generation_event = captured_generation_event;
+        let GameEvent::DamageDealt {
+            event: damage_event,
+        } = &mut captured_generation_event
+        else {
+            unreachable!("the fixture creates a damage event")
+        };
+        damage_event.source.zone_change_generation = Some(7);
+        engine.state.zone_change_generation.insert(200, 8);
+        let captured_generation =
+            engine.collect_triggers(&captured_generation_event, std::slice::from_ref(&watcher));
+        assert_eq!(
+            captured_generation[0]
+                .trigger_context
+                .observed_object
+                .expect("captured damage source"),
+            TriggerObjectRef {
+                object_id: 200,
+                zone_change_generation: 7,
+                controller_at_event: 1,
+            },
+            "trigger context retains the event's source incarnation after a zone change"
         );
         assert!(engine
             .collect_triggers(

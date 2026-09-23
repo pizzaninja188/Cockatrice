@@ -1976,6 +1976,8 @@ pub struct TurnRecord {
     pub by_player: BTreeMap<PlayerId, PlayerTurnRecord>,
     pub declared_attackers: Vec<TurnObjectFact>,
     pub permanents_entered: Vec<TurnObjectFact>,
+    /// Positive damage events sourced by each physical object incarnation this turn.
+    pub dealt_damage_objects: Vec<(ObjectId, u64)>,
     pub damaged_objects: Vec<(ObjectId, u64)>,
 }
 

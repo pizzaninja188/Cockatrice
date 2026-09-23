@@ -3247,6 +3247,103 @@ mod cast_snapshot_tests {
     }
 
     #[test]
+    fn issue_464_damage_source_predicate_filters_additional_sacrifice_candidates() {
+        let mut e = engine_with_extra(
+            r#"additional_costs: [SacrificePermanent(filter: (kind: Creature, controller: You, dealt_damage_this_turn: Some(true)))],
+                spell_effect: [GainLife(amount: 1)]"#,
+            &[],
+        );
+        let dealt_damage = add(&mut e, 0, "snapshot_faerie", Zone::Battlefield);
+        let no_damage = add(&mut e, 0, "snapshot_faerie", Zone::Battlefield);
+        let opponent_damage = add(&mut e, 1, "snapshot_faerie", Zone::Battlefield);
+        let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
+        let generation = e
+            .state
+            .zone_change_generation
+            .get(&dealt_damage)
+            .copied()
+            .unwrap_or(0);
+        let opponent_generation = e
+            .state
+            .zone_change_generation
+            .get(&opponent_damage)
+            .copied()
+            .unwrap_or(0);
+        let mut dealt_to_player = damage::DamageEvent::noncombat(
+            dealt_damage,
+            0,
+            "Snapshot Faerie",
+            damage::DamageRecipient::Player(1),
+            1,
+        );
+        dealt_to_player.source.zone_change_generation = Some(generation);
+        let mut only_received = damage::DamageEvent::noncombat(
+            opponent_damage,
+            1,
+            "Snapshot Faerie",
+            damage::DamageRecipient::Permanent(no_damage),
+            1,
+        );
+        only_received.source.zone_change_generation = Some(opponent_generation);
+        e.fire_triggers(&[
+            GameEvent::DamageDealt {
+                event: dealt_to_player,
+            },
+            GameEvent::DamageDealt {
+                event: only_received,
+            },
+        ]);
+        e.state.players[1].has_lost = true;
+        assert!(e.state.turn_history.current.damaged_objects.contains(&(
+            no_damage,
+            e.state
+                .zone_change_generation
+                .get(&no_damage)
+                .copied()
+                .unwrap_or(0),
+        )));
+        assert!(e
+            .state
+            .turn_history
+            .current
+            .dealt_damage_objects
+            .contains(&(dealt_damage, generation)));
+        e.state.players[0].mana_pool.black = 1;
+
+        for rejected_candidate in [no_damage, opponent_damage] {
+            let mut rejected = command(&e, spell);
+            let Some(rv1::ruled_command::Cmd::CastSpell(ref mut cast)) = rejected.cmd else {
+                unreachable!()
+            };
+            cast.cost_selections = vec![rv1::CostSelection {
+                cost_index: 0,
+                selection: Some(rv1::cost_selection::Selection::PermanentId(
+                    rejected_candidate,
+                )),
+            }];
+            assert!(matches!(
+                e.apply_command(0, &rejected),
+                Err(EngineError::Illegal(_))
+            ));
+            assert_eq!(e.state.objects[&spell].zone, Zone::Hand);
+        }
+
+        let mut accepted = command(&e, spell);
+        let Some(rv1::ruled_command::Cmd::CastSpell(ref mut cast)) = accepted.cmd else {
+            unreachable!()
+        };
+        cast.cost_selections = vec![rv1::CostSelection {
+            cost_index: 0,
+            selection: Some(rv1::cost_selection::Selection::PermanentId(dealt_damage)),
+        }];
+        e.apply_command(0, &accepted)
+            .expect("the generation recorded as a damage source is a legal sacrifice");
+        assert_eq!(e.state.objects[&dealt_damage].zone, Zone::Graveyard);
+        assert_eq!(e.state.objects[&no_damage].zone, Zone::Battlefield);
+        assert_eq!(e.state.objects[&opponent_damage].zone, Zone::Battlefield);
+    }
+
+    #[test]
     fn issue_166_history_preserves_cast_faces_origins_and_subtypes() {
         let mut e = engine_with_extra(
             r#"flashback_cost: Some("{B}"),

@@ -1225,6 +1225,15 @@ pub(super) fn permanent_matches_filter_characteristics(
                 .contains(&(oid, generation))
                 != required
         })
+        || filter.dealt_damage_this_turn.is_some_and(|required| {
+            let generation = state.zone_change_generation.get(&oid).copied().unwrap_or(0);
+            state
+                .turn_history
+                .current
+                .dealt_damage_objects
+                .contains(&(oid, generation))
+                != required
+        })
         || filter
             .required_counter
             .is_some_and(|counter| object.counter_count(counter) == 0)

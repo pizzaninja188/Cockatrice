@@ -826,6 +826,9 @@ pub struct TargetFilter {
     /// Rooftop Assassin / Downwind Ambusher observe actual damage to this incarnation.
     #[serde(default)]
     pub was_dealt_damage_this_turn: Option<bool>,
+    /// Treacherous Greed / Red Guardian observe this incarnation as a source of actual damage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dealt_damage_this_turn: Option<bool>,
     /// A permanent must currently carry at least one counter of this kind. Floodpits Drowner and
     /// Bounty Hunter-style targeting use the same physical counter predicate as event filters.
     #[serde(default)]
@@ -918,6 +921,7 @@ impl TargetFilter {
                 || self.min_mana_value.is_some()
                 || self.max_mana_value.is_some()
                 || self.was_dealt_damage_this_turn.is_some()
+                || self.dealt_damage_this_turn.is_some()
                 || self.required_counter.is_some()
                 || self
                     .excluded_objects
@@ -1019,6 +1023,7 @@ impl TargetFilter {
             || self.min_mana_value.is_some()
             || self.max_mana_value.is_some()
             || self.was_dealt_damage_this_turn.is_some()
+            || self.dealt_damage_this_turn.is_some()
             || self.required_counter.is_some()
             || self.tapped.is_some()
             || self.combat_role.is_some()
@@ -1140,14 +1145,38 @@ pub(super) fn terminal_filters_have_duplicates<T: PartialEq>(leaves: &[&T]) -> b
 #[cfg(test)]
 mod tests {
     #[test]
+    fn issue_464_optional_source_damage_filter_preserves_legacy_ron() {
+        let filter = TargetFilter::default();
+        let serialized = ron::to_string(&filter).expect("serialize default target filter");
+        let has_source_damage_field = |serialized: &str| {
+            serialized
+                .split(',')
+                .any(|field| field.starts_with("dealt_damage_this_turn:"))
+        };
+        assert!(
+            !has_source_damage_field(&serialized),
+            "the absent optional predicate must not churn existing generated RON: {serialized}"
+        );
+
+        let filter = TargetFilter {
+            dealt_damage_this_turn: Some(true),
+            ..TargetFilter::default()
+        };
+        let serialized = ron::to_string(&filter).expect("serialize source-damage filter");
+        assert!(has_source_damage_field(&serialized));
+    }
+
+    #[test]
     fn issue_176_rejects_contradictory_characteristic_filters() {
         for source in [
             "(min_mana_value: Some(3), max_mana_value: Some(2))",
             "(kind: Creature, excluded_permanent_types: [Creature])",
             "(kind: AnyPlayer, token: Some(true))",
             "(kind: AnyPlayer, was_dealt_damage_this_turn: Some(true))",
+            "(kind: AnyPlayer, dealt_damage_this_turn: Some(true))",
             "(kind: AnyTarget, token: Some(true))",
             "(kind: AnyTarget, max_mana_value: Some(3))",
+            "(kind: AnyTarget, dealt_damage_this_turn: Some(true))",
             "(kind: AnyTarget, excluded_objects: [AttachedObject])",
             "(excluded_objects: [Source, Source])",
             "(token: Some(true), any_of: Some([(kind: Creature), (kind: AnyPermanent)]))",

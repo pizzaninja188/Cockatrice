@@ -12,6 +12,10 @@ use super::*;
 pub(crate) struct DamageSourceSnapshot {
     pub wither: bool,
     pub object_id: ObjectId,
+    /// Captured incarnation of the object that dealt this damage. `None` is reserved for
+    /// sources without a physical object, such as a copy that has no backing card.
+    #[serde(default)]
+    pub zone_change_generation: Option<u64>,
     pub controller: PlayerId,
     pub label: String,
     pub colors: Vec<Color>,
@@ -94,6 +98,7 @@ impl DamageEvent {
             source: DamageSourceSnapshot {
                 wither: false,
                 object_id: source_id,
+                zone_change_generation: None,
                 controller,
                 label: label.into(),
                 colors: Vec::new(),
@@ -283,6 +288,18 @@ impl GameEngine {
     ) -> Option<Vec<CompletedDamage>> {
         for spec in &mut damage {
             let item_source = item.source_permanent_id.unwrap_or(item.id);
+            spec.event.source.zone_change_generation = if spec.event.source.object_id == item_source
+                && item.source_permanent_id.is_some()
+            {
+                Some(item.source_zone_change)
+            } else if spec.event.source.object_id == item.id && item.is_copy {
+                None
+            } else {
+                self.state
+                    .zone_change_generation
+                    .get(&spec.event.source.object_id)
+                    .copied()
+            };
             spec.event.source.wither = if spec.event.source.object_id == item_source {
                 self.resolving_source_has_keyword(item, Keyword::Wither)
             } else {
@@ -1176,5 +1193,127 @@ impl GameEngine {
                 additional_effect: None,
             });
         id
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn source_item(source: ObjectId, generation: u64) -> StackItem {
+        StackItem {
+            id: source,
+            controller: 0,
+            card_id: "grizzly_bears".into(),
+            targets: Vec::new(),
+            ability_text: Some("test damage".into()),
+            source_permanent_id: Some(source),
+            source_owner: Some(0),
+            source_zone_change: generation,
+            source_face_change: 0,
+            ability_index: None,
+            activated_ability: None,
+            triggered_ability: None,
+            is_triggered: false,
+            is_copy: false,
+            face_index: 0,
+            cast_method: SpellCastMethod::Normal,
+            returned_attacker_assignment: None,
+            chosen_x: 0,
+            chosen_modes: Vec::new(),
+            cast_condition_results: Vec::new(),
+            cast_occurrence: None,
+            cast_by: None,
+            cast_cost_receipts: Vec::new(),
+            payment_result: CardResultCohort::default(),
+            search_results: Default::default(),
+            resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
+            trigger_context: TriggerContext::default(),
+        }
+    }
+
+    fn move_bear_to_battlefield(engine: &mut GameEngine) -> ObjectId {
+        let object_id = engine.state.players[0].hand.remove(0);
+        engine.state.players[0].battlefield.push(object_id);
+        engine.state.objects.get_mut(&object_id).unwrap().zone = Zone::Battlefield;
+        object_id
+    }
+
+    #[test]
+    fn issue_464_damage_pipeline_records_only_positive_source_incarnations() {
+        let decks = Some(vec![
+            vec!["grizzly_bears".into(); 7],
+            vec!["island".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(464_003, &[0, 1], 20, decks, true).expect("engine");
+        let source = move_bear_to_battlefield(&mut engine);
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let completed = engine
+            .process_or_park_damage_batch(
+                &source_item(source, generation),
+                vec![DamageSpec {
+                    event: DamageEvent::noncombat(
+                        source,
+                        0,
+                        "Grizzly Bears",
+                        DamageRecipient::Player(1),
+                        1,
+                    ),
+                    source_has_deathtouch: false,
+                    source_has_lifelink: false,
+                }],
+                &mut Vec::new(),
+            )
+            .expect("unprevented damage completes immediately");
+        assert_eq!(completed[0].result.dealt, 1);
+        engine.commit_completed_damage_batch(&completed, &mut Vec::new());
+        assert_eq!(
+            engine.state.turn_history.current.dealt_damage_objects,
+            vec![(source, generation)]
+        );
+
+        let prevented_source = move_bear_to_battlefield(&mut engine);
+        engine.add_damage_prevention(
+            None,
+            "test prevention",
+            DamagePreventionScope::Recipient(1),
+            DamagePreventionAmount::All,
+        );
+        let prevented_generation = engine
+            .state
+            .zone_change_generation
+            .get(&prevented_source)
+            .copied()
+            .unwrap_or(0);
+        let prevented = engine
+            .process_or_park_damage_batch(
+                &source_item(prevented_source, prevented_generation),
+                vec![DamageSpec {
+                    event: DamageEvent::noncombat(
+                        prevented_source,
+                        0,
+                        "Grizzly Bears",
+                        DamageRecipient::Player(1),
+                        1,
+                    ),
+                    source_has_deathtouch: false,
+                    source_has_lifelink: false,
+                }],
+                &mut Vec::new(),
+            )
+            .expect("fully prevented damage completes immediately");
+        assert_eq!(prevented[0].result.dealt, 0);
+        engine.commit_completed_damage_batch(&prevented, &mut Vec::new());
+        assert_eq!(
+            engine.state.turn_history.current.dealt_damage_objects,
+            vec![(source, generation)],
+            "damage prevented to zero does not create a source fact"
+        );
     }
 }

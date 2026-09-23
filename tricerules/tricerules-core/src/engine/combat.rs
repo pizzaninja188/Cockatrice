@@ -1793,11 +1793,14 @@ impl GameEngine {
                 trigger_events.push(event);
             }
         }
-        trigger_events.extend(
-            damage_dealt_events
-                .into_iter()
-                .map(|event| GameEvent::DamageDealt { event }),
-        );
+        trigger_events.extend(damage_dealt_events.into_iter().map(|mut event| {
+            event.source.zone_change_generation = self
+                .state
+                .zone_change_generation
+                .get(&event.source.object_id)
+                .copied();
+            GameEvent::DamageDealt { event }
+        }));
         self.fire_triggers(&trigger_events);
         Ok(())
     }

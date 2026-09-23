@@ -746,33 +746,27 @@ impl GameEngine {
                         .declared_attackers
                         .extend(facts);
                 }
-                GameEvent::DamageDealt { event }
-                    if event.amount > 0
-                        && matches!(event.recipient, damage::DamageRecipient::Permanent(_)) =>
-                {
-                    let damage::DamageRecipient::Permanent(object_id) = event.recipient else {
-                        unreachable!()
-                    };
-                    let identity = (
-                        object_id,
-                        self.state
-                            .zone_change_generation
-                            .get(&object_id)
-                            .copied()
-                            .unwrap_or(0),
-                    );
-                    if !self
-                        .state
-                        .turn_history
-                        .current
-                        .damaged_objects
-                        .contains(&identity)
-                    {
-                        self.state
-                            .turn_history
-                            .current
-                            .damaged_objects
-                            .push(identity);
+                GameEvent::DamageDealt { event } if event.amount > 0 => {
+                    if let Some(generation) = event.source.zone_change_generation {
+                        let source_identity = (event.source.object_id, generation);
+                        let dealt = &mut self.state.turn_history.current.dealt_damage_objects;
+                        if !dealt.contains(&source_identity) {
+                            dealt.push(source_identity);
+                        }
+                    }
+                    if let damage::DamageRecipient::Permanent(object_id) = event.recipient {
+                        let identity = (
+                            object_id,
+                            self.state
+                                .zone_change_generation
+                                .get(&object_id)
+                                .copied()
+                                .unwrap_or(0),
+                        );
+                        let received = &mut self.state.turn_history.current.damaged_objects;
+                        if !received.contains(&identity) {
+                            received.push(identity);
+                        }
                     }
                 }
                 _ => {}
@@ -3466,6 +3460,62 @@ mod tests {
             },
             returned_context,
         ));
+    }
+
+    #[test]
+    fn issue_464_positive_damage_records_the_source_incarnation_only() {
+        let decks = Some(vec![
+            deck_with_cards(&["grizzly_bears"], "forest"),
+            deck_with_cards(&[], "island"),
+        ]);
+        let mut engine = GameEngine::new(464_002, &[0, 1], 20, decks, true).expect("engine");
+        let source = move_to_battlefield(&mut engine, 0, "grizzly_bears");
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let mut positive = damage::DamageEvent::noncombat(
+            source,
+            0,
+            "Grizzly Bears",
+            damage::DamageRecipient::Player(1),
+            1,
+        );
+        positive.source.zone_change_generation = Some(generation);
+        let mut prevented = damage::DamageEvent::combat(
+            source,
+            0,
+            "Grizzly Bears",
+            damage::DamageRecipient::Permanent(source),
+            0,
+        );
+        prevented.source.zone_change_generation = Some(generation);
+
+        // The event keeps the old source incarnation even if the same ObjectId has since changed
+        // zones. Only positive actual damage creates a fact.
+        engine
+            .state
+            .zone_change_generation
+            .insert(source, generation + 1);
+        engine.record_committed_events(&[
+            GameEvent::DamageDealt { event: positive },
+            GameEvent::DamageDealt { event: prevented },
+        ]);
+
+        assert_eq!(
+            engine.state.turn_history.current.dealt_damage_objects,
+            vec![(source, generation)]
+        );
+        assert!(engine.state.turn_history.current.damaged_objects.is_empty());
+        engine.state.turn_history.finish_turn();
+        assert!(engine
+            .state
+            .turn_history
+            .current
+            .dealt_damage_objects
+            .is_empty());
     }
 
     #[test]

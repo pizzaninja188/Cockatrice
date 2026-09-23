@@ -2853,6 +2853,137 @@ mod tests {
     }
 
     #[test]
+    fn issue_464_target_filter_accepts_dealt_damage_predicate() {
+        let filter = issue_176_target("(kind: Creature, dealt_damage_this_turn: Some(true))");
+        assert_eq!(filter.kind, TargetKind::Creature);
+        let decks = Some(vec![
+            vec!["grizzly_bears".into(); 7],
+            vec!["island".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(464_001, &[0, 1], 20, decks, true).unwrap();
+        let bear = engine.state.players[0].hand.remove(0);
+        engine.state.players[0].battlefield.push(bear);
+        engine.state.objects.get_mut(&bear).unwrap().zone = Zone::Battlefield;
+        assert!(
+            !filter_characteristics_match(&engine, &filter, bear),
+            "a source-damage predicate must not match before this object dealt damage"
+        );
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&bear)
+            .copied()
+            .unwrap_or(0);
+        engine
+            .state
+            .turn_history
+            .current
+            .dealt_damage_objects
+            .push((bear, generation));
+        assert!(filter_characteristics_match(&engine, &filter, bear));
+        engine.state.turn_history.finish_turn();
+        assert!(!filter_characteristics_match(&engine, &filter, bear));
+        engine
+            .state
+            .turn_history
+            .current
+            .dealt_damage_objects
+            .push((bear, generation));
+        *engine.state.zone_change_generation.entry(bear).or_default() += 1;
+        assert!(
+            !filter_characteristics_match(&engine, &filter, bear),
+            "a returned permanent is a different object incarnation"
+        );
+    }
+
+    #[test]
+    fn issue_464_opponent_damage_source_is_a_legal_target_only_this_turn() {
+        let filter = issue_176_target(
+            "(kind: Creature, controller: Opponent, dealt_damage_this_turn: Some(true))",
+        );
+        let decks = Some(vec![
+            vec!["grizzly_bears".into(); 7],
+            vec!["grizzly_bears".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(464_004, &[0, 1], 20, decks, true).unwrap();
+        let target = engine.state.players[1].hand.remove(0);
+        engine.state.players[1].battlefield.push(target);
+        engine.state.objects.get_mut(&target).unwrap().zone = Zone::Battlefield;
+        let damaged_permanent = engine.state.players[0].hand.remove(0);
+        engine.state.players[0].battlefield.push(damaged_permanent);
+        engine
+            .state
+            .objects
+            .get_mut(&damaged_permanent)
+            .unwrap()
+            .zone = Zone::Battlefield;
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&target)
+            .copied()
+            .unwrap_or(0);
+        let mut event = damage::DamageEvent::combat(
+            target,
+            1,
+            "Grizzly Bears",
+            damage::DamageRecipient::Permanent(damaged_permanent),
+            1,
+        );
+        event.source.zone_change_generation = Some(generation);
+        engine.fire_triggers(&[GameEvent::DamageDealt { event }]);
+        engine.state.players[0]
+            .battlefield
+            .retain(|object_id| *object_id != damaged_permanent);
+        engine.state.players[0].graveyard.push(damaged_permanent);
+        engine
+            .state
+            .objects
+            .get_mut(&damaged_permanent)
+            .unwrap()
+            .zone = Zone::Graveyard;
+        *engine
+            .state
+            .zone_change_generation
+            .entry(damaged_permanent)
+            .or_default() += 1;
+        let source = TargetSourceIdentity::current(&engine, 999);
+        let effects = [SpellEffectKind::Destroy {
+            subject: EffectSubject::Chosen(Box::new(filter.clone())),
+        }];
+        let targets = compute_ability_targets_with_context(
+            &engine,
+            0,
+            source,
+            &effects,
+            None,
+            TriggerContext::default(),
+        );
+        assert_eq!(
+            targets.groups[0].valid_permanent_ids,
+            vec![target],
+            "the ETB trigger publishes the opponent source that dealt damage"
+        );
+        assert!(target_filter_legal_at_resolution(
+            &engine,
+            &filter,
+            target,
+            0,
+            source,
+            TriggerContext::default()
+        ));
+        engine.state.turn_history.finish_turn();
+        assert!(!target_filter_legal_at_resolution(
+            &engine,
+            &filter,
+            target,
+            0,
+            source,
+            TriggerContext::default()
+        ));
+    }
+
+    #[test]
     fn issue_176_graveyard_predicates_use_card_characteristics() {
         let decks = Some(vec![
             vec!["grizzly_bears".into(); 7],

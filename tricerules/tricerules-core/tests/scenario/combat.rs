@@ -1561,6 +1561,47 @@ fn declare_attackers_skips_blockers_when_no_eligible_blockers() {
 }
 
 #[test]
+fn issue_464_combat_damage_records_the_source_incarnation() {
+    let decks = Some(vec![
+        vec!["grizzly_bears".into(); 7],
+        vec!["island".into(); 7],
+    ]);
+    let mut engine = GameEngine::new(464_005, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut engine);
+    let attacker = put_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    let generation = engine
+        .state
+        .zone_change_generation
+        .entry(attacker)
+        .or_default();
+    *generation += 1; // the fixture moves this real card from hand to the battlefield
+    let generation = *generation;
+    engine
+        .apply_command(0, &primitive_yield())
+        .expect("enter begin combat");
+    pass_both_players(&mut engine);
+    assert_eq!(
+        engine.state.turn_step,
+        tricerules_core::TurnStep::DeclareAttackers
+    );
+
+    engine
+        .apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attacker");
+    pass_both_players(&mut engine); // no eligible blockers; blockers are declared empty
+    pass_both_players(&mut engine); // combat damage resolves
+
+    assert_eq!(engine.state.players[1].life, 18);
+    assert_eq!(
+        engine.state.turn_history.current.dealt_damage_objects,
+        vec![(attacker, generation)],
+        "the combat fast path records the physical source incarnation; turn={}, step={:?}",
+        engine.state.turn,
+        engine.state.turn_step
+    );
+}
+
+#[test]
 fn cannot_add_mana_while_declaring_attackers() {
     let mut e = GameEngine::new(4010, &[0, 1], 20, None, true).expect("new");
     advance_to_declare_attackers(&mut e);
