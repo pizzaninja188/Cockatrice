@@ -173,8 +173,14 @@ impl CharacteristicsEvaluator<'_> {
         let object = self.state.objects.get(&oid)?;
         let mut result = self.characteristics_through_layer_5(oid)?;
 
-        let ordered_effects = self.ordered_effects(oid, &result);
-        self.apply_layer_6_abilities(object, &mut result, &ordered_effects);
+        let pre_layer_6 = result.clone();
+        let layer_6_effects = self.ordered_layer_6_effects(oid, &pre_layer_6);
+        self.apply_layer_6_abilities(object, &mut result, &layer_6_effects);
+        // Layer-7 scopes may inspect current keywords. Resolve their membership only after all
+        // layer-6 additions/removals have been applied; a keyword grant in layer 6 and a P/T
+        // modifier in layer 7 are in different layers, so this adds no 613.8 dependency.
+        let mut ordered_effects = layer_6_effects;
+        ordered_effects.extend(self.ordered_layer_7_effects(oid, &result, &pre_layer_6));
         self.apply_layer_7_power_toughness(oid, object, &mut result, &ordered_effects);
         Some(result)
     }
@@ -497,10 +503,10 @@ impl CharacteristicsEvaluator<'_> {
         }
     }
 
-    /// Active effects in CR 613.7 timestamp order. The original vector index makes equal
-    /// timestamps deterministic. Layer-2 source-controller dependencies are handled by
-    /// `layer_2_controller` before this later-layer pass.
-    fn ordered_effects<'a>(
+    /// Active layer-6 effects in CR 613.7 timestamp order. The original vector index makes equal
+    /// timestamps deterministic. Their affected scope is evaluated from the layer-5 snapshot;
+    /// current-keyword predicates are rejected for layer-6 users until CR 613.8 ordering exists.
+    fn ordered_layer_6_effects<'a>(
         &'a self,
         oid: ObjectId,
         pre_layer_6: &Characteristics,
@@ -516,13 +522,43 @@ impl CharacteristicsEvaluator<'_> {
                     ContinuousEffectKind::Layer6RemoveAllAbilities
                         | ContinuousEffectKind::Layer6AddKeyword(_)
                         | ContinuousEffectKind::Layer6AddProtection(_)
-                        | ContinuousEffectKind::Layer7bSetPt { .. }
+                )
+            })
+            .filter(|(_, effect)| {
+                effect_affects(self.state, self.registry, effect, oid, pre_layer_6)
+            })
+            .filter(|(_, effect)| {
+                self.characteristic_effect_condition_holds(effect, oid, pre_layer_6)
+            })
+            .collect();
+        effects.sort_by_key(|(index, effect)| (effect.timestamp, *index));
+        effects.into_iter().map(|(_, effect)| effect).collect()
+    }
+
+    /// Active layer-7 P/T effects in CR 613.7 timestamp order. Their affected scopes read the
+    /// post-layer-6 snapshot, while existing conditional-effect predicates retain their
+    /// established pre-layer-6 evaluation.
+    fn ordered_layer_7_effects<'a>(
+        &'a self,
+        oid: ObjectId,
+        post_layer_6: &Characteristics,
+        pre_layer_6: &Characteristics,
+    ) -> Vec<&'a ContinuousEffect> {
+        let mut effects: Vec<(usize, &ContinuousEffect)> = self
+            .state
+            .continuous_effects
+            .iter()
+            .enumerate()
+            .filter(|(_, effect)| {
+                matches!(
+                    effect.kind,
+                    ContinuousEffectKind::Layer7bSetPt { .. }
                         | ContinuousEffectKind::PtModify { .. }
                         | ContinuousEffectKind::PtModifyByCount { .. }
                 )
             })
             .filter(|(_, effect)| {
-                effect_affects(self.state, self.registry, effect, oid, pre_layer_6)
+                effect_affects(self.state, self.registry, effect, oid, post_layer_6)
             })
             .filter(|(_, effect)| {
                 self.characteristic_effect_condition_holds(effect, oid, pre_layer_6)
@@ -1342,6 +1378,9 @@ pub(super) fn creature_matches_scope(
         && filter
             .color
             .is_none_or(|value| characteristics.colors.contains(&value))
+        && filter
+            .required_keyword
+            .is_none_or(|value| characteristics.has_keyword(value))
         && name_matches
         && (!filter.requires_any_counter || object.has_any_counter())
         && filter

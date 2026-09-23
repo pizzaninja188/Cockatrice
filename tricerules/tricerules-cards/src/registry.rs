@@ -532,6 +532,14 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 }
             }
         }
+        if let StaticAbilityDef::AnthemKeyword { filter, .. } = ability {
+            if filter.required_keyword.is_some() {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "AnthemKeyword cannot require a current keyword until CR 613.8 layer-6 dependency ordering is implemented".into(),
+                });
+            }
+        }
         if let StaticAbilityDef::SpellGenericReduction {
             amount, condition, ..
         } = ability
@@ -735,6 +743,12 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                         id: card.id.clone(),
                         reason,
                     })?;
+                if filter.required_keyword.is_some() {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "EntersWithCounters creature scopes cannot require a current keyword before layer 6 is applied".into(),
+                    });
+                }
             }
             if amount.card_result_filter().is_some() {
                 return Err(RegistryError::InvalidCard {
@@ -2304,6 +2318,47 @@ mod tests {
     #[test]
     fn embedded_registry_loads() {
         CardRegistry::from_embedded().unwrap();
+    }
+
+    #[test]
+    fn issue_476_rejects_current_keyword_scopes_before_layer_six() {
+        let anthem_keyword = r#"(
+            id: "bad_keyword_anthem",
+            name: "Bad Keyword Anthem",
+            face_id: "bad_keyword_anthem",
+            mana_cost: "{W}",
+            types: ["Creature"],
+            power: 1,
+            toughness: 1,
+            static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                definition: AnthemKeyword(
+                    filter: (required_keyword: Some(Flying)),
+                    keyword: Vigilance,
+                ))],
+        )"#;
+        let error = CardRegistry::from_chunks(&[anthem_keyword])
+            .expect_err("layer-6 keyword anthem cannot depend on a layer-6 keyword");
+        assert!(error.to_string().contains("CR 613.8 layer-6 dependency"));
+
+        let entry_replacement = r#"(
+            id: "bad_keyword_entry_replacement",
+            name: "Bad Keyword Entry Replacement",
+            face_id: "bad_keyword_entry_replacement",
+            mana_cost: "{W}",
+            types: ["Enchantment"],
+            static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                definition: EntersWithCounters(
+                    affected: Creatures((required_keyword: Some(Flying))),
+                    counter: PlusOnePlusOne,
+                    amount: 1,
+                ))],
+        )"#;
+        let error = CardRegistry::from_chunks(&[entry_replacement])
+            .expect_err("entry replacement sees characteristics only through layer 5");
+        assert!(
+            error.to_string().contains("before layer 6 is applied"),
+            "unexpected entry-replacement rejection: {error}"
+        );
     }
 
     #[test]

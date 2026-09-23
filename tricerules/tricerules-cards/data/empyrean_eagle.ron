@@ -1,0 +1,21 @@
+// Pinned Oracle 270d14b2-07bc-46bc-918f-658102265ccf; ruling checked 2026-09-23.
+// CR 613.1f applies flying before the layer-7c power/toughness bonus.
+(
+  id: "empyrean_eagle",
+  name: "Empyrean Eagle",
+  face_id: "empyrean_eagle",
+  mana_cost: "{1}{W}{U}",
+  types: ["Creature", "Bird", "Spirit"],
+  power: 2,
+  toughness: 3,
+  keywords: [Flying],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AnthemPt(
+      filter: (controller: YouControl, required_keyword: Some(Flying), exclude_self: true),
+      delta_power: 1,
+      delta_toughness: 1,
+    ),
+  )],
+)

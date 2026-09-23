@@ -8,5 +8,5 @@
   power: 8,
   toughness: 8,
   keywords: [Trample],
-  static_abilities: [(ability_id:"static_01",presentation:OracleLines([2]),definition:AnthemKeyword(filter:(controller:Some(YouControl),subtype:None,color:None,name:None,required_counter:None,requires_any_counter:false,exclude_self:true,attacking:false),condition:None,keyword:Trample))],
+  static_abilities: [(ability_id:"static_01",presentation:OracleLines([2]),definition:AnthemKeyword(filter:(controller:Some(YouControl),subtype:None,color:None,required_keyword:None,name:None,required_counter:None,requires_any_counter:false,exclude_self:true,attacking:false),condition:None,keyword:Trample))],
 )

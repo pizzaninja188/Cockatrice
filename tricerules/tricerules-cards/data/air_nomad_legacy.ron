@@ -1,0 +1,24 @@
+// Pinned Oracle 9e830359-ab92-4bfd-82b3-d9c67ac80cf7; ruling checked 2026-09-23.
+// Creating the Clue directly does not count as investigating (CR 701.9).
+(
+  id: "air_nomad_legacy",
+  name: "Air Nomad Legacy",
+  face_id: "air_nomad_legacy",
+  mana_cost: "{W}{U}",
+  types: ["Enchantment"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "clue", count: 1)],
+  )],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AnthemPt(
+      filter: (controller: YouControl, required_keyword: Some(Flying)),
+      delta_power: 1,
+      delta_toughness: 1,
+    ),
+  )],
+)

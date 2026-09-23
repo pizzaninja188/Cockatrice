@@ -970,6 +970,234 @@ fn anthem_scope_is_dynamic_for_creatures_entering_later() {
     );
 }
 
+/// Issue #476: a layer-7c anthem scope reads flying after layer-6 keyword effects are applied.
+#[test]
+fn issue_476_flying_anthem_scope_tracks_current_keyword() {
+    use tricerules_cards::primitives::{
+        ContinuousEffectKind, CreatureScopeController, CreatureScopeFilter, EffectDuration,
+    };
+    use tricerules_cards::Keyword;
+    use tricerules_core::{AffectedScope, ContinuousEffect};
+
+    let mut e = anthem_engine(6007, "glorious_anthem");
+    let granted_flyer = inject_creature_on_battlefield(&mut e, 0, "savannah_lions");
+    let grounded = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let opposing_flyer = inject_creature_on_battlefield(&mut e, 1, "savannah_lions");
+
+    let filter = CreatureScopeFilter {
+        controller: Some(CreatureScopeController::YouControl),
+        required_keyword: Some(Keyword::Flying),
+        ..CreatureScopeFilter::default()
+    };
+    let keyword_timestamp = e.state.command_index + 1;
+    let anthem_timestamp = keyword_timestamp + 1;
+    e.state.continuous_effects.extend([
+        ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(granted_flyer),
+            kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Flying),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: keyword_timestamp,
+        },
+        ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(opposing_flyer),
+            kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Flying),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: keyword_timestamp,
+        },
+        ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::CreaturesMatching {
+                reference_player: 0,
+                filter,
+                exclude: None,
+            },
+            kind: ContinuousEffectKind::PtModify {
+                delta_power: 1,
+                delta_toughness: 1,
+            },
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: anthem_timestamp,
+        },
+    ]);
+
+    assert_eq!(e.effective_power(granted_flyer), Some(3));
+    assert_eq!(e.effective_toughness(granted_flyer), Some(3));
+    assert_eq!(e.effective_power(grounded), Some(2));
+    assert_eq!(e.effective_power(opposing_flyer), Some(2));
+
+    e.state
+        .continuous_effects
+        .retain(|effect| effect.timestamp != keyword_timestamp);
+    assert_eq!(
+        e.effective_power(granted_flyer),
+        Some(2),
+        "losing flying removes the anthem while its source remains"
+    );
+}
+
+#[test]
+fn issue_476_air_nomad_creates_one_clue_when_it_enters() {
+    let mut e = anthem_engine(6009, "air_nomad_legacy");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            w: 1,
+            u: 1,
+            ..Default::default()
+        },
+    );
+
+    let index = hand_index_for_card(&e, 0, "air_nomad_legacy");
+    e.apply_command(0, &cast_spell(index, vec![]))
+        .expect("cast Air Nomad Legacy");
+    resolve_entire_stack_two_player(&mut e);
+
+    let clues = battlefield_token_oids(&e, 0, "clue");
+    assert_eq!(clues.len(), 1, "the ETB trigger creates one Clue directly");
+    assert_eq!(
+        e.state.objects[&clues[0]].zone,
+        tricerules_core::Zone::Battlefield
+    );
+}
+
+#[test]
+fn issue_476_air_nomad_buffs_controlled_flyers_after_layer_six() {
+    use tricerules_cards::{ContinuousEffectKind, EffectDuration, Keyword};
+    use tricerules_core::{AffectedScope, ContinuousEffect};
+
+    let mut e = anthem_engine(6010, "air_nomad_legacy");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            w: 1,
+            u: 1,
+            ..Default::default()
+        },
+    );
+    let legacy_index = hand_index_for_card(&e, 0, "air_nomad_legacy");
+    let legacy = e.state.players[0].hand[legacy_index];
+    e.apply_command(0, &cast_spell(legacy_index, vec![]))
+        .expect("cast Air Nomad Legacy");
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.state.objects[&legacy].zone,
+        tricerules_core::Zone::Battlefield
+    );
+
+    let new_flyer = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let grounded = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let opponent_flyer = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let grant_timestamp = e.state.command_index + 1;
+    for object_id in [new_flyer, opponent_flyer] {
+        e.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(object_id),
+            kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Flying),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: grant_timestamp,
+        });
+    }
+
+    assert_eq!(e.effective_power(new_flyer), Some(3));
+    assert_eq!(e.effective_toughness(new_flyer), Some(3));
+    assert_eq!(e.effective_power(grounded), Some(2));
+    assert_eq!(e.effective_power(opponent_flyer), Some(2));
+
+    let snapshot = e.initial_response_batch();
+    let published = snapshot
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::ZoneView(view)) => view
+                .per_player
+                .iter()
+                .find(|player| player.player_id == e.state.players[0].id)
+                .and_then(|player| {
+                    player
+                        .battlefield_objects
+                        .iter()
+                        .find(|object| object.object_id == new_flyer)
+                }),
+            _ => None,
+        })
+        .expect("the public battlefield snapshot contains the flying creature");
+    assert_eq!(published.power, 3);
+    assert_eq!(published.toughness, 3);
+    assert!(published.keywords.iter().any(|keyword| keyword == "Flying"));
+    assert_eq!(published.object_id, new_flyer);
+
+    e.state
+        .continuous_effects
+        .retain(|effect| effect.timestamp != grant_timestamp);
+    assert_eq!(e.effective_power(new_flyer), Some(2));
+}
+
+#[test]
+fn issue_476_empyrean_eagle_buffs_other_controlled_flyers_only() {
+    use tricerules_cards::{ContinuousEffectKind, EffectDuration, Keyword};
+    use tricerules_core::{AffectedScope, ContinuousEffect};
+
+    let mut e = anthem_engine(6011, "empyrean_eagle");
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            w: 1,
+            u: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    let eagle_index = hand_index_for_card(&e, 0, "empyrean_eagle");
+    let eagle = e.state.players[0].hand[eagle_index];
+    e.apply_command(0, &cast_spell(eagle_index, vec![]))
+        .expect("cast Empyrean Eagle");
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.state.objects[&eagle].zone,
+        tricerules_core::Zone::Battlefield
+    );
+
+    let new_flyer = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let grounded = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let opponent_flyer = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    let grant_timestamp = e.state.command_index + 1;
+    for object_id in [new_flyer, opponent_flyer] {
+        e.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(object_id),
+            kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Flying),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: grant_timestamp,
+        });
+    }
+
+    assert_eq!(
+        e.effective_power(eagle),
+        Some(2),
+        "the source excludes itself"
+    );
+    assert_eq!(e.effective_toughness(eagle), Some(3));
+    assert_eq!(e.effective_power(new_flyer), Some(3));
+    assert_eq!(e.effective_toughness(new_flyer), Some(3));
+    assert_eq!(e.effective_power(grounded), Some(2));
+    assert_eq!(e.effective_power(opponent_flyer), Some(2));
+}
+
 /// P1 LTB drain: bouncing Glorious Anthem off the battlefield removes its continuous effect
 /// (CR 604.3/611.3) — the buff disappears the moment the source leaves.
 #[test]

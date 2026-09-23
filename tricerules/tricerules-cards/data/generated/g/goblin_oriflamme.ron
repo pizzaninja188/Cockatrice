@@ -5,5 +5,5 @@
   face_id: "goblin_oriflamme",
   mana_cost: "{1}{R}",
   types: ["Enchantment"],
-  static_abilities: [(ability_id:"static_01",presentation:OracleLines([1]),definition:AnthemPt(filter:(controller:Some(YouControl),subtype:None,color:None,name:None,required_counter:None,requires_any_counter:false,exclude_self:false,attacking:true),condition:None,delta_power:1,delta_toughness:0))],
+  static_abilities: [(ability_id:"static_01",presentation:OracleLines([1]),definition:AnthemPt(filter:(controller:Some(YouControl),subtype:None,color:None,required_keyword:None,name:None,required_counter:None,requires_any_counter:false,exclude_self:false,attacking:true),condition:None,delta_power:1,delta_toughness:0))],
 )

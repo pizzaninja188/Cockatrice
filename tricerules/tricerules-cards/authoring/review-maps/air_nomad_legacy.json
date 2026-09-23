@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "9e830359-ab92-4bfd-82b3-d9c67ac80cf7",
+  "spans": [
+    {
+      "face_id": "air_nomad_legacy",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "air_nomad_legacy",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CreatureScopeFilter.required_keyword",
+      "typed_path": "/faces/0/static_abilities/0/definition/AnthemPt/filter/required_keyword"
+    }
+  ],
+  "tokens": ["clue"],
+  "semantic_fixtures": [
+    {
+      "test": "issue_476_flying_anthems::issue_476_air_nomad_creates_a_clue_and_buffs_only_current_flyers",
+      "covers": "complete registered identity, direct Clue token effect, and controlled current-Flying anthem definition"
+    },
+    {
+      "test": "scenario counters_and_pump::issue_476_air_nomad_creates_one_clue_when_it_enters",
+      "covers": "accepted cast, ETB trigger, bounded resolution, and exactly one Clue token"
+    },
+    {
+      "test": "scenario counters_and_pump::issue_476_air_nomad_buffs_controlled_flyers_after_layer_six",
+      "covers": "controlled creature with layer-6 Flying receives +1/+1; grounded and opposing flyers do not; losing Flying removes the bonus; public snapshot retains the engine object id and effective characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

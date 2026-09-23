@@ -7,5 +7,5 @@
   types: ["Creature", "Cat", "Warrior"],
   power: 4,
   toughness: 3,
-  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [PumpAll(filter:(controller:Some(YouControl),subtype:None,color:None,name:None,required_counter:None,requires_any_counter:false,exclude_self:false,attacking:false),power:2,toughness:1)])],
+  triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield, effect: [PumpAll(filter:(controller:Some(YouControl),subtype:None,color:None,required_keyword:None,name:None,required_counter:None,requires_any_counter:false,exclude_self:false,attacking:false),power:2,toughness:1)])],
 )

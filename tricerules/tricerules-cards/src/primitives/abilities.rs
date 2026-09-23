@@ -1425,6 +1425,11 @@ pub struct CreatureScopeFilter {
     /// If `Some`, only creatures of this color (Crusade = White, Bad Moon = Black).
     #[serde(default)]
     pub color: Option<Color>,
+    /// If `Some`, only creatures with this keyword in their current derived characteristics.
+    /// Layer-7 power/toughness scopes read this after layer 6 (Air Nomad Legacy and Empyrean
+    /// Eagle). Same-layer keyword dependencies remain rejected until CR 613.8 ordering exists.
+    #[serde(default)]
+    pub required_keyword: Option<Keyword>,
     /// If `Some`, only creatures whose current layer-one copiable face has this name. Pack
     /// Mastiff and Cylian Sunsinger use name-selected resolving effects; copied permanents match
     /// the name they acquired rather than their physical card definition id.

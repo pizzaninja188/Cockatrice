@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "270d14b2-07bc-46bc-918f-658102265ccf",
+  "spans": [
+    {
+      "face_id": "empyrean_eagle",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords/0"
+      ]
+    },
+    {
+      "face_id": "empyrean_eagle",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "CreatureScopeFilter.required_keyword",
+      "typed_path": "/faces/0/static_abilities/0/definition/AnthemPt/filter/required_keyword"
+    },
+    {
+      "symbol": "CreatureScopeFilter.exclude_self",
+      "typed_path": "/faces/0/static_abilities/0/definition/AnthemPt/filter/exclude_self"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "issue_476_flying_anthems::issue_476_empyrean_eagle_excludes_itself_from_its_flying_anthem",
+      "covers": "complete registered identity, printed Flying, and other-controlled-flyers scope with source exclusion"
+    },
+    {
+      "test": "scenario counters_and_pump::issue_476_empyrean_eagle_buffs_other_controlled_flyers_only",
+      "covers": "printed Eagle remains 2/3; a controlled flyer granted Flying in layer 6 gets +1/+1; the grounded creature and opposing flyer do not"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -51,6 +51,7 @@ agna_qela	0	ability:0	exercised
 agna_qela	0	ability:1	exercised
 agna_qela	0	land	exercised
 air_elemental	0	cast	exercised
+air_nomad_legacy	0	cast	exercised
 air_response_unit	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
 air_response_unit	0	cast	exercised
 airbending_lesson	0	cast	exercised
@@ -883,6 +884,7 @@ elvish_visionary	0	cast	exercised
 elvish_warrior	0	cast	exercised
 embermouth_sentinel	0	cast	exercised
 emerge_from_the_cocoon	0	cast	exercised
+empyrean_eagle	0	cast	exercised
 encroaching_dragonstorm	0	cast	exercised
 endless_one	0	cast	exercised
 enduring_curiosity	0	cast	exercised

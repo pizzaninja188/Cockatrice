@@ -6,5 +6,5 @@
   mana_cost: "{1}{R}{W}",
   types: ["Enchantment"],
   triggered_abilities: [(ability_id:"triggered_01",presentation:OracleLines([2]),trigger:WheneverPermanentEntersBattlefield(controller:Controller,filter:(permanent_type:Some(Creature),required_subtypes:[],exclude_source:false,source_only:false,excluded_types:[],any_subtypes:[],token:None,owner:None,any_of:None),creature_filter:None),effect:[DamagePlayer(amount:1,who:EachOpponent)],modal:None,targeting:None,may:false,intervening_if:None,triggers_only_once:false,max_triggers_per_turn:None)],
-  static_abilities: [(ability_id:"static_01",presentation:OracleLines([1]),definition:AnthemPt(filter:(controller:Some(YouControl),subtype:None,color:None,name:None,required_counter:None,requires_any_counter:false,exclude_self:false,attacking:false),condition:None,delta_power:1,delta_toughness:1))],
+  static_abilities: [(ability_id:"static_01",presentation:OracleLines([1]),definition:AnthemPt(filter:(controller:Some(YouControl),subtype:None,color:None,required_keyword:None,name:None,required_counter:None,requires_any_counter:false,exclude_self:false,attacking:false),condition:None,delta_power:1,delta_toughness:1))],
 )
