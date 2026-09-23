@@ -1,0 +1,25 @@
+(
+  id: "uncle_iroh",
+  name: "Uncle Iroh",
+  face_id: "uncle_iroh",
+  supertypes: ["Legendary"],
+  mana_cost: "{1}{R/G}{R/G}",
+  types: ["Creature", "Human", "Noble", "Ally"],
+  power: 4,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [AddMana(amount: (r: 1), retention: EndOfCombat)],
+  )],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: SpellGenericReduction(
+      casters: Controller,
+      spell_filter: Some((required_subtypes: ["Lesson"])),
+      amount: 1,
+    ),
+  )],
+)

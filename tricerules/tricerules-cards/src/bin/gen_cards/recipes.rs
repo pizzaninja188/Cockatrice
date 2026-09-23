@@ -17966,7 +17966,7 @@ fn match_static_spell_reduction_second_spell(
         presentation: context.presentation.clone(),
         definition: StaticAbilityDef::SpellGenericReduction {
             casters: RelativePlayerSet::Controller,
-            spell_type: None,
+            spell_filter: None,
             amount: Amount::Fixed(amount),
             condition: Some(GameCondition::SpellsCastThisTurn {
                 players: RelativePlayerSet::Controller,

@@ -1,0 +1,19 @@
+(
+  id: "geyser_drake",
+  name: "Geyser Drake",
+  face_id: "geyser_drake",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Drake"],
+  power: 2,
+  toughness: 3,
+  keywords: [Flying],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: SpellGenericReduction(
+      casters: Controller,
+      amount: 1,
+      condition: Some(ActivePlayer(players: Opponents)),
+    ),
+  )],
+)

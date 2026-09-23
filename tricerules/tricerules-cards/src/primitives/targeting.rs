@@ -496,6 +496,84 @@ pub struct StackSpellFilter {
     pub max_mana_value: Option<u32>,
 }
 
+/// Spell characteristics that qualify for a source-owned cast-cost reduction (CR 601.2f).
+/// Conditions inside one leaf compose with AND; a flat `any_of` composes distinct leaves with OR.
+/// This is narrower than [`StackSpellFilter`] because mana-value bounds are not part of the
+/// static reduction cohort. Ballyrush Banneret and Dragonlord's Servant use subtype predicates;
+/// the five color-crystal reductions use `is_color`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct SpellCostFilter {
+    /// A pure, flat OR. Ballyrush Banneret's Kithkin/Soldier clauses share one ability instance,
+    /// so a spell matching both alternatives is still one match for that ability.
+    #[serde(default)]
+    pub any_of: Option<Vec<Self>>,
+    #[serde(default)]
+    pub card_type: Option<CardTypeFilter>,
+    /// CR 105.2: matches one of a spell's current colors, including multicolored spells.
+    #[serde(default)]
+    pub is_color: Option<Color>,
+    /// Every listed subtype must match. Use `any_of` for an Oracle `A or B` sentence.
+    #[serde(default)]
+    pub required_subtypes: Vec<String>,
+}
+
+impl SpellCostFilter {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        fn visit<'a>(
+            filter: &'a SpellCostFilter,
+            leaves: &mut Vec<&'a SpellCostFilter>,
+        ) -> Result<(), String> {
+            if let Some(branches) = &filter.any_of {
+                let mut leaf_fields = filter.clone();
+                leaf_fields.any_of = None;
+                if leaf_fields != SpellCostFilter::default() || branches.len() < 2 {
+                    return Err(
+                        "spell cost filter any_of requires a pure OR with at least two alternatives"
+                            .into(),
+                    );
+                }
+                for branch in branches {
+                    if branch.any_of.is_some() {
+                        return Err("spell cost filter any_of must be flat".into());
+                    }
+                    visit(branch, leaves)?;
+                }
+                return Ok(());
+            }
+            if filter.card_type.is_none()
+                && filter.is_color.is_none()
+                && filter.required_subtypes.is_empty()
+            {
+                return Err("spell cost filter leaf requires at least one predicate".into());
+            }
+            if filter
+                .required_subtypes
+                .iter()
+                .any(|subtype| subtype.trim().is_empty())
+            {
+                return Err("spell cost filter subtype names must not be empty".into());
+            }
+            let mut subtypes = filter.required_subtypes.iter().collect::<Vec<_>>();
+            subtypes.sort_unstable();
+            if subtypes.windows(2).any(|pair| pair[0] == pair[1]) {
+                return Err("spell cost filter cannot repeat a required subtype".into());
+            }
+            if leaves.contains(&filter) {
+                return Err("spell cost filter cannot repeat an alternative".into());
+            }
+            leaves.push(filter);
+            Ok(())
+        }
+
+        visit(self, &mut Vec::new())
+    }
+
+    pub fn is_unrestricted(&self) -> bool {
+        self == &Self::default()
+    }
+}
+
 impl StackSpellFilter {
     pub(crate) fn validate(&self) -> Result<(), String> {
         fn visit<'a>(

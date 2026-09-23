@@ -26,7 +26,7 @@
     presentation: OracleLines([3]),
     definition: SpellGenericReduction(
       casters: Controller,
-      spell_type: Some(InstantOrSorcery),
+      spell_filter: Some((card_type: Some(InstantOrSorcery))),
       amount: 1,
     ),
   )],

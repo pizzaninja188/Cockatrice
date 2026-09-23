@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "411b9158-e427-4099-bd30-3fbb22edb553",
+  "spans": [
+    {
+      "face_id": "geyser_drake",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/keywords"]
+    },
+    {
+      "face_id": "geyser_drake",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/static_abilities/0/definition"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "StaticAbilityDef::SpellGenericReduction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_341_static_spell_cost_filters::issue_341_geyser_drake_uses_the_active_players_opponent_set",
+      "covers": "the controller receives the generic reduction during the opponent's turn only"
+    },
+    {
+      "test": "issue_341_static_spell_cost_filter::issue_341_batch_maps_definitions",
+      "covers": "reviewed printed characteristics, Flying, and opponent-turn condition"
+    },
+    {
+      "test": "issue_341_static_spell_cost_filter::issue_341_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

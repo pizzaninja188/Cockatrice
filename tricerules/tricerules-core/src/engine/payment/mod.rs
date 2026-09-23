@@ -21,6 +21,66 @@ pub(in crate::engine) use transaction::{card_result_entry, PaidCardCost, Prepare
 use super::*;
 use tricerules_cards::ManaSpendingRestriction;
 
+fn spell_cost_filter_matches(
+    filter: &SpellCostFilter,
+    characteristics: &super::characteristics::Characteristics,
+) -> bool {
+    if let Some(alternatives) = &filter.any_of {
+        return alternatives
+            .iter()
+            .any(|alternative| spell_cost_filter_matches(alternative, characteristics));
+    }
+    filter.card_type.is_none_or(|card_type| {
+        card_type_filter_matches_characteristics(card_type, characteristics)
+    }) && filter
+        .is_color
+        .is_none_or(|color| characteristics.colors.contains(&color))
+        && filter
+            .required_subtypes
+            .iter()
+            .all(|subtype| characteristics.has_type(subtype))
+}
+
+fn card_type_filter_matches_characteristics(
+    filter: CardTypeFilter,
+    characteristics: &Characteristics,
+) -> bool {
+    match filter {
+        CardTypeFilter::BasicLand => {
+            characteristics.has_type("Land")
+                && characteristics
+                    .supertypes
+                    .iter()
+                    .any(|value| value == "Basic")
+        }
+        CardTypeFilter::Land => characteristics.has_type("Land"),
+        CardTypeFilter::Enchantment => characteristics.has_type("Enchantment"),
+        CardTypeFilter::Instant => characteristics.has_type("Instant"),
+        CardTypeFilter::Sorcery => characteristics.has_type("Sorcery"),
+        CardTypeFilter::InstantOrSorcery => {
+            characteristics.has_type("Instant") || characteristics.has_type("Sorcery")
+        }
+        CardTypeFilter::Creature => characteristics.is_creature(),
+        CardTypeFilter::Artifact => characteristics.is_artifact(),
+        CardTypeFilter::Planeswalker => characteristics.has_type("Planeswalker"),
+        CardTypeFilter::Battle => characteristics.has_type("Battle"),
+        CardTypeFilter::Nonland => !characteristics.has_type("Land"),
+        CardTypeFilter::NonlandPermanent => {
+            !characteristics.has_type("Land")
+                && [
+                    "Artifact",
+                    "Battle",
+                    "Creature",
+                    "Enchantment",
+                    "Planeswalker",
+                ]
+                .iter()
+                .any(|kind| characteristics.has_type(kind))
+        }
+        CardTypeFilter::Noncreature => !characteristics.is_creature(),
+    }
+}
+
 /// CR 118.7 / 702.193: automatic reductions used while determining an activated ability's
 /// total mana cost. The six fixed slots are W, U, B, R, G, and C; generic reductions are
 /// accumulated separately so they compose with existing conditional reductions.
@@ -121,39 +181,8 @@ fn mana_filter_matches_characteristics(
     filter: &ManaSpendFilter,
     characteristics: &Characteristics,
 ) -> bool {
-    filter.card_type.is_none_or(|card_type| match card_type {
-        CardTypeFilter::BasicLand => {
-            characteristics.has_type("Land")
-                && characteristics
-                    .supertypes
-                    .iter()
-                    .any(|value| value == "Basic")
-        }
-        CardTypeFilter::Land => characteristics.has_type("Land"),
-        CardTypeFilter::Enchantment => characteristics.has_type("Enchantment"),
-        CardTypeFilter::Instant => characteristics.has_type("Instant"),
-        CardTypeFilter::Sorcery => characteristics.has_type("Sorcery"),
-        CardTypeFilter::InstantOrSorcery => {
-            characteristics.has_type("Instant") || characteristics.has_type("Sorcery")
-        }
-        CardTypeFilter::Creature => characteristics.is_creature(),
-        CardTypeFilter::Artifact => characteristics.is_artifact(),
-        CardTypeFilter::Planeswalker => characteristics.has_type("Planeswalker"),
-        CardTypeFilter::Battle => characteristics.has_type("Battle"),
-        CardTypeFilter::Nonland => !characteristics.has_type("Land"),
-        CardTypeFilter::NonlandPermanent => {
-            !characteristics.has_type("Land")
-                && [
-                    "Artifact",
-                    "Battle",
-                    "Creature",
-                    "Enchantment",
-                    "Planeswalker",
-                ]
-                .iter()
-                .any(|kind| characteristics.has_type(kind))
-        }
-        CardTypeFilter::Noncreature => !characteristics.is_creature(),
+    filter.card_type.is_none_or(|card_type| {
+        card_type_filter_matches_characteristics(card_type, characteristics)
     }) && filter
         .subtype
         .as_ref()
@@ -832,23 +861,26 @@ impl GameEngine {
             .flat_map(|candidate| candidate.battlefield.iter().copied())
             .collect::<Vec<_>>();
         sources.sort_unstable();
+        let spell_characteristics = super::characteristics::spell_cast_characteristics(
+            &self.state,
+            self.registry,
+            source_oid,
+            player,
+            face,
+        );
         sources.into_iter().fold(intrinsic, |total, source_id| {
             let Some(source_controller) = self.controller_of(source_id) else {
                 return total;
             };
-            let Some(source_face) = self.effective_face(source_id) else {
-                return total;
-            };
-            source_face
-                .static_abilities
-                .iter()
+            self.active_static_ability_definitions(source_id)
+                .into_iter()
                 .fold(total, |total, ability| {
                     let StaticAbilityDef::SpellGenericReduction {
                         casters,
-                        spell_type,
+                        spell_filter,
                         amount,
                         condition,
-                    } = &ability.definition
+                    } = &ability
                     else {
                         return total;
                     };
@@ -861,7 +893,9 @@ impl GameEngine {
                         RelativePlayerSet::TargetedPlayer { .. } => false,
                     };
                     if !caster_matches
-                        || spell_type.is_some_and(|card_type| !face.matches_card_type(card_type))
+                        || spell_filter.as_ref().is_some_and(|filter| {
+                            !spell_cost_filter_matches(filter, &spell_characteristics)
+                        })
                     {
                         return total;
                     }
@@ -1009,5 +1043,118 @@ mod restricted_mana_filter_tests {
         assert!(mana_filter_matches_face(&filter, &chandra));
         assert!(!mana_filter_matches_face(&filter, &jaya));
         assert!(!mana_filter_matches_face(&filter, &elemental_named_chandra));
+    }
+}
+
+#[cfg(test)]
+mod spell_cost_filter_tests {
+    use super::*;
+    use crate::state::{AffectedScope, ContinuousEffect};
+    use tricerules_cards::primitives::{Color, TypeLineReplacement};
+    use tricerules_cards::PermanentTypeFilter;
+
+    #[test]
+    fn spell_cost_filters_use_current_type_and_color_characteristics() {
+        let deck = |card_id: &str| vec![card_id.to_string(); 20];
+        let mut engine = GameEngine::new(
+            341_006,
+            &[0, 1],
+            20,
+            Some(vec![deck("airbending_lesson"), deck("forest")]),
+            true,
+        )
+        .expect("engine");
+        let spell_oid = engine.state.players[0].hand[0];
+        let face = engine
+            .registry
+            .get("airbending_lesson")
+            .expect("Lesson card")
+            .primary_face();
+        let white = SpellCostFilter {
+            is_color: Some(Color::White),
+            ..Default::default()
+        };
+        let red = SpellCostFilter {
+            is_color: Some(Color::Red),
+            ..Default::default()
+        };
+        let printed = super::super::characteristics::spell_cast_characteristics(
+            &engine.state,
+            engine.registry,
+            spell_oid,
+            0,
+            face,
+        );
+        assert!(spell_cost_filter_matches(&white, &printed));
+        assert!(!spell_cost_filter_matches(&red, &printed));
+        let hybrid_face = engine
+            .registry
+            .get("uncle_iroh")
+            .expect("hybrid red-green spell")
+            .primary_face();
+        let hybrid = super::super::characteristics::spell_cast_characteristics(
+            &engine.state,
+            engine.registry,
+            spell_oid,
+            0,
+            hybrid_face,
+        );
+        assert!(
+            spell_cost_filter_matches(&red, &hybrid),
+            "a color filter matches one color of a multicolored spell"
+        );
+
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(spell_oid),
+            kind: ContinuousEffectKind::Layer5SetColors(vec![Color::Red]),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1,
+        });
+        let changed_color = super::super::characteristics::spell_cast_characteristics(
+            &engine.state,
+            engine.registry,
+            spell_oid,
+            0,
+            face,
+        );
+        assert!(spell_cost_filter_matches(&red, &changed_color));
+        assert!(!spell_cost_filter_matches(&white, &changed_color));
+
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(spell_oid),
+            kind: ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+                card_types: vec![PermanentTypeFilter::Artifact],
+                creature_types: vec![],
+            }),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 2,
+        });
+        let changed_type = super::super::characteristics::spell_cast_characteristics(
+            &engine.state,
+            engine.registry,
+            spell_oid,
+            0,
+            face,
+        );
+        assert!(spell_cost_filter_matches(
+            &SpellCostFilter {
+                card_type: Some(CardTypeFilter::Artifact),
+                ..Default::default()
+            },
+            &changed_type,
+        ));
+        assert!(!spell_cost_filter_matches(
+            &SpellCostFilter {
+                card_type: Some(CardTypeFilter::Instant),
+                ..Default::default()
+            },
+            &changed_type,
+        ));
     }
 }

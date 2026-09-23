@@ -1,0 +1,23 @@
+(
+  id: "ballyrush_banneret",
+  name: "Ballyrush Banneret",
+  face_id: "ballyrush_banneret",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Kithkin", "Soldier"],
+  power: 2,
+  toughness: 1,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: SpellGenericReduction(
+      casters: Controller,
+      spell_filter: Some((
+        any_of: Some([
+          (required_subtypes: ["Kithkin"]),
+          (required_subtypes: ["Soldier"]),
+        ]),
+      )),
+      amount: 1,
+    ),
+  )],
+)

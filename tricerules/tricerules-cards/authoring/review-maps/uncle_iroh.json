@@ -1,0 +1,51 @@
+{
+  "format_version": 1,
+  "oracle_id": "8a98ddac-7341-4118-b188-51d8d03afd1d",
+  "spans": [
+    {
+      "face_id": "uncle_iroh",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0"
+      ]
+    },
+    {
+      "face_id": "uncle_iroh",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/static_abilities/0/definition"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::AddMana",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::SpellGenericReduction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_341_static_spell_cost_filters::issue_341_uncle_iroh_reduces_lessons_and_firebending_adds_combat_mana",
+      "covers": "Lesson-only discount and Firebending's stack trigger adds red mana retained through end of combat"
+    },
+    {
+      "test": "issue_341_static_spell_cost_filter::issue_341_batch_maps_definitions",
+      "covers": "reviewed printed characteristics, Firebending, and Lesson reduction"
+    },
+    {
+      "test": "issue_341_static_spell_cost_filter::issue_341_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

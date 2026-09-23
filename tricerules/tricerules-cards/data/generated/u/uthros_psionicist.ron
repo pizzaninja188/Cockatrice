@@ -7,5 +7,5 @@
   types: ["Creature", "Jellyfish", "Scientist"],
   power: 2,
   toughness: 4,
-  static_abilities: [(ability_id:"static_01",presentation:OracleLines([1]),definition:SpellGenericReduction(casters:Controller,spell_type:None,amount:2,condition:Some(SpellsCastThisTurn(players:Controller,filter:(any_of:None,card_type:None,is_color:None,targeted_permanent_type:None,required_subtypes:[],min_mana_value:None,max_mana_value:None,origin:None),min:Some(1),max:Some(1)))))],
+  static_abilities: [(ability_id:"static_01",presentation:OracleLines([1]),definition:SpellGenericReduction(casters:Controller,spell_filter:None,amount:2,condition:Some(SpellsCastThisTurn(players:Controller,filter:(any_of:None,card_type:None,is_color:None,targeted_permanent_type:None,required_subtypes:[],min_mana_value:None,max_mana_value:None,origin:None),min:Some(1),max:Some(1)))))],
 )

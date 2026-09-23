@@ -1,0 +1,34 @@
+{
+  "format_version": 1,
+  "oracle_id": "0ad27d0e-b6c3-4c3f-a389-285d889b6a65",
+  "spans": [
+    {
+      "face_id": "ballyrush_banneret",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0/definition"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::SpellGenericReduction",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_341_static_spell_cost_filters::issue_341_ballyrush_matches_subtype_or_once_per_source_and_casts_at_zero_generic",
+      "covers": "Kithkin OR Soldier matching, one reduction for a Kithkin Soldier, source stacking, nonmatches, and zero generic cost"
+    },
+    {
+      "test": "issue_341_static_spell_cost_filter::issue_341_batch_maps_definitions",
+      "covers": "reviewed printed characteristics and exact subtype OR definition"
+    },
+    {
+      "test": "issue_341_static_spell_cost_filter::issue_341_batch_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle text fingerprint"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

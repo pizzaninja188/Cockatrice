@@ -254,7 +254,7 @@ fn issue_460_uthros_psionicist_reduces_only_the_second_spell() {
         ability.definition,
         StaticAbilityDef::SpellGenericReduction {
             casters: RelativePlayerSet::Controller,
-            spell_type: None,
+            spell_filter: None,
             amount: Amount::Fixed(2),
             condition: Some(GameCondition::SpellsCastThisTurn {
                 players: RelativePlayerSet::Controller,
@@ -321,7 +321,7 @@ fn issue_460_handwritten_anchors_keep_the_recipe_shapes() {
         reduction.definition,
         StaticAbilityDef::SpellGenericReduction {
             casters: RelativePlayerSet::Controller,
-            spell_type: None,
+            spell_filter: None,
             amount: Amount::Fixed(1),
             condition: Some(GameCondition::SpellsCastThisTurn {
                 players: RelativePlayerSet::Controller,

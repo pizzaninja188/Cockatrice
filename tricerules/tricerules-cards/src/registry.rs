@@ -545,7 +545,10 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             }
         }
         if let StaticAbilityDef::SpellGenericReduction {
-            amount, condition, ..
+            amount,
+            condition,
+            spell_filter,
+            ..
         } = ability
         {
             amount
@@ -557,6 +560,21 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             if let Some(condition) = condition {
                 condition
                     .validate_live()
+                    .map_err(|reason| RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    })?;
+            }
+            if let Some(filter) = spell_filter {
+                if filter.is_unrestricted() {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "SpellGenericReduction spell_filter must constrain the spell"
+                            .into(),
+                    });
+                }
+                filter
+                    .validate()
                     .map_err(|reason| RegistryError::InvalidCard {
                         id: card.id.clone(),
                         reason,

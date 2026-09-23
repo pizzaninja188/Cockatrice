@@ -3,8 +3,8 @@
 use super::{
     AbilityCost, ActivatedCostModifier, Amount, CardTypeFilter, CastCostReceiptCondition, Color,
     CounterKind, EffectContext, GameCondition, Keyword, ObjectCastCostKind, PermanentEventFilter,
-    PowerComparison, RelativePlayerSet, SpellEffectKind, StackSpellFilter, TargetController,
-    TargetFilter, TargetKind, TargetingDef,
+    PowerComparison, RelativePlayerSet, SpellCostFilter, SpellEffectKind, StackSpellFilter,
+    TargetController, TargetFilter, TargetKind, TargetingDef,
 };
 use crate::{AbilityId, AbilityPresentation, ManaAmount, ModalDef};
 use serde::{Deserialize, Serialize};
@@ -1761,11 +1761,12 @@ pub enum StaticAbilityDef {
     },
     /// CR 601.2f: spells cast by the selected players receive a fixed generic reduction while
     /// this permanent remains on the battlefield. Mocking Sprite filters by spell type;
-    /// Highspire Bell-Ringer additionally gates the reduction on committed turn history.
+    /// Ballyrush Banneret and Dragonlord's Servant filter by subtype; Highspire Bell-Ringer
+    /// additionally gates the reduction on committed turn history.
     SpellGenericReduction {
         casters: RelativePlayerSet,
         #[serde(default)]
-        spell_type: Option<CardTypeFilter>,
+        spell_filter: Option<SpellCostFilter>,
         amount: Amount,
         #[serde(default)]
         condition: Option<GameCondition>,

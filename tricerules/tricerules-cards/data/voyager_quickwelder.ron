@@ -1,0 +1,18 @@
+(
+  id: "voyager_quickwelder",
+  name: "Voyager Quickwelder",
+  face_id: "voyager_quickwelder",
+  mana_cost: "{2}{W}",
+  types: ["Artifact", "Creature", "Robot", "Artificer"],
+  power: 2,
+  toughness: 4,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: SpellGenericReduction(
+      casters: Controller,
+      spell_filter: Some((card_type: Some(Artifact))),
+      amount: 1,
+    ),
+  )],
+)

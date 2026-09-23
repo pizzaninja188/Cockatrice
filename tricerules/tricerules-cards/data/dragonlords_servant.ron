@@ -1,0 +1,18 @@
+(
+  id: "dragonlords_servant",
+  name: "Dragonlord's Servant",
+  face_id: "dragonlords_servant",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Goblin", "Shaman"],
+  power: 1,
+  toughness: 3,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: SpellGenericReduction(
+      casters: Controller,
+      spell_filter: Some((required_subtypes: ["Dragon"])),
+      amount: 1,
+    ),
+  )],
+)

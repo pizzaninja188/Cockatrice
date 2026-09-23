@@ -139,6 +139,47 @@ pub(super) fn characteristics_from(
     CharacteristicsEvaluator { state, registry }.characteristics(oid)
 }
 
+/// CR 601.2f: characteristics of a proposed spell while its cost is determined. Legal-action
+/// generation evaluates the card before its physical object is moved to the stack, so start from
+/// the selected face and apply the type/color layers that the current effect model allows to
+/// affect that exact object. Battlefield permanent scopes do not affect a spell candidate.
+pub(super) fn spell_cast_characteristics(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    oid: ObjectId,
+    controller: PlayerId,
+    face: &CardFace,
+) -> Characteristics {
+    let mut characteristics = Characteristics {
+        mana_value: face.mana_cost.mana_value_on_stack(0),
+        controller,
+        names: vec![face.name.clone()],
+        types: face.types.clone(),
+        all_creature_types: face
+            .characteristic_defining_abilities
+            .iter()
+            .any(|ability| {
+                matches!(
+                    &ability.definition,
+                    CharacteristicDefiningAbility::Changeling
+                )
+            }),
+        supertypes: face.supertypes.clone(),
+        colors: face.colors(),
+        keywords: face.keywords.clone(),
+        protections: face.protections.clone(),
+        evasions: face.evasions.clone(),
+        power: face.power,
+        toughness: face.toughness,
+        signed_power: face.power.map(i64::from),
+        signed_toughness: face.toughness.map(i64::from),
+    };
+    let evaluator = CharacteristicsEvaluator { state, registry };
+    evaluator.apply_layer_4_type(oid, &mut characteristics);
+    evaluator.apply_layer_5_color(oid, &mut characteristics);
+    characteristics
+}
+
 /// CR 105.2/707.10: a spell uses its selected face, even when it is a copy with no
 /// backing GameObject. Only effects that actually affect this stack object apply;
 /// battlefield creature/permanent scopes must not color a creature/permanent spell.

@@ -11,7 +11,7 @@
   keywords: [Flying],
   static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]), definition: SpellGenericReduction(
     casters: Controller,
-    spell_type: Some(InstantOrSorcery),
+    spell_filter: Some((card_type: Some(InstantOrSorcery))),
     amount: 1,
   ))],
 )
