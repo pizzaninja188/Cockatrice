@@ -1,0 +1,28 @@
+// Oracle and rulings checked 2026-09-22 against the pinned campaign source.
+(
+  id: "tifas_limit_break",
+  name: "Tifa's Limit Break",
+  face_id: "tifas_limit_break",
+  mana_cost: "{G}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "tiered",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 1,
+    options: [
+      Mana(option_id: "somersault", presentation: OracleLines([2]), kind: AdditionalPayment, cost: "{0}"),
+      Mana(option_id: "meteor_strikes", presentation: OracleLines([3]), kind: AdditionalPayment, cost: "{2}"),
+      Mana(option_id: "final_heaven", presentation: OracleLines([4]), kind: AdditionalPayment, cost: "{6}{G}"),
+    ],
+  )],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 1,
+    modes: [
+      (mode_id: "somersault", presentation: OracleLines([2]), linked_cast_cost: Some((group_id: "tiered", option_id: "somersault")), effects: [PumpTarget(power: 2, toughness: 2, subject: Chosen((kind: Creature)))], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])]))),
+      (mode_id: "meteor_strikes", presentation: OracleLines([3]), linked_cast_cost: Some((group_id: "tiered", option_id: "meteor_strikes")), effects: [PumpTarget(power: 0, toughness: 0, subject: Chosen((kind: Creature)), scale: (basis: Subject(Power), power_per_unit: 1, toughness_per_unit: 0)), PumpTarget(power: 0, toughness: 0, subject: Chosen((kind: Creature)), scale: (basis: Subject(Toughness), power_per_unit: 0, toughness_per_unit: 1))], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0, 1])]))),
+      (mode_id: "final_heaven", presentation: OracleLines([4]), linked_cast_cost: Some((group_id: "tiered", option_id: "final_heaven")), effects: [PumpTarget(power: 0, toughness: 0, subject: Chosen((kind: Creature)), scale: (basis: Subject(Power), power_per_unit: 2, toughness_per_unit: 0)), PumpTarget(power: 0, toughness: 0, subject: Chosen((kind: Creature)), scale: (basis: Subject(Toughness), power_per_unit: 0, toughness_per_unit: 2))], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0, 1])]))),
+    ],
+  ),
+)

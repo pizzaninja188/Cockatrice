@@ -1,0 +1,28 @@
+// Oracle and rulings checked 2026-09-22 against the pinned campaign source.
+(
+  id: "thunder_magic",
+  name: "Thunder Magic",
+  face_id: "thunder_magic",
+  mana_cost: "{R}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "tiered",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 1,
+    options: [
+      Mana(option_id: "thunder", presentation: OracleLines([2]), kind: AdditionalPayment, cost: "{0}"),
+      Mana(option_id: "thundara", presentation: OracleLines([3]), kind: AdditionalPayment, cost: "{3}"),
+      Mana(option_id: "thundaga", presentation: OracleLines([4]), kind: AdditionalPayment, cost: "{5}{R}"),
+    ],
+  )],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 1,
+    modes: [
+      (mode_id: "thunder", presentation: OracleLines([2]), linked_cast_cost: Some((group_id: "tiered", option_id: "thunder")), effects: [DamageTarget(amount: 2, target: (kind: Creature))], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])]))),
+      (mode_id: "thundara", presentation: OracleLines([3]), linked_cast_cost: Some((group_id: "tiered", option_id: "thundara")), effects: [DamageTarget(amount: 4, target: (kind: Creature))], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])]))),
+      (mode_id: "thundaga", presentation: OracleLines([4]), linked_cast_cost: Some((group_id: "tiered", option_id: "thundaga")), effects: [DamageTarget(amount: 8, target: (kind: Creature))], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature", effect_indices: [0])]))),
+    ],
+  ),
+)

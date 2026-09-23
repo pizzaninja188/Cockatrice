@@ -998,6 +998,7 @@ fire-rim_form	0	cast	exercised
 fire_elemental	0	cast	exercised
 fire_ice	0	cast	exercised
 fire_ice	1	cast	exercised
+fire_magic	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 fire_nation_ambushers	0	cast	exercised
 fire_nation_cadets	0	ability:0	exercised
 fire_nation_cadets	0	cast	exercised
@@ -1479,6 +1480,7 @@ hymn_to_tourach	0	cast	exercised
 ice_cream_kitty	0	ability:0	exercised
 ice_cream_kitty	0	ability:1	exercised
 ice_cream_kitty	0	cast	exercised
+ice_magic	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 icecave_crasher	0	cast	exercised
 iceridge_serpent	0	cast	exercised
 icetill_explorer	0	cast	exercised
@@ -2345,6 +2347,7 @@ resolute_reinforcements	0	cast	exercised
 restless_reef	0	ability:0	exercised
 restless_reef	0	ability:1	exercised
 restless_reef	0	land	exercised
+restoration_magic	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 return_from_the_wilds	0	cast	exercised
 return_to_the_sewers	0	cast	exercised
 revenge_of_the_rats	0	cast	exercised
@@ -3042,6 +3045,7 @@ three_tree_scribe	0	cast	exercised
 thrill_of_possibility	0	cast	exercised
 thunder_lasso	0	ability:0	exercised
 thunder_lasso	0	cast	exercised
+thunder_magic	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 thunder_salvo	0	cast	exercised
 thundering_falls	0	land	exercised
 thundering_giant	0	cast	exercised
@@ -3052,6 +3056,7 @@ ticket_booth_tunnel_of_hate	1	cast	exercised
 tidecaller_mentor	0	cast	exercised
 tidehollow_strix	0	cast	exercised
 tidings	0	cast	exercised
+tifas_limit_break	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 timid_shieldbearer	0	ability:0	exercised
 timid_shieldbearer	0	cast	exercised
 tinkers_tote	0	ability:0	exercised
@@ -3248,6 +3253,7 @@ vigilant_baloth	0	cast	exercised
 village_ironsmith_ironfang	0	cast	exercised
 village_ironsmith_ironfang	1	cast	intentional: face unavailable from hand
 village_rites	0	cast	exercised
+vincents_limit_break	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 vindictive_warden	0	ability:0	exercised
 vindictive_warden	0	cast	exercised
 vine_trellis	0	ability:0	exercised

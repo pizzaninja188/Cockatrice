@@ -1,0 +1,28 @@
+// Oracle and rulings checked 2026-09-22 against the pinned campaign source.
+(
+  id: "restoration_magic",
+  name: "Restoration Magic",
+  face_id: "restoration_magic",
+  mana_cost: "{W}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "tiered",
+    presentation: OracleLines([1]),
+    min: 1,
+    max: 1,
+    options: [
+      Mana(option_id: "cure", presentation: OracleLines([2]), kind: AdditionalPayment, cost: "{0}"),
+      Mana(option_id: "cura", presentation: OracleLines([3]), kind: AdditionalPayment, cost: "{1}"),
+      Mana(option_id: "curaga", presentation: OracleLines([4]), kind: AdditionalPayment, cost: "{3}{W}"),
+    ],
+  )],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 1,
+    modes: [
+      (mode_id: "cure", presentation: OracleLines([2]), linked_cast_cost: Some((group_id: "tiered", option_id: "cure")), effects: [GrantKeywords(subject: Chosen((kind: AnyPermanent)), keywords: [Hexproof, Indestructible])], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target permanent", effect_indices: [0])]))),
+      (mode_id: "cura", presentation: OracleLines([3]), linked_cast_cost: Some((group_id: "tiered", option_id: "cura")), effects: [GrantKeywords(subject: Chosen((kind: AnyPermanent)), keywords: [Hexproof, Indestructible]), GainLife(amount: 3)], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target permanent", effect_indices: [0])]))),
+      (mode_id: "curaga", presentation: OracleLines([4]), linked_cast_cost: Some((group_id: "tiered", option_id: "curaga")), effects: [GrantKeywordsAllPermanents(filter: (kind: AnyPermanent, controller: You), keywords: [Hexproof, Indestructible]), GainLife(amount: 6)]),
+    ],
+  ),
+)

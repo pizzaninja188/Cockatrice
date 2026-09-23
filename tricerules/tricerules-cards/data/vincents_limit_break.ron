@@ -1,0 +1,28 @@
+// Oracle and rulings checked 2026-09-22 against the pinned campaign source.
+(
+  id: "vincents_limit_break",
+  name: "Vincent's Limit Break",
+  face_id: "vincents_limit_break",
+  mana_cost: "{1}{B}",
+  types: ["Instant"],
+  cast_cost_groups: [(
+    group_id: "tiered",
+    presentation: OracleLines([2]),
+    min: 1,
+    max: 1,
+    options: [
+      Mana(option_id: "galian_beast", presentation: OracleLines([3]), kind: AdditionalPayment, cost: "{0}"),
+      Mana(option_id: "death_gigas", presentation: OracleLines([4]), kind: AdditionalPayment, cost: "{1}"),
+      Mana(option_id: "hellmasker", presentation: OracleLines([5]), kind: AdditionalPayment, cost: "{3}"),
+    ],
+  )],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 1,
+    modes: [
+      (mode_id: "galian_beast", presentation: OracleLines([3]), linked_cast_cost: Some((group_id: "tiered", option_id: "galian_beast")), effects: [GrantTriggeredAbility(subject: Chosen((kind: Creature, controller: You)), ability: (ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfDies, effect: [ReturnTriggeredCard(from: [Graveyard], reference: AbilitySource, tapped: true, controller: Owner)])), SetBasePowerToughness(target: (kind: Creature, controller: You), power: Fixed(3), toughness: Fixed(2))], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature you control", effect_indices: [0, 1])]))),
+      (mode_id: "death_gigas", presentation: OracleLines([4]), linked_cast_cost: Some((group_id: "tiered", option_id: "death_gigas")), effects: [GrantTriggeredAbility(subject: Chosen((kind: Creature, controller: You)), ability: (ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfDies, effect: [ReturnTriggeredCard(from: [Graveyard], reference: AbilitySource, tapped: true, controller: Owner)])), SetBasePowerToughness(target: (kind: Creature, controller: You), power: Fixed(5), toughness: Fixed(2))], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature you control", effect_indices: [0, 1])]))),
+      (mode_id: "hellmasker", presentation: OracleLines([5]), linked_cast_cost: Some((group_id: "tiered", option_id: "hellmasker")), effects: [GrantTriggeredAbility(subject: Chosen((kind: Creature, controller: You)), ability: (ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfDies, effect: [ReturnTriggeredCard(from: [Graveyard], reference: AbilitySource, tapped: true, controller: Owner)])), SetBasePowerToughness(target: (kind: Creature, controller: You), power: Fixed(7), toughness: Fixed(2))], targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target creature you control", effect_indices: [0, 1])]))),
+    ],
+  ),
+)
