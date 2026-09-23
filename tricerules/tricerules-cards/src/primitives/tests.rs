@@ -2291,6 +2291,15 @@ fn issue_206_explore_rejects_unsupported_subjects_and_source_bound_spells() {
 }
 
 #[test]
+fn issue_479_opponent_land_comparison_condition_is_authored() {
+    let condition = ron::from_str::<GameCondition>("OpponentControlsMoreLandsThanYou");
+    assert!(
+        condition.is_ok(),
+        "issue #479 needs a typed condition for an individual opponent's land count: {condition:?}"
+    );
+}
+
+#[test]
 fn issue_207_stack_ability_and_source_linked_ability_loss_primitives_parse() {
     for authored in [
         "CounterTargetAbility",

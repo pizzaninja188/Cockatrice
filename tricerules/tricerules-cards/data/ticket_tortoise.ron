@@ -1,0 +1,18 @@
+// Ticket Tortoise — exact pinned Standard identity; Scryfall ruling list is empty.
+(
+  id: "ticket_tortoise",
+  name: "Ticket Tortoise",
+  face_id: "ticket_tortoise",
+  mana_cost: "{2}",
+  types: ["Artifact", "Creature", "Turtle"],
+  power: 3,
+  toughness: 1,
+  keywords: [Defender],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    intervening_if: Some(OpponentControlsMoreLandsThanYou),
+    effect: [CreateTokens(token: "treasure", count: 1)],
+  )],
+)

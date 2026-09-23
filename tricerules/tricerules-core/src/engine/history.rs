@@ -387,6 +387,15 @@ pub(super) fn relative_player_set_contains(
     }
 }
 
+fn any_opponent_controls_more_lands(
+    controller_land_count: u32,
+    opponent_land_counts: impl IntoIterator<Item = u32>,
+) -> bool {
+    opponent_land_counts
+        .into_iter()
+        .any(|opponent_land_count| opponent_land_count > controller_land_count)
+}
+
 pub(super) fn player_life_aggregate_value(
     state: &GameState,
     players: RelativePlayerSet,
@@ -1070,6 +1079,9 @@ impl GameEngine {
                 context.controller,
                 self.state.active_player_id(),
             ),
+            GameCondition::OpponentControlsMoreLandsThanYou => {
+                self.opponent_controls_more_lands_than_you(context.controller)
+            }
             GameCondition::PlayerLifeAggregate {
                 players, aggregate, ..
             } => player_life_aggregate_value(
@@ -1442,6 +1454,52 @@ impl GameEngine {
                 battlefield_permanent_matches(&self.state, filter, *oid, characteristics, context)
             })
             .collect()
+    }
+
+    fn opponent_controls_more_lands_than_you(&self, controller: PlayerId) -> bool {
+        let mut land_counts: Vec<_> = self
+            .state
+            .players
+            .iter()
+            .map(|player| (player.id, 0u32))
+            .collect();
+        for object_id in self
+            .state
+            .players
+            .iter()
+            .flat_map(|player| player.battlefield.iter().copied())
+        {
+            let Some(characteristics) = self
+                .characteristics(object_id)
+                .filter(|characteristics| characteristics.has_type("Land"))
+            else {
+                continue;
+            };
+            if let Some((_, count)) = land_counts
+                .iter_mut()
+                .find(|(player_id, _)| *player_id == characteristics.controller)
+            {
+                *count = count.saturating_add(1);
+            }
+        }
+
+        let controller_land_count = land_counts
+            .iter()
+            .find(|(player_id, _)| *player_id == controller)
+            .map(|(_, count)| *count)
+            .unwrap_or(0);
+        any_opponent_controls_more_lands(
+            controller_land_count,
+            land_counts.into_iter().filter_map(|(player_id, count)| {
+                relative_player_set_contains(
+                    &self.state,
+                    RelativePlayerSet::Opponents,
+                    controller,
+                    player_id,
+                )
+                .then_some(count)
+            }),
+        )
     }
 
     pub(super) fn battlefield_aggregate_value(
@@ -3602,6 +3660,55 @@ mod tests {
             ),
             1
         );
+    }
+
+    #[test]
+    fn issue_479_opponent_land_counts_use_each_opponent_and_live_controller_context() {
+        assert!(
+            !any_opponent_controls_more_lands(3, [2, 2]),
+            "two opponents with two lands each do not combine into one opponent with four"
+        );
+        assert!(any_opponent_controls_more_lands(3, [4, 0]));
+        assert!(
+            !any_opponent_controls_more_lands(3, [3]),
+            "equal land counts do not qualify"
+        );
+
+        let decks = Some(vec![
+            deck_with_cards(&[], "forest"),
+            deck_with_cards(&[], "island"),
+        ]);
+        let mut engine = GameEngine::new(479_001, &[0, 1], 20, decks, true).expect("engine");
+        for _ in 0..2 {
+            move_to_battlefield(&mut engine, 0, "forest");
+        }
+        for _ in 0..3 {
+            move_to_battlefield(&mut engine, 1, "island");
+        }
+
+        let condition = GameCondition::OpponentControlsMoreLandsThanYou;
+        let context = |controller| ConditionContext {
+            controller,
+            source_object_id: 0,
+            source_zone_change: 0,
+            resolving_spell_id: None,
+            stack_item: None,
+            previous_effect_result: None,
+        };
+        assert!(engine.condition_holds(&condition, context(0)));
+        assert!(!engine.condition_holds(&condition, context(1)));
+
+        for _ in 0..2 {
+            move_to_battlefield(&mut engine, 0, "forest");
+        }
+        assert!(!engine.condition_holds(&condition, context(0)));
+        assert!(
+            engine.condition_holds(&condition, context(1)),
+            "the condition uses its stable ability-controller context, not the source id"
+        );
+        move_to_battlefield(&mut engine, 1, "island");
+        assert!(!engine.condition_holds(&condition, context(0)));
+        assert!(!engine.condition_holds(&condition, context(1)));
     }
 
     #[test]

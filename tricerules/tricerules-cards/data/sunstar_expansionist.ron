@@ -1,0 +1,39 @@
+// Sunstar Expansionist — exact pinned Standard identity; Scryfall ruling list is empty.
+(
+  id: "sunstar_expansionist",
+  name: "Sunstar Expansionist",
+  face_id: "sunstar_expansionist",
+  mana_cost: "{1}{W}",
+  types: ["Creature", "Human", "Knight"],
+  power: 2,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      intervening_if: Some(OpponentControlsMoreLandsThanYou),
+      effect: [CreateTokens(token: "lander", count: 1)],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WheneverPermanentEntersBattlefield(
+        controller: Controller,
+        filter: (
+          permanent_type: Some(Land),
+          required_subtypes: [],
+          exclude_source: false,
+          source_only: false,
+          excluded_types: [],
+          any_subtypes: [],
+          token: None,
+          owner: None,
+          any_of: None,
+        ),
+        creature_filter: None,
+      ),
+      effect: [PumpTarget(power: 1, toughness: 0, scale: None, subject: Source)],
+    ),
+  ],
+)

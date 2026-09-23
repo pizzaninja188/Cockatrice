@@ -912,7 +912,8 @@ impl CharacteristicsEvaluator<'_> {
                     .count();
                 condition.matches_value(u32::try_from(count).unwrap_or(u32::MAX))
             }
-            GameCondition::BattlefieldAggregate { .. } => false,
+            GameCondition::OpponentControlsMoreLandsThanYou
+            | GameCondition::BattlefieldAggregate { .. } => false,
             GameCondition::UnlockedRoomDoorCount { controllers, .. } => {
                 let count = self
                     .state

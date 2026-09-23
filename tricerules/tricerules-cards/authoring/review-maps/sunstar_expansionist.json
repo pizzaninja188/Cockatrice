@@ -1,0 +1,62 @@
+{
+  "format_version": 1,
+  "oracle_id": "944a91ab-c217-4c1d-b920-2e5503c34546",
+  "spans": [
+    {
+      "face_id": "sunstar_expansionist",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "sunstar_expansionist",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::OpponentControlsMoreLandsThanYou",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [
+    "lander"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_479_land_comparison::issue_479_sunstar_expansionist_creates_lander_and_keeps_its_landfall_pump",
+      "covers": "complete Sunstar Expansionist success; Lander event identity and controller; controller-landfall +1/+0 pump and cleanup"
+    },
+    {
+      "test": "issue_479_land_comparison::issue_479_sunstar_expansionist_has_both_complete_entry_and_landfall_abilities",
+      "covers": "pinned Oracle identity and characteristics; conditioned Lander ETB; separately authored controller landfall trigger and +1/+0 source pump"
+    },
+    {
+      "test": "issue_479_land_comparison::issue_479_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle line fingerprint for Sunstar Expansionist"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

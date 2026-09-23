@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "oracle_id": "952083c5-9ffa-4cd9-915f-b7de7f3e5326",
+  "spans": [
+    {
+      "face_id": "ticket_tortoise",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "ticket_tortoise",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Defender",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::OpponentControlsMoreLandsThanYou",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [
+    "treasure"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_479_land_comparison::issue_479_ticket_tortoise_creates_treasure_only_when_one_opponent_has_more_lands",
+      "covers": "complete Ticket Tortoise success; strict per-opponent land comparison; false-at-entry and later-change nonretroactivity; resolution-time recheck; physical token event and controller"
+    },
+    {
+      "test": "issue_479_land_comparison::issue_479_ticket_tortoise_is_a_complete_conditioned_treasure_card",
+      "covers": "pinned Oracle identity, mana cost, Artifact Creature type line, 3/1 characteristics, Defender, condition and Treasure token effect"
+    },
+    {
+      "test": "issue_479_land_comparison::issue_479_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned Oracle line fingerprint for Ticket Tortoise"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

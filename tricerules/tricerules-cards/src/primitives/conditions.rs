@@ -47,6 +47,9 @@ pub enum GameCondition {
     /// `Controller` is "during your turn" (Daggersail Aeronaut); `Opponents` supports the inverse
     /// without assuming a two-player game.
     ActivePlayer { players: RelativePlayerSet },
+    /// Ticket Tortoise and Sunstar Expansionist: whether any individual opponent currently
+    /// controls more lands than this condition's controller. Opponent counts are never summed.
+    OpponentControlsMoreLandsThanYou,
     /// Star Charter checks either change to its controller; Flamecache Gecko checks loss by
     /// any opponent. Totals are separate, so offsetting changes still qualify (CR 119).
     LifeChangedThisTurn {
@@ -367,6 +370,7 @@ impl GameCondition {
             | GameCondition::SelfWasCast
             | GameCondition::TriggeringSpellManaSpent { .. }
             | GameCondition::ObjectTapped { .. } => Ok(()),
+            GameCondition::OpponentControlsMoreLandsThanYou => Ok(()),
             GameCondition::ActivePlayer { .. } => Ok(()),
             GameCondition::LifeChangedThisTurn { .. } => Ok(()),
             GameCondition::PlayerLifeAggregate { min, max, .. } => {
@@ -437,6 +441,7 @@ impl GameCondition {
             | GameCondition::SelfWasCast
             | GameCondition::TriggeringSpellManaSpent { .. }
             | GameCondition::ActivePlayer { .. }
+            | GameCondition::OpponentControlsMoreLandsThanYou
             | GameCondition::LifeChangedThisTurn { .. }
             | GameCondition::PlayerLifeAggregate { .. }
             | GameCondition::AttackedThisTurn { .. }

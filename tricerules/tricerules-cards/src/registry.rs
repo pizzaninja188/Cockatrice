@@ -523,11 +523,15 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     });
                 }
                 if condition.any_node_matches(|node| {
-                    matches!(node, GameCondition::BattlefieldCreatureCount { .. })
+                    matches!(
+                        node,
+                        GameCondition::BattlefieldCreatureCount { .. }
+                            | GameCondition::OpponentControlsMoreLandsThanYou
+                    )
                 }) {
                     return Err(RegistryError::InvalidCard {
                         id: card.id.clone(),
-                        reason: "conditional layer-6/7 anthems cannot depend on derived creature counts until CR 613.8 dependency ordering is implemented".into(),
+                        reason: "conditional layer-6/7 anthems cannot depend on derived battlefield counts until CR 613.8 dependency ordering is implemented".into(),
                     });
                 }
             }
@@ -668,11 +672,15 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 });
             }
             if condition.any_node_matches(|node| {
-                matches!(node, GameCondition::BattlefieldCreatureCount { .. })
+                matches!(
+                    node,
+                    GameCondition::BattlefieldCreatureCount { .. }
+                        | GameCondition::OpponentControlsMoreLandsThanYou
+                )
             }) {
                 return Err(RegistryError::InvalidCard {
                     id: card.id.clone(),
-                    reason: "conditional self modifiers cannot depend on derived creature counts until CR 613.8 dependency ordering is implemented".into(),
+                    reason: "conditional self modifiers cannot depend on derived battlefield counts until CR 613.8 dependency ordering is implemented".into(),
                 });
             }
         }
