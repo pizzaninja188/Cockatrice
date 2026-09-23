@@ -3513,11 +3513,12 @@ impl SpellEffectKind {
                             ..
                         }
                         | SpellEffectKind::Untap { .. }
+                        | SpellEffectKind::UntapAll { .. }
                         | SpellEffectKind::RemoveAllAbilities { .. }
                         | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
                 ) {
                     return Err(
-                        "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, Draw, Scry, Surveil, Untap, and RemoveAllAbilities effects"
+                        "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, Draw, Scry, Surveil, Untap, UntapAll, and RemoveAllAbilities effects"
                             .into(),
                     );
                 }
@@ -4982,6 +4983,26 @@ mod attachment_filter_tests {
         }
         .validate()
         .is_ok());
+    }
+}
+
+#[cfg(test)]
+mod conditional_mass_untap_tests {
+    use super::*;
+
+    #[test]
+    fn conditional_effect_accepts_untap_all() {
+        let effect = SpellEffectKind::Conditional {
+            condition: GameCondition::ActivePlayer {
+                players: RelativePlayerSet::Opponents,
+            },
+            effect: Box::new(SpellEffectKind::UntapAll {
+                players: RelativePlayerSet::Controller,
+                filter: TargetFilter::default_creature(),
+            }),
+        };
+
+        assert!(effect.validate(EffectContext::Spell).is_ok());
     }
 }
 

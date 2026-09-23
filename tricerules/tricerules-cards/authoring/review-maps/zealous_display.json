@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "0ff3afba-7a90-4f62-a1b0-b553ad81c32b",
+  "spans": [
+    {
+      "face_id": "zealous_display",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "GameCondition::ActivePlayer",
+      "typed_path": "/faces/0/spell_effect/1/Conditional/condition/ActivePlayer"
+    },
+    {
+      "symbol": "SpellEffectKind::UntapAll",
+      "typed_path": "/faces/0/spell_effect/1/Conditional/effect/UntapAll"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario untap::zealous_display_pumps_on_own_turn_without_untapping",
+      "covers": "own-turn condition false; current creatures controlled by the caster receive +2/+0; no creatures untap"
+    },
+    {
+      "test": "scenario untap::zealous_display_pumps_and_untaps_on_opponent_turn",
+      "covers": "opponent-turn condition true; current caster-controlled creatures receive +2/+0 and tapped creatures untap; opponent creatures and later entrants are excluded; untap event names only actual changes"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

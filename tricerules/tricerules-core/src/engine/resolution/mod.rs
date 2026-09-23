@@ -1616,6 +1616,9 @@ impl GameEngine {
                                 effect @ SpellEffectKind::Untap { .. } => {
                                     misc::untap(&mut cx, effect)?
                                 }
+                                effect @ SpellEffectKind::UntapAll { .. } => {
+                                    mass::untap_all(&mut cx, effect)?
+                                }
                                 effect @ SpellEffectKind::RemoveAllAbilities { .. } => {
                                     pump_counters::remove_all_abilities(&mut cx, effect)?
                                 }

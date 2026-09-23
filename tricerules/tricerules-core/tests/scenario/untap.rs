@@ -337,6 +337,141 @@ fn vitalize_applies_stun_independently_to_each_untap_event() {
     assert!(!is_tapped(&e, ordinary));
 }
 
+fn creature_power(e: &GameEngine, oid: u32) -> u32 {
+    e.characteristics(oid)
+        .and_then(|characteristics| characteristics.power)
+        .expect("creature power")
+}
+
+#[test]
+fn zealous_display_has_a_complete_registered_definition() {
+    use tricerules_cards::primitives::{GameCondition, RelativePlayerSet, SpellEffectKind};
+
+    let card = tricerules_cards::CardRegistry::global()
+        .get("zealous_display")
+        .expect("Zealous Display registered");
+    let face = card.primary_face();
+    assert_eq!(card.name, "Zealous Display");
+    assert_eq!(face.name, "Zealous Display");
+    assert_eq!(face.mana_cost.to_string(), "{2}{W}");
+    assert_eq!(face.types, ["Instant"]);
+    assert_eq!(face.spell_effect.len(), 2);
+    assert!(matches!(
+        &face.spell_effect[0],
+        SpellEffectKind::PumpAll {
+            power: 2,
+            toughness: 0,
+            ..
+        }
+    ));
+    assert!(matches!(
+        &face.spell_effect[1],
+        SpellEffectKind::Conditional {
+            condition: GameCondition::ActivePlayer {
+                players: RelativePlayerSet::Opponents,
+            },
+            effect,
+        } if matches!(effect.as_ref(), SpellEffectKind::UntapAll {
+            players: RelativePlayerSet::Controller,
+            filter,
+        } if filter.kind == tricerules_cards::primitives::TargetKind::Creature)
+    ));
+}
+
+#[test]
+fn zealous_display_pumps_on_own_turn_without_untapping() {
+    let decks = Some(vec![
+        deck_with("plains", &["zealous_display", "grizzly_bears"]),
+        forest_only_deck(),
+    ]);
+    let mut e = GameEngine::new(484_001, &[0, 1], 20, decks, true).expect("engine");
+    advance_to_main1_from_game_start(&mut e);
+
+    let tapped_creature = relocate_to_battlefield(&mut e, 0, "grizzly_bears", true);
+    let untapped_creature = inject_creature_on_battlefield(&mut e, 0, "savannah_lions");
+    let opponent_creature = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    set_tapped(&mut e, opponent_creature, true);
+
+    let resolution = cast_instant_and_resolve(
+        &mut e,
+        0,
+        "zealous_display",
+        ManaGift {
+            c: 2,
+            w: 1,
+            ..Default::default()
+        },
+    );
+
+    assert_eq!(creature_power(&e, tapped_creature), 4);
+    assert_eq!(creature_power(&e, untapped_creature), 4);
+    assert_eq!(creature_power(&e, opponent_creature), 2);
+    assert!(
+        is_tapped(&e, tapped_creature),
+        "no untap on its controller's turn"
+    );
+    assert!(!is_tapped(&e, untapped_creature));
+    assert!(is_tapped(&e, opponent_creature));
+    assert!(untapped_oids(&resolution).is_empty());
+}
+
+#[test]
+fn zealous_display_pumps_and_untaps_on_opponent_turn() {
+    use tricerules_cards::CounterKind;
+
+    let decks = Some(vec![
+        deck_with("plains", &["zealous_display", "grizzly_bears"]),
+        forest_only_deck(),
+    ]);
+    let mut e = GameEngine::new(484_002, &[0, 1], 20, decks, true).expect("engine");
+    advance_to_active_player_upkeep(&mut e, 1);
+    assert_eq!(e.state.active_player_id(), 1);
+
+    let tapped_creature = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    set_tapped(&mut e, tapped_creature, true);
+    let stunned_creature = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    set_tapped(&mut e, stunned_creature, true);
+    e.state
+        .objects
+        .get_mut(&stunned_creature)
+        .expect("stunned creature")
+        .set_counter(CounterKind::Stun, 1);
+    let untapped_creature = inject_creature_on_battlefield(&mut e, 0, "savannah_lions");
+    let opponent_creature = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    set_tapped(&mut e, opponent_creature, true);
+
+    e.apply_command(1, &pass())
+        .expect("active player passes priority");
+    assert_eq!(e.state.priority_player_id(), 0);
+    let resolution = cast_instant_and_resolve(
+        &mut e,
+        0,
+        "zealous_display",
+        ManaGift {
+            c: 2,
+            w: 1,
+            ..Default::default()
+        },
+    );
+
+    assert_eq!(creature_power(&e, tapped_creature), 4);
+    assert_eq!(creature_power(&e, stunned_creature), 4);
+    assert_eq!(creature_power(&e, untapped_creature), 4);
+    assert_eq!(creature_power(&e, opponent_creature), 2);
+    assert!(!is_tapped(&e, tapped_creature));
+    assert!(is_tapped(&e, stunned_creature));
+    assert_eq!(
+        e.state.objects[&stunned_creature].counter_count(CounterKind::Stun),
+        0
+    );
+    assert!(!is_tapped(&e, untapped_creature));
+    assert!(is_tapped(&e, opponent_creature));
+    assert_eq!(untapped_oids(&resolution), vec![tapped_creature]);
+
+    let later_creature = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    assert_eq!(creature_power(&e, later_creature), 2);
+}
+
 #[test]
 fn skipped_untap_preserves_stun_for_the_next_actual_attempt() {
     use tricerules_cards::CounterKind;

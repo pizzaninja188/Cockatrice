@@ -1,0 +1,14 @@
+(
+  id: "zealous_display",
+  name: "Zealous Display",
+  face_id: "zealous_display",
+  mana_cost: "{2}{W}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpAll(filter: (controller: YouControl), power: 2, toughness: 0),
+    Conditional(
+      condition: ActivePlayer(players: Opponents),
+      effect: UntapAll(players: Controller, filter: (kind: Creature)),
+    ),
+  ],
+)
