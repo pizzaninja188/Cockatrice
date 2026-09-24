@@ -1,0 +1,16 @@
+(
+  id: "clinquant_skymage",
+  name: "Clinquant Skymage",
+  face_id: "clinquant_skymage",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Bird", "Wizard"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPlayerDrawsCard(drawer: Controller),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

@@ -1,0 +1,21 @@
+{
+  "format_version": 1,
+  "oracle_id": "7f961374-00b0-40df-83eb-9ced2bb519aa",
+  "spans": [
+    {"face_id": "ravenhill_flock", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/keywords"]},
+    {"face_id": "ravenhill_flock", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/triggered_abilities/0"]}
+  ],
+  "primitive_references": [
+    {"symbol": "Keyword::Flying", "typed_path": "/faces/0/keywords/0"},
+    {"symbol": "TriggerCondition::WheneverPlayerDrawsCard", "typed_path": "/faces/0/triggered_abilities/0/trigger"},
+    {"symbol": "SpellEffectKind::PutCounters", "typed_path": "/faces/0/triggered_abilities/0/effect/0"}
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "issue_296_every_draw::issue_296_registers_both_complete_cards_with_distinct_characteristics", "covers": "exact Bird 1/2 face, Flying, controller draw trigger, and one self +1/+1 counter"},
+    {"test": "scenario issue_296_every_draw::both_complete_cards_trigger_once_per_card_in_a_two_card_draw", "covers": "Ravenhill Flock receives two counters from two distinct successful Divination draws"},
+    {"test": "scenario issue_296_every_draw::a_single_effect_draw_triggers_once_and_an_opponents_draw_does_not", "covers": "one Visionary draw gives one counter; an opponent turn-based draw gives none"},
+    {"test": "scenario issue_296_every_draw::an_empty_library_draw_attempt_creates_no_every_draw_trigger", "covers": "attempting to draw with an empty library creates no counter trigger"}
+  ],
+  "complete_definition_review_confirmed": true
+}

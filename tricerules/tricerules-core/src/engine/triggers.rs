@@ -1545,19 +1545,15 @@ impl GameEngine {
                 .iter()
                 .flat_map(|source| {
                     self.matching_snapshot_abilities(source, |condition| {
-                        let TriggerCondition::WheneverPlayerDrawsNthCard {
-                            drawer: drawer_filter,
-                            ordinal: trigger_ordinal,
-                        } = condition
-                        else {
-                            return false;
+                        let drawer_filter = match condition {
+                            TriggerCondition::WheneverPlayerDrawsCard { drawer } => drawer,
+                            TriggerCondition::WheneverPlayerDrawsNthCard {
+                                drawer,
+                                ordinal: trigger_ordinal,
+                            } if *trigger_ordinal == *ordinal => drawer,
+                            _ => return false,
                         };
-                        *trigger_ordinal == *ordinal
-                            && self.relative_player_matches(
-                                *drawer_filter,
-                                *drawer,
-                                source.controller,
-                            )
+                        self.relative_player_matches(*drawer_filter, *drawer, source.controller)
                     })
                 })
                 .collect(),
@@ -2597,6 +2593,72 @@ impl TriggerSourceSnapshot {
 mod tests {
     use super::super::damage::DamageEvent;
     use super::*;
+
+    #[test]
+    fn issue_296_every_draw_matches_each_drawer_in_a_multiplayer_event_batch() {
+        let mut engine = GameEngine::new_with_default_decks(296_201, &[0, 1], 20).unwrap();
+        engine
+            .state
+            .players
+            .push(crate::state::PlayerState::new(2, 20));
+        let mut sources = Vec::new();
+        for player in [0, 1, 2] {
+            let source = if player == 2 {
+                let source = engine.state.players[1].hand.remove(0);
+                engine.state.players[2].hand.push(source);
+                source
+            } else {
+                engine.state.players[player].hand[0]
+            };
+            let object = engine.state.objects.get_mut(&source).unwrap();
+            object.card_id = "ravenhill_flock".into();
+            object.owner = player as i32;
+            object.base_controller = player as i32;
+            object.controller = player as i32;
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                source,
+                Zone::Battlefield,
+                None,
+            )
+            .unwrap();
+            sources.push(source);
+        }
+        let events = [
+            GameEvent::CardDrawn {
+                drawer: 2,
+                ordinal: 1,
+            },
+            GameEvent::CardDrawn {
+                drawer: 0,
+                ordinal: 2,
+            },
+            GameEvent::CardDrawn {
+                drawer: 2,
+                ordinal: 3,
+            },
+        ];
+        let triggers = engine.collect_event_triggers(&events);
+        assert_eq!(triggers.len(), 3);
+        assert_eq!(
+            triggers
+                .iter()
+                .map(|trigger| trigger.source_id)
+                .collect::<Vec<_>>(),
+            [sources[2], sources[0], sources[2]]
+        );
+        engine.stage_triggers(triggers);
+        let staged = &engine.state.staged_trigger_groups.front().unwrap().triggers;
+        assert_eq!(
+            staged
+                .iter()
+                .map(|trigger| trigger.controller)
+                .collect::<Vec<_>>(),
+            [0, 2, 2],
+            "a simultaneous group is staged in APNAP order"
+        );
+    }
     use crate::state::DiscardBatch;
     use tricerules_cards::{AbilityId, AbilityPresentation, CardFaceId, IdentifiedAbility};
 

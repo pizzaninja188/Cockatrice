@@ -1,0 +1,21 @@
+{
+  "format_version": 1,
+  "oracle_id": "d9a3207a-a330-4517-967e-f37c9a9f1355",
+  "spans": [
+    {"face_id": "clinquant_skymage", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/keywords"]},
+    {"face_id": "clinquant_skymage", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/triggered_abilities/0"]}
+  ],
+  "primitive_references": [
+    {"symbol": "Keyword::Flying", "typed_path": "/faces/0/keywords/0"},
+    {"symbol": "TriggerCondition::WheneverPlayerDrawsCard", "typed_path": "/faces/0/triggered_abilities/0/trigger"},
+    {"symbol": "SpellEffectKind::PutCounters", "typed_path": "/faces/0/triggered_abilities/0/effect/0"}
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "issue_296_every_draw::issue_296_registers_both_complete_cards_with_distinct_characteristics", "covers": "exact Bird Wizard 1/1 face, Flying, controller draw trigger, and one self +1/+1 counter"},
+    {"test": "scenario issue_296_every_draw::both_complete_cards_trigger_once_per_card_in_a_two_card_draw", "covers": "Clinquant Skymage receives two counters from two distinct successful Divination draws"},
+    {"test": "scenario issue_296_every_draw::pending_draw_triggers_do_not_put_counters_on_a_new_source_generation", "covers": "pending triggers from old source incarnation do not counter a returned Clinquant Skymage"},
+    {"test": "scenario issue_296_every_draw::own_turn_based_draw_triggers_after_the_opponents_turn", "covers": "own turn-based draw gives one counter after an opponent turn produces none"}
+  ],
+  "complete_definition_review_confirmed": true
+}

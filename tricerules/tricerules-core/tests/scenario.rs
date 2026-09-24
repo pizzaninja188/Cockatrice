@@ -477,6 +477,8 @@ mod issue_276_generated_power_damage;
 mod issue_287_generated_recruit_etb;
 #[path = "scenario/issue_294_direct_ron.rs"]
 mod issue_294_direct_ron;
+#[path = "scenario/issue_296_every_draw.rs"]
+mod issue_296_every_draw;
 #[path = "scenario/issue_301_generated_beginning_of_combat.rs"]
 mod issue_301_generated_beginning_of_combat;
 #[path = "scenario/issue_309_generated_station.rs"]

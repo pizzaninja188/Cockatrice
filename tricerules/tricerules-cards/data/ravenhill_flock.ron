@@ -1,0 +1,16 @@
+(
+  id: "ravenhill_flock",
+  name: "Ravenhill Flock",
+  face_id: "ravenhill_flock",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Bird"],
+  power: 1,
+  toughness: 2,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPlayerDrawsCard(drawer: Controller),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

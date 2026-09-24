@@ -591,6 +591,12 @@ pub enum TriggerCondition {
         drawer: CastTriggerPlayer,
         ordinal: u32,
     },
+    /// Each successful CR 121.2 card draw is a separate event, regardless of its turn ordinal.
+    /// Kept distinct from the Nth-card contract for cards such as Erudite Wizard.
+    WheneverPlayerDrawsCard {
+        #[serde(default)]
+        drawer: CastTriggerPlayer,
+    },
     /// Whenever this permanent becomes the target of the selected kind of stack object. The
     /// targeting object has already been legally cast, activated, copied, or put on the stack;
     /// changing or copying targets can reuse the same event vocabulary when those actions exist.
