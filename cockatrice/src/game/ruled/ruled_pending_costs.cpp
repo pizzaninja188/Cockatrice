@@ -498,7 +498,7 @@ bool RuledPendingCast::pendingRuledCastCostObjectUsesExplicitConfirmation() cons
     const auto option = std::find_if(group.options.cbegin(), group.options.cend(), [&](const auto &entry) {
         return entry.optionIndex == spell.activeCastCostOption;
     });
-    return option != group.options.cend() && ruledCastCostUsesPermanentCohort(option->kind);
+    return option != group.options.cend() && ruledCastCostUsesPermanentCohort(option->kind) && option->objectMax > 1;
 }
 
 bool RuledPendingCast::isAwaitingRuledSpellCostSelection() const

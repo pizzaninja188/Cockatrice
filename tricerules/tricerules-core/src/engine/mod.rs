@@ -1247,7 +1247,7 @@ impl GameEngine {
             staged_trigger_groups: VecDeque::new(),
             active_event_observers: Vec::new(),
             warped_permanent_incarnations: HashSet::new(),
-            cast_entry_facts: HashMap::new(),
+            spell_entry_facts: HashMap::new(),
             observed_object_cohorts: HashMap::new(),
             pending_immediate_observer_actions: Vec::new(),
             pending_trigger_order: None,

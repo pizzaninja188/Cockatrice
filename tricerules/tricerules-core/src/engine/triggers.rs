@@ -426,8 +426,8 @@ impl GameEngine {
                         && trigger.ability.trigger == TriggerCondition::WhenSelfEntersBattlefield
                     {
                         trigger.trigger_context.entering_chosen_x = Some(*chosen_x);
-                        trigger.trigger_context.entering_cast =
-                            self.state.cast_entry_facts.get(object_id).copied();
+                        trigger.trigger_context.entering_spell =
+                            self.state.spell_entry_facts.get(object_id).copied();
                     }
                     if matches!(
                         trigger.ability.trigger,

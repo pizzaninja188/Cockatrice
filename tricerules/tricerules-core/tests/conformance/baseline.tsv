@@ -123,6 +123,7 @@ arcane_epiphany	0	cast	exercised
 archangel	0	cast	exercised
 archers_of_qarsi	0	cast	exercised
 archive_dragon	0	cast	exercised
+archons_glory	0	cast	exercised
 archweaver	0	cast	exercised
 ardent_militia	0	cast	exercised
 argothian_enchantress	0	cast	exercised
@@ -433,6 +434,7 @@ cancel	0	cast	unsupported: target group 0 needs a richer fixture
 candlestick	0	ability:0	exercised
 candlestick	0	ability:1	exercised
 candlestick	0	cast	exercised
+candy_grapple	0	cast	exercised
 candy_trail	0	ability:0	exercised
 candy_trail	0	cast	exercised
 canonized_in_blood	0	ability:0	exercised
@@ -1629,6 +1631,7 @@ keep_out	0	cast	unsupported: face not offered by generic hand fixture
 keepers_of_the_faith	0	cast	exercised
 keldon_raider	0	cast	exercised
 kelinore_bat	0	cast	exercised
+kellans_lightblades	0	cast	unsupported: target group 0 needs a richer fixture
 kembas_skyguard	0	cast	exercised
 kessig_recluse	0	cast	exercised
 killers_mask	0	ability:0	exercised
@@ -3137,6 +3140,7 @@ triton_shorethief	0	cast	exercised
 trokin_high_guard	0	cast	exercised
 tropical_island	0	ability:0	exercised
 tropical_island	0	land	exercised
+troublemaker_ouphe	0	cast	exercised
 true_ancestry	0	cast	exercised
 trufflesnout	0	cast	exercised
 trumpet_blast	0	cast	exercised

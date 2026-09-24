@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "16cdba97-73cf-44ba-9d64-f27009b829f8",
+  "spans": [
+    {
+      "face_id": "troublemaker_ouphe",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/cast_cost_groups/0"]
+    },
+    {
+      "face_id": "troublemaker_ouphe",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostOptionDef::SacrificePermanent",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "ObjectCastCostKind::Bargain",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "GameCondition::SelfWasBargained",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_322_bargain::bargained_ouphe_exiles_a_targeted_opponent_artifact",
+      "covers": "a bargained Troublemaker Ouphe's self-entry trigger targets and exiles an artifact controlled by an opponent"
+    },
+    {
+      "test": "scenario issue_322_bargain::unbargained_ouphe_and_a_permanent_copy_have_no_bargain_trigger",
+      "covers": "an unbargained Ouphe and a Clone permanent copy do not satisfy SelfWasBargained"
+    },
+    {
+      "test": "issue_322_bargain::the_four_complete_bargain_cards_register_with_optional_receipts_and_shared_targets",
+      "covers": "the exact reviewed identity, optional Bargain cost group, artifact/enchantment/token eligibility, and linked self-entry ability"
+    },
+    {
+      "test": "issue_322_bargain::bargain_card_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Troublemaker Ouphe"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1497,6 +1497,21 @@ TEST(RuledPendingTargetTest, SingleCastCostChoiceCompletesImmediately)
     EXPECT_TRUE(ruledCastCostGroupSelectionCompletesImmediately(spell, group));
 }
 
+TEST(RuledPendingTargetTest, SingleRequiredCastCostObjectCompletesOnItsClick)
+{
+    RuledCastCostOption sacrifice;
+    sacrifice.kind = RuledCastCostOptionKind::SacrificePermanent;
+    sacrifice.objectMin = 1;
+    sacrifice.objectMax = 1;
+
+    EXPECT_FALSE(ruledCastCostObjectSelectionCompletesImmediately(sacrifice, 0, true));
+    EXPECT_FALSE(ruledCastCostObjectSelectionCompletesImmediately(sacrifice, 1, false));
+    EXPECT_TRUE(ruledCastCostObjectSelectionCompletesImmediately(sacrifice, 1, true));
+
+    sacrifice.objectMax = 2;
+    EXPECT_FALSE(ruledCastCostObjectSelectionCompletesImmediately(sacrifice, 1, true));
+}
+
 TEST(RuledPendingTargetTest, PermanentChoicePromptKeepsEngineSpecificityAndAddsClickGuidance)
 {
     EXPECT_EQ(formatRuledPermanentChoicePrompt(QStringLiteral("Choose a creature you control.")),
@@ -7939,6 +7954,38 @@ TEST_F(RuledClientTest, PaymentReconciliationPreservesIncompleteCohortsButReject
     offers.costDataByCastKey[key].castCostGroups[0].options[0].validPermanentGenerations[900] = 12;
     offers.costDataByCastKey[key].castCostGroups[0].options[0].candidateContributions[900] = 4;
     EXPECT_FALSE(pending.reconcileSpellCosts(*state, 8));
+}
+
+TEST_F(RuledClientTest, SinglePermanentCastCostDoesNotRequireRedundantConfirmation)
+{
+    RuledPendingCast pending;
+    auto &spell = pending.beginSpell();
+    spell.waitingForCastCostObject = true;
+    spell.activeCastCostOption = 5;
+
+    RuledCastCostOption option;
+    option.optionIndex = 5;
+    option.kind = RuledCastCostOptionKind::SacrificePermanent;
+    option.selectable = true;
+    option.objectMin = 1;
+    option.objectMax = 1;
+    option.validPermanentIds = {900};
+
+    RuledCastCostGroup group;
+    group.groupIndex = 2;
+    group.max = 1;
+    group.options = {option};
+    spell.castCostGroups = {group};
+
+    RuledPendingCastCostSelection selection;
+    selection.groupIndex = 2;
+    selection.optionIndex = 5;
+    selection.objectKind = RuledPendingCastCostSelection::ObjectKind::Permanent;
+    selection.selectedObjectIds = {900};
+    spell.castCostSelections = {selection};
+
+    EXPECT_TRUE(pending.pendingRuledCastCostObjectCanConfirm());
+    EXPECT_FALSE(pending.pendingRuledCastCostObjectUsesExplicitConfirmation());
 }
 
 TEST(RuledPendingPaymentTest, PaymentPromptKeepsTheExistingTextAndTargetingPrecedence)

@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "9588a7fd-bbe5-4a81-9a7e-d8e8f6c0537d",
+  "spans": [
+    {
+      "face_id": "candy_grapple",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/cast_cost_groups/0"]
+    },
+    {
+      "face_id": "candy_grapple",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostOptionDef::SacrificePermanent",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "ObjectCastCostKind::Bargain",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ConditionalCastCost",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ConditionalCastCost",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_322_bargain::candy_grapple_uses_three_or_five_minus_five_from_the_committed_choice",
+      "covers": "a nonbargained cast gives -3/-3; a Bargained cast gives -5/-5 instead"
+    },
+    {
+      "test": "issue_322_bargain::the_four_complete_bargain_cards_register_with_optional_receipts_and_shared_targets",
+      "covers": "the exact reviewed identity, optional Bargain cost group, artifact/enchantment/token eligibility, and linked conditional spell effects"
+    },
+    {
+      "test": "issue_322_bargain::bargain_card_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Candy Grapple"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

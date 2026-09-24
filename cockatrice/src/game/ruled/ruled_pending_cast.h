@@ -402,6 +402,15 @@ ruledCastCostGroupSelectionCompletesImmediately(const PendingRuledSpellCast &spe
            ruledCastCostGroupCanConfirm(spell, group);
 }
 
+/// A required exactly-one permanent cost object completes on the object click. Wider cohorts stay
+/// open for explicit confirmation so the player can select the intended set.
+[[nodiscard]] inline bool ruledCastCostObjectSelectionCompletesImmediately(const RuledCastCostOption &option,
+                                                                           int selectedObjectCount,
+                                                                           bool selectionCanConfirm)
+{
+    return option.objectMax == 1 && selectedObjectCount == 1 && selectionCanConfirm;
+}
+
 /// A required exactly-one target group completes on the target click. Every other legal range
 /// needs an explicit confirmation surface, including optional 0-1 groups where confirming zero
 /// targets is semantically different from cancelling the entire cast.

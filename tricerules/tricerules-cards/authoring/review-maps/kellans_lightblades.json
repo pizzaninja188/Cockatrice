@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "4b803bf2-025a-4bf6-9d3c-a28d714b4781",
+  "spans": [
+    {
+      "face_id": "kellans_lightblades",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/cast_cost_groups/0"]
+    },
+    {
+      "face_id": "kellans_lightblades",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostOptionDef::SacrificePermanent",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "ObjectCastCostKind::Bargain",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ConditionalCastCost",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ConditionalCastCost",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_322_bargain::copied_bargained_kellans_lightblades_keeps_the_choice_and_destroys_its_attacker",
+      "covers": "the cast sacrifices a Treasure, and a copy retains the Bargain receipt so it destroys the attacking creature instead of dealing damage"
+    },
+    {
+      "test": "scenario issue_322_bargain::nonbargained_kellans_lightblades_deals_three_damage",
+      "covers": "a nonbargained spell deals 3 damage to the target attacking creature"
+    },
+    {
+      "test": "issue_322_bargain::the_four_complete_bargain_cards_register_with_optional_receipts_and_shared_targets",
+      "covers": "the exact reviewed identity, optional Bargain cost group, artifact/enchantment/token eligibility, and linked alternate effects"
+    },
+    {
+      "test": "issue_322_bargain::bargain_card_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Kellan's Lightblades"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

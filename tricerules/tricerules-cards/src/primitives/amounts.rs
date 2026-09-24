@@ -375,7 +375,7 @@ impl Amount {
 
     pub fn validate(&self) -> Result<(), String> {
         match self {
-            Amount::Conditional { condition, .. } => condition.validate_without_cast_entry(),
+            Amount::Conditional { condition, .. } => condition.validate_without_self_entry_spell(),
             Amount::Count(expression) => expression.validate(),
             Amount::DivideRoundedDown { amount, divisor } => {
                 if *divisor == 0 {

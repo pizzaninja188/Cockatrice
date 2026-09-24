@@ -1441,13 +1441,17 @@ impl GameEngine {
             Some(event.destination_controller),
         )?;
         self.state.continuous_effects.extend(spell_effects);
-        if let Some(caster) = event.cast_by {
-            self.state.cast_entry_facts.insert(
+        let bargained = event.cast_cost_receipts.iter().any(|receipt| {
+            receipt.object_cost_kind == Some(tricerules_cards::ObjectCastCostKind::Bargain)
+        });
+        if event.cast_by.is_some() || bargained {
+            self.state.spell_entry_facts.insert(
                 event.object_id,
-                crate::state::CastEntryFact {
+                crate::state::SpellEntryFact {
                     object_id: event.object_id,
                     zone_change_generation: self.state.zone_change_generation[&event.object_id],
-                    caster,
+                    caster: event.cast_by,
+                    bargained,
                 },
             );
         }

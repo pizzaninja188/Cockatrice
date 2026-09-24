@@ -833,6 +833,7 @@ impl GameEngine {
                     option_index: selection.option_index,
                     group_id: Some(group.group_id.clone()),
                     option_id: Some(option.option_id().clone()),
+                    object_cost_kind: option.object_cost_kind(),
                     label,
                     objects,
                 });
@@ -892,6 +893,7 @@ impl GameEngine {
                     option_index: 0,
                     group_id: None,
                     option_id: None,
+                    object_cost_kind: None,
                     label: format!(
                         "Harmonize — tap {} (reduce {{{harmonize_reduction}}})",
                         object_display_name(&self.state, self.registry, object_id)

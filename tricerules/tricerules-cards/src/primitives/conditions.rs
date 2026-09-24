@@ -35,8 +35,13 @@ pub enum GameCondition {
     /// face cast condition and consumed through `CastSnapshot`; spell copies were not cast.
     CastOrigin { origin: SpellCastOrigin },
     /// Sunderflock's self-entry intervening condition: the trigger's controller cast the
-    /// spell that became this permanent. This is not a copied characteristic or cast snapshot.
+    /// spell that became this permanent. Spell copies do not satisfy this condition.
     SelfWasCast,
+    /// Wilds of Eldraine self-entry intervening condition: the entering spell's Bargain cost was
+    /// declared. Troublemaker Ouphe and Realm-Scorcher Hellkite use this for self-entry triggers.
+    /// A copy of a bargained spell inherits this choice (CR 707.2); a permanent copy effect does
+    /// not.
+    SelfWasBargained,
     /// Compare the actual mana paid for the spell whose cast event created this triggered
     /// ability. The value is frozen at CR 601.2i and follows the trigger through resolution;
     /// printed mana value and aggregate Expend history are deliberately unrelated.
@@ -230,13 +235,17 @@ pub enum GameCondition {
 }
 
 impl GameCondition {
-    pub(crate) fn requires_cast_entry_context(&self) -> bool {
-        self.any_node_matches(|condition| matches!(condition, Self::SelfWasCast))
+    pub(crate) fn requires_self_entry_spell_context(&self) -> bool {
+        self.any_node_matches(|condition| {
+            matches!(condition, Self::SelfWasCast | Self::SelfWasBargained)
+        })
     }
 
-    pub(crate) fn validate_without_cast_entry(&self) -> Result<(), String> {
-        if self.requires_cast_entry_context() {
-            return Err("SelfWasCast requires a self-entry intervening-if condition".into());
+    pub(crate) fn validate_without_self_entry_spell(&self) -> Result<(), String> {
+        if self.requires_self_entry_spell_context() {
+            return Err(
+                "self-entry spell conditions require a self-entry intervening-if condition".into(),
+            );
         }
         self.validate()
     }
@@ -278,7 +287,7 @@ impl GameCondition {
             return Err("CastOrigin is available only as a face cast condition".into());
         }
         self.validate_cast_snapshot_reference(0)?;
-        self.validate_without_cast_entry()
+        self.validate_without_self_entry_spell()
     }
 
     pub(crate) fn validate_cast_condition(&self) -> Result<(), String> {
@@ -289,7 +298,7 @@ impl GameCondition {
             return Err("triggering-spell mana spending requires a spell-cast trigger".into());
         }
         self.validate_cast_snapshot_reference(0)?;
-        self.validate_without_cast_entry()
+        self.validate_without_self_entry_spell()
     }
 
     pub(crate) fn validate_trigger_condition(&self) -> Result<(), String> {
@@ -368,6 +377,7 @@ impl GameCondition {
             | GameCondition::CastSnapshot { .. }
             | GameCondition::CastOrigin { .. }
             | GameCondition::SelfWasCast
+            | GameCondition::SelfWasBargained
             | GameCondition::TriggeringSpellManaSpent { .. }
             | GameCondition::ObjectTapped { .. } => Ok(()),
             GameCondition::OpponentControlsMoreLandsThanYou => Ok(()),
@@ -439,6 +449,7 @@ impl GameCondition {
             | GameCondition::CastSnapshot { .. }
             | GameCondition::CastOrigin { .. }
             | GameCondition::SelfWasCast
+            | GameCondition::SelfWasBargained
             | GameCondition::TriggeringSpellManaSpent { .. }
             | GameCondition::ActivePlayer { .. }
             | GameCondition::OpponentControlsMoreLandsThanYou

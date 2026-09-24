@@ -855,6 +855,8 @@ pub enum SpellEffectKind {
         effect: Box<SpellEffectKind>,
     },
     /// Resolve one ordinary instruction only when the announced cast-cost receipt matches.
+    /// Archon's Glory, Candy Grapple, and Kellan's Lightblades reuse the receipt link for
+    /// conditional keywords, alternate pumps, and damage-versus-destruction respectively.
     ConditionalCastCost {
         condition: CastCostReceiptCondition,
         effect: Box<SpellEffectKind>,
@@ -3497,7 +3499,7 @@ impl SpellEffectKind {
 
         match self {
             SpellEffectKind::Conditional { condition, effect } => {
-                condition.validate_without_cast_entry()?;
+                condition.validate_without_self_entry_spell()?;
                 if matches!(effect.as_ref(), SpellEffectKind::Conditional { .. }) {
                     return Err("Conditional effects cannot be nested".into());
                 }
@@ -3530,11 +3532,14 @@ impl SpellEffectKind {
                 }
                 if !matches!(
                     effect.as_ref(),
-                    SpellEffectKind::PumpTarget { .. } | SpellEffectKind::GainLife { .. }
+                    SpellEffectKind::PumpTarget { .. }
+                        | SpellEffectKind::GainLife { .. }
+                        | SpellEffectKind::Destroy { .. }
+                        | SpellEffectKind::DamageTarget { .. }
+                        | SpellEffectKind::GrantKeywords { .. }
                 ) {
                     return Err(
-                        "ConditionalCastCost currently supports PumpTarget and GainLife effects"
-                            .into(),
+                        "ConditionalCastCost currently supports PumpTarget, GainLife, Destroy, DamageTarget, and GrantKeywords effects".into(),
                     );
                 }
                 effect.validate(context)?;
@@ -3888,7 +3893,7 @@ impl SpellEffectKind {
                     if let ResolutionBranchRequirement::GameCondition(condition) =
                         &branch.requirement
                     {
-                        condition.validate_without_cast_entry()?;
+                        condition.validate_without_self_entry_spell()?;
                     }
                     if let ResolutionBranchRequirement::CardResultCount { min, max, .. } =
                         &branch.requirement
@@ -4524,7 +4529,7 @@ impl SpellEffectKind {
                     restriction.validate()?;
                 }
                 if let Some(conditional) = conditional {
-                    conditional.condition.validate_without_cast_entry()?;
+                    conditional.condition.validate_without_self_entry_spell()?;
                     if conditional.options.is_empty() {
                         return Err(
                             "conditional ProduceMana requires at least one mana option".into()
@@ -4650,7 +4655,7 @@ impl SpellEffectKind {
                     );
                 }
                 if let Some(conditional) = conditional_destination {
-                    conditional.condition.validate_without_cast_entry()?;
+                    conditional.condition.validate_without_self_entry_spell()?;
                 }
                 if let Some(result_id) = result_id {
                     result_id.validate()?;

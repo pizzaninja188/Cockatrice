@@ -1644,6 +1644,15 @@ impl GameEngine {
                                 effect @ SpellEffectKind::GainLife { .. } => {
                                     life::gain_life(&mut cx, effect)?
                                 }
+                                effect @ SpellEffectKind::Destroy { .. } => {
+                                    misc::destroy(&mut cx, effect)?
+                                }
+                                effect @ SpellEffectKind::DamageTarget { .. } => {
+                                    damage::damage_target(&mut cx, effect)?
+                                }
+                                effect @ SpellEffectKind::GrantKeywords { .. } => {
+                                    pump_counters::grant_keywords(&mut cx, effect)?
+                                }
                                 _ => {
                                     return Err(EngineError::Illegal(
                                         "unsupported cast-cost conditional inner effect",
@@ -2852,7 +2861,7 @@ fn move_object_to_zone_with_entry_receipt(
     // Adventure or "play it" permission merely because the destination enum is unchanged.
     if old_zone.is_some() {
         state.spell_effects_carry_to_permanent.remove(&oid);
-        state.cast_entry_facts.remove(&oid);
+        state.spell_entry_facts.remove(&oid);
         state
             .discard_reference_successors
             .retain(|(object_id, _), _| *object_id != oid);

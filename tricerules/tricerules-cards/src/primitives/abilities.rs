@@ -1299,10 +1299,10 @@ impl TriggeredAbilityDef {
             );
         }
         if let Some(condition) = self.intervening_if.as_ref() {
-            if condition.requires_cast_entry_context()
+            if condition.requires_self_entry_spell_context()
                 && self.trigger != TriggerCondition::WhenSelfEntersBattlefield
             {
-                return Err("SelfWasCast requires WhenSelfEntersBattlefield".into());
+                return Err("self-entry spell conditions require WhenSelfEntersBattlefield".into());
             }
             condition.validate_trigger_condition()?;
         }
@@ -1372,7 +1372,7 @@ impl ReflexiveTriggeredAbilityDef {
             );
         }
         if let Some(condition) = self.intervening_if.as_ref() {
-            condition.validate_without_cast_entry()?;
+            condition.validate_without_self_entry_spell()?;
             condition.validate_trigger_condition()?;
         }
         for effect in &self.effect {

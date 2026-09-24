@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "bc5631ae-494e-4987-8d17-57674bfbdb9f",
+  "spans": [
+    {
+      "face_id": "archons_glory",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/cast_cost_groups/0"]
+    },
+    {
+      "face_id": "archons_glory",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "CastCostOptionDef::SacrificePermanent",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "ObjectCastCostKind::Bargain",
+      "typed_path": "/faces/0/cast_cost_groups/0/options/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ConditionalCastCost",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_322_bargain::archons_glory_applies_its_conditional_keywords_only_after_bargain",
+      "covers": "the creature always gets +2/+2, while only a Bargained cast also grants flying and lifelink; the optional Treasure sacrifice appears in the committed receipt"
+    },
+    {
+      "test": "scenario issue_322_bargain::bargain_cost_rejects_ineligible_opponent_and_stale_objects_atomically",
+      "covers": "Bargain rejects a creature, an opponent's Treasure, and a stale Treasure generation without moving objects, consuming mana, or casting the spell"
+    },
+    {
+      "test": "issue_322_bargain::the_four_complete_bargain_cards_register_with_optional_receipts_and_shared_targets",
+      "covers": "the exact reviewed identity, optional Bargain cost group, artifact/enchantment/token eligibility, and linked conditional spell effect"
+    },
+    {
+      "test": "issue_322_bargain::bargain_card_fingerprints_match_the_pinned_oracle_text",
+      "covers": "pinned normalized Oracle text fingerprint for Archon's Glory"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

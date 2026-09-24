@@ -509,6 +509,9 @@ mod issue_336_generated_eight_clause_batch;
 mod issue_337_generated_eight_clause_batch;
 #[path = "scenario/issue_338_additional_costs.rs"]
 mod issue_338_additional_costs;
+
+#[path = "scenario/issue_322_bargain.rs"]
+mod issue_322_bargain;
 #[path = "scenario/issue_338_direct_ron.rs"]
 mod issue_338_direct_ron;
 #[path = "scenario/issue_338_direct_ron_batch2.rs"]

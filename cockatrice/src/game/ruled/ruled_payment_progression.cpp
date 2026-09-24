@@ -110,7 +110,12 @@ bool RuledPaymentUi::tryHandlePriorityCostClick(CardItem *card)
                                                               option->candidateContributions.value(candidateId));
             }
             actions->pendingRuledSpellCast.castCostObjectError.clear();
-            emit actions->ruledSpellCastPendingChanged(true);
+            if (ruledCastCostObjectSelectionCompletesImmediately(*option, selection->selectedObjectIds.size(),
+                                                                 actions->pendingRuledCastCostObjectCanConfirm())) {
+                confirmPendingRuledCastCostGroup();
+            } else {
+                emit actions->ruledSpellCastPendingChanged(true);
+            }
             card->update();
             return true;
         }
@@ -839,7 +844,11 @@ void RuledPaymentUi::confirmPendingRuledCastCostGroup()
         actions->pendingRuledSpellCast.castCostObjectError.clear();
         const QPair<int, int> coordinate{group.groupIndex, option->optionIndex};
         if (!actions->pendingRuledSpellCast.selectedModeLinkedCastCosts.contains(coordinate)) {
-            emit actions->ruledSpellCastPendingChanged(true);
+            if (ruledCastCostGroupSelectionCompletesImmediately(actions->pendingRuledSpellCast, group)) {
+                confirmPendingRuledCastCostGroup();
+            } else {
+                emit actions->ruledSpellCastPendingChanged(true);
+            }
             return;
         }
         if (!promptForNextRuledCastCostGroup())

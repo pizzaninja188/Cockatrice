@@ -4,9 +4,10 @@ use tricerules_cards::primitives::{
     CastCostReceiptCondition, Color, ConditionalSearchDestination, ContinuousEffectKind,
     CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
     DelayedTokenSacrificeTiming, EffectDuration, GameCondition, HandCardAction, Keyword,
-    LibraryBottomOrder, LibraryPlacement, ManaAmount, ManaSpendingRestriction, PermanentTypeFilter,
-    ResolvingPermanentModifier, SearchDestination, SearchSelectionSlot, SearchZoneSelection,
-    StaticEmblemEffect, TargetFilter, TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
+    LibraryBottomOrder, LibraryPlacement, ManaAmount, ManaSpendingRestriction, ObjectCastCostKind,
+    PermanentTypeFilter, ResolvingPermanentModifier, SearchDestination, SearchSelectionSlot,
+    SearchZoneSelection, StaticEmblemEffect, TargetFilter, TriggeredAbilityDef,
+    TypeLineReplacement, ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
 use tricerules_cards::{
@@ -223,8 +224,8 @@ pub struct TriggerStackObjectRef {
 /// reconstructing relationships after objects detach, change controller, or leave a zone.
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct TriggerContext {
-    /// The exact permanent incarnation whose self-entry trigger asks "if you cast it".
-    pub entering_cast: Option<CastEntryFact>,
+    /// The exact permanent incarnation and cast-time choices observed by its self-entry trigger.
+    pub entering_spell: Option<SpellEntryFact>,
     /// CR 400.7e public-zone incarnation reached by a self zone-change trigger.
     /// Hoarding Recluse and Myr Retriever exclude this card, not every later incarnation.
     pub source_after_zone_change: Option<TriggerObjectRef>,
@@ -250,13 +251,15 @@ pub struct TriggerContext {
     pub event_count: Option<u32>,
 }
 
-/// CR 400.7d casting information retained for the permanent that a spell becomes. It is not
-/// copiable and expires on the next zone change; an already-created trigger retains its copy.
+/// Cast-time facts retained for the permanent that a spell becomes. Copies of spells inherit
+/// their announced choices (CR 707.2), but permanent copy effects do not. The fact expires on the
+/// next zone change; an already-created trigger retains its event-time copy.
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CastEntryFact {
+pub struct SpellEntryFact {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
-    pub caster: PlayerId,
+    pub caster: Option<PlayerId>,
+    pub bargained: bool,
 }
 
 /// The game entity an Aura or Equipment is attached to. Players are represented explicitly;
@@ -1536,6 +1539,8 @@ pub struct CastCostReceipt {
     pub option_index: u32,
     pub group_id: Option<ChoiceId>,
     pub option_id: Option<ChoiceId>,
+    /// Semantic identity for a cost paid with battlefield objects. Copies retain the receipt.
+    pub object_cost_kind: Option<ObjectCastCostKind>,
     pub label: String,
     pub objects: Vec<CastCostObjectReceipt>,
 }
@@ -2088,8 +2093,8 @@ pub struct GameState {
     /// for relay compatibility, while this generation preserves CR 400.7 identity semantics for
     /// effects that resolve after a source leaves and returns.
     pub zone_change_generation: HashMap<ObjectId, u64>,
-    /// Live, generation-bound CR 400.7d facts; self-entry triggers retain a separate snapshot.
-    pub(crate) cast_entry_facts: HashMap<ObjectId, CastEntryFact>,
+    /// Live, generation-bound spell-entry facts; self-entry triggers retain a separate snapshot.
+    pub(crate) spell_entry_facts: HashMap<ObjectId, SpellEntryFact>,
     /// Incremented whenever a battlefield permanent changes face/status in place.
     pub face_change_generation: HashMap<ObjectId, u64>,
     /// Public CR 709.5 designations for battlefield Rooms. Absence means the object is not a

@@ -1,6 +1,9 @@
 //! Costs paid to activate abilities.
 
-use super::{BattlefieldPermanentFilter, GameCondition, TargetFilter, TargetKind, ZoneCardFilter};
+use super::{
+    BattlefieldPermanentFilter, GameCondition, TargetController, TargetFilter, TargetKind,
+    ZoneCardFilter,
+};
 use crate::mana::ManaCost;
 use crate::{choice_fallback, AbilityPresentation, ChoiceId};
 use serde::{Deserialize, Serialize};
@@ -300,6 +303,10 @@ pub enum ObjectCastCostKind {
     AdditionalPayment,
     Kicker,
     Teamwork,
+    /// Wilds of Eldraine's optional sacrifice of an artifact, enchantment, or token. Reuses the
+    /// existing `SacrificePermanent` payment and receipt contract; Archon's Glory, Candy Grapple,
+    /// and Kellan's Lightblades need the distinct identity only for their linked spell text.
+    Bargain,
 }
 
 /// One mutually distinguishable option in a cast-cost group.
@@ -372,6 +379,21 @@ impl CastCostGroupDef {
                 "cast cost group requires min <= max <= distinct option count and max > 0".into(),
             );
         }
+        if self.options.iter().any(|option| {
+            matches!(
+                option,
+                CastCostOptionDef::TapPermanents {
+                    kind: ObjectCastCostKind::Bargain,
+                    ..
+                } | CastCostOptionDef::SacrificePermanent {
+                    kind: ObjectCastCostKind::Bargain,
+                    ..
+                }
+            )
+        }) && (self.min != 0 || self.max != 1 || self.options.len() != 1)
+        {
+            return Err("Bargain must be one optional cast-cost option".into());
+        }
         let mut option_ids = std::collections::HashSet::new();
         for option in &self.options {
             let option_id = option.option_id();
@@ -406,13 +428,26 @@ impl CastCostGroupDef {
                     }
                 }
                 CastCostOptionDef::TapPermanents {
-                    constraint, filter, ..
+                    kind,
+                    constraint,
+                    filter,
+                    ..
                 } => {
+                    if *kind == ObjectCastCostKind::Bargain {
+                        return Err(
+                            "Bargain must sacrifice an artifact, enchantment, or token".into()
+                        );
+                    }
                     constraint.validate_for(ObjectContributionKind::CurrentPower, "cast tap")?;
                     filter.validate_target_constraints()?;
                 }
-                CastCostOptionDef::SacrificePermanent { filter, .. } => {
+                CastCostOptionDef::SacrificePermanent { kind, filter, .. } => {
                     filter.validate_target_constraints()?;
+                    if *kind == ObjectCastCostKind::Bargain && !is_bargain_filter(filter) {
+                        return Err(
+                            "Bargain filter must be a permanent you control that is an artifact, an enchantment, or a token".into(),
+                        );
+                    }
                 }
             }
         }
@@ -422,6 +457,33 @@ impl CastCostGroupDef {
     pub fn fallback_prompt(&self) -> String {
         choice_fallback("Choose cast cost", &self.group_id)
     }
+}
+
+fn is_bargain_filter(filter: &TargetFilter) -> bool {
+    let mut root = filter.clone();
+    let Some(branches) = root.any_of.take() else {
+        return false;
+    };
+    if root != TargetFilter::default() || branches.len() != 2 {
+        return false;
+    }
+
+    let artifact_or_enchantment = TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        controller: TargetController::You,
+        permanent_types: vec![
+            super::PermanentTypeFilter::Artifact,
+            super::PermanentTypeFilter::Enchantment,
+        ],
+        ..TargetFilter::default()
+    };
+    let token = TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        controller: TargetController::You,
+        token: Some(true),
+        ..TargetFilter::default()
+    };
+    branches.contains(&artifact_or_enchantment) && branches.contains(&token)
 }
 
 impl CastCostOptionDef {
@@ -449,6 +511,19 @@ impl CastCostOptionDef {
         }
     }
 
+    /// Return the semantic identity of an object-paid cast cost, if this option pays with
+    /// battlefield objects. The committed receipt carries this through spell-copy creation.
+    pub fn object_cost_kind(&self) -> Option<ObjectCastCostKind> {
+        match self {
+            Self::TapPermanents { kind, .. } | Self::SacrificePermanent { kind, .. } => Some(*kind),
+            Self::Blight { .. }
+            | Self::Mana { .. }
+            | Self::Behold { .. }
+            | Self::DiscardCard { .. }
+            | Self::PayLife { .. } => None,
+        }
+    }
+
     pub fn fallback_label(&self) -> String {
         match self {
             Self::Blight { count, .. } => format!("Blight {count}"),
@@ -463,11 +538,15 @@ impl CastCostOptionDef {
                 ObjectCastCostKind::Teamwork => "Pay teamwork cost".into(),
                 ObjectCastCostKind::Kicker => "Pay tap kicker cost".into(),
                 ObjectCastCostKind::AdditionalPayment => "Tap permanents".into(),
+                ObjectCastCostKind::Bargain => "Bargain".into(),
             },
             Self::SacrificePermanent { kind, .. } => match kind {
                 ObjectCastCostKind::Kicker => "Kicker - sacrifice a permanent".into(),
                 ObjectCastCostKind::Teamwork => "Pay teamwork cost".into(),
                 ObjectCastCostKind::AdditionalPayment => "Sacrifice a permanent".into(),
+                ObjectCastCostKind::Bargain => {
+                    "Bargain (sacrifice an artifact, enchantment, or token)".into()
+                }
             },
         }
     }

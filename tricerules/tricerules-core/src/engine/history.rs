@@ -1011,17 +1011,31 @@ impl GameEngine {
                 }),
             GameCondition::SelfWasCast => trigger_context
                 .or_else(|| context.stack_item.map(|item| &item.trigger_context))
-                .and_then(|trigger| trigger.entering_cast)
+                .and_then(|trigger| trigger.entering_spell)
                 .or_else(|| {
                     self.state
-                        .cast_entry_facts
+                        .spell_entry_facts
                         .get(&context.source_object_id)
                         .copied()
                 })
                 .is_some_and(|fact| {
                     fact.object_id == context.source_object_id
                         && fact.zone_change_generation == context.source_zone_change
-                        && fact.caster == context.controller
+                        && fact.caster == Some(context.controller)
+                }),
+            GameCondition::SelfWasBargained => trigger_context
+                .or_else(|| context.stack_item.map(|item| &item.trigger_context))
+                .and_then(|trigger| trigger.entering_spell)
+                .or_else(|| {
+                    self.state
+                        .spell_entry_facts
+                        .get(&context.source_object_id)
+                        .copied()
+                })
+                .is_some_and(|fact| {
+                    fact.object_id == context.source_object_id
+                        && fact.zone_change_generation == context.source_zone_change
+                        && fact.bargained
                 }),
             GameCondition::TriggeringSpellManaSpent { comparison } => {
                 let spent = trigger_context
@@ -1796,6 +1810,7 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::SpellEntryFact;
 
     #[test]
     fn issue_189_controller_relative_departure_condition_is_available() {
@@ -3862,5 +3877,69 @@ mod tests {
             6,
             "the same physical id after a zone change is a new object and counts as another"
         );
+    }
+
+    #[test]
+    fn self_was_bargained_uses_the_matching_spell_entry_generation() {
+        let mut engine = GameEngine::new(
+            67_011,
+            &[0, 1],
+            20,
+            Some(vec![
+                deck_with_cards(&["grizzly_bears"], "forest"),
+                deck_with_cards(&[], "island"),
+            ]),
+            true,
+        )
+        .expect("engine");
+        let context = ConditionContext {
+            controller: 0,
+            source_object_id: 77,
+            source_zone_change: 4,
+            resolving_spell_id: None,
+            stack_item: None,
+            previous_effect_result: None,
+        };
+        let bargained_entry = SpellEntryFact {
+            object_id: 77,
+            zone_change_generation: 4,
+            caster: Some(0),
+            bargained: true,
+        };
+        let condition = GameCondition::SelfWasBargained;
+
+        engine.state.spell_entry_facts.insert(77, bargained_entry);
+        assert!(engine.condition_holds(&condition, context));
+
+        engine.state.spell_entry_facts.insert(
+            77,
+            SpellEntryFact {
+                zone_change_generation: 3,
+                ..bargained_entry
+            },
+        );
+        assert!(!engine.condition_holds(&condition, context));
+
+        engine.state.spell_entry_facts.insert(
+            77,
+            SpellEntryFact {
+                bargained: false,
+                ..bargained_entry
+            },
+        );
+        assert!(
+            !engine.condition_holds(&condition, context),
+            "a permanent-copy entry has no Bargain payment"
+        );
+
+        let entry_trigger = TriggerContext {
+            entering_spell: Some(bargained_entry),
+            ..TriggerContext::default()
+        };
+        assert!(engine.condition_holds_with_trigger_context(
+            &condition,
+            context,
+            Some(&entry_trigger)
+        ));
     }
 }
