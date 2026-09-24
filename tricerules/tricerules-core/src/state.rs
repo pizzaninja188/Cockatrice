@@ -2083,6 +2083,8 @@ pub struct GameState {
         HashMap<(ObjectId, u64), BTreeMap<CounterKind, u32>>,
     /// Signed departure P/T for source-relative quantities (CR 608.2h).
     pub(crate) last_known_pt_by_generation: HashMap<(ObjectId, u64), (Option<i64>, Option<i64>)>,
+    /// Derived battlefield mana value before a zone change clears copied values and face state.
+    pub(crate) last_known_mana_value_by_generation: HashMap<(ObjectId, u64), u32>,
     pub(crate) last_known_copy_by_generation: HashMap<(ObjectId, u64), TokenCopySnapshot>,
     /// The object an Aura or Equipment source was attached to as that source last left the
     /// battlefield, keyed by the source generation. The value carries the attached object's

@@ -344,6 +344,8 @@ mod issue_341_static_spell_cost_filters;
 mod issue_479_land_comparison;
 #[path = "scenario/issue_481_conditional_library_choices.rs"]
 mod issue_481_conditional_library_choices;
+#[path = "scenario/issue_483_feed_the_swarm.rs"]
+mod issue_483_feed_the_swarm;
 #[path = "scenario/issue_487_red_guardian.rs"]
 mod issue_487_red_guardian;
 #[path = "scenario/issue_490_beza_comparison.rs"]

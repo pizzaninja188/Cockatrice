@@ -78,9 +78,9 @@ pub(super) fn gain_life(
 /// CR 119.3: the players named by `who` lose life. Untargeted (CR 115.1).
 ///
 /// `LifeAmount::TargetManaValue` (CR 202.3) reads the mana value of the object the *spell*
-/// targets — a sibling effect declared it, this one only borrows it. Position relative to that
-/// sibling does not matter: the object keeps its `card_id` across a zone change, so Reanimate's
-/// `[MoveGraveyardCards, LoseLife]` reads the same value before or after the creature moves.
+/// targets — a sibling effect declared it, this one only borrows it. A battlefield departure
+/// uses the target generation's last-known derived mana value, including copied characteristics.
+/// Reanimate's graveyard-to-battlefield move reads the resulting live object instead.
 /// Position relative to a *suspending* effect does matter — see the `EffectOutcome::Suspended`
 /// early return in the caller, and Thoughtseize's RON for the one card that has to care.
 pub(super) fn lose_life(
@@ -100,23 +100,28 @@ pub(super) fn lose_life(
         LifeAmount::Fixed(n) => n,
         LifeAmount::TargetManaValue => targets
             .first()
-            .and_then(|tid| engine.state.objects.get(tid))
-            .and_then(|o| {
-                let def = engine.registry.get(&o.card_id)?;
-                if let Some(values) = &o.copiable_values {
-                    return Some(values.face.mana_cost.mana_value());
-                }
-                // CR 202.3b: a face with no printed cost (a transforming DFC's back face) has
-                // the mana value of the front face, so fall back rather than reading 0.
-                let face = def
-                    .face(o.face_up_index)
-                    .unwrap_or_else(|| def.primary_face());
-                let cost = if face.mana_cost.is_empty() {
-                    &def.primary_face().mana_cost
-                } else {
-                    &face.mana_cost
-                };
-                Some(cost.mana_value())
+            .and_then(|tid| {
+                let selected_generation = cx.top.targets.iter().find_map(|target| {
+                    (target.object_id == *tid)
+                        .then_some(target.zone_change_generation)
+                        .flatten()
+                });
+                selected_generation
+                    .and_then(|generation| {
+                        engine
+                            .state
+                            .last_known_mana_value_by_generation
+                            .get(&(*tid, generation))
+                            .copied()
+                    })
+                    .or_else(|| {
+                        super::super::characteristics::characteristics_from(
+                            &engine.state,
+                            engine.registry,
+                            *tid,
+                        )
+                        .map(|characteristics| characteristics.mana_value)
+                    })
             })
             // Unreachable in practice: registry load requires an object-targeting sibling, and
             // the CR 608.2b fizzle check kills the whole spell before resolution when that

@@ -1,0 +1,11 @@
+(
+  id: "feed_the_swarm",
+  name: "Feed the Swarm",
+  face_id: "feed_the_swarm",
+  mana_cost: "{1}{B}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: AnyPermanent, controller: Opponent, permanent_types: [Creature, Enchantment]))),
+    LoseLife(amount: TargetManaValue),
+  ],
+)

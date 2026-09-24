@@ -2948,6 +2948,9 @@ fn move_object_to_zone_with_entry_receipt(
             state.last_known_tapped.insert(oid, was_tapped);
         }
         if let Some(characteristics) = last_known_characteristics {
+            state
+                .last_known_mana_value_by_generation
+                .insert((oid, prior_generation), characteristics.mana_value);
             state.last_known_pt_by_generation.insert(
                 (oid, prior_generation),
                 (
@@ -3487,6 +3490,72 @@ mod attached_subject_tests {
         ability.effect = effects;
         item.triggered_ability = Some(ability);
         item
+    }
+
+    #[test]
+    fn issue_483_life_loss_uses_copied_battlefield_mana_value_after_destroy() {
+        let mut engine = GameEngine::new_with_default_decks(483_001, &[0, 1], 20).unwrap();
+        let original = add_battlefield_object(&mut engine, 1, "grizzly_bears");
+        let copied_from = add_battlefield_object(&mut engine, 1, "serra_angel");
+        engine
+            .state
+            .objects
+            .get_mut(&original)
+            .unwrap()
+            .copiable_values = engine.copiable_values_for(copied_from);
+        assert_eq!(
+            super::super::characteristics::characteristics_from(
+                &engine.state,
+                engine.registry,
+                original,
+            )
+            .unwrap()
+            .mana_value,
+            5
+        );
+        let mut top = triggered_item(original, 0);
+        top.targets.push(StackTarget {
+            object_id: original,
+            group_index: 0,
+            damage_amount: 0,
+            kind: 0,
+            zone_change_generation: Some(0),
+        });
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            original,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        let mut events = Vec::new();
+        let previous = EffectResult::default();
+        let mut result = EffectResult::default();
+        let mut cx = EffectCx {
+            engine: &mut engine,
+            events: &mut events,
+            targets: &[original],
+            targets_by_role: &[],
+            target_damage: &[],
+            target_group_indices: &[],
+            top: &top,
+            controller: 0,
+            affected_player: 0,
+            spell_label: "Feed the Swarm",
+            previous_effect_result: &previous,
+            effect_result: &mut result,
+            effect_index: 1,
+        };
+        life::lose_life(
+            &mut cx,
+            SpellEffectKind::LoseLife {
+                amount: LifeAmount::TargetManaValue,
+                who: PlayerRecipient::Controller,
+            },
+        )
+        .unwrap();
+        assert_eq!(engine.state.players[0].life, 15);
     }
 
     #[test]

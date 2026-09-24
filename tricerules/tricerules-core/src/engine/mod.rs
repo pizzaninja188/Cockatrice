@@ -1195,6 +1195,7 @@ impl GameEngine {
             last_known_controller_by_generation: HashMap::new(),
             last_known_counters_by_generation: HashMap::new(),
             last_known_pt_by_generation: HashMap::new(),
+            last_known_mana_value_by_generation: HashMap::new(),
             last_known_copy_by_generation: HashMap::new(),
             last_known_attached_object_by_generation: HashMap::new(),
             zone_change_generation: HashMap::new(),

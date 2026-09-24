@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "5825997b-10d7-4a36-972c-a80ddd90b8ed",
+  "spans": [
+    {
+      "face_id": "feed_the_swarm",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter.controller",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen/controller"
+    },
+    {
+      "symbol": "TargetFilter.permanent_types",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen/permanent_types"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "LifeAmount::TargetManaValue",
+      "typed_path": "/faces/0/spell_effect/1/LoseLife/amount"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_483_feed_the_swarm::feed_the_swarm_destroys_an_opponents_creature_and_loses_its_mana_value",
+      "covers": "legal opponent creature is destroyed and the controller loses its mana value"
+    },
+    {
+      "test": "scenario issue_483_feed_the_swarm::feed_the_swarm_loses_life_when_legal_indestructible_target_survives",
+      "covers": "legal indestructible target stays while the controller still loses its mana value"
+    },
+    {
+      "test": "scenario issue_483_feed_the_swarm::feed_the_swarm_illegal_target_prevents_both_instructions",
+      "covers": "illegal sole target causes the spell to fail without life loss"
+    },
+    {
+      "test": "scenario issue_483_feed_the_swarm::feed_the_swarm_destroys_an_opponents_enchantment",
+      "covers": "opponent-controlled enchantment is a legal target and is destroyed with life loss"
+    },
+    {
+      "test": "scenario issue_483_feed_the_swarm::feed_the_swarm_rejects_a_permanent_the_caster_controls",
+      "covers": "caster-controlled permanent is not a legal target"
+    },
+    {
+      "test": "scenario issue_483_feed_the_swarm::feed_the_swarm_uses_copied_battlefield_mana_value_after_destroy",
+      "covers": "complete cast and resolution uses the copied battlefield mana value after the target leaves"
+    },
+    {
+      "test": "issue_483_feed_the_swarm::issue_483_registers_complete_feed_the_swarm",
+      "covers": "exact source-backed face identity and ordered typed target destruction and life loss"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
