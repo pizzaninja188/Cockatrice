@@ -1,0 +1,30 @@
+{
+  "format_version": 1,
+  "oracle_id": "234a734b-ba28-4f1b-9d01-3c3e7d516590",
+  "spans": [
+    {
+      "face_id": "an_offer_you_cant_refuse",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {"symbol": "SpellEffectKind::CounterTargetSpell", "typed_path": "/faces/0/spell_effect/0"},
+    {"symbol": "StackSpellFilter::Noncreature", "typed_path": "/faces/0/spell_effect/0/CounterTargetSpell/spell_filter/card_type"},
+    {"symbol": "SpellEffectKind::CreateTokens", "typed_path": "/faces/0/spell_effect/1"},
+    {"symbol": "PlayerRecipient::PreviousTargetedSpellController", "typed_path": "/faces/0/spell_effect/1/CreateTokens/who"}
+  ],
+  "tokens": ["treasure"],
+  "semantic_fixtures": [
+    {"test": "scenario issue_478_targeted_spell_controller::issue_478_legal_uncounterable_spell_gives_its_controller_treasure", "covers": "legal uncounterable noncreature spell remains on the stack and its controller gets two Treasure"},
+    {"test": "scenario issue_478_targeted_spell_controller::issue_478_countered_spell_gives_target_controller_treasure", "covers": "counterable noncreature spell is countered, yet its former controller gets two Treasure"},
+    {"test": "scenario issue_478_targeted_spell_controller::issue_478_illegal_stack_target_fizzles_without_treasure", "covers": "sole target left stack and changed generation, so the whole spell fizzles without Treasure"},
+    {"test": "scenario issue_478_targeted_spell_controller::issue_478_rejects_creature_spells_at_cast", "covers": "noncreature filter rejects a creature spell before committing the cast"},
+    {"test": "issue_478_targeted_spell_controller::issue_478_registers_complete_offer", "covers": "exact Oracle identity, mana, type, ordered effects, recipient, and fail-closed adjacency"}
+  ],
+  "complete_definition_review_confirmed": true
+}

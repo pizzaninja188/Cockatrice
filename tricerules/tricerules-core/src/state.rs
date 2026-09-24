@@ -117,6 +117,8 @@ pub(crate) struct EffectResult {
     pub produced_objects: Vec<TriggerObjectRef>,
     pub receipt: Option<ResolutionReceipt>,
     pub counter_placements: Vec<CounterPlacementReceipt>,
+    /// Controller of a legal stack target at the counter instruction, before any stack exit.
+    pub targeted_spell_controller: Option<PlayerId>,
 }
 
 /// Private generation-bound proof that one counter instruction actually changed its recipient.
@@ -140,6 +142,7 @@ impl From<CardResultCohort> for EffectResult {
             produced_objects: Vec::new(),
             receipt: None,
             counter_placements: Vec::new(),
+            targeted_spell_controller: None,
         }
     }
 }

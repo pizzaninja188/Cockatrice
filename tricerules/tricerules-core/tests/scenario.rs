@@ -340,6 +340,8 @@ mod issue_299_generated_mercenary;
 mod issue_300_generated_land_sacrifice_draw;
 #[path = "scenario/issue_341_static_spell_cost_filters.rs"]
 mod issue_341_static_spell_cost_filters;
+#[path = "scenario/issue_478_targeted_spell_controller.rs"]
+mod issue_478_targeted_spell_controller;
 #[path = "scenario/issue_479_land_comparison.rs"]
 mod issue_479_land_comparison;
 #[path = "scenario/issue_480_tainted_treats.rs"]

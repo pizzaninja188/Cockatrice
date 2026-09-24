@@ -384,6 +384,7 @@ fn simple_player_recipients(
         PlayerRecipient::TriggerObjectController => trigger_object_controller.into_iter().collect(),
         PlayerRecipient::SourceController => source_controller.into_iter().collect(),
         PlayerRecipient::ControllerOfTargetGroup { .. }
+        | PlayerRecipient::PreviousTargetedSpellController
         | PlayerRecipient::DefendingPlayer
         | PlayerRecipient::AttackingOpponentsOfDefendingPlayer => Vec::new(),
         PlayerRecipient::EachOpponent => {
@@ -447,6 +448,11 @@ mod player_recipient_order_tests {
 
 fn player_recipients(cx: &EffectCx<'_>, who: PlayerRecipient) -> Vec<PlayerId> {
     match who {
+        PlayerRecipient::PreviousTargetedSpellController => cx
+            .previous_effect_result
+            .targeted_spell_controller
+            .into_iter()
+            .collect(),
         PlayerRecipient::ControllerOfTargetGroup { group_index } => {
             let object_id = cx.targets.iter().zip(cx.target_group_indices).find_map(
                 |(&object_id, &target_group)| (target_group == group_index).then_some(object_id),

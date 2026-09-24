@@ -2339,6 +2339,11 @@ pub enum PlayerRecipient {
     /// Outrage and Searing Blaze-style effects evaluate this relationship at resolution rather
     /// than snapshotting the target's controller when the spell was cast.
     ControllerOfTargetGroup { group_index: u32 },
+    /// The controller of the legal stack spell selected by the immediately preceding
+    /// `CounterTargetSpell`, captured before that instruction may remove the spell. This
+    /// remains defined if the spell is legal but cannot be countered. An Offer You Can't
+    /// Refuse, Strix Serenade, and Swan Song use this recipient.
+    PreviousTargetedSpellController,
     /// The event-time defending player of the attack that caused this trigger. Scorch Spitter and
     /// similar attack triggers keep that player even if the source leaves before resolution.
     DefendingPlayer,
@@ -3102,6 +3107,16 @@ impl SpellEffectKind {
             let previous = index
                 .checked_sub(1)
                 .and_then(|previous| effects.get(previous));
+            if matches!(
+                effect,
+                SpellEffectKind::CreateTokens {
+                    who: PlayerRecipient::PreviousTargetedSpellController,
+                    ..
+                }
+            ) && !matches!(previous, Some(SpellEffectKind::CounterTargetSpell { .. }))
+            {
+                return Err("PreviousTargetedSpellController requires an immediately preceding CounterTargetSpell".into());
+            }
             let previous_cardinality = previous
                 .map(produced_object_cardinality)
                 .unwrap_or(ProducedObjectCardinality::None);

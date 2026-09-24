@@ -1,0 +1,16 @@
+// Pinned Oracle 234a734b-ba28-4f1b-9d01-3c3e7d516590; official Foundations rulings checked 2026-09-24.
+// CR 608.2b, 701.6a, 701.7a: a legal, uncounterable target still gives its controller Treasure.
+(
+  id: "an_offer_you_cant_refuse",
+  name: "An Offer You Can't Refuse",
+  face_id: "an_offer_you_cant_refuse",
+  mana_cost: "{U}",
+  types: ["Instant"],
+  spell_effect: [
+    CounterTargetSpell(
+      spell_filter: (card_type: Some(Noncreature)),
+      unless_controller_pays: None,
+    ),
+    CreateTokens(token: "treasure", count: 2, who: PreviousTargetedSpellController),
+  ],
+)

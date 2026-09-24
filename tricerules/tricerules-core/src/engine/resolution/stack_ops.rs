@@ -18,6 +18,19 @@ pub(super) fn counter_target_spell(
     let spell_label = cx.spell_label;
 
     if let Some(&tid) = targets.first() {
+        // CR 608.2b already filtered illegal targets. Capture the current spell controller
+        // before countering changes its zone and generation; even a legal uncounterable spell
+        // must give its controller the following instruction's tokens.
+        cx.effect_result.targeted_spell_controller = cx
+            .top
+            .targets
+            .iter()
+            .any(|target| {
+                target.object_id == tid && stack_target_identity_is_current(engine, target)
+            })
+            .then(|| engine.state.stack.iter().find(|item| item.id == tid))
+            .flatten()
+            .map(|item| item.controller);
         let receipt_payment = unless_controller_pays_by_cast_cost.map(|conditional| {
             if cx.top.cast_cost_condition_matches(&conditional.condition) {
                 conditional.if_selected
