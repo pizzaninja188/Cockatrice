@@ -365,6 +365,72 @@ fn canonical_resolution_publishes_new_creature_battlefield_snapshot() {
 }
 
 #[test]
+fn canonical_stack_resolution_exposes_active_player_priority_before_auto_pass() {
+    let decks = Some(vec![
+        vec!["forest".into(); 7],
+        vec![
+            "mountain".into(),
+            "lightning_bolt".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+            "mountain".into(),
+        ],
+    ]);
+    let mut e = GameEngine::new(9911, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+
+    e.apply_command(0, &pass())
+        .expect("active player passes to opponent");
+    give_mana(
+        &mut e,
+        1,
+        ManaGift {
+            r: 1,
+            ..Default::default()
+        },
+    );
+    let bolt = hand_index_for_card(&e, 1, "lightning_bolt");
+    let policies = vec![
+        auto_pass_everywhere(0),
+        AutoPassPolicy {
+            player_id: 1,
+            stop_on_own_turn: vec![],
+            stop_on_opponent_turn: vec![PhaseId::Main1 as i32],
+        },
+    ];
+    e.apply_command(
+        1,
+        &canonical_with_policies(cast_spell(bolt, target_player(0)), policies.clone()),
+    )
+    .expect("opponent casts an instant and keeps priority");
+    e.apply_command(1, &canonical_with_policies(pass(), policies.clone()))
+        .expect("caster passes priority back");
+
+    let resolved = e
+        .apply_command(0, &canonical_with_policies(pass(), policies))
+        .expect("active player passes and the instant resolves");
+    assert!(e.state.stack.is_empty());
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main1);
+    assert_eq!(
+        e.state.priority_player_id(),
+        0,
+        "the active player receives a fresh priority window after resolution"
+    );
+    assert!(
+        priority_changes_in(&resolved).contains(&0),
+        "the resolved batch publishes the active player's priority"
+    );
+
+    e.apply_command(0, &pass())
+        .expect("active player passes after resolution");
+    e.apply_command(1, &pass())
+        .expect("opponent also passes on the empty stack");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::BeginCombat);
+}
+
+#[test]
 fn automatic_settlement_stops_when_a_step_trigger_reaches_the_stack() {
     let mut e = GameEngine::new(9908, &[0, 1], 20, all_land_decks(), true).expect("new");
     inject_permanent_on_battlefield(&mut e, 0, "howling_mine");

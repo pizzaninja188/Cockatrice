@@ -1916,8 +1916,18 @@ impl GameEngine {
             bool,
         ),
     ) -> Result<(), EngineError> {
+        use rv1::ruled_event::Ev;
+
+        // The pass that resolves a stack object closes that priority round. Keep the fresh
+        // active-player window visible instead of applying their phase auto-pass policy a second
+        // time to the same canonical command.
+        let resolved_stack_object = batch
+            .events
+            .iter()
+            .any(|event| matches!(event.ev.as_ref(), Some(Ev::StackResolved(_))));
         let mut automatic_passes = 0;
-        while automatic_passes < MAX_AUTOMATIC_PRIORITY_PASSES
+        while !resolved_stack_object
+            && automatic_passes < MAX_AUTOMATIC_PRIORITY_PASSES
             && self.can_automatically_pass_priority(policies)
         {
             let priority_player = self.state.priority_player_id();
@@ -1929,7 +1939,6 @@ impl GameEngine {
             batch.events.extend(next.events);
             automatic_passes += 1;
         }
-        use rv1::ruled_event::Ev;
         let mut published_phase_count = 0;
         let mut published_priority_count = 0;
         let mut published_zone_view_count = 0;
