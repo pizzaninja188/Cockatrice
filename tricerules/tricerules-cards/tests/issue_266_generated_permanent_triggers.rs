@@ -46,6 +46,7 @@ fn issue_266_emits_exact_life_and_combined_event_triggers() {
             ability.trigger,
             TriggerCondition::WheneverPlayerGainsLife {
                 player: CastTriggerPlayer::Controller,
+                first_during_your_turn: false,
             }
         );
         assert_eq!(
@@ -94,6 +95,18 @@ fn issue_266_emits_exact_life_and_combined_event_triggers() {
             );
         }
     }
+}
+
+#[test]
+fn issue_477_existing_life_gain_recipe_omits_default_first_turn_filter() {
+    let trigger = TriggerCondition::WheneverPlayerGainsLife {
+        player: CastTriggerPlayer::Controller,
+        first_during_your_turn: false,
+    };
+    assert_eq!(
+        ron::ser::to_string(&trigger).expect("serialize life gain trigger"),
+        "WheneverPlayerGainsLife(player:Controller)"
+    );
 }
 
 #[test]

@@ -710,6 +710,9 @@ enum GameEvent {
     /// "gain that much" payoff adds it with its first card.
     LifeGained {
         player: PlayerId,
+        /// Captured before the gain commits, so batched simultaneous lifelink events keep their
+        /// distinct first/second order even when triggers are collected together afterward.
+        first_this_turn: bool,
     },
     /// CR 701.25d: one completed surveil action. This is emitted after the complete library
     /// partition, including any retained-card ordering, even when the library was empty.

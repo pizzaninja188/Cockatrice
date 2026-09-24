@@ -1557,7 +1557,10 @@ impl GameEngine {
                     })
                 })
                 .collect(),
-            GameEvent::LifeGained { player: gaining } => {
+            GameEvent::LifeGained {
+                player: gaining,
+                first_this_turn,
+            } => {
                 // Every player's permanents watch, in APNAP order (CR 603.3b) — the amount is
                 // irrelevant, one gain event fires each matching ability once.
                 sources
@@ -1566,15 +1569,20 @@ impl GameEngine {
                         self.matching_snapshot_abilities(source, |tc| {
                             let TriggerCondition::WheneverPlayerGainsLife {
                                 player: player_filter,
+                                first_during_your_turn,
                             } = tc
                             else {
                                 return false;
                             };
-                            self.relative_player_matches(
-                                *player_filter,
-                                *gaining,
-                                source.controller,
-                            )
+                            (!first_during_your_turn
+                                || (*first_this_turn
+                                    && *gaining == source.controller
+                                    && *gaining == self.state.active_player_id()))
+                                && self.relative_player_matches(
+                                    *player_filter,
+                                    *gaining,
+                                    source.controller,
+                                )
                         })
                     })
                     .collect()

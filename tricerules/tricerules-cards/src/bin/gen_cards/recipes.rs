@@ -4787,6 +4787,7 @@ fn match_controller_gains_life_put_counter_on_source(
                 context,
                 TriggerCondition::WheneverPlayerGainsLife {
                     player: CastTriggerPlayer::Controller,
+                    first_during_your_turn: false,
                 },
                 vec![SpellEffectKind::PutCounters {
                     counter: CounterKind::PlusOnePlusOne,
@@ -4807,6 +4808,7 @@ fn match_controller_gains_life_each_opponent_loses_one(
                 context,
                 TriggerCondition::WheneverPlayerGainsLife {
                     player: CastTriggerPlayer::Controller,
+                    first_during_your_turn: false,
                 },
                 vec![SpellEffectKind::LoseLife {
                     amount: LifeAmount::Fixed(1),

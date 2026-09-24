@@ -1,0 +1,16 @@
+// Pinned Oracle 52f1b5a4-62ff-44de-80da-503d4e52d312; exact rulings checked 2026-09-24.
+(
+  id: "cat_collector", name: "Cat Collector", face_id: "cat_collector",
+  mana_cost: "{2}{W}", types: ["Creature", "Human", "Citizen"], power: 3, toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01", presentation: OracleLines([1]), trigger: WhenSelfEntersBattlefield,
+      effect: [CreateTokens(token: "food", count: 1)],
+    ),
+    (
+      ability_id: "triggered_02", presentation: OracleLines([2]),
+      trigger: WheneverPlayerGainsLife(player: Controller, first_during_your_turn: true),
+      effect: [CreateTokens(token: "cat_w_1_1", count: 1)],
+    ),
+  ],
+)

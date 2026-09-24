@@ -712,6 +712,11 @@ pub enum TriggerCondition {
         /// Defaults to `Controller` ("whenever you gain life").
         #[serde(default)]
         player: CastTriggerPlayer,
+        /// Match only the first positive life-gain event on that player's own turn, including
+        /// gains before this source entered. Cat Collector's exact ruling requires event history,
+        /// rather than this ability's per-source trigger count.
+        #[serde(default, skip_serializing_if = "is_false")]
+        first_during_your_turn: bool,
     },
     /// Whenever a player completes a surveil action (CR 701.25d). The event is emitted only
     /// after both the graveyard selection and retained-card ordering are complete. Dimir Spybug
@@ -1970,6 +1975,10 @@ pub enum StaticAbilityDef {
     /// CR 305.1 / 611.3: the controller may play lands from their own graveyard while this
     /// permanent is on the battlefield. Icetill Explorer, Crucible of Worlds.
     PlayLandsFromOwnGraveyard,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 fn is_zero_i32(value: &i32) -> bool {

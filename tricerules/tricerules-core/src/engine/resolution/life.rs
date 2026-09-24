@@ -40,6 +40,7 @@ pub(in crate::engine) fn apply_life_gain_without_triggers(
         return None;
     }
     let pi = engine.state.player_idx(player)?;
+    let first_this_turn = engine.state.turn_history.current.player(player).life_gained == 0;
     crate::engine::history::commit_life_change(&mut engine.state, pi, amount as i32);
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
@@ -49,7 +50,10 @@ pub(in crate::engine) fn apply_life_gain_without_triggers(
         })),
     });
     events.push(ev_log(format!("P{player} gains {amount} life ({reason}).")));
-    Some(GameEvent::LifeGained { player })
+    Some(GameEvent::LifeGained {
+        player,
+        first_this_turn,
+    })
 }
 
 pub(super) fn gain_life(

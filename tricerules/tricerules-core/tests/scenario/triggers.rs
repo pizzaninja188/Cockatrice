@@ -1,4 +1,6 @@
 use crate::helpers::*;
+use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration, TypeLineAddition};
+use tricerules_core::state::{AffectedScope, ContinuousEffect};
 
 fn trigger_targets(object_id: u32) -> Vec<TargetRef> {
     vec![TargetRef {
@@ -1230,6 +1232,188 @@ fn two_life_gain_events_trigger_separately() {
     }
 
     assert_eq!(e.effective_power(pridemate), Some(4), "two counters");
+}
+
+#[test]
+fn issue_477_prior_gain_before_cat_collector_enters_suppresses_later_trigger() {
+    let decks = Some(vec![
+        deck_with("plains", &["angels_mercy", "angels_mercy", "cat_collector"]),
+        island_only_deck(),
+    ]);
+    let mut e = GameEngine::new(477_001, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    grant_pool(&mut e, 0);
+    ensure_in_hand(&mut e, 0, "angels_mercy");
+    e.apply_command(
+        0,
+        &cast_spell(hand_index_for_card(&e, 0, "angels_mercy"), vec![]),
+    )
+    .expect("earlier life gain");
+    resolve_entire_stack_two_player(&mut e);
+
+    let cat = inject_creature_on_battlefield(&mut e, 0, "cat_collector");
+    assert_eq!(e.state.objects[&cat].card_id, "cat_collector");
+    grant_pool(&mut e, 0);
+    ensure_in_hand(&mut e, 0, "angels_mercy");
+    e.apply_command(
+        0,
+        &cast_spell(hand_index_for_card(&e, 0, "angels_mercy"), vec![]),
+    )
+    .expect("later life gain");
+    resolve_entire_stack_two_player(&mut e);
+
+    assert_eq!(
+        e.state.players[0]
+            .battlefield
+            .iter()
+            .filter(|&&oid| e.state.objects[&oid].card_id == "cat_w_1_1")
+            .count(),
+        0,
+        "an earlier gain in the same turn uses Cat Collector's first event"
+    );
+}
+
+fn issue_477_token_count(e: &GameEngine, card_id: &str) -> usize {
+    e.state.players[0]
+        .battlefield
+        .iter()
+        .filter(|&&oid| e.state.objects[&oid].card_id == card_id)
+        .count()
+}
+
+fn issue_477_cast_mercy(e: &mut GameEngine) {
+    grant_pool(e, 0);
+    inject_card_into_hand(e, 0, "angels_mercy");
+    e.apply_command(
+        0,
+        &cast_spell(hand_index_for_card(e, 0, "angels_mercy"), vec![]),
+    )
+    .expect("cast Angel's Mercy");
+    resolve_entire_stack_two_player(e);
+}
+
+#[test]
+fn issue_477_complete_cat_collector_etb_and_first_own_turn_gain() {
+    let decks = Some(vec![
+        deck_with("plains", &["cat_collector", "angels_mercy", "angels_mercy"]),
+        island_only_deck(),
+    ]);
+    let mut e = GameEngine::new(477_002, &[0, 1], 20, decks, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    grant_pool(&mut e, 0);
+    ensure_in_hand(&mut e, 0, "cat_collector");
+    e.apply_command(
+        0,
+        &cast_spell(hand_index_for_card(&e, 0, "cat_collector"), vec![]),
+    )
+    .expect("cast Cat Collector");
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(issue_477_token_count(&e, "food"), 1, "ETB Food");
+
+    issue_477_cast_mercy(&mut e);
+    assert_eq!(issue_477_token_count(&e, "cat_w_1_1"), 1);
+    issue_477_cast_mercy(&mut e);
+    assert_eq!(issue_477_token_count(&e, "cat_w_1_1"), 1, "second gain");
+
+    pass_turn_to_next_upkeep(&mut e, 0);
+    e.apply_command(1, &pass())
+        .expect("opponent passes upkeep priority");
+    issue_477_cast_mercy(&mut e);
+    assert_eq!(issue_477_token_count(&e, "cat_w_1_1"), 1, "opponent's turn");
+
+    pass_turn_to_next_upkeep(&mut e, 1);
+    while e.state.turn_step != tricerules_core::TurnStep::Main1 {
+        pass_both_players(&mut e);
+    }
+    issue_477_cast_mercy(&mut e);
+    assert_eq!(issue_477_token_count(&e, "cat_w_1_1"), 2, "next own turn");
+}
+
+#[test]
+fn issue_477_simultaneous_lifelink_gains_create_only_one_cat() {
+    let mut e = GameEngine::new(
+        477_003,
+        &[0, 1],
+        20,
+        Some(vec![forest_only_deck(), island_only_deck()]),
+        true,
+    )
+    .expect("new");
+    advance_to_declare_attackers(&mut e);
+    inject_creature_on_battlefield(&mut e, 0, "cat_collector");
+    let vamp_a = inject_creature_on_battlefield(&mut e, 0, "child_of_night");
+    let vamp_b = inject_creature_on_battlefield(&mut e, 0, "child_of_night");
+    e.apply_command(0, &declare_attackers(vec![vamp_a, vamp_b]))
+        .expect("declare attackers");
+    pass_both_players(&mut e);
+    pass_both_players(&mut e);
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(e.state.turn_history.current.player(0).life_gained, 4);
+    assert_eq!(issue_477_token_count(&e, "cat_w_1_1"), 1);
+}
+
+#[test]
+fn issue_477_first_gain_allows_additional_trigger_instances() {
+    let mut e = GameEngine::new(
+        477_005,
+        &[0, 1],
+        20,
+        Some(vec![forest_only_deck(), island_only_deck()]),
+        true,
+    )
+    .expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let cat = inject_creature_on_battlefield(&mut e, 0, "cat_collector");
+    // Bifur is the implemented additional-instance consumer. Give this Cat Collector the
+    // matching Dwarf subtype so its first-gain trigger uses the same rule as Roaming Throne.
+    inject_creature_on_battlefield(&mut e, 0, "bifur,_melodic_rider");
+    e.state.players[0].has_enduring_story = true;
+    e.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(cat),
+        kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            card_types: Vec::new(),
+            creature_types: vec!["Dwarf".into()],
+        }),
+        condition: None,
+        duration: EffectDuration::Indefinite,
+        timestamp: e.state.command_index,
+    });
+    issue_477_cast_mercy(&mut e);
+    assert_eq!(issue_477_token_count(&e, "cat_w_1_1"), 2);
+    issue_477_cast_mercy(&mut e);
+    assert_eq!(issue_477_token_count(&e, "cat_w_1_1"), 2);
+}
+
+#[test]
+fn issue_477_zero_and_prohibited_gains_do_not_consume_first_event() {
+    let mut e = anthem_engine(477_004, "swords_to_plowshares");
+    inject_creature_on_battlefield(&mut e, 0, "cat_collector");
+    let wall = inject_creature_with_stats(&mut e, 0, "grizzly_bears", 0, 4);
+    grant_pool(&mut e, 0);
+    e.apply_command(
+        0,
+        &cast_spell(
+            hand_index_for_card(&e, 0, "swords_to_plowshares"),
+            targets_with_damage(vec![(wall, 0)]),
+        ),
+    )
+    .expect("zero-power target");
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(e.state.turn_history.current.player(0).life_gained, 0);
+
+    let prohibition = inject_creature_on_battlefield(&mut e, 1, "giant_cindermaw");
+    issue_477_cast_mercy(&mut e);
+    assert_eq!(e.state.turn_history.current.player(0).life_gained, 0);
+    assert_eq!(issue_477_token_count(&e, "cat_w_1_1"), 0);
+    e.state.players[1]
+        .battlefield
+        .retain(|&oid| oid != prohibition);
+    e.state.players[1].graveyard.push(prohibition);
+    e.state.objects.get_mut(&prohibition).expect("source").zone = tricerules_core::Zone::Graveyard;
+    issue_477_cast_mercy(&mut e);
+    assert_eq!(issue_477_token_count(&e, "cat_w_1_1"), 1);
 }
 
 /// CR 702.15b: lifelink life gain is an ordinary life-gain event, and each lifelinker's damage is
