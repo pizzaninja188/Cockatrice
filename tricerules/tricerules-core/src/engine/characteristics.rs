@@ -954,8 +954,39 @@ impl CharacteristicsEvaluator<'_> {
                     .count();
                 condition.matches_value(u32::try_from(count).unwrap_or(u32::MAX))
             }
-            GameCondition::OpponentControlsMoreLandsThanYou
-            | GameCondition::BattlefieldAggregate { .. } => false,
+            GameCondition::OpponentHasMoreThanYou { metric } => {
+                let Some(reference) = self
+                    .state
+                    .players
+                    .iter()
+                    .find(|player| player.id == controller && !player.has_lost)
+                else {
+                    return false;
+                };
+                self.state
+                    .players
+                    .iter()
+                    .filter(|player| {
+                        !player.has_lost
+                            && relative_player_set_contains(
+                                self.state,
+                                RelativePlayerSet::Opponents,
+                                controller,
+                                player.id,
+                            )
+                    })
+                    .any(|opponent| match metric {
+                        PlayerComparisonMetric::LifeTotal => opponent.life > reference.life,
+                        PlayerComparisonMetric::HandSize => {
+                            opponent.hand.len() > reference.hand.len()
+                        }
+                        // These need current derived types. Their conditional layer use remains
+                        // rejected by CardRegistry until CR 613.8 dependency ordering is modeled.
+                        PlayerComparisonMetric::LandCount
+                        | PlayerComparisonMetric::CreatureCount => false,
+                    })
+            }
+            GameCondition::BattlefieldAggregate { .. } => false,
             GameCondition::UnlockedRoomDoorCount { controllers, .. } => {
                 let count = self
                     .state
@@ -1667,6 +1698,50 @@ impl GameEngine {
 mod tests {
     use super::*;
     use tricerules_cards::{CharacteristicDefiningAbility, TypeLineAddition};
+
+    #[test]
+    fn static_opponent_comparisons_support_live_life_and_hand_values() {
+        fn holds(engine: &GameEngine, metric: PlayerComparisonMetric) -> bool {
+            let queried_oid = engine.state.players[0].library[0];
+            let queried = engine
+                .characteristics(queried_oid)
+                .expect("library object characteristics");
+            CharacteristicsEvaluator {
+                state: &engine.state,
+                registry: engine.registry,
+            }
+            .characteristic_condition_holds(
+                &GameCondition::OpponentHasMoreThanYou { metric },
+                queried_oid,
+                engine.state.players[0].id,
+                queried_oid,
+                &queried,
+            )
+        }
+
+        let mut engine =
+            GameEngine::new_with_default_decks(490_105, &[0, 1], 20).expect("new engine");
+        assert!(!holds(&engine, PlayerComparisonMetric::LifeTotal));
+        engine.state.players[1].life += 1;
+        assert!(holds(&engine, PlayerComparisonMetric::LifeTotal));
+        engine.state.players[1].life -= 1;
+
+        assert!(!holds(&engine, PlayerComparisonMetric::HandSize));
+        let drawn = engine.state.players[1]
+            .library
+            .pop_front()
+            .expect("card to move into the opponent hand");
+        engine.state.players[1].hand.push(drawn);
+        engine
+            .state
+            .objects
+            .get_mut(&drawn)
+            .expect("drawn card")
+            .zone = Zone::Hand;
+        assert!(holds(&engine, PlayerComparisonMetric::HandSize));
+        engine.state.players[1].has_lost = true;
+        assert!(!holds(&engine, PlayerComparisonMetric::HandSize));
+    }
 
     fn install_changeling_face(engine: &mut GameEngine, face_down: bool) -> ObjectId {
         let oid = engine.state.players[0].library[0];

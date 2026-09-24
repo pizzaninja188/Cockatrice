@@ -52,9 +52,10 @@ pub enum GameCondition {
     /// `Controller` is "during your turn" (Daggersail Aeronaut); `Opponents` supports the inverse
     /// without assuming a two-player game.
     ActivePlayer { players: RelativePlayerSet },
-    /// Ticket Tortoise and Sunstar Expansionist: whether any individual opponent currently
-    /// controls more lands than this condition's controller. Opponent counts are never summed.
-    OpponentControlsMoreLandsThanYou,
+    /// Whether any opponent who is still in the game has a larger current value than this
+    /// condition's controller. Each opponent is compared independently; opponents are never
+    /// summed, and hand contents are not inspected when comparing hand size.
+    OpponentHasMoreThanYou { metric: PlayerComparisonMetric },
     /// Star Charter checks either change to its controller; Flamecache Gecko checks loss by
     /// any opponent. Totals are separate, so offsetting changes still qualify (CR 119).
     LifeChangedThisTurn {
@@ -380,7 +381,7 @@ impl GameCondition {
             | GameCondition::SelfWasBargained
             | GameCondition::TriggeringSpellManaSpent { .. }
             | GameCondition::ObjectTapped { .. } => Ok(()),
-            GameCondition::OpponentControlsMoreLandsThanYou => Ok(()),
+            GameCondition::OpponentHasMoreThanYou { .. } => Ok(()),
             GameCondition::ActivePlayer { .. } => Ok(()),
             GameCondition::LifeChangedThisTurn { .. } => Ok(()),
             GameCondition::PlayerLifeAggregate { min, max, .. } => {
@@ -452,7 +453,7 @@ impl GameCondition {
             | GameCondition::SelfWasBargained
             | GameCondition::TriggeringSpellManaSpent { .. }
             | GameCondition::ActivePlayer { .. }
-            | GameCondition::OpponentControlsMoreLandsThanYou
+            | GameCondition::OpponentHasMoreThanYou { .. }
             | GameCondition::LifeChangedThisTurn { .. }
             | GameCondition::PlayerLifeAggregate { .. }
             | GameCondition::AttackedThisTurn { .. }
@@ -522,6 +523,17 @@ pub enum SpellManaSpentComparison {
 pub enum PlayerLifeAggregate {
     Minimum,
     Maximum,
+}
+
+/// Current per-player values compared by Beza and the existing land-comparison cards.
+/// The same strict greater-than rule applies to each metric, but each player's value is evaluated
+/// separately so multiplayer totals can never combine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PlayerComparisonMetric {
+    LifeTotal,
+    HandSize,
+    LandCount,
+    CreatureCount,
 }
 
 /// Gain/loss predicates for Star Charter and Flamecache Gecko; Either is a disjunction,

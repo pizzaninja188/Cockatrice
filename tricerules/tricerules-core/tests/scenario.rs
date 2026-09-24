@@ -346,6 +346,8 @@ mod issue_479_land_comparison;
 mod issue_481_conditional_library_choices;
 #[path = "scenario/issue_487_red_guardian.rs"]
 mod issue_487_red_guardian;
+#[path = "scenario/issue_490_beza_comparison.rs"]
+mod issue_490_beza_comparison;
 #[path = "scenario/issue_57_targeting_costs.rs"]
 mod issue_57_targeting_costs;
 #[path = "scenario/issue_59_resolution_choices.rs"]

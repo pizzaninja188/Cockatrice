@@ -32,11 +32,11 @@ pub use primitives::{
     EffectContext, EffectDuration, Evasion, GainControlDuration, GameCondition, GraveyardAggregate,
     Keyword, LibraryPartitionKind, ManaAmount, ManaSpendFilter, ManaSpendingEffect,
     ManaSpendingRestriction, ObjectCastCostKind, ObjectContributionKind, ObjectPaymentConstraint,
-    PermanentChoiceConstraint, PermanentTypeFilter, PowerComparison, PowerToughnessCharacteristic,
-    PtScale, PtScaleBasis, QuantityTerm, RelativePlayerSet, ResolvingEffectDuration,
-    ResolvingPermanentModifier, SearchDestination, SearchZoneSelection, SpecialActionManaPurpose,
-    SpellCastFilter, SpellCastOrigin, SpellCostModifier, SpellEffectKind, SpellKeyword,
-    StaticEmblemEffect, TargetMatchFilter, TargetObjectExclusion, TriggerCondition,
+    PermanentChoiceConstraint, PermanentTypeFilter, PlayerComparisonMetric, PowerComparison,
+    PowerToughnessCharacteristic, PtScale, PtScaleBasis, QuantityTerm, RelativePlayerSet,
+    ResolvingEffectDuration, ResolvingPermanentModifier, SearchDestination, SearchZoneSelection,
+    SpecialActionManaPurpose, SpellCastFilter, SpellCastOrigin, SpellCostModifier, SpellEffectKind,
+    SpellKeyword, StaticEmblemEffect, TargetMatchFilter, TargetObjectExclusion, TriggerCondition,
     TriggeredAbilityDef, TypeLineAddition, TypeLineReplacement, ZoneCardFilter,
 };
 pub use registry::CardRegistry;

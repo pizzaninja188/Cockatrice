@@ -1,0 +1,70 @@
+{
+  "format_version": 1,
+  "oracle_id": "020de6d7-f5a2-4036-ad25-451e5977b4d4",
+  "spans": [
+    {
+      "face_id": "beza_the_bounding_spring",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::OpponentHasMoreThanYou(LandCount)",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens(Treasure)",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "GameCondition::OpponentHasMoreThanYou(LifeTotal)",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    },
+    {
+      "symbol": "GameCondition::OpponentHasMoreThanYou(CreatureCount)",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/2"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens(Fish)",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/2"
+    },
+    {
+      "symbol": "GameCondition::OpponentHasMoreThanYou(HandSize)",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/3"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/3"
+    }
+  ],
+  "tokens": ["treasure", "fish_u_1_1"],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_490_beza_comparison::issue_490_beza_resolves_each_qualifying_bonus",
+      "covers": "complete Beza ETB; strict land, life, creature and hand comparisons; ordered Treasure, life, Fish and draw outcomes; physical token identity and owner"
+    },
+    {
+      "test": "scenario issue_490_beza_comparison::issue_490_beza_comparisons_use_resolution_time_values",
+      "covers": "clause values are read as the ETB ability resolves, after trigger creation"
+    },
+    {
+      "test": "scenario issue_490_beza_comparison::issue_490_animated_treasure_changes_bezas_later_creature_comparison",
+      "covers": "a Treasure that enters as a creature changes the later live creature comparison during the same resolution"
+    },
+    {
+      "test": "issue_490_beza::issue_490_registers_beza_as_a_complete_standard_identity",
+      "covers": "pinned Oracle identity, mana cost, Legendary Creature — Elemental Elk type line, 4/5 characteristics and all four ordered conditional clauses"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

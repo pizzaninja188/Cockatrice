@@ -25,7 +25,7 @@
       "typed_path": "/faces/0/triggered_abilities/0/trigger"
     },
     {
-      "symbol": "GameCondition::OpponentControlsMoreLandsThanYou",
+      "symbol": "GameCondition::OpponentHasMoreThanYou(LandCount)",
       "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
     },
     {

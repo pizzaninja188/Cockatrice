@@ -1,6 +1,6 @@
 use tricerules_cards::primitives::{
-    CastTriggerPlayer, EffectSubject, GameCondition, PermanentTypeFilter, SpellEffectKind,
-    TriggerCondition,
+    CastTriggerPlayer, EffectSubject, GameCondition, PermanentTypeFilter, PlayerComparisonMetric,
+    SpellEffectKind, TriggerCondition,
 };
 use tricerules_cards::{AbilityPresentation, CardRegistry};
 
@@ -28,7 +28,9 @@ fn issue_479_ticket_tortoise_is_a_complete_conditioned_treasure_card() {
     );
     assert_eq!(
         trigger.intervening_if,
-        Some(GameCondition::OpponentControlsMoreLandsThanYou)
+        Some(GameCondition::OpponentHasMoreThanYou {
+            metric: PlayerComparisonMetric::LandCount,
+        })
     );
     assert!(matches!(
         trigger.effect.as_slice(),
@@ -60,7 +62,9 @@ fn issue_479_sunstar_expansionist_has_both_complete_entry_and_landfall_abilities
     );
     assert_eq!(
         entry.intervening_if,
-        Some(GameCondition::OpponentControlsMoreLandsThanYou)
+        Some(GameCondition::OpponentHasMoreThanYou {
+            metric: PlayerComparisonMetric::LandCount,
+        })
     );
     assert!(matches!(
         entry.effect.as_slice(),

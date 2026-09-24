@@ -1,0 +1,48 @@
+// Beza, the Bounding Spring — exact pinned Standard identity; rulings fetched 2026-09-24.
+(
+  id: "beza,_the_bounding_spring",
+  name: "Beza, the Bounding Spring",
+  face_id: "beza_the_bounding_spring",
+  mana_cost: "{2}{W}{W}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Elemental", "Elk"],
+  power: 4,
+  toughness: 5,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [
+      CreateTokens(
+        token: "treasure",
+        count: Conditional(
+          condition: OpponentHasMoreThanYou(metric: LandCount),
+          when_true: 1,
+          otherwise: 0,
+        ),
+      ),
+      GainLife(
+        amount: Conditional(
+          condition: OpponentHasMoreThanYou(metric: LifeTotal),
+          when_true: 4,
+          otherwise: 0,
+        ),
+      ),
+      CreateTokens(
+        token: "fish_u_1_1",
+        count: Conditional(
+          condition: OpponentHasMoreThanYou(metric: CreatureCount),
+          when_true: 2,
+          otherwise: 0,
+        ),
+      ),
+      Draw(
+        count: Conditional(
+          condition: OpponentHasMoreThanYou(metric: HandSize),
+          when_true: 1,
+          otherwise: 0,
+        ),
+      ),
+    ],
+  )],
+)

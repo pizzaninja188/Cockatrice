@@ -12,7 +12,7 @@
     ability_id: "triggered_01",
     presentation: OracleLines([2]),
     trigger: WhenSelfEntersBattlefield,
-    intervening_if: Some(OpponentControlsMoreLandsThanYou),
+    intervening_if: Some(OpponentHasMoreThanYou(metric: LandCount)),
     effect: [CreateTokens(token: "treasure", count: 1)],
   )],
 )

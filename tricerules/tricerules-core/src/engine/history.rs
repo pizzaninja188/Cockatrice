@@ -387,15 +387,6 @@ pub(super) fn relative_player_set_contains(
     }
 }
 
-fn any_opponent_controls_more_lands(
-    controller_land_count: u32,
-    opponent_land_counts: impl IntoIterator<Item = u32>,
-) -> bool {
-    opponent_land_counts
-        .into_iter()
-        .any(|opponent_land_count| opponent_land_count > controller_land_count)
-}
-
 pub(super) fn player_life_aggregate_value(
     state: &GameState,
     players: RelativePlayerSet,
@@ -1093,8 +1084,8 @@ impl GameEngine {
                 context.controller,
                 self.state.active_player_id(),
             ),
-            GameCondition::OpponentControlsMoreLandsThanYou => {
-                self.opponent_controls_more_lands_than_you(context.controller)
+            GameCondition::OpponentHasMoreThanYou { metric } => {
+                self.opponent_has_more_than_you(context.controller, *metric)
             }
             GameCondition::PlayerLifeAggregate {
                 players, aggregate, ..
@@ -1470,50 +1461,58 @@ impl GameEngine {
             .collect()
     }
 
-    fn opponent_controls_more_lands_than_you(&self, controller: PlayerId) -> bool {
-        let mut land_counts: Vec<_> = self
+    fn opponent_has_more_than_you(
+        &self,
+        controller: PlayerId,
+        metric: PlayerComparisonMetric,
+    ) -> bool {
+        let Some(controller_value) = self.player_comparison_value(controller, metric) else {
+            return false;
+        };
+        self.state
+            .players
+            .iter()
+            .filter(|player| !player.has_lost && self.state.are_opponents(player.id, controller))
+            .any(|opponent| {
+                self.player_comparison_value(opponent.id, metric)
+                    .is_some_and(|opponent_value| opponent_value > controller_value)
+            })
+    }
+
+    fn player_comparison_value(
+        &self,
+        player_id: PlayerId,
+        metric: PlayerComparisonMetric,
+    ) -> Option<i64> {
+        let player = self
             .state
             .players
             .iter()
-            .map(|player| (player.id, 0u32))
-            .collect();
-        for object_id in self
+            .find(|player| player.id == player_id && !player.has_lost)?;
+        Some(match metric {
+            PlayerComparisonMetric::LifeTotal => i64::from(player.life),
+            PlayerComparisonMetric::HandSize => i64::from(clamp_public_count(player.hand.len())),
+            PlayerComparisonMetric::LandCount => {
+                self.player_battlefield_type_count(player_id, "Land")
+            }
+            PlayerComparisonMetric::CreatureCount => {
+                self.player_battlefield_type_count(player_id, "Creature")
+            }
+        })
+    }
+
+    fn player_battlefield_type_count(&self, player_id: PlayerId, card_type: &str) -> i64 {
+        let count = self
             .state
             .players
             .iter()
             .flat_map(|player| player.battlefield.iter().copied())
-        {
-            let Some(characteristics) = self
-                .characteristics(object_id)
-                .filter(|characteristics| characteristics.has_type("Land"))
-            else {
-                continue;
-            };
-            if let Some((_, count)) = land_counts
-                .iter_mut()
-                .find(|(player_id, _)| *player_id == characteristics.controller)
-            {
-                *count = count.saturating_add(1);
-            }
-        }
-
-        let controller_land_count = land_counts
-            .iter()
-            .find(|(player_id, _)| *player_id == controller)
-            .map(|(_, count)| *count)
-            .unwrap_or(0);
-        any_opponent_controls_more_lands(
-            controller_land_count,
-            land_counts.into_iter().filter_map(|(player_id, count)| {
-                relative_player_set_contains(
-                    &self.state,
-                    RelativePlayerSet::Opponents,
-                    controller,
-                    player_id,
-                )
-                .then_some(count)
-            }),
-        )
+            .filter_map(|object_id| self.characteristics(object_id))
+            .filter(|characteristics| {
+                characteristics.controller == player_id && characteristics.has_type(card_type)
+            })
+            .count();
+        i64::from(clamp_public_count(count))
     }
 
     pub(super) fn battlefield_aggregate_value(
@@ -3679,16 +3678,6 @@ mod tests {
 
     #[test]
     fn issue_479_opponent_land_counts_use_each_opponent_and_live_controller_context() {
-        assert!(
-            !any_opponent_controls_more_lands(3, [2, 2]),
-            "two opponents with two lands each do not combine into one opponent with four"
-        );
-        assert!(any_opponent_controls_more_lands(3, [4, 0]));
-        assert!(
-            !any_opponent_controls_more_lands(3, [3]),
-            "equal land counts do not qualify"
-        );
-
         let decks = Some(vec![
             deck_with_cards(&[], "forest"),
             deck_with_cards(&[], "island"),
@@ -3701,7 +3690,9 @@ mod tests {
             move_to_battlefield(&mut engine, 1, "island");
         }
 
-        let condition = GameCondition::OpponentControlsMoreLandsThanYou;
+        let condition = GameCondition::OpponentHasMoreThanYou {
+            metric: PlayerComparisonMetric::LandCount,
+        };
         let context = |controller| ConditionContext {
             controller,
             source_object_id: 0,
@@ -3724,6 +3715,127 @@ mod tests {
         move_to_battlefield(&mut engine, 1, "island");
         assert!(!engine.condition_holds(&condition, context(0)));
         assert!(!engine.condition_holds(&condition, context(1)));
+    }
+
+    #[test]
+    fn issue_490_player_comparisons_use_each_live_opponent_and_current_value() {
+        fn add_card_for(
+            engine: &mut GameEngine,
+            player: usize,
+            card_id: &str,
+            zone: Zone,
+        ) -> ObjectId {
+            let owner = engine.state.players[player].id;
+            let mut object = engine
+                .state
+                .objects
+                .values()
+                .find(|object| object.card_id == card_id)
+                .expect("template card")
+                .clone();
+            let object_id = engine.state.next_object_id;
+            engine.state.next_object_id += 1;
+            object.id = object_id;
+            object.owner = owner;
+            object.base_controller = owner;
+            object.controller = owner;
+            object.zone = zone;
+            let player_state = &mut engine.state.players[player];
+            match zone {
+                Zone::Battlefield => player_state.battlefield.push(object_id),
+                Zone::Hand => player_state.hand.push(object_id),
+                _ => panic!("test helper only adds battlefield or hand cards"),
+            }
+            engine.state.objects.insert(object_id, object);
+            engine.state.zone_change_generation.insert(object_id, 0);
+            object_id
+        }
+
+        fn set_hand_size(engine: &mut GameEngine, player: usize, size: usize) {
+            while engine.state.players[player].hand.len() > size {
+                let object_id = engine.state.players[player].hand.pop().unwrap();
+                engine.state.objects.get_mut(&object_id).unwrap().zone = Zone::Library;
+                engine.state.players[player].library.push_back(object_id);
+            }
+            while engine.state.players[player].hand.len() < size {
+                if engine.state.players[player].library.is_empty() {
+                    add_card_for(engine, player, "island", Zone::Hand);
+                    continue;
+                }
+                let object_id = engine.state.players[player]
+                    .library
+                    .pop_front()
+                    .expect("checked test library");
+                engine.state.players[player].hand.push(object_id);
+                engine.state.objects.get_mut(&object_id).unwrap().zone = Zone::Hand;
+            }
+        }
+
+        let decks = Some(vec![
+            deck_with_cards(&["forest", "grizzly_bears", "grizzly_bears"], "plains"),
+            deck_with_cards(&["forest", "grizzly_bears", "grizzly_bears"], "island"),
+        ]);
+        let mut engine = GameEngine::new(490_001, &[0, 1], 20, decks, true).expect("engine");
+        engine.state.players.push(PlayerState::new(2, 20));
+        for player in 0..2 {
+            move_to_battlefield(&mut engine, player, "forest");
+            move_to_battlefield(&mut engine, player, "grizzly_bears");
+        }
+        add_card_for(&mut engine, 2, "forest", Zone::Battlefield);
+        add_card_for(&mut engine, 2, "grizzly_bears", Zone::Battlefield);
+
+        let context = ConditionContext {
+            controller: 0,
+            source_object_id: 0,
+            source_zone_change: 0,
+            resolving_spell_id: None,
+            stack_item: None,
+            previous_effect_result: None,
+        };
+        let holds = |engine: &GameEngine, metric| {
+            engine.condition_holds(&GameCondition::OpponentHasMoreThanYou { metric }, context)
+        };
+
+        engine.state.players[1].life = 21;
+        assert!(
+            holds(&engine, PlayerComparisonMetric::LifeTotal),
+            "one opponent's larger current life total qualifies"
+        );
+        engine.state.players[1].life = 20;
+        assert!(
+            !holds(&engine, PlayerComparisonMetric::LifeTotal),
+            "equal life totals do not qualify"
+        );
+
+        assert!(
+            !holds(&engine, PlayerComparisonMetric::LandCount),
+            "two opponents with one land each are not combined"
+        );
+        add_card_for(&mut engine, 2, "forest", Zone::Battlefield);
+        assert!(holds(&engine, PlayerComparisonMetric::LandCount));
+
+        assert!(
+            !holds(&engine, PlayerComparisonMetric::CreatureCount),
+            "two opponents with one creature each are not combined"
+        );
+        add_card_for(&mut engine, 2, "grizzly_bears", Zone::Battlefield);
+        assert!(holds(&engine, PlayerComparisonMetric::CreatureCount));
+
+        for player in 0..3 {
+            set_hand_size(&mut engine, player, 2);
+        }
+        assert!(
+            !holds(&engine, PlayerComparisonMetric::HandSize),
+            "equal hand sizes do not qualify"
+        );
+        set_hand_size(&mut engine, 2, 3);
+        assert!(holds(&engine, PlayerComparisonMetric::HandSize));
+
+        engine.state.players[2].has_lost = true;
+        assert!(
+            !holds(&engine, PlayerComparisonMetric::LandCount),
+            "a player who has lost is no longer an opponent for the comparison"
+        );
     }
 
     #[test]

@@ -526,7 +526,10 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     matches!(
                         node,
                         GameCondition::BattlefieldCreatureCount { .. }
-                            | GameCondition::OpponentControlsMoreLandsThanYou
+                            | GameCondition::OpponentHasMoreThanYou {
+                                metric: crate::primitives::PlayerComparisonMetric::LandCount
+                                    | crate::primitives::PlayerComparisonMetric::CreatureCount,
+                            }
                     )
                 }) {
                     return Err(RegistryError::InvalidCard {
@@ -693,7 +696,10 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 matches!(
                     node,
                     GameCondition::BattlefieldCreatureCount { .. }
-                        | GameCondition::OpponentControlsMoreLandsThanYou
+                        | GameCondition::OpponentHasMoreThanYou {
+                            metric: crate::primitives::PlayerComparisonMetric::LandCount
+                                | crate::primitives::PlayerComparisonMetric::CreatureCount,
+                        }
                 )
             }) {
                 return Err(RegistryError::InvalidCard {
