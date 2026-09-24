@@ -241,6 +241,12 @@ TEST_F(RuledE2ESmokeTest, WardManaDeclineAndPrivateDiscardPayment)
     declineManaWard.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
     p2.pendingChoice.reset();
     ASSERT_TRUE(sendAndPump(p2, declineManaWard, QStringLiteral("decline Ward {2}")));
+    ASSERT_TRUE(p1.pumpUntil(
+        [&] {
+            p2.pump(25);
+            return p1.sawWardManaCountered && p2.sawWardManaCountered && p1.priorityPlayer == p1.myId;
+        },
+        10000, "Ward mana counter reaches both seats"));
     EXPECT_TRUE(p1.sawWardManaAnnotation && p2.sawWardManaAnnotation);
     EXPECT_TRUE(p1.sawWardManaCountered && p2.sawWardManaCountered);
     EXPECT_NE(p1.wardManaSpellOid, 0u);
@@ -278,6 +284,12 @@ TEST_F(RuledE2ESmokeTest, WardManaDeclineAndPrivateDiscardPayment)
     ASSERT_TRUE(passPriority(p1));
     ASSERT_TRUE(p2.pendingChoice.has_value());
     EXPECT_EQ(p2.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_HAND_CARDS);
+    ASSERT_TRUE(p1.pumpUntil(
+        [&] {
+            p2.pump(25);
+            return p1.sawWardDiscardObserverRedaction && p2.sawWardDiscardPrivateCandidates;
+        },
+        10000, "Ward discard choice reaches both seats"));
     EXPECT_TRUE(p2.sawWardDiscardPrivateCandidates);
     EXPECT_TRUE(p1.sawWardDiscardObserverRedaction);
     ASSERT_NE(p2.wardDiscardChosenOid, 0u);
@@ -2978,6 +2990,12 @@ TEST_F(RuledE2ESmokeTest, SpellCastTransactionAllowsManaAbilitiesCancelRetryAndC
     const int handSlot = static_cast<int>(action->hand_index());
     ASSERT_NE(p1.handServerCardBySlot.find(handSlot), p1.handServerCardBySlot.end());
     const int physicalCardId = p1.handServerCardBySlot.at(handSlot);
+    const auto wasMovedFromHand = [physicalCardId](const OpeningDriver &client) {
+        return std::any_of(client.physicalMoveEvents.cbegin(), client.physicalMoveEvents.cend(),
+                           [physicalCardId](const Event_MoveCard &move) {
+                               return move.card_id() == physicalCardId && move.start_zone() == ZoneNames::HAND;
+                           });
+    };
 
     auto begin = [&] {
         ruled::v1::RuledCommand command;
@@ -2997,6 +3015,8 @@ TEST_F(RuledE2ESmokeTest, SpellCastTransactionAllowsManaAbilitiesCancelRetryAndC
     EXPECT_EQ(p1.latestLegal.pending_spell_cast().locked_total_cost(), "{2}{U}");
     EXPECT_FALSE(p2.latestLegal.has_pending_spell_cast());
     const quint64 firstTransaction = p1.latestLegal.pending_spell_cast().transaction_id();
+    EXPECT_FALSE(wasMovedFromHand(p1)) << "the caster still sees the card in hand during payment";
+    EXPECT_FALSE(wasMovedFromHand(p2)) << "the observer must not see an early hand-to-stack move";
 
     std::vector<quint32> islands;
     for (const auto &permanent : p1.battlefieldByPlayer[p1.myId]) {
@@ -3014,6 +3034,7 @@ TEST_F(RuledE2ESmokeTest, SpellCastTransactionAllowsManaAbilitiesCancelRetryAndC
         p2.pump(25);
         ASSERT_TRUE(p1.latestLegal.has_pending_spell_cast());
         EXPECT_EQ(p1.latestLegal.pending_spell_cast().transaction_id(), firstTransaction);
+        EXPECT_FALSE(wasMovedFromHand(p1));
     }
 
     ruled::v1::RuledCommand cancel;
@@ -3023,6 +3044,7 @@ TEST_F(RuledE2ESmokeTest, SpellCastTransactionAllowsManaAbilitiesCancelRetryAndC
     EXPECT_EQ(p1.myPool.u, 3) << "cancel must not reverse legal mana abilities";
     ASSERT_NE(p1.handServerCardBySlot.find(handSlot), p1.handServerCardBySlot.end());
     EXPECT_EQ(p1.handServerCardBySlot.at(handSlot), physicalCardId);
+    EXPECT_FALSE(wasMovedFromHand(p1)) << "cancel leaves the same physical card in hand";
 
     ASSERT_TRUE(begin());
     const quint64 secondTransaction = p1.latestLegal.pending_spell_cast().transaction_id();
@@ -3084,10 +3106,9 @@ TEST_F(RuledE2ESmokeTest, SpellCastTransactionAllowsManaAbilitiesCancelRetryAndC
     EXPECT_EQ(resumed1.latestLegal.pending_spell_cast().SerializeAsString(), expectedPending);
     EXPECT_FALSE(resumed2.latestLegal.has_pending_spell_cast());
     EXPECT_EQ(resumed1.myPool.u, 3);
-    ASSERT_NE(resumed1.serverCardByEngineOid.find(reservedObjectId), resumed1.serverCardByEngineOid.end());
-    EXPECT_EQ(resumed1.serverCardByEngineOid.at(reservedObjectId), physicalCardId);
-    ASSERT_NE(resumed2.serverCardByEngineOid.find(reservedObjectId), resumed2.serverCardByEngineOid.end());
-    EXPECT_EQ(resumed2.serverCardByEngineOid.at(reservedObjectId), physicalCardId);
+    EXPECT_FALSE(wasMovedFromHand(resumed1));
+    EXPECT_EQ(resumed1.serverCardByEngineOid.find(reservedObjectId), resumed1.serverCardByEngineOid.end());
+    EXPECT_EQ(resumed2.serverCardByEngineOid.find(reservedObjectId), resumed2.serverCardByEngineOid.end());
 
     const int previewCount = resumed1.paymentPreviewCount;
     ruled::v1::RuledCommand preview;
@@ -3125,6 +3146,7 @@ TEST_F(RuledE2ESmokeTest, SpellCastTransactionAllowsManaAbilitiesCancelRetryAndC
     EXPECT_EQ(resumed1.myPool.total(), 0);
     EXPECT_EQ(resumed1.stackDepth, 1);
     EXPECT_EQ(resumed2.stackDepth, 1);
+    EXPECT_TRUE(wasMovedFromHand(resumed1)) << "commit moves the physical card out of hand";
     ASSERT_NE(resumed1.serverCardByEngineOid.find(reservedObjectId), resumed1.serverCardByEngineOid.end());
     EXPECT_EQ(resumed1.serverCardByEngineOid.at(reservedObjectId), physicalCardId);
 }

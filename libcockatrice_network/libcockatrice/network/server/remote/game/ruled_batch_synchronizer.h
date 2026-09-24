@@ -50,6 +50,7 @@ public:
     void revealFaceDownPermanentsOnConcede(int concedingPlayerId, GameEventStorage &events);
 
     [[nodiscard]] int priorityPlayer() const;
+    [[nodiscard]] int pendingHandCardId(int playerId) const;
     [[nodiscard]] QJsonObject diagnosticSnapshot() const;
     void setPriorityPlayer(int playerId);
     [[nodiscard]] QString cardIdForName(const QString &cardName) const;
@@ -70,6 +71,7 @@ private:
         int sourceX = -1;
         int sourceY = 0;
         CardRef sourceCardRef;
+        int faceIndex = 0;
         QVector<quint32> targetOids;
     };
 

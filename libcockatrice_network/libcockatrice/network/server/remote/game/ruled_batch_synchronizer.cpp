@@ -261,6 +261,15 @@ int RuledBatchSynchronizer::priorityPlayer() const
     return ruledPriorityPlayer;
 }
 
+int RuledBatchSynchronizer::pendingHandCardId(int playerId) const
+{
+    for (const auto &pending : ruledPendingCastVisualQueue) {
+        if (pending.sourcePlayerId == playerId && pending.sourceZoneName == ZoneNames::HAND)
+            return pending.serverCardId;
+    }
+    return -1;
+}
+
 void RuledBatchSynchronizer::setPriorityPlayer(int playerId)
 {
     ruledPriorityPlayer = playerId;
@@ -283,6 +292,10 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
                 return entry.casterPlayerId == playerId && entry.transactionId == transactionId;
             });
         if (pendingIt == ruledPendingCastVisualQueue.end()) {
+            return;
+        }
+        if (pendingIt->sourceZoneName == ZoneNames::HAND) {
+            ruledPendingCastVisualQueue.erase(pendingIt);
             return;
         }
         Server_AbstractPlayer *sourcePlayer = game->getPlayer(pendingIt->sourcePlayerId);
@@ -314,6 +327,40 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
         return;
     }
 
+    if (ruledCmd.has_commit_spell_cast()) {
+        const quint64 transactionId = ruledCmd.commit_spell_cast().transaction_id();
+        const auto pendingIt = std::find_if(
+            ruledPendingCastVisualQueue.begin(), ruledPendingCastVisualQueue.end(),
+            [playerId, transactionId](const PendingRuledCastVisual &entry) {
+                return entry.casterPlayerId == playerId && entry.transactionId == transactionId &&
+                       entry.sourceZoneName == ZoneNames::HAND;
+            });
+        if (pendingIt != ruledPendingCastVisualQueue.end()) {
+            Server_AbstractPlayer *sourcePlayer = game->getPlayer(pendingIt->sourcePlayerId);
+            Server_CardZone *hand = sourcePlayer ? sourcePlayer->getZones().value(ZoneNames::HAND) : nullptr;
+            Server_CardZone *stack = ruledCanonicalStackZone(game);
+            if (hand && stack) {
+                for (Server_Card *card : hand->getCards()) {
+                    if (card && card->getId() == pendingIt->serverCardId) {
+                        if (pendingIt->faceIndex > 0) {
+                            const QString cardId = cardIdForName(card->getName());
+                            const QString activeName = faceDisplayName(cardId, pendingIt->faceIndex);
+                            if (!activeName.isEmpty() && activeName != card->getName())
+                                card->setCardRef(CardRef{activeName});
+                        }
+                        CardToMove move;
+                        move.set_card_id(card->getId());
+                        GameEventStorage events;
+                        if (ruledApplyMove(cmdPlayer, events, hand, stack, move, -1, 0, "commitCast"))
+                            events.sendToGame(game);
+                        break;
+                    }
+                }
+            }
+        }
+        return;
+    }
+
     quint64 transactionId = 0;
     quint32 reservedObjectId = 0;
     if (response.has_batch()) {
@@ -334,8 +381,8 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
     }
 
     const auto applyBegin = [&](const auto &acceptedCast) {
-        // Route all spells to the canonical (lowest player-id) stack zone so every client's stack
-        // window shows one stack. Commit later binds this same physical card to StackPushed.
+        // Route committed spells to the canonical (lowest player-id) stack zone so every client's
+        // stack window shows one stack. Hand sources remain in hand until commit.
         Server_CardZone *stackZone = ruledCanonicalStackZone(game);
         Server_CardZone *sourceZone = nullptr;
         Server_Card *card = nullptr;
@@ -394,7 +441,8 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
         pending.sourceY = card->getY();
         pending.sourceCardRef = card->getCardRef();
         const int faceIndex = static_cast<int>(acceptedCast.face_index());
-        if (faceIndex > 0) {
+        pending.faceIndex = faceIndex;
+        if (faceIndex > 0 && (sourceZone->getName() != ZoneNames::HAND || legacyAtomic)) {
             const QString cardId = cardIdForName(card->getName());
             const QString activeName = faceDisplayName(cardId, faceIndex);
             if (!activeName.isEmpty() && activeName != card->getName()) {
@@ -411,6 +459,10 @@ void RuledBatchSynchronizer::applyAcceptedCommandVisuals(int playerId,
             }
         }
 
+        if (sourceZone->getName() == ZoneNames::HAND && !legacyAtomic) {
+            ruledPendingCastVisualQueue.append(pending);
+            return;
+        }
         CardToMove cardToMove;
         cardToMove.set_card_id(card->getId());
         GameEventStorage moveGes;
@@ -1348,10 +1400,19 @@ void RuledBatchSynchronizer::applyPhaseStackAndZoneViews(const ruled::v1::RuledE
             // (CR 605 mana undo, untap effects), which the binding honors per-object.
             const bool perPlayerAllowUntap = batchHasUntapPhase && p.player_id() == game->getActivePlayer();
             if (Server_AbstractPlayer *ab = game->getPlayer(p.player_id())) {
+                const auto pendingHand = std::find_if(
+                    ruledPendingCastVisualQueue.cbegin(), ruledPendingCastVisualQueue.cend(), [&p](const auto &entry) {
+                        return entry.sourcePlayerId == p.player_id() && entry.sourceZoneName == ZoneNames::HAND;
+                    });
+                const int reservedCardId = pendingHand == ruledPendingCastVisualQueue.cend() ? -1
+                                                                                           : pendingHand->serverCardId;
+                const quint32 reservedOid = pendingHand == ruledPendingCastVisualQueue.cend() ? 0
+                                                                                              : pendingHand->reservedObjectId;
                 const RuledPlayerBinding::RuledZoneSyncResult sync =
                     playerBinding(p.player_id())
                         .applyRuledEngineZoneView(static_cast<Server_Player *>(ab), p, &tapSyncGes, perPlayerAllowUntap,
-                                                  &engineUntappedOids, e.zone_view().battlefields_unchanged());
+                                                  &engineUntappedOids, e.zone_view().battlefields_unchanged(),
+                                                  reservedCardId, reservedOid);
                 result.handOrLibraryChanged = result.handOrLibraryChanged || sync.handOrLibraryChanged;
                 result.battlefieldOrderChanged = result.battlefieldOrderChanged || sync.battlefieldOrderChanged;
                 result.publicZoneOrderChanged = result.publicZoneOrderChanged || sync.publicZoneOrderChanged;

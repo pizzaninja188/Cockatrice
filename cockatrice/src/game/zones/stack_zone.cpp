@@ -106,8 +106,8 @@ void StackZone::reorganizeCards()
     const CardList &rawCards = getLogic()->getCards();
     if (!rawCards.isEmpty()) {
         // Build a display list and sort by engine push order when in a ruled game. A physical
-        // cast source is parked in this zone as soon as BeginSpellCast removes it from hand, but
-        // remains hidden until CommitSpellCast produces StackPushed.
+        // Non-hand cast sources can be parked here before payment, but remain hidden until
+        // CommitSpellCast produces StackPushed. Hand casts move here only on commit.
         // Index 0 = most recently pushed = resolves first. The underlying rawCards list
         // is not reordered so that takeCard(position, id) continues to work correctly.
         QList<CardItem *> display;

@@ -1831,7 +1831,7 @@ TEST_F(RuledBatchTest, PreparationCopiesHaveDedicatedExileIdentityAndFullReplace
     EXPECT_EQ(findCardByEngineOid(p1, 203u), source);
 }
 
-TEST_F(RuledBatchTest, SpellCastTransactionMovesOnceAndBindsTheReservedPhysicalCardOnCommit)
+TEST_F(RuledBatchTest, SpellCastTransactionKeepsHandCardUntilCommit)
 {
     seedCardCatalog({"Lightning Bolt"});
     Server_Card *first = addCardToHand(p1, "Lightning Bolt");
@@ -1867,9 +1867,25 @@ TEST_F(RuledBatchTest, SpellCastTransactionMovesOnceAndBindsTheReservedPhysicalC
 
     applyAcceptedCommandVisuals(p1->getPlayerId(), begin, begun);
     auto *stack = p1->getZones().value(ZoneNames::STACK);
-    ASSERT_EQ(stack->getCards().size(), 1);
-    EXPECT_EQ(stack->getCards().first(), second);
+    EXPECT_TRUE(stack->getCards().isEmpty());
+    EXPECT_EQ(p1->getZones().value(ZoneNames::HAND)->getCards(), (QList<Server_Card *>{first, second}));
     EXPECT_EQ(first->getZone()->getName(), QString(ZoneNames::HAND));
+    auto *pendingView = begun.mutable_batch()->add_events()->mutable_zone_view();
+    auto p1Pending = buildPerPlayerView(p1, {}, {});
+    auto *remaining = p1Pending.add_hand_cards();
+    remaining->set_object_id(301u);
+    remaining->set_card_id("lightning_bolt");
+    *pendingView->add_per_player() = p1Pending;
+    *pendingView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(begun);
+    EXPECT_EQ(p1->getZones().value(ZoneNames::HAND)->getCards(), (QList<Server_Card *>{first, second}));
+    EXPECT_EQ(bindingFor(p1).findHandCardByEngineIndex(p1, 0), first);
+    const auto maps = appendedServerMaps();
+    const auto handMap = std::find_if(maps.events().begin(), maps.events().end(),
+                                      [](const auto &event) { return event.has_hand_slot_map(); });
+    ASSERT_NE(handMap, maps.events().end());
+    ASSERT_EQ(handMap->hand_slot_map().entries_size(), 1);
+    EXPECT_EQ(handMap->hand_slot_map().entries(0).server_card_id(), first->getId());
 
     ruled::v1::RuledCommand commit;
     commit.mutable_commit_spell_cast()->set_transaction_id(41u);
@@ -1882,7 +1898,7 @@ TEST_F(RuledBatchTest, SpellCastTransactionMovesOnceAndBindsTheReservedPhysicalC
 
     applyAcceptedCommandVisuals(p1->getPlayerId(), commit, committed);
     callBatchApply(committed);
-    ASSERT_EQ(stack->getCards().size(), 1) << "commit must not move or create a second physical card";
+    ASSERT_EQ(stack->getCards().size(), 1) << "commit moves the reserved physical card exactly once";
     EXPECT_EQ(stack->getCards().first()->getId(), secondPhysicalId);
     EXPECT_EQ(boundStackServerCardId(900u), secondPhysicalId);
     EXPECT_EQ(boundStackTargets(900u), QVector<quint32>({777u}));
@@ -1923,7 +1939,8 @@ TEST_F(RuledBatchTest, CancelSpellCastRestoresTheExactPhysicalCardAndHandOrder)
     pending->set_reserved_object_id(302u);
     pending->mutable_announcement()->CopyFrom(*announcement);
     applyAcceptedCommandVisuals(p1->getPlayerId(), begin, begun);
-    ASSERT_EQ(p1->getZones().value(ZoneNames::STACK)->getCards().size(), 1);
+    EXPECT_TRUE(p1->getZones().value(ZoneNames::STACK)->getCards().isEmpty());
+    EXPECT_EQ(p1->getZones().value(ZoneNames::HAND)->getCards(), originalHand);
 
     ruled::v1::RuledCommand cancel;
     cancel.mutable_cancel_spell_cast()->set_transaction_id(52u);

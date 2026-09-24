@@ -145,7 +145,9 @@ struct RuledPlayerBinding
                                                  GameEventStorage *tapGes = nullptr,
                                                  bool allowUntapReset = true,
                                                  const QSet<quint32> *engineUntappedOids = nullptr,
-                                                 bool battlefieldsUnchanged = false);
+                                                 bool battlefieldsUnchanged = false,
+                                                 int reservedHandCardId = -1,
+                                                 quint32 reservedHandOid = 0);
     // CR 111: mint a physical token Server_Card on the player's table from an engine
     // TokenCreated identity (tokens have no deck card / Oracle entry) and bind it to `engineOid`
     // so the following zone-view sync matches the engine battlefield slot to it. The token is

@@ -53,7 +53,9 @@ Owns the mutually exclusive local spell-cast / activated-ability transaction. A 
 through `Announcing`, `BeginPending`, engine-authoritative `Paying`, `CommitPending`, or
 `CancelPending`. Modes, targets, X, and additional-cost objects are staged before
 `BeginSpellCast`; only the returned transaction id and locked cost may enter payment. A reconnect
-rebuilds `Paying` from the caster-private `PendingSpellCast` and the exact reserved stack object.
+rebuilds `Paying` from the caster-private `PendingSpellCast` and the exact reserved engine object.
+The relay keeps a hand source physically in hand until commit; other cast sources can be parked on
+the physical stack during payment.
 The client never redetermines that cost. Hand selections are retained as stable `Server_Card.id`
 values and converted back to the latest engine hand slot only when the announcement is submitted.
 Starting one local transaction cancels the other. Freeform never enters this controller.

@@ -103,9 +103,10 @@ which rejects previews, routes concede first, gates on a parked resolution, and 
 `EngineError::Illegal` — the engine never panics on a bad command.
 
 **6 — Mirror onto physical cards (Servatrice).** Only after the engine accepts does the driver
-touch Cockatrice objects: for a cast it moves the physical `Server_Card` from HAND to the
-**canonical stack zone** (the lowest player-id STACK zone, so every client sees one merged stack)
-and queues a `PendingRuledCastVisual` to bind to the next `StackPushed`. Then
+touch Cockatrice objects: a hand cast keeps its physical `Server_Card` in HAND while payment is
+pending, then moves it to the **canonical stack zone** on commit (the lowest player-id STACK zone,
+so every client sees one merged stack). Other cast sources move on begin. A
+`PendingRuledCastVisual` binds the same card to the next `StackPushed`. Then
 `RuledBatchSynchronizer::applyBatch(resp)` runs its load-bearing ordered pipeline (§4), and the
 accepted command's bytes are appended to the replay log.
 

@@ -232,7 +232,9 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
                                              GameEventStorage *tapGes,
                                              bool allowUntapReset,
                                              const QSet<quint32> *engineUntappedOids,
-                                             bool battlefieldsUnchanged)
+                                             bool battlefieldsUnchanged,
+                                             int reservedHandCardId,
+                                             quint32 reservedHandOid)
 {
     RuledZoneSyncResult result;
     const int playerId = player->getPlayerId();
@@ -278,7 +280,8 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
             pool.append(c);
         }
         for (Server_Card *c : handZone->getCards()) {
-            pool.append(c);
+            if (c && c->getId() != reservedHandCardId)
+                pool.append(c);
         }
         QVector<QPair<quint32, QString>> libWants;
         libWants.reserve(v.library_cards_size());
@@ -358,6 +361,16 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
             return result;
         }
 
+        if (reservedHandCardId >= 0) {
+            const auto reserved = std::find_if(handZone->getCards().begin(), handZone->getCards().end(),
+                                               [reservedHandCardId](const Server_Card *card) {
+                                                   return card && card->getId() == reservedHandCardId;
+                                               });
+            if (reserved == handZone->getCards().end())
+                return result;
+            handList.insert(qMin(handZone->getCards().indexOf(*reserved), handList.size()), *reserved);
+        }
+
         const QList<Server_Card *> currentHand = handZone->getCards();
         const QList<Server_Card *> currentDeck = deckZone->getCards();
         bool handMatches = (currentHand.size() == handList.size());
@@ -407,8 +420,13 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
         }
         libraryEngineOidToServerCardId.clear();
         libraryServerCardIdToEngineOid.clear();
-        for (int i = 0; i < handList.size(); ++i) {
-            registerEngineOid(static_cast<quint32>(v.hand_cards(i).object_id()), handList[i]->getId());
+        int engineHandIndex = 0;
+        for (Server_Card *card : handList) {
+            if (card->getId() == reservedHandCardId) {
+                registerEngineOid(reservedHandOid, card->getId());
+                continue;
+            }
+            registerEngineOid(static_cast<quint32>(v.hand_cards(engineHandIndex++).object_id()), card->getId());
         }
         for (int i = 0; i < libList.size(); ++i) {
             registerLibraryEngineOid(libWants[i].first, libList[i]->getId());

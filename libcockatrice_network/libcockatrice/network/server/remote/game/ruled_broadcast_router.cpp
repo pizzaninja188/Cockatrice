@@ -332,14 +332,16 @@ void RuledBroadcastRouter::appendServerObjectMaps(ruled::v1::IpcResponse &toSend
                 continue;
             }
             const int pid = pl->getPlayerId();
+            const int reservedCardId = synchronizer->pendingHandCardId(pid);
+            int handIndex = 0;
             for (int i = 0; i < handZone->getCards().size(); ++i) {
                 Server_Card *c = handZone->getCards().at(i);
-                if (!c) {
+                if (!c || c->getId() == reservedCardId) {
                     continue;
                 }
                 auto *ent = hm->add_entries();
                 ent->set_player_id(pid);
-                ent->set_hand_index(static_cast<uint32_t>(i));
+                ent->set_hand_index(static_cast<uint32_t>(handIndex++));
                 ent->set_server_card_id(c->getId());
             }
         }
