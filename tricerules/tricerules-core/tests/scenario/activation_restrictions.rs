@@ -1,6 +1,6 @@
 use super::helpers::*;
-use tricerules_cards::Keyword;
-use tricerules_core::GameEngine;
+use tricerules_cards::{ContinuousEffectKind, EffectDuration, Keyword};
+use tricerules_core::{AffectedScope, AttachmentRecipient, ContinuousEffect, GameEngine};
 use tricerules_proto::ruled::v1::{ruled_event::Ev, TargetRef};
 
 fn activation_engine(seed: u64) -> GameEngine {
@@ -105,6 +105,169 @@ fn caged_zombie_tracks_committed_creature_deaths_for_ui_and_command_legality() {
 
     e.state.turn_history.finish_turn();
     assert_eq!(zone_view_ability_flags(&mut e, 0, zombie), [false]);
+}
+
+#[test]
+fn attached_activation_prohibition_keeps_abilities_but_rejects_commands_and_follows_attachment() {
+    let mut e = activation_engine(5405);
+    let elves = inject_creature_on_battlefield(&mut e, 0, "llanowar_elves");
+    let aura = inject_permanent_on_battlefield(&mut e, 0, "pacifism");
+    e.state.objects.get_mut(&aura).expect("Aura").attached_to =
+        Some(AttachmentRecipient::Object(elves));
+    e.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: Some(aura),
+        affected: AffectedScope::AttachedTo(aura),
+        kind: ContinuousEffectKind::ProhibitActivatedAbilities,
+        condition: None,
+        duration: EffectDuration::WhileSourceOnBattlefield,
+        timestamp: e.state.command_index,
+    });
+
+    assert_eq!(
+        zone_view_ability_flags(&mut e, 0, elves),
+        [false],
+        "the ability remains listed but is not offered as activatable"
+    );
+    let public_batch = e.initial_response_batch();
+    let zone_view = public_batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::ZoneView(view)) => Some(view),
+            _ => None,
+        })
+        .expect("public zone view");
+    let annotated = zone_view.per_player[0]
+        .battlefield_objects
+        .iter()
+        .find(|object| object.object_id == elves)
+        .expect("enchanted creature remains in the battlefield view");
+    assert!(annotated
+        .rules_annotation_labels
+        .contains(&"Activated abilities can't be activated".to_string()));
+    let err = e
+        .apply_command(0, &activate_ability(elves, 0, vec![]))
+        .expect_err("the engine must reject a submitted prohibited activation");
+    assert!(matches!(err, tricerules_core::EngineError::Illegal(_)));
+    assert!(!e.state.objects[&elves].tapped);
+
+    e.state.objects.get_mut(&aura).expect("Aura").attached_to = None;
+    assert_eq!(zone_view_ability_flags(&mut e, 0, elves), [true]);
+    e.apply_command(0, &activate_ability(elves, 0, vec![]))
+        .expect("the activated ability works again after it is no longer enchanted");
+    assert!(e.state.objects[&elves].tapped);
+}
+
+#[test]
+fn attached_activation_prohibition_preserves_keywords_static_and_triggered_abilities() {
+    let decks = Some(vec![
+        deck_with("mountain", &["glimmerlight", "grizzly_bears"]),
+        deck_with("forest", &[]),
+    ]);
+    let mut e = GameEngine::new(5406, &[0, 1], 20, decks, true).expect("new engine");
+    advance_to_main1_from_game_start(&mut e);
+    let equipment = move_ready_to_battlefield(&mut e, 0, "glimmerlight");
+    resolve_entire_stack_two_player(&mut e);
+    let aura = inject_permanent_on_battlefield(&mut e, 0, "confiscate");
+    let equipped_creature = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    e.state.objects.get_mut(&aura).expect("Aura").attached_to =
+        Some(AttachmentRecipient::Object(equipment));
+    give_mana(
+        &mut e,
+        0,
+        ManaGift {
+            c: 1,
+            ..Default::default()
+        },
+    );
+    e.apply_command(
+        0,
+        &activate_ability_for(&e, equipment, 0, target(equipped_creature)),
+    )
+    .expect("activate Glimmerlight's Equip ability");
+    assert_eq!(e.state.stack.len(), 1);
+
+    e.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: Some(aura),
+        affected: AffectedScope::AttachedTo(aura),
+        kind: ContinuousEffectKind::ProhibitActivatedAbilities,
+        condition: None,
+        duration: EffectDuration::WhileSourceOnBattlefield,
+        timestamp: e.state.command_index,
+    });
+    e.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(equipment),
+        kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Flying),
+        condition: None,
+        duration: EffectDuration::UntilEndOfTurn,
+        timestamp: e.state.command_index,
+    });
+    let granted_ability = tricerules_cards::CardRegistry::global()
+        .get("llanowar_elves")
+        .expect("Llanowar Elves definition")
+        .primary_face()
+        .activated_abilities[0]
+        .clone();
+    e.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(equipment),
+        kind: ContinuousEffectKind::GrantActivatedAbility(Box::new(granted_ability)),
+        condition: None,
+        duration: EffectDuration::UntilEndOfTurn,
+        timestamp: e.state.command_index,
+    });
+    let granted_trigger = tricerules_cards::CardRegistry::global()
+        .get("soul_warden")
+        .expect("Soul Warden definition")
+        .primary_face()
+        .triggered_abilities[0]
+        .clone();
+    e.state.add_triggered_ability_grant(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(equipment),
+        kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(granted_trigger)),
+        condition: None,
+        duration: EffectDuration::UntilEndOfTurn,
+        timestamp: e.state.command_index,
+    });
+
+    assert_eq!(
+        zone_view_ability_flags(&mut e, 0, equipment),
+        [false, false]
+    );
+    assert!(e
+        .characteristics(equipment)
+        .is_some_and(|characteristics| characteristics.has_keyword(Keyword::Flying)));
+    let err = e
+        .apply_command(0, &activate_ability_for(&e, equipment, 1, vec![]))
+        .expect_err("an activated ability granted after attachment is also prohibited");
+    assert!(matches!(err, tricerules_core::EngineError::Illegal(_)));
+
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.characteristics(equipped_creature)
+            .and_then(|characteristics| characteristics.power),
+        Some(3),
+        "Glimmerlight's attached +1/+1 static ability applies after the prohibited state"
+    );
+    assert_eq!(
+        e.state.stack.len(),
+        0,
+        "the already-activated Equip resolves"
+    );
+
+    move_ready_to_battlefield(&mut e, 0, "grizzly_bears");
+    resolve_entire_stack_two_player(&mut e);
+    assert_eq!(
+        e.state.players[0].life, 21,
+        "the granted trigger still resolves"
+    );
 }
 
 #[test]

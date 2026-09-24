@@ -988,6 +988,17 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     })?;
             }
         }
+        if matches!(
+            ability,
+            StaticAbilityDef::ProhibitActivatedAbilitiesOfAttachedPermanent
+        ) && !face.is_aura
+        {
+            return Err(RegistryError::InvalidCard {
+                id: card.id.clone(),
+                reason: "ProhibitActivatedAbilitiesOfAttachedPermanent requires an Aura source"
+                    .into(),
+            });
+        }
         if let StaticAbilityDef::ProhibitSpecialAction {
             affected,
             condition,
@@ -4952,6 +4963,22 @@ mod tests {
                 static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: AttachedModifier(keywords: [Flying]))],
             )"#,
             r#"(
+                id: "creature_activation_prohibition",
+                name: "Creature Activation Prohibition",
+                face_id: "creature_activation_prohibition",
+                types: ["Creature"],
+                power: 1,
+                toughness: 1,
+                static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ProhibitActivatedAbilitiesOfAttachedPermanent)],
+            )"#,
+            r#"(
+                id: "equipment_activation_prohibition",
+                name: "Equipment Activation Prohibition",
+                face_id: "equipment_activation_prohibition",
+                types: ["Artifact", "Equipment"],
+                static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ProhibitActivatedAbilitiesOfAttachedPermanent)],
+            )"#,
+            r#"(
                 id: "empty_attachment_modifier",
                 name: "Empty Attachment Modifier",
                 face_id: "empty_attachment_modifier",
@@ -4996,6 +5023,21 @@ mod tests {
                 "expected malformed attachment definition to be rejected"
             );
         }
+    }
+
+    #[test]
+    fn attached_activated_ability_prohibition_requires_an_aura_source() {
+        let aura = r#"(
+            id: "activation_prohibiting_aura",
+            name: "Activation Prohibiting Aura",
+            face_id: "activation_prohibiting_aura",
+            types: ["Enchantment", "Aura"],
+            spell_effect: [AuraAttach(target: (kind: Creature))],
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ProhibitActivatedAbilitiesOfAttachedPermanent)],
+        )"#;
+        let registry = CardRegistry::from_chunks_and_tokens(&[aura], &[])
+            .expect("an Aura may prohibit abilities of its enchanted permanent");
+        assert!(registry.get("activation_prohibiting_aura").is_some());
     }
 
     #[test]

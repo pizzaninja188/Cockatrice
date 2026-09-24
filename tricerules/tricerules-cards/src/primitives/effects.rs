@@ -5167,6 +5167,9 @@ pub enum ContinuousEffectKind {
     },
     /// CR 101.2 / 116.2: prohibit a non-stack special action for affected permanents.
     ProhibitSpecialAction(SpecialActionKind),
+    /// CR 602.5: affected permanents retain their activated abilities, but players can't begin
+    /// activating them while this rule-changing effect applies.
+    ProhibitActivatedAbilities,
     /// CR 613 layer 7c — modifying effects (+N/+N, -N/-N).
     PtModify {
         delta_power: i32,

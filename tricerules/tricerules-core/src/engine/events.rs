@@ -23,6 +23,9 @@ impl GameEngine {
         {
             labels.push("Loses all abilities".to_string());
         }
+        if self.activated_abilities_prohibited(oid) {
+            labels.push("Activated abilities can't be activated".to_string());
+        }
         if let Some((_, _, land_type)) =
             super::characteristics::basic_land_type_setting(&self.state, oid)
         {

@@ -503,6 +503,17 @@ impl GameEngine {
                         timestamp,
                     });
                 }
+                StaticAbilityDef::ProhibitActivatedAbilitiesOfAttachedPermanent => {
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        trigger_grant_origin: None,
+                        source_id: Some(object_id),
+                        affected: AffectedScope::AttachedTo(object_id),
+                        kind: ContinuousEffectKind::ProhibitActivatedAbilities,
+                        condition: None,
+                        duration: EffectDuration::WhileSourceOnBattlefield,
+                        timestamp,
+                    });
+                }
                 StaticAbilityDef::AttachedModifier {
                     condition,
                     add_types,
@@ -1155,6 +1166,26 @@ impl GameEngine {
         })
     }
 
+    /// CR 602.5: whether an active rule-changing effect prohibits beginning an activated ability
+    /// on this permanent. Its abilities remain in the effective list and are still visible.
+    pub(super) fn activated_abilities_prohibited(&self, object_id: ObjectId) -> bool {
+        let Some(characteristics) = self.characteristics(object_id) else {
+            return false;
+        };
+        self.state.continuous_effects.iter().any(|effect| {
+            matches!(
+                effect.kind,
+                ContinuousEffectKind::ProhibitActivatedAbilities
+            ) && super::characteristics::effect_affects(
+                &self.state,
+                self.registry,
+                effect,
+                object_id,
+                &characteristics,
+            )
+        })
+    }
+
     /// CR 502.3: whether the normal untap-step turn-based action excludes this permanent.
     /// Explicit untap effects do not consult this restriction.
     pub(super) fn doesnt_untap_during_untap_step(&self, oid: ObjectId) -> bool {
@@ -1235,5 +1266,106 @@ impl GameEngine {
             .retain(|effect| effect.duration != EffectDuration::UntilEndOfTurn);
         self.state.damage_prevention_prohibitions.clear();
         self.state.death_replacement_effects.clear();
+    }
+}
+
+#[cfg(test)]
+mod issue_461_activation_prohibition_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    fn fixture_object(
+        id: ObjectId,
+        card_id: &str,
+        attached_to: Option<AttachmentRecipient>,
+    ) -> GameObject {
+        GameObject {
+            id,
+            owner: 0,
+            base_controller: 0,
+            controller: 0,
+            card_id: card_id.into(),
+            copiable_values: None,
+            token_origin: None,
+            token_faces: None,
+            copy_revision: 0,
+            zone: Zone::Battlefield,
+            tapped: false,
+            summoning_sick: false,
+            power: Some(1),
+            toughness: Some(1),
+            damage: 0,
+            deathtouch_damage: false,
+            counters: BTreeMap::new(),
+            counter_timestamps: BTreeMap::new(),
+            attached_to,
+            regeneration_shields: 0,
+            must_attack_if_able: false,
+            must_block_if_able: false,
+            face_up_index: 0,
+            face_down: false,
+        }
+    }
+
+    #[test]
+    fn attached_aura_static_ability_compiles_to_a_live_dynamic_prohibition() {
+        let target = r#"(
+            id: "test_ability_target",
+            name: "Test Ability Target",
+            face_id: "test_ability_target",
+            types: ["Creature"],
+            power: 1,
+            toughness: 1,
+            keywords: [Flying],
+        )"#;
+        let aura = r#"(
+            id: "test_activation_lock_aura",
+            name: "Test Activation Lock Aura",
+            face_id: "test_activation_lock_aura",
+            types: ["Enchantment", "Aura"],
+            spell_effect: [AuraAttach(target: (kind: Creature))],
+            static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ProhibitActivatedAbilitiesOfAttachedPermanent)],
+        )"#;
+        let registry = tricerules_cards::CardRegistry::from_chunks_and_tokens(&[target, aura], &[])
+            .expect("Aura prohibition fixture");
+        let mut engine = GameEngine::new(461_001, &[0, 1], 20, None, true).expect("new engine");
+        engine.registry = Box::leak(Box::new(registry));
+
+        let target_id = 20;
+        let aura_id = 21;
+        engine.state.objects.insert(
+            target_id,
+            fixture_object(target_id, "test_ability_target", None),
+        );
+        engine.state.objects.insert(
+            aura_id,
+            fixture_object(
+                aura_id,
+                "test_activation_lock_aura",
+                Some(AttachmentRecipient::Object(target_id)),
+            ),
+        );
+        engine.state.players[0]
+            .battlefield
+            .extend([target_id, aura_id]);
+        engine.emit_static_abilities_on_enter(aura_id);
+
+        assert!(engine.state.continuous_effects.iter().any(|effect| {
+            effect.affected == AffectedScope::AttachedTo(aura_id)
+                && effect.kind == ContinuousEffectKind::ProhibitActivatedAbilities
+                && effect.duration == EffectDuration::WhileSourceOnBattlefield
+        }));
+        assert!(engine.activated_abilities_prohibited(target_id));
+        assert!(engine
+            .characteristics(target_id)
+            .is_some_and(|characteristics| characteristics.has_keyword(Keyword::Flying)));
+
+        engine.state.objects.get_mut(&aura_id).unwrap().attached_to = None;
+        assert!(!engine.activated_abilities_prohibited(target_id));
+        engine.state.objects.get_mut(&aura_id).unwrap().attached_to =
+            Some(AttachmentRecipient::Object(target_id));
+        assert!(engine.activated_abilities_prohibited(target_id));
+        engine.state.objects.get_mut(&aura_id).unwrap().zone = Zone::Graveyard;
+        assert!(!engine.activated_abilities_prohibited(target_id));
     }
 }

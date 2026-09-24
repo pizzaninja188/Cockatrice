@@ -1780,6 +1780,10 @@ pub enum StaticAbilityDef {
         #[serde(default)]
         condition: Option<GameCondition>,
     },
+    /// CR 602.5: while this Aura is attached to a permanent, players can't begin to activate
+    /// abilities of that permanent. The abilities remain present; Stuck in Summoner's
+    /// Sanctum and Petrify use this rule prohibition, which is distinct from layer-6 ability loss.
+    ProhibitActivatedAbilitiesOfAttachedPermanent,
     /// CR 613.4 layer 7c: every creature matching `filter` gets +`delta_power`/+`delta_toughness`
     /// (negative values for a debuff anthem). Anthems (Glorious Anthem) and lords (Crusade, Bad Moon).
     AnthemPt {

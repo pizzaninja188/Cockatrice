@@ -1550,6 +1550,13 @@ impl GameEngine {
                 (card_id, face_index, ability, ability_path)
             }
         };
+        if source_zone == AbilitySourceZone::Battlefield
+            && self.activated_abilities_prohibited(permanent_id)
+        {
+            return Err(EngineError::Illegal(
+                "activated abilities of this permanent can't be activated",
+            ));
+        }
         // The source can leave the battlefield while its activation costs are committed (Clue and
         // Lander both sacrifice themselves). Capture the existing public token identity now so a
         // synthetic stack card can still render the exact token face after payment.
@@ -1858,6 +1865,11 @@ impl GameEngine {
             AbilitySourceZone::Graveyard => Zone::Graveyard,
         };
         if object.zone != expected_zone {
+            return false;
+        }
+        if ability.source_zone == AbilitySourceZone::Battlefield
+            && self.activated_abilities_prohibited(permanent_id)
+        {
             return false;
         }
         let activating_player = if ability.source_zone == AbilitySourceZone::Battlefield {
