@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "ebec110e-aff3-48aa-abf6-309dd2ffb478",
+  "spans": [
+    {
+      "face_id": "petrify",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/spell_effect/0"]
+    },
+    {
+      "face_id": "petrify",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0",
+        "/faces/0/static_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {"symbol": "SpellEffectKind::AuraAttach", "typed_path": "/faces/0/spell_effect/0"},
+    {"symbol": "StaticAbilityDef::AttachedModifier", "typed_path": "/faces/0/static_abilities/0/definition"},
+    {"symbol": "CombatRestriction.cant_attack", "typed_path": "/faces/0/static_abilities/0/definition/AttachedModifier/restriction/cant_attack"},
+    {"symbol": "CombatRestriction.cant_block", "typed_path": "/faces/0/static_abilities/0/definition/AttachedModifier/restriction/cant_block"},
+    {"symbol": "StaticAbilityDef::ProhibitActivatedAbilitiesOfAttachedPermanent", "typed_path": "/faces/0/static_abilities/1/definition"}
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_429_aura_restriction::petrify_prohibits_activated_abilities_and_attacks",
+      "covers": "creature activation is blocked and a petrified creature cannot be declared as an attacker"
+    },
+    {
+      "test": "scenario issue_429_aura_restriction::petrify_prohibits_blocking_and_accepts_artifact_targets",
+      "covers": "creature cannot block; artifact token is a legal Aura target and its activated mana ability is prohibited"
+    },
+    {
+      "test": "issue_429_aura_restriction::issue_429_registers_exactly_the_reviewed_six",
+      "covers": "complete identity, mana cost, Aura type, and complete Aura attach target filter"
+    },
+    {
+      "test": "issue_429_aura_restriction::issue_429_stuck_and_petrify_keep_each_printed_static_clause",
+      "covers": "both line-two static abilities, attached attack and block restrictions, and prohibition vocabulary"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

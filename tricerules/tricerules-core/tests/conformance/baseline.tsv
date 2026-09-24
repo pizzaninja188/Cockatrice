@@ -2144,6 +2144,7 @@ peregrine_griffin	0	cast	exercised
 perigee_beckoner	0	cast	exercised
 perish	0	cast	exercised
 pest_mascot	0	cast	exercised
+petrify	0	cast	exercised
 phantom_interference	0	cast	unsupported: modal fixture cannot satisfy required selectable modes
 phantom_monster	0	cast	exercised
 pharikas_chosen	0	cast	exercised
@@ -2872,6 +2873,7 @@ strix_lookout	0	cast	exercised
 strixhaven_skycoach	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
 strixhaven_skycoach	0	cast	exercised
 stroke_of_midnight	0	cast	exercised
+stuck_in_summoners_sanctum	0	cast	exercised
 submerged_boneyard	0	ability:0	exercised
 submerged_boneyard	0	land	exercised
 subterranean_cavern	0	ability:0	exercised

@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "84d308ce-c3c5-4612-accc-6e6cc68a33be",
+  "spans": [
+    {
+      "face_id": "stuck_in_summoners_sanctum",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/keywords/0"]
+    },
+    {
+      "face_id": "stuck_in_summoners_sanctum",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/spell_effect/0"]
+    },
+    {
+      "face_id": "stuck_in_summoners_sanctum",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    },
+    {
+      "face_id": "stuck_in_summoners_sanctum",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/static_abilities/0",
+        "/faces/0/static_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {"symbol": "Keyword::Flash", "typed_path": "/faces/0/keywords/0"},
+    {"symbol": "SpellEffectKind::AuraAttach", "typed_path": "/faces/0/spell_effect/0"},
+    {"symbol": "TriggerCondition::WhenSelfEntersBattlefield", "typed_path": "/faces/0/triggered_abilities/0/trigger"},
+    {"symbol": "SpellEffectKind::Tap", "typed_path": "/faces/0/triggered_abilities/0/effect/0"},
+    {"symbol": "StaticAbilityDef::AttachedModifier", "typed_path": "/faces/0/static_abilities/0/definition"},
+    {"symbol": "StaticAbilityDef::ProhibitActivatedAbilitiesOfAttachedPermanent", "typed_path": "/faces/0/static_abilities/1/definition"}
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_429_aura_restriction::stuck_in_summoners_sanctum_taps_locks_activation_and_untap_until_detached",
+      "covers": "enchant a creature, ETB tap, activated ability prohibition while retaining the ability, untap-step restriction, dynamic detachment, and restored activation"
+    },
+    {
+      "test": "issue_429_aura_restriction::issue_429_registers_exactly_the_reviewed_six",
+      "covers": "complete identity, mana cost, Aura type, and Flash keyword"
+    },
+    {
+      "test": "issue_429_aura_restriction::issue_429_stuck_and_petrify_keep_each_printed_static_clause",
+      "covers": "both line-four static abilities, attached untap restriction, entry tap trigger, and prohibition vocabulary"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

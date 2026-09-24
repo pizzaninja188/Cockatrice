@@ -1,23 +1,27 @@
-//! Issue #429 registry and presentation conformance for the four newly eligible Aura identities.
+//! Issue #429 registry and presentation conformance for the six newly eligible Aura identities.
 //!
 //! All four identities print their reviewed clauses in the pinned Scryfall snapshot
 //! `27bf3214-1271-490b-bdfe-c0be6c23d02e`; exact-name records and `rulings_uri` responses were
 //! fetched 2026-09-20. New Horizons returned two rulings (casting with no creatures is legal; a
 //! fizzled Aura never triggers), Friendly Neighborhood returned the resolution-time creature
-//! count ruling, and Stop Cold returned the later-granted-ability ruling. The expectations below
+//! count ruling, and Stop Cold returned the later-granted-ability ruling. Stuck in Summoner's
+//! Sanctum and Petrify had no Scryfall rulings; Wizards' set release notes clarify that activated
+//! abilities contain a colon, including keyword abilities such as equip. The expectations below
 //! are the reviewed printed Oracle behavior and the shipped typed vocabulary, not a copy of
 //! generator output. CR 303.4/702.5 (Aura attach), 603.6a (entry triggers), 701.26 (tap), 122.1
 //! (counters), 111.1 (tokens), 113.10a/605.1a (granted mana ability), 602.2b/611.2c (granted
 //! activated ability and its resolution-time count), 613.1f/613.7 (layer-6 ability removal and
-//! timestamps), and 502.3 (untap-step restriction) govern the asserted shapes.
+//! timestamps), 502.3 (untap-step restriction), and 602.5 (prohibited activations) govern the
+//! asserted shapes.
 
 mod common;
 
 use common::FaceExpectation;
 use tricerules_cards::primitives::{
-    AbilitySourceZone, Amount, CountExpression, EffectSubject, PermanentTypeFilter,
-    PlayerRecipient, PtScale, PtScaleBasis, RelativePlayerSet, SpellEffectKind, StaticAbilityDef,
-    TargetController, TargetFilter, TargetKind,
+    AbilitySourceZone, Amount, CombatRestriction, CountExpression, EffectSubject,
+    PermanentTypeFilter, PlayerRecipient, PtScale, PtScaleBasis, RelativePlayerSet,
+    SpellEffectKind, StaticAbilityDef, TargetController, TargetFilter, TargetKind,
+    TriggerCondition,
 };
 use tricerules_cards::{
     AbilityCost, AbilityPresentation, ActivatedAbilityDef, ActivationTiming, CardFace,
@@ -81,7 +85,7 @@ fn two_any_one_color() -> Vec<ManaAmount> {
 }
 
 #[test]
-fn issue_429_registers_exactly_the_reviewed_four() {
+fn issue_429_registers_exactly_the_reviewed_six() {
     let registry = CardRegistry::global();
     for (id, name, face_id, mana_cost, types, keywords, power_toughness) in [
         (
@@ -120,6 +124,24 @@ fn issue_429_registers_exactly_the_reviewed_four() {
             &[Keyword::Flash][..],
             None,
         ),
+        (
+            "stuck_in_summoners_sanctum",
+            "Stuck in Summoner's Sanctum",
+            "stuck_in_summoners_sanctum",
+            "{2}{U}",
+            &["Enchantment", "Aura"][..],
+            &[Keyword::Flash][..],
+            None,
+        ),
+        (
+            "petrify",
+            "Petrify",
+            "petrify",
+            "{1}{W}",
+            &["Enchantment", "Aura"][..],
+            &[][..],
+            None,
+        ),
     ] {
         assert_eq!(registry.id_for_name(name), Some(id), "{id}");
         FaceExpectation {
@@ -136,11 +158,9 @@ fn issue_429_registers_exactly_the_reviewed_four() {
 }
 
 #[test]
-fn issue_429_excluded_aura_identities_stay_unregistered() {
+fn issue_429_still_excludes_aura_identities_with_other_unsupported_clauses() {
     let registry = CardRegistry::global();
     for (id, name) in [
-        ("stuck_in_summoners_sanctum", "Stuck in Summoner's Sanctum"),
-        ("petrify", "Petrify"),
         ("tractor_beam", "Tractor Beam"),
         ("buried_in_the_garden", "Buried in the Garden"),
         ("shimmerwilds_growth", "Shimmerwilds Growth"),
@@ -212,6 +232,107 @@ fn issue_429_attach_targets_match_the_printed_enchant_lines() {
             },
         }]
     );
+    let artifact_or_creature = [SpellEffectKind::AuraAttach {
+        target: TargetFilter {
+            any_of: Some(vec![
+                TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    permanent_types: vec![PermanentTypeFilter::Artifact],
+                    ..TargetFilter::default()
+                },
+                TargetFilter {
+                    kind: TargetKind::Creature,
+                    ..TargetFilter::default()
+                },
+            ]),
+            ..TargetFilter::default()
+        },
+    }];
+    assert_eq!(
+        face("stuck_in_summoners_sanctum").spell_effect,
+        artifact_or_creature
+    );
+    assert_eq!(face("petrify").spell_effect, artifact_or_creature);
+}
+
+#[test]
+fn issue_429_stuck_and_petrify_keep_each_printed_static_clause() {
+    let stuck = face("stuck_in_summoners_sanctum");
+    let [stuck_untap, stuck_activation] = stuck.static_abilities.as_slice() else {
+        panic!("Stuck in Summoner's Sanctum must have the two printed static clauses");
+    };
+    assert_eq!(stuck_untap.ability_id.as_str(), "static_01");
+    assert_eq!(
+        stuck_untap.presentation,
+        AbilityPresentation::OracleLines(vec![4])
+    );
+    let StaticAbilityDef::AttachedModifier {
+        doesnt_untap_during_untap_step,
+        remove_all_abilities,
+        restriction,
+        ..
+    } = &stuck_untap.definition
+    else {
+        panic!("Stuck's untap clause must be an attached modifier");
+    };
+    assert!(*doesnt_untap_during_untap_step);
+    assert!(!remove_all_abilities);
+    assert_eq!(*restriction, CombatRestriction::default());
+    assert_eq!(stuck_activation.ability_id.as_str(), "static_02");
+    assert_eq!(
+        stuck_activation.presentation,
+        AbilityPresentation::OracleLines(vec![4])
+    );
+    assert_eq!(
+        stuck_activation.definition,
+        StaticAbilityDef::ProhibitActivatedAbilitiesOfAttachedPermanent
+    );
+    let [entry] = stuck.triggered_abilities.as_slice() else {
+        panic!("Stuck in Summoner's Sanctum must have one entry trigger");
+    };
+    assert_eq!(entry.ability_id.as_str(), "triggered_01");
+    assert_eq!(
+        entry.presentation,
+        AbilityPresentation::OracleLines(vec![3])
+    );
+    assert_eq!(entry.trigger, TriggerCondition::WhenSelfEntersBattlefield);
+    assert_eq!(
+        entry.effect,
+        [SpellEffectKind::Tap {
+            subject: EffectSubject::AttachedObject,
+        }]
+    );
+
+    let petrify = face("petrify");
+    let [petrify_combat, petrify_activation] = petrify.static_abilities.as_slice() else {
+        panic!("Petrify must have the two printed static clauses");
+    };
+    assert_eq!(petrify_combat.ability_id.as_str(), "static_01");
+    assert_eq!(
+        petrify_combat.presentation,
+        AbilityPresentation::OracleLines(vec![2])
+    );
+    let StaticAbilityDef::AttachedModifier { restriction, .. } = &petrify_combat.definition else {
+        panic!("Petrify's combat clause must be an attached modifier");
+    };
+    assert_eq!(
+        *restriction,
+        CombatRestriction {
+            cant_attack: true,
+            cant_block: true,
+            ..CombatRestriction::default()
+        }
+    );
+    assert_eq!(petrify_activation.ability_id.as_str(), "static_02");
+    assert_eq!(
+        petrify_activation.presentation,
+        AbilityPresentation::OracleLines(vec![2])
+    );
+    assert_eq!(
+        petrify_activation.definition,
+        StaticAbilityDef::ProhibitActivatedAbilitiesOfAttachedPermanent
+    );
+    assert!(petrify.triggered_abilities.is_empty());
 }
 
 #[test]
