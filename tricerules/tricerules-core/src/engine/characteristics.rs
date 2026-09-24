@@ -670,7 +670,8 @@ impl CharacteristicsEvaluator<'_> {
             | GameCondition::SelfWasBargained
             | GameCondition::CastOrigin { .. }
             | GameCondition::TriggeringSpellManaSpent { .. }
-            | GameCondition::ObjectMatches { .. } => false,
+            | GameCondition::ObjectMatches { .. }
+            | GameCondition::ObjectManaValue { .. } => false,
             GameCondition::Void => self.state.turn_history.current.void_holds(),
             GameCondition::PermanentLeftBattlefieldThisTurn { controllers } => self
                 .state

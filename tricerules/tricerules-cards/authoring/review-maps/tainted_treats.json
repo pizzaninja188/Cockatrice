@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "60826714-b9fd-4c89-b9f2-1a3c3229686b",
+  "spans": [
+    {
+      "face_id": "tainted_treats",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter.permanent_types",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen/permanent_types"
+    },
+    {
+      "symbol": "SpellEffectKind::Conditional",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "GameCondition::ObjectManaValue",
+      "typed_path": "/faces/0/spell_effect/1/Conditional/condition"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1/Conditional/effect"
+    }
+  ],
+  "tokens": ["food"],
+  "semantic_fixtures": [
+    {"test": "scenario issue_480_tainted_treats::tainted_treats_destroys_low_value_creature_and_creates_food", "covers": "destroy a low-value creature and create Food using its battlefield mana value"},
+    {"test": "scenario issue_480_tainted_treats::tainted_treats_destroys_high_value_creature_without_food", "covers": "high-value target remains legal for destruction but produces no Food"},
+    {"test": "scenario issue_480_tainted_treats::tainted_treats_creates_food_when_low_value_target_is_indestructible", "covers": "legal indestructible target survives while the mana-value condition still creates Food"},
+    {"test": "scenario issue_480_tainted_treats::tainted_treats_illegal_target_prevents_food", "covers": "illegal sole target prevents all resolution"},
+    {"test": "scenario issue_480_tainted_treats::tainted_treats_uses_copied_battlefield_mana_value_after_destroy", "covers": "copied battlefield mana value survives target destruction by generation"},
+    {"test": "scenario issue_480_tainted_treats::tainted_treats_treats_x_as_zero_on_the_battlefield", "covers": "X in the destroyed permanent's battlefield mana cost contributes zero despite counters"},
+    {"test": "scenario issue_480_tainted_treats::tainted_treats_can_destroy_artifact_and_rejects_enchantment", "covers": "artifact is legal and enchantment is not"},
+    {"test": "issue_480_tainted_treats::issue_480_registers_complete_tainted_treats", "covers": "source-backed complete definition and targeting contract"}
+  ],
+  "complete_definition_review_confirmed": true
+}

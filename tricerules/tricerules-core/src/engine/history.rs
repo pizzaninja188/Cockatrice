@@ -1341,6 +1341,32 @@ impl GameEngine {
                             context.controller,
                         )
                 }),
+            GameCondition::ObjectManaValue { object, .. } => self
+                .condition_object_identity(*object, context)
+                .and_then(|(object_id, expected_generation)| {
+                    let current_generation = self
+                        .state
+                        .zone_change_generation
+                        .get(&object_id)
+                        .copied()
+                        .unwrap_or(0);
+                    if current_generation == expected_generation
+                        && self
+                            .state
+                            .objects
+                            .get(&object_id)
+                            .is_some_and(|candidate| candidate.zone == Zone::Battlefield)
+                    {
+                        self.characteristics(object_id)
+                            .map(|characteristics| characteristics.mana_value)
+                    } else {
+                        self.state
+                            .last_known_mana_value_by_generation
+                            .get(&(object_id, expected_generation))
+                            .copied()
+                    }
+                })
+                .is_some_and(|mana_value| condition.matches_value(mana_value)),
             GameCondition::BattlefieldCreatureCount { filter, .. } => {
                 condition.matches_value(self.battlefield_creature_count(
                     filter,

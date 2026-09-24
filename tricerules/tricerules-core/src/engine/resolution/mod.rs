@@ -1606,6 +1606,9 @@ impl GameEngine {
                                 effect @ SpellEffectKind::Draw { .. } => {
                                     zones::draw(&mut cx, effect)?
                                 }
+                                effect @ SpellEffectKind::CreateTokens { .. } => {
+                                    tokens::create_tokens(&mut cx, effect)?
+                                }
                                 effect @ SpellEffectKind::Scry { .. } => {
                                     zones::scry(&mut cx, effect)?
                                 }

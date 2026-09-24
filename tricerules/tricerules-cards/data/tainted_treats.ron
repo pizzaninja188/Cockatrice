@@ -1,0 +1,24 @@
+// Pinned Oracle 60826714-b9fd-4c89-b9f2-1a3c3229686b; TMT ruling and CR 608.2b/h checked 2026-09-24.
+(
+  id: "tainted_treats",
+  name: "Tainted Treats",
+  face_id: "tainted_treats",
+  mana_cost: "{1}{B}{G}",
+  types: ["Instant"],
+  spell_effect: [
+    Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact, Creature]))),
+    Conditional(
+      condition: ObjectManaValue(
+        object: ChosenTarget(group_index: 0, target_index: 0),
+        max: Some(4),
+      ),
+      effect: CreateTokens(token: "food", count: 1),
+    ),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target artifact or creature",
+    effect_indices: [0],
+  )])),
+)

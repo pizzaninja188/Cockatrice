@@ -342,6 +342,8 @@ mod issue_300_generated_land_sacrifice_draw;
 mod issue_341_static_spell_cost_filters;
 #[path = "scenario/issue_479_land_comparison.rs"]
 mod issue_479_land_comparison;
+#[path = "scenario/issue_480_tainted_treats.rs"]
+mod issue_480_tainted_treats;
 #[path = "scenario/issue_481_conditional_library_choices.rs"]
 mod issue_481_conditional_library_choices;
 #[path = "scenario/issue_483_feed_the_swarm.rs"]

@@ -189,6 +189,15 @@ pub enum GameCondition {
         object: ConditionObjectRef,
         filter: Box<TargetFilter>,
     },
+    /// Compare an exact bound object's derived battlefield mana value. If an earlier
+    /// instruction moved it away, use that generation's last battlefield value (CR 608.2h).
+    ObjectManaValue {
+        object: ConditionObjectRef,
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
     /// Compare the number of battlefield creatures matching derived characteristics against
     /// inclusive bounds. Winged Words uses `min: 1` plus Flying; subtype-based cost reductions
     /// and public activation/trigger conditions reuse the same filter.
@@ -256,6 +265,9 @@ impl GameCondition {
             matches!(
                 condition,
                 Self::ObjectMatches {
+                    object: ConditionObjectRef::PreviousEffectObject,
+                    ..
+                } | Self::ObjectManaValue {
                     object: ConditionObjectRef::PreviousEffectObject,
                     ..
                 }
@@ -421,6 +433,9 @@ impl GameCondition {
             GameCondition::ObjectMatches { filter, .. } => {
                 filter.validate_characteristic_constraints()
             }
+            GameCondition::ObjectManaValue { min, max, .. } => {
+                validate_optional_bounds(min.as_ref(), max.as_ref(), "ObjectManaValue")
+            }
             GameCondition::BattlefieldCreatureCount { filter, min, max } => {
                 filter.validate()?;
                 validate_optional_bounds(min.as_ref(), max.as_ref(), "BattlefieldCreatureCount")
@@ -470,6 +485,7 @@ impl GameCondition {
             | GameCondition::AttackersDeclaredThisTurn { min, max, .. }
             | GameCondition::PermanentsEnteredThisTurn { min, max, .. }
             | GameCondition::SourceCounterCount { min, max, .. }
+            | GameCondition::ObjectManaValue { min, max, .. }
             | GameCondition::BattlefieldCreatureCount { min, max, .. }
             | GameCondition::BattlefieldAggregate { min, max, .. }
             | GameCondition::UnlockedRoomDoorCount { min, max, .. }

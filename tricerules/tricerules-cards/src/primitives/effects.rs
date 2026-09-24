@@ -3509,6 +3509,7 @@ impl SpellEffectKind {
                         | SpellEffectKind::GrantKeywords { .. }
                         | SpellEffectKind::ChoosePermanents { .. }
                         | SpellEffectKind::Draw { .. }
+                        | SpellEffectKind::CreateTokens { .. }
                         | SpellEffectKind::Scry { .. }
                         | SpellEffectKind::LibraryPartition {
                             kind: LibraryPartitionKind::Surveil,
@@ -3520,7 +3521,7 @@ impl SpellEffectKind {
                         | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
                 ) {
                     return Err(
-                        "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, Draw, Scry, Surveil, Untap, UntapAll, and RemoveAllAbilities effects"
+                        "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, Draw, CreateTokens, Scry, Surveil, Untap, UntapAll, and RemoveAllAbilities effects"
                             .into(),
                     );
                 }
