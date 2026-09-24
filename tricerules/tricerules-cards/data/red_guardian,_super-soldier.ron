@@ -1,0 +1,29 @@
+// Pinned Oracle identity and the card-specific ruling were reviewed on 2026-09-24.
+// Source: Marvel Super Heroes Release Notes; capability reuses generation-bound damage history.
+(
+  id: "red_guardian,_super-soldier",
+  name: "Red Guardian, Super-Soldier",
+  face_id: "red_guardian_super_soldier",
+  mana_cost: "{2}{W}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Human", "Soldier", "Villain"],
+  power: 2,
+  toughness: 2,
+  keywords: [Flash],
+  triggered_abilities: [(
+    ability_id: "destroy_damage_source",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [Destroy(subject: Chosen((
+      kind: Creature,
+      controller: Opponent,
+      dealt_damage_this_turn: Some(true),
+    )))],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target creature an opponent controls that dealt damage this turn",
+      effect_indices: [0],
+    )])),
+  )],
+)

@@ -1,0 +1,37 @@
+{
+  "format_version": 1,
+  "oracle_id": "e85567e8-1102-4d44-a15b-d5f1fdef8465",
+  "spans": [
+    {
+      "face_id": "red_guardian_super_soldier",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/keywords/0"]
+    },
+    {
+      "face_id": "red_guardian_super_soldier",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {"symbol": "Keyword::Flash", "typed_path": "/faces/0/keywords/0"},
+    {"symbol": "TriggerCondition::WhenSelfEntersBattlefield", "typed_path": "/faces/0/triggered_abilities/0/trigger"},
+    {"symbol": "SpellEffectKind::Destroy", "typed_path": "/faces/0/triggered_abilities/0/effect/0"},
+    {"symbol": "TargetingDef", "typed_path": "/faces/0/triggered_abilities/0/targeting"},
+    {"symbol": "TargetFilter::dealt_damage_this_turn", "typed_path": "/faces/0/triggered_abilities/0/effect/0"}
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "scenario issue_487_red_guardian::red_guardian_destroys_a_damage_source_not_a_damage_recipient", "covers": "damage source rather than damage recipient; opponent restriction; recipient may have left; valid target is destroyed"},
+    {"test": "scenario issue_487_red_guardian::red_guardian_does_not_offer_a_returned_damage_source_before_targeting", "covers": "CR 603.3d: no legal targets remain after the damage source returns, so the ETB trigger is not put on the stack"},
+    {"test": "scenario issue_487_red_guardian::red_guardian_revalidates_a_selected_source_after_its_generation_changes", "covers": "CR 400.7 new object and CR 608.2b revalidation after a chosen target leaves and returns"},
+    {"test": "issue_487_red_guardian::red_guardian_is_a_complete_registered_standard_card", "covers": "exact card identity, type line, flash, ETB destruction filter, and single target group"}
+  ],
+  "complete_definition_review_confirmed": true
+}
