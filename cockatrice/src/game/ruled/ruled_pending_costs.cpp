@@ -288,6 +288,14 @@ bool selectionStillLegal(const RuledClientState &state,
 
 bool RuledPendingCast::reconcileSpellCosts(const RuledClientState &state, int localPlayerId)
 {
+    // Once the engine has accepted this announcement, the source is expected to have left the
+    // hand-action list. Keep the local payment staging bound to that matching engine transaction;
+    // legal-action refreshes during mana payment must not cancel it or replace its locked costs.
+    if (spell.valid && spell.engineTransactionId != 0 && state.pendingSpellCast &&
+        state.pendingSpellCast->transaction_id() == spell.engineTransactionId) {
+        return true;
+    }
+
     if (spell.valid) {
         const bool sourceStillLegal =
             spell.source == RuledCastSource::Hand

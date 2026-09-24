@@ -7909,6 +7909,24 @@ TEST_F(RuledClientTest, PaymentReconciliationRebindsHandCostsAndRejectsMissingCa
     EXPECT_TRUE(spell.valid); // The UI owns cancellation and its signals, not this decision helper.
 }
 
+TEST_F(RuledClientTest, PaymentReconciliationKeepsTheMatchingAnnouncedSpellDuringPayment)
+{
+    RuledPendingCast pending;
+    auto &spell = pending.beginSpell();
+    spell.handIndex = 3;
+    spell.engineTransactionId = 17;
+    spell.stage = PendingRuledSpellCast::Stage::Paying;
+
+    auto &engineCast = state->pendingSpellCast.emplace();
+    engineCast.set_transaction_id(spell.engineTransactionId);
+
+    EXPECT_FALSE(state->isHandCastActionLegal(spell.handIndex, spell.faceIndex, spell.castMethod));
+    EXPECT_TRUE(pending.reconcileSpellCosts(*state, kLocalPlayer));
+
+    engineCast.set_transaction_id(spell.engineTransactionId + 1);
+    EXPECT_FALSE(pending.reconcileSpellCosts(*state, kLocalPlayer));
+}
+
 TEST_F(RuledClientTest, PaymentReconciliationPreservesIncompleteCohortsButRejectsChangedGenerations)
 {
     RuledPendingCast pending;
