@@ -1,0 +1,44 @@
+// Oracle text from https://scryfall.com/card/mkm/67/profts-eidetic-memory?utm_source=api.
+// Its ruling says X is set as the triggered ability resolves; CR 603.4 checks the intervening-if
+// at trigger and resolution.
+(
+  id: "profts_eidetic_memory",
+  name: "Proft's Eidetic Memory",
+  face_id: "profts_eidetic_memory",
+  mana_cost: "{1}{U}",
+  supertypes: ["Legendary"],
+  types: ["Enchantment"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: NoMaximumHandSize(players: Controller),
+  )],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Draw(who: Controller, count: 1)],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([3]),
+      trigger: AtBeginningOfCombat(player: Controller),
+      intervening_if: Some(CardsDrawnThisTurn(players: Controller, min: Some(2))),
+      effect: [PutCounters(
+        counter: PlusOnePlusOne,
+        count: Count(Affine(
+          constant: -1,
+          terms: [(coefficient: 1, quantity: CardsDrawnThisTurn(players: Controller))],
+        )),
+        subject: Chosen((kind: Creature, controller: You)),
+      )],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target creature you control",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)

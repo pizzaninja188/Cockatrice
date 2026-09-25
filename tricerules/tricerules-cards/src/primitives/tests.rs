@@ -1272,6 +1272,16 @@ fn issue_230_discard_alternatives_validate_both_real_card_filters() {
 }
 
 #[test]
+fn amount_count_expression_reads_cards_drawn_this_turn() {
+    let expression: CountExpression = ron::from_str("CardsDrawnThisTurn(players: Controller)")
+        .expect("the controller's committed draw count should parse as an amount expression");
+    let amount = Amount::Count(expression);
+    assert!(amount.validate().is_ok());
+    let encoded = ron::to_string(&amount).expect("draw-count amount should serialize");
+    assert_eq!(ron::from_str::<Amount>(&encoded).unwrap(), amount);
+}
+
+#[test]
 fn amount_serde_preserves_literals_x_and_named_conditionals() {
     assert_eq!(ron::from_str::<Amount>("4").unwrap(), Amount::Fixed(4));
     assert_eq!(ron::from_str::<Amount>(r#""X""#).unwrap(), Amount::X);

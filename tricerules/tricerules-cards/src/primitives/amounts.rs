@@ -65,6 +65,10 @@ pub enum CountExpression {
     /// The committed, identity-free number of creatures that died during the current turn.
     /// Bloodcrazed Paladin shares this watcher with `GameCondition::CreatureDeathsThisTurn`.
     CreatureDeathsThisTurn,
+    /// Count committed card draws by selected players during the current turn. Proft's Eidetic
+    /// Memory, Fractal Anomaly, and Elenda and Azor use this resolving amount for counters or
+    /// token quantity.
+    CardsDrawnThisTurn { players: RelativePlayerSet },
     /// Count cards in an engine-owned payment or immediately preceding effect cohort. Gerrard's
     /// Verdict and Gorging Vulture share this without re-examining an object's current zone.
     CardsMatchingResult { filter: CardResultFilter },
@@ -177,6 +181,7 @@ impl CountExpression {
             }
             CountExpression::GraveyardCardsNamed { .. }
             | CountExpression::CreatureDeathsThisTurn
+            | CountExpression::CardsDrawnThisTurn { .. }
             | CountExpression::CardsMatchingResult { .. }
             | CountExpression::CardResultCharacteristicSum { .. } => Ok(()),
         }

@@ -1,0 +1,89 @@
+{
+  "format_version": 1,
+  "oracle_id": "b749e9e4-0f2a-4157-8cca-facd6b48157f",
+  "spans": [
+    {
+      "face_id": "profts_eidetic_memory",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    },
+    {
+      "face_id": "profts_eidetic_memory",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    },
+    {
+      "face_id": "profts_eidetic_memory",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1",
+        "/faces/0/triggered_abilities/1/targeting/groups/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::NoMaximumHandSize",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "NoMaximumHandSizeScope::Controller",
+      "typed_path": "/faces/0/static_abilities/0/definition/NoMaximumHandSize/players"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfCombat",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "GameCondition::CardsDrawnThisTurn",
+      "typed_path": "/faces/0/triggered_abilities/1/intervening_if"
+    },
+    {
+      "symbol": "CountExpression::Affine",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0/PutCounters/count/Count/Affine"
+    },
+    {
+      "symbol": "CountExpression::CardsDrawnThisTurn",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0/PutCounters/count/Count/Affine/terms/0/quantity/CardsDrawnThisTurn"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0/PutCounters/subject/Chosen"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/1/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_proft_eidetic_memory::proft_counts_pre_entry_draws_and_reads_x_when_the_trigger_resolves",
+      "covers": "counts draws before Proft entered, excludes the opponent's simultaneous draws, selects its target as the trigger is put on the stack, and reads X after another draw resolves above it"
+    },
+    {
+      "test": "scenario deck_coverage_proft_eidetic_memory::proft_does_not_trigger_after_only_one_draw_this_turn",
+      "covers": "the beginning-of-combat trigger does not fire when only one card has been drawn this turn"
+    },
+    {
+      "test": "scenario deck_coverage_proft_eidetic_memory::proft_removes_only_its_controllers_hand_size_limit",
+      "covers": "its controller keeps nine cards through cleanup while the opponent still discards to seven"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

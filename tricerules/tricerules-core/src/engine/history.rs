@@ -534,6 +534,24 @@ pub(super) fn permanent_event_fact_matches(
 }
 
 impl GameEngine {
+    fn cards_drawn_this_turn_count(&self, players: RelativePlayerSet, controller: PlayerId) -> u32 {
+        self.state
+            .players
+            .iter()
+            .filter(|player| {
+                relative_player_set_contains(&self.state, players, controller, player.id)
+            })
+            .fold(0u32, |total, player| {
+                total.saturating_add(
+                    self.state
+                        .turn_history
+                        .current
+                        .player(player.id)
+                        .cards_drawn,
+                )
+            })
+    }
+
     /// Classify the initial legal targets without committing anything. Callers retain this
     /// snapshot across payment, then record it only when the original action completes. Copies,
     /// retargeting, and untargeted references (including Ward) do not call this boundary.
@@ -1187,27 +1205,7 @@ impl GameEngine {
                 condition.matches_value(count)
             }
             GameCondition::CardsDrawnThisTurn { players, .. } => {
-                let count = self
-                    .state
-                    .players
-                    .iter()
-                    .filter(|player| {
-                        relative_player_set_contains(
-                            &self.state,
-                            *players,
-                            context.controller,
-                            player.id,
-                        )
-                    })
-                    .fold(0u32, |total, player| {
-                        total.saturating_add(
-                            self.state
-                                .turn_history
-                                .current
-                                .player(player.id)
-                                .cards_drawn,
-                        )
-                    });
+                let count = self.cards_drawn_this_turn_count(*players, context.controller);
                 condition.matches_value(count)
             }
             GameCondition::AttackedThisTurn { players } => self
@@ -1768,6 +1766,9 @@ impl GameEngine {
             }
             CountExpression::CreatureDeathsThisTurn => {
                 self.state.turn_history.current.creatures_died as i64
+            }
+            CountExpression::CardsDrawnThisTurn { players } => {
+                self.cards_drawn_this_turn_count(*players, context.controller) as i64
             }
             CountExpression::CardsMatchingResult { filter } => context
                 .previous_effect_result
