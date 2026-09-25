@@ -1,0 +1,32 @@
+{
+  "format_version": 1,
+  "oracle_id": "a699c663-8131-4045-9265-a83e86609374",
+  "spans": [
+    {
+      "face_id": "thran_dynamo",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "ActivatedCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_thran_dynamo::thran_dynamo_casts_then_adds_three_colorless_mana_without_using_the_stack",
+      "covers": "casts for four mana, adds exactly three colorless mana, taps as the activation cost, resolves the mana ability without the stack, and rejects activation while tapped"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

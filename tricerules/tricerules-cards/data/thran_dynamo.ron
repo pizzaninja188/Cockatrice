@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-09-25: https://scryfall.com/card/cmm/415/thran-dynamo.
+// CR 605.1a identifies the untargeted mana-producing ability as a mana ability; CR 605.3b makes it resolve without the stack.
+(
+  id: "thran_dynamo",
+  name: "Thran Dynamo",
+  face_id: "thran_dynamo",
+  mana_cost: "{4}",
+  types: ["Artifact"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Tap],
+    effect: [ProduceMana(options: [(c: 3)])],
+  )],
+)

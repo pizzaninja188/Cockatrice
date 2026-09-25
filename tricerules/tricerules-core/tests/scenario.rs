@@ -96,6 +96,8 @@ mod deck_coverage_looting;
 mod deck_coverage_sol_ring;
 #[path = "scenario/deck_coverage_stump_stomp.rs"]
 mod deck_coverage_stump_stomp;
+#[path = "scenario/deck_coverage_thran_dynamo.rs"]
+mod deck_coverage_thran_dynamo;
 #[path = "scenario/deck_coverage_tri_lands.rs"]
 mod deck_coverage_tri_lands;
 #[path = "scenario/dev_commands.rs"]
