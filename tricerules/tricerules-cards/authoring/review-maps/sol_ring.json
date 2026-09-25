@@ -1,0 +1,30 @@
+{
+  "format_version": 1,
+  "oracle_id": "6ad8011d-3471-4369-9d68-b264cc027487",
+  "spans": [
+    {
+      "face_id": "sol_ring",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_sol_ring::sol_ring_casts_then_its_tap_ability_adds_two_colorless_mana",
+      "covers": "cast Sol Ring for {1}, tap it for exactly two colorless mana immediately without using the stack, then reject a second activation while tapped"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

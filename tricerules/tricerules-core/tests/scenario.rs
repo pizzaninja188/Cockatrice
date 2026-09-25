@@ -78,6 +78,8 @@ mod current_standard_coverage_2026_09_10;
 mod custom_resolution;
 #[path = "scenario/damage_prevention.rs"]
 mod damage_prevention;
+#[path = "scenario/deck_coverage_sol_ring.rs"]
+mod deck_coverage_sol_ring;
 #[path = "scenario/dev_commands.rs"]
 mod dev_commands;
 #[path = "scenario/dynamic_amounts.rs"]
