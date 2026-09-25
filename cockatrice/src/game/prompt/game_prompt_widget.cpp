@@ -537,13 +537,15 @@ void GamePromptWidget::setLocalPlayerHasPriority(bool hasPriority)
     refreshPromptLabel();
 }
 
-void GamePromptWidget::setCombatMode(CombatMode mode, bool localPlayerHasButtons, bool declarationSatisfied)
+void GamePromptWidget::setCombatMode(CombatMode mode, bool localPlayerHasButtons, bool declarationSatisfied,
+                                     bool choosingDefender)
 {
     if (mode == currentCombatMode && localPlayerHasButtons == localPlayerHasCombatButtons &&
-        declarationSatisfied == combatDeclarationSatisfied) {
+        declarationSatisfied == combatDeclarationSatisfied && choosingDefender == choosingAttackDefender) {
         return;
     }
     combatDeclarationSatisfied = declarationSatisfied;
+    choosingAttackDefender = choosingDefender;
     // Clear the sticky rejection label whenever we leave the "defender has buttons" state:
     // either the phase advanced past declare-blockers, or legal blocks were accepted and the
     // local player no longer has blocker buttons (blockersSubmittedThisStep flipped true).
@@ -843,7 +845,9 @@ void GamePromptWidget::updateCombatButtonsVisibility()
         confirmAttackersButton->setToolTip(
             combatDeclarationSatisfied
                 ? QString()
-                : tr("You must attack with all creatures that are required to attack."));
+                : choosingAttackDefender
+                      ? tr("Choose what this creature attacks before confirming.")
+                      : tr("You must attack with all creatures that are required to attack."));
     }
     if (showBlockers) {
         confirmBlockersButton->setToolTip(
@@ -922,7 +926,11 @@ void GamePromptWidget::refreshPromptLabel()
 
     if (currentCombatMode == CombatMode::DeclareAttackers) {
         if (localPlayerHasCombatButtons) {
-            if (!combatDeclarationSatisfied) {
+            if (choosingAttackDefender) {
+                promptLabel->setText(
+                    tr("%1's Declare Attackers step. Choose an opponent or other legal defender to attack.")
+                        .arg(activePlayerName));
+            } else if (!combatDeclarationSatisfied) {
                 promptLabel->setText(
                     tr("%1's Declare Attackers step. Some creatures must attack — declare them to continue.")
                         .arg(activePlayerName));

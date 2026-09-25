@@ -183,12 +183,7 @@ impl GameEngine {
                 .as_ref()
                 .is_some_and(|combat| !combat.blockers_declared)
         {
-            let next_defender = self.blocking_player_ids().into_iter().find(|player| {
-                self.state
-                    .combat
-                    .as_ref()
-                    .is_some_and(|combat| !combat.blockers_declared_by.contains(player))
-            });
+            let next_defender = self.next_blocking_player_needing_declaration();
             if let Some(defender) = next_defender {
                 self.state.priority_idx = self.state.player_idx(defender).unwrap();
                 self.state.passes_since_stack_change = 0;
@@ -550,13 +545,13 @@ impl GameEngine {
             DeclareAttackers => {
                 self.clear_step_mana_pools();
                 self.state.passes_since_stack_change = 0;
-                let has_eligible_blockers = self.defending_player_has_eligible_blockers();
                 let has_attackers = self
                     .state
                     .combat
                     .as_ref()
                     .is_some_and(|c| !c.attacking.is_empty());
-                if !has_eligible_blockers || !has_attackers {
+                let next_defender = self.next_blocking_player_needing_declaration();
+                if next_defender.is_none() || !has_attackers {
                     // Auto-declare empty blockers; active player gets priority in DeclareBlockers.
                     let blocking_players = self.blocking_player_ids();
                     if let Some(c) = self.state.combat.as_mut() {
@@ -589,7 +584,7 @@ impl GameEngine {
                 } else {
                     self.state.turn_step = DeclareBlockers;
                     // CR 509.1 / 101.4: the first defending player in APNAP order acts first.
-                    if let Some(d) = self.blocking_player_ids().first().copied() {
+                    if let Some(d) = next_defender {
                         if let Some(di) = self.state.player_idx(d) {
                             self.state.priority_idx = di;
                         }

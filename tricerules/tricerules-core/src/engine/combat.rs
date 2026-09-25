@@ -802,10 +802,29 @@ impl GameEngine {
             .collect()
     }
 
-    pub(super) fn defending_player_has_eligible_blockers(&self) -> bool {
-        self.blocking_player_ids()
-            .into_iter()
-            .any(|defender| !self.blocking_options(defender).0.is_empty())
+    /// Advance the blocker-declaration queue, recording empty declarations for seats with no
+    /// legal pair. Only a defender who can actually block needs to make a choice.
+    pub(super) fn next_blocking_player_needing_declaration(&mut self) -> Option<PlayerId> {
+        for defender in self.blocking_player_ids() {
+            if self
+                .state
+                .combat
+                .as_ref()
+                .is_some_and(|combat| combat.blockers_declared_by.contains(&defender))
+            {
+                continue;
+            }
+            if !self.blocking_options(defender).0.is_empty() {
+                return Some(defender);
+            }
+            self.state
+                .combat
+                .as_mut()
+                .unwrap()
+                .blockers_declared_by
+                .push(defender);
+        }
+        None
     }
 
     /// CR 508.1d: the active player's creatures that MUST be declared as attackers this combat —
@@ -1101,12 +1120,7 @@ impl GameEngine {
             c.assign_combat_damage_phase = false;
             c.blockers_declared_by.push(defending_player);
         }
-        let next_defender = self.blocking_player_ids().into_iter().find(|player| {
-            self.state
-                .combat
-                .as_ref()
-                .is_some_and(|c| !c.blockers_declared_by.contains(player))
-        });
+        let next_defender = self.next_blocking_player_needing_declaration();
         if next_defender.is_none() {
             self.state.combat.as_mut().unwrap().blockers_declared = true;
         }

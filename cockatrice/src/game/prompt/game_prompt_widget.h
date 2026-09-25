@@ -145,7 +145,8 @@ public slots:
     /// `declarationSatisfied` (CR 508.1d / 509.1c): when false, the local player still has a
     /// must-attack / must-block creature that isn't staged, so the confirm (OK) button is disabled
     /// to prevent submitting an illegal declaration that the engine would reject (softlock).
-    void setCombatMode(CombatMode mode, bool localPlayerHasButtons, bool declarationSatisfied = true);
+    void setCombatMode(CombatMode mode, bool localPlayerHasButtons, bool declarationSatisfied = true,
+                       bool choosingAttackDefender = false);
     void setTargetingMode(bool enabled, const QString &effectText = {});
     void setRuledStackHasItems(bool hasItems);
     /// CR 510.4: true while the engine reports a pending first-strike damage substep.
@@ -248,6 +249,7 @@ private:
     bool localPlayerHasCombatButtons = false;
     /// CR 508.1d / 509.1c: false while a required attacker/blocker is still unstaged; disables OK.
     bool combatDeclarationSatisfied = true;
+    bool choosingAttackDefender = false;
     /// A sub-state of PromptMode::Targeting: allocating a multi-target spell's damage.
     bool spellDamageAllocationMode = false;
     bool ruledStackHasItems = false;

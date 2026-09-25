@@ -191,6 +191,183 @@ fn three_player_opening_split_combat_elimination_and_final_victory() {
 }
 
 #[test]
+fn four_player_opening_priority_split_combat_and_departure() {
+    let decks = Some(vec![vec!["forest".into(); 30]; 4]);
+    let mut engine = GameEngine::new(4001, &[0, 1, 2, 3], 20, decks, false).expect("four seats");
+    let chooser = engine.state.opening.as_ref().unwrap().chooser;
+    engine
+        .apply_command(
+            chooser,
+            &RuledCommand {
+                cmd: Some(Cmd::ChooseStartingPlayer(ChooseStartingPlayer {
+                    starting_player_id: 0,
+                })),
+            },
+        )
+        .expect("choose P0 first");
+    for seat in [0, 1, 2, 3] {
+        assert_eq!(
+            engine.state.opening.as_ref().unwrap().mulligan_actor,
+            Some(seat)
+        );
+        engine
+            .apply_command(
+                seat,
+                &RuledCommand {
+                    cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
+                },
+            )
+            .expect("keep opening hand");
+    }
+    advance_until(&mut engine, 0, TurnStep::Main1);
+    assert_eq!(engine.state.players[0].hand.len(), 8);
+    for seat in 1..4 {
+        assert_eq!(engine.state.players[seat].hand.len(), 7);
+    }
+
+    let attackers: Vec<_> = (0..3)
+        .map(|_| inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears"))
+        .collect();
+    let blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    engine
+        .apply_command(0, &primitive_yield())
+        .expect("begin combat");
+    advance_until(&mut engine, 0, TurnStep::DeclareAttackers);
+    let legal = engine.initial_response_batch().legal_by_player[&0]
+        .legal_attack_assignments
+        .clone();
+    let assignments = (1..=3)
+        .map(|seat| {
+            *legal
+                .iter()
+                .find(|a| {
+                    a.attacker_object_id == attackers[(seat - 1) as usize]
+                        && a.defending_player_id == seat
+                })
+                .expect("attacker may choose each defender")
+        })
+        .collect();
+    engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::DeclareAttackers(DeclareAttackers { assignments })),
+            },
+        )
+        .expect("split attack three ways");
+    advance_until(&mut engine, 0, TurnStep::DeclareBlockers);
+    assert_eq!(engine.state.priority_player_id(), 1);
+    assert!(
+        engine.apply_command(2, &declare_blockers(vec![])).is_err(),
+        "later defender cannot declare early"
+    );
+    engine
+        .apply_command(
+            1,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: attackers[0],
+                blocker_id: blocker,
+            }]),
+        )
+        .expect("first defender blocks");
+    assert_eq!(
+        engine.state.priority_player_id(),
+        0,
+        "defenders with no legal block pairs are skipped individually"
+    );
+    assert!(engine.apply_command(2, &declare_blockers(vec![])).is_err());
+    assert!(engine.apply_command(3, &declare_blockers(vec![])).is_err());
+    advance_until(&mut engine, 0, TurnStep::EndCombat);
+    assert_eq!(
+        engine
+            .state
+            .players
+            .iter()
+            .map(|p| p.life)
+            .collect::<Vec<_>>(),
+        vec![20, 20, 18, 18]
+    );
+
+    engine
+        .apply_command(1, &concede())
+        .expect("first defender departs");
+    assert!(engine.state.winner.is_none());
+    assert!(engine.apply_command(1, &pass()).is_err());
+    advance_until(&mut engine, 2, TurnStep::Main1);
+    advance_until(&mut engine, 3, TurnStep::Main1);
+    engine
+        .apply_command(2, &concede())
+        .expect("second defender departs");
+    assert!(engine.state.winner.is_none());
+    engine
+        .apply_command(3, &concede())
+        .expect("third defender departs");
+    assert_eq!(engine.state.winner, Some(0));
+}
+
+#[test]
+fn four_player_blocking_skips_empty_middle_defender() {
+    let mut engine = GameEngine::new(4002, &[0, 1, 2, 3], 20, None, true).expect("four seats");
+    advance_until(&mut engine, 0, TurnStep::Main1);
+    let first_attack = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    let middle_attack = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    let last_attack = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    let first_blocker = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    let last_blocker = inject_creature_on_battlefield(&mut engine, 3, "grizzly_bears");
+    engine
+        .apply_command(0, &primitive_yield())
+        .expect("begin combat");
+    advance_until(&mut engine, 0, TurnStep::DeclareAttackers);
+    let legal = engine.initial_response_batch().legal_by_player[&0]
+        .legal_attack_assignments
+        .clone();
+    let assignments = [(first_attack, 1), (middle_attack, 2), (last_attack, 3)]
+        .into_iter()
+        .map(|(attacker, defender)| {
+            *legal
+                .iter()
+                .find(|a| a.attacker_object_id == attacker && a.defending_player_id == defender)
+                .expect("legal split assignment")
+        })
+        .collect();
+    engine
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::DeclareAttackers(DeclareAttackers { assignments })),
+            },
+        )
+        .expect("attack each defender");
+    advance_until(&mut engine, 0, TurnStep::DeclareBlockers);
+    assert_eq!(engine.state.priority_player_id(), 1);
+    engine
+        .apply_command(
+            1,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: first_attack,
+                blocker_id: first_blocker,
+            }]),
+        )
+        .expect("first defender blocks");
+    assert_eq!(
+        engine.state.priority_player_id(),
+        3,
+        "empty middle seat is skipped"
+    );
+    assert!(engine.apply_command(2, &declare_blockers(vec![])).is_err());
+    engine
+        .apply_command(
+            3,
+            &declare_blockers(vec![BlockPair {
+                attacker_id: last_attack,
+                blocker_id: last_blocker,
+            }]),
+        )
+        .expect("last defender blocks");
+    assert_eq!(engine.state.priority_player_id(), 0);
+}
+
+#[test]
 fn opening_continues_when_chooser_or_mulligan_actor_leaves() {
     let decks = Some(vec![vec!["forest".into(); 30]; 3]);
     let mut engine = GameEngine::new(3002, &[0, 1, 2], 20, decks, false).unwrap();

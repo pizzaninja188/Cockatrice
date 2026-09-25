@@ -150,7 +150,7 @@ TEST_F(RuledE2ESmokeTest, ThreeClientsRotateTurnsThenConcedeAndLeave)
     EXPECT_GE(p3.handSizeByPlayer[p3.myId], 8);
 
     // Split attacks between both opponents. One defender blocks; the other has no
-    // blocker and must still get their own empty declaration turn.
+    // legal blocker and is skipped without an empty declaration command.
     auto sendAndSettle = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &label) {
         const quint64 commandId = sender.nextCmdId;
         const std::array<quint64, 3> before{p1.stateVersion, p2.stateVersion, p3.stateVersion};
@@ -233,10 +233,8 @@ TEST_F(RuledE2ESmokeTest, ThreeClientsRotateTurnsThenConcedeAndLeave)
     ASSERT_EQ(block.declare_blockers().block_pairs_size(), 1);
     ASSERT_TRUE(sendAndSettle(p1, block, QStringLiteral("first defender blocks")));
     ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_DECLARE_BLOCKERS);
-    ASSERT_EQ(p1.priorityPlayer, p2.myId);
-    ruled::v1::RuledCommand noBlocks;
-    noBlocks.mutable_declare_blockers();
-    ASSERT_TRUE(sendAndSettle(p2, noBlocks, QStringLiteral("second defender declares no blocks")));
+    ASSERT_EQ(p1.priorityPlayer, p3.myId);
+    EXPECT_EQ(p2.latestLegal.legal_block_pairs_size(), 0);
     deadline.restart();
     while (p1.phase != ruled::v1::PHASE_ID_MAIN2 && deadline.elapsed() < 20000)
         ASSERT_TRUE(pass());
@@ -307,6 +305,182 @@ TEST_F(RuledE2ESmokeTest, ThreeClientsRotateTurnsThenConcedeAndLeave)
     ASSERT_TRUE(p1.pumpUntil([&] { return p1.sawEngineConcession && p1.sawEngineWinner; }, 10000,
                              "engine final departure and winner"));
     ASSERT_TRUE(p1.pumpUntil([&] { return !p1.gameStarted; }, 10000, "physical game end"));
+}
+
+TEST_F(RuledE2ESmokeTest, FourClientsOpenSplitCombatAndDepart)
+{
+    const auto started = startServers();
+    if (!started)
+        FAIL() << started.message();
+    if (const std::string message = started.message(); message.rfind("SKIP:", 0) == 0)
+        GTEST_SKIP() << message.substr(5);
+
+    DepartureObserver p1(QStringLiteral("fourp1"), &transcript);
+    SmokeClient p2(QStringLiteral("fourp2"), &transcript);
+    SmokeClient p3(QStringLiteral("fourp3"), &transcript);
+    SmokeClient p4(QStringLiteral("fourp4"), &transcript);
+    std::array<SmokeClient *, 4> clients{&p1, &p2, &p3, &p4};
+    for (auto *client : clients)
+        ASSERT_TRUE(client->loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame(4));
+    for (auto *client : std::array<SmokeClient *, 3>{&p2, &p3, &p4})
+        ASSERT_TRUE(client->joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    ASSERT_TRUE(p3.selectDeck(deckXml({{40, QStringLiteral("Mountain")}})));
+    ASSERT_TRUE(p4.selectDeck(deckXml({{40, QStringLiteral("Plains")}})));
+    for (auto *client : clients)
+        client->sendReady();
+
+    QElapsedTimer deadline;
+    deadline.start();
+    std::map<int, quint64> actedAtVersion;
+    int keeps = 0;
+    bool choseFirst = false;
+    const auto allAtMain = [&] {
+        return std::all_of(clients.begin(), clients.end(), [&](const auto *client) {
+            return client->gameStarted && client->stateVersion > 0 &&
+                   client->phase == ruled::v1::PHASE_ID_MAIN1 && client->activePlayer == p1.myId;
+        });
+    };
+    while (!allAtMain() && deadline.elapsed() < 30000) {
+        for (auto *client : clients)
+            client->pump(20);
+        for (auto *client : clients) {
+            if (!client->gameStarted || client->stateVersion == 0 ||
+                actedAtVersion[client->myId] == client->stateVersion)
+                continue;
+            const auto &opening = client->latestLegal.opening();
+            ruled::v1::RuledCommand command;
+            if (!choseFirst && opening.stage() == ruled::v1::OPENING_STAGE_CHOOSE_STARTING_PLAYER &&
+                opening.eligible_starting_player_ids_size() > 0) {
+                command.mutable_choose_starting_player()->set_starting_player_id(p1.myId);
+                choseFirst = true;
+            } else if (opening.stage() == ruled::v1::OPENING_STAGE_MULLIGAN && opening.can_keep()) {
+                command.mutable_mulligan()->set_keep(true);
+                ++keeps;
+            } else if (client->priorityPlayer == client->myId && client->phase != ruled::v1::PHASE_ID_MAIN1 &&
+                       opening.stage() != ruled::v1::OPENING_STAGE_CHOOSE_STARTING_PLAYER &&
+                       opening.stage() != ruled::v1::OPENING_STAGE_MULLIGAN) {
+                command.mutable_pass_priority();
+            } else {
+                continue;
+            }
+            client->sendRuled(command, QStringLiteral("advance four-player opening"));
+            actedAtVersion[client->myId] = client->stateVersion;
+        }
+    }
+    ASSERT_TRUE(allAtMain());
+    EXPECT_TRUE(choseFirst);
+    EXPECT_EQ(keeps, 4);
+    for (auto *client : clients) {
+        EXPECT_EQ(client->gameId, p1.gameId);
+        EXPECT_EQ(client->handSizeByPlayer[client->myId], client == &p1 ? 8 : 7);
+    }
+
+    auto sendAndSettle = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &label) {
+        const quint64 commandId = sender.nextCmdId;
+        const std::array<quint64, 4> before{p1.stateVersion, p2.stateVersion, p3.stateVersion, p4.stateVersion};
+        sender.sendRuled(command, label);
+        if (!sender.pumpUntil([&] { return sender.responses.count(commandId) > 0; }, 10000, "four-seat response"))
+            return false;
+        if (sender.responses[commandId].response_code() != Response::RespOk)
+            return false;
+        QElapsedTimer sync;
+        sync.start();
+        while (sync.elapsed() < 10000) {
+            for (auto *client : clients)
+                client->pump(20);
+            if (p1.stateVersion > before[0] && p2.stateVersion > before[1] &&
+                p3.stateVersion > before[2] && p4.stateVersion > before[3])
+                return true;
+        }
+        return false;
+    };
+    auto putReady = [&](int controller) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(controller);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name("Grizzly Bears");
+        put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+        put->set_ready(true);
+        return sendAndSettle(p1, command, QStringLiteral("place four-seat combat creature"));
+    };
+    for (int i = 0; i < 3; ++i)
+        ASSERT_TRUE(putReady(p1.myId));
+    ASSERT_TRUE(putReady(p2.myId));
+    const auto &attackers = p1.battlefieldByPlayer[p1.myId];
+    ASSERT_GE(attackers.size(), 3u);
+    const auto &blockers = p1.battlefieldByPlayer[p2.myId];
+    ASSERT_FALSE(blockers.empty());
+    auto pass = [&] {
+        SmokeClient *actor = nullptr;
+        for (auto *client : clients)
+            if (client->myId == p1.priorityPlayer)
+                actor = client;
+        if (actor == nullptr)
+            return false;
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return sendAndSettle(*actor, command, QStringLiteral("advance four-seat combat"));
+    };
+    deadline.restart();
+    while (p1.phase != ruled::v1::PHASE_ID_DECLARE_ATTACKERS && deadline.elapsed() < 20000)
+        ASSERT_TRUE(pass());
+    ruled::v1::RuledCommand attack;
+    const std::array<int, 3> defenderIds{p2.myId, p3.myId, p4.myId};
+    for (int i = 0; i < 3; ++i)
+        for (const auto &assignment : p1.latestLegal.legal_attack_assignments())
+            if (assignment.attacker_object_id() == attackers[i].oid &&
+                assignment.defending_player_id() == defenderIds[i])
+                *attack.mutable_declare_attackers()->add_assignments() = assignment;
+    ASSERT_EQ(attack.declare_attackers().assignments_size(), 3);
+    ASSERT_TRUE(sendAndSettle(p1, attack, QStringLiteral("attack all three defenders")));
+    deadline.restart();
+    while (p1.phase != ruled::v1::PHASE_ID_DECLARE_BLOCKERS && deadline.elapsed() < 20000)
+        ASSERT_TRUE(pass());
+    ASSERT_EQ(p1.priorityPlayer, p2.myId);
+    ruled::v1::RuledCommand block;
+    for (const auto &pair : p2.latestLegal.legal_block_pairs())
+        if (pair.blocker_id() == blockers.back().oid && pair.attacker_id() == attackers[0].oid)
+            *block.mutable_declare_blockers()->add_block_pairs() = pair;
+    ASSERT_EQ(block.declare_blockers().block_pairs_size(), 1);
+    ASSERT_TRUE(sendAndSettle(p2, block, QStringLiteral("first defender blocks")));
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+    EXPECT_EQ(p3.latestLegal.legal_block_pairs_size(), 0);
+    EXPECT_EQ(p4.latestLegal.legal_block_pairs_size(), 0);
+    deadline.restart();
+    while (p1.phase != ruled::v1::PHASE_ID_MAIN2 && deadline.elapsed() < 20000)
+        ASSERT_TRUE(pass());
+    EXPECT_EQ(p1.lifeByPlayer.count(p2.myId), 0u);
+    EXPECT_EQ(p1.lifeByPlayer[p3.myId], 18);
+    EXPECT_EQ(p1.lifeByPlayer[p4.myId], 18);
+
+    p1.expectedConceder = p2.myId;
+    CommandContainer concede;
+    concede.set_game_id(p2.gameId);
+    concede.add_game_command()->MutableExtension(Command_Concede::ext);
+    p2.sendContainer(concede);
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.sawEngineConcession; }, 10000, "first four-seat departure"));
+    EXPECT_TRUE(p1.gameStarted);
+    p1.expectedConceder = p3.myId;
+    p1.sawEngineConcession = false;
+    CommandContainer leave;
+    leave.set_game_id(p3.gameId);
+    leave.add_game_command()->MutableExtension(Command_LeaveGame::ext);
+    p3.sendContainer(leave);
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.sawEngineConcession; }, 10000, "second four-seat departure"));
+    EXPECT_TRUE(p1.gameStarted);
+    p1.expectedConceder = p4.myId;
+    p1.expectedWinner = p1.myId;
+    p1.sawEngineConcession = false;
+    CommandContainer finalConcede;
+    finalConcede.set_game_id(p4.gameId);
+    finalConcede.add_game_command()->MutableExtension(Command_Concede::ext);
+    p4.sendContainer(finalConcede);
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.sawEngineConcession && p1.sawEngineWinner; }, 10000,
+                             "four-seat final winner"));
 }
 
 TEST_F(RuledE2ESmokeTest, UnregisteredDisconnectDuringThreePlayerOpeningLetsOtherSeatsContinue)

@@ -253,13 +253,13 @@ fn concede_is_legal_during_opening_sequence() {
 
 /// The engine accepts only the player counts covered by free-for-all integration scenarios.
 #[test]
-fn engine_accepts_three_player_free_for_all() {
-    for player_ids in [vec![], vec![5], vec![5, 6, 7, 8]] {
+fn engine_accepts_up_to_four_player_free_for_all() {
+    for player_ids in [vec![], vec![5], vec![5, 6, 7, 8, 9]] {
         let err = GameEngine::new(1, &player_ids, 20, None, true)
             .err()
             .unwrap_or_else(|| panic!("{} players must be rejected", player_ids.len()));
         assert!(
-            format!("{err:?}").contains("requires 2 or 3 players"),
+            format!("{err:?}").contains("requires 2 to 4 players"),
             "unexpected error for {} players: {err:?}",
             player_ids.len()
         );
@@ -271,6 +271,10 @@ fn engine_accepts_three_player_free_for_all() {
     assert!(
         GameEngine::new(1, &[5, 6, 7], 20, None, true).is_ok(),
         "three-player free-for-all must construct normally"
+    );
+    assert!(
+        GameEngine::new(1, &[5, 6, 7, 8], 20, None, true).is_ok(),
+        "four-player free-for-all must construct normally"
     );
 }
 

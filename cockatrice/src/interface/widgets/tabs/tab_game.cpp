@@ -517,7 +517,8 @@ void TabGame::connectToGameEventHandler()
                     // CR 508.1d / 509.1c: disable the confirm (OK) button while a required
                     // attacker/blocker is still unstaged, so an illegal declaration can't be sent.
                     const bool declarationSatisfied = handler->combatDeclarationSatisfied();
-                    gamePromptWidget->setCombatMode(mode, localHasButtons, declarationSatisfied);
+                    gamePromptWidget->setCombatMode(mode, localHasButtons, declarationSatisfied,
+                                                    handler->isChoosingAttackDefender());
                     if (!RuledActions::isRuledGame(game)) {
                         return;
                     }

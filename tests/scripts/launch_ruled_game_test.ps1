@@ -11,7 +11,7 @@ $helper = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentLi
 $helper.Id | Set-Content "$PSScriptRoot/helper.pid"
 '@ + "`nexit $buildExit" | Set-Content "$fixture/scripts/build-ninja.ps1"
         $launcherArgs = @('-NoProfile', '-File', "`"$fixture/scripts/launch-ruled-game.ps1`"", '-Dev')
-        if ($buildExit -eq 0) { $launcherArgs += @('-Players', '3') }
+        if ($buildExit -eq 0) { $launcherArgs += @('-Players', '4') }
         $launcher = Start-Process $shell -WindowStyle Hidden -PassThru -ArgumentList $launcherArgs `
             -RedirectStandardOutput "$fixture/stdout.log" -RedirectStandardError "$fixture/stderr.log"
         try {

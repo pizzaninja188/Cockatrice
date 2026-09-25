@@ -109,6 +109,20 @@ TEST_F(GamePromptWidgetTest, DeclareAttackersDisablesConfirmWhenRequirementUnmet
     EXPECT_TRUE(btn("confirmAttackersButton")->isEnabled());
 }
 
+TEST_F(GamePromptWidgetTest, AwaitingAttackDefenderHasItsOwnPrompt)
+{
+    widget->setActivePlayerName(QStringLiteral("p1"));
+    widget->setLocalPlayerHasPriority(true);
+    widget->setCombatMode(GamePromptWidget::CombatMode::DeclareAttackers, true,
+                          /*declarationSatisfied=*/false, /*choosingAttackDefender=*/true);
+    EXPECT_EQ(label("promptLabel")->text(),
+              QStringLiteral("p1's Declare Attackers step. Choose an opponent or other legal defender to attack."));
+    EXPECT_FALSE(btn("confirmAttackersButton")->isEnabled());
+    widget->setCombatMode(GamePromptWidget::CombatMode::DeclareAttackers, true,
+                          /*declarationSatisfied=*/true, /*choosingAttackDefender=*/false);
+    EXPECT_EQ(label("promptLabel")->text(), QStringLiteral("p1's Declare Attackers step. Choose attackers."));
+}
+
 // CR 509.1c: OK is disabled (but still shown) while a required blocker is unstaged.
 TEST_F(GamePromptWidgetTest, DeclareBlockersDisablesConfirmWhenRequirementUnmet)
 {

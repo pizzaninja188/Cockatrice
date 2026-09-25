@@ -214,12 +214,12 @@ mod session_count_tests {
     use tricerules_proto::SessionStart;
 
     #[test]
-    fn live_session_accepts_three_players_and_rejects_four() {
+    fn live_session_accepts_four_players_and_rejects_five() {
         let mut session = EngineSession::new(false);
         let response = session
             .process(&IpcEnvelope {
                 msg: Some(Msg::SessionStart(SessionStart {
-                    player_ids: vec![0, 1, 2],
+                    player_ids: vec![0, 1, 2, 3],
                     ..Default::default()
                 })),
             })
@@ -231,7 +231,7 @@ mod session_count_tests {
         let response = unsupported
             .process(&IpcEnvelope {
                 msg: Some(Msg::SessionStart(SessionStart {
-                    player_ids: vec![0, 1, 2, 3],
+                    player_ids: vec![0, 1, 2, 3, 4],
                     ..Default::default()
                 })),
             })

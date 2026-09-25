@@ -7939,12 +7939,14 @@ TEST_F(RuledClientTest, SplitAttackOffersBlockerControlsOnlyToCurrentDefender)
     EXPECT_FALSE(state->localPlayerIsDefender());
     ruled::v1::RuledEventBatch secondTurn;
     secondTurn.add_events()->mutable_priority_changed()->set_player_id(secondDefender);
-    // A defender with no eligible blockers must still get the Skip Blockers control.
-    (*secondTurn.mutable_legal_by_player())[secondDefender];
+    // The next attacked defender gets controls when the engine offers a legal block;
+    // defenders with no legal pairs are skipped by the engine before this priority change.
+    addLegalBlockPair((*secondTurn.mutable_legal_by_player())[secondDefender], 201, 101);
     QSignalSpy combatChanged(state, &RuledClientState::combatStateChanged);
     apply(secondTurn);
     EXPECT_GT(combatChanged.count(), 0);
     EXPECT_TRUE(state->localPlayerIsDefender());
+    EXPECT_TRUE(state->isLegalBlockPair(201, 101));
 
     host.local = firstDefender;
     EXPECT_FALSE(state->localPlayerIsDefender());

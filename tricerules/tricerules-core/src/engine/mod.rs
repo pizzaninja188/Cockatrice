@@ -1082,10 +1082,8 @@ fn new_object_from_card(
     }
 }
 
-/// Engine-only free-for-all seat counts. The sidecar still admits only two-seat live sessions
-/// until relay and client presentation have three-seat acceptance coverage. Team formats remain
-/// separate and unsupported.
-const SUPPORTED_PLAYER_COUNT: std::ops::RangeInclusive<usize> = 2..=3;
+/// Free-for-all seat counts admitted by the live sidecar. Team formats remain separate and unsupported.
+const SUPPORTED_PLAYER_COUNT: std::ops::RangeInclusive<usize> = 2..=4;
 
 impl GameEngine {
     fn clear_all_mana_pools(&mut self) {
@@ -1117,7 +1115,7 @@ impl GameEngine {
         skip_opening_sequence: bool,
     ) -> Result<Self, EngineError> {
         if !SUPPORTED_PLAYER_COUNT.contains(&player_ids.len()) {
-            return Err(EngineError::Illegal("free-for-all requires 2 or 3 players"));
+            return Err(EngineError::Illegal("free-for-all requires 2 to 4 players"));
         }
         let registry = CardRegistry::global();
         let mut objects = HashMap::new();
