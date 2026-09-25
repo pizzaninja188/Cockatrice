@@ -82,6 +82,8 @@ mod damage_prevention;
 mod deck_coverage_copperline_prismatic;
 #[path = "scenario/deck_coverage_cycling_taplands.rs"]
 mod deck_coverage_cycling_taplands;
+#[path = "scenario/deck_coverage_darksteel_plate.rs"]
+mod deck_coverage_darksteel_plate;
 #[path = "scenario/deck_coverage_sol_ring.rs"]
 mod deck_coverage_sol_ring;
 #[path = "scenario/deck_coverage_tri_lands.rs"]
