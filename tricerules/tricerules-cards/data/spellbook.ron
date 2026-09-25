@@ -9,6 +9,6 @@
   static_abilities: [(
     ability_id: "static_01",
     presentation: OracleLines([1]),
-    definition: NoMaximumHandSize,
+    definition: NoMaximumHandSize(players: Controller),
   )],
 )

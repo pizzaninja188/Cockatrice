@@ -13,6 +13,10 @@
     {
       "symbol": "StaticAbilityDef::NoMaximumHandSize",
       "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "NoMaximumHandSizeScope::Controller",
+      "typed_path": "/faces/0/static_abilities/0/definition/NoMaximumHandSize/players"
     }
   ],
   "tokens": [],

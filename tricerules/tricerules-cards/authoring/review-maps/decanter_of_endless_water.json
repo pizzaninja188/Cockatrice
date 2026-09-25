@@ -21,6 +21,10 @@
       "typed_path": "/faces/0/static_abilities/0/definition"
     },
     {
+      "symbol": "NoMaximumHandSizeScope::Controller",
+      "typed_path": "/faces/0/static_abilities/0/definition/NoMaximumHandSize/players"
+    },
+    {
       "symbol": "AbilityCost::Tap",
       "typed_path": "/faces/0/activated_abilities/0/costs/0"
     },

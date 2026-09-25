@@ -80,6 +80,8 @@ mod custom_resolution;
 mod damage_prevention;
 #[path = "scenario/deck_coverage_ancient_grudge.rs"]
 mod deck_coverage_ancient_grudge;
+#[path = "scenario/deck_coverage_anvil.rs"]
+mod deck_coverage_anvil;
 #[path = "scenario/deck_coverage_battlelands.rs"]
 mod deck_coverage_battlelands;
 #[path = "scenario/deck_coverage_checklands.rs"]

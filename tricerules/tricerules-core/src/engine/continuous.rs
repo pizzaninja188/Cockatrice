@@ -375,7 +375,7 @@ impl GameEngine {
             match static_ability.definition {
                 StaticAbilityDef::Madness { .. }
                 | StaticAbilityDef::DiscardToLibrary
-                | StaticAbilityDef::NoMaximumHandSize
+                | StaticAbilityDef::NoMaximumHandSize { .. }
                 | StaticAbilityDef::SpellCannotBeCountered
                 | StaticAbilityDef::Storied
                 | StaticAbilityDef::AdditionalTriggeredAbilityInstances { .. }

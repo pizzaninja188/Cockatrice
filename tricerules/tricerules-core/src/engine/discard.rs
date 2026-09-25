@@ -117,37 +117,45 @@ use crate::state::{PendingDiscardBatch, ProposedDiscard};
 impl GameEngine {
     fn player_has_discard_static(
         &self,
-        player: PlayerId,
-        predicate: impl Fn(&StaticAbilityDef) -> bool,
+        predicate: impl Fn(&StaticAbilityDef, PlayerId) -> bool,
     ) -> bool {
         self.state
             .players
             .iter()
             .flat_map(|p| p.battlefield.iter().copied())
             .any(|oid| {
-                self.controller_of(oid) == Some(player)
-                    && !self.state.objects[&oid].face_down
-                    && super::characteristics::latest_remove_all_abilities_timestamp(
-                        &self.state,
-                        oid,
-                    )
-                    .is_none()
-                    && self.effective_face(oid).is_some_and(|face| {
-                        face.static_abilities
-                            .iter()
-                            .any(|a| predicate(&a.definition))
-                    })
+                self.controller_of(oid).is_some_and(|controller| {
+                    !self.state.objects[&oid].face_down
+                        && super::characteristics::latest_remove_all_abilities_timestamp(
+                            &self.state,
+                            oid,
+                        )
+                        .is_none()
+                        && self.effective_face(oid).is_some_and(|face| {
+                            face.static_abilities
+                                .iter()
+                                .any(|a| predicate(&a.definition, controller))
+                        })
+                })
             })
     }
 
     pub(super) fn has_discard_library_replacement(&self, player: PlayerId) -> bool {
-        self.player_has_discard_static(player, |a| matches!(a, StaticAbilityDef::DiscardToLibrary))
+        self.player_has_discard_static(|a, controller| {
+            controller == player && matches!(a, StaticAbilityDef::DiscardToLibrary)
+        })
     }
 
     pub(super) fn maximum_hand_size(&self, player: PlayerId) -> usize {
-        if self
-            .player_has_discard_static(player, |a| matches!(a, StaticAbilityDef::NoMaximumHandSize))
-        {
+        if self.player_has_discard_static(|a, controller| match a {
+            StaticAbilityDef::NoMaximumHandSize {
+                players: tricerules_cards::primitives::NoMaximumHandSizeScope::Controller,
+            } => controller == player,
+            StaticAbilityDef::NoMaximumHandSize {
+                players: tricerules_cards::primitives::NoMaximumHandSizeScope::AllPlayers,
+            } => true,
+            _ => false,
+        }) {
             usize::MAX
         } else {
             MAX_HAND_SIZE

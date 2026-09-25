@@ -1683,8 +1683,9 @@ pub enum StaticAbilityDef {
     Madness { cost: super::super::ManaCost },
     /// Library of Leng: optional replacement for effect-caused discards only.
     DiscardToLibrary,
-    /// Library of Leng and Reliquary Tower establish this continuous player rule.
-    NoMaximumHandSize,
+    /// Spellbook, Decanter of Endless Water, Thought Vessel, Reliquary Tower, and Library of
+    /// Leng use the controller scope; Anvil of Bogardan and Folio of Fancies use all players.
+    NoMaximumHandSize { players: NoMaximumHandSizeScope },
 
     /// CR 113.6g / 701.6: this spell cannot be countered while it is on the stack. Countering
     /// spells and abilities can still legally target it and any optional payment still occurs.
@@ -1975,6 +1976,16 @@ pub enum StaticAbilityDef {
     /// CR 305.1 / 611.3: the controller may play lands from their own graveyard while this
     /// permanent is on the battlefield. Icetill Explorer, Crucible of Worlds.
     PlayLandsFromOwnGraveyard,
+}
+
+/// Which players a maximum-hand-size static ability applies to.
+///
+/// The current cards establish two templates: a controller-only limit modifier and an
+/// all-player limit modifier. Folio of Fancies shares Anvil of Bogardan's all-player clause.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NoMaximumHandSizeScope {
+    Controller,
+    AllPlayers,
 }
 
 fn is_false(value: &bool) -> bool {

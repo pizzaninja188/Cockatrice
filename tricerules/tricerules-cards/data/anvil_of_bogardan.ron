@@ -1,0 +1,25 @@
+// Oracle text from the pinned deck-coverage corpus; CR 402.2 and 504.2 govern these abilities.
+(
+  id: "anvil_of_bogardan",
+  name: "Anvil of Bogardan",
+  face_id: "anvil_of_bogardan",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: NoMaximumHandSize(players: AllPlayers),
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: AtBeginningOfDrawStep(player: AnyPlayer),
+    effect: [DrawDiscard(
+      who: AffectedPlayer,
+      draw_count: 1,
+      discard_count: 1,
+      order: DrawThenDiscard,
+      optional: false,
+    )],
+  )],
+)

@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "9deb2a0b-f40c-4d13-8321-41dc41448d24",
+  "spans": [
+    {
+      "face_id": "anvil_of_bogardan",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    },
+    {
+      "face_id": "anvil_of_bogardan",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::NoMaximumHandSize",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "NoMaximumHandSizeScope::AllPlayers",
+      "typed_path": "/faces/0/static_abilities/0/definition/NoMaximumHandSize/players"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfDrawStep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DrawDiscard",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_anvil::anvil_of_bogardan_removes_both_players_hand_limits_at_cleanup",
+      "covers": "Anvil's all-player maximum hand size applies during each player's cleanup"
+    },
+    {
+      "test": "scenario deck_coverage_anvil::anvil_of_bogardan_draws_then_each_triggered_player_discards",
+      "covers": "Each draw-step trigger draws then lets that player choose a discard, after the normal draw"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
