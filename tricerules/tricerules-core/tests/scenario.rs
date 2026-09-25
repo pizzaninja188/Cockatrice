@@ -78,6 +78,8 @@ mod current_standard_coverage_2026_09_10;
 mod custom_resolution;
 #[path = "scenario/damage_prevention.rs"]
 mod damage_prevention;
+#[path = "scenario/deck_coverage_copperline_prismatic.rs"]
+mod deck_coverage_copperline_prismatic;
 #[path = "scenario/deck_coverage_cycling_taplands.rs"]
 mod deck_coverage_cycling_taplands;
 #[path = "scenario/deck_coverage_sol_ring.rs"]

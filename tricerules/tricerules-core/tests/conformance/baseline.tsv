@@ -590,6 +590,8 @@ coordinated_maneuver	0	cast	exercised
 copper_host_crusher	0	cast	exercised
 copper_myr	0	ability:0	exercised
 copper_myr	0	cast	exercised
+copperline_gorge	0	ability:0	exercised
+copperline_gorge	0	land	exercised
 coral_commando	0	cast	exercised
 coral_eel	0	cast	exercised
 coral_merfolk	0	cast	exercised
@@ -2226,6 +2228,9 @@ primal_huntbeast	0	cast	exercised
 primordial_pachyderm	0	cast	exercised
 primordial_wurm	0	cast	exercised
 prismari_charm	0	cast	exercised
+prismatic_lens	0	ability:0	exercised
+prismatic_lens	0	ability:1	exercised
+prismatic_lens	0	cast	exercised
 prized_griffin	0	cast	exercised
 prizefighter_construct	0	cast	exercised
 prodigal_pyromancer	0	ability:0	exercised
