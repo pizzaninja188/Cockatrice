@@ -149,6 +149,100 @@ TEST_F(RuledE2ESmokeTest, ThreeClientsRotateTurnsThenConcedeAndLeave)
     EXPECT_TRUE(thirdAtMain());
     EXPECT_GE(p3.handSizeByPlayer[p3.myId], 8);
 
+    // Split attacks between both opponents. One defender blocks; the other has no
+    // blocker and must still get their own empty declaration turn.
+    auto sendAndSettle = [&](SmokeClient &sender, const ruled::v1::RuledCommand &command, const QString &label) {
+        const quint64 commandId = sender.nextCmdId;
+        const std::array<quint64, 3> before{p1.stateVersion, p2.stateVersion, p3.stateVersion};
+        sender.sendRuled(command, label);
+        if (!sender.pumpUntil([&] { return sender.responses.count(commandId) > 0; }, 10000, "combat response"))
+            return false;
+        if (sender.responses[commandId].response_code() != Response::RespOk)
+            return false;
+        QElapsedTimer sync;
+        sync.start();
+        while ((p1.stateVersion <= before[0] || p2.stateVersion <= before[1] || p3.stateVersion <= before[2]) &&
+               sync.elapsed() < 10000)
+            for (auto *client : clients)
+                client->pump(20);
+        return p1.stateVersion > before[0] && p2.stateVersion > before[1] && p3.stateVersion > before[2];
+    };
+    auto putReady = [&](int controller, const char *name) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(controller);
+        auto *put = dev->mutable_put_card_in_zone();
+        put->set_card_name(name);
+        put->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+        put->set_ready(true);
+        return sendAndSettle(p3, command, QStringLiteral("place combat creature"));
+    };
+    ASSERT_TRUE(putReady(p3.myId, "Grizzly Bears"));
+    ASSERT_TRUE(putReady(p3.myId, "Grizzly Bears"));
+    ASSERT_TRUE(putReady(p1.myId, "Grizzly Bears"));
+    const auto &attackers = p1.battlefieldByPlayer[p3.myId];
+    ASSERT_GE(attackers.size(), 2u);
+    const quint32 attackP1 = attackers[0].oid;
+    const quint32 attackP2 = attackers[1].oid;
+    const auto &blockers = p1.battlefieldByPlayer[p1.myId];
+    ASSERT_FALSE(blockers.empty());
+    const quint32 blocker = blockers.back().oid;
+    // The observer only records LifeChanged events; an untouched starting total
+    // has no map entry yet.
+    const auto observedLife = [&](int playerId) {
+        const auto found = p1.lifeByPlayer.find(playerId);
+        return found == p1.lifeByPlayer.end() ? 20 : found->second;
+    };
+    const int p1LifeBeforeCombat = observedLife(p1.myId);
+    const int p2LifeBeforeCombat = observedLife(p2.myId);
+
+    auto pass = [&] {
+        SmokeClient *actor = nullptr;
+        for (auto *client : clients)
+            if (client->myId == p1.priorityPlayer)
+                actor = client;
+        if (actor == nullptr)
+            return false;
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return sendAndSettle(*actor, command, QStringLiteral("advance split combat"));
+    };
+    deadline.restart();
+    while (p1.phase != ruled::v1::PHASE_ID_DECLARE_ATTACKERS && deadline.elapsed() < 20000)
+        ASSERT_TRUE(pass());
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_DECLARE_ATTACKERS);
+    ruled::v1::RuledCommand attack;
+    for (const auto &assignment : p3.latestLegal.legal_attack_assignments()) {
+        if ((assignment.attacker_object_id() == attackP1 && assignment.defending_player_id() == p1.myId) ||
+            (assignment.attacker_object_id() == attackP2 && assignment.defending_player_id() == p2.myId))
+            *attack.mutable_declare_attackers()->add_assignments() = assignment;
+    }
+    ASSERT_EQ(attack.declare_attackers().assignments_size(), 2);
+    ASSERT_TRUE(sendAndSettle(p3, attack, QStringLiteral("split attackers across defenders")));
+    deadline.restart();
+    while (p1.phase != ruled::v1::PHASE_ID_DECLARE_BLOCKERS && deadline.elapsed() < 20000)
+        ASSERT_TRUE(pass());
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.latestLegal.legal_block_pairs_size() > 0; }, 10000,
+                             "first defender's block offer"));
+    EXPECT_EQ(p2.latestLegal.legal_block_pairs_size(), 0);
+    ruled::v1::RuledCommand block;
+    for (const auto &pair : p1.latestLegal.legal_block_pairs())
+        if (pair.blocker_id() == blocker && pair.attacker_id() == attackP1)
+            *block.mutable_declare_blockers()->add_block_pairs() = pair;
+    ASSERT_EQ(block.declare_blockers().block_pairs_size(), 1);
+    ASSERT_TRUE(sendAndSettle(p1, block, QStringLiteral("first defender blocks")));
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_DECLARE_BLOCKERS);
+    ASSERT_EQ(p1.priorityPlayer, p2.myId);
+    ruled::v1::RuledCommand noBlocks;
+    noBlocks.mutable_declare_blockers();
+    ASSERT_TRUE(sendAndSettle(p2, noBlocks, QStringLiteral("second defender declares no blocks")));
+    deadline.restart();
+    while (p1.phase != ruled::v1::PHASE_ID_MAIN2 && deadline.elapsed() < 20000)
+        ASSERT_TRUE(pass());
+    EXPECT_EQ(observedLife(p1.myId), p1LifeBeforeCombat);
+    EXPECT_EQ(observedLife(p2.myId), p2LifeBeforeCombat - 2);
+
     // A raw ruled Concede would leave Servatrice's physical seat in play.
     // Only the normal client concession path may depart from both systems.
     const quint64 directConcedeCommandId = p2.nextCmdId;

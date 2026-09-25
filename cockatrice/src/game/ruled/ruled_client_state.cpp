@@ -1127,13 +1127,13 @@ bool RuledClientState::localPlayerIsActive() const
 bool RuledClientState::localPlayerIsDefender() const
 {
     const int localId = host->localPlayerId();
-    if (localId < 0 || currentActivePlayerId < 0) {
+    if (localId < 0 || currentActivePlayerId < 0 || currentCombatPhase != RuledCombatPhase::DeclareBlockers ||
+        localId != currentPriorityPlayerId || blockersSubmittedThisStep) {
         return false;
     }
-    if (currentCombatPhase == RuledCombatPhase::DeclareBlockers) {
-        return localId != currentActivePlayerId && !blockersSubmittedThisStep;
-    }
-    return localId != currentActivePlayerId;
+    return std::any_of(currentAttackAssignments.cbegin(), currentAttackAssignments.cend(), [localId](const auto &a) {
+        return static_cast<int>(a.defending_player_id()) == localId;
+    });
 }
 
 bool RuledClientState::combatDeclarationSatisfied() const
@@ -1413,7 +1413,7 @@ void RuledClientState::syncBlockersPreviewToServer()
     if (localId < 0 || currentActivePlayerId < 0) {
         return;
     }
-    if (localId == currentActivePlayerId) {
+    if (!localPlayerIsDefender()) {
         return;
     }
 
@@ -1893,6 +1893,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     // be revalidated client-side.
     currentCombatPhase = RuledCombatPhase::None;
     currentActivePlayerId = -1;
+    currentPriorityPlayerId = -1;
     pendingAttackerOids.clear();
     pendingAttackAssignments.clear();
     currentAttackerOids.clear();

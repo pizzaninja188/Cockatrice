@@ -763,6 +763,9 @@ public:
     RuledCombatPhase currentCombatPhase = RuledCombatPhase::None;
     // Active player as last reported by PhaseChanged (used to compute attacker/defender role).
     int currentActivePlayerId = -1;
+    // The engine's current priority holder; during blocker declarations this is the seat whose
+    // declaration is due, including a defender with no legal blocker pairs.
+    int currentPriorityPlayerId = -1;
     // Active player's local pending attacker selection (engine ObjectIds).
     QSet<quint32> pendingAttackerOids;
     // One engine-published defender edge for each fully staged attacker. An attacker can remain in

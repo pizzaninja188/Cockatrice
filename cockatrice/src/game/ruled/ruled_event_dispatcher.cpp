@@ -526,8 +526,11 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
             applyPhaseChanged(e.phase_changed(), ctx);
         }
         if (e.has_priority_changed()) {
-            host->setPriorityPlayerId(static_cast<int>(e.priority_changed().player_id()));
+            state->currentPriorityPlayerId = static_cast<int>(e.priority_changed().player_id());
+            host->setPriorityPlayerId(state->currentPriorityPlayerId);
             ctx.promptFeed += QStringLiteral("Priority: P%1\n").arg(e.priority_changed().player_id());
+            if (state->currentCombatPhase == RuledCombatPhase::DeclareBlockers)
+                ctx.combatStateDirty = true;
         }
         if (e.has_stack_pushed()) {
             applyStackPushed(e.stack_pushed(), ctx);

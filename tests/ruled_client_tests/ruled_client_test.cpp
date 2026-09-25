@@ -3613,12 +3613,13 @@ TEST_F(RuledClientTest, BlockerStagingPairsToAnAttackerAndSyncsAPreview)
 {
     ruled::v1::RuledEventBatch declared;
     auto *ad = declared.add_events()->mutable_attackers_declared();
-    *ad->add_assignments() = playerAttackAssignment(100);
-    *ad->add_assignments() = playerAttackAssignment(101); // Only blocker 200 can block this attacker.
-    *ad->add_assignments() = playerAttackAssignment(102); // Unblockable: no legal pair targets this attacker.
+    *ad->add_assignments() = playerAttackAssignment(100, kLocalPlayer);
+    *ad->add_assignments() = playerAttackAssignment(101, kLocalPlayer); // Only blocker 200 can block this attacker.
+    *ad->add_assignments() = playerAttackAssignment(102, kLocalPlayer); // Unblockable: no legal pair targets this attacker.
     apply(declared);
     // The opponent is the active player during our declare-blockers step.
     auto batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent);
+    batch.add_events()->mutable_priority_changed()->set_player_id(kLocalPlayer);
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
     auto *firstPair = actions.add_legal_block_pairs();
     firstPair->set_blocker_id(200);
@@ -3670,9 +3671,11 @@ TEST_F(RuledClientTest, BlockerStagingPairsToAnAttackerAndSyncsAPreview)
 TEST_F(RuledClientTest, RejectedBlockDeclarationRollsBackTheLocalGuard)
 {
     ruled::v1::RuledEventBatch declared;
-    *declared.add_events()->mutable_attackers_declared()->add_assignments() = playerAttackAssignment(100);
+    *declared.add_events()->mutable_attackers_declared()->add_assignments() =
+        playerAttackAssignment(100, kLocalPlayer);
     apply(declared);
     auto batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent);
+    batch.add_events()->mutable_priority_changed()->set_player_id(kLocalPlayer);
     addLegalBlockPair((*batch.mutable_legal_by_player())[kLocalPlayer], 200, 100);
     apply(batch);
     state->toggleStagedBlocker(200);
@@ -3746,9 +3749,11 @@ TEST_F(RuledClientTest, CombatStagingIgnoresCreaturesOutsideEngineSelectableSets
     EXPECT_TRUE(state->isPendingAttacker(100));
 
     ruled::v1::RuledEventBatch declared;
-    *declared.add_events()->mutable_attackers_declared()->add_assignments() = playerAttackAssignment(300);
+    *declared.add_events()->mutable_attackers_declared()->add_assignments() =
+        playerAttackAssignment(300, kLocalPlayer);
     apply(declared);
     auto blockers = phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent);
+    blockers.add_events()->mutable_priority_changed()->set_player_id(kLocalPlayer);
     addLegalBlockPair((*blockers.mutable_legal_by_player())[kLocalPlayer], 400, 300);
     apply(blockers);
 
@@ -7907,6 +7912,42 @@ TEST_F(RuledClientTest, PaymentReconciliationRebindsHandCostsAndRejectsMissingCa
     state->ownedCardToEngineHandSlot.remove(RuledClientState::makeOwnedCardKey(8, 91));
     EXPECT_FALSE(pending.reconcileSpellCosts(*state, 8));
     EXPECT_TRUE(spell.valid); // The UI owns cancellation and its signals, not this decision helper.
+}
+
+TEST_F(RuledClientTest, SplitAttackOffersBlockerControlsOnlyToCurrentDefender)
+{
+    constexpr int attacker = 1;
+    constexpr int firstDefender = 2;
+    constexpr int secondDefender = 3;
+    host.local = firstDefender;
+
+    ruled::v1::RuledEventBatch declared;
+    auto *attackers = declared.add_events()->mutable_attackers_declared();
+    *attackers->add_assignments() = playerAttackAssignment(100, firstDefender);
+    *attackers->add_assignments() = playerAttackAssignment(101, secondDefender);
+    apply(declared);
+
+    auto firstTurn = phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, attacker);
+    firstTurn.add_events()->mutable_priority_changed()->set_player_id(firstDefender);
+    addLegalBlockPair((*firstTurn.mutable_legal_by_player())[firstDefender], 200, 100);
+    apply(firstTurn);
+    EXPECT_TRUE(state->localPlayerIsDefender());
+    EXPECT_TRUE(state->isLegalBlockPair(200, 100));
+    EXPECT_FALSE(state->isLegalBlockPair(200, 101));
+
+    host.local = secondDefender;
+    EXPECT_FALSE(state->localPlayerIsDefender());
+    ruled::v1::RuledEventBatch secondTurn;
+    secondTurn.add_events()->mutable_priority_changed()->set_player_id(secondDefender);
+    // A defender with no eligible blockers must still get the Skip Blockers control.
+    (*secondTurn.mutable_legal_by_player())[secondDefender];
+    QSignalSpy combatChanged(state, &RuledClientState::combatStateChanged);
+    apply(secondTurn);
+    EXPECT_GT(combatChanged.count(), 0);
+    EXPECT_TRUE(state->localPlayerIsDefender());
+
+    host.local = firstDefender;
+    EXPECT_FALSE(state->localPlayerIsDefender());
 }
 
 TEST_F(RuledClientTest, PaymentReconciliationKeepsTheMatchingAnnouncedSpellDuringPayment)
