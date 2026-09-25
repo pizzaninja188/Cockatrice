@@ -1984,6 +1984,8 @@ mossbeard_ancient	0	cast	exercised
 mossbridge_troll	0	ability:0	unsupported: nonmana costs need additional fixture resources
 mossbridge_troll	0	cast	exercised
 mosscoat_goriak	0	cast	exercised
+mossfire_valley	0	ability:0	exercised
+mossfire_valley	0	land	exercised
 mountain	0	ability:0	exercised
 mountain	0	land	exercised
 mountain_bandit	0	cast	exercised

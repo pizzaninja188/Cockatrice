@@ -92,6 +92,8 @@ mod deck_coverage_cycling_taplands;
 mod deck_coverage_darksteel_plate;
 #[path = "scenario/deck_coverage_looting.rs"]
 mod deck_coverage_looting;
+#[path = "scenario/deck_coverage_mossfire_valley.rs"]
+mod deck_coverage_mossfire_valley;
 #[path = "scenario/deck_coverage_sol_ring.rs"]
 mod deck_coverage_sol_ring;
 #[path = "scenario/deck_coverage_stump_stomp.rs"]

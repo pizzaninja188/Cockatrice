@@ -1,0 +1,15 @@
+// Oracle and rulings checked 2026-09-25: https://scryfall.com/card/tdc/378/mossfire-valley?utm_source=api.
+// CR 605.1a classifies the untargeted mana-producing ability as a mana ability; CR 605.3b makes it resolve without the stack.
+(
+  id: "mossfire_valley",
+  name: "Mossfire Valley",
+  face_id: "mossfire_valley",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{1}"), Tap],
+    effect: [ProduceMana(options: [(r: 1, g: 1)])],
+  )],
+)
