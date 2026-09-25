@@ -994,6 +994,9 @@ feral_shadow	0	cast	exercised
 ferocious_zheng	0	cast	exercised
 festering_gulch	0	ability:0	exercised
 festering_gulch	0	land	exercised
+fetid_pools	0	ability:0	exercised
+fetid_pools	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+fetid_pools	0	land	exercised
 field_creeper	0	cast	exercised
 fields_of_strife	0	ability:0	exercised
 fields_of_strife	0	ability:1	exercised
@@ -1079,6 +1082,9 @@ forensic_researcher	0	cast	exercised
 forest	0	ability:0	exercised
 forest	0	land	exercised
 forest_bear	0	cast	exercised
+forgotten_cave	0	ability:0	exercised
+forgotten_cave	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+forgotten_cave	0	land	exercised
 forlorn_flats	0	ability:0	exercised
 forlorn_flats	0	land	exercised
 forsaken_sanctuary	0	ability:0	exercised
@@ -1570,6 +1576,9 @@ iron_tusk_elephant	0	cast	exercised
 ironclad_krovod	0	cast	exercised
 ironpaw_aspirant	0	cast	exercised
 ironroot_treefolk	0	cast	exercised
+irrigated_farmland	0	ability:0	exercised
+irrigated_farmland	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+irrigated_farmland	0	land	exercised
 isamaru,_hound_of_konda	0	cast	exercised
 island	0	ability:0	exercised
 island	0	land	exercised
@@ -2525,6 +2534,9 @@ scarecrow_guide	0	cast	exercised
 scarlet_witch,_wanda_maximoff	0	cast	exercised
 scarwood_goblins	0	cast	exercised
 scathe_zombies	0	cast	exercised
+scattered_groves	0	ability:0	exercised
+scattered_groves	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+scattered_groves	0	land	exercised
 scene_of_the_crime	0	ability:0	exercised
 scene_of_the_crime	0	ability:1	exercised
 scene_of_the_crime	0	ability:2	exercised
@@ -2603,6 +2615,9 @@ shatterskull_recruit	0	cast	exercised
 shatterstorm	0	cast	exercised
 shefet_archfiend	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 shefet_archfiend	0	cast	exercised
+sheltered_thicket	0	ability:0	exercised
+sheltered_thicket	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+sheltered_thicket	0	land	exercised
 shepherd_of_the_lost	0	cast	exercised
 shepherding_spirits	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 shepherding_spirits	0	cast	exercised
@@ -3132,6 +3147,9 @@ tranquil_cove	0	ability:0	exercised
 tranquil_cove	0	land	exercised
 tranquil_expanse	0	ability:0	exercised
 tranquil_expanse	0	land	exercised
+tranquil_thicket	0	ability:0	exercised
+tranquil_thicket	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+tranquil_thicket	0	land	exercised
 tranquility	0	cast	exercised
 transdimensional_bovine	0	ability:0	exercised
 transdimensional_bovine	0	cast	exercised

@@ -1,0 +1,29 @@
+// Oracle text pinned to Scryfall oracle_cards 27bf3214-1271-490b-bdfe-c0be6c23d02e.
+// CR 305.6 (basic land type mana abilities), CR 614.1c (enters tapped), and CR 702.29a (Cycling).
+(
+  id: "scattered_groves",
+  name: "Scattered Groves",
+  face_id: "scattered_groves",
+  mana_cost: "",
+  types: ["Land", "Forest", "Plains"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(g: 1), (w: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+  static_abilities: [(
+    ability_id: "enters_tapped",
+    presentation: OracleLines([2]),
+    definition: EntersTapped(affected: Self_),
+  )],
+)

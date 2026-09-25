@@ -1,0 +1,24 @@
+{
+  "format_version": 1,
+  "oracle_id": "32b03b48-06da-4a74-a7ac-e5ae39a4f428",
+  "spans": [
+    { "face_id": "fetid_pools", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/activated_abilities/0"] },
+    { "face_id": "fetid_pools", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/static_abilities/0"] },
+    { "face_id": "fetid_pools", "start_line": 3, "end_line": 3, "typed_paths": ["/faces/0/activated_abilities/1"] }
+  ],
+  "primitive_references": [
+    { "symbol": "AbilityCost::Tap", "typed_path": "/faces/0/activated_abilities/0/costs/0" },
+    { "symbol": "SpellEffectKind::ProduceMana", "typed_path": "/faces/0/activated_abilities/0/effect/0" },
+    { "symbol": "StaticAbilityDef::EntersTapped", "typed_path": "/faces/0/static_abilities/0/definition" },
+    { "symbol": "AbilitySourceZone::Hand", "typed_path": "/faces/0/activated_abilities/1/source_zone" },
+    { "symbol": "AbilityCost::Mana", "typed_path": "/faces/0/activated_abilities/1/costs/0" },
+    { "symbol": "AbilityCost::DiscardSelf", "typed_path": "/faces/0/activated_abilities/1/costs/1" },
+    { "symbol": "SpellEffectKind::Draw", "typed_path": "/faces/0/activated_abilities/1/effect/0" }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    { "test": "scenario deck_coverage_cycling_taplands::deck_coverage_cycling_taplands_enter_tapped_and_produce_each_printed_color", "covers": "enters tapped and produces blue or black mana after untapping" },
+    { "test": "scenario deck_coverage_cycling_taplands::deck_coverage_cycling_taplands_pay_the_printed_cost_discard_and_draw", "covers": "generic Cycling {2}, self-discard from hand as a cost, and one private draw on resolution" }
+  ],
+  "complete_definition_review_confirmed": true
+}
