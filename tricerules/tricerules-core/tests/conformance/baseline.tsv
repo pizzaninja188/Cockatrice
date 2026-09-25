@@ -730,6 +730,8 @@ debris_beetle	0	cast	exercised
 debris_field_crusher	0	ability:0	exercised
 debris_field_crusher	0	ability:1	exercised
 debris_field_crusher	0	cast	exercised
+decanter_of_endless_water	0	ability:0	exercised
+decanter_of_endless_water	0	cast	exercised
 decode_transmissions	0	cast	exercised
 decoy_ploy	0	cast	unsupported: face not offered by generic hand fixture
 deduce	0	cast	exercised
@@ -2387,6 +2389,8 @@ regathan_firecat	0	cast	exercised
 reigning_victor	0	cast	exercised
 release_the_dogs	0	cast	exercised
 relic_sloth	0	cast	exercised
+reliquary_tower	0	ability:0	exercised
+reliquary_tower	0	land	exercised
 reluctant_dounguard	0	cast	exercised
 remnant_elemental	0	cast	exercised
 renegade_demon	0	cast	exercised
@@ -2805,6 +2809,7 @@ spectral_snatcher	0	ability:0	unsupported: ability not offered by generic battle
 spectral_snatcher	0	cast	exercised
 spell_pierce	0	cast	unsupported: target group 0 needs a richer fixture
 spell_snare	0	cast	unsupported: target group 0 needs a richer fixture
+spellbook	0	cast	exercised
 spellgorger_weird	0	cast	exercised
 spellgyre	0	cast	exercised
 spicy_oatmeal_pizza	0	ability:0	exercised
@@ -3105,6 +3110,8 @@ thornwood_falls	0	land	exercised
 those_who_serve	0	cast	exercised
 thought_shucker	0	ability:0	unsupported: nonmana costs need additional fixture resources
 thought_shucker	0	cast	exercised
+thought_vessel	0	ability:0	exercised
+thought_vessel	0	cast	exercised
 thoughtseize	0	cast	exercised
 thoughtweft_charge	0	cast	exercised
 thousand_moons_infantry	0	cast	exercised

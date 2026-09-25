@@ -1,0 +1,20 @@
+// Oracle text from the pinned Scryfall corpus; https://scryfall.com/card/soc/398/reliquary-tower?utm_source=api.
+// CR 514.1 uses the player's maximum hand size during cleanup.
+(
+  id: "reliquary_tower",
+  name: "Reliquary Tower",
+  face_id: "reliquary_tower",
+  mana_cost: "",
+  types: ["Land"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: NoMaximumHandSize,
+  )],
+  activated_abilities: [(
+    ability_id: "mana",
+    presentation: OracleLines([2]),
+    costs: [Tap],
+    effect: [ProduceMana(options: [(c: 1)])],
+  )],
+)

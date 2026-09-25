@@ -1,0 +1,20 @@
+// Oracle text from the pinned Scryfall corpus; https://scryfall.com/card/mbc/78/thought-vessel?utm_source=api.
+// CR 514.1 uses the player's maximum hand size during cleanup.
+(
+  id: "thought_vessel",
+  name: "Thought Vessel",
+  face_id: "thought_vessel",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: NoMaximumHandSize,
+  )],
+  activated_abilities: [(
+    ability_id: "mana",
+    presentation: OracleLines([2]),
+    costs: [Tap],
+    effect: [ProduceMana(options: [(c: 1)])],
+  )],
+)

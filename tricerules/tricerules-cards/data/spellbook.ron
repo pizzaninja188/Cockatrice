@@ -1,0 +1,14 @@
+// Oracle text from the pinned Scryfall corpus; https://scryfall.com/card/m10/220/spellbook?utm_source=api.
+// CR 514.1 uses the player's maximum hand size during cleanup.
+(
+  id: "spellbook",
+  name: "Spellbook",
+  face_id: "spellbook",
+  mana_cost: "{0}",
+  types: ["Artifact", "Book"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: NoMaximumHandSize,
+  )],
+)

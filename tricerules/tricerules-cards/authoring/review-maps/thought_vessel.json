@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "9965d9c5-2ebf-4a6c-930e-55c5890979be",
+  "spans": [
+    {
+      "face_id": "thought_vessel",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    },
+    {
+      "face_id": "thought_vessel",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::NoMaximumHandSize",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_hand_size_mana::thought_vessel_removes_its_controllers_hand_limit_at_cleanup",
+      "covers": "Thought Vessel keeps its controller's nine-card hand through cleanup while the opponent still has a seven-card maximum"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "oracle_id": "83133f51-bfbd-4db5-9be0-f660e3b66435",
+  "spans": [
+    {
+      "face_id": "spellbook",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::NoMaximumHandSize",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_hand_size_mana::spellbook_removes_its_controllers_hand_limit_at_cleanup",
+      "covers": "Spellbook keeps its controller's nine-card hand through cleanup while the opponent still has a seven-card maximum"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

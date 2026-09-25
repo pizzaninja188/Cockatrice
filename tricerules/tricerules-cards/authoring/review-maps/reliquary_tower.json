@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "c23e5b80-08d2-4e24-9908-fe2aa4f30f6f",
+  "spans": [
+    {
+      "face_id": "reliquary_tower",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    },
+    {
+      "face_id": "reliquary_tower",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::NoMaximumHandSize",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_hand_size_mana::reliquary_tower_removes_its_controllers_hand_limit_at_cleanup",
+      "covers": "Reliquary Tower keeps its controller's nine-card hand through cleanup while the opponent still has a seven-card maximum"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
