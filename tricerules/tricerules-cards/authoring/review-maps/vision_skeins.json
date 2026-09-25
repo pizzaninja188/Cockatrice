@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "oracle_id": "6d42dff5-97ec-4768-b112-84a3584d0b87",
+  "spans": [
+    {
+      "face_id": "vision_skeins",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/spell_effect/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_vision_skeins_mikokoro::vision_skeins_makes_each_player_draw_two_cards",
+      "covers": "cast Vision Skeins and verify that its controller and opponent each draw exactly two cards"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,10 @@
+// Oracle and rulings checked 2026-09-25: https://scryfall.com/card/e01/29/vision-skeins?utm_source=api.
+// CR 121.2c makes each player draw in active-player order.
+(
+  id: "vision_skeins",
+  name: "Vision Skeins",
+  face_id: "vision_skeins",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [Draw(who: EachPlayer, count: 2)],
+)

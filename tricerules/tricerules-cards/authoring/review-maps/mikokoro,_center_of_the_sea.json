@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "a4580a1d-141e-449b-9018-e0258130634b",
+  "spans": [
+    {
+      "face_id": "mikokoro_center_of_the_sea",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "mikokoro_center_of_the_sea",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_vision_skeins_mikokoro::mikokoro_mana_ability_adds_colorless_without_the_stack",
+      "covers": "Mikokoro enters as a legendary land and its first ability adds one colorless mana immediately without the stack"
+    },
+    {
+      "test": "scenario deck_coverage_vision_skeins_mikokoro::mikokoro_pays_two_and_each_player_draws_one_on_the_stack",
+      "covers": "the {2} activation cost, tap cost, illegal unpaid activation, ordinary stack use, and one draw for each player"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

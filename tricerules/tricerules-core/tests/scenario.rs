@@ -102,6 +102,8 @@ mod deck_coverage_stump_stomp;
 mod deck_coverage_thran_dynamo;
 #[path = "scenario/deck_coverage_tri_lands.rs"]
 mod deck_coverage_tri_lands;
+#[path = "scenario/deck_coverage_vision_skeins_mikokoro.rs"]
+mod deck_coverage_vision_skeins_mikokoro;
 #[path = "scenario/dev_commands.rs"]
 mod dev_commands;
 #[path = "scenario/dynamic_amounts.rs"]

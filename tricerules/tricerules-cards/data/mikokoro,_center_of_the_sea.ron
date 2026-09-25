@@ -1,0 +1,24 @@
+// Oracle and rulings checked 2026-09-25: https://scryfall.com/card/dmc/217/mikokoro-center-of-the-sea?utm_source=api.
+// CR 605.1a/605.3b: the first ability adds mana immediately; CR 602.2 puts the draw ability on the stack.
+(
+  id: "mikokoro,_center_of_the_sea",
+  name: "Mikokoro, Center of the Sea",
+  face_id: "mikokoro_center_of_the_sea",
+  mana_cost: "",
+  supertypes: ["Legendary"],
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "mana",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Mana("{2}"), Tap],
+      effect: [Draw(who: EachPlayer, count: 1)],
+    ),
+  ],
+)

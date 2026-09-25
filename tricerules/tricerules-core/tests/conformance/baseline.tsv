@@ -1918,6 +1918,9 @@ mightform_harmonizer	0	cast	exercised
 mighty_mutanimals	0	cast	exercised
 migrating_ketradon	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 migrating_ketradon	0	cast	exercised
+mikokoro,_center_of_the_sea	0	ability:0	exercised
+mikokoro,_center_of_the_sea	0	ability:1	exercised
+mikokoro,_center_of_the_sea	0	land	exercised
 millennial_gargoyle	0	cast	exercised
 mind_control	0	cast	exercised
 mind_drill_assailant	0	ability:0	exercised
@@ -3346,6 +3349,7 @@ vinereap_mentor	0	cast	exercised
 violent_urge	0	cast	exercised
 virulent_emissary	0	cast	exercised
 virus_beetle	0	cast	exercised
+vision_skeins	0	cast	exercised
 visions_of_villainy	0	cast	exercised
 vitalize	0	cast	exercised
 viv_vision,_teen_synthezoid	0	ability:0	exercised
