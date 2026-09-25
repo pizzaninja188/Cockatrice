@@ -1,0 +1,34 @@
+// Oracle/rulings checked against Scryfall. CR 305.5–305.6 and 614.12.
+(
+  id: "rootbound_crag",
+  name: "Rootbound Crag",
+  face_id: "rootbound_crag",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Tap],
+    effect: [ProduceMana(options: [(r: 1), (g: 1)])],
+  )],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: EntersTapped(
+      affected: Self_,
+      condition: Some(BattlefieldAggregate(
+        filter: (
+          controllers: Controller,
+          any_of: Some([
+            (controllers: Controller, required_subtypes: ["Mountain"]),
+            (controllers: Controller, required_subtypes: ["Forest"]),
+          ]),
+          card_type: Some(Land),
+          exclude_source: true,
+        ),
+        aggregate: Count,
+        max: Some(0),
+      )),
+    ),
+  )],
+)

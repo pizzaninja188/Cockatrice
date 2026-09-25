@@ -80,6 +80,8 @@ mod custom_resolution;
 mod damage_prevention;
 #[path = "scenario/deck_coverage_battlelands.rs"]
 mod deck_coverage_battlelands;
+#[path = "scenario/deck_coverage_checklands.rs"]
+mod deck_coverage_checklands;
 #[path = "scenario/deck_coverage_copperline_prismatic.rs"]
 mod deck_coverage_copperline_prismatic;
 #[path = "scenario/deck_coverage_cycling_taplands.rs"]

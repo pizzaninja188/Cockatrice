@@ -1456,6 +1456,8 @@ hill_giant	0	cast	exercised
 hill_giant_herdgorger	0	cast	exercised
 hill_gigas	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 hill_gigas	0	cast	exercised
+hinterland_harbor	0	ability:0	exercised
+hinterland_harbor	0	land	exercised
 hinterland_sanctifier	0	cast	exercised
 hippo-cows	0	cast	exercised
 hire_a_crew	0	cast	exercised
@@ -2446,6 +2448,8 @@ roiling_dragonstorm	0	cast	exercised
 romantic_rendezvous	0	cast	exercised
 rooftop_assassin	0	cast	exercised
 rooftop_percher	0	cast	exercised
+rootbound_crag	0	ability:0	exercised
+rootbound_crag	0	land	exercised
 rootrider_faun	0	ability:0	exercised
 rootrider_faun	0	ability:1	exercised
 rootrider_faun	0	cast	exercised
