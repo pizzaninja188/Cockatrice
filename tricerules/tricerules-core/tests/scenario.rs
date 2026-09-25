@@ -82,6 +82,8 @@ mod damage_prevention;
 mod deck_coverage_cycling_taplands;
 #[path = "scenario/deck_coverage_sol_ring.rs"]
 mod deck_coverage_sol_ring;
+#[path = "scenario/deck_coverage_tri_lands.rs"]
+mod deck_coverage_tri_lands;
 #[path = "scenario/dev_commands.rs"]
 mod dev_commands;
 #[path = "scenario/dynamic_amounts.rs"]

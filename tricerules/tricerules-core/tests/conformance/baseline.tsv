@@ -121,6 +121,8 @@ arashin_sunshield	0	cast	exercised
 arbiter_of_woe	0	cast	unsupported: required cast-cost group needs a specialized fixture
 arborback_stomper	0	cast	exercised
 arcane_epiphany	0	cast	exercised
+arcane_sanctum	0	ability:0	exercised
+arcane_sanctum	0	land	exercised
 archangel	0	cast	exercised
 archers_of_qarsi	0	cast	exercised
 archive_dragon	0	cast	exercised
@@ -2565,6 +2567,8 @@ sea_eagle	0	cast	exercised
 seacoast_drake	0	cast	exercised
 seagraf_skaab	0	cast	exercised
 sear	0	cast	exercised
+seaside_citadel	0	ability:0	exercised
+seaside_citadel	0	land	exercised
 seasoned_consultant	0	cast	exercised
 seat_of_the_synod	0	ability:0	exercised
 seat_of_the_synod	0	land	exercised
