@@ -1,0 +1,17 @@
+// Oracle identity 5b5ef43b-13fd-4461-8d2d-18be65e9a790 verified against the pinned source,
+// current Scryfall record, its rulings, and the September 25, 2026 Comprehensive Rules. The ruling
+// confirms the graveyard event still triggers while the entry trigger remains on the stack.
+// CR 603.6a covers entry; CR 603.6c and 603.10a cover the battlefield-to-graveyard trigger.
+(
+  id: "ichor_wellspring",
+  name: "Ichor Wellspring",
+  face_id: "ichor_wellspring",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersOrIsPutIntoGraveyardFromBattlefield,
+    effect: [Draw(who: Controller, count: 1)],
+  )],
+)

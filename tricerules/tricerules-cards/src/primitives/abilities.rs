@@ -388,6 +388,10 @@ pub enum TriggerCondition {
     },
     /// When this permanent enters the battlefield.
     WhenSelfEntersBattlefield,
+    /// When this permanent enters or is put into a graveyard from the battlefield. Ichor
+    /// Wellspring uses one printed ability for both the entry event (CR 603.6a) and the
+    /// battlefield-to-graveyard event (CR 603.6c / 603.10a).
+    WhenSelfEntersOrIsPutIntoGraveyardFromBattlefield,
     /// CR 714.2b: a printed Saga chapter triggers whenever lore counters cross one of these
     /// chapter numerals. A single definition may carry multiple numerals for "III, IV" text.
     SagaChapter { chapters: Vec<u32> },
@@ -1202,6 +1206,11 @@ impl TriggeredAbilityDef {
             let trigger = match self.trigger {
                 TriggerCondition::WhenSelfEntersBattlefield => {
                     Some(format!("When {face_name} enters"))
+                }
+                TriggerCondition::WhenSelfEntersOrIsPutIntoGraveyardFromBattlefield => {
+                    Some(format!(
+                        "When {face_name} enters or is put into a graveyard from the battlefield"
+                    ))
                 }
                 TriggerCondition::WhenSelfDies => Some(format!("When {face_name} dies")),
                 TriggerCondition::WhenSelfLeavesBattlefield => {

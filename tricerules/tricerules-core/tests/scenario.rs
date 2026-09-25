@@ -98,6 +98,8 @@ mod deck_coverage_cycling_taplands;
 mod deck_coverage_darksteel_plate;
 #[path = "scenario/deck_coverage_hand_size_mana.rs"]
 mod deck_coverage_hand_size_mana;
+#[path = "scenario/deck_coverage_ichor_wellspring.rs"]
+mod deck_coverage_ichor_wellspring;
 #[path = "scenario/deck_coverage_looting.rs"]
 mod deck_coverage_looting;
 #[path = "scenario/deck_coverage_mossfire_valley.rs"]

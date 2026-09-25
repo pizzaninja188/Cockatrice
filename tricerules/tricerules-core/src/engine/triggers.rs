@@ -423,7 +423,11 @@ impl GameEngine {
                 } = event
                 {
                     if trigger.source_id == *object_id
-                        && trigger.ability.trigger == TriggerCondition::WhenSelfEntersBattlefield
+                        && matches!(
+                            trigger.ability.trigger,
+                            TriggerCondition::WhenSelfEntersBattlefield
+                                | TriggerCondition::WhenSelfEntersOrIsPutIntoGraveyardFromBattlefield
+                        )
                     {
                         trigger.trigger_context.entering_chosen_x = Some(*chosen_x);
                         trigger.trigger_context.entering_spell =
@@ -809,7 +813,13 @@ impl GameEngine {
                     entering_id,
                     entering_controller,
                     entering_face_index,
-                    |tc| *tc == TriggerCondition::WhenSelfEntersBattlefield,
+                    |tc| {
+                        matches!(
+                            tc,
+                            TriggerCondition::WhenSelfEntersBattlefield
+                                | TriggerCondition::WhenSelfEntersOrIsPutIntoGraveyardFromBattlefield
+                        )
+                    },
                 ));
 
                 for source in sources {
@@ -1158,8 +1168,13 @@ impl GameEngine {
                 was_creature,
             } => {
                 let dying = dying.at_event(sources);
-                let mut out = self
-                    .matching_snapshot_abilities(dying, |tc| *tc == TriggerCondition::WhenSelfDies);
+                let mut out = self.matching_snapshot_abilities(dying, |tc| {
+                    matches!(
+                        tc,
+                        TriggerCondition::WhenSelfDies
+                            | TriggerCondition::WhenSelfEntersOrIsPutIntoGraveyardFromBattlefield
+                    )
+                });
                 // The committed battlefield-to-graveyard move advances exactly one generation.
                 // Derive from the event snapshot, never the possibly newer current object.
                 for trigger in &mut out {

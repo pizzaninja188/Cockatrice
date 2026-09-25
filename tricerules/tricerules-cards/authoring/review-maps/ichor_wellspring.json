@@ -1,0 +1,30 @@
+{
+  "format_version": 1,
+  "oracle_id": "5b5ef43b-13fd-4461-8d2d-18be65e9a790",
+  "spans": [
+    {
+      "face_id": "ichor_wellspring",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersOrIsPutIntoGraveyardFromBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_ichor_wellspring::ichor_wellspring_draws_for_entry_and_graveyard_events_on_one_ability",
+      "covers": "casts the artifact, leaves its entry trigger on the stack, destroys it with Disenchant before that trigger resolves, then verifies that the same ability ID created a second trigger and that each resolves to exactly one draw"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
