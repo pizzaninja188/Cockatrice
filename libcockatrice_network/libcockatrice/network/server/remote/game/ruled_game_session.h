@@ -61,6 +61,7 @@ public:
     bool playerCommand(int playerId, const QByteArray &payload, ruled::v1::IpcResponse &response);
     bool previewPayment(int playerId, const ruled::v1::PreviewPayment &preview, ruled::v1::IpcResponse &response);
     void handleConnectionLost();
+    void handleDepartureRejected(const QString &reason);
 
     bool cacheAutoPassPolicy(int playerId, const ruled::v1::SetAutoPassPolicy &policy);
     [[nodiscard]] QByteArray canonicalGameplayCommand(int playerId, const ruled::v1::RuledCommand &command) const;

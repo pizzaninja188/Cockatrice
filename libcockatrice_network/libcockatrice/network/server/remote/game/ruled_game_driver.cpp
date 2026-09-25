@@ -108,8 +108,20 @@ RuledGameDriver::processRuledPayload(int playerId, const Command_RuledPayload &c
     return result;
 }
 
+Response::ResponseCode RuledGameDriver::submitPlayerDeparture(int playerId, GameEventStorage &ges)
+{
+    if (!session->isActive())
+        return Response::RespContextError;
+    ruled::v1::RuledCommand command;
+    command.mutable_concede();
+    Command_RuledPayload payload;
+    command.SerializeToString(payload.mutable_payload());
+    return processRuledPayloadImpl(playerId, payload, ges, true);
+}
+
 Response::ResponseCode
-RuledGameDriver::processRuledPayloadImpl(int playerId, const Command_RuledPayload &cmd, GameEventStorage & /*ges*/)
+RuledGameDriver::processRuledPayloadImpl(int playerId, const Command_RuledPayload &cmd, GameEventStorage &ges,
+                                         bool internalDeparture)
 {
     if (cmd.has_diagnostic_report_id()) {
         const auto reportId = QString::fromStdString(cmd.diagnostic_report_id());
@@ -125,6 +137,10 @@ RuledGameDriver::processRuledPayloadImpl(int playerId, const Command_RuledPayloa
     if (!ruledCmd.ParseFromString(cmd.payload())) {
         return Response::RespInvalidCommand;
     }
+    // Physical departure must accompany the engine command. The client uses
+    // legacy Command_Concede, routed through submitPlayerDeparture.
+    if (ruledCmd.has_concede() && !internalDeparture)
+        return Response::RespInvalidCommand;
     if (ruledCmd.has_set_auto_pass_policy()) {
         return cacheAutoPassPolicy(playerId, ruledCmd.set_auto_pass_policy()) ? Response::RespOk
                                                                               : Response::RespContextError;
@@ -198,8 +214,12 @@ RuledGameDriver::processRuledPayloadImpl(int playerId, const Command_RuledPayloa
         return Response::RespInternalError;
     }
     if (!resp.ok()) {
+        if (internalDeparture)
+            session->handleDepartureRejected(QString::fromStdString(resp.error()));
         return Response::RespContextError;
     }
+    if (internalDeparture)
+        synchronizer->revealFaceDownPermanentsOnConcede(playerId, ges);
     synchronizer->applyAcceptedCommandVisuals(playerId, ruledCmd, resp);
     const RuledBatchSynchronizer::BatchApplyResult batchResult = synchronizer->applyBatch(resp);
     if ((batchResult.zoneViewApplied && (batchResult.handOrLibraryChanged || batchResult.battlefieldOrderChanged || batchResult.publicZoneOrderChanged)) ||

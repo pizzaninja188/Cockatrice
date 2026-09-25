@@ -342,7 +342,19 @@ void RuledGameSession::handleConnectionLost()
     sendEngineNotice(
         QStringLiteral("Rules engine disconnected"),
         QStringLiteral("The connection to the rules engine was lost — this ruled game can no longer "
-                       "continue. The engine state cannot be recovered; please concede or leave the game."));
+                       "continue. The engine state cannot be recovered; please leave the game."));
+    relay.reset();
+}
+
+void RuledGameSession::handleDepartureRejected(const QString &reason)
+{
+    if (engineConnectionLost)
+        return;
+    engineConnectionLost = true;
+    sendEngineNotice(QStringLiteral("Rules engine refused a departure"),
+                     QStringLiteral("The rules engine refused a required player departure: %1. "
+                                    "This ruled game can no longer continue; please leave the game.")
+                         .arg(reason));
     relay.reset();
 }
 

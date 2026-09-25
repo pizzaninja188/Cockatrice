@@ -679,7 +679,11 @@ Server_AbstractPlayer::cmdConcede(const Command_Concede & /*cmd*/, ResponseConta
 
     setConceded(true);
     if (game->getRuledGame()) {
-        game->ruled()->revealFaceDownPermanentsOnConcede(playerId, ges);
+        const Response::ResponseCode departure = game->ruled()->submitPlayerDeparture(playerId, ges);
+        if (departure != Response::RespOk) {
+            setConceded(false);
+            return departure;
+        }
     }
     game->removeArrowsRelatedToPlayer(ges, this);
     game->unattachCards(ges, this);
@@ -693,7 +697,7 @@ Server_AbstractPlayer::cmdConcede(const Command_Concede & /*cmd*/, ResponseConta
     ges.setGameEventContext(Context_Concede());
 
     game->stopGameIfFinished();
-    if (game->getGameStarted() && (game->getActivePlayer() == playerId)) {
+    if (!game->getRuledGame() && game->getGameStarted() && (game->getActivePlayer() == playerId)) {
         game->nextTurn();
     }
 
@@ -704,6 +708,8 @@ Response::ResponseCode Server_AbstractPlayer::cmdUnconcede(const Command_Unconce
                                                            ResponseContainer & /*rc*/,
                                                            GameEventStorage &ges)
 {
+    if (game->getRuledGame())
+        return Response::RespInvalidCommand;
     if (!game->getGameStarted()) {
         return Response::RespGameNotStarted;
     }

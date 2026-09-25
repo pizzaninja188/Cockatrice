@@ -41,6 +41,8 @@ public:
     ~RuledGameDriver();
 
     Response::ResponseCode processRuledPayload(int playerId, const Command_RuledPayload &cmd, GameEventStorage &ges);
+    /// Submit an authenticated departure to the engine before changing the physical player state.
+    Response::ResponseCode submitPlayerDeparture(int playerId, GameEventStorage &ges);
     /// Ruled mode: forward a serialized `ruled.v1.RuledCommand` to tricerules and broadcast the batch
     /// (used for mana-pool sync on land taps — not every payload goes through `Command_RuledPayload`).
     void relayRuledPayloadAndBroadcast(int playerId, const QByteArray &ruledCmdBytes);
@@ -80,7 +82,8 @@ public:
 
 private:
     Response::ResponseCode
-    processRuledPayloadImpl(int playerId, const Command_RuledPayload &cmd, GameEventStorage &ges);
+    processRuledPayloadImpl(int playerId, const Command_RuledPayload &cmd, GameEventStorage &ges,
+                           bool internalDeparture = false);
     /// Handles the rules engine connection dropping during an active ruled game: notifies the
     /// players once (the game is unrecoverable) and tears down the dead relay so subsequent
     /// commands fail fast instead of re-timing-out and re-notifying. Idempotent.

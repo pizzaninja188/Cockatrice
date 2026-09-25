@@ -1045,7 +1045,12 @@ void TabGame::retranslateUi()
         aGameInfo->setText(tr("Game &information"));
     if (aConcede) {
         if (game->getPlayerManager()->isMainPlayerConceded()) {
-            aConcede->setText(tr("Un&concede"));
+            if (RuledActions::isRuledGame(game)) {
+                aConcede->setText(tr("Conceded"));
+                aConcede->setEnabled(false);
+            } else {
+                aConcede->setText(tr("Un&concede"));
+            }
         } else {
             aConcede->setText(tr("&Concede"));
         }
@@ -1226,6 +1231,8 @@ void TabGame::actConcede()
             return;
         emit game->getPlayerManager()->activeLocalPlayerConceded();
     } else {
+        if (RuledActions::isRuledGame(game))
+            return;
         if (QMessageBox::question(this, tr("Unconcede"),
                                   tr("You have already conceded.  Do you want to return to this game?"),
                                   QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)

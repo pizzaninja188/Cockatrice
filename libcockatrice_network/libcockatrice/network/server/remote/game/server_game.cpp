@@ -564,10 +564,16 @@ void Server_Game::removeParticipant(Server_AbstractParticipant *participant, Eve
 {
     room->getServer()->removePersistentPlayer(QString::fromStdString(participant->getUserInfo()->name()), room->getId(),
                                               gameId, participant->getPlayerId());
-    participants.remove(participant->getPlayerId());
-
     bool spectator = participant->isSpectator();
     GameEventStorage ges;
+    if (!spectator && gameStarted && ruledDriver) {
+        auto *player = static_cast<Server_AbstractPlayer *>(participant);
+        if (!player->getConceded()) {
+            player->setConceded(true);
+            ruledDriver->submitPlayerDeparture(player->getPlayerId(), ges);
+        }
+    }
+    participants.remove(participant->getPlayerId());
     if (!spectator) {
         auto *player = static_cast<Server_AbstractPlayer *>(participant);
         removeArrowsRelatedToPlayer(ges, player);
@@ -600,7 +606,7 @@ void Server_Game::removeParticipant(Server_AbstractParticipant *participant, Eve
     }
     if (!spectator) {
         stopGameIfFinished();
-        if (gameStarted && playerActive)
+        if (gameStarted && playerActive && !ruledDriver)
             nextTurn();
     }
 
