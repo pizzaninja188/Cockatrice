@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "a332e80a-dc51-4dc6-bc85-e114a1c6fdb8",
+  "spans": [
+    {
+      "face_id": "vanquish_the_horde",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/cost_modifiers/0"]
+    },
+    {
+      "face_id": "vanquish_the_horde",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/spell_effect/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellCostModifier::BattlefieldCountGenericReduction",
+      "typed_path": "/faces/0/cost_modifiers/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DestroyAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_creature_board_wipes::both_wipes_count_creatures_on_every_players_battlefield_and_keep_colored_costs",
+      "covers": "counts opposing and controlled creatures for a generic-only discount, preserves both white pips, and floors generic cost at zero"
+    },
+    {
+      "test": "scenario deck_coverage_creature_board_wipes::vanquish_the_horde_destroys_creatures_controlled_by_both_players_only",
+      "covers": "destroys creatures of every player without affecting noncreature permanents"
+    },
+    {
+      "test": "deck_coverage_creature_board_wipes::creature_board_wipe_cards_have_complete_typed_definitions",
+      "covers": "registered identity, printed cost and type, complete cost reduction, and exact mass-destruction effect"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

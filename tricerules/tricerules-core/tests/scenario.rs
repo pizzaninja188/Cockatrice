@@ -86,6 +86,8 @@ mod deck_coverage_battlelands;
 mod deck_coverage_checklands;
 #[path = "scenario/deck_coverage_copperline_prismatic.rs"]
 mod deck_coverage_copperline_prismatic;
+#[path = "scenario/deck_coverage_creature_board_wipes.rs"]
+mod deck_coverage_creature_board_wipes;
 #[path = "scenario/deck_coverage_cycling_taplands.rs"]
 mod deck_coverage_cycling_taplands;
 #[path = "scenario/deck_coverage_darksteel_plate.rs"]

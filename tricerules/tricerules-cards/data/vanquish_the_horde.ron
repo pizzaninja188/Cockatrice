@@ -1,0 +1,13 @@
+(
+  id: "vanquish_the_horde",
+  name: "Vanquish the Horde",
+  face_id: "vanquish_the_horde",
+  mana_cost: "{6}{W}{W}",
+  types: ["Sorcery"],
+  cost_modifiers: [BattlefieldCountGenericReduction(
+    amount_per_match: 1,
+    filter: (controllers: All, card_type: Some(Creature)),
+    aggregate: Count,
+  )],
+  spell_effect: [DestroyAll(kind: (kind: Creature), prevent_regeneration: false)],
+)

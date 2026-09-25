@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "7a2484a9-04fd-41a0-8224-610c1c07ed10",
+  "spans": [
+    {
+      "face_id": "blasphemous_act",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/cost_modifiers/0"]
+    },
+    {
+      "face_id": "blasphemous_act",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/spell_effect/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellCostModifier::BattlefieldCountGenericReduction",
+      "typed_path": "/faces/0/cost_modifiers/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamageAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_creature_board_wipes::both_wipes_count_creatures_on_every_players_battlefield_and_keep_colored_costs",
+      "covers": "counts opposing and controlled creatures for a generic-only discount, preserves the red pip, and floors generic cost at zero"
+    },
+    {
+      "test": "scenario deck_coverage_creature_board_wipes::blasphemous_act_deals_thirteen_to_each_creature_and_leaves_a_fourteen_toughness_one_alive",
+      "covers": "deals exactly 13 damage to each player's creatures and lets state-based actions destroy only creatures with lethal damage"
+    },
+    {
+      "test": "deck_coverage_creature_board_wipes::creature_board_wipe_cards_have_complete_typed_definitions",
+      "covers": "registered identity, printed cost and type, complete cost reduction, and exact mass-damage effect"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
