@@ -1,0 +1,9 @@
+// Oracle and rulings checked 2026-09-25: https://scryfall.com/card/ody/70/careful-study
+(
+  id: "careful_study",
+  name: "Careful Study",
+  face_id: "careful_study",
+  mana_cost: "{U}",
+  types: ["Sorcery"],
+  spell_effect: [DrawDiscard(draw_count: 2, discard_count: 2, order: DrawThenDiscard)],
+)

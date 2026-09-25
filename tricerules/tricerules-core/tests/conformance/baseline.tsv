@@ -462,6 +462,7 @@ capture_sphere	0	cast	exercised
 caravan_hurda	0	cast	exercised
 careening_mine_cart	0	ability:0	unsupported: payment preview rejected: illegal command: missing tap cost selection
 careening_mine_cart	0	cast	exercised
+careful_study	0	cast	exercised
 carrion_screecher	0	cast	exercised
 carrot_cake	0	ability:0	exercised
 carrot_cake	0	cast	exercised
@@ -959,6 +960,7 @@ faerie_invaders	0	cast	exercised
 faerie_miscreant	0	cast	exercised
 failed_fording	0	cast	exercised
 faithbearer_paladin	0	cast	exercised
+faithless_looting	0	cast	exercised
 falkenrath_reaver	0	cast	exercised
 family_reunion	0	cast	exercised
 fanatic_of_the_harrowing	0	cast	exercised

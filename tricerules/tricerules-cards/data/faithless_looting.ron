@@ -1,0 +1,11 @@
+// Oracle and rulings checked 2026-09-25: https://scryfall.com/card/soc/244/faithless-looting
+// CR 702.34: casting with flashback uses the alternative cost and exiles this spell after it leaves the stack.
+(
+  id: "faithless_looting",
+  name: "Faithless Looting",
+  face_id: "faithless_looting",
+  mana_cost: "{R}",
+  flashback_cost: Some("{2}{R}"),
+  types: ["Sorcery"],
+  spell_effect: [DrawDiscard(draw_count: 2, discard_count: 2, order: DrawThenDiscard)],
+)
