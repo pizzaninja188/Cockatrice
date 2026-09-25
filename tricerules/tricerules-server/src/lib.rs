@@ -63,34 +63,27 @@ impl EngineSession {
                         &start.servatrice_build
                     }
                 );
-                if start.player_ids.len() != 2 {
-                    IpcResponse {
-                        error: "live multiplayer sessions await three-client integration".into(),
-                        ..Default::default()
-                    }
-                } else {
-                    match resolve_deck_names(&start.player_ids, &start.player_decks) {
-                        Err(missing) => missing_cards_response(missing),
-                        Ok(decks) => {
-                            match GameEngine::new(start.seed, &start.player_ids, 20, decks, false) {
-                                Err(error) => IpcResponse {
-                                    error: error.to_string(),
+                match resolve_deck_names(&start.player_ids, &start.player_decks) {
+                    Err(missing) => missing_cards_response(missing),
+                    Ok(decks) => {
+                        match GameEngine::new(start.seed, &start.player_ids, 20, decks, false) {
+                            Err(error) => IpcResponse {
+                                error: error.to_string(),
+                                ..Default::default()
+                            },
+                            Ok(mut engine) => {
+                                if self.effective_dev {
+                                    eprintln!("tricerules: DEV COMMANDS ENABLED for game {} — cheat commands are accepted", start.game_id);
+                                    engine.enable_dev_commands();
+                                }
+                                let batch = engine.initial_response_batch();
+                                self.engine = Some(engine);
+                                IpcResponse {
+                                    ok: true,
+                                    batch: Some(batch),
+                                    engine_build: ENGINE_BUILD.into(),
+                                    card_data_hash: CardRegistry::content_hash(),
                                     ..Default::default()
-                                },
-                                Ok(mut engine) => {
-                                    if self.effective_dev {
-                                        eprintln!("tricerules: DEV COMMANDS ENABLED for game {} — cheat commands are accepted", start.game_id);
-                                        engine.enable_dev_commands();
-                                    }
-                                    let batch = engine.initial_response_batch();
-                                    self.engine = Some(engine);
-                                    IpcResponse {
-                                        ok: true,
-                                        batch: Some(batch),
-                                        engine_build: ENGINE_BUILD.into(),
-                                        card_data_hash: CardRegistry::content_hash(),
-                                        ..Default::default()
-                                    }
                                 }
                             }
                         }
@@ -221,7 +214,7 @@ mod session_count_tests {
     use tricerules_proto::SessionStart;
 
     #[test]
-    fn live_session_waits_for_three_client_integration() {
+    fn live_session_accepts_three_players_and_rejects_four() {
         let mut session = EngineSession::new(false);
         let response = session
             .process(&IpcEnvelope {
@@ -231,8 +224,19 @@ mod session_count_tests {
                 })),
             })
             .expect("response");
+        assert!(response.ok, "{}", response.error);
+        assert!(session.engine.is_some());
+
+        let mut unsupported = EngineSession::new(false);
+        let response = unsupported
+            .process(&IpcEnvelope {
+                msg: Some(Msg::SessionStart(SessionStart {
+                    player_ids: vec![0, 1, 2, 3],
+                    ..Default::default()
+                })),
+            })
+            .expect("response");
         assert!(!response.ok);
-        assert!(response.error.contains("three-client integration"));
-        assert!(session.engine.is_none());
+        assert!(unsupported.engine.is_none());
     }
 }

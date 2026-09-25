@@ -187,13 +187,13 @@ void SmokeClient::handleRoomEvent(const RoomEvent &ev)
     return ::testing::AssertionSuccess();
 }
 
-::testing::AssertionResult SmokeClient::createRuledGame()
+::testing::AssertionResult SmokeClient::createRuledGame(int players)
 {
     CommandContainer cont;
     cont.set_room_id(roomId);
     auto *create = cont.add_room_command()->MutableExtension(Command_CreateGame::ext);
     create->set_description("ruled e2e smoke");
-    create->set_max_players(2);
+    create->set_max_players(players);
     create->set_spectators_allowed(false);
     create->set_starting_life_total(20);
     create->set_ruled_game(true);

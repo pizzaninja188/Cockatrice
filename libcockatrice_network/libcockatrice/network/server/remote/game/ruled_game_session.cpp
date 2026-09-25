@@ -93,12 +93,6 @@ ruled::v1::SetAutoPassPolicy stopEverywhereAutoPassPolicy()
     return policy;
 }
 
-void shuffleMainDeckForRuledFallback(Server_AbstractPlayer *player)
-{
-    if (Server_CardZone *deckZone = player->getZones().value(ZoneNames::DECK)) {
-        deckZone->shuffle();
-    }
-}
 } // namespace
 
 RuledGameSession::RuledGameSession(Server_Game *_game)
@@ -270,11 +264,13 @@ RuledGameSession::StartResult RuledGameSession::start()
             relay.reset();
             return result;
         }
-        for (Server_AbstractPlayer *player : game->getPlayers().values()) {
-            shuffleMainDeckForRuledFallback(player);
-        }
+        sendEngineNotice(QStringLiteral("Cannot start ruled game"),
+                         QStringLiteral("Cannot start ruled game — the rules engine refused the session: %1")
+                             .arg(QString::fromStdString(result.response.error())));
+        for (Server_AbstractPlayer *player : game->getPlayers().values())
+            player->setReadyStart(false);
+        game->sendGameStateToPlayers();
         relay.reset();
-        result.disposition = StartDisposition::Fallback;
         return result;
     }
 

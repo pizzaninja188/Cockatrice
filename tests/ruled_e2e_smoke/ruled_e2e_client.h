@@ -45,7 +45,7 @@ public:
     void handleSessionEvent(const SessionEvent &ev);
     void handleRoomEvent(const RoomEvent &ev);
     ::testing::AssertionResult loginAndJoinRoom();
-    ::testing::AssertionResult createRuledGame();
+    ::testing::AssertionResult createRuledGame(int players = 2);
     ::testing::AssertionResult joinRuledGame(int targetGameId);
     ::testing::AssertionResult selectDeck(const QString &xml);
     void sendReady();

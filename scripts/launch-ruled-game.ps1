@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
-    One command from nothing to two clients sitting in a started ruled game.
+    One command from nothing to two or three clients sitting in a started ruled game.
 
 .DESCRIPTION
-    Builds the project, starts the tricerules sidecar, servatrice, and two Cockatrice clients,
+    Builds the project, starts the tricerules sidecar, servatrice, and two or three Cockatrice clients,
     then lets each client's autopilot (--autopilot, see
     cockatrice/src/game/ruled/ruled_autopilot.cpp) do the pre-game ceremony: join the lobby room,
-    create/join the game, load a deck, ready up. Both seats are ready within a couple of seconds
+    create/join the game, load a deck, ready up. The seats are ready within a couple of seconds
     of the windows appearing, so manual verification starts at the opening hand instead of ten
     clicks later.
 
@@ -18,6 +18,12 @@
 
 .PARAMETER DeckB
     Deck for the joining seat (p2). Defaults to scripts/decks/dev-blue.cod.
+
+.PARAMETER DeckC
+    Deck for the third seat (p3) when -Players 3. Defaults to scripts/decks/dev-creatures.cod.
+
+.PARAMETER Players
+    Number of seats in the ruled game: 2 (default) or 3.
 
 .PARAMETER GameName
     Game description, and the name the joining seat matches on. Change it to run two sets at once.
@@ -63,6 +69,9 @@
     ./scripts/launch-ruled-game.ps1 -Dev
 
 .EXAMPLE
+    ./scripts/launch-ruled-game.ps1 -Players 3 -Dev
+
+.EXAMPLE
     ./scripts/launch-ruled-game.ps1 -Stop
 #>
 
@@ -70,6 +79,8 @@
 param(
     [string]$DeckA,
     [string]$DeckB,
+    [string]$DeckC,
+    [ValidateSet(2, 3)][int]$Players = 2,
     [string]$GameName,
     [long]$Seed = 0,
     [switch]$Dev,
@@ -87,13 +98,14 @@ $ErrorActionPreference = "Stop"
 
 # Capture runs own isolated servers and process records; route before the ordinary dev-run cleanup.
 if ($Capture -or $RunDirectory) {
-    foreach ($taskConflict in @('DeckA','DeckB','Seed','Dev','Freeform','NoServers')) {
+    foreach ($taskConflict in @('DeckA','DeckB','DeckC','Players','Seed','Dev','Freeform','NoServers')) {
         if ($PSBoundParameters.ContainsKey($taskConflict)) { throw "-$taskConflict cannot override a captured game." }
     }
     & (Join-Path $PSScriptRoot 'launch-ruled-capture.ps1') @PSBoundParameters
     return
 }
 if ($PSBoundParameters.ContainsKey('StopAfter') -or $AllowBuildMismatch) { throw '-StopAfter and -AllowBuildMismatch require -Capture.' }
+if ($Players -eq 2 -and $PSBoundParameters.ContainsKey('DeckC')) { throw '-DeckC requires -Players 3.' }
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $buildDir = Join-Path $repoRoot "build\windows-ninja-all"
@@ -213,6 +225,7 @@ if ($buildProcess.ExitCode -ne 0) {
 
 if (-not $DeckA) { $DeckA = Join-Path $PSScriptRoot "decks\dev-red.cod" }
 if (-not $DeckB) { $DeckB = Join-Path $PSScriptRoot "decks\dev-blue.cod" }
+if ($Players -eq 3 -and -not $DeckC) { $DeckC = Join-Path $PSScriptRoot "decks\dev-creatures.cod" }
 if (-not $GameName) {
     if ($Freeform) { $GameName = "Freeform dev game" } else { $GameName = "Ruled dev game" }
 }
@@ -221,6 +234,9 @@ $buildHint = "The automatic build completed, but the expected artifact was not p
 $cockatriceExe = Get-RequiredPath (Join-Path $buildDir "cockatrice\cockatrice.exe") "Cockatrice" $buildHint
 $deckAPath = Get-RequiredPath $DeckA "Deck A" "Pass -DeckA <file>, or use the decks in scripts/decks/."
 $deckBPath = Get-RequiredPath $DeckB "Deck B" "Pass -DeckB <file>, or use the decks in scripts/decks/."
+if ($Players -eq 3) {
+    $deckCPath = Get-RequiredPath $DeckC "Deck C" "Pass -DeckC <file>, or use the decks in scripts/decks/."
+}
 
 $rulesPort = 17381
 if ($env:TRICERULES_PORT) { $rulesPort = [int]$env:TRICERULES_PORT }
@@ -290,6 +306,7 @@ if (-not $NoServers) {
 # Inherited by both clients: the autopilot reads these directly, keeping main.cpp's option list to
 # the two that actually vary per seat.
 $env:COCKATRICE_AUTOPILOT_GAME = $GameName
+$env:COCKATRICE_AUTOPILOT_PLAYERS = "$Players"
 if ($Freeform) { $env:COCKATRICE_AUTOPILOT_RULED = "0" } else { $env:COCKATRICE_AUTOPILOT_RULED = "1" }
 
 Write-Host "Starting clients..." -ForegroundColor Cyan
@@ -304,11 +321,14 @@ $devArgs = if ($Dev) { @("--dev-console") } else { @() }
 $traceArgs = if ($Trace) { @("--debug-output") } else { @() }
 $p1Cwd = $repoRoot
 $p2Cwd = $repoRoot
+$p3Cwd = $repoRoot
 if ($Trace) {
     $p1Cwd = Join-Path $debugLogDir "p1"
     $p2Cwd = Join-Path $debugLogDir "p2"
+    if ($Players -eq 3) { $p3Cwd = Join-Path $debugLogDir "p3" }
     New-Item -ItemType Directory -Force $p1Cwd | Out-Null
     New-Item -ItemType Directory -Force $p2Cwd | Out-Null
+    if ($Players -eq 3) { New-Item -ItemType Directory -Force $p3Cwd | Out-Null }
 }
 
 $hostClient = Start-Process -FilePath $cockatriceExe -PassThru -WorkingDirectory $p1Cwd -ArgumentList (@(
@@ -323,6 +343,12 @@ $joinClient = Start-Process -FilePath $cockatriceExe -PassThru -WorkingDirectory
     "-c", "p2:pass@127.0.0.1:$serverPort", "--autopilot", "join", "--autopilot-deck", "`"$deckBPath`"") + $devArgs + $traceArgs)
 Register-LaunchedProcess -Process $joinClient -Label "cockatrice p2 (join)"
 
+if ($Players -eq 3) {
+    $thirdClient = Start-Process -FilePath $cockatriceExe -PassThru -WorkingDirectory $p3Cwd -ArgumentList (@(
+        "-c", "p3:pass@127.0.0.1:$serverPort", "--autopilot", "join", "--autopilot-deck", "`"$deckCPath`"") + $devArgs + $traceArgs)
+    Register-LaunchedProcess -Process $thirdClient -Label "cockatrice p3 (join)"
+}
+
 Write-Host ""
 if ($Freeform) {
     Write-Host "Freeform game '$GameName' coming up." -ForegroundColor Green
@@ -330,7 +356,8 @@ if ($Freeform) {
     Write-Host "Ruled game '$GameName' coming up." -ForegroundColor Green
 }
 Write-Host "  p1 $([System.IO.Path]::GetFileName($deckAPath))   p2 $([System.IO.Path]::GetFileName($deckBPath))"
-Write-Host "  Both seats ready themselves; the game starts on its own."
+if ($Players -eq 3) { Write-Host "  p3 $([System.IO.Path]::GetFileName($deckCPath))" }
+Write-Host "  All seats ready themselves; the game starts on its own."
 Write-Host "  If a seat stays in the lobby, check its log for 'ruled_autopilot'."
 Write-Host ""
 Write-Host "  Tear down:  ./scripts/launch-ruled-game.ps1 -Stop" -ForegroundColor DarkGray

@@ -263,9 +263,6 @@ bool RuledGameDriver::startRuledSidecarSession()
     if (result.disposition == RuledGameSession::StartDisposition::Blocked) {
         return false;
     }
-    if (result.disposition == RuledGameSession::StartDisposition::Fallback) {
-        return true;
-    }
     synchronizer->applyStartupBatch(result.response, result.deckByPlayer);
     if (!session->isActive()) {
         return true;

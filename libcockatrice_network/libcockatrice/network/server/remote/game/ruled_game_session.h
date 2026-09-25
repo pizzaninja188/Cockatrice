@@ -27,7 +27,6 @@ public:
     enum class StartDisposition
     {
         Blocked,
-        Fallback,
         Started
     };
 

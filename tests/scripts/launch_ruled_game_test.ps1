@@ -10,9 +10,10 @@ try {
 $helper = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList @('-NoProfile', '-Command', 'Start-Sleep -Seconds 60')
 $helper.Id | Set-Content "$PSScriptRoot/helper.pid"
 '@ + "`nexit $buildExit" | Set-Content "$fixture/scripts/build-ninja.ps1"
-        $launcher = Start-Process $shell -WindowStyle Hidden -PassThru -ArgumentList @(
-            '-NoProfile', '-File', "`"$fixture/scripts/launch-ruled-game.ps1`"", '-Dev'
-        ) -RedirectStandardOutput "$fixture/stdout.log" -RedirectStandardError "$fixture/stderr.log"
+        $launcherArgs = @('-NoProfile', '-File', "`"$fixture/scripts/launch-ruled-game.ps1`"", '-Dev')
+        if ($buildExit -eq 0) { $launcherArgs += @('-Players', '3') }
+        $launcher = Start-Process $shell -WindowStyle Hidden -PassThru -ArgumentList $launcherArgs `
+            -RedirectStandardOutput "$fixture/stdout.log" -RedirectStandardError "$fixture/stderr.log"
         try {
             if (-not $launcher.WaitForExit(15000)) {
                 throw 'Launcher waited for the surviving build helper after the build finished.'
