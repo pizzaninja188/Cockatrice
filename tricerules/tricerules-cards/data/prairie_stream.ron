@@ -1,0 +1,22 @@
+// Oracle text pinned to Scryfall oracle_cards 27bf3214-1271-490b-bdfe-c0be6c23d02e.
+// CR 305.6/305.8 (basic land subtypes), CR 614.1c (enters tapped).
+(
+  id: "prairie_stream",
+  name: "Prairie Stream",
+  face_id: "prairie_stream",
+  mana_cost: "",
+  types: ["Land", "Plains", "Island"],
+  activated_abilities: [(ability_id: "activated_01", presentation: OracleLines([1]), costs: [Tap], effect: [ProduceMana(options: [(w: 1), (u: 1)])])],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: EntersTapped(
+      affected: Self_,
+      condition: Some(BattlefieldAggregate(
+        filter: (controllers: Controller, card_type: Some(BasicLand), exclude_source: true),
+        aggregate: Count,
+        max: Some(1),
+      )),
+    ),
+  )],
+)

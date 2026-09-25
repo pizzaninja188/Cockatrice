@@ -445,6 +445,8 @@ canonized_in_blood	0	ability:0	exercised
 canonized_in_blood	0	cast	exercised
 canopy_gorger	0	cast	exercised
 canopy_spider	0	cast	exercised
+canopy_vista	0	ability:0	exercised
+canopy_vista	0	land	exercised
 canyon_crawler	0	ability:0	unsupported: ability not offered by generic battlefield fixture
 canyon_crawler	0	cast	exercised
 canyon_minotaur	0	cast	exercised
@@ -517,6 +519,8 @@ chomping_changeling	0	cast	exercised
 chrome_companion	0	ability:0	exercised
 chrome_companion	0	cast	exercised
 chupacabra_echo	0	cast	exercised
+cinder_glade	0	ability:0	exercised
+cinder_glade	0	land	exercised
 cinder_strike	0	cast	exercised
 circuitous_route	0	cast	exercised
 city_pigeon	0	cast	exercised
@@ -2218,6 +2222,8 @@ potioners_trove	0	ability:0	exercised
 potioners_trove	0	ability:1	unsupported: nonmana costs need additional fixture resources
 potioners_trove	0	cast	exercised
 pouncing_cheetah	0	cast	exercised
+prairie_stream	0	ability:0	exercised
+prairie_stream	0	land	exercised
 prakhata_club_security	0	cast	exercised
 prayer_of_binding	0	cast	exercised
 preordain	0	cast	exercised
@@ -2940,6 +2946,8 @@ sundial,_dawn_tyrant	0	cast	exercised
 sundown_pass	0	ability:0	exercised
 sundown_pass	0	land	exercised
 sungrace_pegasus	0	cast	exercised
+sunken_hollow	0	ability:0	exercised
+sunken_hollow	0	land	exercised
 sunset_saboteur	0	cast	exercised
 sunshower_druid	0	cast	exercised
 sunspire_griffin	0	cast	exercised
