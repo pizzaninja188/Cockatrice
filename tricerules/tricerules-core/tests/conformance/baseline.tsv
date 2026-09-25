@@ -2909,6 +2909,9 @@ strixhaven_skycoach	0	ability:0	unsupported: payment preview rejected: illegal c
 strixhaven_skycoach	0	cast	exercised
 stroke_of_midnight	0	cast	exercised
 stuck_in_summoners_sanctum	0	cast	exercised
+stump_stomp_burnwillow_clearing	0	cast	exercised
+stump_stomp_burnwillow_clearing	1	ability:0	exercised
+stump_stomp_burnwillow_clearing	1	land	exercised
 submerged_boneyard	0	ability:0	exercised
 submerged_boneyard	0	land	exercised
 subterranean_cavern	0	ability:0	exercised

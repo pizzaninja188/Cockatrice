@@ -86,6 +86,8 @@ mod deck_coverage_cycling_taplands;
 mod deck_coverage_darksteel_plate;
 #[path = "scenario/deck_coverage_sol_ring.rs"]
 mod deck_coverage_sol_ring;
+#[path = "scenario/deck_coverage_stump_stomp.rs"]
+mod deck_coverage_stump_stomp;
 #[path = "scenario/deck_coverage_tri_lands.rs"]
 mod deck_coverage_tri_lands;
 #[path = "scenario/dev_commands.rs"]
