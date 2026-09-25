@@ -375,6 +375,7 @@ fn issue_196_regeneration_removes_combat_participants_before_logging() {
                 trample_player_damage: HashMap::new(),
                 damage_assignment_needed: false,
                 attackers_declared: true,
+                blockers_declared_by: vec![1],
                 blockers_declared: true,
                 assign_combat_damage_phase: false,
                 first_strike_attackers: vec![],

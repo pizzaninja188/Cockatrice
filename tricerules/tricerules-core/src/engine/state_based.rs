@@ -848,6 +848,7 @@ mod sba_tests {
             trample_player_damage: HashMap::new(),
             damage_assignment_needed: false,
             attackers_declared: true,
+            blockers_declared_by: Vec::new(),
             blockers_declared: false,
             assign_combat_damage_phase: false,
             first_strike_attackers: vec![],

@@ -1,6 +1,6 @@
 use super::events::{ev_game_over, ev_log, ev_phase, ev_priority_changed, finish_with_events};
 use super::legal_actions::fill_legal;
-use super::resolution::draw_card;
+use super::resolution::{draw_card, move_object_to_zone};
 use super::*;
 
 /// Sorcery-speed window: your main phase, stack empty, you are the active player (CR 307.5,
@@ -28,6 +28,196 @@ pub(super) fn instant_timing_step_allowed(state: &GameState) -> bool {
 }
 
 impl GameEngine {
+    /// CR 800.4a/e: objects owned by a departing player leave the game, and attacks aimed at
+    /// that player stop participating in combat. No zone-change triggers fire for this removal.
+    fn remove_departing_player_objects(
+        &mut self,
+        player: PlayerId,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let owned: HashSet<ObjectId> = self
+            .state
+            .objects
+            .iter()
+            .filter_map(|(&id, object)| (object.owner == player).then_some(id))
+            .collect();
+        let mut removed_from_combat = Vec::new();
+        if let Some(combat) = self.state.combat.as_mut() {
+            let removed_attackers: HashSet<ObjectId> = combat
+                .attacking
+                .iter()
+                .copied()
+                .filter(|id| {
+                    owned.contains(id)
+                        || combat
+                            .attack_assignments
+                            .get(id)
+                            .is_some_and(|assignment| assignment.defending_player == player)
+                })
+                .collect();
+            removed_from_combat.extend(removed_attackers.iter().copied());
+            combat
+                .attacking
+                .retain(|id| !removed_attackers.contains(id));
+            combat
+                .attack_assignments
+                .retain(|id, _| !removed_attackers.contains(id));
+            combat
+                .blockers
+                .retain(|id, _| !removed_attackers.contains(id));
+            for blockers in combat.blockers.values_mut() {
+                for id in blockers.iter().copied().filter(|id| owned.contains(id)) {
+                    removed_from_combat.push(id);
+                }
+                blockers.retain(|id| !owned.contains(id));
+            }
+            combat
+                .damage_assignments
+                .retain(|id, _| !removed_attackers.contains(id));
+            combat
+                .trample_player_damage
+                .retain(|id, _| !removed_attackers.contains(id));
+            combat
+                .first_strike_attackers
+                .retain(|id| !removed_attackers.contains(id));
+            combat.first_strike_blockers.retain(|id, blockers| {
+                if removed_attackers.contains(id) {
+                    return false;
+                }
+                blockers.retain(|blocker| !owned.contains(blocker));
+                true
+            });
+        }
+        removed_from_combat.sort_unstable();
+        removed_from_combat.dedup();
+        if !removed_from_combat.is_empty() {
+            events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::RemovedFromCombat(
+                    rv1::CreaturesRemovedFromCombat {
+                        object_ids: removed_from_combat,
+                    },
+                )),
+            });
+        }
+        for participant in &mut self.state.players {
+            participant.library.retain(|id| !owned.contains(id));
+            participant.hand.retain(|id| !owned.contains(id));
+            participant.battlefield.retain(|id| !owned.contains(id));
+            participant.graveyard.retain(|id| !owned.contains(id));
+            participant.exile.retain(|id| !owned.contains(id));
+        }
+        let unowned_stack_cards: Vec<_> = self
+            .state
+            .stack
+            .iter()
+            .filter(|item| item.controller == player)
+            .filter_map(|item| {
+                self.state
+                    .objects
+                    .get(&item.id)
+                    .filter(|object| object.owner != player && object.zone == Zone::Stack)
+                    .map(|_| item.id)
+            })
+            .collect();
+        self.state
+            .stack
+            .retain(|item| !owned.contains(&item.id) && item.controller != player);
+        self.state
+            .stack_presentations
+            .retain(|id, _| !owned.contains(id));
+        self.state.objects.retain(|id, _| !owned.contains(id));
+        for id in unowned_stack_cards {
+            move_object_to_zone(&mut self.state, self.registry, id, Zone::Exile, None)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn reconcile_departed_players(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        if self.state.winner.is_some() {
+            return Ok(());
+        }
+        let departed: Vec<_> = self
+            .state
+            .players
+            .iter()
+            .filter(|player| player.has_lost)
+            .map(|player| player.id)
+            .collect();
+        if departed.is_empty() {
+            return Ok(());
+        }
+        for player in departed {
+            self.remove_departing_player_objects(player, events)?;
+            // CR 800.4a: an effect granting control to a player who left ends immediately.
+            self.state.continuous_effects.retain(|effect| {
+                !matches!(effect.kind, ContinuousEffectKind::Layer2Control {
+                    controller: ControllerReference::Fixed(controller),
+                } if controller == player)
+            });
+        }
+        self.reindex_battlefield_control(events);
+        let stranded: Vec<_> = self
+            .state
+            .objects
+            .iter()
+            .filter_map(|(&id, object)| {
+                (object.zone == Zone::Battlefield
+                    && self
+                        .state
+                        .players
+                        .iter()
+                        .any(|p| p.id == object.controller && p.has_lost))
+                .then_some(id)
+            })
+            .collect();
+        for id in stranded {
+            move_object_to_zone(&mut self.state, self.registry, id, Zone::Exile, None)?;
+        }
+        if self.state.turn_step == TurnStep::DeclareBlockers
+            && self
+                .state
+                .combat
+                .as_ref()
+                .is_some_and(|combat| !combat.blockers_declared)
+        {
+            let next_defender = self.blocking_player_ids().into_iter().find(|player| {
+                self.state
+                    .combat
+                    .as_ref()
+                    .is_some_and(|combat| !combat.blockers_declared_by.contains(player))
+            });
+            if let Some(defender) = next_defender {
+                self.state.priority_idx = self.state.player_idx(defender).unwrap();
+                self.state.passes_since_stack_change = 0;
+                events.push(ev_priority_changed(self));
+            } else {
+                self.state.combat.as_mut().unwrap().blockers_declared = true;
+                self.finalize_block_declarations(events)?;
+                let active = self.state.active_player_idx;
+                self.state.priority_idx = if self.state.players[active].has_lost {
+                    self.state
+                        .next_in_game_player_idx(active)
+                        .ok_or(EngineError::Illegal("no player in game"))?
+                } else {
+                    active
+                };
+                self.state.passes_since_stack_change = 0;
+                events.push(ev_priority_changed(self));
+            }
+        }
+        if self.state.players[self.state.priority_idx].has_lost {
+            if let Some(next) = self.state.next_in_game_player_idx(self.state.priority_idx) {
+                self.state.priority_idx = next;
+                self.state.passes_since_stack_change = 0;
+                events.push(ev_priority_changed(self));
+            }
+        }
+        Ok(())
+    }
+
     /// Apply deferred draw-from-empty losses once a resolving effect has completed. A player
     /// remains in the game during resolution so mandatory trailing instructions can finish;
     /// the next command boundary then performs the CR 704.5b state-based action (CR 704.4).
@@ -62,18 +252,35 @@ impl GameEngine {
         &mut self,
         player: PlayerId,
     ) -> Result<RuledEventBatch, EngineError> {
-        // CR 104.3a ends this two-player game immediately. Drop any parked resolution so hidden
-        // choices staged before the concession can neither be published nor committed afterward.
-        self.state.pending_resolution = None;
+        // A concession removes this player; other free-for-all players continue until one remains.
+        let departed_resolution_object = self
+            .state
+            .pending_resolution
+            .as_ref()
+            .and_then(|pending| pending.continuation.stack())
+            .filter(|stack| {
+                stack.item.controller == player
+                    || self
+                        .state
+                        .objects
+                        .get(&stack.item.id)
+                        .is_some_and(|object| object.owner == player)
+            })
+            .map(|stack| stack.item.id);
+        if let Some(id) = departed_resolution_object {
+            self.state.pending_resolution = None;
+            if self
+                .state
+                .objects
+                .get(&id)
+                .is_some_and(|object| object.owner != player && object.zone == Zone::Stack)
+            {
+                move_object_to_zone(&mut self.state, self.registry, id, Zone::Exile, None)?;
+            }
+        }
         for p in &mut self.state.players {
             if p.id == player {
                 p.has_lost = true;
-            }
-        }
-        for p in &self.state.players {
-            if p.id != player {
-                self.state.winner = Some(p.id);
-                break;
             }
         }
         let mut batch = RuledEventBatch::default();
@@ -86,11 +293,21 @@ impl GameEngine {
                 } if duration_player == player
             )
         });
-        self.reindex_battlefield_control(&mut batch.events);
         batch.events.push(ev_log(format!("P{player} conceded")));
+        self.sweep_life();
+        if self.state.winner.is_some() {
+            self.state.pending_resolution = None;
+        }
+        if self.state.winner.is_none() {
+            self.reconcile_opening_departure(player, &mut batch.events)?;
+        }
+        self.reconcile_departed_players(&mut batch.events)?;
+        self.reindex_battlefield_control(&mut batch.events);
+        self.apply_sbas(&mut batch.events)?;
         if let Some(winner) = self.state.winner {
             batch.events.push(ev_game_over(winner));
         }
+        batch.events.push(self.ev_zone_view_sync_tracked());
         fill_legal(&mut batch, self);
         Ok(batch)
     }
@@ -128,13 +345,16 @@ impl GameEngine {
         {
             return Err(EngineError::Illegal("discard to hand size first"));
         }
-        let n = self.state.players.len() as u32;
+        let n = self.state.players.iter().filter(|p| !p.has_lost).count() as u32;
         if !self.state.stack.is_empty() {
             return self.pass_priority_on_stack(player, n);
         }
         // empty stack
         self.state.passes_since_stack_change += 1;
-        self.state.priority_idx = (self.state.priority_idx + 1) % self.state.players.len();
+        self.state.priority_idx = self
+            .state
+            .next_in_game_player_idx(self.state.priority_idx)
+            .ok_or(EngineError::Illegal("no player in game"))?;
         let ev = vec![rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::PriorityChanged(
                 rv1::PriorityChanged {
@@ -163,8 +383,10 @@ impl GameEngine {
         n: u32,
     ) -> Result<RuledEventBatch, EngineError> {
         self.state.passes_since_stack_change += 1;
-        self.state.priority_idx =
-            (self.state.player_idx(player).unwrap() + 1) % self.state.players.len();
+        self.state.priority_idx = self
+            .state
+            .next_in_game_player_idx(self.state.player_idx(player).unwrap())
+            .ok_or(EngineError::Illegal("no player in game"))?;
         let mut ev = vec![rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::PriorityChanged(
                 rv1::PriorityChanged {
@@ -227,21 +449,19 @@ impl GameEngine {
                 // First draw step of the duel: only the starting player skips (CR 103.8). `turn`
                 // may stay 1 for the second seat's first turn because we bump `turn` when wrapping
                 // to seat 0, not on every active change.
-                let skip_opening_draw = self.state.turn == 1
+                let skip_opening_draw = self.state.players.len() == 2
+                    && self.state.turn == 1
                     && self.state.active_player_idx == self.state.starting_player_idx;
                 if skip_opening_draw {
                     // skip draw
                 } else if let Some(idx) = self.state.player_idx(ap) {
                     if self.state.players[idx].library.is_empty() {
-                        for p in &mut self.state.players {
-                            p.has_lost = p.id == ap;
-                        }
-                        for p in &self.state.players {
-                            if p.id != ap {
-                                self.state.winner = Some(p.id);
-                            }
-                        }
-                        ev.push(ev_log("Game over: empty library on draw".into()));
+                        self.state.players[idx].has_lost = true;
+                        ev.push(ev_log(if self.state.players.len() == 2 {
+                            "Game over: empty library on draw".into()
+                        } else {
+                            format!("P{ap} loses: empty library on draw")
+                        }));
                         return Ok(finish_with_events(self, std::mem::take(ev)));
                     }
                     draw_card(&mut self.state, self.registry, ap)?;
@@ -316,6 +536,7 @@ impl GameEngine {
                         trample_player_damage: HashMap::new(),
                         damage_assignment_needed: false,
                         attackers_declared: false,
+                        blockers_declared_by: Vec::new(),
                         blockers_declared: false,
                         assign_combat_damage_phase: false,
                         first_strike_attackers: Vec::new(),
@@ -337,12 +558,14 @@ impl GameEngine {
                     .is_some_and(|c| !c.attacking.is_empty());
                 if !has_eligible_blockers || !has_attackers {
                     // Auto-declare empty blockers; active player gets priority in DeclareBlockers.
+                    let blocking_players = self.blocking_player_ids();
                     if let Some(c) = self.state.combat.as_mut() {
                         c.blockers.clear();
                         c.damage_assignments.clear();
                         c.damage_assignment_needed = false;
                         c.assign_combat_damage_phase = false;
                         c.blockers_declared = true;
+                        c.blockers_declared_by = blocking_players;
                     }
                     self.state.turn_step = DeclareBlockers;
                     if let Some(i) = self.state.player_idx(ap) {
@@ -366,7 +589,7 @@ impl GameEngine {
                 } else {
                     self.state.turn_step = DeclareBlockers;
                     // CR 509.1 / 101.4: the first defending player in APNAP order acts first.
-                    if let Some(d) = self.state.defending_player_ids().first().copied() {
+                    if let Some(d) = self.blocking_player_ids().first().copied() {
                         if let Some(di) = self.state.player_idx(d) {
                             self.state.priority_idx = di;
                         }
@@ -636,10 +859,10 @@ impl GameEngine {
             });
         debug_assert!(expired.is_empty(), "turn-end observers only expire");
         self.state.turn_history.finish_turn();
-        let n = self.state.players.len();
-        if n >= 1 {
-            self.state.active_player_idx = (self.state.active_player_idx + 1) % n;
-        }
+        self.state.active_player_idx = self
+            .state
+            .next_in_game_player_idx(self.state.active_player_idx)
+            .ok_or(EngineError::Illegal("no player in game"))?;
         if self.state.active_player_idx == 0 {
             self.state.turn = self.state.turn.saturating_add(1);
         }
@@ -763,7 +986,7 @@ impl GameEngine {
                 if !self.state.is_defending_player(player) {
                     return Err(EngineError::Illegal("not defending player"));
                 }
-                self.set_blockers(&[])
+                self.set_blockers(player, &[])
             }
             Untap | Upkeep | Draw | Main1 | BeginCombat | CombatDamage | EndCombat | Main2
             | EndStep => {

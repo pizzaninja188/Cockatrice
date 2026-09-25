@@ -1897,7 +1897,9 @@ pub struct CombatState {
     pub damage_assignment_needed: bool,
     /// True once active player has finalized attackers for this combat.
     pub attackers_declared: bool,
-    /// True after the defending player has finalized blockers for this combat.
+    /// Defending players that have finalized their declarations, in APNAP order.
+    pub blockers_declared_by: Vec<PlayerId>,
+    /// True after every attacked defending player has finalized blockers.
     pub blockers_declared: bool,
     /// True only after both players have passed priority in declare blockers while assignment
     /// is still required — then the active player may submit `AssignCombatDamage`.
@@ -2561,15 +2563,20 @@ impl GameState {
         self.defending_player_ids().contains(&player)
     }
 
+    /// Next player still in the game, scanning forward from a seat and wrapping once.
+    pub fn next_in_game_player_idx(&self, from: usize) -> Option<usize> {
+        if self.players.is_empty() {
+            return None;
+        }
+        (1..=self.players.len())
+            .map(|offset| (from + offset) % self.players.len())
+            .find(|&idx| !self.players[idx].has_lost)
+    }
+
     /// The defending player, but only when there is exactly one.
     ///
-    /// **This is the engine's single remaining hard 2-player assumption.** Combat commands carry no
-    /// per-attacker defender (`DeclareAttackers` is a bare list of creature ids), so any code that
-    /// needs to name *the* defender cannot work with more than one — it calls this and fails closed.
-    /// Widening the engine past two seats means giving each of these a real defender instead:
-    /// `combat.rs` `defending_player_has_eligible_blockers`, `required_blocker_ids`, `set_blockers`,
-    /// and combat damage assignment. Nothing else in the engine depends on the seat count; see
-    /// `SUPPORTED_PLAYER_COUNT` in `engine/mod.rs`.
+    /// A convenience for duel-only callers and synthetic fixtures. Multiplayer combat uses each
+    /// attacker's recorded defending player instead.
     pub fn sole_defending_player_id(&self) -> Option<PlayerId> {
         let defenders = self.defending_player_ids();
         match defenders.len() {
@@ -2592,11 +2599,8 @@ fn defending_player_ids_of(players: &[PlayerState], active_player_idx: usize) ->
 
 /// Seat-order unit tests.
 ///
-/// These deliberately exercise 3 and 4 seats, which `GameEngine::new` refuses to build (see
-/// `SUPPORTED_PLAYER_COUNT`). Both helpers are seat-generic by construction, and this is the only
-/// place that can prove it while the constructor gate stands — which is the point: the arithmetic
-/// they replaced (`1 - idx`, `[start, 1 - start]`, `resolved[0] && resolved[1]`) could not be
-/// tested at all.
+/// These exercise three and four seats independently of the constructor's supported range.
+/// Four seats remain a helper-level check until a complete four-seat scenario is added.
 #[cfg(test)]
 mod seat_order_tests {
     use super::*;

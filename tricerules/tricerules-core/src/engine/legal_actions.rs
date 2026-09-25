@@ -23,6 +23,10 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         return;
     }
     for p in &eng.state.players {
+        if p.has_lost {
+            batch.legal_by_player.remove(&p.id);
+            continue;
+        }
         let paying_cast = eng
             .state
             .pending_spell_cast
@@ -287,12 +291,14 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         };
         let blocks_open = eng.state.turn_step == TurnStep::DeclareBlockers
             && !combat.map(|c| c.blockers_declared).unwrap_or(false);
-        let (mut legal_block_pairs, mut required_blocker_ids) =
-            if blocks_open && eng.state.is_defending_player(p.id) {
-                eng.blocking_options(p.id)
-            } else {
-                (Vec::new(), Vec::new())
-            };
+        let (mut legal_block_pairs, mut required_blocker_ids) = if blocks_open
+            && p.id == eng.state.priority_player_id()
+            && eng.blocking_player_ids().contains(&p.id)
+        {
+            eng.blocking_options(p.id)
+        } else {
+            (Vec::new(), Vec::new())
+        };
 
         if eng.state.pending_spell_cast.is_some() {
             labels.clear();

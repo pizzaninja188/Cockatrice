@@ -786,10 +786,26 @@ impl GameEngine {
         !self.eligible_attacker_ids(ap).is_empty()
     }
 
-    pub(super) fn defending_player_has_eligible_blockers(&self) -> bool {
+    pub(super) fn blocking_player_ids(&self) -> Vec<PlayerId> {
+        let Some(combat) = self.state.combat.as_ref() else {
+            return Vec::new();
+        };
         self.state
-            .sole_defending_player_id()
-            .is_some_and(|defender| !self.blocking_options(defender).0.is_empty())
+            .defending_player_ids()
+            .into_iter()
+            .filter(|player| {
+                combat
+                    .attack_assignments
+                    .values()
+                    .any(|assignment| assignment.defending_player == *player)
+            })
+            .collect()
+    }
+
+    pub(super) fn defending_player_has_eligible_blockers(&self) -> bool {
+        self.blocking_player_ids()
+            .into_iter()
+            .any(|defender| !self.blocking_options(defender).0.is_empty())
     }
 
     /// CR 508.1d: the active player's creatures that MUST be declared as attackers this combat —
@@ -897,6 +913,7 @@ impl GameEngine {
             c.damage_assignment_needed = false;
             c.assign_combat_damage_phase = false;
             c.attackers_declared = true;
+            c.blockers_declared_by.clear();
             c.blockers_declared = false;
             c.first_strike_attackers.clear();
             c.first_strike_blockers.clear();
@@ -910,6 +927,7 @@ impl GameEngine {
                 trample_player_damage: HashMap::new(),
                 damage_assignment_needed: false,
                 attackers_declared: true,
+                blockers_declared_by: Vec::new(),
                 blockers_declared: false,
                 assign_combat_damage_phase: false,
                 first_strike_attackers: Vec::new(),
@@ -970,12 +988,32 @@ impl GameEngine {
 
     pub(super) fn set_blockers(
         &mut self,
+        defending_player: PlayerId,
         pairs: &[rv1::BlockPair],
     ) -> Result<RuledEventBatch, EngineError> {
-        let defending_player = self
-            .state
-            .sole_defending_player_id()
-            .ok_or(EngineError::Illegal("defender missing"))?;
+        // A duel may auto-declare empty blocks when no legal pair exists. Retain the historical
+        // acceptance of a matching explicit empty declaration from that defender.
+        if self.state.players.len() == 2
+            && pairs.is_empty()
+            && self
+                .state
+                .combat
+                .as_ref()
+                .is_some_and(|c| c.blockers_declared && c.blockers.is_empty())
+            && self.state.sole_defending_player_id() == Some(defending_player)
+        {
+            let mut batch = RuledEventBatch::default();
+            fill_legal(&mut batch, self);
+            return Ok(batch);
+        }
+        if self.state.priority_player_id() != defending_player
+            || !self.blocking_player_ids().contains(&defending_player)
+            || self.state.combat.as_ref().is_none_or(|c| {
+                c.blockers_declared || c.blockers_declared_by.contains(&defending_player)
+            })
+        {
+            return Err(EngineError::Illegal("not your block declaration"));
+        }
         let graph = self.block_graph(defending_player);
         // A blocker may appear at most once: CR 509.1a — a creature can only block one attacker.
         let mut seen_blockers = HashSet::new();
@@ -1050,31 +1088,27 @@ impl GameEngine {
                 "block declaration must satisfy the maximum possible blocking requirements",
             ));
         }
-        let block_edges: Vec<BlockEdgeSnapshot> = pairs
-            .iter()
-            .map(|pair| {
-                Ok(BlockEdgeSnapshot {
-                    attacker: self
-                        .trigger_object_ref(pair.attacker_id)
-                        .ok_or(EngineError::Illegal("attacker characteristics missing"))?,
-                    blocker: self
-                        .trigger_object_ref(pair.blocker_id)
-                        .ok_or(EngineError::Illegal("blocker characteristics missing"))?,
-                })
-            })
-            .collect::<Result<_, EngineError>>()?;
         // CR 702.19: trample attackers with 1+ blockers also require explicit damage assignment
         // (to split damage between blockers and the defending player).
         let damage_assignment_needed = attacker_to_blockers.iter().any(|(atk_id, blks)| {
             self.attacker_needs_explicit_damage_assignment(*atk_id, blks.len())
         });
         if let Some(c) = self.state.combat.as_mut() {
-            c.blockers = attacker_to_blockers;
+            c.blockers.extend(attacker_to_blockers);
             c.damage_assignments.clear();
             c.trample_player_damage.clear();
-            c.damage_assignment_needed = damage_assignment_needed;
+            c.damage_assignment_needed |= damage_assignment_needed;
             c.assign_combat_damage_phase = false;
-            c.blockers_declared = true;
+            c.blockers_declared_by.push(defending_player);
+        }
+        let next_defender = self.blocking_player_ids().into_iter().find(|player| {
+            self.state
+                .combat
+                .as_ref()
+                .is_some_and(|c| !c.blockers_declared_by.contains(player))
+        });
+        if next_defender.is_none() {
+            self.state.combat.as_mut().unwrap().blockers_declared = true;
         }
         let block_line = if pairs.is_empty() {
             "declares no blockers".to_string()
@@ -1090,28 +1124,73 @@ impl GameEngine {
                 .join("; ")
         };
         let mut b = RuledEventBatch::default();
-        let block_pairs_for_event: Vec<rv1::BlockPair> = pairs.to_vec();
-        b.events.push(rv1::RuledEvent {
-            ev: Some(rv1::ruled_event::Ev::BlockersDeclared(
-                rv1::BlockersDeclared {
-                    block_pairs: block_pairs_for_event,
-                },
-            )),
-        });
+        if next_defender.is_none() {
+            self.finalize_block_declarations(&mut b.events)?;
+        }
         self.clear_step_mana_pools();
         // MTG timing: blockers are declared in declare-blockers, then players get priority
         // before the game advances into combat-damage where damage is actually dealt.
         self.state.turn_step = TurnStep::DeclareBlockers;
-        if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
+        if let Some(i) = self
+            .state
+            .player_idx(next_defender.unwrap_or(self.state.active_player_id()))
+        {
             self.state.priority_idx = i;
         }
         self.state.passes_since_stack_change = 0;
         b.events
             .push(ev_log(format!("P{} {}", defending_player, block_line)));
-        self.fire_triggers(&[GameEvent::BlockersDeclared { edges: block_edges }]);
         b.events.push(ev_priority_changed(self));
         fill_legal(&mut b, self);
         Ok(b)
+    }
+
+    pub(super) fn finalize_block_declarations(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let combat = self
+            .state
+            .combat
+            .as_ref()
+            .ok_or(EngineError::Illegal("combat?"))?;
+        let all_pairs: Vec<rv1::BlockPair> = combat
+            .attacking
+            .iter()
+            .flat_map(|attacker_id| {
+                combat
+                    .blockers
+                    .get(attacker_id)
+                    .into_iter()
+                    .flatten()
+                    .map(|blocker_id| rv1::BlockPair {
+                        attacker_id: *attacker_id,
+                        blocker_id: *blocker_id,
+                    })
+            })
+            .collect();
+        let block_edges: Vec<BlockEdgeSnapshot> = all_pairs
+            .iter()
+            .map(|pair| {
+                Ok(BlockEdgeSnapshot {
+                    attacker: self
+                        .trigger_object_ref(pair.attacker_id)
+                        .ok_or(EngineError::Illegal("attacker characteristics missing"))?,
+                    blocker: self
+                        .trigger_object_ref(pair.blocker_id)
+                        .ok_or(EngineError::Illegal("blocker characteristics missing"))?,
+                })
+            })
+            .collect::<Result<_, EngineError>>()?;
+        events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::BlockersDeclared(
+                rv1::BlockersDeclared {
+                    block_pairs: all_pairs,
+                },
+            )),
+        });
+        self.fire_triggers(&[GameEvent::BlockersDeclared { edges: block_edges }]);
+        Ok(())
     }
 
     pub(super) fn assign_combat_damage(

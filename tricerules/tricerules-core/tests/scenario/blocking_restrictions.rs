@@ -98,7 +98,7 @@ fn issue_174_synthetic_defenders_have_separate_blocking_graphs() {
         .apply_command(10, &declare_attackers(vec![first, second]))
         .unwrap();
     pass_both_players(&mut engine);
-    // The constructor still rejects multiplayer; exercise only the seat-generic snapshot seam.
+    // Exercise the seat-generic blocking graph with a synthetic third defender.
     let mut third = engine.state.players[1].clone();
     third.id = 30;
     third.battlefield.clear();
@@ -124,8 +124,11 @@ fn issue_174_synthetic_defenders_have_separate_blocking_graphs() {
             blocker_id: blocker
         }]
     );
+    assert!(batch.legal_by_player[&30].legal_block_pairs.is_empty());
+    engine.state.priority_idx = 2;
+    let third_batch = engine.initial_response_batch();
     assert_eq!(
-        batch.legal_by_player[&30].legal_block_pairs,
+        third_batch.legal_by_player[&30].legal_block_pairs,
         [BlockPair {
             attacker_id: second,
             blocker_id: third_blocker

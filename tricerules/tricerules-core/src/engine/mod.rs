@@ -1082,16 +1082,10 @@ fn new_object_from_card(
     }
 }
 
-/// Seat count [`GameEngine::new`] accepts. Seat-order mechanics — opening order, APNAP, priority,
-/// and the current duel/free-for-all defending-player policy — are written generically. This is
-/// not team-format support: opponent membership is only the default relation in
-/// [`GameState::are_opponents`](crate::state::GameState::are_opponents), and team turns, priority,
-/// combat, life, and victory are deliberately unmodeled. The remaining arity-specific mechanic is
-/// naming *the* defender during combat, because `DeclareAttackers` carries no per-attacker defender
-/// to choose between them. Widening this constant therefore means a `ruled_v1.proto` change plus
-/// client UI first; the sites to revisit are named on
-/// [`GameState::sole_defending_player_id`](crate::state::GameState::sole_defending_player_id).
-const SUPPORTED_PLAYER_COUNT: usize = 2;
+/// Engine-only free-for-all seat counts. The sidecar still admits only two-seat live sessions
+/// until relay and client presentation have three-seat acceptance coverage. Team formats remain
+/// separate and unsupported.
+const SUPPORTED_PLAYER_COUNT: std::ops::RangeInclusive<usize> = 2..=3;
 
 impl GameEngine {
     fn clear_all_mana_pools(&mut self) {
@@ -1122,8 +1116,8 @@ impl GameEngine {
         decks: Option<Vec<Vec<String>>>,
         skip_opening_sequence: bool,
     ) -> Result<Self, EngineError> {
-        if player_ids.len() != SUPPORTED_PLAYER_COUNT {
-            return Err(EngineError::Illegal("M2: exactly 2 players"));
+        if !SUPPORTED_PLAYER_COUNT.contains(&player_ids.len()) {
+            return Err(EngineError::Illegal("free-for-all requires 2 or 3 players"));
         }
         let registry = CardRegistry::global();
         let mut objects = HashMap::new();
@@ -1461,6 +1455,13 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         if self.state.winner.is_some() {
             return Err(EngineError::Illegal("game over"));
+        }
+        let player_index = self
+            .state
+            .player_idx(player)
+            .ok_or(EngineError::UnknownPlayer(player))?;
+        if self.state.players[player_index].has_lost {
+            return Err(EngineError::Illegal("player has left the game"));
         }
         use rv1::ruled_command::Cmd;
         if let Some(Cmd::CanonicalGameplay(canonical)) = cmd.cmd.as_ref() {
@@ -1936,6 +1937,11 @@ impl GameEngine {
         {
             let priority_player = self.state.priority_player_id();
             let mut next = self.pass_priority(priority_player)?;
+            self.sweep_life();
+            self.reconcile_departed_players(&mut next.events)?;
+            if let Some(winner) = self.state.winner {
+                next.events.push(events::ev_game_over(winner));
+            }
             // Internal passes bypass dispatch_command's normal post-command trigger flush. A
             // beginning-of-step trigger must reach the stack (or its ordering/target prompt)
             // before the settlement policy decides whether another priority pass is harmless.
@@ -2150,7 +2156,7 @@ impl GameEngine {
                 {
                     return Err(EngineError::Illegal("declare blockers not legal"));
                 }
-                self.set_blockers(&b.block_pairs)
+                self.set_blockers(player, &b.block_pairs)
             }
             Some(Cmd::PassPriority(_)) => {
                 if self.state.turn_step == TurnStep::DeclareAttackers
@@ -2172,7 +2178,7 @@ impl GameEngine {
                         .map(|c| !c.blockers_declared)
                         .unwrap_or(false)
                 {
-                    self.set_blockers(&[])
+                    self.set_blockers(player, &[])
                 } else {
                     self.pass_priority(player)
                 }
@@ -2216,6 +2222,7 @@ impl GameEngine {
             self.commit_pending_library_losses();
         }
         self.sweep_life();
+        self.reconcile_departed_players(&mut b.events)?;
         // CR 704.4: SBAs are not checked while a tier-3 resolution is parked mid-resolution; they
         // run when it completes, including the CR 121.4/704.5b library-loss action. Zone view +
         // legal actions still refresh so the deciding player's client sees the drawn/revealed

@@ -406,6 +406,8 @@ mod modal_spells;
 mod multi_attacker_triggers;
 #[path = "scenario/multi_face.rs"]
 mod multi_face;
+#[path = "scenario/multiplayer_milestone.rs"]
+mod multiplayer_milestone;
 #[path = "scenario/name_counter_scopes.rs"]
 mod name_counter_scopes;
 #[path = "scenario/opening.rs"]

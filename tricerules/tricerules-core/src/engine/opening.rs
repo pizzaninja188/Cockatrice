@@ -66,6 +66,46 @@ fn mulligan_redraw(
 }
 
 impl GameEngine {
+    pub(super) fn reconcile_opening_departure(
+        &mut self,
+        player: PlayerId,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(index) = self.state.player_idx(player) else {
+            return Ok(());
+        };
+        let next = self
+            .state
+            .next_in_game_player_idx(index)
+            .ok_or(EngineError::Illegal("no player in game"))?;
+        let next_player = self.state.players[next].id;
+        let Some(opening) = self.state.opening.as_mut() else {
+            return Ok(());
+        };
+        opening.resolved[index] = true;
+        if opening.chooser == player && opening.starting_player.is_none() {
+            opening.chooser = next_player;
+            self.state.priority_idx = next;
+            events.push(ev_priority_changed(self));
+            return Ok(());
+        }
+        if opening.starting_player == Some(player) {
+            opening.starting_player = Some(next_player);
+            self.state.starting_player_idx = next;
+            self.state.active_player_idx = next;
+        }
+        if opening.mulligan_actor == Some(player)
+            || opening
+                .bottom
+                .is_some_and(|(bottoming, _)| bottoming == player)
+        {
+            opening.mulligan_actor = None;
+            opening.bottom = None;
+            Self::opening_pick_next_or_finish(self, index, events)?;
+        }
+        Ok(())
+    }
+
     pub(super) fn apply_opening_command(
         &mut self,
         player: PlayerId,
@@ -108,6 +148,9 @@ impl GameEngine {
                 self.state.starting_player_idx = sp_idx;
                 for pi in 0..self.state.players.len() {
                     let p = &mut self.state.players[pi];
+                    if p.has_lost {
+                        continue;
+                    }
                     for _ in 0..7 {
                         deal_opening_card(p, &mut self.state.objects)?;
                     }
@@ -142,7 +185,9 @@ impl GameEngine {
                         let op = self.state.opening.as_mut().unwrap();
                         op.mulligans_taken[idx]
                     };
-                    if k == 0 {
+                    // Free-for-all's first mulligan does not reduce the kept hand (CR 800.6).
+                    let bottom_count = k.saturating_sub(u32::from(self.state.players.len() > 2));
+                    if bottom_count == 0 {
                         {
                             let op = self.state.opening.as_mut().unwrap();
                             op.resolved[idx] = true;
@@ -151,11 +196,11 @@ impl GameEngine {
                         events.push(ev_log(format!(
                             "P{player} begins the game with 7 cards in hand."
                         )));
-                        Self::opening_pick_next_or_finish(self, &mut events)?;
+                        Self::opening_pick_next_or_finish(self, idx, &mut events)?;
                     } else {
                         {
                             let op = self.state.opening.as_mut().unwrap();
-                            op.bottom = Some((player, k));
+                            op.bottom = Some((player, bottom_count));
                             op.mulligan_actor = Some(player);
                         }
                         events.push(ev_priority_changed(self));
@@ -166,23 +211,24 @@ impl GameEngine {
                         op.mulligans_taken[idx] += 1;
                         op.mulligans_taken[idx]
                     };
+                    let bottom_count = prev.saturating_sub(u32::from(self.state.players.len() > 2));
                     mulligan_redraw(&mut self.state, self.registry, player)?;
-                    if prev >= MAX_HAND_SIZE as u32 {
+                    if bottom_count >= MAX_HAND_SIZE as u32 {
                         // Mulliganed to 0 effective cards — auto-keep; go straight to bottom phase.
                         {
                             let op = self.state.opening.as_mut().unwrap();
-                            op.bottom = Some((player, prev));
+                            op.bottom = Some((player, bottom_count));
                             op.mulligan_actor = Some(player);
                         }
                         events.push(ev_log(format!(
-                            "P{player} mulliganed to 0 — automatically keeping; putting {prev} card(s) on the bottom of their library."
+                            "P{player} mulliganed to 0 — automatically keeping; putting {bottom_count} card(s) on the bottom of their library."
                         )));
                         events.push(ev_priority_changed(self));
                         // Falls through to batch builder below (zone_view_sync added there).
                     } else {
                         events.push(ev_log(format!(
                             "P{player} mulligans to {} cards.",
-                            7u32.saturating_sub(prev)
+                            7u32.saturating_sub(bottom_count)
                         )));
                         events.push(self.ev_zone_view_sync_tracked());
                         Self::opening_set_next_actor_after_mulligan(self, idx, &mut events)?;
@@ -242,12 +288,13 @@ impl GameEngine {
                         op.bottom = None;
                         op.resolved[idx] = true;
                         op.mulligan_actor = None;
-                        let total_mulls = op.mulligans_taken[idx];
+                        let total_mulls = op.mulligans_taken[idx]
+                            .saturating_sub(u32::from(self.state.players.len() > 2));
                         events.push(ev_log(format!(
                             "P{player} puts {total_mulls} card(s) on the bottom of their library and begins the game with {kept} card(s) in their hand."
                         )));
                     }
-                    Self::opening_pick_next_or_finish(self, &mut events)?;
+                    Self::opening_pick_next_or_finish(self, idx, &mut events)?;
                 }
             }
             _ => return Err(EngineError::Illegal("illegal command during opening")),
@@ -263,7 +310,7 @@ impl GameEngine {
         Ok(b)
     }
 
-    /// After a mulligan (redraw): alternate to the other player unless they have already kept —
+    /// After a mulligan (redraw): offer the next unresolved player a decision —
     /// then the mulliganing player decides again (CR-style table flow for this fork).
     fn opening_set_next_actor_after_mulligan(
         eng: &mut GameEngine,
@@ -295,6 +342,7 @@ impl GameEngine {
 
     fn opening_pick_next_or_finish(
         eng: &mut GameEngine,
+        previous_idx: usize,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         let done = {
@@ -317,15 +365,10 @@ impl GameEngine {
             return Ok(());
         }
         {
-            let spid = {
-                let op = eng.state.opening.as_ref().unwrap();
-                op.starting_player
-                    .ok_or(EngineError::Illegal("opening not started"))?
-            };
-            let start = eng.state.player_idx(spid).unwrap();
             let op = eng.state.opening.as_mut().unwrap();
-            // Turn order from the starting player (CR 103.4).
-            if let Some(oi) = next_unresolved_from(&op.resolved, start) {
+            // Continue around the table before returning to a player who mulliganed.
+            let next = (previous_idx + 1) % eng.state.players.len();
+            if let Some(oi) = next_unresolved_from(&op.resolved, next) {
                 let pid = eng.state.players[oi].id;
                 op.mulligan_actor = Some(pid);
                 eng.state.priority_idx = oi;

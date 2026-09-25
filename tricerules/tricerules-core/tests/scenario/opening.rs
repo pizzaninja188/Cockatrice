@@ -251,17 +251,15 @@ fn concede_is_legal_during_opening_sequence() {
     );
 }
 
-/// The seat-count gate (`SUPPORTED_PLAYER_COUNT` in `engine/mod.rs`) is the engine's one remaining
-/// hard 2-player assumption, kept because `DeclareAttackers` carries no per-attacker defender. It
-/// must reject rather than build a game that would then fail somewhere inside combat.
+/// The engine accepts only the player counts covered by free-for-all integration scenarios.
 #[test]
-fn engine_rejects_any_player_count_but_two() {
-    for player_ids in [vec![], vec![5], vec![5, 6, 7], vec![5, 6, 7, 8]] {
+fn engine_accepts_three_player_free_for_all() {
+    for player_ids in [vec![], vec![5], vec![5, 6, 7, 8]] {
         let err = GameEngine::new(1, &player_ids, 20, None, true)
             .err()
             .unwrap_or_else(|| panic!("{} players must be rejected", player_ids.len()));
         assert!(
-            format!("{err:?}").contains("exactly 2 players"),
+            format!("{err:?}").contains("requires 2 or 3 players"),
             "unexpected error for {} players: {err:?}",
             player_ids.len()
         );
@@ -269,6 +267,10 @@ fn engine_rejects_any_player_count_but_two() {
     assert!(
         GameEngine::new(1, &[5, 6], 20, None, true).is_ok(),
         "two players is still accepted"
+    );
+    assert!(
+        GameEngine::new(1, &[5, 6, 7], 20, None, true).is_ok(),
+        "three-player free-for-all must construct normally"
     );
 }
 
