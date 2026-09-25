@@ -1,0 +1,30 @@
+// Oracle identity fedbd40b-e3a5-449c-a8a3-b42e9da191a9 verified against the pinned source and
+// the current Scryfall record on 2026-09-25. Its rulings endpoint returned no rulings.
+// CR 605.1a and 605.3b govern the untargeted activated mana ability; CR 603.6c/603.10a govern
+// the battlefield-to-graveyard trigger, and CR 603.3a assigns that trigger to the event-time controller.
+(
+  id: "chromatic_star",
+  name: "Chromatic Star",
+  face_id: "chromatic_star",
+  mana_cost: "{1}",
+  types: ["Artifact"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    source_zone: Battlefield,
+    costs: [Mana("{1}"), Tap, SacrificeSelf],
+    effect: [ProduceMana(options: [
+      (w: 1),
+      (u: 1),
+      (b: 1),
+      (r: 1),
+      (g: 1),
+    ])],
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfDies,
+    effect: [Draw(who: Controller, count: 1)],
+  )],
+)

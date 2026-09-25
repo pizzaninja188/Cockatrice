@@ -1,0 +1,52 @@
+{
+  "format_version": 1,
+  "oracle_id": "fedbd40b-e3a5-449c-a8a3-b42e9da191a9",
+  "spans": [
+    {
+      "face_id": "chromatic_star",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "chromatic_star",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_chromatic_star::chromatic_star_pays_for_each_color_and_draws_when_sacrificed",
+      "covers": "rejects an unpaid activation without side effects, then pays one generic mana, taps and sacrifices the Star, immediately adds each of the five selected colors, and draws exactly one card when its trigger resolves"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

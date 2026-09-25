@@ -86,6 +86,8 @@ mod deck_coverage_anvil;
 mod deck_coverage_battlelands;
 #[path = "scenario/deck_coverage_checklands.rs"]
 mod deck_coverage_checklands;
+#[path = "scenario/deck_coverage_chromatic_star.rs"]
+mod deck_coverage_chromatic_star;
 #[path = "scenario/deck_coverage_copperline_prismatic.rs"]
 mod deck_coverage_copperline_prismatic;
 #[path = "scenario/deck_coverage_creature_board_wipes.rs"]

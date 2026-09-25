@@ -519,6 +519,8 @@ chitin_gravestalker	0	ability:0	unsupported: ability not offered by generic batt
 chitin_gravestalker	0	cast	exercised
 chitinous_graspling	0	cast	exercised
 chomping_changeling	0	cast	exercised
+chromatic_star	0	ability:0	exercised
+chromatic_star	0	cast	exercised
 chrome_companion	0	ability:0	exercised
 chrome_companion	0	cast	exercised
 chupacabra_echo	0	cast	exercised
