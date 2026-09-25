@@ -78,6 +78,8 @@ mod current_standard_coverage_2026_09_10;
 mod custom_resolution;
 #[path = "scenario/damage_prevention.rs"]
 mod damage_prevention;
+#[path = "scenario/deck_coverage_ancient_grudge.rs"]
+mod deck_coverage_ancient_grudge;
 #[path = "scenario/deck_coverage_battlelands.rs"]
 mod deck_coverage_battlelands;
 #[path = "scenario/deck_coverage_checklands.rs"]

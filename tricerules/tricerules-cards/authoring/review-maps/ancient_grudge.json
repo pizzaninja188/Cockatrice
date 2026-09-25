@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "306593b0-6ea8-476f-a3f2-e17876c1bab4",
+  "spans": [
+    {
+      "face_id": "ancient_grudge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting/groups/0"
+      ]
+    },
+    {
+      "face_id": "ancient_grudge",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/flashback_cost"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetFilter.permanent_types",
+      "typed_path": "/faces/0/spell_effect/0/Destroy/subject/Chosen/permanent_types"
+    },
+    {
+      "symbol": "CardFaceDef.flashback_cost",
+      "typed_path": "/faces/0/flashback_cost"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_ancient_grudge::ancient_grudge_destroys_an_artifact_and_uses_flashback",
+      "covers": "rejects a nonartifact target, destroys an artifact creature, pays the green flashback cost, destroys an artifact, exiles the physical spell, and rejects a second flashback cast"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,13 @@
+// Oracle and rulings checked 2026-09-25: https://scryfall.com/card/tsr/151/ancient-grudge.
+// CR 115.1a governs its artifact target, CR 601.2 its alternative cost, CR 701.8 destroying the permanent,
+// and CR 702.34 casting from the graveyard and exiling the spell after it leaves the stack.
+(
+  id: "ancient_grudge",
+  name: "Ancient Grudge",
+  face_id: "ancient_grudge",
+  mana_cost: "{1}{R}",
+  flashback_cost: Some("{G}"),
+  types: ["Instant"],
+  spell_effect: [Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact])))],
+  targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target artifact", effect_indices: [0])])),
+)
