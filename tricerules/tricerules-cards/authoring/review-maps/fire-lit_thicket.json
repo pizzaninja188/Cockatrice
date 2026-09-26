@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "d99a1d9a-7721-4331-bf22-1c6ee0bd825a",
+  "spans": [
+    {
+      "face_id": "fire_lit_thicket",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "fire_lit_thicket",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ManaAmount",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceMana/options"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "ManaAmount",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/ProduceMana/options"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_fire_lit_thicket::fire_lit_thicket_taps_for_colorless_without_using_the_stack",
+      "covers": "the first land ability adds exactly one colorless mana, taps the land, and uses no stack item"
+    },
+    {
+      "test": "scenario deck_coverage_fire_lit_thicket::fire_lit_thicket_pays_red_or_green_for_each_of_its_three_mana_choices",
+      "covers": "the hybrid activation accepts either red or green payment and each choice produces exactly red-red, red-green, or green-green without using the stack"
+    },
+    {
+      "test": "scenario deck_coverage_fire_lit_thicket::fire_lit_thicket_rejects_unpaid_or_invalid_hybrid_activations_atomically",
+      "covers": "colorless cannot pay the hybrid cost and an out-of-range output choice is rejected without spending mana or tapping the land"
+    },
+    {
+      "test": "deck_coverage_fire_lit_thicket::fire_lit_thicket_registers_both_mana_abilities_and_all_three_outputs",
+      "covers": "exact identity, land characteristics, Oracle line mappings, hybrid cost and all mana output amounts"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

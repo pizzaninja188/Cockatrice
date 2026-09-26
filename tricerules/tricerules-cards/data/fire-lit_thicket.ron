@@ -1,0 +1,26 @@
+// Scryfall Oracle ID d99a1d9a-7721-4331-bf22-1c6ee0bd825a; exact 2XM printing checked 2026-09-26.
+// Its rulings endpoint returned no entries. CR 107.4c/e and 107.5 cover its mana symbols and tap
+// cost; CR 602.2b/601.2h cover payment; CR 605.1a/605.3b govern mana-ability classification/resolution.
+(
+  id: "fire-lit_thicket",
+  name: "Fire-Lit Thicket",
+  face_id: "fire_lit_thicket",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      source_zone: Battlefield,
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      source_zone: Battlefield,
+      costs: [Mana("{R/G}"), Tap],
+      effect: [ProduceMana(options: [(r: 2), (r: 1, g: 1), (g: 2)])],
+    ),
+  ],
+)
