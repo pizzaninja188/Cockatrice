@@ -1,0 +1,23 @@
+// Scryfall Oracle ID 32e5339e-9e4f-46f8-b305-f9d6d3ba8bb5; exact paper printing checked 2026-09-26.
+// Its rulings endpoint returned no entries. CR 105.4/106.1a define the color choice, CR 107.5 and
+// 701.21a govern the tap and sacrifice costs, and CR 605.1a/605.3a-b classify its mana ability.
+(
+  id: "lotus_petal",
+  name: "Lotus Petal",
+  face_id: "lotus_petal",
+  mana_cost: "{0}",
+  types: ["Artifact"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    source_zone: Battlefield,
+    costs: [Tap, SacrificeSelf],
+    effect: [ProduceMana(options: [
+      (w: 1),
+      (u: 1),
+      (b: 1),
+      (r: 1),
+      (g: 1),
+    ])],
+  )],
+)

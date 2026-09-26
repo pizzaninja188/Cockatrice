@@ -1,0 +1,34 @@
+{
+  "format_version": 1,
+  "oracle_id": "32e5339e-9e4f-46f8-b305-f9d6d3ba8bb5",
+  "spans": [
+    {
+      "face_id": "lotus_petal",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {"symbol": "AbilityCost::Tap", "typed_path": "/faces/0/activated_abilities/0/costs/0"},
+    {"symbol": "AbilityCost::SacrificeSelf", "typed_path": "/faces/0/activated_abilities/0/costs/1"},
+    {"symbol": "SpellEffectKind::ProduceMana", "typed_path": "/faces/0/activated_abilities/0/effect/0"},
+    {"symbol": "ManaAmount", "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceMana/options"}
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_lotus_petal::lotus_petal_sacrifices_and_adds_the_chosen_color_without_the_stack",
+      "covers": "each of the five choices adds exactly one mana of that color, the source is sacrificed, and no ability is put on the stack"
+    },
+    {
+      "test": "scenario deck_coverage_lotus_petal::lotus_petal_rejects_an_out_of_range_color_without_paying_its_costs",
+      "covers": "an out-of-range color choice is rejected without tapping or sacrificing the source or adding mana"
+    },
+    {
+      "test": "deck_coverage_lotus_petal::lotus_petal_registers_its_free_artifact_and_five_color_mana_ability",
+      "covers": "the exact identity, {0} artifact characteristics, tap and sacrifice costs, Oracle-line presentation, and five one-color mana options"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
