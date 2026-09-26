@@ -1,0 +1,10 @@
+// Scryfall Ape token 6736e171-ed7d-4259-8a42-f5936ebad532 (3/3 green Ape creature token).
+(
+    id: "ape_g_3_3",
+    name: "Ape",
+    face_id: "ape",
+    types: ["Creature", "Ape"],
+    colors: [Green],
+    power: 3,
+    toughness: 3,
+)

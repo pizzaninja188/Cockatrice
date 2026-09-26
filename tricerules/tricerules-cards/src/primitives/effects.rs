@@ -1087,10 +1087,16 @@ pub enum SpellEffectKind {
         reveal: bool,
         bottom_order: LibraryBottomOrder,
     },
-    /// CR 701.7: destroy `subject`. Chosen subjects are CR 115 targets; source, attachment, and
+    /// CR 701.8: destroy `subject`. Chosen subjects are CR 115 targets; source, attachment, and
     /// trigger-object subjects are untargeted rules references. Murder and Royal Assassin use
     /// chosen subjects, while Cracked Skull uses the damage event's trigger object.
     Destroy {
+        #[serde(default = "default_destroy_subject")]
+        subject: EffectSubject,
+    },
+    /// CR 701.8 / 701.19c: destroy `subject` while preventing regeneration shields from applying.
+    /// Pongify and Flesh to Dust use this for targeted creature destruction.
+    DestroyPreventingRegeneration {
         #[serde(default = "default_destroy_subject")]
         subject: EffectSubject,
     },
@@ -2470,6 +2476,8 @@ impl SpellEffectKind {
                 ..
             } | SpellEffectKind::Destroy {
                 subject: EffectSubject::AttachedObject,
+            } | SpellEffectKind::DestroyPreventingRegeneration {
+                subject: EffectSubject::AttachedObject,
             }
         )
     }
@@ -2533,6 +2541,8 @@ impl SpellEffectKind {
                 subject: EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::Destroy {
+                subject: EffectSubject::TriggerObject,
+            } | SpellEffectKind::DestroyPreventingRegeneration {
                 subject: EffectSubject::TriggerObject,
             } | SpellEffectKind::LoseLife {
                 who: PlayerRecipient::TriggerObjectController,
@@ -2650,6 +2660,7 @@ impl SpellEffectKind {
                 })
                 .collect(),
             SpellEffectKind::Destroy { subject }
+            | SpellEffectKind::DestroyPreventingRegeneration { subject }
             | SpellEffectKind::Sacrifice { subject }
             | SpellEffectKind::PumpTarget { subject, .. }
             | SpellEffectKind::Tap { subject }
@@ -2968,6 +2979,7 @@ impl SpellEffectKind {
                     }
                 }
                 SpellEffectKind::Destroy { subject: value }
+                | SpellEffectKind::DestroyPreventingRegeneration { subject: value }
                 | SpellEffectKind::Sacrifice { subject: value }
                 | SpellEffectKind::PumpTarget { subject: value, .. }
                 | SpellEffectKind::Tap { subject: value }
@@ -3004,7 +3016,11 @@ impl SpellEffectKind {
                         }
                         | SpellEffectKind::DrawDiscard { .. }
                 ),
-                CardResultAction::Destroy => matches!(effect, SpellEffectKind::Destroy { .. }),
+                CardResultAction::Destroy => matches!(
+                    effect,
+                    SpellEffectKind::Destroy { .. }
+                        | SpellEffectKind::DestroyPreventingRegeneration { .. }
+                ),
                 CardResultAction::Exile => matches!(
                     effect,
                     SpellEffectKind::ChooseHandCards {
@@ -3521,6 +3537,7 @@ impl SpellEffectKind {
                 if !matches!(
                     effect.as_ref(),
                     SpellEffectKind::Destroy { .. }
+                        | SpellEffectKind::DestroyPreventingRegeneration { .. }
                         | SpellEffectKind::GrantKeywords { .. }
                         | SpellEffectKind::ChoosePermanents { .. }
                         | SpellEffectKind::Draw { .. }
@@ -3551,6 +3568,7 @@ impl SpellEffectKind {
                     SpellEffectKind::PumpTarget { .. }
                         | SpellEffectKind::GainLife { .. }
                         | SpellEffectKind::Destroy { .. }
+                        | SpellEffectKind::DestroyPreventingRegeneration { .. }
                         | SpellEffectKind::DamageTarget { .. }
                         | SpellEffectKind::GrantKeywords { .. }
                 ) {
@@ -4156,6 +4174,10 @@ impl SpellEffectKind {
                 subject: EffectSubject::Source
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject,
+            } | SpellEffectKind::DestroyPreventingRegeneration {
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
             } | SpellEffectKind::AttachSource { .. }
                 | SpellEffectKind::ChangeSourceFace { .. }
                 | SpellEffectKind::ReturnTriggeredCard { .. }
@@ -4240,6 +4262,9 @@ impl SpellEffectKind {
                 ..
             }
             | SpellEffectKind::Destroy {
+                subject: EffectSubject::Chosen(target),
+            }
+            | SpellEffectKind::DestroyPreventingRegeneration {
                 subject: EffectSubject::Chosen(target),
             }
             | SpellEffectKind::Explore {

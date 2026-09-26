@@ -35,8 +35,10 @@ pub(super) fn destroy(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::Destroy { subject } = effect else {
-        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    let (subject, prevent_regeneration) = match effect {
+        SpellEffectKind::Destroy { subject } => (subject, false),
+        SpellEffectKind::DestroyPreventingRegeneration { subject } => (subject, true),
+        _ => return Err(EngineError::Illegal("resolution dispatch mismatch")),
     };
     let subjects: Vec<ObjectId> = match &subject {
         EffectSubject::Chosen(_) => cx.targets.to_vec(),
@@ -71,7 +73,7 @@ pub(super) fn destroy(
         match attempt_destroy(
             engine,
             snapshot,
-            false,
+            prevent_regeneration,
             spell_label,
             DestroyLogStyle::Subject,
             events,

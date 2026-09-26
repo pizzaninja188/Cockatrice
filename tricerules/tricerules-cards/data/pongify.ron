@@ -1,0 +1,25 @@
+// Oracle and rulings checked against Scryfall on 2026-09-26.
+// CR 608.2b-c, 701.8, 701.19c, and 111.2-111.4 govern the target, regeneration prohibition,
+// ordered token creation, and Ape characteristics. An indestructible legal target still yields
+// the Ape; an illegal target makes the entire spell fail to resolve.
+(
+  id: "pongify",
+  name: "Pongify",
+  face_id: "pongify",
+  mana_cost: "{U}",
+  types: ["Instant"],
+  spell_effect: [
+    DestroyPreventingRegeneration(subject: Chosen((kind: Creature))),
+    CreateTokens(
+      token: "ape_g_3_3",
+      count: 1,
+      who: ControllerOfTargetGroup(group_index: 0),
+    ),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target creature",
+    effect_indices: [0],
+  )])),
+)

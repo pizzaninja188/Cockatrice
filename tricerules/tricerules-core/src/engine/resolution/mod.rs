@@ -1600,9 +1600,10 @@ impl GameEngine {
                             EffectOutcome::Continue
                         } else {
                             match *effect {
-                                effect @ SpellEffectKind::Destroy { .. } => {
-                                    misc::destroy(&mut cx, effect)?
-                                }
+                                effect @ (SpellEffectKind::Destroy { .. }
+                                | SpellEffectKind::DestroyPreventingRegeneration {
+                                    ..
+                                }) => misc::destroy(&mut cx, effect)?,
                                 effect @ SpellEffectKind::GrantKeywords { .. } => {
                                     pump_counters::grant_keywords(&mut cx, effect)?
                                 }
@@ -1653,9 +1654,10 @@ impl GameEngine {
                                 effect @ SpellEffectKind::GainLife { .. } => {
                                     life::gain_life(&mut cx, effect)?
                                 }
-                                effect @ SpellEffectKind::Destroy { .. } => {
-                                    misc::destroy(&mut cx, effect)?
-                                }
+                                effect @ (SpellEffectKind::Destroy { .. }
+                                | SpellEffectKind::DestroyPreventingRegeneration {
+                                    ..
+                                }) => misc::destroy(&mut cx, effect)?,
                                 effect @ SpellEffectKind::DamageTarget { .. } => {
                                     damage::damage_target(&mut cx, effect)?
                                 }
@@ -1770,7 +1772,10 @@ impl GameEngine {
                     effect @ SpellEffectKind::PutCountersAll { .. } => {
                         pump_counters::put_counters_all(&mut cx, effect)?
                     }
-                    effect @ SpellEffectKind::Destroy { .. } => misc::destroy(&mut cx, effect)?,
+                    effect @ (SpellEffectKind::Destroy { .. }
+                    | SpellEffectKind::DestroyPreventingRegeneration { .. }) => {
+                        misc::destroy(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::Sacrifice { .. } => misc::sacrifice(&mut cx, effect)?,
                     effect @ SpellEffectKind::DestroyAttached { .. } => {
                         mass::destroy_attached(&mut cx, effect)?

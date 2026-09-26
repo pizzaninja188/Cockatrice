@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "05849bd6-8f38-4031-be2b-e2aa03beb8cc",
+  "spans": [
+    {
+      "face_id": "pongify",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DestroyPreventingRegeneration",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": ["ape_g_3_3"],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_pongify::pongify_destroys_through_regeneration_shield_and_gives_target_controller_ape",
+      "covers": "destroys through a regeneration shield and gives one 3/3 green Ape to the target creature's controller"
+    },
+    {
+      "test": "scenario deck_coverage_pongify::pongify_still_gives_ape_when_target_is_indestructible",
+      "covers": "a legal indestructible target remains while its controller still receives the Ape"
+    },
+    {
+      "test": "scenario deck_coverage_pongify::pongify_creates_no_ape_when_target_is_illegal_on_resolution",
+      "covers": "an illegal target makes the spell fail to resolve and creates no Ape"
+    },
+    {
+      "test": "deck_coverage_pongify::pongify_has_exact_identity_target_and_ape_token_contract",
+      "covers": "card/face characteristics, exact effect ordering, creature target, target-controller recipient, and token characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
