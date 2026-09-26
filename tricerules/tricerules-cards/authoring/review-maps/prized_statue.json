@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "681fc668-cb26-4ba4-a915-48ddfa2b9520",
+  "spans": [
+    {
+      "face_id": "prized_statue",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    }
+  ],
+  "tokens": ["treasure"],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_prized_statue::prized_statue_creates_a_treasure_on_entry_and_when_put_into_a_graveyard",
+      "covers": "casting Prized Statue creates one Treasure; destroying the artifact and putting it into a graveyard creates one more; the controller receives both"
+    },
+    {
+      "test": "deck_coverage_prized_statue::prized_statue_registers_its_entry_and_graveyard_triggers",
+      "covers": "exact identity, two trigger events presented from the same Oracle line, and one controller Treasure token from each event"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

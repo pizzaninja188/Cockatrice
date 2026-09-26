@@ -126,6 +126,8 @@ mod deck_coverage_myr_retriever;
 mod deck_coverage_ominous_seas;
 #[path = "scenario/deck_coverage_pongify.rs"]
 mod deck_coverage_pongify;
+#[path = "scenario/deck_coverage_prized_statue.rs"]
+mod deck_coverage_prized_statue;
 #[path = "scenario/deck_coverage_proft_eidetic_memory.rs"]
 mod deck_coverage_proft_eidetic_memory;
 #[path = "scenario/deck_coverage_prosperity.rs"]

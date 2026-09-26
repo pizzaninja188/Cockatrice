@@ -1,0 +1,22 @@
+// Oracle checked against Scryfall on 2026-09-26; no rulings are published. CR 603.2, 603.10a.
+(
+  id: "prized_statue",
+  name: "Prized Statue",
+  face_id: "prized_statue",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [CreateTokens(token: "treasure", count: 1)],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfDies,
+      effect: [CreateTokens(token: "treasure", count: 1)],
+    ),
+  ],
+)
