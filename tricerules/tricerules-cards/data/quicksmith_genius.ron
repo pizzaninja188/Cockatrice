@@ -1,0 +1,27 @@
+// Oracle and rulings checked against the pinned Commander 2021 printing on 2026-09-26; Scryfall returned no rulings.
+// CR 603.2/603.3 handles the artifact-entry trigger; CR 118.12 makes the optional discard the resolving action,
+// so choosing to discard draws even if that discard is modified. CR 701.9 and 121.1 govern the discard and draw.
+(
+  id: "quicksmith_genius",
+  name: "Quicksmith Genius",
+  face_id: "quicksmith_genius",
+  mana_cost: "{2}{R}",
+  types: ["Creature", "Human", "Artificer"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Artifact)),
+    ),
+    effect: [DrawDiscard(
+      who: Controller,
+      draw_count: 1,
+      discard_count: 1,
+      order: DiscardThenDraw,
+      optional: true,
+    )],
+  )],
+)

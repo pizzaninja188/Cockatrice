@@ -112,6 +112,8 @@ mod deck_coverage_mossfire_valley;
 mod deck_coverage_proft_eidetic_memory;
 #[path = "scenario/deck_coverage_prosperity.rs"]
 mod deck_coverage_prosperity;
+#[path = "scenario/deck_coverage_quicksmith_genius.rs"]
+mod deck_coverage_quicksmith_genius;
 #[path = "scenario/deck_coverage_sakura_tribe_elder.rs"]
 mod deck_coverage_sakura_tribe_elder;
 #[path = "scenario/deck_coverage_search_lands.rs"]

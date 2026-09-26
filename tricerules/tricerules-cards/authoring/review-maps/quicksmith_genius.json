@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "bca0c136-3845-4cb9-8d80-f504a01ad50a",
+  "spans": [
+    {
+      "face_id": "quicksmith_genius",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DrawDiscard",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "DrawDiscardOrder::DiscardThenDraw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/DrawDiscard/order"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_quicksmith_genius::quicksmith_genius_loots_once_for_each_controlled_artifact_entry",
+      "covers": "a Sol Ring entering under the controller's control creates one Quicksmith Genius trigger with a private discard-then-draw choice"
+    },
+    {
+      "test": "scenario deck_coverage_quicksmith_genius::quicksmith_genius_may_decline_the_optional_discard",
+      "covers": "declining the optional discard leaves the hand and library unchanged"
+    },
+    {
+      "test": "deck_coverage_quicksmith_genius::quicksmith_genius_registers_its_artifact_loot_trigger",
+      "covers": "the exact Oracle identity, printed characteristics, controller artifact-entry trigger and optional discard-then-draw effect"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
