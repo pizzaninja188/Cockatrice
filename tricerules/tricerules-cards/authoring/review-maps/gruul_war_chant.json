@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "a9edb891-1a38-4b8a-8539-c459e8a52315",
+  "spans": [
+    {
+      "face_id": "gruul_war_chant",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0",
+        "/faces/0/static_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemPt",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "CreatureScopeFilter::controller_and_attacking",
+      "typed_path": "/faces/0/static_abilities/0/definition/AnthemPt/filter"
+    },
+    {
+      "symbol": "StaticAbilityDef::AnthemKeyword",
+      "typed_path": "/faces/0/static_abilities/1"
+    },
+    {
+      "symbol": "CreatureScopeFilter::controller_and_attacking",
+      "typed_path": "/faces/0/static_abilities/1/definition/AnthemKeyword/filter"
+    },
+    {
+      "symbol": "Keyword::Menace",
+      "typed_path": "/faces/0/static_abilities/1/definition/AnthemKeyword/keyword"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_gruul_war_chant::gruul_war_chant_grants_attack_pump_and_menace_only_to_its_controllers_attackers",
+      "covers": "the controlled attacker gets +1/+0 and menace, a single blocker is rejected, combat damage uses the +1 power, the grant ends after combat, and an opponent's attacker receives neither effect"
+    },
+    {
+      "test": "deck_coverage_gruul_war_chant::gruul_war_chant_registers_its_attack_scoped_pump_and_menace_effects",
+      "covers": "exact card identity, mana cost and type, both static definitions mapped to Oracle line 1, the controller-and-attacking filters, and the inclusive source scope"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
