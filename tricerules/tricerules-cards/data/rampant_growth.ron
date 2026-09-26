@@ -1,0 +1,15 @@
+// Oracle/rulings checked 2026-09-25 against pinned Scryfall oracle 27bf3214-1271-490b-bdfe-c0be6c23d02e.
+// CR 701.23 permits failing to find; CR 701.24a shuffles after the search. BasicLand excludes
+// nonbasic lands such as Taiga. The searched card enters tapped.
+(
+  id: "rampant_growth",
+  name: "Rampant Growth",
+  face_id: "rampant_growth",
+  mana_cost: "{1}{G}",
+  types: ["Sorcery"],
+  spell_effect: [SearchLibrary(
+    filter: Some((card_type: Some(BasicLand))),
+    destination: Battlefield(tapped: true),
+    shuffle: true,
+  )],
+)

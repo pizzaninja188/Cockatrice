@@ -1,0 +1,20 @@
+// Oracle/rulings checked 2026-09-25 against pinned Scryfall oracle 27bf3214-1271-490b-bdfe-c0be6c23d02e.
+// CR 701.23 permits failing to find; CR 701.24a shuffles after the search. Each listed land
+// subtype is an alternative, and nonbasic lands with one of those subtypes also qualify.
+(
+  id: "farseek",
+  name: "Farseek",
+  face_id: "farseek",
+  mana_cost: "{1}{G}",
+  types: ["Sorcery"],
+  spell_effect: [SearchLibrary(
+    filter: Some((any_of: Some([
+      (required_subtypes: ["Plains"]),
+      (required_subtypes: ["Island"]),
+      (required_subtypes: ["Swamp"]),
+      (required_subtypes: ["Mountain"]),
+    ]))),
+    destination: Battlefield(tapped: true),
+    shuffle: true,
+  )],
+)

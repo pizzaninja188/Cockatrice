@@ -1,0 +1,30 @@
+{
+  "format_version": 1,
+  "oracle_id": "495e52e6-4c2b-4574-9474-eadbdcc8b4ac",
+  "spans": [
+    {
+      "face_id": "farseek",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/spell_effect/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_search_lands::farseek_accepts_each_listed_subtype_including_a_nonbasic_land_and_enters_tapped",
+      "covers": "private OR search accepts Plains, Island, Swamp, Mountain, and matching nonbasic Taiga, excludes Forest alone, enters tapped, and shuffles"
+    },
+    {
+      "test": "deck_coverage_search_lands::farseek_uses_four_or_branches_for_land_subtypes_and_enters_tapped",
+      "covers": "exact printed identity and four distinct typed OR branches, destination, and search defaults"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

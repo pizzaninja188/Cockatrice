@@ -1,0 +1,30 @@
+{
+  "format_version": 1,
+  "oracle_id": "78826359-fe63-44ad-adc4-a17ffcd710e4",
+  "spans": [
+    {
+      "face_id": "nature_s_lore",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/spell_effect/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_search_lands::natures_lore_finds_a_nonbasic_forest_and_puts_it_onto_the_battlefield_untapped",
+      "covers": "private Forest-subtype search accepts nonbasic Taiga, moves the chosen object to the battlefield untapped, and shuffles"
+    },
+    {
+      "test": "deck_coverage_search_lands::nature_s_lore_searches_for_a_forest_subtype_and_enters_untapped",
+      "covers": "exact printed identity and typed subtype filter, destination, and search defaults"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

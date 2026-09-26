@@ -106,6 +106,8 @@ mod deck_coverage_looting;
 mod deck_coverage_mossfire_valley;
 #[path = "scenario/deck_coverage_proft_eidetic_memory.rs"]
 mod deck_coverage_proft_eidetic_memory;
+#[path = "scenario/deck_coverage_search_lands.rs"]
+mod deck_coverage_search_lands;
 #[path = "scenario/deck_coverage_sol_ring.rs"]
 mod deck_coverage_sol_ring;
 #[path = "scenario/deck_coverage_stump_stomp.rs"]

@@ -1,0 +1,30 @@
+{
+  "format_version": 1,
+  "oracle_id": "8539f295-5d58-4436-a73a-b9277c4c7795",
+  "spans": [
+    {
+      "face_id": "rampant_growth",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/spell_effect/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_search_lands::rampant_growth_rejects_a_nonbasic_land_and_puts_a_basic_onto_the_battlefield_tapped",
+      "covers": "private basic-land-only search excludes nonbasic Taiga, moves the chosen basic to the battlefield tapped, and shuffles"
+    },
+    {
+      "test": "deck_coverage_search_lands::rampant_growth_searches_for_a_basic_land_and_enters_tapped",
+      "covers": "exact printed identity and typed basic-land filter, destination, and search defaults"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

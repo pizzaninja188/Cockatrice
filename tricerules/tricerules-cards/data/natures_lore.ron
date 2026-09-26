@@ -1,0 +1,15 @@
+// Oracle/rulings checked 2026-09-25 against pinned Scryfall oracle 27bf3214-1271-490b-bdfe-c0be6c23d02e.
+// CR 701.23 permits failing to find; CR 701.24a shuffles after the search. Forest is a subtype
+// predicate, so nonbasic lands such as Taiga qualify. The searched card enters untapped.
+(
+  id: "natures_lore",
+  name: "Nature's Lore",
+  face_id: "nature_s_lore",
+  mana_cost: "{1}{G}",
+  types: ["Sorcery"],
+  spell_effect: [SearchLibrary(
+    filter: Some((required_subtypes: ["Forest"])),
+    destination: Battlefield(tapped: false),
+    shuffle: true,
+  )],
+)
