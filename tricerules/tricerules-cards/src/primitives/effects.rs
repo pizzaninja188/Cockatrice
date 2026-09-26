@@ -81,6 +81,8 @@ pub enum CounterKind {
     /// Quest counters are ordinary named counters used by quest-style threshold cards such as
     /// Earthbender Ascension and Overseer of Vault 76.
     Quest,
+    /// Ominous Seas uses this distinct named counter for its draw trigger and Kraken cost.
+    Foreshadow,
     /// CR 122.1h: if a permanent with one or more finality counters would go from the
     /// battlefield to a graveyard, it is exiled instead. This is not a keyword counter.
     Finality,
@@ -100,6 +102,7 @@ impl CounterKind {
             CounterKind::Lore => "lore".into(),
             CounterKind::Charge => "charge".into(),
             CounterKind::Quest => "quest".into(),
+            CounterKind::Foreshadow => "foreshadow".into(),
             CounterKind::Finality => "finality".into(),
         }
     }

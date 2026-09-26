@@ -120,6 +120,8 @@ mod deck_coverage_lotus_petal;
 mod deck_coverage_mind_stone;
 #[path = "scenario/deck_coverage_mossfire_valley.rs"]
 mod deck_coverage_mossfire_valley;
+#[path = "scenario/deck_coverage_ominous_seas.rs"]
+mod deck_coverage_ominous_seas;
 #[path = "scenario/deck_coverage_pongify.rs"]
 mod deck_coverage_pongify;
 #[path = "scenario/deck_coverage_proft_eidetic_memory.rs"]

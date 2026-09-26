@@ -1,0 +1,29 @@
+// Oracle and rulings checked against Scryfall on 2026-09-26. CR 121.2, 603.2c, 702.29a-b.
+(
+  id: "ominous_seas",
+  name: "Ominous Seas",
+  face_id: "ominous_seas",
+  mana_cost: "{1}{U}",
+  types: ["Enchantment"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerDrawsCard(drawer: Controller),
+    effect: [PutCounters(counter: Foreshadow, count: 1, subject: Source)],
+  )],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [RemoveCounters(counter: Some(Foreshadow), count: 8, payment_source: Source)],
+      effect: [CreateTokens(token: "kraken_token_8_8", count: 1)],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      source_zone: Hand,
+      costs: [Mana("{2}"), DiscardSelf],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

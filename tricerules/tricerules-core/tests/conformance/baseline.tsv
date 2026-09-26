@@ -2130,6 +2130,9 @@ omega_myr	0	cast	exercised
 ominous_asylum	0	ability:0	exercised
 ominous_asylum	0	ability:1	exercised
 ominous_asylum	0	land	exercised
+ominous_seas	0	ability:0	unsupported: nonmana costs need additional fixture resources
+ominous_seas	0	ability:1	unsupported: ability not offered by generic battlefield fixture
+ominous_seas	0	cast	exercised
 omni-cheese_pizza	0	ability:0	exercised
 omni-cheese_pizza	0	ability:1	exercised
 omni-cheese_pizza	0	cast	exercised

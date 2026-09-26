@@ -1,0 +1,10 @@
+// Blue 8/8 Kraken creature token (Ominous Seas).
+(
+  id: "kraken_token_8_8",
+  name: "Kraken Token",
+  face_id: "kraken_token",
+  types: ["Creature", "Kraken"],
+  colors: [Blue],
+  power: 8,
+  toughness: 8,
+)

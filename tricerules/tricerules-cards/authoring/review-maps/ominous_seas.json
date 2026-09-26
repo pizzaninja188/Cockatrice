@@ -1,0 +1,76 @@
+{
+  "format_version": 1,
+  "oracle_id": "58ea9b0a-1bef-4ccb-acb7-f03c8daf3df3",
+  "spans": [
+    {
+      "face_id": "ominous_seas",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "ominous_seas",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "ominous_seas",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPlayerDrawsCard",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "CounterKind::Foreshadow",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/PutCounters/counter"
+    },
+    {
+      "symbol": "AbilityCost::RemoveCounters",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "CounterKind::Foreshadow",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0/RemoveCounters/counter"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilitySourceZone::Hand",
+      "typed_path": "/faces/0/activated_abilities/1/source_zone"
+    },
+    {
+      "symbol": "AbilityCost::DiscardSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": ["kraken_token_8_8"],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_ominous_seas::ominous_seas_counts_controller_draws_cycles_from_hand_and_pays_eight_counters",
+      "covers": "controller draws add one Foreshadow counter each; Cycling from hand draws and triggers; seven counters cannot pay eight; eight counters pay the cost and resolve into one blue 8/8 Kraken"
+    },
+    {
+      "test": "deck_coverage_ominous_seas::ominous_seas_registers_draw_foreshadow_cycling_and_kraken_activation",
+      "covers": "exact card identity, draw-trigger counter, eight-counter activation, token characteristics, and hand-only Cycling cost and draw"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
