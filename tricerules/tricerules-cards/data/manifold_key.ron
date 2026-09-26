@@ -1,0 +1,45 @@
+// Scryfall Oracle ID 370c37f7-2484-40e8-8fd9-c10cf6f5d5f2; exact card record checked 2026-09-26.
+// Its 2021-03-19 ruling says an ability activated after blockers are declared does not unblock the creature.
+// CR 602.2a-b/115.1c cover activation and targeting; CR 509.1b preserves a legal block; CR 608.2b rechecks targets.
+(
+  id: "manifold_key",
+  name: "Manifold Key",
+  face_id: "manifold_key",
+  mana_cost: "{1}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      source_zone: Battlefield,
+      costs: [Mana("{1}"), Tap],
+      effect: [Untap(subject: Chosen((
+        kind: AnyPermanent,
+        permanent_types: [Artifact],
+        excluded_objects: [Source],
+      )))],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose another target artifact",
+        effect_indices: [0],
+      )])),
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      source_zone: Battlefield,
+      costs: [Mana("{3}"), Tap],
+      effect: [ApplyCombatRestriction(
+        scope: Chosen((kind: Creature)),
+        restriction: (cant_be_blocked: true),
+      )],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target creature",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)

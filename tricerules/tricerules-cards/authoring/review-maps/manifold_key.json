@@ -1,0 +1,84 @@
+{
+  "format_version": 1,
+  "oracle_id": "370c37f7-2484-40e8-8fd9-c10cf6f5d5f2",
+  "spans": [
+    {
+      "face_id": "manifold_key",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "manifold_key",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Untap/subject/Chosen/kind"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Artifact",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Untap/subject/Chosen/permanent_types/0"
+    },
+    {
+      "symbol": "TargetObjectExclusion::Source",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Untap/subject/Chosen/excluded_objects/0"
+    },
+    {
+      "symbol": "TargetGroupDef",
+      "typed_path": "/faces/0/activated_abilities/0/targeting/groups/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::ApplyCombatRestriction",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "CombatRestriction.cant_be_blocked",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/ApplyCombatRestriction/restriction/cant_be_blocked"
+    },
+    {
+      "symbol": "TargetGroupDef",
+      "typed_path": "/faces/0/activated_abilities/1/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_manifold_key::manifold_key_untaps_another_artifact_and_rejects_illegal_targets",
+      "covers": "rejects this source and a nonartifact without paying; pays one and taps as activation costs, then untaps a legal opponent artifact on resolution"
+    },
+    {
+      "test": "scenario deck_coverage_manifold_key::manifold_key_makes_a_target_unblockable_and_cannot_unblock_a_blocked_creature",
+      "covers": "the three-mana activation prevents a target from being blocked; when used after a legal block is declared, that creature remains blocked as stated in the card ruling"
+    },
+    {
+      "test": "deck_coverage_manifold_key::manifold_key_registers_its_artifact_untap_and_unblockable_activations",
+      "covers": "exact identity, mana cost, artifact type, both costs, source exclusion, artifact and creature target contracts, untap effect, and unblockable restriction"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
