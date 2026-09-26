@@ -1,0 +1,25 @@
+// Scryfall Oracle ID 96230edf-568a-47dd-b877-9d92aa58fac8; exact card and rulings checked
+// 2026-09-26. CR 603.6d covers the enters-tapped static effect during entry; CR 602.2a-b covers
+// activation and payment; CR 113.7a, 701.8, and 702.12b cover the source-independent
+// resolution and destruction/indestructible behavior.
+(
+  id: "nevinyrrals_disk",
+  name: "Nevinyrral's Disk",
+  face_id: "nevinyrrals_disk",
+  mana_cost: "{4}",
+  types: ["Artifact"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: EntersTapped(affected: Self_),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    source_zone: Battlefield,
+    costs: [Mana("{1}"), Tap],
+    effect: [DestroyAll(
+      kind: (kind: AnyPermanent, permanent_types: [Artifact, Creature, Enchantment]),
+    )],
+  )],
+)

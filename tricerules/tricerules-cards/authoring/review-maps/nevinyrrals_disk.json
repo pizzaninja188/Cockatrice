@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "96230edf-568a-47dd-b877-9d92aa58fac8",
+  "spans": [
+    {
+      "face_id": "nevinyrrals_disk",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    },
+    {
+      "face_id": "nevinyrrals_disk",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::DestroyAll",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/DestroyAll/kind/kind"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Artifact",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/DestroyAll/kind/permanent_types/0"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Creature",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/DestroyAll/kind/permanent_types/1"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Enchantment",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/DestroyAll/kind/permanent_types/2"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_nevinyrrals_disk::nevinyrrals_disk_enters_tapped_rejects_tapped_activation_then_sweeps_matching_permanents",
+      "covers": "the actual Disk enters tapped, cannot activate while tapped, then pays {1} and Tap; its ability remains on the stack and resolves across both players"
+    },
+    {
+      "test": "deck_coverage_nevinyrrals_disk::nevinyrrals_disk_registers_entry_replacement_and_mass_destroy_activation",
+      "covers": "exact identity, normal layout, artifact type, entry replacement, activation costs, and the artifact/creature/enchantment union filter"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

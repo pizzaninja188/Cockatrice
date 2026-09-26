@@ -128,6 +128,8 @@ mod deck_coverage_mind_stone;
 mod deck_coverage_mossfire_valley;
 #[path = "scenario/deck_coverage_myr_retriever.rs"]
 mod deck_coverage_myr_retriever;
+#[path = "scenario/deck_coverage_nevinyrrals_disk.rs"]
+mod deck_coverage_nevinyrrals_disk;
 #[path = "scenario/deck_coverage_ominous_seas.rs"]
 mod deck_coverage_ominous_seas;
 #[path = "scenario/deck_coverage_pongify.rs"]
