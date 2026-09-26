@@ -1,0 +1,31 @@
+// Oracle/rulings checked 2026-09-25 against Scryfall Oracle ID 694cb93a-bcc5-44b0-a76c-19ae4a4e5e0f; no rulings.
+// CR 115.1a and 601.2c govern target choice; CR 702.11b defines Hexproof; CR 611.2a and 611.2c
+// govern the until-end-of-turn effects and the target set fixed as they resolve.
+(
+  id: "rangers_guile",
+  name: "Ranger's Guile",
+  face_id: "rangers_guile",
+  mana_cost: "{G}",
+  types: ["Instant"],
+  spell_effect: [
+    PumpTarget(
+      power: 1,
+      toughness: 1,
+      subject: Chosen((kind: Creature, controller: You)),
+    ),
+    GrantKeywords(
+      subject: Chosen((kind: Creature, controller: You)),
+      keywords: [Hexproof],
+    ),
+  ],
+  targeting: Some((
+    groups: [
+      (
+        min: 1,
+        max: 1,
+        prompt: "Choose target creature you control",
+        effect_indices: [0, 1],
+      ),
+    ],
+  )),
+)

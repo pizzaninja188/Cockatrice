@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "694cb93a-bcc5-44b0-a76c-19ae4a4e5e0f",
+  "spans": [
+    {
+      "face_id": "rangers_guile",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "Keyword::Hexproof",
+      "typed_path": "/faces/0/spell_effect/1/GrantKeywords/keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_combat_tricks_batch::deck_coverage_rangers_guile",
+      "covers": "Ranger's Guile targets a creature its controller controls; on resolution it grants exactly +1/+1 and Hexproof; an opponent cannot target that creature while Hexproof lasts; both effects expire at end of turn"
+    },
+    {
+      "test": "deck_coverage_rangers_guile::rangers_guile_registers_its_complete_targeted_pump_and_hexproof",
+      "covers": "exact identity, color, cost, types, target-own-creature filter, +1/+1, Hexproof and one target group applying to both effects"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

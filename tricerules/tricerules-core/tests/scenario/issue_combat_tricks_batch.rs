@@ -155,6 +155,45 @@ fn issue_combat_tricks_blossoming_defense() {
 }
 
 #[test]
+fn deck_coverage_rangers_guile() {
+    let (mut engine, own, _) = trick_engine(700_021);
+    cast_resolve(&mut engine, "rangers_guile", own);
+    assert_eq!(engine.effective_power(own), Some(3));
+    assert_eq!(engine.effective_toughness(own), Some(3));
+    assert!(engine.effective_has_keyword(own, Keyword::Hexproof));
+
+    inject_card_into_hand(&mut engine, 1, "moment_of_triumph");
+    let removal_slot = hand_index_for_card(&engine, 1, "moment_of_triumph");
+    engine
+        .apply_command(0, &pass())
+        .expect("active player passes");
+    assert!(
+        engine
+            .apply_command(1, &cast_spell(removal_slot, target_object(own)))
+            .is_err(),
+        "the opponent can't target the creature after Hexproof resolves"
+    );
+    engine
+        .apply_command(1, &pass())
+        .expect("opponent returns priority to the active player");
+
+    end_active_turn(&mut engine, 0);
+    assert_eq!(engine.effective_power(own), Some(2));
+    assert_eq!(engine.effective_toughness(own), Some(2));
+    assert!(!engine.effective_has_keyword(own, Keyword::Hexproof));
+
+    let (mut illegal, _, opposing) = trick_engine(700_022);
+    inject_card_into_hand(&mut illegal, 0, "rangers_guile");
+    let slot = hand_index_for_card(&illegal, 0, "rangers_guile");
+    assert!(
+        illegal
+            .apply_command(0, &cast_spell(slot, target_object(opposing)))
+            .is_err(),
+        "an opponent's creature isn't a legal target"
+    );
+}
+
+#[test]
 fn issue_combat_tricks_snakeskin_veil() {
     let (mut e, own, _) = trick_engine(700_008);
     cast_resolve(&mut e, "snakeskin_veil", own);
