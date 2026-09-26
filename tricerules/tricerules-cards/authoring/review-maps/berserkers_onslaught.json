@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "85d2948c-1a79-418d-80c4-bc1012a4d313",
+  "spans": [
+    {
+      "face_id": "berserkers_onslaught",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemKeyword",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "CreatureScopeFilter::controller_and_attacking",
+      "typed_path": "/faces/0/static_abilities/0/definition/AnthemKeyword/filter"
+    },
+    {
+      "symbol": "Keyword::DoubleStrike",
+      "typed_path": "/faces/0/static_abilities/0/definition/AnthemKeyword/keyword"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_berserkers_onslaught::onslaught_grants_double_strike_only_to_its_controllers_attackers_for_both_damage_steps",
+      "covers": "the controlled attacker gains double strike, while the controller's bystander and an opponent's attacker do not; the attacker deals combat damage in both steps and loses the continuous grant after combat"
+    },
+    {
+      "test": "deck_coverage_berserkers_onslaught::berserkers_onslaught_registers_its_attacking_creature_double_strike_grant",
+      "covers": "exact card identity, printed characteristics, Oracle line mapping, and the live controller/attacker filter with the Double Strike keyword"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

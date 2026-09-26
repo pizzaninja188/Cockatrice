@@ -1458,7 +1458,6 @@ impl GameEngine {
         } else {
             // Emit PhaseChanged before resolving damage so the C++ client clears its
             // stack-object set before any combat damage triggers are pushed (StackPushed).
-            self.state.combat = None;
             self.clear_step_mana_pools();
             self.state.turn_step = TurnStep::CombatDamage;
             if let Some(i) = self.state.player_idx(ap) {

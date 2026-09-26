@@ -1,0 +1,17 @@
+(
+  id: "berserkers_onslaught",
+  name: "Berserkers' Onslaught",
+  face_id: "berserkers_onslaught",
+  mana_cost: "{3}{R}{R}",
+  types: ["Enchantment"],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([1]),
+      definition: AnthemKeyword(
+        filter: (controller: YouControl, attacking: true),
+        keyword: DoubleStrike,
+      ),
+    ),
+  ],
+)

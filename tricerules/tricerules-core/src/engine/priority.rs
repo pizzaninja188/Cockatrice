@@ -656,6 +656,10 @@ impl GameEngine {
             }
             EndCombat => {
                 self.clear_all_mana_pools();
+                // CR 511.3 removes creatures from combat when this step ends. Keep attacker
+                // membership available to continuous effects through both damage steps and this
+                // step (CR 613.5, 702.4b-c).
+                self.state.combat = None;
                 self.state.turn_step = Main2;
                 if let Some(i) = self.state.player_idx(ap) {
                     self.state.priority_idx = i;

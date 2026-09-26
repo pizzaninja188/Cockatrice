@@ -1222,7 +1222,18 @@ fn trample_single_blocker_lethal_plus_excess_to_player() {
             "dreadmaw has 2 marked damage from the blocker"
         );
     }
-    assert!(e.state.combat.is_none(), "combat cleared after resolution");
+    // Combat remains active through the end-of-combat step (CR 511.3).
+    pass_both_players(&mut e);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::EndCombat);
+    assert!(
+        e.state.combat.is_some(),
+        "combat remains through end combat"
+    );
+
+    // Combat ends as the end-of-combat step ends.
+    pass_both_players(&mut e);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main2);
+    assert!(e.state.combat.is_none(), "combat cleared after end combat");
 }
 
 #[test]
@@ -1375,7 +1386,18 @@ fn trample_multi_blocked_excess_to_player() {
         "defending player takes 2 trample damage: {life_evs:?}"
     );
     assert_eq!(e.state.players[1].life, p1_life_before - 2);
-    assert!(e.state.combat.is_none(), "combat cleared");
+    // Combat remains active through the end-of-combat step (CR 511.3).
+    pass_both_players(&mut e);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::EndCombat);
+    assert!(
+        e.state.combat.is_some(),
+        "combat remains through end combat"
+    );
+
+    // Combat ends as the end-of-combat step ends.
+    pass_both_players(&mut e);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main2);
+    assert!(e.state.combat.is_none(), "combat cleared after end combat");
 }
 
 #[test]

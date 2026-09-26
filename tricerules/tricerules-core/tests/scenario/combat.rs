@@ -1353,7 +1353,17 @@ fn assign_combat_damage_three_blockers_split_one_each() {
         assert_eq!(obj.damage, 1);
         assert_eq!(obj.zone, tricerules_core::Zone::Battlefield);
     }
-    // After resolution combat is cleared.
+    // Combat remains active through the end-of-combat step (CR 511.3).
+    pass_both_players(&mut e);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::EndCombat);
+    assert!(
+        e.state.combat.is_some(),
+        "combat remains through end combat"
+    );
+
+    // Combat ends as the end-of-combat step ends.
+    pass_both_players(&mut e);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main2);
     assert!(e.state.combat.is_none());
 }
 
@@ -1439,7 +1449,18 @@ fn assign_combat_damage_two_multi_blocked_attackers_requires_both() {
     for bid in [b1a, b1b, b2a, b2b] {
         assert!(dead.contains(&bid), "blocker {bid} dies: {dead:?}");
     }
-    assert!(e.state.combat.is_none(), "combat cleared after resolution");
+    // Combat remains active through the end-of-combat step (CR 511.3).
+    pass_both_players(&mut e);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::EndCombat);
+    assert!(
+        e.state.combat.is_some(),
+        "combat remains through end combat"
+    );
+
+    // Combat ends as the end-of-combat step ends.
+    pass_both_players(&mut e);
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main2);
+    assert!(e.state.combat.is_none(), "combat cleared after end combat");
 }
 
 // ── Combat eligibility skip tests ────────────────────────────────────────────

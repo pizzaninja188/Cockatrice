@@ -200,6 +200,34 @@ fn attacking_scope_warded_battlements_tracks_current_combat_membership() {
     assert_eq!(battlefield_power(declared_view, 0, attacker), 3);
     assert_eq!(battlefield_power(declared_view, 0, bystander), 2);
 
+    engine
+        .apply_command(0, &pass())
+        .expect("active player passes in declare attackers");
+    engine
+        .apply_command(1, &pass())
+        .expect("defending player passes in declare attackers");
+    assert_eq!(
+        engine.state.turn_step,
+        tricerules_core::TurnStep::DeclareBlockers
+    );
+    engine
+        .apply_command(1, &declare_blockers(vec![]))
+        .expect("declare no blockers");
+    engine
+        .apply_command(0, &pass())
+        .expect("active player passes in declare blockers");
+    engine
+        .apply_command(1, &pass())
+        .expect("defending player passes in declare blockers");
+    assert_eq!(
+        engine.state.turn_step,
+        tricerules_core::TurnStep::CombatDamage
+    );
+    assert_eq!(
+        engine.state.players[1].life, 17,
+        "the attacking +1/+0 effect still applies while combat damage is calculated"
+    );
+
     let main2 = advance_to_main2(&mut engine);
     assert_eq!(engine.effective_power(attacker), Some(2));
     let main2_view = last_zone_view(&main2);

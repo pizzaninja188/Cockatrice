@@ -86,6 +86,8 @@ mod deck_coverage_anvil;
 mod deck_coverage_battlelands;
 #[path = "scenario/deck_coverage_beast_within.rs"]
 mod deck_coverage_beast_within;
+#[path = "scenario/deck_coverage_berserkers_onslaught.rs"]
+mod deck_coverage_berserkers_onslaught;
 #[path = "scenario/deck_coverage_checklands.rs"]
 mod deck_coverage_checklands;
 #[path = "scenario/deck_coverage_chromatic_star.rs"]
