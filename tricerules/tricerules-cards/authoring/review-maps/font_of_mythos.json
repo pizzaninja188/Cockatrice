@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "oracle_id": "7194a262-5e7a-4c12-b271-2bc5e0799477",
+  "spans": [
+    {
+      "face_id": "font_of_mythos",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::AtBeginningOfDrawStep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario font_of_mythos::font_of_mythos_draws_two_after_normal_draw_even_when_tapped",
+      "covers": "the turn-based draw is already in the opponent's hand before Font's trigger resolves; the tapped Font then draws exactly two more for that opponent, not its controller"
+    },
+    {
+      "test": "font_of_mythos::font_of_mythos_registry_matches_reviewed_definition",
+      "covers": "reviewed card identity and characteristics, Oracle line mapping, each-player draw-step trigger, affected-player recipient, and count of two"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

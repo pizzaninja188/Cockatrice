@@ -1,0 +1,14 @@
+// CR 504.1 and 703.4d: the turn-based draw happens before the draw-step trigger is put on the stack.
+(
+    id: "font_of_mythos",
+    name: "Font of Mythos",
+    face_id: "font_of_mythos",
+    mana_cost: "{4}",
+    types: ["Artifact"],
+    triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: OracleLines([1]),
+        trigger: AtBeginningOfDrawStep(player: AnyPlayer),
+        effect: [Draw(who: AffectedPlayer, count: 2)],
+    )],
+)
