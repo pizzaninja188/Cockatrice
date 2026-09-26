@@ -1,0 +1,10 @@
+// Oracle identity and ruling verified from Scryfall on 2026-09-26.
+// X is announced and paid while casting (CR 107.3a / 601.2b); multiple players draw APNAP (CR 121.2c).
+(
+  id: "prosperity",
+  name: "Prosperity",
+  face_id: "prosperity",
+  mana_cost: "{X}{U}",
+  types: ["Sorcery"],
+  spell_effect: [Draw(who: EachPlayer, count: "X")],
+)

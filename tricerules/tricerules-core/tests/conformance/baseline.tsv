@@ -2275,6 +2275,7 @@ promising_vein	0	land	exercised
 prompto_argentum	0	cast	exercised
 prophetic_prism	0	ability:0	exercised
 prophetic_prism	0	cast	exercised
+prosperity	0	cast	exercised
 prosperity_tycoon	0	ability:0	unsupported: nonmana costs need additional fixture resources
 prosperity_tycoon	0	cast	exercised
 protective_response	0	cast	unsupported: target group 0 needs a richer fixture

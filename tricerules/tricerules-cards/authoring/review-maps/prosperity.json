@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "c586312d-d04a-4bfb-bbb2-b41186ca178e",
+  "spans": [
+    {
+      "face_id": "prosperity",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/spell_effect/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "PlayerRecipient::EachPlayer",
+      "typed_path": "/faces/0/spell_effect/0/Draw/who"
+    },
+    {
+      "symbol": "Amount::X",
+      "typed_path": "/faces/0/spell_effect/0/Draw/count"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_prosperity::prosperity_pays_x_plus_blue_and_each_player_draws_x_in_apnap_order",
+      "covers": "the announced X is paid with the blue pip and generic mana, every living player draws exactly X cards, and those draws follow APNAP order"
+    },
+    {
+      "test": "scenario deck_coverage_prosperity::prosperity_with_x_zero_draws_no_cards_but_still_pays_blue",
+      "covers": "X=0 is accepted, the blue pip is still paid, and neither player draws"
+    },
+    {
+      "test": "scenario deck_coverage_prosperity::prosperity_can_make_all_remaining_players_lose_simultaneously",
+      "covers": "each player draws all available cards, the subsequent failed draws are deferred until resolution completes, and simultaneous losses produce a draw as confirmed by Scryfall ruling"
+    },
+    {
+      "test": "deck_coverage_prosperity::prosperity_registers_its_variable_all_player_draw",
+      "covers": "the exact Oracle identity, normal layout, {X}{U} sorcery characteristics, and one X draw for each player"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
