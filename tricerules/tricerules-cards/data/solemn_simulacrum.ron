@@ -1,0 +1,49 @@
+// Oracle and rulings checked 2026-09-26 against Scryfall Oracle ID
+// 00c0543c-2a1f-4425-8283-4062d74a1637; the rulings endpoint returned no rulings.
+// CR 603.6a covers entry triggers; CR 603.6c/603.10a cover the battlefield-to-graveyard
+// trigger; CR 603.3a assigns it to the source's controller when it triggered. CR 700.4 defines
+// dies, CR 701.23/701.24 cover searching and shuffling, and CR 121.1 defines drawing a card.
+(
+  id: "solemn_simulacrum",
+  name: "Solemn Simulacrum",
+  face_id: "solemn_simulacrum",
+  mana_cost: "{4}",
+  types: ["Artifact", "Creature", "Golem"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [ChooseResolutionBranch(
+        optional: true,
+        branches: [(
+          branch_id: "search_for_a_basic_land",
+          presentation: OracleLines([1]),
+          cost: None,
+          effects: [SearchLibrary(
+            filter: Some((card_type: Some(BasicLand))),
+            destination: Battlefield(tapped: true),
+            shuffle: true,
+            reveal: false,
+          )],
+        )],
+      )],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfDies,
+      effect: [ChooseResolutionBranch(
+        optional: true,
+        branches: [(
+          branch_id: "draw_a_card",
+          presentation: OracleLines([2]),
+          cost: None,
+          effects: [Draw(who: Controller, count: 1)],
+        )],
+      )],
+    ),
+  ],
+)

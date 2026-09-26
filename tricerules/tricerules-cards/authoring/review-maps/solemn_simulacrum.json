@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "00c0543c-2a1f-4425-8283-4062d74a1637",
+  "spans": [
+    {
+      "face_id": "solemn_simulacrum",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    },
+    {
+      "face_id": "solemn_simulacrum",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/triggered_abilities/1"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseResolutionBranch",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0"
+    },
+    {
+      "symbol": "CardTypeFilter::BasicLand",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0/SearchLibrary/filter/card_type"
+    },
+    {
+      "symbol": "SearchDestination::Battlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0/SearchLibrary/destination"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0/ChooseResolutionBranch/branches/0/effects/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_solemn_simulacrum::solemn_simulacrum_searches_for_a_tapped_basic_and_its_controller_may_draw_on_death",
+      "covers": "the accepted ETB branch privately searches only for a basic land, moves it onto the battlefield tapped, and shuffles; the event-time controller may choose to draw when Solemn Simulacrum dies"
+    },
+    {
+      "test": "scenario deck_coverage_solemn_simulacrum::solemn_simulacrum_can_decline_both_optional_abilities",
+      "covers": "declining the ETB search neither changes the library nor shuffles, and declining the dies branch does not draw"
+    },
+    {
+      "test": "deck_coverage_solemn_simulacrum::solemn_simulacrum_registers_both_optional_triggered_abilities",
+      "covers": "exact identity, characteristics, both triggers, basic-land filter, tapped destination, shuffle, controller draw, and Oracle-line mappings"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
