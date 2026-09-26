@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "e3afc704-220f-498f-9eaa-0821b17dc24c",
+  "spans": [
+    {
+      "face_id": "sakura_tribe_elder",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CardTypeFilter::BasicLand",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/SearchLibrary/filter/card_type"
+    },
+    {
+      "symbol": "SearchDestination::Battlefield",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/SearchLibrary/destination"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_sakura_tribe_elder::sakura_tribe_elder_can_be_sacrificed_while_summoning_sick_to_find_a_tapped_basic_land",
+      "covers": "the creature can activate without tapping while summoning sick, pays its own sacrifice cost before resolution, searches for a basic land rather than a nonbasic land, and puts the chosen land onto the battlefield tapped before shuffling"
+    },
+    {
+      "test": "deck_coverage_sakura_tribe_elder::sakura_tribe_elder_registers_its_complete_sacrifice_search_ability",
+      "covers": "exact identity and characteristics, sacrifice-only cost, basic-land filter, tapped destination, and shuffle"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

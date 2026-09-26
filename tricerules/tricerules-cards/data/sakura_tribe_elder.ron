@@ -1,0 +1,28 @@
+// Oracle/rulings checked 2026-09-25 against Scryfall Oracle ID e3afc704-220f-498f-9eaa-0821b17dc24c; no rulings.
+// CR 602.2b and 113.7a: sacrifice is paid as the activation cost, and the ability then exists
+// independently of its source. CR 302.6: this ability has no tap/untap cost. CR 701.23b permits
+// failing to find a basic land in the hidden library; CR 701.24a performs the instructed shuffle.
+(
+  id: "sakura-tribe_elder",
+  name: "Sakura-Tribe Elder",
+  face_id: "sakura_tribe_elder",
+  mana_cost: "{1}{G}",
+  types: ["Creature", "Snake", "Shaman"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [SacrificeSelf],
+      effect: [
+        SearchLibrary(
+          filter: Some((card_type: Some(BasicLand))),
+          destination: Battlefield(tapped: true),
+          shuffle: true,
+          reveal: false,
+        ),
+      ],
+    ),
+  ],
+)
