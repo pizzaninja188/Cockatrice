@@ -1,0 +1,86 @@
+{
+  "format_version": 1,
+  "oracle_id": "37a55560-6e32-4f54-b9a8-fd157aea6eb5",
+  "spans": [
+    {
+      "face_id": "khalni_ambush",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting/groups/0",
+        "/faces/0/targeting/groups/1"
+      ]
+    },
+    {
+      "face_id": "khalni_territory",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/1/static_abilities/0"]
+    },
+    {
+      "face_id": "khalni_territory",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/1/activated_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Fight",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen(TargetFilter)",
+      "typed_path": "/faces/0/spell_effect/0/Fight/first"
+    },
+    {
+      "symbol": "TargetControllerFilter::You",
+      "typed_path": "/faces/0/spell_effect/0/Fight/first/Chosen/controller"
+    },
+    {
+      "symbol": "TargetControllerFilter::NotYou",
+      "typed_path": "/faces/0/spell_effect/0/Fight/second/Chosen/controller"
+    },
+    {
+      "symbol": "TargetGroupDef",
+      "typed_path": "/faces/0/targeting/groups/0"
+    },
+    {
+      "symbol": "TargetGroupDef",
+      "typed_path": "/faces/0/targeting/groups/1"
+    },
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/1/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/1/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/1/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_khalni_ambush::khalni_ambush_fights_with_current_power_and_rejects_wrong_controller_targets",
+      "covers": "publishes separate target groups for a creature you control and a creature you do not control, rejects reversed controllers without paying, then both creatures deal damage equal to their current power"
+    },
+    {
+      "test": "scenario deck_coverage_khalni_ambush::khalni_ambush_deals_no_damage_if_either_target_leaves_before_resolution",
+      "covers": "removing either target after casting causes neither creature to fight, matching the card ruling"
+    },
+    {
+      "test": "scenario deck_coverage_khalni_ambush::khalni_territory_enters_tapped_then_produces_green_mana_immediately",
+      "covers": "playing the back face as a land enters it tapped, prevents its mana ability before untap, and taps to add green mana immediately after untapping"
+    },
+    {
+      "test": "deck_coverage_khalni_ambush::khalni_ambush_and_khalni_territory_register_both_faces",
+      "covers": "exact identity, both face names and types, spell cost, two ordered target groups, fight effect, tapped entry, and green mana ability"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

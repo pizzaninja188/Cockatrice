@@ -1681,6 +1681,9 @@ kelinore_bat	0	cast	exercised
 kellans_lightblades	0	cast	unsupported: target group 0 needs a richer fixture
 kembas_skyguard	0	cast	exercised
 kessig_recluse	0	cast	exercised
+khalni_ambush_khalni_territory	0	cast	exercised
+khalni_ambush_khalni_territory	1	ability:0	exercised
+khalni_ambush_khalni_territory	1	land	exercised
 killers_mask	0	ability:0	exercised
 killers_mask	0	cast	exercised
 kin-tree_nurturer	0	cast	exercised

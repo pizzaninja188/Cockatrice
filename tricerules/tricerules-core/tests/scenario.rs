@@ -112,6 +112,8 @@ mod deck_coverage_gruul_war_chant;
 mod deck_coverage_hand_size_mana;
 #[path = "scenario/deck_coverage_ichor_wellspring.rs"]
 mod deck_coverage_ichor_wellspring;
+#[path = "scenario/deck_coverage_khalni_ambush.rs"]
+mod deck_coverage_khalni_ambush;
 #[path = "scenario/deck_coverage_krark_clan_ironworks.rs"]
 mod deck_coverage_krark_clan_ironworks;
 #[path = "scenario/deck_coverage_looting.rs"]

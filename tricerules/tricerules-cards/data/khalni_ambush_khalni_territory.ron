@@ -1,0 +1,49 @@
+(
+  id: "khalni_ambush_khalni_territory",
+  name: "Khalni Ambush // Khalni Territory",
+  layout: ModalDfc,
+  faces: [
+    (
+      name: "Khalni Ambush",
+      face_id: "khalni_ambush",
+      mana_cost: "{2}{G}",
+      types: ["Instant"],
+      spell_effect: [Fight(
+        first: Chosen((kind: Creature, controller: You)),
+        second: Chosen((kind: Creature, controller: NotYou)),
+      )],
+      targeting: Some((groups: [
+        (
+          min: 1,
+          max: 1,
+          prompt: "Choose target creature you control",
+          effect_indices: [0],
+        ),
+        (
+          min: 1,
+          max: 1,
+          prompt: "Choose target creature you don't control",
+          effect_indices: [0],
+          distinct_from: [0],
+        ),
+      ])),
+    ),
+    (
+      name: "Khalni Territory",
+      face_id: "khalni_territory",
+      mana_cost: "",
+      types: ["Land"],
+      activated_abilities: [(
+        ability_id: "activated_01",
+        presentation: OracleLines([2]),
+        costs: [Tap],
+        effect: [ProduceMana(options: [(g: 1)])],
+      )],
+      static_abilities: [(
+        ability_id: "static_01",
+        presentation: OracleLines([1]),
+        definition: EntersTapped(affected: Self_, condition: None, unless_cost: None),
+      )],
+    ),
+  ],
+)
