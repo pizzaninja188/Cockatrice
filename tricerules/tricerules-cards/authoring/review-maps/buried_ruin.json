@@ -1,0 +1,72 @@
+{
+  "format_version": 1,
+  "oracle_id": "3644f316-f9a3-46c9-9b1e-747f86cf4ead",
+  "spans": [
+    {
+      "face_id": "buried_ruin",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "buried_ruin",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "GraveyardOwner::Controller",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/MoveGraveyardCards/filter/owner"
+    },
+    {
+      "symbol": "ZoneCardFilter.card_type",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/MoveGraveyardCards/filter/card/card_type"
+    },
+    {
+      "symbol": "GraveyardDestination::Hand",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/MoveGraveyardCards/destination"
+    },
+    {
+      "symbol": "TargetGroupDef",
+      "typed_path": "/faces/0/activated_abilities/1/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_buried_ruin::buried_ruin_taps_for_colorless_and_recovers_an_artifact_after_sacrificing",
+      "covers": "the first ability taps for one colorless mana immediately; the second rejects a nonartifact or opposing graveyard target without paying costs, then pays two, taps and sacrifices this land, and returns the selected controller-owned artifact only on resolution"
+    },
+    {
+      "test": "deck_coverage_buried_ruin::buried_ruin_registers_colorless_mana_and_targeted_artifact_recovery",
+      "covers": "exact land identity, printed mana cost and type, both battlefield activations, ordered costs, artifact-only controller graveyard filter, hand destination, and mandatory single-target presentation"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,35 @@
+// Scryfall Oracle ID 3644f316-f9a3-46c9-9b1e-747f86cf4ead; exact EOC printing checked 2026-09-26.
+// Its rulings endpoint returned no entries. CR 605.1a/605.3b cover the mana ability;
+// CR 602.2a-b and 701.21a cover activation and sacrificing as a cost; CR 115.1c and 608.2b cover its target.
+(
+  id: "buried_ruin",
+  name: "Buried Ruin",
+  face_id: "buried_ruin",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      source_zone: Battlefield,
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      source_zone: Battlefield,
+      costs: [Mana("{2}"), Tap, SacrificeSelf],
+      effect: [MoveGraveyardCards(
+        filter: (owner: Controller, card: Some((card_type: Some(Artifact)))),
+        destination: Hand,
+      )],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target artifact card from your graveyard",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)

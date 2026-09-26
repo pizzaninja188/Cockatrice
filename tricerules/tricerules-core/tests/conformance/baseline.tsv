@@ -416,6 +416,9 @@ bump_in_the_night	0	cast	exercised
 burdened_stoneback	0	ability:0	unsupported: nonmana costs need additional fixture resources
 burdened_stoneback	0	cast	exercised
 burglar_rat	0	cast	exercised
+buried_ruin	0	ability:0	exercised
+buried_ruin	0	ability:1	unsupported: target group 0 needs a richer fixture
+buried_ruin	0	land	exercised
 burn,_burn,_tree_and_fern	0	cast	exercised
 burning_curiosity	0	cast	exercised
 burrog_banemaker	0	ability:0	exercised
