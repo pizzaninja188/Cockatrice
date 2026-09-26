@@ -1,0 +1,31 @@
+// Oracle identity 70fa2eba-565e-4fed-adc9-7f5d9fcbf1fa checked against Scryfall on 2026-09-25;
+// its rulings endpoint returned no rulings. CR 605.1a/605.3a-b govern the mana ability, CR 119.4
+// the life payment, CR 602.2b and 701.21a the activation costs, CR 113.7a source independence,
+// and CR 121.1 the draw.
+(
+  id: "waterlogged_grove",
+  name: "Waterlogged Grove",
+  face_id: "waterlogged_grove",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap, PayLife(amount: 1)],
+      effect: [ProduceMana(options: [(g: 1), (u: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      source_zone: Battlefield,
+      costs: [Mana("{1}"), Tap, SacrificeSelf],
+      cost_modifiers: [],
+      effect: [Draw(who: Controller, count: 1)],
+      targeting: None,
+      timing: Normal,
+      conditions: [],
+      activation_limit: None,
+    ),
+  ],
+)

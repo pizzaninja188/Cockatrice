@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "70fa2eba-565e-4fed-adc9-7f5d9fcbf1fa",
+  "spans": [
+    {
+      "face_id": "waterlogged_grove",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "waterlogged_grove",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::PayLife",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_waterlogged_grove::waterlogged_grove_pays_one_life_and_immediately_adds_the_chosen_color",
+      "covers": "both mana choices, the one-life cost, tap status, and immediate resolution without the stack"
+    },
+    {
+      "test": "scenario deck_coverage_waterlogged_grove::waterlogged_grove_cannot_pay_its_mana_ability_life_cost_at_zero_life",
+      "covers": "an unpaid life cost leaves life, mana, tap status, and the stack unchanged"
+    },
+    {
+      "test": "scenario deck_coverage_waterlogged_grove::waterlogged_grove_draws_after_its_source_is_sacrificed_as_an_activation_cost",
+      "covers": "the {1}, tap, sacrifice costs are required; the source moves to its owner's graveyard before the ability draws one card"
+    },
+    {
+      "test": "deck_coverage_waterlogged_grove::waterlogged_grove_registers_both_complete_abilities",
+      "covers": "exact printed identity, both ability costs, the two chosen mana outputs, and the draw effect"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
