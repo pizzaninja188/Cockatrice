@@ -1,0 +1,15 @@
+(
+  id: "voltaic_key",
+  name: "Voltaic Key",
+  face_id: "voltaic_key",
+  mana_cost: "{1}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Mana("{1}"), Tap],
+      effect: [Untap(subject: Chosen((kind: AnyPermanent, permanent_types: [Artifact])))],
+    ),
+  ],
+)

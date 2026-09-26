@@ -1,0 +1,58 @@
+{
+  "format_version": 1,
+  "oracle_id": "09aeea91-b1dc-443f-a509-4758f052c0a7",
+  "spans": [
+    {
+      "face_id": "voltaic_key",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Untap/subject/Chosen"
+    },
+    {
+      "symbol": "TargetFilter.permanent_types",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Untap/subject/Chosen/permanent_types"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_voltaic_key::voltaic_key_pays_and_taps_as_cost_then_untaps_an_opponents_artifact",
+      "covers": "the generic mana and tap costs are paid on activation, and the artifact controlled by another player is untapped only when the ability resolves"
+    },
+    {
+      "test": "scenario deck_coverage_voltaic_key::voltaic_key_can_target_itself_and_untaps_after_paying_its_tap_cost",
+      "covers": "the source artifact is a legal target, remains legal after being tapped to pay the cost, and is untapped on resolution"
+    },
+    {
+      "test": "scenario deck_coverage_voltaic_key::voltaic_key_may_target_an_already_untapped_artifact",
+      "covers": "an untapped artifact is a legal target and the untap instruction leaves it unchanged"
+    },
+    {
+      "test": "scenario deck_coverage_voltaic_key::voltaic_key_rejects_a_nonartifact_without_paying_any_cost",
+      "covers": "a nonartifact permanent is rejected as a target before either activation cost is paid"
+    },
+    {
+      "test": "deck_coverage_voltaic_key::voltaic_key_registers_its_targeted_artifact_untap_ability",
+      "covers": "normal artifact characteristics, the exact mana-plus-tap costs, the Oracle-line mapping, and the unrestricted artifact target filter"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

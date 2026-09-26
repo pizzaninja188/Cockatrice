@@ -124,6 +124,8 @@ mod deck_coverage_thran_dynamo;
 mod deck_coverage_tri_lands;
 #[path = "scenario/deck_coverage_vision_skeins_mikokoro.rs"]
 mod deck_coverage_vision_skeins_mikokoro;
+#[path = "scenario/deck_coverage_voltaic_key.rs"]
+mod deck_coverage_voltaic_key;
 #[path = "scenario/deck_coverage_waterlogged_grove.rs"]
 mod deck_coverage_waterlogged_grove;
 #[path = "scenario/dev_commands.rs"]
