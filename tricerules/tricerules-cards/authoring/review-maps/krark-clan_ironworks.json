@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "oracle_id": "68e1f7e0-a9b3-437f-8086-0c0cb85f2880",
+  "spans": [
+    {
+      "face_id": "krark_clan_ironworks",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ManaAmount",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceMana/options"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_krark_clan_ironworks::ironworks_can_sacrifice_itself_and_immediately_add_two_colorless",
+      "covers": "the source can be sacrificed as the cost and adds exactly two colorless mana without the stack"
+    },
+    {
+      "test": "scenario deck_coverage_krark_clan_ironworks::ironworks_sacrifices_another_artifact_and_rejects_uncontrolled_or_nonartifact_choices",
+      "covers": "another controlled artifact is a legal cost while an opponent-controlled artifact and own nonartifact are rejected atomically"
+    },
+    {
+      "test": "scenario deck_coverage_krark_clan_ironworks::ironworks_mana_can_pay_for_a_spell_before_priority_returns",
+      "covers": "the mana ability can be activated during spell payment and its output can commit the pending spell"
+    },
+    {
+      "test": "deck_coverage_krark_clan_ironworks::krark_clan_ironworks_registers_its_artifact_sacrifice_mana_ability",
+      "covers": "exact identity, artifact characteristics, Oracle line mapping, controlled artifact sacrifice filter, and two colorless output"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

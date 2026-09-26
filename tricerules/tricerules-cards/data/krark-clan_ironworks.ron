@@ -1,0 +1,22 @@
+(
+  id: "krark-clan_ironworks",
+  name: "Krark-Clan Ironworks",
+  face_id: "krark_clan_ironworks",
+  mana_cost: "{4}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      source_zone: Battlefield,
+      costs: [
+        SacrificePermanent(filter: (
+          kind: AnyPermanent,
+          controller: You,
+          permanent_types: [Artifact],
+        )),
+      ],
+      effect: [ProduceMana(options: [(c: 2)])],
+    ),
+  ],
+)

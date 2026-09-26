@@ -106,6 +106,8 @@ mod deck_coverage_garruks_packleader;
 mod deck_coverage_hand_size_mana;
 #[path = "scenario/deck_coverage_ichor_wellspring.rs"]
 mod deck_coverage_ichor_wellspring;
+#[path = "scenario/deck_coverage_krark_clan_ironworks.rs"]
+mod deck_coverage_krark_clan_ironworks;
 #[path = "scenario/deck_coverage_looting.rs"]
 mod deck_coverage_looting;
 #[path = "scenario/deck_coverage_lotus_petal.rs"]
