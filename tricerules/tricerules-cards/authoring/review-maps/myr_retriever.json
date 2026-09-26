@@ -1,0 +1,56 @@
+{
+  "format_version": 1,
+  "oracle_id": "d07d3be3-f69d-4484-8467-cffd43871788",
+  "spans": [
+    {
+      "face_id": "myr_retriever",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfDies",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "GraveyardOwner::Controller",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/MoveGraveyardCards/filter/owner"
+    },
+    {
+      "symbol": "TargetObjectExclusion::Source",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/MoveGraveyardCards/filter/excluded_objects/0"
+    },
+    {
+      "symbol": "ZoneCardFilter.card_type",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/MoveGraveyardCards/filter/card/card_type"
+    },
+    {
+      "symbol": "GraveyardDestination::Hand",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/MoveGraveyardCards/destination"
+    },
+    {
+      "symbol": "TargetGroupDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting/groups/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_myr_retriever::myr_retriever_targets_another_artifact_that_dies_at_the_same_time",
+      "covers": "a simultaneously dying artifact is a legal target; the source, a nonartifact in its controller's graveyard, and an artifact in the opponent's graveyard are illegal; the selected card returns to its controller's hand"
+    },
+    {
+      "test": "deck_coverage_myr_retriever::myr_retriever_registers_its_targeted_death_trigger",
+      "covers": "exact card identity, artifact creature characteristics, dies trigger, and mandatory single graveyard-card target"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

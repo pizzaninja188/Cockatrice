@@ -2033,6 +2033,7 @@ mutant_town_musicians	0	cast	exercised
 my_precious_allure_of_power	0	ability:0	exercised
 my_precious_allure_of_power	0	cast	exercised
 my_precious_allure_of_power	1	cast	unsupported: required cast-cost group needs a specialized fixture
+myr_retriever	0	cast	exercised
 mysterios_phantasm	0	cast	exercised
 mystic_archaeologist	0	ability:0	exercised
 mystic_archaeologist	0	cast	exercised

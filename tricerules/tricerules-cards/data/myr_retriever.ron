@@ -1,0 +1,29 @@
+// Oracle and ruling checked against Scryfall on 2026-09-26. CR 603.10a, 115.1d, 400.7e, 608.2b.
+(
+  id: "myr_retriever",
+  name: "Myr Retriever",
+  face_id: "myr_retriever",
+  mana_cost: "{2}",
+  types: ["Artifact", "Creature", "Myr"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfDies,
+    effect: [MoveGraveyardCards(
+      filter: (
+        excluded_objects: [Source],
+        owner: Controller,
+        card: Some((card_type: Some(Artifact))),
+      ),
+      destination: Hand,
+    )],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target artifact card from your graveyard",
+      effect_indices: [0],
+    )])),
+  )],
+)
