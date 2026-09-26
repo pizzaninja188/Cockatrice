@@ -98,6 +98,8 @@ mod deck_coverage_creature_board_wipes;
 mod deck_coverage_cycling_taplands;
 #[path = "scenario/deck_coverage_darksteel_plate.rs"]
 mod deck_coverage_darksteel_plate;
+#[path = "scenario/deck_coverage_garruks_packleader.rs"]
+mod deck_coverage_garruks_packleader;
 #[path = "scenario/deck_coverage_hand_size_mana.rs"]
 mod deck_coverage_hand_size_mana;
 #[path = "scenario/deck_coverage_ichor_wellspring.rs"]

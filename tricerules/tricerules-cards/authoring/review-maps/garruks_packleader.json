@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "13279222-422d-4447-9451-2463b0c714c6",
+  "spans": [
+    {
+      "face_id": "garruks_packleader",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "CreatureEventFilter::power::AtLeast",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverPermanentEntersBattlefield/creature_filter"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TriggeredAbilityDef::may",
+      "typed_path": "/faces/0/triggered_abilities/0/may"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_garruks_packleader::garruks_packleader_draws_for_a_controlled_creature_with_power_three_or_greater",
+      "covers": "the Packleader itself, an opponent creature, and a controlled 2/2 do not trigger; a controlled 4/4 triggers and the controller's accepted optional branch draws exactly one card"
+    },
+    {
+      "test": "scenario deck_coverage_garruks_packleader::garruks_packleader_can_decline_its_optional_draw",
+      "covers": "declining the optional draw leaves the library and hand unchanged"
+    },
+    {
+      "test": "deck_coverage_garruks_packleader::garruks_packleader_registers_its_power_filtered_optional_draw_trigger",
+      "covers": "the exact Oracle identity, printed characteristics, entry-time creature power filter, and optional controller draw"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

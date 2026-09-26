@@ -1,0 +1,24 @@
+// Scryfall Oracle ID 13279222-422d-4447-9451-2463b0c714c6; pinned printing C19 #168.
+// Oracle/rulings source: https://scryfall.com/card/c19/168/garruks-packleader
+// Rulings confirm that simultaneous qualifying entry triggers and that power is checked as the
+// creature enters, including counters and static effects. CR 603.3/603.5, 603.6a, and 121.1.
+(
+  id: "garruks_packleader",
+  name: "Garruk's Packleader",
+  face_id: "garruks_packleader",
+  mana_cost: "{4}{G}",
+  types: ["Creature", "Beast"],
+  power: 4,
+  toughness: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Creature), exclude_source: true),
+      creature_filter: Some((power: Some(AtLeast(3)))),
+    ),
+    effect: [Draw(who: Controller, count: 1)],
+    may: true,
+  )],
+)
