@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "7735eeba-693b-47e2-bd51-414379cf1016",
+  "spans": [
+    {
+      "face_id": "beast_within",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": ["beast_g_3_3"],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_beast_within::beast_within_destroys_a_land_and_gives_the_beast_to_its_controller",
+      "covers": "targets any permanent including a land, destroys it, and creates the 3/3 green Beast for its controller"
+    },
+    {
+      "test": "scenario deck_coverage_beast_within::beast_within_gives_the_beast_to_a_foreign_controller_after_destroying_the_owner_card",
+      "covers": "the destroyed card goes to its owner's graveyard while its last-known controller receives the Beast"
+    },
+    {
+      "test": "scenario deck_coverage_beast_within::beast_within_still_creates_a_beast_if_its_legal_target_is_indestructible",
+      "covers": "a legal indestructible target is not destroyed, but its controller still receives the token"
+    },
+    {
+      "test": "scenario deck_coverage_beast_within::beast_within_creates_no_beast_if_its_target_is_illegal_on_resolution",
+      "covers": "a target that leaves the battlefield before resolution makes the spell fail to resolve"
+    },
+    {
+      "test": "deck_coverage_beast_within::beast_within_targets_any_permanent_and_gives_a_beast_to_its_controller",
+      "covers": "exact printed identity, any-permanent target, effect order, target-controller recipient, and token characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

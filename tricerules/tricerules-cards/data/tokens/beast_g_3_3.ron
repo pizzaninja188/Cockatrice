@@ -1,0 +1,10 @@
+// 3/3 green Beast creature token (Beast Within).
+(
+    id: "beast_g_3_3",
+    name: "Beast",
+    face_id: "beast",
+    types: ["Creature", "Beast"],
+    colors: [Green],
+    power: 3,
+    toughness: 3,
+)
