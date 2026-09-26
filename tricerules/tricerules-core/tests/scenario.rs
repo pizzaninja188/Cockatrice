@@ -108,6 +108,8 @@ mod deck_coverage_ichor_wellspring;
 mod deck_coverage_looting;
 #[path = "scenario/deck_coverage_lotus_petal.rs"]
 mod deck_coverage_lotus_petal;
+#[path = "scenario/deck_coverage_mind_stone.rs"]
+mod deck_coverage_mind_stone;
 #[path = "scenario/deck_coverage_mossfire_valley.rs"]
 mod deck_coverage_mossfire_valley;
 #[path = "scenario/deck_coverage_proft_eidetic_memory.rs"]

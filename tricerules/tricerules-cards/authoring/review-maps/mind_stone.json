@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "c97361b5-af16-4a7b-af85-a429dbaf4ad2",
+  "spans": [
+    {
+      "face_id": "mind_stone",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "mind_stone",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ManaAmount",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceMana/options"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_mind_stone::mind_stone_taps_for_colorless_without_using_the_stack",
+      "covers": "the tap ability adds exactly one colorless mana and resolves without using the stack"
+    },
+    {
+      "test": "scenario deck_coverage_mind_stone::mind_stone_pays_its_cost_before_drawing_one_card",
+      "covers": "the draw ability rejects unpaid activation, sacrifices as a cost, then draws exactly one card on resolution"
+    },
+    {
+      "test": "deck_coverage_mind_stone::mind_stone_registers_its_colorless_mana_and_sacrifice_draw_abilities",
+      "covers": "exact identity, {2} artifact characteristics, Oracle line mappings, mana output, ordered activation costs and draw effect"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

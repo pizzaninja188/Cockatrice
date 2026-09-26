@@ -1940,6 +1940,9 @@ mind_drill_assailant	0	cast	exercised
 mind_rot	0	cast	exercised
 mind_sculpt	0	cast	exercised
 mind_spring	0	cast	exercised
+mind_stone	0	ability:0	exercised
+mind_stone	0	ability:1	exercised
+mind_stone	0	cast	exercised
 mind_transfer_protocol	0	cast	exercised
 mindful_biomancer	0	ability:0	exercised
 mindful_biomancer	0	cast	exercised
