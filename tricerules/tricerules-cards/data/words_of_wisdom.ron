@@ -1,0 +1,13 @@
+// Scryfall Oracle ID cff1b9bb-2a4c-4522-94a4-a674f942e376; physical Odyssey printing ODY 114 checked 2026-09-26.
+// Its rulings endpoint returned no entries. CR 121.1-121.2c govern the ordered multiplayer draws; CR 121.4/704.5b govern empty-library draws.
+(
+  id: "words_of_wisdom",
+  name: "Words of Wisdom",
+  face_id: "words_of_wisdom",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    Draw(who: Controller, count: 2),
+    Draw(who: EachOpponent, count: 1),
+  ],
+)

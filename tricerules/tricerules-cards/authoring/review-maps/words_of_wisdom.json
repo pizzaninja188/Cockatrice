@@ -1,0 +1,39 @@
+{
+  "format_version": 1,
+  "oracle_id": "cff1b9bb-2a4c-4522-94a4-a674f942e376",
+  "spans": [
+    {
+      "face_id": "words_of_wisdom",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {"symbol": "SpellEffectKind::Draw", "typed_path": "/faces/0/spell_effect/0"},
+    {"symbol": "PlayerRecipient::Controller", "typed_path": "/faces/0/spell_effect/0/Draw/who"},
+    {"symbol": "SpellEffectKind::Draw", "typed_path": "/faces/0/spell_effect/1"},
+    {"symbol": "PlayerRecipient::EachOpponent", "typed_path": "/faces/0/spell_effect/1/Draw/who"},
+    {"symbol": "Amount::Fixed(2)", "typed_path": "/faces/0/spell_effect/0/Draw/count"},
+    {"symbol": "Amount::Fixed(1)", "typed_path": "/faces/0/spell_effect/1/Draw/count"}
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_words_of_wisdom::words_of_wisdom_draws_two_then_each_other_player_draws_one_in_order",
+      "covers": "the controller draws two first, then each of three opponents draws one in turn order, each from their own library"
+    },
+    {
+      "test": "scenario deck_coverage_words_of_wisdom::words_of_wisdom_rejects_a_cast_without_enough_mana",
+      "covers": "a cast without the required blue and generic mana is rejected without moving the card or changing libraries"
+    },
+    {
+      "test": "deck_coverage_words_of_wisdom::words_of_wisdom_registers_its_ordered_player_draws",
+      "covers": "the exact Oracle identity, normal instant face, mana cost, and ordered controller/opponent draw effects"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
