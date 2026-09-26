@@ -65,6 +65,22 @@ fn nature_s_lore_searches_for_a_forest_subtype_and_enters_untapped() {
 }
 
 #[test]
+fn three_visits_searches_for_a_forest_subtype_and_enters_untapped() {
+    assert_eq!(
+        CardRegistry::global().id_for_name("Three Visits"),
+        Some("three_visits")
+    );
+    let filter = assert_search_defaults(
+        "three_visits",
+        "three_visits",
+        "Three Visits",
+        SearchDestination::Battlefield { tapped: false },
+    );
+    assert_eq!(filter.required_subtypes, ["Forest"]);
+    assert_eq!(filter.card_type, None);
+}
+
+#[test]
 fn rampant_growth_searches_for_a_basic_land_and_enters_tapped() {
     assert_eq!(
         CardRegistry::global().id_for_name("Rampant Growth"),

@@ -1,4 +1,4 @@
-//! Exact deck-corpus coverage for Nature's Lore, Rampant Growth, and Farseek.
+//! Exact deck-corpus coverage for Nature's Lore, Three Visits, Rampant Growth, and Farseek.
 //!
 //! Oracle text and rulings were checked 2026-09-25 against pinned Scryfall oracle snapshot
 //! 27bf3214-1271-490b-bdfe-c0be6c23d02e. CR 701.23b permits a hidden-zone search to find no card;
@@ -63,6 +63,67 @@ fn natures_lore_finds_a_nonbasic_forest_and_puts_it_onto_the_battlefield_untappe
     assert_eq!(
         engine.state.zone_change_generation.get(&taiga).copied(),
         Some(generation_before + 1)
+    );
+    assert!(engine.state.players[0].battlefield.contains(&taiga));
+    assert!(engine.state.players[0].library.contains(&forest));
+    assert!(permanents_moved_in(&completion).iter().any(|moved| {
+        moved.object_id == taiga
+            && moved.owner_player_id == 0
+            && moved.destination == Destination::Battlefield as i32
+    }));
+    assert!(completion.events.iter().any(|event| {
+        matches!(
+            &event.ev,
+            Some(Ev::Log(log)) if log.text == "P0 shuffles their library."
+        )
+    }));
+}
+
+#[test]
+fn three_visits_finds_a_nonbasic_forest_and_puts_it_onto_the_battlefield_untapped() {
+    let decks = Some(vec![
+        deck_with("forest", &["three_visits"]),
+        deck_with("island", &[]),
+    ]);
+    let mut engine = GameEngine::new(202_609_254, &[0, 1], 20, decks, true).expect("new game");
+    advance_to_main1_from_game_start(&mut engine);
+
+    let taiga = inject_library_card(&mut engine, 0, "taiga");
+    let forest = inject_library_card(&mut engine, 0, "forest");
+    ensure_in_hand(&mut engine, 0, "three_visits");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            g: 1,
+            c: 1,
+            ..Default::default()
+        },
+    );
+    engine
+        .apply_command(
+            0,
+            &cast_spell(hand_index_for_card(&engine, 0, "three_visits"), vec![]),
+        )
+        .expect("cast Three Visits");
+    engine.apply_command(0, &pass()).expect("caster passes");
+    let search_batch = engine
+        .apply_command(1, &pass())
+        .expect("resolve Three Visits");
+    let choice = find_resolution_choice(&search_batch).expect("Forest search choice");
+    assert_eq!(choice.choice_kind(), ChoiceKind::LibrarySearch);
+    assert_eq!((choice.min, choice.max), (0, 1));
+    assert!(choice.candidate_object_ids.contains(&taiga));
+    assert!(choice.candidate_object_ids.contains(&forest));
+
+    let completion = engine
+        .apply_command(0, &submit_resolution_choice(vec![taiga]))
+        .expect("choose Taiga, a nonbasic land with the Forest subtype");
+    let object = &engine.state.objects[&taiga];
+    assert_eq!(object.zone, Zone::Battlefield);
+    assert!(
+        !object.tapped,
+        "Three Visits puts the land onto the battlefield untapped"
     );
     assert!(engine.state.players[0].battlefield.contains(&taiga));
     assert!(engine.state.players[0].library.contains(&forest));

@@ -1,0 +1,15 @@
+// Oracle/rulings checked 2026-09-25 against pinned Scryfall oracle 27bf3214-1271-490b-bdfe-c0be6c23d02e.
+// CR 701.23a-b defines the search and permits failing to find in a hidden zone; CR 701.24a
+// shuffles afterward. Forest is a land subtype, so nonbasic Forests such as Taiga qualify.
+(
+  id: "three_visits",
+  name: "Three Visits",
+  face_id: "three_visits",
+  mana_cost: "{1}{G}",
+  types: ["Sorcery"],
+  spell_effect: [SearchLibrary(
+    filter: Some((required_subtypes: ["Forest"])),
+    destination: Battlefield(tapped: false),
+    shuffle: true,
+  )],
+)
