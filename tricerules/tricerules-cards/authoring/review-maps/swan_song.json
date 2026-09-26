@@ -1,0 +1,70 @@
+{
+  "format_version": 1,
+  "oracle_id": "8ddfc283-c9b4-41a5-af88-cf0068e986cc",
+  "spans": [
+    {
+      "face_id": "swan_song",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StackSpellFilter::Enchantment",
+      "typed_path": "/faces/0/spell_effect/0/CounterTargetSpell/spell_filter/any_of/0/card_type"
+    },
+    {
+      "symbol": "StackSpellFilter::Instant",
+      "typed_path": "/faces/0/spell_effect/0/CounterTargetSpell/spell_filter/any_of/1/card_type"
+    },
+    {
+      "symbol": "StackSpellFilter::Sorcery",
+      "typed_path": "/faces/0/spell_effect/0/CounterTargetSpell/spell_filter/any_of/2/card_type"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "PlayerRecipient::PreviousTargetedSpellController",
+      "typed_path": "/faces/0/spell_effect/1/CreateTokens/who"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    }
+  ],
+  "tokens": ["bird_u_2_2_flying"],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_swan_song::swan_song_targets_each_allowed_spell_type_and_gives_its_controller_a_bird",
+      "covers": "enchantment, instant, and sorcery targets are countered and their controller receives one blue 2/2 Bird with flying"
+    },
+    {
+      "test": "scenario deck_coverage_swan_song::swan_song_gives_a_bird_even_when_its_target_cannot_be_countered",
+      "covers": "the legal uncounterable target stays on the stack while its controller still receives the Bird"
+    },
+    {
+      "test": "scenario deck_coverage_swan_song::swan_song_rejects_a_creature_spell_as_a_target",
+      "covers": "a creature spell is rejected as an illegal target at cast time without changing state"
+    },
+    {
+      "test": "scenario deck_coverage_swan_song::swan_song_creates_no_bird_if_its_target_leaves_the_stack_first",
+      "covers": "if the only target is countered first, Swan Song does not resolve and creates no Bird"
+    },
+    {
+      "test": "deck_coverage_swan_song::swan_song_registers_its_exact_spell_filter_and_bird_token",
+      "covers": "exact card identity, allowed spell-type union, target-controller recipient, effect order, and blue 2/2 Bird characteristics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

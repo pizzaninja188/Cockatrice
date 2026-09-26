@@ -3021,6 +3021,7 @@ swab_goblin	0	cast	exercised
 swallowed_by_leviathan	0	cast	unsupported: target group 0 needs a richer fixture
 swamp	0	ability:0	exercised
 swamp	0	land	exercised
+swan_song	0	cast	unsupported: target group 0 needs a richer fixture
 sweettooth_witch	0	ability:0	unsupported: nonmana costs need additional fixture resources
 sweettooth_witch	0	cast	exercised
 swift_spinner	0	cast	exercised

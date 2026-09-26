@@ -1,0 +1,29 @@
+// Oracle and rulings verified against Scryfall on 2026-09-26 (Oracle ID 8ddfc283-c9b4-41a5-af88-cf0068e986cc).
+// CR 608.2b, 701.6a, 701.7a, and 111.3-4 govern target legality, countering, and the Bird token.
+(
+  id: "swan_song",
+  name: "Swan Song",
+  face_id: "swan_song",
+  mana_cost: "{U}",
+  types: ["Instant"],
+  spell_effect: [
+    CounterTargetSpell(
+      spell_filter: (any_of: Some([
+        (card_type: Some(Enchantment)),
+        (card_type: Some(Instant)),
+        (card_type: Some(Sorcery)),
+      ])),
+    ),
+    CreateTokens(
+      token: "bird_u_2_2_flying",
+      count: 1,
+      who: PreviousTargetedSpellController,
+    ),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target enchantment, instant, or sorcery spell",
+    effect_indices: [0],
+  )])),
+)

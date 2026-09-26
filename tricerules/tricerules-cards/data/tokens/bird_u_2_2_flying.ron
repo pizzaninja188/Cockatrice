@@ -1,0 +1,11 @@
+// Blue 2/2 Bird creature token with flying (Swan Song).
+(
+    id: "bird_u_2_2_flying",
+    name: "Bird",
+    face_id: "bird",
+    types: ["Creature", "Bird"],
+    colors: [Blue],
+    power: 2,
+    toughness: 2,
+    keywords: [Flying],
+)

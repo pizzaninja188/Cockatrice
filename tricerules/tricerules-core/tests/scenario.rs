@@ -138,6 +138,8 @@ mod deck_coverage_sol_ring;
 mod deck_coverage_solemn_simulacrum;
 #[path = "scenario/deck_coverage_stump_stomp.rs"]
 mod deck_coverage_stump_stomp;
+#[path = "scenario/deck_coverage_swan_song.rs"]
+mod deck_coverage_swan_song;
 #[path = "scenario/deck_coverage_thran_dynamo.rs"]
 mod deck_coverage_thran_dynamo;
 #[path = "scenario/deck_coverage_tri_lands.rs"]
