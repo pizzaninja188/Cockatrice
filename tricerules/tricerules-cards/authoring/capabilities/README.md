@@ -4,11 +4,12 @@ This directory documents bounded, reusable rules patterns that card authors can 
 preflighting a complete card. An entry describes reviewed evidence and its limits. It is not a
 rules source, generator input, registry, or substitute for reviewing the full card.
 
-Phase 2 seeds ten entries from shipped card definitions, review maps, engine paths, and semantic
-scenario assertions. The planned three-batch pilot remains pending; these entries are not pilot
-measurements. The [pilot status and measurement protocol](PILOT.md) records that status and defines
-how to measure future use. The template below is not evidence and must not be counted as catalog
-content.
+Phase 2 seeded ten entries from shipped card definitions, review maps, engine paths, and semantic
+scenario assertions. The pilot added a source-counter-scaled mana entry after Astral Cornucopia's
+delivery. The three-batch pilot is underway; entries are lookup aids, not pilot measurements or proof
+of support for a new card. The [pilot protocol](PILOT.md) defines its measurement method. Measurement
+records stay outside the catalogue. The template below is not evidence and must not be counted as
+catalog content.
 
 ## Keep three questions separate
 
@@ -72,6 +73,7 @@ authoritative for their respective content; the index points to them instead of 
 | Entry | Category | Evidence and boundary |
 |---|---|---|
 | [Permanent taps for {C}](entries/permanent-taps-for-colorless.md) | Mana ability | Mind Stone and Scavenger Grounds each tap for one colorless mana without the stack; covers these two shipped definitions. |
+| [Mana scaled by a source counter](entries/source-counter-scaled-mana.md) | Mana ability | Astral Cornucopia multiplies one chosen-mana option by its current Charge-counter count; zero-counter output remains empty while the mana-ability choice is retained. |
 | [Lotus Petal chosen-color mana](entries/lotus-petal-chosen-color-mana.md) | Mana ability | Taps and sacrifices itself for one of five colors; does not cover unrestricted mana choices beyond those options. |
 | [Artifact sacrifice draw](entries/artifact-sacrifice-draw.md) | Activated ability | Mind Stone pays {1}, taps and sacrifices itself before one draw resolves. |
 | [Ichor Wellspring event draw](entries/ichor-wellspring-multizone-draw.md) | Triggered ability | One ability triggers on entry and battlefield-to-graveyard; the fixture checks the second event while the entry trigger waits. |
@@ -82,9 +84,11 @@ authoritative for their respective content; the index points to them instead of 
 | [Prosperity X for each player](entries/prosperity-x-each-player-draw.md) | Group draw | Three-player X=2 and two-player X=0 cases are covered; the index does not make a whole-card readiness claim. |
 | [Scavenger Grounds exile all graveyards](entries/scavenger-grounds-all-graveyards-exile.md) | Graveyard effect | Sacrifices a controlled Desert (including itself) as a cost, then exiles cards in all players' graveyards at resolution. |
 
-The entries inspect the cited RON, review-map, test, and engine source at the recorded revision.
-Tests were inspected, not run in this documentation phase. No manual client acceptance is claimed;
-whole-card readiness remains unassessed in each entry. The three-batch pilot is still pending.
+The ten Phase 2 entries inspect the cited RON, review-map, test, and engine source at their recorded
+revisions; those tests were inspected, not run during that documentation work. The source-counter
+entry added during the pilot records Astral Cornucopia's separate delivery evidence and test results.
+No manual client acceptance is claimed for any entry. Whole-card readiness remains unassessed for
+the ten Phase 2 entries. The pilot outcome is not yet determined.
 
 ## Catalogue boundary
 
@@ -109,7 +113,7 @@ recognition, or whole-card readiness.
 Look for useful patterns when repeated card research reveals the same reusable behavior or repeated
 lookup misses. Do not try to catalogue every mechanic or create an entry for each card. An outside-
 deck card may help validate related semantics, but it does not expand the selected campaign or admit
-that card. The three-batch pilot remains pending until the campaign is explicitly resumed.
+that card. Keep pilot measurement records outside this catalogue as directed in [PILOT.md](PILOT.md).
 
 ## Optional source-only checker
 
