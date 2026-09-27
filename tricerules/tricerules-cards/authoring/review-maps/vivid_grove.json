@@ -1,0 +1,81 @@
+{
+  "format_version": 1,
+  "oracle_id": "b7a68899-c0d3-49e0-854b-19268ae9b89d",
+  "spans": [
+    {
+      "face_id": "vivid_grove",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0",
+        "/faces/0/static_abilities/1"
+      ]
+    },
+    {
+      "face_id": "vivid_grove",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "vivid_grove",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "StaticAbilityDef::EntersWithCounters",
+      "typed_path": "/faces/0/static_abilities/1/definition"
+    },
+    {
+      "symbol": "CounterKind::Charge",
+      "typed_path": "/faces/0/static_abilities/1/definition/EntersWithCounters/counter"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::RemoveCounters",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "CounterKind::Charge",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1/RemoveCounters/counter"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_vivid_grove::vivid_grove_enters_tapped_adds_green_and_spends_its_two_counters_atomically",
+      "covers": "enters tapped with exactly two Charge counters; adds exactly one green mana immediately; spends one Charge counter per activation, allows blue outside its color identity, and rejects a third activation without partial payment"
+    },
+    {
+      "test": "scenario deck_coverage_vivid_grove::vivid_grove_counter_ability_selects_each_color_and_rejects_colorless",
+      "covers": "selects indices 0 through 4 and verifies exactly one corresponding white, blue, black, red, or green mana; rejects index 5 atomically, with every selected mana ability resolving immediately without the stack"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

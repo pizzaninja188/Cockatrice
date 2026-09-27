@@ -3418,6 +3418,9 @@ visions_of_villainy	0	cast	exercised
 vitalize	0	cast	exercised
 viv_vision,_teen_synthezoid	0	ability:0	exercised
 viv_vision,_teen_synthezoid	0	cast	exercised
+vivid_grove	0	ability:0	exercised
+vivid_grove	0	ability:1	unsupported: nonmana costs need additional fixture resources
+vivid_grove	0	land	exercised
 vizkopa_vampire	0	cast	exercised
 vizzerdrix	0	cast	exercised
 vodalian_arcanist	0	ability:0	exercised
