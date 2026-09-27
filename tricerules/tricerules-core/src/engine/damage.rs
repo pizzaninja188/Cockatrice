@@ -565,7 +565,13 @@ impl GameEngine {
                 if let DamageRecipient::Permanent(recipient) = event.recipient {
                     let recipient_label =
                         object_display_name(&self.state, self.registry, recipient);
-                    if self.place_counters(recipient, counter, amount) > 0 {
+                    if self.place_counters(
+                        recipient,
+                        counter,
+                        amount,
+                        super::continuous::CounterPlacementOrigin::Effect,
+                    ) > 0
+                    {
                         events.push(ev_log(format!(
                             "{source_label} puts {amount} {} counter(s) on {recipient_label}.",
                             counter.label()
@@ -1119,7 +1125,12 @@ impl GameEngine {
                     && characteristics.has_type("Siege");
                 let _ = object;
                 if is_creature && event.source.wither {
-                    self.place_counters(permanent, CounterKind::MinusOneMinusOne, result.dealt);
+                    self.place_counters(
+                        permanent,
+                        CounterKind::MinusOneMinusOne,
+                        result.dealt,
+                        super::continuous::CounterPlacementOrigin::Damage,
+                    );
                 }
                 if defeated_siege {
                     self.stage_siege_defeat_trigger(permanent);

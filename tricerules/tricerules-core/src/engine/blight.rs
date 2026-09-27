@@ -1,4 +1,5 @@
 //! Shared CR 701.68 operation for Cinder Strike, Gristle Glutton and Chaos Spewer.
+use super::continuous::CounterPlacementOrigin;
 use super::*;
 use crate::state::BlightReceipt;
 
@@ -48,6 +49,7 @@ impl GameEngine {
         player: PlayerId,
         count: u32,
         creature: Option<ObjectId>,
+        origin: CounterPlacementOrigin,
     ) -> BlightReceipt {
         let creature = creature.map(|oid| TriggerObjectRef {
             object_id: oid,
@@ -60,7 +62,12 @@ impl GameEngine {
             controller_at_event: player,
         });
         if let Some(object) = &creature {
-            self.place_counters(object.object_id, CounterKind::MinusOneMinusOne, count);
+            self.place_counters(
+                object.object_id,
+                CounterKind::MinusOneMinusOne,
+                count,
+                origin,
+            );
         }
         BlightReceipt {
             player,

@@ -34,6 +34,49 @@ fn format_paid_card_costs_log(costs: &[PaidCardCost]) -> String {
     }
 }
 
+fn mana_amount_for_color(
+    color: tricerules_cards::Color,
+    count: u32,
+) -> tricerules_cards::ManaAmount {
+    use tricerules_cards::Color;
+    match color {
+        Color::White => tricerules_cards::ManaAmount {
+            w: count,
+            ..Default::default()
+        },
+        Color::Blue => tricerules_cards::ManaAmount {
+            u: count,
+            ..Default::default()
+        },
+        Color::Black => tricerules_cards::ManaAmount {
+            b: count,
+            ..Default::default()
+        },
+        Color::Red => tricerules_cards::ManaAmount {
+            r: count,
+            ..Default::default()
+        },
+        Color::Green => tricerules_cards::ManaAmount {
+            g: count,
+            ..Default::default()
+        },
+    }
+}
+
+fn multiply_mana_amount(
+    amount: tricerules_cards::ManaAmount,
+    multiplier: u32,
+) -> tricerules_cards::ManaAmount {
+    tricerules_cards::ManaAmount {
+        w: amount.w.saturating_mul(multiplier),
+        u: amount.u.saturating_mul(multiplier),
+        b: amount.b.saturating_mul(multiplier),
+        r: amount.r.saturating_mul(multiplier),
+        g: amount.g.saturating_mul(multiplier),
+        c: amount.c.saturating_mul(multiplier),
+    }
+}
+
 /// CR 702.8b: true if the card face is castable at instant speed (is an instant, or has flash).
 pub(super) fn castable_at_instant_speed(face: &tricerules_cards::FaceRef<'_>) -> bool {
     face.is_instant || face.keywords.contains(&tricerules_cards::Keyword::Flash)
@@ -1412,7 +1455,7 @@ impl GameEngine {
             })
             .map(|conditional| conditional.options.as_slice())
             .unwrap_or(default_options.as_slice());
-        let multiplier = ability.mana_source_counter().map_or(1, |counter| {
+        let source_counter_multiplier = ability.mana_source_counter().map_or(1, |counter| {
             self.state
                 .objects
                 .get(&permanent_id)
@@ -1420,19 +1463,98 @@ impl GameEngine {
                 .map(|object| object.counter_count(counter))
                 .unwrap_or(0)
         });
+        let multiplier = source_counter_multiplier
+            .saturating_mul(self.tapped_permanent_mana_multiplier(permanent_id, ability));
         Some(
             options
                 .iter()
-                .map(|amount| tricerules_cards::ManaAmount {
-                    w: amount.w * multiplier,
-                    u: amount.u * multiplier,
-                    b: amount.b * multiplier,
-                    r: amount.r * multiplier,
-                    g: amount.g * multiplier,
-                    c: amount.c * multiplier,
-                })
+                .map(|amount| multiply_mana_amount(*amount, multiplier))
                 .collect(),
         )
+    }
+
+    /// CR 106.12 / 614.1: replacement effects for tapping a permanent for mana apply only when
+    /// the activated mana ability has a tap symbol in its activation cost. Counter-paid storage
+    /// abilities without a tap cost are deliberately excluded.
+    fn tapped_permanent_mana_multiplier(
+        &self,
+        permanent_id: ObjectId,
+        ability: &tricerules_cards::ActivatedAbilityDef,
+    ) -> u32 {
+        if !ability
+            .costs
+            .iter()
+            .any(|cost| matches!(cost, AbilityCost::Tap))
+        {
+            return 1;
+        }
+        let Some(controller) = self
+            .state
+            .objects
+            .get(&permanent_id)
+            .filter(|source| source.zone == Zone::Battlefield)
+            .map(|source| source.controller)
+        else {
+            return 1;
+        };
+
+        let mut sources: Vec<_> = self
+            .state
+            .objects
+            .values()
+            .filter(|object| object.zone == Zone::Battlefield && object.controller == controller)
+            .map(|object| object.id)
+            .collect();
+        sources.sort_unstable();
+        sources
+            .into_iter()
+            .flat_map(|source| self.active_static_ability_definitions(source))
+            .filter_map(|static_ability| {
+                match static_ability {
+                tricerules_cards::primitives::StaticAbilityDef::MultiplyManaFromTappedPermanents {
+                    multiplier,
+                } => Some(multiplier),
+                _ => None,
+            }
+            })
+            .fold(1_u32, u32::saturating_mul)
+    }
+
+    /// Validate the bounded storage-land choice identically for payment previews and committed
+    /// activations. The maximum is derived from the live source and its color options are
+    /// card-authored, so request fields cannot supply either value.
+    pub(in crate::engine) fn validate_activation_mana_choice(
+        &self,
+        source: ObjectId,
+        source_zone: AbilitySourceZone,
+        ability: &ActivatedAbilityDef,
+        mana_option_index: u32,
+        x_value: u32,
+        first_color_count: u32,
+    ) -> Result<(), EngineError> {
+        if ability.storage_counter_split_mana().is_some() {
+            let source_object = self
+                .state
+                .objects
+                .get(&source)
+                .filter(|object| object.zone == Zone::Battlefield)
+                .ok_or(EngineError::Illegal("storage mana source missing"))?;
+            if source_zone != AbilitySourceZone::Battlefield
+                || mana_option_index != 0
+                || x_value > source_object.counter_count(tricerules_cards::CounterKind::Storage)
+                || first_color_count > x_value
+            {
+                return Err(EngineError::Illegal(
+                    "invalid storage mana X or color split",
+                ));
+            }
+            return Ok(());
+        }
+
+        if first_color_count != 0 || x_value != 0 {
+            return Err(EngineError::Illegal("unexpected mana X or color split"));
+        }
+        Ok(())
     }
 
     /// Printed activated abilities available from a nonbattlefield zone. Ability indices flatten
@@ -1488,6 +1610,8 @@ impl GameEngine {
         let mana_option_index = command.mana_option_index;
         let cost_selections = command.cost_selections.as_slice();
         let restricted_mana = command.restricted_mana.as_slice();
+        let x_value = command.x_value;
+        let mana_split_first_color_count = command.mana_split_first_color_count;
         if self.state.priority_player_id() != player && self.special_cast_method(player).is_none() {
             return Err(EngineError::Illegal("not your priority"));
         }
@@ -1569,6 +1693,14 @@ impl GameEngine {
                 (card_id, face_index, ability, ability_path)
             }
         };
+        self.validate_activation_mana_choice(
+            permanent_id,
+            source_zone,
+            &ability,
+            mana_option_index,
+            x_value,
+            mana_split_first_color_count,
+        )?;
         if source_zone == AbilitySourceZone::Battlefield
             && self.activated_abilities_prohibited(permanent_id)
         {
@@ -1600,7 +1732,7 @@ impl GameEngine {
             .as_ref()
             .is_some_and(|pending| pending.caster == player);
         if resolving_mana_payment || casting_mana_payment {
-            if ability.mana_options().is_none() {
+            if !ability.is_mana_ability() {
                 return Err(EngineError::Illegal(
                     "only mana abilities may be activated during payment",
                 ));
@@ -1608,7 +1740,7 @@ impl GameEngine {
         } else if self.state.priority_player_id() != player {
             return Err(EngineError::Illegal("not your priority"));
         }
-        if source_zone != AbilitySourceZone::Battlefield && ability.mana_options().is_some() {
+        if source_zone != AbilitySourceZone::Battlefield && ability.is_mana_ability() {
             return Err(EngineError::Illegal(
                 "nonbattlefield mana abilities are not supported",
             ));
@@ -1628,7 +1760,7 @@ impl GameEngine {
             return Err(EngineError::Illegal("activation limit reached"));
         }
 
-        if ability.mana_options().is_some() {
+        if ability.is_mana_ability() {
             let mut batch = self.resolve_mana_ability(
                 player,
                 idx,
@@ -1642,6 +1774,8 @@ impl GameEngine {
                 flex_payments,
                 cost_selections,
                 restricted_mana,
+                x_value,
+                mana_split_first_color_count,
                 command.payment.as_ref(),
             )?;
             if resolving_mana_payment {
@@ -1707,6 +1841,7 @@ impl GameEngine {
             flex_payments,
             cost_selections,
             restricted_mana,
+            x_value,
             targeting_cost,
             mana_reduction,
         )?;
@@ -2169,18 +2304,43 @@ impl GameEngine {
         flex_payments: &[rv1::FlexPipPayment],
         cost_selections: &[rv1::CostSelection],
         restricted_mana: &[rv1::ManaSpendSelection],
+        x_value: u32,
+        mana_split_first_color_count: u32,
         selection: Option<&rv1::PaymentSelection>,
     ) -> Result<RuledEventBatch, EngineError> {
         if !targets.is_empty() {
             return Err(EngineError::Illegal("mana ability takes no targets"));
         }
-        let Some(options) = self.active_mana_options(permanent_id, ability) else {
-            return Err(EngineError::Illegal("not a mana ability"));
+        self.validate_activation_mana_choice(
+            permanent_id,
+            AbilitySourceZone::Battlefield,
+            ability,
+            mana_option_index,
+            x_value,
+            mana_split_first_color_count,
+        )?;
+        let amount = if let Some((first_color, second_color)) = ability.storage_counter_split_mana()
+        {
+            let mut amount = mana_amount_for_color(first_color, mana_split_first_color_count);
+            let second_amount =
+                mana_amount_for_color(second_color, x_value - mana_split_first_color_count);
+            amount.w += second_amount.w;
+            amount.u += second_amount.u;
+            amount.b += second_amount.b;
+            amount.r += second_amount.r;
+            amount.g += second_amount.g;
+            amount.c += second_amount.c;
+            let multiplier = self.tapped_permanent_mana_multiplier(permanent_id, ability);
+            multiply_mana_amount(amount, multiplier)
+        } else {
+            let Some(options) = self.active_mana_options(permanent_id, ability) else {
+                return Err(EngineError::Illegal("not a mana ability"));
+            };
+            options
+                .get(mana_option_index as usize)
+                .copied()
+                .ok_or(EngineError::Illegal("invalid mana option"))?
         };
-        let amount = options
-            .get(mana_option_index as usize)
-            .copied()
-            .ok_or(EngineError::Illegal("invalid mana option"))?;
         let activation_uses = self.limited_activation_uses(permanent_id, ability_index, ability);
 
         let face_index = self.state.objects[&permanent_id].face_up_index;
@@ -2204,6 +2364,7 @@ impl GameEngine {
             flex_payments,
             cost_selections,
             restricted_mana,
+            x_value,
             0,
             self.activated_mana_reduction(player, permanent_id, ability)?,
         )?;
@@ -3927,12 +4088,83 @@ mod cast_snapshot_tests {
 #[cfg(test)]
 mod mana_payment_tests {
     use super::*;
+    use tricerules_cards::ActivationTiming;
 
     /// Build a 2-player engine and hand priority to player 0 so `pay_mana`'s priority gate passes.
     fn engine_with_priority() -> GameEngine {
         let mut e = GameEngine::new_with_default_decks(1, &[0, 1], 20).expect("new");
         e.state.priority_idx = 0;
         e
+    }
+
+    #[test]
+    fn issue_499_rejects_generic_x_on_an_ordinary_activated_ability() {
+        let mut e = engine_with_priority();
+        let source = e.state.players[0].hand.remove(0);
+        e.state.players[0].battlefield.push(source);
+        e.state.objects.get_mut(&source).unwrap().zone = Zone::Battlefield;
+
+        let ability = ActivatedAbilityDef {
+            ability_id: tricerules_cards::AbilityId::new("activated_01").unwrap(),
+            presentation: tricerules_cards::AbilityPresentation::Fallback,
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![AbilityCost::Mana(ManaCost::parse("{X}").unwrap())],
+            cost_modifiers: vec![],
+            effect: vec![SpellEffectKind::Draw {
+                who: PlayerRecipient::Controller,
+                count: Amount::Fixed(1),
+            }],
+            targeting: None,
+            timing: ActivationTiming::Normal,
+            conditions: vec![],
+            activation_limit: None,
+        };
+        let mut face = e.registry.get("island").unwrap().primary_face().clone();
+        face.activated_abilities = vec![ability];
+        let display_name = face.name.clone();
+        e.state.objects.get_mut(&source).unwrap().copiable_values =
+            Some(crate::state::CopiableValues {
+                source_card_id: "island".into(),
+                source_face_index: 0,
+                face,
+                room_faces: None,
+                display_name,
+            });
+        e.state.players[0].mana_pool.colorless = 2;
+        let generation = e
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or_default();
+        let command = rv1::RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::ActivateAbility(
+                rv1::ActivateAbility {
+                    source_object_id: source,
+                    ability_index: 0,
+                    source_zone: rv1::AbilitySourceZone::Battlefield as i32,
+                    expected_zone_change_generation: generation,
+                    x_value: 2,
+                    payment: Some(rv1::PaymentSelection {
+                        mana: Some(rv1::PaymentMana {
+                            c: 2,
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            )),
+        };
+
+        let error = e
+            .apply_command(0, &command)
+            .expect_err("non-storage activated X is outside the implemented payment path");
+        assert!(error
+            .to_string()
+            .contains("unexpected mana X or color split"));
+        assert_eq!(e.state.players[0].mana_pool.colorless, 2);
+        assert!(e.state.stack.is_empty());
     }
 
     #[test]

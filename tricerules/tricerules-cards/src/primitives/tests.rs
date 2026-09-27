@@ -883,6 +883,7 @@ fn issue_169_grouped_taps_cannot_pretend_to_supply_one_observed_object() {
 }
 
 use super::*;
+use crate::{AbilityId, AbilityPresentation, ManaCost};
 
 #[test]
 fn issue_172_expend_threshold_is_positive_and_defaults_to_controller() {
@@ -1827,6 +1828,62 @@ fn activation_limit_rejects_zero_maximum_for_every_scope() {
             .validate_shape()
             .is_err()
     );
+}
+
+fn storage_counter_split_ability(mana_cost: &str) -> ActivatedAbilityDef {
+    ActivatedAbilityDef {
+        ability_id: AbilityId::new("activated_03").unwrap(),
+        presentation: AbilityPresentation::Fallback,
+        source_zone: AbilitySourceZone::Battlefield,
+        costs: vec![
+            AbilityCost::Mana(ManaCost::parse(mana_cost).unwrap()),
+            AbilityCost::RemoveXStorageCountersFromSource,
+        ],
+        cost_modifiers: vec![],
+        effect: vec![
+            SpellEffectKind::ProduceSplitManaFromRemovedStorageCounters {
+                first_color: Color::Blue,
+                second_color: Color::Black,
+            },
+        ],
+        targeting: None,
+        timing: ActivationTiming::Normal,
+        conditions: vec![],
+        activation_limit: None,
+    }
+}
+
+#[test]
+fn storage_counter_split_mana_is_only_the_bounded_storage_land_shape() {
+    let ability = storage_counter_split_ability("{1}");
+    ability
+        .validate_shape()
+        .expect("the reviewed storage-land cost and effect shape validates");
+    assert_eq!(
+        ability.storage_counter_split_mana(),
+        Some((Color::Blue, Color::Black))
+    );
+    assert!(ability.is_mana_ability());
+    assert!(ability.mana_options().is_none());
+
+    for unsupported in ["{X}", "{2}", "{1}{U}"] {
+        let ability = storage_counter_split_ability(unsupported);
+        assert!(
+            ability.validate_shape().is_err(),
+            "unsupported cost {unsupported} cannot reuse the storage choice X"
+        );
+        assert!(ability.storage_counter_split_mana().is_none());
+    }
+}
+
+#[test]
+fn storage_counter_kind_has_a_distinct_typed_label() {
+    assert_eq!(
+        ron::from_str::<CounterKind>("Storage").expect("Storage counter parses"),
+        CounterKind::Storage
+    );
+    assert_eq!(CounterKind::Storage.label(), "storage");
+    assert_ne!(CounterKind::Storage, CounterKind::Charge);
 }
 
 fn source_counter_scaled_mana_effect() -> SpellEffectKind {

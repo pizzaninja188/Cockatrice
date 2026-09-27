@@ -311,6 +311,7 @@ fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
             | AbilityCost::ReturnUnblockedAttacker
             | AbilityCost::Blight { .. }
             | AbilityCost::RemoveCounters { .. }
+            | AbilityCost::RemoveXStorageCountersFromSource
             | AbilityCost::TapPermanents { .. }
             | AbilityCost::Mana(_)
             | AbilityCost::Waterbend(_)
@@ -332,6 +333,14 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 reason,
             })?;
         let ability = &identified.definition;
+        if let StaticAbilityDef::MultiplyManaFromTappedPermanents { multiplier } = ability {
+            if *multiplier < 2 {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "static replacement multiplier must be at least 2".into(),
+                });
+            }
+        }
         if let StaticAbilityDef::AdditionalTriggeredAbilityInstances {
             source_filter,
             condition,
@@ -2946,6 +2955,112 @@ mod tests {
             RegistryError::InvalidCard { reason, .. }
                 if reason.contains("requires a trigger that supplies an observed object")
         ));
+    }
+
+    #[test]
+    fn issue_499_split_mana_is_restricted_to_the_exact_activated_cost_and_effect_shape() {
+        let invalid_cards = [
+            (
+                "bad_storage_split_cost",
+                r#"(
+                    id: "bad_storage_split_cost", name: "Bad Storage Split Cost",
+                    face_id: "bad_storage_split_cost", types: ["Artifact"],
+                    activated_abilities: [(
+                        ability_id: "activated_01", presentation: Fallback,
+                        source_zone: Battlefield,
+                        costs: [Mana("{X}"), RemoveXStorageCountersFromSource],
+                        effect: [ProduceSplitManaFromRemovedStorageCounters(
+                            first_color: Blue, second_color: Black,
+                        )],
+                    )],
+                )"#,
+            ),
+            (
+                "bad_storage_counter_cost_without_split_output",
+                r#"(
+                    id: "bad_storage_counter_cost_without_split_output",
+                    name: "Bad Storage Counter Cost Without Split Output",
+                    face_id: "bad_storage_counter_cost_without_split_output",
+                    types: ["Artifact"],
+                    activated_abilities: [(
+                        ability_id: "activated_01", presentation: Fallback,
+                        source_zone: Battlefield,
+                        costs: [Mana("{1}"), RemoveXStorageCountersFromSource],
+                        effect: [Draw(count: 1)],
+                    )],
+                )"#,
+            ),
+            (
+                "bad_storage_split_trigger",
+                r#"(
+                    id: "bad_storage_split_trigger", name: "Bad Storage Split Trigger",
+                    face_id: "bad_storage_split_trigger", types: ["Artifact"],
+                    triggered_abilities: [(
+                        ability_id: "triggered_01", presentation: Fallback,
+                        trigger: WhenSelfEntersBattlefield,
+                        effect: [ProduceSplitManaFromRemovedStorageCounters(
+                            first_color: Blue, second_color: Black,
+                        )],
+                    )],
+                )"#,
+            ),
+            (
+                "bad_storage_split_nested_trigger",
+                r#"(
+                    id: "bad_storage_split_nested_trigger", name: "Bad Nested Split Trigger",
+                    face_id: "bad_storage_split_nested_trigger", types: ["Artifact"],
+                    triggered_abilities: [(
+                        ability_id: "triggered_01", presentation: Fallback,
+                        trigger: WhenSelfEntersBattlefield,
+                        effect: [Conditional(
+                            condition: SourceCounterCount(counter: Storage, min: Some(1)),
+                            effect: ProduceSplitManaFromRemovedStorageCounters(
+                                first_color: Blue, second_color: Black,
+                            ),
+                        )],
+                    )],
+                )"#,
+            ),
+            (
+                "bad_storage_split_reflexive",
+                r#"(
+                    id: "bad_storage_split_reflexive", name: "Bad Storage Split Reflexive",
+                    face_id: "bad_storage_split_reflexive", types: ["Sorcery"],
+                    spell_effect: [CreateReflexiveTrigger(ability: (
+                        ability_id: "reflexive_01", presentation: Fallback,
+                        effect: [ProduceSplitManaFromRemovedStorageCounters(
+                            first_color: Blue, second_color: Black,
+                        )],
+                    ))],
+                )"#,
+            ),
+            (
+                "bad_storage_split_nested_reflexive",
+                r#"(
+                    id: "bad_storage_split_nested_reflexive", name: "Bad Nested Split Reflexive",
+                    face_id: "bad_storage_split_nested_reflexive", types: ["Artifact"],
+                    triggered_abilities: [(
+                        ability_id: "triggered_01", presentation: Fallback,
+                        trigger: WhenSelfEntersBattlefield,
+                        effect: [CreateReflexiveTrigger(ability: (
+                            ability_id: "reflexive_01", presentation: Fallback,
+                            effect: [ProduceSplitManaFromRemovedStorageCounters(
+                                first_color: Blue, second_color: Black,
+                            )],
+                        ))],
+                    )],
+                )"#,
+            ),
+        ];
+
+        for (id, card) in invalid_cards {
+            let error = CardRegistry::from_chunks(&[card]).expect_err("unsupported split shape");
+            assert!(
+                matches!(&error, RegistryError::InvalidCard { id: invalid_id, reason }
+                    if invalid_id == id && reason.contains("storage-counter split mana")),
+                "{id}: {error:?}"
+            );
+        }
     }
 
     #[test]

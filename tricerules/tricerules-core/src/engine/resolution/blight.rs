@@ -3,7 +3,12 @@ use super::*;
 pub(super) fn blight(cx: &mut EffectCx<'_>, count: u32) -> Result<EffectOutcome, EngineError> {
     let candidates = cx.engine.blight_candidates(cx.controller);
     if candidates.is_empty() {
-        let receipt = cx.engine.complete_blight(cx.controller, count, None);
+        let receipt = cx.engine.complete_blight(
+            cx.controller,
+            count,
+            None,
+            super::super::continuous::CounterPlacementOrigin::Effect,
+        );
         cx.engine.fire_triggers(&[GameEvent::Blighted(receipt)]);
         cx.events.push(ev_log(format!(
             "P{} blights {count}; no creature can receive counters.",
@@ -92,7 +97,12 @@ impl GameEngine {
             return Err(EngineError::Illegal("stale Blight creature"));
         }
         let mut stack = stack.clone();
-        let receipt = self.complete_blight(pending.deciding_player, *count, Some(chosen));
+        let receipt = self.complete_blight(
+            pending.deciding_player,
+            *count,
+            Some(chosen),
+            super::super::continuous::CounterPlacementOrigin::Effect,
+        );
         self.fire_triggers(&[GameEvent::Blighted(receipt)]);
         stack.item.blight_receipts.push(receipt);
         let name = object_display_name(&self.state, self.registry, chosen);

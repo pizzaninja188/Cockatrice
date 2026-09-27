@@ -452,6 +452,77 @@ TEST_F(RuledClientTest, SuspendingPaymentDoesNotRefundTheOuterSpellIntoTheManaPo
     EXPECT_EQ(payment.takeAllOptimisticManaCounterIds(), QVector<int>({17}));
 }
 
+TEST_F(RuledClientTest, XCounterManaPromptSubmitsTheChosenSplitAndCancellationRestoresOuterPayment)
+{
+    QVector<QPair<RuledXCounterManaPromptStep, quint32>> prompts;
+    const auto selected = ruledPromptXCounterManaSplit(
+        4, [&](RuledXCounterManaPromptStep step, quint32 maximum) -> std::optional<quint32> {
+            prompts.append({step, maximum});
+            return prompts.size() == 1 ? 3u : 2u;
+        });
+    ASSERT_TRUE(selected);
+    EXPECT_EQ(selected->xValue, 3u);
+    EXPECT_EQ(selected->firstColorCount, 2u);
+    const QVector<QPair<RuledXCounterManaPromptStep, quint32>> expectedPrompts = {
+        {RuledXCounterManaPromptStep::ChooseX, 4},
+        {RuledXCounterManaPromptStep::ChooseFirstColorCount, 3},
+    };
+    EXPECT_EQ(prompts, expectedPrompts);
+
+    PendingActivatedAbility pending;
+    pending.permanentOid = 501;
+    pending.abilityIndex = 2;
+    pending.xValue = selected->xValue;
+    pending.manaSplitFirstColorCount = selected->firstColorCount;
+    ruled::v1::ActivateAbility command;
+    pending.writeActivationHeader(command);
+    EXPECT_EQ(command.x_value(), 3u);
+    EXPECT_EQ(command.mana_split_first_color_count(), 2u);
+
+    QVector<RuledXCounterManaPromptStep> canceledPrompts;
+    const auto canceled =
+        ruledPromptXCounterManaSplit(4, [&](RuledXCounterManaPromptStep step, quint32) -> std::optional<quint32> {
+            canceledPrompts.append(step);
+            if (step == RuledXCounterManaPromptStep::ChooseX) {
+                return 3u;
+            }
+            return std::nullopt;
+        });
+    EXPECT_FALSE(canceled);
+    const QVector<RuledXCounterManaPromptStep> expectedCanceledPrompts = {
+        RuledXCounterManaPromptStep::ChooseX,
+        RuledXCounterManaPromptStep::ChooseFirstColorCount,
+    };
+    EXPECT_EQ(canceledPrompts, expectedCanceledPrompts);
+
+    auto &payment = state->payment;
+    payment.begin();
+    ASSERT_TRUE(payment.payMana('U', 0, 17));
+    auto outer = payment.suspend();
+    payment.begin(true);
+    EXPECT_TRUE(payment.active);
+    payment.clear();            // The canceled activation never spends its nested payment.
+    payment = std::move(outer); // Same restoration path used by cancelPendingActivatedAbility.
+    EXPECT_TRUE(payment.active);
+    EXPECT_EQ(payment.selection.mana().u(), 1u);
+}
+
+TEST(RuledPendingCastTest, XCounterManaPromptAllowsZeroWithoutAskingForASplit)
+{
+    int promptCount = 0;
+    const auto selected = ruledPromptXCounterManaSplit(
+        0, [&](RuledXCounterManaPromptStep step, quint32 maximum) -> std::optional<quint32> {
+            ++promptCount;
+            EXPECT_EQ(step, RuledXCounterManaPromptStep::ChooseX);
+            EXPECT_EQ(maximum, 0u);
+            return 0u;
+        });
+    ASSERT_TRUE(selected);
+    EXPECT_EQ(selected->xValue, 0u);
+    EXPECT_EQ(selected->firstColorCount, 0u);
+    EXPECT_EQ(promptCount, 1);
+}
+
 TEST_F(RuledClientTest, NestedPaymentsDoNotReusePreviewTransactionIds)
 {
     auto &payment = state->payment;
@@ -4232,6 +4303,7 @@ TEST_F(RuledClientTest, AbilityDiagnosticsDescribeEntriesAndDropExpiredPrivateOf
                                {"manaCost", "{1}"},
                                {"manaProduced", "G"},
                                {"manaOptionLabels", QJsonArray{}},
+                               {"xCounterManaChoice", QJsonValue(QJsonValue::Null)},
                                {"costLabel", "{1}, {T}"},
                                {"activatable", true},
                                {"hasOnlyTapCost", false}};
@@ -4935,6 +5007,41 @@ TEST_F(RuledClientTest, ZeroOutputManaAbilityRetainsItsSelectableOptionsDuringPa
         EXPECT_EQ(ordinaryOptions.at(i).manaOptionIndex, i);
 }
 
+TEST_F(RuledClientTest, XCounterManaChoiceIsParsedAsAnEnginePublishedManaAbility)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *object = batch.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    object->set_object_id(203);
+    auto *ability = object->add_activated_abilities();
+    ability->set_ability_index(2);
+    ability->set_text("{1}, Remove X storage counters: Add X mana in any combination of {U} and {B}.");
+    ability->set_mana_cost("{1}");
+    ability->set_activatable(true);
+    auto *choice = ability->mutable_x_counter_mana_choice();
+    choice->set_counter_label("storage");
+    choice->set_max_x(4);
+    choice->set_first_color("U");
+    choice->set_second_color("B");
+    apply(batch);
+
+    const auto decoded = state->activatedAbilityForOid(203, 2);
+    ASSERT_TRUE(decoded);
+    ASSERT_TRUE(decoded->xCounterManaChoice);
+    EXPECT_EQ(decoded->xCounterManaChoice->counterLabel, QStringLiteral("storage"));
+    EXPECT_EQ(decoded->xCounterManaChoice->maxX, 4u);
+    EXPECT_EQ(decoded->xCounterManaChoice->firstColor, QStringLiteral("U"));
+    EXPECT_EQ(decoded->xCounterManaChoice->secondColor, QStringLiteral("B"));
+    EXPECT_TRUE(decoded->isManaAbility());
+    EXPECT_FALSE(decoded->usesDirectManaActivation());
+
+    const auto nestedOptions = RuledPendingCast::cardActionMenuOptions({}, *state, 203, true);
+    ASSERT_EQ(nestedOptions.size(), 1);
+    EXPECT_EQ(nestedOptions.first().kind, RuledCardActionMenuOption::Kind::ActivateAbility);
+    EXPECT_EQ(nestedOptions.first().index, 2);
+    EXPECT_EQ(nestedOptions.first().manaOptionIndex, 0);
+    EXPECT_TRUE(nestedOptions.first().enabled);
+}
+
 TEST_F(RuledClientTest, PaymentCandidateAndManaAbilityShareOneCardMenu)
 {
     state->activatedAbilitiesByOid[203] = {RuledAbilityEntry{"{T}: Add {G}.", {}, "G", {}, true}};
@@ -4963,12 +5070,16 @@ TEST(RuledPendingCastTest, ActivationHeaderPreservesSelectedManaOptionAndSourceI
     pending.abilityIndex = 2;
     pending.manaOptionIndex = 3;
     pending.expectedZoneChangeGeneration = 7;
+    pending.xValue = 4;
+    pending.manaSplitFirstColorCount = 1;
     ruled::v1::ActivateAbility command;
     pending.writeActivationHeader(command);
     EXPECT_EQ(command.source_object_id(), 501u);
     EXPECT_EQ(command.ability_index(), 2u);
     EXPECT_EQ(command.expected_zone_change_generation(), 7u);
     EXPECT_EQ(command.mana_option_index(), 3u);
+    EXPECT_EQ(command.x_value(), 4u);
+    EXPECT_EQ(command.mana_split_first_color_count(), 1u);
 }
 
 TEST_F(RuledClientTest, TriggerModesBecomePromptOptionsAndSubmitTheChosenMode)

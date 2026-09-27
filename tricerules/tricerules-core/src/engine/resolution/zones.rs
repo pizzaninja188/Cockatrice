@@ -2937,6 +2937,7 @@ fn place_explore_counter(engine: &mut GameEngine, explorer: TriggerObjectRef) {
             CounterKind::PlusOnePlusOne,
             1,
             false,
+            super::super::continuous::CounterPlacementOrigin::Effect,
         ) {
             engine.fire_triggers(&[event]);
         }

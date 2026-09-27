@@ -642,6 +642,7 @@ pub(super) fn earthbend(
         oid,
         tricerules_cards::primitives::CounterKind::PlusOnePlusOne,
         count,
+        super::super::continuous::CounterPlacementOrigin::Effect,
     );
     super::misc::create_delayed_trigger(
         cx,
@@ -916,8 +917,13 @@ pub(super) fn put_counters(
         }
 
         let tgt = object_display_name(&engine.state, engine.registry, tid);
-        let Some(counter_event) = engine.place_counters_with_event(tid, counter, count, false)
-        else {
+        let Some(counter_event) = engine.place_counters_with_event(
+            tid,
+            counter,
+            count,
+            false,
+            super::super::continuous::CounterPlacementOrigin::Effect,
+        ) else {
             continue;
         };
         let GameEvent::CountersPlaced {
@@ -985,8 +991,13 @@ pub(super) fn put_counters_all(
     let mut counter_events = Vec::new();
     for tid in affected {
         let tgt = object_display_name(&engine.state, engine.registry, tid);
-        let Some(counter_event) = engine.place_counters_with_event(tid, counter, count, false)
-        else {
+        let Some(counter_event) = engine.place_counters_with_event(
+            tid,
+            counter,
+            count,
+            false,
+            super::super::continuous::CounterPlacementOrigin::Effect,
+        ) else {
             continue;
         };
         let GameEvent::CountersPlaced {
@@ -1077,9 +1088,13 @@ pub(super) fn put_counters_all_planeswalkers(
     let mut counter_events = Vec::new();
     for object_id in affected {
         let target_name = object_display_name(&engine.state, engine.registry, object_id);
-        let Some(counter_event) =
-            engine.place_counters_with_event(object_id, counter, count, false)
-        else {
+        let Some(counter_event) = engine.place_counters_with_event(
+            object_id,
+            counter,
+            count,
+            false,
+            super::super::continuous::CounterPlacementOrigin::Effect,
+        ) else {
             continue;
         };
         let GameEvent::CountersPlaced {
@@ -1156,7 +1171,12 @@ pub(super) fn change_counters(
             let changed = if removing {
                 cx.engine.remove_counters(oid, kind, count)
             } else {
-                cx.engine.place_counters(oid, kind, count)
+                cx.engine.place_counters(
+                    oid,
+                    kind,
+                    count,
+                    super::super::continuous::CounterPlacementOrigin::Effect,
+                )
             };
             if changed > 0 {
                 cx.events.push(ev_log(format!(

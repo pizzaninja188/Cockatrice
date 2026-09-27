@@ -46,6 +46,14 @@ class RuledClientHost;
 
 /// One engine-published activation's presentation and public availability. Targeting, source
 /// identity and recipient-specific payment legality remain in their existing state tables.
+struct RuledXCounterManaChoice
+{
+    QString counterLabel;
+    quint32 maxX = 0;
+    QString firstColor;
+    QString secondColor;
+};
+
 struct RuledAbilityEntry
 {
     QString text;
@@ -58,10 +66,12 @@ struct RuledAbilityEntry
     bool hasOnlyTapCost = false;
     /// Ordered choices retained when the current output is empty, e.g. source-scaled mana at zero counters.
     QStringList manaOptionLabels;
+    /// Engine-bounded X and two-color split for storage-counter mana abilities.
+    std::optional<RuledXCounterManaChoice> xCounterManaChoice;
 
     [[nodiscard]] bool isManaAbility() const
     {
-        return !manaProduced.isEmpty() || !manaOptionLabels.isEmpty();
+        return !manaProduced.isEmpty() || !manaOptionLabels.isEmpty() || xCounterManaChoice.has_value();
     }
 
     [[nodiscard]] QStringList manaOptionsForSelection() const

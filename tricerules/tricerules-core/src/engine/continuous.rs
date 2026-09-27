@@ -6,6 +6,18 @@
 use super::resolution::resolve_creature_scope;
 use super::*;
 
+/// The rules event that causes a counter placement. Only effect placements participate in the
+/// narrow CR 614.16 replacement implemented for #499; costs, turn-based actions, and entry
+/// counters stay on their own rules paths.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum CounterPlacementOrigin {
+    Effect,
+    Cost,
+    TurnBased,
+    Entry,
+    Damage,
+}
+
 impl GameEngine {
     /// CR 702.195: Storied is a static ability that establishes an irreversible player
     /// designation. This check runs at every state-stabilization seam that can precede trigger
@@ -150,10 +162,12 @@ impl GameEngine {
         target: ObjectId,
         kind: CounterKind,
         count: u32,
+        origin: CounterPlacementOrigin,
     ) -> u32 {
         if count == 0 || !self.can_receive_counters(target) {
             return 0;
         }
+        let count = self.ordinary_counter_placement_replaced_count(target, count, origin);
         let timestamp = self.state.command_index;
         self.state
             .objects
@@ -163,15 +177,56 @@ impl GameEngine {
         count
     }
 
+    /// CR 614.16: apply the implemented counter replacement only to counters placed by effects
+    /// on a permanent controlled by the source of each active replacement. This deliberately
+    /// leaves paid costs, turn-based actions, and entry counters outside the supported subset.
+    fn ordinary_counter_placement_replaced_count(
+        &self,
+        target: ObjectId,
+        count: u32,
+        origin: CounterPlacementOrigin,
+    ) -> u32 {
+        if origin != CounterPlacementOrigin::Effect {
+            return count;
+        }
+        let Some(target_controller) = self.controller_of(target) else {
+            return count;
+        };
+        let mut sources: Vec<_> = self
+            .state
+            .objects
+            .values()
+            .filter(|object| {
+                object.zone == Zone::Battlefield && object.controller == target_controller
+            })
+            .map(|object| object.id)
+            .collect();
+        sources.sort_unstable();
+
+        let mut replaced = count;
+        for source in sources {
+            for ability in self.active_static_ability_definitions(source) {
+                if matches!(
+                    ability,
+                    StaticAbilityDef::DoubleEffectCountersPlacedOnPermanentsYouControl
+                ) {
+                    replaced = replaced.saturating_mul(2);
+                }
+            }
+        }
+        replaced
+    }
+
     pub(super) fn place_counters_with_event(
         &mut self,
         target: ObjectId,
         kind: CounterKind,
         count: u32,
         read_ahead_entry: bool,
+        origin: CounterPlacementOrigin,
     ) -> Option<GameEvent> {
         let before = self.state.objects.get(&target)?.counter_count(kind);
-        let placed = self.place_counters(target, kind, count);
+        let placed = self.place_counters(target, kind, count, origin);
         if placed == 0 {
             return None;
         }
@@ -380,7 +435,9 @@ impl GameEngine {
                 | StaticAbilityDef::Storied
                 | StaticAbilityDef::AdditionalTriggeredAbilityInstances { .. }
                 | StaticAbilityDef::ProhibitLifeGain { .. }
-                | StaticAbilityDef::ProhibitCounters { .. } => {
+                | StaticAbilityDef::ProhibitCounters { .. }
+                | StaticAbilityDef::DoubleEffectCountersPlacedOnPermanentsYouControl
+                | StaticAbilityDef::MultiplyManaFromTappedPermanents { .. } => {
                     // Queried at the relevant event; no independent effect record is needed.
                 }
                 StaticAbilityDef::EntersAsCopy { .. } => {
@@ -1367,5 +1424,99 @@ mod issue_461_activation_prohibition_tests {
         assert!(engine.activated_abilities_prohibited(target_id));
         engine.state.objects.get_mut(&aura_id).unwrap().zone = Zone::Graveyard;
         assert!(!engine.activated_abilities_prohibited(target_id));
+    }
+}
+
+#[cfg(test)]
+mod issue_499_effect_counter_replacement_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    fn fixture_object(id: ObjectId, card_id: &str) -> GameObject {
+        GameObject {
+            id,
+            owner: 0,
+            base_controller: 0,
+            controller: 0,
+            card_id: card_id.into(),
+            copiable_values: None,
+            token_origin: None,
+            token_faces: None,
+            copy_revision: 0,
+            zone: Zone::Battlefield,
+            tapped: false,
+            summoning_sick: false,
+            power: None,
+            toughness: None,
+            damage: 0,
+            deathtouch_damage: false,
+            counters: BTreeMap::new(),
+            counter_timestamps: BTreeMap::new(),
+            attached_to: None,
+            regeneration_shields: 0,
+            must_attack_if_able: false,
+            must_block_if_able: false,
+            face_up_index: 0,
+            face_down: false,
+        }
+    }
+
+    #[test]
+    fn effect_counter_replacement_excludes_cost_turn_based_and_entry_origins() {
+        let target = r#"(
+            id: "counter_target", name: "Counter Target", face_id: "counter_target",
+            types: ["Land"],
+        )"#;
+        let replacement = r#"(
+            id: "effect_counter_replacement", name: "Effect Counter Replacement",
+            face_id: "effect_counter_replacement", types: ["Enchantment"],
+            static_abilities: [(
+                ability_id: "static_01", presentation: Fallback,
+                definition: DoubleEffectCountersPlacedOnPermanentsYouControl,
+            )],
+        )"#;
+        let registry =
+            tricerules_cards::CardRegistry::from_chunks_and_tokens(&[target, replacement], &[])
+                .expect("typed replacement fixture");
+
+        let registry: &'static tricerules_cards::CardRegistry = Box::leak(Box::new(registry));
+        for (index, (origin, expected)) in [
+            (CounterPlacementOrigin::Effect, 2),
+            (CounterPlacementOrigin::Cost, 1),
+            (CounterPlacementOrigin::TurnBased, 1),
+            (CounterPlacementOrigin::Entry, 1),
+            (CounterPlacementOrigin::Damage, 1),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut engine = GameEngine::new(499_100 + index as u64, &[0, 1], 20, None, true)
+                .expect("new engine");
+            engine.registry = registry;
+            let target_id = 20;
+            let replacement_id = 21;
+            engine
+                .state
+                .objects
+                .insert(target_id, fixture_object(target_id, "counter_target"));
+            engine.state.objects.insert(
+                replacement_id,
+                fixture_object(replacement_id, "effect_counter_replacement"),
+            );
+            engine.state.players[0]
+                .battlefield
+                .extend([target_id, replacement_id]);
+
+            assert_eq!(
+                engine.place_counters(target_id, CounterKind::Storage, 1, origin),
+                expected,
+                "origin {origin:?}"
+            );
+            assert_eq!(
+                engine.state.objects[&target_id].counter_count(CounterKind::Storage),
+                expected,
+                "origin {origin:?}"
+            );
+        }
     }
 }

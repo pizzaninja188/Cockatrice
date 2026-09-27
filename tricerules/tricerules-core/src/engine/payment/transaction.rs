@@ -1121,6 +1121,7 @@ impl GameEngine {
             flex_payments,
             selections,
             restricted_mana,
+            0,
             extra_generic,
             ActivatedManaReduction {
                 generic: generic_reduction,
@@ -1140,6 +1141,7 @@ impl GameEngine {
         flex_payments: &[rv1::FlexPipPayment],
         selections: &[rv1::CostSelection],
         restricted_mana: &[rv1::ManaSpendSelection],
+        x_value: u32,
         extra_generic: u32,
         mana_reduction: ActivatedManaReduction,
     ) -> Result<PreparedPaymentCosts, EngineError> {
@@ -1243,6 +1245,31 @@ impl GameEngine {
                         kind,
                         count: *count,
                         payment_source: debit_source,
+                    });
+                }
+                AbilityCost::RemoveXStorageCountersFromSource => {
+                    let source = self
+                        .state
+                        .objects
+                        .get(&permanent_id)
+                        .filter(|object| object.zone == Zone::Battlefield)
+                        .ok_or(EngineError::Illegal("storage counter cost source missing"))?;
+                    if source.counter_count(CounterKind::Storage) < x_value {
+                        return Err(EngineError::Illegal("not enough storage counters"));
+                    }
+                    debits.push(CostDebit::RemoveCounters {
+                        object: rv1::CostObjectRef {
+                            object_id: permanent_id,
+                            zone_change_generation: self
+                                .state
+                                .zone_change_generation
+                                .get(&permanent_id)
+                                .copied()
+                                .unwrap_or(0),
+                        },
+                        kind: CounterKind::Storage,
+                        count: x_value,
+                        payment_source: CounterDebitSource::Source,
                     });
                 }
                 AbilityCost::Blight { count } => {
@@ -1680,7 +1707,12 @@ impl GameEngine {
                     self.remove_counters(object.object_id, kind, count);
                 }
                 CostDebit::Blight { object, count } => {
-                    let receipt = self.complete_blight(plan.player, count, Some(object.object_id));
+                    let receipt = self.complete_blight(
+                        plan.player,
+                        count,
+                        Some(object.object_id),
+                        super::super::continuous::CounterPlacementOrigin::Cost,
+                    );
                     payment.trigger_events.push(GameEvent::Blighted(receipt));
                     payment.blight_receipts.push(receipt);
                 }
@@ -1688,7 +1720,12 @@ impl GameEngine {
                     object_id, delta, ..
                 } => {
                     if delta > 0 {
-                        self.place_counters(object_id, CounterKind::Loyalty, delta as u32);
+                        self.place_counters(
+                            object_id,
+                            CounterKind::Loyalty,
+                            delta as u32,
+                            super::super::continuous::CounterPlacementOrigin::Cost,
+                        );
                         continue;
                     }
                     let object = self
@@ -3057,6 +3094,7 @@ mod convoke_transaction_tests {
                         &[],
                         &[],
                         &[],
+                        0,
                         increase,
                         ActivatedManaReduction {
                             generic: reduction,
@@ -3107,6 +3145,7 @@ mod convoke_transaction_tests {
                         &[],
                         &[],
                         &[],
+                        0,
                         increase,
                         ActivatedManaReduction {
                             generic: reduction,

@@ -1950,9 +1950,10 @@ impl GameEngine {
                         zones::exile_source_then_return_transformed(&mut cx, effect)?
                     }
                     effect @ (SpellEffectKind::ProduceMana { .. }
-                    | SpellEffectKind::ProduceManaPerSourceCounter { .. }) => {
-                        misc::produce_mana(&mut cx, effect)?
-                    }
+                    | SpellEffectKind::ProduceManaPerSourceCounter { .. }
+                    | SpellEffectKind::ProduceSplitManaFromRemovedStorageCounters {
+                        ..
+                    }) => misc::produce_mana(&mut cx, effect)?,
                     effect @ SpellEffectKind::AddMana { .. } => misc::add_mana(&mut cx, effect)?,
                     effect @ SpellEffectKind::MayBehold { .. } => {
                         choices::may_behold(&mut cx, effect)?
@@ -3847,7 +3848,12 @@ mod attached_subject_tests {
             1
         );
         assert_eq!(
-            engine.place_counters(target, CounterKind::PlusOnePlusOne, 1),
+            engine.place_counters(
+                target,
+                CounterKind::PlusOnePlusOne,
+                1,
+                super::continuous::CounterPlacementOrigin::Effect,
+            ),
             0
         );
         assert_eq!(engine.remove_counters(target, CounterKind::Stun, 1), 1);
@@ -3860,7 +3866,15 @@ mod attached_subject_tests {
             None,
         )
         .unwrap();
-        assert_eq!(engine.place_counters(target, CounterKind::Stun, 1), 1);
+        assert_eq!(
+            engine.place_counters(
+                target,
+                CounterKind::Stun,
+                1,
+                super::continuous::CounterPlacementOrigin::Effect,
+            ),
+            1
+        );
         assert_eq!(
             attempt_untap(&mut engine, target),
             UntapOutcome::ReplacedByStun
@@ -3881,7 +3895,12 @@ mod attached_subject_tests {
             (CounterKind::Keyword(Keyword::Flying), 1),
         ]);
         for (&kind, &count) in &bag {
-            engine.place_counters(departed, kind, count);
+            engine.place_counters(
+                departed,
+                kind,
+                count,
+                super::continuous::CounterPlacementOrigin::Effect,
+            );
         }
         move_object_to_zone(
             &mut engine.state,
@@ -4926,7 +4945,15 @@ mod attached_subject_tests {
             CounterKind::Loyalty,
             CounterKind::Stun,
         ] {
-            assert_eq!(engine.place_counters(source, kind, 2), 0);
+            assert_eq!(
+                engine.place_counters(
+                    source,
+                    kind,
+                    2,
+                    super::continuous::CounterPlacementOrigin::Effect,
+                ),
+                0
+            );
             assert_eq!(engine.state.objects[&source].counter_count(kind), 0);
         }
         let item = quantity_item(
@@ -4963,7 +4990,12 @@ mod attached_subject_tests {
         let aura = add_battlefield_object(&mut engine, 0, "pacifism");
         let first = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         let second = add_battlefield_object(&mut engine, 1, "grizzly_bears");
-        engine.place_counters(first, CounterKind::PlusOnePlusOne, 1);
+        engine.place_counters(
+            first,
+            CounterKind::PlusOnePlusOne,
+            1,
+            super::continuous::CounterPlacementOrigin::Effect,
+        );
         let mut values = engine.copiable_values_for(aura).unwrap();
         values.face.static_abilities = vec![tricerules_cards::IdentifiedAbility::fallback(
             "static_01",

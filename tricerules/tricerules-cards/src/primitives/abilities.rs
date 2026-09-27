@@ -169,6 +169,32 @@ impl ActivatedAbilityDef {
         }
     }
 
+    /// The storage-land output choice, if this ability has the supported source-bound X cost.
+    /// The generic `{1}` component is paid in addition to removing exactly X counters.
+    pub fn storage_counter_split_mana(&self) -> Option<(Color, Color)> {
+        let has_printed_generic_one = matches!(
+            self.costs.as_slice(),
+            [AbilityCost::Mana(cost), AbilityCost::RemoveXStorageCountersFromSource]
+                if cost.to_string() == "{1}"
+        );
+        if self.source_zone != AbilitySourceZone::Battlefield || !has_printed_generic_one {
+            return None;
+        }
+        match self.effect.as_slice() {
+            [SpellEffectKind::ProduceSplitManaFromRemovedStorageCounters {
+                first_color,
+                second_color,
+            }] if first_color != second_color => Some((*first_color, *second_color)),
+            _ => None,
+        }
+    }
+
+    /// CR 605.1a classification for all supported mana abilities, including an output selected
+    /// by a bounded X/split prompt instead of the enumerated `mana_options` list.
+    pub fn is_mana_ability(&self) -> bool {
+        self.mana_options().is_some() || self.storage_counter_split_mana().is_some()
+    }
+
     pub fn mana_source_counter(&self) -> Option<CounterKind> {
         match self.effect.as_slice() {
             [SpellEffectKind::ProduceManaPerSourceCounter { counter, .. }] => Some(*counter),
@@ -230,6 +256,22 @@ impl ActivatedAbilityDef {
         if has_source_counter_scaled_mana && !is_supported_source_counter_mana_ability {
             return Err(
                 "ProduceManaPerSourceCounter must be the sole direct effect of a battlefield activated ability whose only cost is tap"
+                    .into(),
+            );
+        }
+        let has_storage_counter_split_mana = self
+            .effect
+            .iter()
+            .any(SpellEffectKind::contains_storage_counter_split_mana);
+        let has_x_storage_counter_cost = self
+            .costs
+            .iter()
+            .any(|cost| matches!(cost, AbilityCost::RemoveXStorageCountersFromSource));
+        if (has_storage_counter_split_mana || has_x_storage_counter_cost)
+            && self.storage_counter_split_mana().is_none()
+        {
+            return Err(
+                "RemoveXStorageCountersFromSource and storage-counter split mana must appear together as the sole direct output of a battlefield ability with a {1} cost"
                     .into(),
             );
         }
@@ -1295,6 +1337,15 @@ impl TriggeredAbilityDef {
                     .into(),
             );
         }
+        if effects
+            .iter()
+            .any(|effect| effect.contains_storage_counter_split_mana())
+        {
+            return Err(
+                "storage-counter split mana is supported only by its exact battlefield activated ability"
+                    .into(),
+            );
+        }
         let is_spell_cast_trigger = matches!(
             self.trigger,
             TriggerCondition::WheneverPlayerCastsSpell { .. }
@@ -1412,6 +1463,16 @@ impl ReflexiveTriggeredAbilityDef {
         {
             return Err(
                 "source-counter-scaled mana is supported only for tapped activated abilities"
+                    .into(),
+            );
+        }
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::contains_storage_counter_split_mana)
+        {
+            return Err(
+                "storage-counter split mana is supported only by its exact battlefield activated ability"
                     .into(),
             );
         }
@@ -1764,6 +1825,13 @@ pub enum StaticAbilityDef {
         #[serde(default)]
         affected: CounterPlacementAffected,
     },
+    /// CR 614.16: double counters placed on permanents you control by resolving effects.
+    /// This narrow Doubling Season counter clause excludes paid costs, turn-based actions, and
+    /// entry-counter replacement; token doubling is not represented by this variant.
+    DoubleEffectCountersPlacedOnPermanentsYouControl,
+    /// CR 106.12: modify mana from a permanent tapped to activate a mana ability. The multiplier
+    /// covers Mana Reflection and Nyxbloom Ancient's corresponding two- and three-fold effects.
+    MultiplyManaFromTappedPermanents { multiplier: u32 },
     /// CR 119.7 / 614.17: selected players cannot gain life while this ability is active.
     /// Giant Cindermaw and Rampaging Ferocidon affect all players. This is a prohibition,
     /// not damage prevention or a replacement effect, and is queried at each attempted gain.

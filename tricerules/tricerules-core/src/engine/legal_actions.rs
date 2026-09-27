@@ -98,7 +98,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 }
                 for (ai, ability, _, _) in eng.effective_activated_abilities(poid) {
                     let key = (poid as u64) << 32 | ai as u64;
-                    if ability.mana_options().is_some() {
+                    if ability.is_mana_ability() {
                         mana_ability_keys.insert(key);
                     }
                     mana_payment_by_ability.insert(
@@ -416,6 +416,19 @@ pub(super) fn activated_ability_info(
         .map(|object| object.controller)
         .unwrap_or_default();
     let mana_cost = eng.effective_ability_mana_cost(controller, source_id, ability);
+    let x_counter_mana_choice = ability.storage_counter_split_mana().map(|(first, second)| {
+        rv1::ability_info::XCounterManaChoice {
+            counter_label: tricerules_cards::CounterKind::Storage.label().to_string(),
+            max_x: eng
+                .state
+                .objects
+                .get(&source_id)
+                .map(|object| object.counter_count(tricerules_cards::CounterKind::Storage))
+                .unwrap_or(0),
+            first_color: mana_color_symbol(first).to_string(),
+            second_color: mana_color_symbol(second).to_string(),
+        }
+    });
     let mana_produced = eng
         .active_mana_options(source_id, ability)
         .map(|options| {
@@ -451,6 +464,9 @@ pub(super) fn activated_ability_info(
                     .map(|k| format!("{} ", k.label()))
                     .unwrap_or_default()
             ),
+            AbilityCost::RemoveXStorageCountersFromSource => {
+                "Remove X storage counters from this land".to_string()
+            }
             AbilityCost::Tap => "{T}".to_string(),
             AbilityCost::TapPermanents { constraint, .. } => match constraint {
                 ObjectPaymentConstraint::ExactCount(count) => format!("Tap {count} permanents"),
@@ -509,6 +525,17 @@ pub(super) fn activated_ability_info(
             fallback,
         )),
         ability_index: ability_index as u32,
+        x_counter_mana_choice,
+    }
+}
+
+fn mana_color_symbol(color: tricerules_cards::Color) -> &'static str {
+    match color {
+        tricerules_cards::Color::White => "W",
+        tricerules_cards::Color::Blue => "U",
+        tricerules_cards::Color::Black => "B",
+        tricerules_cards::Color::Red => "R",
+        tricerules_cards::Color::Green => "G",
     }
 }
 
@@ -1089,6 +1116,7 @@ fn legal_ability_cost_choices(
             AbilityCost::Tap
             | AbilityCost::PayLife { .. }
             | AbilityCost::Mana(_)
+            | AbilityCost::RemoveXStorageCountersFromSource
             | AbilityCost::Waterbend(_)
             | AbilityCost::Loyalty(_) => {}
         }

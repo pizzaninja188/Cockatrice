@@ -95,6 +95,10 @@ fn counter_payment_filter_has_context_free_controller(filter: &TargetFilter) -> 
 /// `{1}, {T}` filter land, and a sacrifice-for-mana rock all use these same cost kinds.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AbilityCost {
+    /// CR 107.1b: announce X and remove exactly X Storage counters from this land as an
+    /// activation cost. The engine binds the debit to the source object and its current
+    /// zone-change generation; zero is a legal choice.
+    RemoveXStorageCountersFromSource,
     /// Brambleback Brute removes any one kind; Walking Ballista removes fixed +1/+1 counters.
     /// None permits exactly one counter of any present kind and is valid only for source payment.
     RemoveCounters {
@@ -162,6 +166,7 @@ pub enum AbilityCost {
 impl AbilityCost {
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
+            Self::RemoveXStorageCountersFromSource => Ok(()),
             Self::Waterbend(cost)
                 if cost.pips.iter().any(|p| matches!(p, crate::ManaSymbol::X)) =>
             {

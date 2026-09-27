@@ -30,6 +30,16 @@ fn mana_text(amount: &ManaAmount) -> String {
     .collect()
 }
 
+fn mana_color_symbol(color: super::Color) -> &'static str {
+    match color {
+        super::Color::White => "W",
+        super::Color::Blue => "U",
+        super::Color::Black => "B",
+        super::Color::Red => "R",
+        super::Color::Green => "G",
+    }
+}
+
 fn simple_target(filter: &TargetFilter) -> Option<String> {
     let noun = match filter.kind {
         TargetKind::AnyTarget => "any target",
@@ -62,6 +72,9 @@ pub(super) fn simple_costs(costs: &[AbilityCost], source: &str) -> Option<String
             Some(match cost {
                 AbilityCost::Tap => "{T}".into(),
                 AbilityCost::Mana(mana) => mana.to_string(),
+                AbilityCost::RemoveXStorageCountersFromSource => {
+                    format!("Remove X storage counters from {source}")
+                }
                 AbilityCost::SacrificeSelf => format!("Sacrifice {source}"),
                 AbilityCost::Discard => "Discard a card".into(),
                 AbilityCost::DiscardCard { filter } => format!("Discard a {}", filter.noun()),
@@ -134,6 +147,14 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
                         format!("Add {output} for each {} counter on this source.", counter.label())
                     }
                 }
+                SpellEffectKind::ProduceSplitManaFromRemovedStorageCounters {
+                    first_color,
+                    second_color,
+                } => format!(
+                    "Add X mana in any combination of {{{}}} and {{{}}}.",
+                    mana_color_symbol(*first_color),
+                    mana_color_symbol(*second_color)
+                ),
                 SpellEffectKind::Draw {
                     who: PlayerRecipient::Controller,
                     count: Amount::Fixed(1),

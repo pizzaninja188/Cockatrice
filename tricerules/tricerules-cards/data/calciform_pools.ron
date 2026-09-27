@@ -1,0 +1,30 @@
+(
+  id: "calciform_pools",
+  name: "Calciform Pools",
+  face_id: "calciform_pools",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      source_zone: Battlefield,
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      source_zone: Battlefield,
+      costs: [Mana("{1}"), Tap],
+      effect: [PutCounters(subject: Source, counter: Storage, count: 1)],
+    ),
+    (
+      ability_id: "activated_03",
+      presentation: OracleLines([3]),
+      source_zone: Battlefield,
+      costs: [Mana("{1}"), RemoveXStorageCountersFromSource],
+      effect: [ProduceSplitManaFromRemovedStorageCounters(first_color: White, second_color: Blue)],
+    ),
+  ],
+)

@@ -104,7 +104,12 @@ impl GameEngine {
         if !self.is_amass_candidate(chosen, controller) {
             return Err(EngineError::Illegal("stale Amass Army choice"));
         }
-        self.place_counters(chosen, CounterKind::PlusOnePlusOne, amass.count);
+        self.place_counters(
+            chosen,
+            CounterKind::PlusOnePlusOne,
+            amass.count,
+            super::super::continuous::CounterPlacementOrigin::Effect,
+        );
         if !self
             .characteristics(chosen)
             .is_some_and(|characteristics| characteristics.has_type(amass.subtype.as_str()))

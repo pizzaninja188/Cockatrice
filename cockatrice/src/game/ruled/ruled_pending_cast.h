@@ -169,6 +169,8 @@ struct PendingActivatedAbility
     quint32 permanentOid = 0;
     int abilityIndex = -1;
     int manaOptionIndex = 0;
+    quint32 xValue = 0;
+    quint32 manaSplitFirstColorCount = 0;
     quint64 castingPermissionId = 0;
     QString abilityText;
     QString cardName;
@@ -193,8 +195,42 @@ struct PendingActivatedAbility
         command.set_expected_zone_change_generation(expectedZoneChangeGeneration);
         command.set_ability_index(static_cast<quint32>(abilityIndex));
         command.set_mana_option_index(static_cast<quint32>(manaOptionIndex));
+        command.set_x_value(xValue);
+        command.set_mana_split_first_color_count(manaSplitFirstColorCount);
     }
 };
+
+enum class RuledXCounterManaPromptStep
+{
+    ChooseX,
+    ChooseFirstColorCount,
+};
+
+struct RuledXCounterManaSelection
+{
+    quint32 xValue = 0;
+    quint32 firstColorCount = 0;
+};
+
+/// Run the two bounded choices for a storage-counter mana ability. Keeping the prompt progression
+/// here lets the UI and headless tests share the same zero-X, range, and cancellation behavior.
+template <typename Prompt>
+[[nodiscard]] inline std::optional<RuledXCounterManaSelection> ruledPromptXCounterManaSplit(quint32 maximumX,
+                                                                                            Prompt &&prompt)
+{
+    const auto xValue = prompt(RuledXCounterManaPromptStep::ChooseX, maximumX);
+    if (!xValue || *xValue > maximumX) {
+        return std::nullopt;
+    }
+    if (*xValue == 0) {
+        return RuledXCounterManaSelection{0, 0};
+    }
+    const auto firstColorCount = prompt(RuledXCounterManaPromptStep::ChooseFirstColorCount, *xValue);
+    if (!firstColorCount || *firstColorCount > *xValue) {
+        return std::nullopt;
+    }
+    return RuledXCounterManaSelection{*xValue, *firstColorCount};
+}
 
 struct RuledGraveyardCostSelectionProgress
 {

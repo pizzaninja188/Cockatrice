@@ -1706,6 +1706,12 @@ message ActivateAbility {
   AbilitySourceZone source_zone = 8;
   uint64 expected_zone_change_generation = 9;
   PaymentSelection payment = 10;
+  // CR 107.1b / 107.3a: X chosen for a storage-counter mana ability, where X is bounded by
+  // the source's current Storage-counter count. Zero is a valid choice.
+  uint32 x_value = 11;
+  // Number of the chosen X mana units assigned to the first color in AbilityInfo's published
+  // x_counter_mana_choice. The second color receives the remainder.
+  uint32 mana_split_first_color_count = 12;
 }
 
 message ExecutePermanentAction {
@@ -1778,6 +1784,15 @@ message SbasApplied {
 // One activated ability on a battlefield permanent, in registry order. Keeping each property
 // structured avoids a second delimiter-based protocol inside protobuf.
 message AbilityInfo {
+  // A mana ability whose output depends on removing a bounded number of source counters and
+  // choosing a split between two colors. The engine publishes the current bound and color order.
+  message XCounterManaChoice {
+    string counter_label = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    uint32 max_x = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    string first_color = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    string second_color = 4 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  }
+
   string text = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   string mana_cost = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   string mana_produced = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
@@ -1799,6 +1814,7 @@ message AbilityInfo {
   // Ordered choices when the current state yields no mana (for example, a source-count-scaled
   // mana ability with zero counters). `mana_produced` remains an accurate description of output.
   repeated string mana_option_labels = 9 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  XCounterManaChoice x_counter_mana_choice = 10 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // CR 722. Public designation and exact source linkage, independent of card characteristics.

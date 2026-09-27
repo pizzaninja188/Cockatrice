@@ -42,7 +42,13 @@ impl GameEngine {
             .collect();
         let mut counter_events = Vec::new();
         for saga in sagas {
-            if let Some(event) = self.place_counters_with_event(saga, CounterKind::Lore, 1, false) {
+            if let Some(event) = self.place_counters_with_event(
+                saga,
+                CounterKind::Lore,
+                1,
+                false,
+                super::continuous::CounterPlacementOrigin::TurnBased,
+            ) {
                 counter_events.push(event);
             }
         }

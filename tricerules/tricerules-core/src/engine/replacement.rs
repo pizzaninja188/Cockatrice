@@ -1504,6 +1504,7 @@ impl GameEngine {
                 counter,
                 count,
                 read_ahead_entry && counter == CounterKind::Lore,
+                super::continuous::CounterPlacementOrigin::Entry,
             ) {
                 trigger_events.push(placed);
             }

@@ -15,9 +15,40 @@
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMenu>
+#include <QMessageBox>
 #include <QVBoxLayout>
 #include <libcockatrice/utility/zone_names.h>
+#include <limits>
+#include <optional>
+
+namespace
+{
+std::optional<quint32>
+promptBoundedManaCount(QWidget *parent, const QString &title, const QString &label, quint32 maximum)
+{
+    if (maximum <= static_cast<quint32>(std::numeric_limits<int>::max())) {
+        bool accepted = false;
+        const int selected = QInputDialog::getInt(parent, title, label, 0, 0, static_cast<int>(maximum), 1, &accepted);
+        if (!accepted)
+            return std::nullopt;
+        return static_cast<quint32>(selected);
+    }
+
+    bool accepted = false;
+    const QString text = QInputDialog::getText(parent, title, label, QLineEdit::Normal, QStringLiteral("0"), &accepted);
+    if (!accepted)
+        return std::nullopt;
+    bool valid = false;
+    const quint32 selected = text.toUInt(&valid);
+    if (!valid || selected > maximum) {
+        QMessageBox::warning(parent, title, QObject::tr("Enter a whole number from 0 to %1.").arg(maximum));
+        return std::nullopt;
+    }
+    return selected;
+}
+} // namespace
 
 bool RuledPaymentUi::tryHandlePriorityCostClick(CardItem *card)
 {
@@ -2161,6 +2192,33 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     actions->pendingActivatedAbility.waitingForMana = false;
     actions->pendingActivatedAbility.remainingCost = manaCost;
     actions->pendingActivatedAbility.flexPips = flexPips;
+
+    if (selectedAbility && selectedAbility->xCounterManaChoice) {
+        const auto &choice = *selectedAbility->xCounterManaChoice;
+        const QString counterName = choice.counterLabel;
+        const auto selection = ruledPromptXCounterManaSplit(
+            choice.maxX, [&](RuledXCounterManaPromptStep step, quint32 maximum) -> std::optional<quint32> {
+                if (step == RuledXCounterManaPromptStep::ChooseX) {
+                    return promptBoundedManaCount(actions->player->getGame()->getTab(), PlayerActions::tr("Choose X"),
+                                                  PlayerActions::tr("Number of %1 counters to remove from %2 (0–%3):")
+                                                      .arg(counterName, actions->pendingActivatedAbility.cardName)
+                                                      .arg(maximum),
+                                                  maximum);
+                }
+                return promptBoundedManaCount(
+                    actions->player->getGame()->getTab(), PlayerActions::tr("Choose Mana Split"),
+                    PlayerActions::tr("How many of the %1 mana should be {%2}? The rest will be {%3}.")
+                        .arg(maximum)
+                        .arg(choice.firstColor, choice.secondColor),
+                    maximum);
+            });
+        if (!selection) {
+            cancelPendingActivatedAbility();
+            return true;
+        }
+        actions->pendingActivatedAbility.xValue = selection->xValue;
+        actions->pendingActivatedAbility.manaSplitFirstColorCount = selection->firstColorCount;
+    }
 
     if (needsTarget) {
         // Target first, then mana payment after target is chosen.

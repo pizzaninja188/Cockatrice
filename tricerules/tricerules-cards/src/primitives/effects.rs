@@ -78,6 +78,8 @@ pub enum CounterKind {
     Lore,
     /// CR 702.184: charge counters track Station progress on Spacecraft.
     Charge,
+    /// Storage counters on Dreadship Reef, Calciform Pools, and Saltcrusted Steppe.
+    Storage,
     /// Quest counters are ordinary named counters used by quest-style threshold cards such as
     /// Earthbender Ascension and Overseer of Vault 76.
     Quest,
@@ -101,6 +103,7 @@ impl CounterKind {
             CounterKind::Defense => "defense".into(),
             CounterKind::Lore => "lore".into(),
             CounterKind::Charge => "charge".into(),
+            CounterKind::Storage => "storage".into(),
             CounterKind::Quest => "quest".into(),
             CounterKind::Foreshadow => "foreshadow".into(),
             CounterKind::Finality => "finality".into(),
@@ -1721,6 +1724,14 @@ pub enum SpellEffectKind {
         counter: CounterKind,
         options: Vec<ManaAmount>,
     },
+    /// CR 605 mana ability on the storage lands: its X counter cost has already been paid when
+    /// this output is formed. The activating player announces X and one bounded integer split;
+    /// the other color receives the remainder. This avoids expanding every per-pip ordering into
+    /// an option list and permits X=0 as CR 107.1b requires.
+    ProduceSplitManaFromRemovedStorageCounters {
+        first_color: Color,
+        second_color: Color,
+    },
     /// Add a fixed bag of mana while this spell or non-mana ability resolves. Unlike
     /// [`ProduceMana`](Self::ProduceMana), this effect uses the stack normally. Firebending and
     /// Radha, Heir to Keld are the first two mechanics supported by the shared retention shape.
@@ -2803,6 +2814,7 @@ impl SpellEffectKind {
             | SpellEffectKind::CreateAttackingTokens { .. }
             | SpellEffectKind::ProduceMana { .. }
             | SpellEffectKind::ProduceManaPerSourceCounter { .. }
+            | SpellEffectKind::ProduceSplitManaFromRemovedStorageCounters { .. }
             | SpellEffectKind::AddMana { .. }
             | SpellEffectKind::MayBehold { .. }
             | SpellEffectKind::SearchLibrary { .. }
@@ -2861,6 +2873,52 @@ impl SpellEffectKind {
                 }) || otherwise
                     .iter()
                     .any(Self::contains_source_counter_scaled_mana)
+            }
+            _ => false,
+        }
+    }
+
+    /// Detect the storage-land split-mana effect anywhere in an effect tree so ability-shape
+    /// validation can reject nested appearances that would otherwise never execute.
+    pub(crate) fn contains_storage_counter_split_mana(&self) -> bool {
+        match self {
+            Self::ProduceSplitManaFromRemovedStorageCounters { .. } => true,
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.contains_storage_counter_split_mana()
+            }
+            Self::MayBehold { if_beheld, .. } => if_beheld
+                .iter()
+                .any(Self::contains_storage_counter_split_mana),
+            Self::ChooseResolutionBranch {
+                branches,
+                otherwise,
+                ..
+            } => {
+                branches.iter().any(|branch| {
+                    branch
+                        .effects
+                        .iter()
+                        .any(Self::contains_storage_counter_split_mana)
+                }) || otherwise
+                    .iter()
+                    .any(Self::contains_storage_counter_split_mana)
+            }
+            Self::CreateReflexiveTrigger { ability, .. } => ability
+                .effect
+                .iter()
+                .any(Self::contains_storage_counter_split_mana),
+            Self::GrantTriggeredAbility { ability, .. }
+            | Self::CreateDelayedTrigger { ability, .. } => {
+                ability
+                    .effect
+                    .iter()
+                    .any(Self::contains_storage_counter_split_mana)
+                    || ability
+                        .modal
+                        .iter()
+                        .flat_map(|modal| &modal.modes)
+                        .flat_map(|mode| &mode.effects)
+                        .any(Self::contains_storage_counter_split_mana)
             }
             _ => false,
         }
@@ -4662,6 +4720,21 @@ impl SpellEffectKind {
                         "ProduceManaPerSourceCounter options must each contain exactly one mana"
                             .into(),
                     );
+                }
+                Ok(())
+            }
+            SpellEffectKind::ProduceSplitManaFromRemovedStorageCounters {
+                first_color,
+                second_color,
+            } => {
+                if context == EffectContext::Spell {
+                    return Err(
+                        "ProduceSplitManaFromRemovedStorageCounters is only valid on a mana ability, not a spell"
+                            .into(),
+                    );
+                }
+                if first_color == second_color {
+                    return Err("split mana output requires two distinct colors".into());
                 }
                 Ok(())
             }

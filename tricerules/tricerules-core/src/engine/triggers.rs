@@ -2758,7 +2758,13 @@ mod tests {
         });
 
         let event = engine
-            .place_counters_with_event(source, CounterKind::Lore, 4, false)
+            .place_counters_with_event(
+                source,
+                CounterKind::Lore,
+                4,
+                false,
+                super::continuous::CounterPlacementOrigin::Effect,
+            )
             .expect("place lore");
         let triggers = engine.collect_event_triggers(&[event]);
         assert_eq!(triggers.len(), 4);

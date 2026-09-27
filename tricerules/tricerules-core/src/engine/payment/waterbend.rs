@@ -98,6 +98,14 @@ impl GameEngine {
                 .map(|(_, ability, _)| ability),
         }
         .ok_or(EngineError::Illegal("missing activated ability"))?;
+        self.validate_activation_mana_choice(
+            source,
+            source_zone,
+            &ability,
+            command.mana_option_index,
+            command.x_value,
+            command.mana_split_first_color_count,
+        )?;
         if !self.ability_activatable(source, command.ability_index as usize, &ability) {
             return Err(EngineError::Illegal("activation restrictions not met"));
         }
@@ -117,6 +125,7 @@ impl GameEngine {
             &command.flex_payments,
             &command.cost_selections,
             &command.restricted_mana,
+            command.x_value,
             self.targeting_cost_increase(
                 player,
                 TargetingCostAction::ActivatedAbilities,

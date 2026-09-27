@@ -1,0 +1,120 @@
+{
+  "format_version": 1,
+  "oracle_id": "021e4165-2f02-4bd4-86ca-cb7bf4c9e23d",
+  "spans": [
+    {
+      "face_id": "saltcrusted_steppe",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "saltcrusted_steppe",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    },
+    {
+      "face_id": "saltcrusted_steppe",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ManaAmount.c",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceMana/options/0/c"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Source",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/PutCounters/subject"
+    },
+    {
+      "symbol": "CounterKind::Storage",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/PutCounters/counter"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/2/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::RemoveXStorageCountersFromSource",
+      "typed_path": "/faces/0/activated_abilities/2/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceSplitManaFromRemovedStorageCounters",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0"
+    },
+    {
+      "symbol": "Color::Green",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/ProduceSplitManaFromRemovedStorageCounters/first_color"
+    },
+    {
+      "symbol": "Color::White",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0/ProduceSplitManaFromRemovedStorageCounters/second_color"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario issue_499_storage_counter_lands::issue_499_registers_complete_typed_storage_counter_lands",
+      "covers": "all three exact identities, normal one-face Land characteristics, colorless mana ability, {1}{T} Storage placement ability, and {1} plus X Storage counter split-mana ability with its printed color pair"
+    },
+    {
+      "test": "scenario issue_499_storage_counter_lands::issue_499_all_storage_land_pairs_support_zero_midpoint_and_endpoint_splits",
+      "covers": "for each of Calciform Pools, Dreadship Reef, and Saltcrusted Steppe: X=0, a mixed midpoint split, and both endpoint splits produce exactly the independently expected colors and counts; exactly X counters are removed; the source is not tapped; no stack item is created"
+    },
+    {
+      "test": "scenario issue_499_storage_counter_lands::issue_499_each_land_taps_for_colorless_and_line_two_pays_and_places_storage",
+      "covers": "for each named land, line 1 taps and adds exactly one colorless mana without the stack; line 2 pays {1}, taps, then resolves exactly one Storage counter"
+    },
+    {
+      "test": "scenario issue_499_storage_counter_lands::issue_499_rejects_invalid_x_split_and_stale_generation_atomically",
+      "covers": "representative Dreadship Reef rejects X above the live Storage count, first-color count above X, and stale source generation without changing mana, counters, or command revision"
+    },
+    {
+      "test": "scenario issue_499_storage_counter_lands::issue_499_generic_one_is_paid_atomically_with_x_storage_counters",
+      "covers": "representative Dreadship Reef still requires the printed {1} when X=4 and commits neither mana nor counters when that generic cost is unpaid"
+    },
+    {
+      "test": "scenario issue_499_storage_counter_lands::issue_499_counter_placement_replacement_doubles_effect_placement_only",
+      "covers": "the shared line-2 PutCounters effect is an ordinary post-entry counter placement and is doubled by a controlled replacement fixture"
+    },
+    {
+      "test": "scenario issue_499_storage_counter_lands::issue_499_tap_for_mana_replacement_applies_to_line_one_not_line_three",
+      "covers": "a tap-for-mana multiplier doubles line 1 but does not affect line 3, which has no tap cost"
+    },
+    {
+      "test": "scenario issue_499_storage_counter_lands::issue_499_mana_ability_is_usable_during_cast_payment_without_using_stack",
+      "covers": "representative Dreadship Reef produces mana immediately during an open spell-payment transaction; the produced mana completes payment and creates no intermediate stack item"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

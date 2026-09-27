@@ -307,6 +307,12 @@ QJsonValue value(const RuledAbilityEntry &v)
                        {"manaCost", value(v.manaCost)},
                        {"manaProduced", value(v.manaProduced)},
                        {"manaOptionLabels", manaOptionLabels},
+                       {"xCounterManaChoice",
+                        v.xCounterManaChoice ? QJsonObject{{"counterLabel", value(v.xCounterManaChoice->counterLabel)},
+                                                           {"maxX", value(v.xCounterManaChoice->maxX)},
+                                                           {"firstColor", value(v.xCounterManaChoice->firstColor)},
+                                                           {"secondColor", value(v.xCounterManaChoice->secondColor)}}
+                                             : QJsonValue(QJsonValue::Null)},
                        {"costLabel", value(v.costLabel)},
                        {"activatable", value(v.activatable)},
                        {"hasOnlyTapCost", value(v.hasOnlyTapCost)}};
