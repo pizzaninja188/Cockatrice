@@ -72,6 +72,7 @@
   - `tricerules/tricerules-cards/authoring/review-maps/scavenger_grounds.json`
   - `tricerules/tricerules-core/tests/scenario/deck_coverage_scavenger_grounds.rs`
   - `tricerules/tricerules-cards/src/primitives/abilities.rs`
+  - `tricerules/tricerules-cards/src/primitives/costs.rs`
   - `tricerules/tricerules-cards/src/primitives/effects.rs`
   - `tricerules/tricerules-cards/src/primitives/targeting.rs`
   - `tricerules/tricerules-cards/src/registry.rs`

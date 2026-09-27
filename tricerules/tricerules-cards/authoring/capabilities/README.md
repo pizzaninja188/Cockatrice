@@ -56,8 +56,8 @@ Keep paths and symbols exact so a later lightweight checker can verify reference
 symbols. Link to card definitions and review maps with ordinary Markdown links relative to the entry
 file.
 List every implementation, card, review-map, presentation, and test path that supports the entry's
-claims under **Reviewed paths**. A future checker may warn when those paths changed after the entry's
-explicit reviewed revision; a warning requests review and does not decide semantic support.
+claims under **Reviewed paths**. The optional checker can warn when those paths changed after the
+entry's explicit reviewed revision; a warning requests review and does not decide semantic support.
 
 Use repository links to the existing [card authoring guide](../CARD-AUTHORING.md),
 [dependency report contract](../DEPENDENCY-REPORT.md),
@@ -94,3 +94,31 @@ treated as an entry. Do not put generated reports or pilot measurements here.
 
 An entry is lookup evidence for authoring and review. It never changes card admission, generation,
 engine behavior, or verification gates.
+
+## Optional source-only checker
+
+From the repository root, run the checker when reviewing index edits:
+
+```powershell
+powershell -NoProfile -File scripts/check-capability-index.ps1
+powershell -NoProfile -File scripts/check-capability-index.ps1 -CheckFreshness
+```
+
+It accepts `-RepositoryRoot` for an isolated checkout or fixture; otherwise it uses the checkout
+containing the script. Exit code 0 means the catalogue structure and checked references passed;
+exit code 1 reports structural or reference errors. Freshness warnings do not assert support or
+readiness and do not fail an otherwise valid catalogue.
+
+The default pass reads local Markdown, RON, JSON, and source text only. It checks required headings
+and fields, IDs and statuses, local link targets, cited-path coverage by **Reviewed paths**, card IDs
+against linked RON definitions, and exact semantic test IDs against linked review maps. It also
+checks that referenced symbols and test functions appear in their cited source files. These are
+small lexical checks, not general Markdown, RON, JSON-schema, or Rust parsers; they do not compile or
+run tests, establish that Cargo exposes an exact test identity, prove test assertions, or determine
+semantic support.
+
+`-CheckFreshness` compares each entry's full **Reviewed revision** with only that entry's listed
+**Reviewed paths**, including tracked working-tree changes and paths currently untracked. Unrelated
+changes do not invalidate entries. An unresolved revision or unavailable Git status is reported as
+unable to assess, never as fresh. The checker performs no build, network access, or file writes and
+is not part of `verify.ps1` or card-data verification.
