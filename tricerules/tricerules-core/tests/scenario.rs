@@ -126,6 +126,8 @@ mod deck_coverage_krark_clan_ironworks;
 mod deck_coverage_looting;
 #[path = "scenario/deck_coverage_lotus_petal.rs"]
 mod deck_coverage_lotus_petal;
+#[path = "scenario/deck_coverage_mana_reflection.rs"]
+mod deck_coverage_mana_reflection;
 #[path = "scenario/deck_coverage_manifold_key.rs"]
 mod deck_coverage_manifold_key;
 #[path = "scenario/deck_coverage_mh3_mdfcs.rs"]

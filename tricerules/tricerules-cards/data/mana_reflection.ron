@@ -1,0 +1,13 @@
+// Oracle identity a3a8a044-283d-443e-bc40-c2f826d70c22 reviewed 2026-09-27.
+(
+  id: "mana_reflection",
+  name: "Mana Reflection",
+  face_id: "mana_reflection",
+  mana_cost: "{4}{G}{G}",
+  types: ["Enchantment"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: MultiplyManaFromTappedPermanents(multiplier: 2),
+  )],
+)

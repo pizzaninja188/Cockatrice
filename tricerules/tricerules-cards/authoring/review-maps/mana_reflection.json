@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "a3a8a044-283d-443e-bc40-c2f826d70c22",
+  "spans": [
+    {
+      "face_id": "mana_reflection",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::MultiplyManaFromTappedPermanents",
+      "typed_path": "/faces/0/static_abilities/0/definition/MultiplyManaFromTappedPermanents"
+    },
+    {
+      "symbol": "StaticAbilityDef::MultiplyManaFromTappedPermanents.multiplier",
+      "typed_path": "/faces/0/static_abilities/0/definition/MultiplyManaFromTappedPermanents/multiplier"
+    },
+    {
+      "symbol": "AbilityPresentation::OracleLines",
+      "typed_path": "/faces/0/static_abilities/0/presentation"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_mana_reflection::mana_reflection_has_the_reviewed_identity_characteristics_and_static_multiplier",
+      "covers": "Checks the one-face Mana Reflection identity and its green Enchantment characteristics against Scryfall Oracle ID a3a8a044-283d-443e-bc40-c2f826d70c22 (2XM printing UUID 81e0d739-990f-4ba5-b456-165c033014cf), then verifies the static multiplier. The pinned Bello deck map includes the card; since the type is Enchantment and CR 903.3 does not permit it as a Commander, its mainboard subsection is inferred by exclusion. The direct deck API did not expose a verified subsection. Also confirms the enchantment has no activated mana ability of its own."
+    },
+    {
+      "test": "scenario deck_coverage_mana_reflection::mana_reflection_doubles_forest_mana_without_changing_its_color_or_using_the_stack",
+      "covers": "Casts the registered Mana Reflection through accepted commands, then activates a Forest's tap-for-mana ability. Asserts two green mana, the Forest tapped, and no stack use, covering CR 106.12 and 106.12b."
+    },
+    {
+      "test": "scenario deck_coverage_mana_reflection::two_mana_reflections_compound_to_four_green_mana_from_one_forest",
+      "covers": "Casts two actual Mana Reflection copies and verifies the Forest's one-green output becomes four green, covering cumulative copies."
+    },
+    {
+      "test": "scenario deck_coverage_mana_reflection::an_opponents_mana_reflection_does_not_change_the_active_players_forest_mana",
+      "covers": "Places an actual Mana Reflection under the opponent's control and verifies the active player's tapped Forest adds only one green mana."
+    },
+    {
+      "test": "scenario deck_coverage_mana_reflection::mana_reflection_does_not_multiply_dreadship_reefs_non_tap_storage_mana",
+      "covers": "Activates Dreadship Reef's storage-counter mana ability without a tap cost and verifies its blue-black split output is unchanged, covering the CR 106.12 tap-cost boundary."
+    },
+    {
+      "test": "scenario deck_coverage_mana_reflection::mana_reflection_preserves_the_restriction_on_both_chandras_embercat_mana_units",
+      "covers": "Verifies a tapped Chandra's Embercat contributes both increased red mana units to one restricted group: the group cannot pay for Bonesplitter, and both units can pay for an Elemental spell. This exercises retained mana restrictions under CR 106.6a. Triggered-mana evidence is N/A because the current registry has no triggered mana producer with an actual-card fixture."
+    },
+    {
+      "test": "scenario deck_coverage_mana_reflection::mana_reflection_doubles_generator_servant_mana_and_preserves_its_rider",
+      "covers": "Generator Servant's real mana ability costs Tap and SacrificeSelf, so it qualifies under CR 106.12. Mana Reflection turns its two colorless mana into one four-colorless restricted group. The test spends two units from that group on each of two Iron Myr casts and verifies both resolve with Haste, covering preservation of the original rider on every increased unit under CR 106.6a. Triggered-mana evidence remains N/A because no registered actual-card triggered-mana fixture exists."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
