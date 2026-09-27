@@ -1949,7 +1949,8 @@ impl GameEngine {
                     effect @ SpellEffectKind::ExileSourceThenReturnTransformed { .. } => {
                         zones::exile_source_then_return_transformed(&mut cx, effect)?
                     }
-                    effect @ SpellEffectKind::ProduceMana { .. } => {
+                    effect @ (SpellEffectKind::ProduceMana { .. }
+                    | SpellEffectKind::ProduceManaPerSourceCounter { .. }) => {
                         misc::produce_mana(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::AddMana { .. } => misc::add_mana(&mut cx, effect)?,

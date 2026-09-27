@@ -419,13 +419,28 @@ pub(super) fn activated_ability_info(
     let mana_produced = eng
         .active_mana_options(source_id, ability)
         .map(|options| {
-            options
+            let rendered = options
                 .iter()
                 .map(super::events::mana_amount_symbols)
-                .collect::<Vec<_>>()
-                .join("/")
+                .collect::<Vec<_>>();
+            if rendered.iter().all(|option| option.is_empty()) {
+                String::new()
+            } else {
+                rendered.join("/")
+            }
         })
         .unwrap_or_default();
+    let mana_option_labels = if mana_produced.is_empty() && ability.mana_source_counter().is_some()
+    {
+        ability
+            .mana_options()
+            .into_iter()
+            .flatten()
+            .map(super::events::mana_amount_symbols)
+            .collect()
+    } else {
+        Vec::new()
+    };
     let cost_label = ability
         .costs
         .iter()
@@ -479,6 +494,7 @@ pub(super) fn activated_ability_info(
         mana_cost,
         mana_produced,
         cost_label,
+        mana_option_labels,
         activatable: eng.ability_activatable(source_id, ability_index, ability),
         has_only_tap_cost: matches!(ability.costs.as_slice(), [AbilityCost::Tap]),
         presentation: Some(presentation_ref(

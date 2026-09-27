@@ -1507,6 +1507,7 @@ fn validate_effect_targets(
         | SpellEffectKind::DamageCantBePreventedThisTurn
         // CR 605.1a: a mana ability is untargeted by definition.
         | SpellEffectKind::ProduceMana { .. }
+        | SpellEffectKind::ProduceManaPerSourceCounter { .. }
         | SpellEffectKind::AddMana { .. }
         | SpellEffectKind::MayBehold { .. }
         // CR 115.1: "deals N damage to that player / to you" names a player, it does not target.

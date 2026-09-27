@@ -110,6 +110,30 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
                     }
                     text
                 }
+                SpellEffectKind::ProduceManaPerSourceCounter { counter, options }
+                    if !options.is_empty() =>
+                {
+                    let any_color = options.len() == 5
+                        && ['W', 'U', 'B', 'R', 'G'].into_iter().all(|color| {
+                            options
+                                .iter()
+                                .any(|amount| mana_text(amount) == format!("{{{color}}}"))
+                        });
+                    if any_color {
+                        format!(
+                            "Choose a color. Add one mana of that color for each {} counter on this source.",
+                            counter.label()
+                        )
+                    } else {
+                        let output =
+                        options
+                            .iter()
+                            .map(mana_text)
+                            .collect::<Vec<_>>()
+                            .join(" or ");
+                        format!("Add {output} for each {} counter on this source.", counter.label())
+                    }
+                }
                 SpellEffectKind::Draw {
                     who: PlayerRecipient::Controller,
                     count: Amount::Fixed(1),

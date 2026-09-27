@@ -4231,6 +4231,7 @@ TEST_F(RuledClientTest, AbilityDiagnosticsDescribeEntriesAndDropExpiredPrivateOf
     const QJsonObject expected{{"text", "{1}, {T}: Add {G}."},
                                {"manaCost", "{1}"},
                                {"manaProduced", "G"},
+                               {"manaOptionLabels", QJsonArray{}},
                                {"costLabel", "{1}, {T}"},
                                {"activatable", true},
                                {"hasOnlyTapCost", false}};
@@ -4896,6 +4897,42 @@ TEST_F(RuledClientTest, NestedPaymentMenuOffersOnlyEnginePublishedManaAbilities)
     EXPECT_EQ(options.at(2).index, 2);
     EXPECT_EQ(options.at(2).manaOptionIndex, 1);
     EXPECT_FALSE(options.at(2).enabled);
+}
+
+TEST_F(RuledClientTest, ZeroOutputManaAbilityRetainsItsSelectableOptionsDuringPayment)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *object = batch.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    object->set_object_id(203);
+    auto *ability = object->add_activated_abilities();
+    ability->set_ability_index(0);
+    ability->set_text("{T}: Choose a color. Add one mana of that color for each charge counter on this artifact.");
+    ability->set_has_only_tap_cost(true);
+    ability->set_activatable(true);
+    for (const auto *label : {"W", "U", "B", "R", "G"})
+        ability->add_mana_option_labels(label);
+    apply(batch);
+
+    const auto decoded = state->activatedAbilityForOid(203, 0);
+    ASSERT_TRUE(decoded);
+    EXPECT_TRUE(decoded->manaProduced.isEmpty());
+    EXPECT_EQ(decoded->manaOptionLabels, QStringList({"W", "U", "B", "R", "G"}));
+    EXPECT_TRUE(decoded->usesDirectManaActivation());
+
+    const auto options = RuledPendingCast::cardActionMenuOptions({}, *state, 203, true);
+    ASSERT_EQ(options.size(), 5);
+    for (int i = 0; i < 5; ++i) {
+        EXPECT_EQ(options.at(i).kind, RuledCardActionMenuOption::Kind::ActivateAbility);
+        EXPECT_EQ(options.at(i).index, 0);
+        EXPECT_EQ(options.at(i).manaOptionIndex, i);
+        EXPECT_TRUE(options.at(i).enabled);
+    }
+    EXPECT_TRUE(options.first().label.contains("Choose {W}"));
+
+    const auto ordinaryOptions = RuledPendingCast::cardActionMenuOptions({}, *state, 203, false);
+    ASSERT_EQ(ordinaryOptions.size(), 5);
+    for (int i = 0; i < 5; ++i)
+        EXPECT_EQ(ordinaryOptions.at(i).manaOptionIndex, i);
 }
 
 TEST_F(RuledClientTest, PaymentCandidateAndManaAbilityShareOneCardMenu)

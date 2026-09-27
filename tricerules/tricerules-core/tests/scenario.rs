@@ -82,6 +82,8 @@ mod damage_prevention;
 mod deck_coverage_ancient_grudge;
 #[path = "scenario/deck_coverage_anvil.rs"]
 mod deck_coverage_anvil;
+#[path = "scenario/deck_coverage_astral_cornucopia.rs"]
+mod deck_coverage_astral_cornucopia;
 #[path = "scenario/deck_coverage_battlelands.rs"]
 mod deck_coverage_battlelands;
 #[path = "scenario/deck_coverage_beast_within.rs"]

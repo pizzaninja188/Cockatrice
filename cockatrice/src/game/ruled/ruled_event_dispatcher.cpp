@@ -378,10 +378,14 @@ parseSpellModes(const google::protobuf::RepeatedPtrField<ruled::v1::LegalSpellMo
 // Callers own the authoritative index and snapshot lifetime for their source-zone path.
 RuledAbilityEntry parseAbilityInfo(const ruled::v1::AbilityInfo &ability, const RuledPresentationResolver &resolver)
 {
+    QStringList manaOptionLabels;
+    for (const auto &label : ability.mana_option_labels())
+        manaOptionLabels.append(QString::fromStdString(label));
     return {ability.has_presentation() ? resolver.resolve(ability.presentation())
                                        : QString::fromStdString(ability.text()),
             QString::fromStdString(ability.mana_cost()), QString::fromStdString(ability.mana_produced()),
-            QString::fromStdString(ability.cost_label()), ability.activatable(), ability.has_only_tap_cost()};
+            QString::fromStdString(ability.cost_label()), ability.activatable(), ability.has_only_tap_cost(),
+            manaOptionLabels};
 }
 
 /// Copies the engine's structured hand-action contract into the generic client-side indexes.

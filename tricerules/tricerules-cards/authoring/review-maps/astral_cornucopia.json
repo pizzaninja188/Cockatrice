@@ -1,0 +1,100 @@
+{
+  "format_version": 1,
+  "oracle_id": "1bc42024-52da-4d93-8b47-544f0a4a72a1",
+  "spans": [
+    {
+      "face_id": "astral_cornucopia",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "astral_cornucopia",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersWithCounters",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "Amount::X",
+      "typed_path": "/faces/0/static_abilities/0/definition/EntersWithCounters/amount"
+    },
+    {
+      "symbol": "CounterKind::Charge",
+      "typed_path": "/faces/0/static_abilities/0/definition/EntersWithCounters/counter"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceManaPerSourceCounter",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceManaPerSourceCounter"
+    },
+    {
+      "symbol": "CounterKind::Charge",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceManaPerSourceCounter/counter"
+    },
+    {
+      "symbol": "ManaAmount.w",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceManaPerSourceCounter/options/0/w"
+    },
+    {
+      "symbol": "ManaAmount.u",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceManaPerSourceCounter/options/1/u"
+    },
+    {
+      "symbol": "ManaAmount.b",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceManaPerSourceCounter/options/2/b"
+    },
+    {
+      "symbol": "ManaAmount.r",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceManaPerSourceCounter/options/3/r"
+    },
+    {
+      "symbol": "ManaAmount.g",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceManaPerSourceCounter/options/4/g"
+    },
+    {
+      "symbol": "ProduceManaPerSourceCounter.options",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceManaPerSourceCounter/options"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_astral_cornucopia::astral_cornucopia_registers_exact_identity_and_typed_abilities",
+      "covers": "pinned Oracle identity, normal one-face Artifact characteristics, {X}{X}{X} cost, no colors or printed P/T, X-charge entry replacement, tap cost, and five color options scaled by current Charge counters"
+    },
+    {
+      "test": "scenario deck_coverage_astral_cornucopia::astral_cornucopia_casts_x_zero_one_two_and_enters_with_chosen_charge",
+      "covers": "accepted X=0/1/2 casts pay 0/3/6 generic mana and the permanent enters with exactly 0/1/2 Charge counters"
+    },
+    {
+      "test": "scenario deck_coverage_astral_cornucopia::astral_cornucopia_outputs_two_mana_in_each_chosen_color_without_stack",
+      "covers": "with two Charge counters, each of the five color choices adds exactly two mana of only that color; the source taps and the mana ability resolves without the stack"
+    },
+    {
+      "test": "scenario deck_coverage_astral_cornucopia::astral_cornucopia_output_uses_live_charge_counter_count",
+      "covers": "after entry with X=2, a current count of three Charge counters produces three mana, proving output reads the live source count"
+    },
+    {
+      "test": "scenario deck_coverage_astral_cornucopia::astral_cornucopia_with_zero_counters_taps_for_no_mana_without_stack",
+      "covers": "the zero-counter source accepts its mana ability, pays the tap cost, adds no mana, and creates no stack item"
+    },
+    {
+      "test": "scenario deck_coverage_astral_cornucopia::astral_cornucopia_rejects_invalid_mana_option_without_mutation",
+      "covers": "an out-of-range color option is rejected before tapping, changing counters or mana, advancing the command index, or creating a stack item"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

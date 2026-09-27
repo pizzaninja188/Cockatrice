@@ -1383,36 +1383,55 @@ impl GameEngine {
         Ok(batch)
     }
 
-    pub(super) fn active_mana_options<'a>(
+    pub(super) fn active_mana_options(
         &self,
         permanent_id: ObjectId,
-        ability: &'a tricerules_cards::ActivatedAbilityDef,
-    ) -> Option<&'a [tricerules_cards::ManaAmount]> {
+        ability: &tricerules_cards::ActivatedAbilityDef,
+    ) -> Option<Vec<tricerules_cards::ManaAmount>> {
         let default_options = ability.mana_options()?;
         let controller = self.state.objects.get(&permanent_id)?.controller;
+        let options = ability
+            .conditional_mana_output()
+            .filter(|conditional| {
+                self.condition_holds(
+                    &conditional.condition,
+                    ConditionContext {
+                        controller,
+                        source_object_id: permanent_id,
+                        source_zone_change: self
+                            .state
+                            .zone_change_generation
+                            .get(&permanent_id)
+                            .copied()
+                            .unwrap_or(0),
+                        resolving_spell_id: None,
+                        stack_item: None,
+                        previous_effect_result: None,
+                    },
+                )
+            })
+            .map(|conditional| conditional.options.as_slice())
+            .unwrap_or(default_options.as_slice());
+        let multiplier = ability.mana_source_counter().map_or(1, |counter| {
+            self.state
+                .objects
+                .get(&permanent_id)
+                .filter(|object| object.zone == Zone::Battlefield)
+                .map(|object| object.counter_count(counter))
+                .unwrap_or(0)
+        });
         Some(
-            ability
-                .conditional_mana_output()
-                .filter(|conditional| {
-                    self.condition_holds(
-                        &conditional.condition,
-                        ConditionContext {
-                            controller,
-                            source_object_id: permanent_id,
-                            source_zone_change: self
-                                .state
-                                .zone_change_generation
-                                .get(&permanent_id)
-                                .copied()
-                                .unwrap_or(0),
-                            resolving_spell_id: None,
-                            stack_item: None,
-                            previous_effect_result: None,
-                        },
-                    )
+            options
+                .iter()
+                .map(|amount| tricerules_cards::ManaAmount {
+                    w: amount.w * multiplier,
+                    u: amount.u * multiplier,
+                    b: amount.b * multiplier,
+                    r: amount.r * multiplier,
+                    g: amount.g * multiplier,
+                    c: amount.c * multiplier,
                 })
-                .map(|conditional| conditional.options.as_slice())
-                .unwrap_or(default_options.as_slice()),
+                .collect(),
         )
     }
 

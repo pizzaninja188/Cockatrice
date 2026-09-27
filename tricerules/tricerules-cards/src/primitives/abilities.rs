@@ -155,7 +155,7 @@ impl ActivatedAbilityDef {
         crate::ability_fallback(face_name, "activated ability", ability_path)
     }
     /// CR 605.1a: a mana ability produces mana, doesn't target, and isn't a loyalty ability.
-    /// Modelled as "the ability's *sole* effect is `ProduceMana`" — an ability that produced
+    /// Modelled as "the ability's *sole* effect is a mana-production effect" — an ability that produced
     /// mana alongside another effect would not use the fast no-stack path, and deliberately
     /// answers `false` here rather than being silently mis-resolved.
     pub fn mana_options(&self) -> Option<&Vec<ManaAmount>> {
@@ -164,6 +164,14 @@ impl ActivatedAbilityDef {
         }
         match self.effect.as_slice() {
             [SpellEffectKind::ProduceMana { options, .. }] => Some(options),
+            [SpellEffectKind::ProduceManaPerSourceCounter { options, .. }] => Some(options),
+            _ => None,
+        }
+    }
+
+    pub fn mana_source_counter(&self) -> Option<CounterKind> {
+        match self.effect.as_slice() {
+            [SpellEffectKind::ProduceManaPerSourceCounter { counter, .. }] => Some(*counter),
             _ => None,
         }
     }
@@ -208,6 +216,22 @@ impl ActivatedAbilityDef {
         self.presentation.validate()?;
         if self.effect.is_empty() {
             return Err("activated ability must contain at least one effect".into());
+        }
+        let has_source_counter_scaled_mana = self
+            .effect
+            .iter()
+            .any(SpellEffectKind::contains_source_counter_scaled_mana);
+        let is_supported_source_counter_mana_ability = matches!(
+            self.effect.as_slice(),
+            [SpellEffectKind::ProduceManaPerSourceCounter { .. }]
+        ) && self.source_zone
+            == AbilitySourceZone::Battlefield
+            && self.costs.as_slice() == [AbilityCost::Tap];
+        if has_source_counter_scaled_mana && !is_supported_source_counter_mana_ability {
+            return Err(
+                "ProduceManaPerSourceCounter must be the sole direct effect of a battlefield activated ability whose only cost is tap"
+                    .into(),
+            );
         }
         if self
             .effect
@@ -1262,6 +1286,15 @@ impl TriggeredAbilityDef {
                     .flat_map(|mode| &mode.effects),
             )
             .collect::<Vec<_>>();
+        if effects
+            .iter()
+            .any(|effect| effect.contains_source_counter_scaled_mana())
+        {
+            return Err(
+                "source-counter-scaled mana is supported only for tapped activated abilities"
+                    .into(),
+            );
+        }
         let is_spell_cast_trigger = matches!(
             self.trigger,
             TriggerCondition::WheneverPlayerCastsSpell { .. }
@@ -1371,6 +1404,16 @@ impl ReflexiveTriggeredAbilityDef {
         self.presentation.validate()?;
         if self.effect.is_empty() {
             return Err("reflexive triggered ability requires effects".into());
+        }
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::contains_source_counter_scaled_mana)
+        {
+            return Err(
+                "source-counter-scaled mana is supported only for tapped activated abilities"
+                    .into(),
+            );
         }
         if self
             .effect

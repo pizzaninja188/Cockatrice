@@ -1712,6 +1712,15 @@ pub enum SpellEffectKind {
         #[serde(default)]
         conditional: Option<ConditionalManaOutput>,
     },
+    /// CR 605 mana ability whose chosen mana option is produced once for each counter of
+    /// `counter` on its source. The source remains on the battlefield while this activated
+    /// ability resolves; its current counter count is read when the ability is activated.
+    /// Astral Cornucopia and Everflowing Chalice share this tapped-source, one-mana-per-counter
+    /// shape. Each option must be exactly one mana unit so the source count is the output amount.
+    ProduceManaPerSourceCounter {
+        counter: CounterKind,
+        options: Vec<ManaAmount>,
+    },
     /// Add a fixed bag of mana while this spell or non-mana ability resolves. Unlike
     /// [`ProduceMana`](Self::ProduceMana), this effect uses the stack normally. Firebending and
     /// Radha, Heir to Keld are the first two mechanics supported by the shared retention shape.
@@ -2793,6 +2802,7 @@ impl SpellEffectKind {
             | SpellEffectKind::Populate
             | SpellEffectKind::CreateAttackingTokens { .. }
             | SpellEffectKind::ProduceMana { .. }
+            | SpellEffectKind::ProduceManaPerSourceCounter { .. }
             | SpellEffectKind::AddMana { .. }
             | SpellEffectKind::MayBehold { .. }
             | SpellEffectKind::SearchLibrary { .. }
@@ -2825,6 +2835,35 @@ impl SpellEffectKind {
         self.target_roles()
             .into_iter()
             .any(TargetRole::targets_an_object)
+    }
+
+    /// Detect this mana effect anywhere in an effect tree so ability validation can enforce its
+    /// single supported top-level shape instead of accepting a nested no-op.
+    pub(crate) fn contains_source_counter_scaled_mana(&self) -> bool {
+        match self {
+            Self::ProduceManaPerSourceCounter { .. } => true,
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.contains_source_counter_scaled_mana()
+            }
+            Self::MayBehold { if_beheld, .. } => if_beheld
+                .iter()
+                .any(Self::contains_source_counter_scaled_mana),
+            Self::ChooseResolutionBranch {
+                branches,
+                otherwise,
+                ..
+            } => {
+                branches.iter().any(|branch| {
+                    branch
+                        .effects
+                        .iter()
+                        .any(Self::contains_source_counter_scaled_mana)
+                }) || otherwise
+                    .iter()
+                    .any(Self::contains_source_counter_scaled_mana)
+            }
+            _ => false,
+        }
     }
 
     /// Face-local references share the existing amount and branch consumers. Nested branches
@@ -4595,6 +4634,34 @@ impl SpellEffectKind {
                             "conditional ProduceMana requires at least one mana option".into()
                         );
                     }
+                }
+                Ok(())
+            }
+            SpellEffectKind::ProduceManaPerSourceCounter { counter, options } => {
+                if context == EffectContext::Spell {
+                    return Err(
+                        "ProduceManaPerSourceCounter is only valid on a mana ability, not a spell"
+                            .into(),
+                    );
+                }
+                counter.validate()?;
+                if options.is_empty() {
+                    return Err("ProduceManaPerSourceCounter requires at least one option".into());
+                }
+                if options.iter().any(|amount| {
+                    [amount.w, amount.u, amount.b, amount.r, amount.g, amount.c]
+                        .iter()
+                        .filter(|&&count| count == 1)
+                        .count()
+                        != 1
+                        || [amount.w, amount.u, amount.b, amount.r, amount.g, amount.c]
+                            .iter()
+                            .any(|&count| count > 1)
+                }) {
+                    return Err(
+                        "ProduceManaPerSourceCounter options must each contain exactly one mana"
+                            .into(),
+                    );
                 }
                 Ok(())
             }

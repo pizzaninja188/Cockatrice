@@ -56,10 +56,24 @@ struct RuledAbilityEntry
     QString costLabel;
     bool activatable = false;
     bool hasOnlyTapCost = false;
+    /// Ordered choices retained when the current output is empty, e.g. source-scaled mana at zero counters.
+    QStringList manaOptionLabels;
+
+    [[nodiscard]] bool isManaAbility() const
+    {
+        return !manaProduced.isEmpty() || !manaOptionLabels.isEmpty();
+    }
+
+    [[nodiscard]] QStringList manaOptionsForSelection() const
+    {
+        if (!manaProduced.isEmpty())
+            return manaProduced.split(QLatin1Char('/'));
+        return manaOptionLabels.isEmpty() ? QStringList{QString{}} : manaOptionLabels;
+    }
 
     [[nodiscard]] bool usesDirectManaActivation() const
     {
-        return hasOnlyTapCost && !manaProduced.isEmpty();
+        return hasOnlyTapCost && isManaAbility();
     }
 };
 

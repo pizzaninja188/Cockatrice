@@ -754,7 +754,9 @@ pub(super) fn produce_mana(
     _cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::ProduceMana { .. } = effect else {
+    let (SpellEffectKind::ProduceMana { .. } | SpellEffectKind::ProduceManaPerSourceCounter { .. }) =
+        effect
+    else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     Ok(EffectOutcome::Continue)

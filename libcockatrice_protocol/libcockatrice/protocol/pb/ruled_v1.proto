@@ -1796,6 +1796,9 @@ message AbilityInfo {
   // True only when Tap is the ability's entire authored cost. The client may use the direct
   // mana-activation shortcut without hiding additional costs such as sacrifice or life payment.
   bool has_only_tap_cost = 8 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Ordered choices when the current state yields no mana (for example, a source-count-scaled
+  // mana ability with zero counters). `mana_produced` remains an accurate description of output.
+  repeated string mana_option_labels = 9 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // CR 722. Public designation and exact source linkage, independent of card characteristics.

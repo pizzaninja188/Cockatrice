@@ -471,7 +471,7 @@ bool RuledPaymentUi::click(CardItem *card, bool leftClick)
     const auto oid = state->engineOidForCardId(card->getOwner()->getPlayerInfo()->getId(), card->getId());
     const auto abilities = state->activatedAbilitiesForOid(oid);
     const bool hasManaAbility = std::any_of(abilities.cbegin(), abilities.cend(), [](const auto &ability) {
-        return ability && !ability->manaProduced.isEmpty();
+        return ability && ability->isManaAbility();
     });
     // A candidate with a mana ability needs one combined menu on either mouse button. Candidates
     // without that ambiguity retain the fast left-click contribution toggle.
@@ -605,7 +605,7 @@ void RuledPaymentUi::suspendForManaAbility(quint32 oid, int abilityIndex)
         return;
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     const auto ability = state->activatedAbilityForOid(oid, abilityIndex);
-    if (!ability || ability->manaProduced.isEmpty())
+    if (!ability || !ability->isManaAbility())
         return;
     SuspendedPayment frame;
     frame.payment = state->payment.suspend();

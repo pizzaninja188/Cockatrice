@@ -1,0 +1,28 @@
+// Scryfall SOC printing UUID 15175742-11ae-4819-a5bd-412084b0b686; Oracle ID
+// 1bc42024-52da-4d93-8b47-544f0a4a72a1.
+// Scryfall: https://scryfall.com/card/soc/342/astral-cornucopia
+// Rulings: https://api.scryfall.com/cards/15175742-11ae-4819-a5bd-412084b0b686/rulings
+// The 2014-02-01 ruling confirms the X payment/entry examples and mana-ability timing.
+// CR 107.3m, 122.6, 605.1a, 605.2, and 605.3b govern the modeled behavior.
+(
+  id: "astral_cornucopia",
+  name: "Astral Cornucopia",
+  face_id: "astral_cornucopia",
+  mana_cost: "{X}{X}{X}",
+  types: ["Artifact"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: EntersWithCounters(counter: Charge, amount: "X"),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    source_zone: Battlefield,
+    costs: [Tap],
+    effect: [ProduceManaPerSourceCounter(
+      counter: Charge,
+      options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)],
+    )],
+  )],
+)

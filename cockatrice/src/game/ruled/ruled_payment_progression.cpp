@@ -1200,18 +1200,18 @@ Command_RuledPayload *RuledPaymentUi::newRuledPayloadActivateManaAbilityForLand(
     if (oid == 0) {
         return nullptr;
     }
-    // CR 605: pick this permanent's first mana ability (non-empty produced entry) and, when the
-    // ability offers multiple options (a dual land), the option that makes the wanted color.
+    // CR 605: pick this permanent's first mana ability and, when it offers multiple options,
+    // preserve the requested color choice even if its current output is zero.
     const auto abilities = handler->activatedAbilitiesForOid(oid);
     int abilityIndex = -1;
     int optionIndex = 0;
     for (int i = 0; i < abilities.size(); ++i) {
-        if (!abilities.at(i) || abilities.at(i)->manaProduced.isEmpty()) {
+        if (!abilities.at(i) || !abilities.at(i)->isManaAbility()) {
             continue;
         }
         abilityIndex = i;
         if (!desiredColor.isNull()) {
-            const QStringList options = abilities.at(i)->manaProduced.split(QChar('/'));
+            const QStringList options = abilities.at(i)->manaOptionsForSelection();
             for (int o = 0; o < options.size(); ++o) {
                 if (options.at(o).contains(desiredColor.toUpper())) {
                     optionIndex = o;
@@ -1978,15 +1978,18 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     if (battlefieldSource && preparationCopy == 0 && paymentContributions.isEmpty() && abilities.size() == 1 && firstAbility &&
         firstAbility->usesDirectManaActivation() && handler->abilityActivatable(oid, 0) &&
         handler->abilityCostChoices(oid, 0).isEmpty()) {
-        const QStringList colorOptions = firstAbility->manaProduced.split(QChar('/'));
+        const QStringList colorOptions = firstAbility->manaOptionsForSelection();
         if (colorOptions.size() > 1) {
             // Dual land: show a compact color-picker on both left and right click.
             const QString costPrefix = firstAbility->costLabel;
             QMenu colorMenu;
             colorMenu.setTitle(card->getName());
             for (const QString &opt : colorOptions) {
-                const QString label = costPrefix.isEmpty() ? PlayerActions::tr("Add {%1}").arg(opt)
-                                                           : PlayerActions::tr("%1: Add {%2}").arg(costPrefix, opt);
+                const QString action = firstAbility->manaProduced.isEmpty()
+                                           ? PlayerActions::tr("Choose {%1}").arg(opt)
+                                           : PlayerActions::tr("Add {%1}").arg(opt);
+                const QString label = costPrefix.isEmpty() ? action
+                                                           : PlayerActions::tr("%1: %2").arg(costPrefix, action);
                 colorMenu.addAction(label);
             }
             QAction *chosen = colorMenu.exec(QCursor::pos());

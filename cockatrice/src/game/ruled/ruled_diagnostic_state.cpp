@@ -300,9 +300,13 @@ QJsonValue value(const RuledChoiceOption &v)
 }
 QJsonValue value(const RuledAbilityEntry &v)
 {
+    QJsonArray manaOptionLabels;
+    for (const auto &label : v.manaOptionLabels)
+        manaOptionLabels.append(label);
     return QJsonObject{{"text", value(v.text)},
                        {"manaCost", value(v.manaCost)},
                        {"manaProduced", value(v.manaProduced)},
+                       {"manaOptionLabels", manaOptionLabels},
                        {"costLabel", value(v.costLabel)},
                        {"activatable", value(v.activatable)},
                        {"hasOnlyTapCost", value(v.hasOnlyTapCost)}};

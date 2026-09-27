@@ -1829,6 +1829,138 @@ fn activation_limit_rejects_zero_maximum_for_every_scope() {
     );
 }
 
+fn source_counter_scaled_mana_effect() -> SpellEffectKind {
+    SpellEffectKind::ProduceManaPerSourceCounter {
+        counter: CounterKind::Charge,
+        options: vec![ManaAmount {
+            g: 1,
+            ..Default::default()
+        }],
+    }
+}
+
+fn source_counter_scaled_mana_branch(effect: SpellEffectKind) -> SpellEffectKind {
+    SpellEffectKind::ChooseResolutionBranch {
+        chooser: PlayerRecipient::Controller,
+        optional: false,
+        selection: ResolutionBranchSelection::FirstApplicable,
+        branches: vec![ResolutionBranchDef {
+            branch_id: crate::ChoiceId::new("continue").unwrap(),
+            presentation: crate::AbilityPresentation::Fallback,
+            runtime_fallback: None,
+            cost: ResolutionCost::None,
+            requirement: ResolutionBranchRequirement::Always,
+            effects: vec![effect],
+        }],
+        otherwise: vec![],
+    }
+}
+
+#[test]
+fn source_counter_scaled_mana_accepts_the_supported_activated_ability_shape() {
+    let ability = ActivatedAbilityDef {
+        ability_id: crate::AbilityId::new("activated_01").unwrap(),
+        presentation: crate::AbilityPresentation::Fallback,
+        source_zone: AbilitySourceZone::Battlefield,
+        costs: vec![AbilityCost::Tap],
+        cost_modifiers: vec![],
+        effect: vec![source_counter_scaled_mana_effect()],
+        targeting: None,
+        timing: ActivationTiming::Normal,
+        conditions: vec![],
+        activation_limit: None,
+    };
+
+    ability
+        .validate_shape()
+        .expect("a tapped battlefield source can produce one mana per counter");
+    assert!(ability.mana_options().is_some());
+    assert_eq!(ability.mana_source_counter(), Some(CounterKind::Charge));
+}
+
+#[test]
+fn source_counter_scaled_mana_rejects_mixed_activated_effects() {
+    let ability = ActivatedAbilityDef {
+        ability_id: crate::AbilityId::new("activated_01").unwrap(),
+        presentation: crate::AbilityPresentation::Fallback,
+        source_zone: AbilitySourceZone::Battlefield,
+        costs: vec![AbilityCost::Tap],
+        cost_modifiers: vec![],
+        effect: vec![
+            source_counter_scaled_mana_effect(),
+            SpellEffectKind::GainLife {
+                amount: Amount::Fixed(1),
+            },
+        ],
+        targeting: None,
+        timing: ActivationTiming::Normal,
+        conditions: vec![],
+        activation_limit: None,
+    };
+
+    assert!(ability
+        .validate_shape()
+        .expect_err("the special mana effect cannot be mixed with another effect")
+        .contains("sole direct effect"));
+}
+
+#[test]
+fn source_counter_scaled_mana_rejects_nested_activated_effects() {
+    let ability = ActivatedAbilityDef {
+        ability_id: crate::AbilityId::new("activated_01").unwrap(),
+        presentation: crate::AbilityPresentation::Fallback,
+        source_zone: AbilitySourceZone::Battlefield,
+        costs: vec![AbilityCost::Tap],
+        cost_modifiers: vec![],
+        effect: vec![source_counter_scaled_mana_branch(
+            source_counter_scaled_mana_effect(),
+        )],
+        targeting: None,
+        timing: ActivationTiming::Normal,
+        conditions: vec![],
+        activation_limit: None,
+    };
+
+    assert!(ability
+        .validate_shape()
+        .expect_err("a nested special mana effect has no supported resolver")
+        .contains("sole direct effect"));
+}
+
+#[test]
+fn source_counter_scaled_mana_rejects_triggered_and_reflexive_appearances() {
+    let triggered = TriggeredAbilityDef {
+        ability_id: crate::AbilityId::new("triggered_01").unwrap(),
+        presentation: crate::AbilityPresentation::Fallback,
+        trigger: TriggerCondition::WhenSelfEntersBattlefield,
+        effect: vec![source_counter_scaled_mana_branch(
+            source_counter_scaled_mana_effect(),
+        )],
+        modal: None,
+        targeting: None,
+        may: false,
+        intervening_if: None,
+        triggers_only_once: false,
+        max_triggers_per_turn: None,
+    };
+    assert!(triggered
+        .validate_shape()
+        .expect_err("triggered abilities cannot use source-counter-scaled mana")
+        .contains("source-counter-scaled mana"));
+
+    let reflexive = ReflexiveTriggeredAbilityDef {
+        ability_id: crate::AbilityId::new("reflexive_01").unwrap(),
+        presentation: crate::AbilityPresentation::Fallback,
+        effect: vec![source_counter_scaled_mana_effect()],
+        targeting: None,
+        intervening_if: None,
+    };
+    assert!(reflexive
+        .validate_shape()
+        .expect_err("reflexive abilities cannot use source-counter-scaled mana")
+        .contains("source-counter-scaled mana"));
+}
+
 #[test]
 fn damage_targets_rejects_conditional_amounts() {
     let effect = SpellEffectKind::DamageTargets {
