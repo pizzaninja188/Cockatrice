@@ -144,6 +144,8 @@ mod deck_coverage_prosperity;
 mod deck_coverage_quicksmith_genius;
 #[path = "scenario/deck_coverage_sakura_tribe_elder.rs"]
 mod deck_coverage_sakura_tribe_elder;
+#[path = "scenario/deck_coverage_scavenger_grounds.rs"]
+mod deck_coverage_scavenger_grounds;
 #[path = "scenario/deck_coverage_search_lands.rs"]
 mod deck_coverage_search_lands;
 #[path = "scenario/deck_coverage_sol_ring.rs"]

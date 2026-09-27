@@ -2614,6 +2614,9 @@ scathe_zombies	0	cast	exercised
 scattered_groves	0	ability:0	exercised
 scattered_groves	0	ability:1	unsupported: ability not offered by generic battlefield fixture
 scattered_groves	0	land	exercised
+scavenger_grounds	0	ability:0	exercised
+scavenger_grounds	0	ability:1	exercised
+scavenger_grounds	0	land	exercised
 scene_of_the_crime	0	ability:0	exercised
 scene_of_the_crime	0	ability:1	exercised
 scene_of_the_crime	0	ability:2	exercised

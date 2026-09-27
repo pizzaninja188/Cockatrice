@@ -1,0 +1,84 @@
+{
+  "format_version": 1,
+  "oracle_id": "5ece7d03-9ee7-4953-a06e-9d8e41874903",
+  "spans": [
+    {
+      "face_id": "scavenger_grounds",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "scavenger_grounds",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2"
+    },
+    {
+      "symbol": "TargetKind::AnyPermanent",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2/SacrificePermanent/filter/kind"
+    },
+    {
+      "symbol": "TargetController::You",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2/SacrificePermanent/filter/controller"
+    },
+    {
+      "symbol": "TargetFilter.required_subtypes",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2/SacrificePermanent/filter/required_subtypes"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileGraveyards",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "RelativePlayerSet::All",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/ExileGraveyards/players"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_scavenger_grounds::scavenger_grounds_produces_one_colorless_mana_without_the_stack",
+      "covers": "the first ability taps Scavenger Grounds for exactly one colorless mana and resolves immediately without the stack"
+    },
+    {
+      "test": "scenario deck_coverage_scavenger_grounds::scavenger_grounds_rejects_non_deserts_and_opponent_deserts_without_partial_payment",
+      "covers": "the second ability rejects a controlled non-Desert and an opponent-controlled Desert without spending mana, tapping its source, sacrificing the selected permanent, or adding an ability to the stack"
+    },
+    {
+      "test": "scenario deck_coverage_scavenger_grounds::scavenger_grounds_sacrifices_another_desert_then_exiles_all_graveyards_at_resolution",
+      "covers": "the second ability pays two mana, taps its source, sacrifices a different controlled Desert, and exiles cards added to every player's graveyard before resolution, including the sacrificed Desert"
+    },
+    {
+      "test": "scenario deck_coverage_scavenger_grounds::scavenger_grounds_can_sacrifice_itself_and_exile_its_graveyard_card_on_resolution",
+      "covers": "Scavenger Grounds can pay its own Desert sacrifice cost, remains an ability on the stack after entering its owner's graveyard, and is exiled with all graveyard cards when that ability resolves"
+    },
+    {
+      "test": "deck_coverage_scavenger_grounds::scavenger_grounds_registers_colorless_mana_and_all_graveyards_exile",
+      "covers": "exact card identity and Desert type, both battlefield abilities, the one-colorless mana output, ordered mana/tap/controlled-Desert costs, source-self eligibility, no targets, and an all-player graveyard exile effect"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

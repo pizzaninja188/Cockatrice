@@ -1,0 +1,36 @@
+// Scryfall Oracle ID 5ece7d03-9ee7-4953-a06e-9d8e41874903; normal-layout source and rulings checked 2026-09-26.
+// CR 305.6 and 605.1a cover land mana abilities; CR 602.2a-b and 701.21a cover activation costs and sacrifice;
+// CR 701.13a and 608.2h cover the resolution-time graveyard exile; 113.7a keeps the ability independent
+// of its source. The rulings confirm this Desert may sacrifice itself and is in its owner's graveyard
+// before the ability resolves.
+(
+  id: "scavenger_grounds",
+  name: "Scavenger Grounds",
+  face_id: "scavenger_grounds",
+  mana_cost: "",
+  types: ["Land", "Desert"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      source_zone: Battlefield,
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      source_zone: Battlefield,
+      costs: [
+        Mana("{2}"),
+        Tap,
+        SacrificePermanent(filter: (
+          kind: AnyPermanent,
+          controller: You,
+          required_subtypes: ["Desert"],
+        )),
+      ],
+      effect: [ExileGraveyards(players: All)],
+    ),
+  ],
+)
