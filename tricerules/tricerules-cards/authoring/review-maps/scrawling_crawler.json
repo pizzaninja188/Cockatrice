@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "1d60c80d-9a95-4051-bbf7-02ca51ee1be2",
+  "spans": [
+    {
+      "face_id": "scrawling_crawler",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    },
+    {
+      "face_id": "scrawling_crawler",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/triggered_abilities/1"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::AtBeginningOfUpkeep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "PlayerRecipient::EachPlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/Draw/who"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPlayerDrawsCard",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "CastTriggerPlayer::Opponent",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger/WheneverPlayerDrawsCard/drawer"
+    },
+    {
+      "symbol": "SpellEffectKind::LoseLife",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    },
+    {
+      "symbol": "PlayerRecipient::AffectedPlayer",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0/LoseLife/who"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_opponent_draw::scrawling_crawler_upkeep_draws_for_each_player_and_each_opponent_loses_one_life",
+      "covers": "the upkeep trigger makes each player draw one card, and the separate opponent-draw trigger makes only that drawing opponent lose one life"
+    },
+    {
+      "test": "scenario deck_coverage_opponent_draw::opponent_draw_cards_have_reviewed_registry_identity_and_printed_characteristics",
+      "covers": "reviewed Oracle identity, normal layout, {3} Artifact Creature — Phyrexian Construct characteristics, and 3/2 stats"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

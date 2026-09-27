@@ -1,0 +1,27 @@
+// 2X2 43, printing UUID c9bd60fc-2777-44bc-b314-a792e8e48360; Oracle and rulings checked in
+// the pinned opponent-draw batch preflight. Scryfall confirms each draw is a separate trigger and
+// each resolution draws zero or exactly two cards.
+(
+  id: "consecrated_sphinx",
+  name: "Consecrated Sphinx",
+  face_id: "consecrated_sphinx",
+  mana_cost: "{4}{U}{U}",
+  types: ["Creature", "Sphinx"],
+  power: 4,
+  toughness: 6,
+  keywords: [Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPlayerDrawsCard(drawer: Opponent),
+    effect: [ChooseResolutionBranch(
+      optional: true,
+      branches: [(
+        branch_id: "draw_two",
+        presentation: OracleLines([2]),
+        cost: None,
+        effects: [Draw(count: 2)],
+      )],
+    )],
+  )],
+)

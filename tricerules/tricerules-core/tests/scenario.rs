@@ -146,6 +146,8 @@ mod deck_coverage_nevinyrrals_disk;
 mod deck_coverage_ohran_frostfang;
 #[path = "scenario/deck_coverage_ominous_seas.rs"]
 mod deck_coverage_ominous_seas;
+#[path = "scenario/deck_coverage_opponent_draw.rs"]
+mod deck_coverage_opponent_draw;
 #[path = "scenario/deck_coverage_pongify.rs"]
 mod deck_coverage_pongify;
 #[path = "scenario/deck_coverage_prized_statue.rs"]

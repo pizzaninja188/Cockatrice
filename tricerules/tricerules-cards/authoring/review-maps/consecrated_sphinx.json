@@ -1,0 +1,55 @@
+{
+  "format_version": 1,
+  "oracle_id": "311a449d-dc74-46e6-9a47-6a597931f736",
+  "spans": [
+    {
+      "face_id": "consecrated_sphinx",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/keywords"]
+    },
+    {
+      "face_id": "consecrated_sphinx",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPlayerDrawsCard",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "CastTriggerPlayer::Opponent",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverPlayerDrawsCard/drawer"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseResolutionBranch",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_opponent_draw::consecrated_sphinx_gets_two_triggers_and_each_choice_is_draw_two_or_decline",
+      "covers": "wrong-player and out-of-range branch choices are rejected without consuming the offer; two separate opponent draws create two independently resolved choices; the chosen trigger draws exactly two cards and the declined trigger draws none"
+    },
+    {
+      "test": "scenario deck_coverage_opponent_draw::opponent_draw_cards_have_reviewed_registry_identity_and_printed_characteristics",
+      "covers": "reviewed Oracle identity, normal layout, {4}{U}{U} blue Creature — Sphinx characteristics, Flying, and 4/6 stats"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

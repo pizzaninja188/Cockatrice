@@ -1,0 +1,25 @@
+// FDN 132, printing UUID a1176dcf-40ee-4342-aa74-791b8352e99a; Oracle and rulings checked in
+// the pinned opponent-draw batch preflight. CR 503.1a, 121.2, and 603.2c govern these effects.
+(
+  id: "scrawling_crawler",
+  name: "Scrawling Crawler",
+  face_id: "scrawling_crawler",
+  mana_cost: "{3}",
+  types: ["Artifact", "Creature", "Phyrexian", "Construct"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: AtBeginningOfUpkeep(player: Controller),
+      effect: [Draw(who: EachPlayer, count: 1)],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WheneverPlayerDrawsCard(drawer: Opponent),
+      effect: [LoseLife(amount: Fixed(1), who: AffectedPlayer)],
+    ),
+  ],
+)

@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "63fd2a57-7a47-4e07-947c-f4e9da7ee538",
+  "spans": [
+    {
+      "face_id": "minds_eye",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPlayerDrawsCard",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "CastTriggerPlayer::Opponent",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverPlayerDrawsCard/drawer"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseResolutionBranch",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ResolutionCost::Mana",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/cost"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_opponent_draw::minds_eye_pays_once_for_two_opponent_draw_triggers",
+      "covers": "wrong-player and out-of-range branch choices are rejected without consuming the offer; paying the first {1} draws exactly one card; an unaffordable payment on the second trigger is rejected without changing state before declining it"
+    },
+    {
+      "test": "scenario deck_coverage_opponent_draw::opponent_draw_cards_have_reviewed_registry_identity_and_printed_characteristics",
+      "covers": "reviewed Oracle identity, normal layout, {5} colorless Artifact characteristics, and absence of creature stats"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

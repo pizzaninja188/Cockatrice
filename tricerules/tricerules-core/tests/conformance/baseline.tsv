@@ -611,6 +611,7 @@ conduit_pylons	0	land	exercised
 confiscate	0	cast	exercised
 confusticate_and_bebother	0	cast	exercised
 conifer_strider	0	cast	exercised
+consecrated_sphinx	0	cast	exercised
 consulate_skygate	0	cast	exercised
 convolute	0	cast	unsupported: target group 0 needs a richer fixture
 coordinated_maneuver	0	cast	exercised
@@ -1980,6 +1981,7 @@ mind_stone	0	cast	exercised
 mind_transfer_protocol	0	cast	exercised
 mindful_biomancer	0	ability:0	exercised
 mindful_biomancer	0	cast	exercised
+minds_eye	0	cast	exercised
 mindwhisker	0	cast	exercised
 mine_raider	0	cast	exercised
 minecart_daredevil_ride_the_rails	0	cast	exercised
@@ -2657,6 +2659,7 @@ scorpions_sting	0	cast	exercised
 scour_for_scrap	0	cast	exercised
 scoured_barrens	0	ability:0	exercised
 scoured_barrens	0	land	exercised
+scrawling_crawler	0	cast	exercised
 scream_puff	0	cast	exercised
 screaming_phantom	0	cast	exercised
 scroll_thief	0	cast	exercised

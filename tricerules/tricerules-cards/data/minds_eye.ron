@@ -1,0 +1,24 @@
+// BBD 240, printing UUID 5a0e1ef4-fdb1-42bd-8e46-ba84cf850939; Oracle text and rulings checked
+// in the pinned opponent-draw batch preflight. Each opponent card draw creates a separate optional
+// payment trigger.
+(
+  id: "minds_eye",
+  name: "Mind's Eye",
+  face_id: "minds_eye",
+  mana_cost: "{5}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerDrawsCard(drawer: Opponent),
+    effect: [ChooseResolutionBranch(
+      optional: true,
+      branches: [(
+        branch_id: "pay_1",
+        presentation: OracleLines([1]),
+        cost: Mana("{1}"),
+        effects: [Draw(count: 1)],
+      )],
+    )],
+  )],
+)
