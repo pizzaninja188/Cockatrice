@@ -52,7 +52,7 @@ identity (the target/module/test form used by the test runner or review map) and
 anchor. For example, Divination is recorded as
 `scenario spell_effects::cast_divination_draws_two_cards` plus
 `tricerules/tricerules-core/tests/scenario/spell_effects.rs#cast_divination_draws_two_cards`.
-Keep paths and symbols exact so a later lightweight checker can verify references and locate
+Keep paths and symbols exact so the optional lightweight checker can verify references and locate
 symbols. Link to card definitions and review maps with ordinary Markdown links relative to the entry
 file.
 List every implementation, card, review-map, presentation, and test path that supports the entry's
@@ -94,6 +94,22 @@ treated as an entry. Do not put generated reports or pilot measurements here.
 
 An entry is lookup evidence for authoring and review. It never changes card admission, generation,
 engine behavior, or verification gates.
+
+## Entry maintenance and scope
+
+Update an affected entry when a change materially alters its behavior boundary, implementation,
+generator route, or supporting card, review-map, test, or presentation evidence. A freshness warning
+is a prompt to inspect the reported path diffs: retain the claim only when the reviewed evidence still
+supports it, and narrow the behavior or downgrade a status when it does not. Update **Reviewed
+revision** only after actually reviewing the relevant paths and the claims that depend on them. A
+new commit, a clean checker run, or an unrelated change is not a reason to blanket-bump revisions.
+Neither a checker pass nor a revision update automatically promotes runtime support, generator
+recognition, or whole-card readiness.
+
+Look for useful patterns when repeated card research reveals the same reusable behavior or repeated
+lookup misses. Do not try to catalogue every mechanic or create an entry for each card. An outside-
+deck card may help validate related semantics, but it does not expand the selected campaign or admit
+that card. The three-batch pilot remains pending until the campaign is explicitly resumed.
 
 ## Optional source-only checker
 

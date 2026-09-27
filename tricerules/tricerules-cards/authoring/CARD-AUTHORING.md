@@ -1116,6 +1116,7 @@ behavior from production RON. Keep routine authoring separate from new engine pr
 - [ ] Target prompts contain only short, effect-specific click guidance.
 - [ ] RON contains no copied Oracle display prose or freeform choice labels.
 - [ ] Happy and illegal scenarios cover the implemented mechanics and relevant prompt/choice path.
+- [ ] Relevant capability entries were maintained when this batch introduces or materially changes a demonstrated pattern; do not create an entry for every card.
 - [ ] Genuine deferrals are recorded in `partial-cards.tsv`, not runtime RON.
 - [ ] `CARDS.md`, generator checks, Rust gates, and `git diff --check` pass as applicable.
 - [ ] The final report includes the governed MTG concepts and compliance or deferral note.

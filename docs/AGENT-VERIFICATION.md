@@ -128,6 +128,26 @@ powershell.exe -NoProfile -File tests/scripts/launch_ruled_game_test.ps1
 Also run these with `pwsh.exe` when PowerShell 7 is available. After changing orchestration, run
 the real combined gate once; fixture success alone does not establish the toolchain integration.
 
+The capability index checker is opt-in documentation tooling. It is not called by `verify.ps1` or
+CardData Check, and capability-index documentation changes do not require the full Rust gates. For
+checker changes, run its isolated regression suite under both available PowerShell versions:
+
+```powershell
+powershell.exe -NoProfile -File tests/scripts/capability_index_test.ps1
+pwsh.exe -NoProfile -File tests/scripts/capability_index_test.ps1
+```
+
+Run the checker separately when reviewing index edits:
+
+```powershell
+powershell.exe -NoProfile -File scripts/check-capability-index.ps1
+powershell.exe -NoProfile -File scripts/check-capability-index.ps1 -CheckFreshness
+```
+
+It performs local structural and lexical reference checks only; it does not build, execute tests,
+or decide semantic support. Freshness checks are opt-in and limited to each entry's **Reviewed
+paths**. Documentation-only changes still require link/target review and `git diff --check`.
+
 ## Windows
 
 Use the final entry point above for completion. For focused work or diagnosing a failed gate,
