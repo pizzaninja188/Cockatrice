@@ -63,13 +63,27 @@ fn resolve_with_target(
     targets: &[ObjectId],
     groups: &[u32],
 ) {
+    resolve_with_source_and_target(engine, effect, targets, groups, None);
+}
+
+fn resolve_with_source(engine: &mut GameEngine, effect: SpellEffectKind, source: ObjectId) {
+    resolve_with_source_and_target(engine, effect, &[], &[], Some(source));
+}
+
+fn resolve_with_source_and_target(
+    engine: &mut GameEngine,
+    effect: SpellEffectKind,
+    targets: &[ObjectId],
+    groups: &[u32],
+    source: Option<ObjectId>,
+) {
     let top = StackItem {
         id: u32::MAX,
         controller: 3,
         card_id: "cryptic_command".into(),
         targets: vec![],
         ability_text: None,
-        source_permanent_id: None,
+        source_permanent_id: source,
         source_owner: None,
         source_zone_change: 0,
         source_face_change: 0,
@@ -116,6 +130,9 @@ fn resolve_with_target(
         SpellEffectKind::DamageAll { .. } => damage_all(&mut cx, effect),
         SpellEffectKind::PutCountersAll { .. } => {
             super::super::pump_counters::put_counters_all(&mut cx, effect)
+        }
+        SpellEffectKind::PutCountersAllPlaneswalkers { .. } => {
+            super::super::pump_counters::put_counters_all_planeswalkers(&mut cx, effect)
         }
         _ => panic!("mass-effect fixture only"),
     };
@@ -186,6 +203,113 @@ fn issue_444_targeted_mass_counters_use_chosen_player_at_resolution() {
     assert_eq!(
         engine.state.objects[&other].counter_count(CounterKind::PlusOnePlusOne),
         1
+    );
+}
+
+#[test]
+fn ajani_steadfast_loyalty_clause_excludes_its_source_planeswalker() {
+    let mut engine = setup();
+    let source = deploy(&mut engine, 0, "grizzly_bears");
+    let other = deploy(&mut engine, 0, "grizzly_bears");
+    let opponent = deploy(&mut engine, 1, "grizzly_bears");
+    for object_id in [source, other, opponent] {
+        let object = engine
+            .state
+            .objects
+            .get_mut(&object_id)
+            .expect("planeswalker");
+        object.card_id = "jace_beleren".into();
+        object.counters.insert(CounterKind::Loyalty, 3);
+    }
+
+    resolve_with_source(
+        &mut engine,
+        SpellEffectKind::PutCountersAllPlaneswalkers {
+            counter: CounterKind::Loyalty,
+            count: 1.into(),
+            exclude_self: true,
+        },
+        source,
+    );
+
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::Loyalty),
+        3,
+        "Ajani's -2 clause says each other planeswalker"
+    );
+    assert_eq!(
+        engine.state.objects[&other].counter_count(CounterKind::Loyalty),
+        4
+    );
+    assert_eq!(
+        engine.state.objects[&opponent].counter_count(CounterKind::Loyalty),
+        3,
+        "only planeswalkers controlled by the ability's controller are included"
+    );
+
+    for object_id in [source, other, opponent] {
+        engine
+            .state
+            .objects
+            .get_mut(&object_id)
+            .expect("planeswalker")
+            .counters
+            .insert(CounterKind::Loyalty, 3);
+    }
+    engine.state.zone_change_generation.insert(source, 1);
+    resolve_with_source(
+        &mut engine,
+        SpellEffectKind::PutCountersAllPlaneswalkers {
+            counter: CounterKind::Loyalty,
+            count: 1.into(),
+            exclude_self: true,
+        },
+        source,
+    );
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::Loyalty),
+        4,
+        "the returned object has a new generation and is not Ajani's source"
+    );
+    assert_eq!(
+        engine.state.objects[&other].counter_count(CounterKind::Loyalty),
+        4
+    );
+    assert_eq!(
+        engine.state.objects[&opponent].counter_count(CounterKind::Loyalty),
+        3
+    );
+
+    for object_id in [source, other, opponent] {
+        engine
+            .state
+            .objects
+            .get_mut(&object_id)
+            .expect("planeswalker")
+            .counters
+            .insert(CounterKind::Loyalty, 3);
+    }
+    resolve_with_source(
+        &mut engine,
+        SpellEffectKind::PutCountersAllPlaneswalkers {
+            counter: CounterKind::Loyalty,
+            count: 1.into(),
+            exclude_self: false,
+        },
+        source,
+    );
+    assert_eq!(
+        engine.state.objects[&source].counter_count(CounterKind::Loyalty),
+        4,
+        "the source is included when exclusion is not requested"
+    );
+    assert_eq!(
+        engine.state.objects[&other].counter_count(CounterKind::Loyalty),
+        4
+    );
+    assert_eq!(
+        engine.state.objects[&opponent].counter_count(CounterKind::Loyalty),
+        3
     );
 }
 

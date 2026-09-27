@@ -1016,6 +1016,99 @@ pub(super) fn put_counters_all(
     Ok(EffectOutcome::Continue)
 }
 
+/// CR 122 / 608.2h: put `count` counters on each planeswalker the resolving ability's controller
+/// currently controls. Brokers Ascendancy and Ajani Steadfast share the resolution-time type and
+/// control check; Ajani's instruction sets `exclude_self` to omit its source planeswalker.
+pub(super) fn put_counters_all_planeswalkers(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::PutCountersAllPlaneswalkers {
+        counter,
+        count,
+        exclude_self,
+    } = effect
+    else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let count = cx.engine.resolve_amount(
+        &count,
+        AmountContext::for_stack_item(cx.top, cx.controller)
+            .with_previous_effect_result(cx.previous_effect_result),
+    );
+    let source = cx
+        .top
+        .source_permanent_id
+        .map(|source_id| (source_id, cx.top.source_zone_change));
+    let affected = cx
+        .engine
+        .state
+        .players
+        .iter()
+        .flat_map(|player| player.battlefield.iter().copied())
+        .filter_map(|object_id| {
+            cx.engine
+                .characteristics(object_id)
+                .map(|characteristics| (object_id, characteristics))
+        })
+        .filter(|(object_id, characteristics)| {
+            let is_source_object = source.is_some_and(|(source_id, source_generation)| {
+                *object_id == source_id
+                    && cx
+                        .engine
+                        .state
+                        .zone_change_generation
+                        .get(object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        == source_generation
+            });
+            characteristics.controller == cx.controller
+                && characteristics.has_type("Planeswalker")
+                && (!exclude_self || !is_source_object)
+        })
+        .map(|(object_id, _)| object_id)
+        .collect::<Vec<_>>();
+
+    let engine = &mut *cx.engine;
+    let events = &mut *cx.events;
+    let receipts = &mut cx.effect_result.counter_placements;
+    let spell_label = cx.spell_label;
+    let mut counter_events = Vec::new();
+    for object_id in affected {
+        let target_name = object_display_name(&engine.state, engine.registry, object_id);
+        let Some(counter_event) =
+            engine.place_counters_with_event(object_id, counter, count, false)
+        else {
+            continue;
+        };
+        let GameEvent::CountersPlaced {
+            object,
+            kind,
+            before,
+            after,
+            ..
+        } = &counter_event
+        else {
+            unreachable!("counter placement funnel returned a different event");
+        };
+        receipts.push(crate::state::CounterPlacementReceipt {
+            object: *object,
+            counter: *kind,
+            count: after.saturating_sub(*before),
+        });
+        counter_events.push(counter_event);
+        events.push(ev_log(format!(
+            "{spell_label} puts {count} {} counter{} on {target_name}",
+            counter_label(counter),
+            if count == 1 { "" } else { "s" },
+        )));
+    }
+    engine.fire_triggers(&counter_events);
+
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn can_put_counters(
     engine: &GameEngine,
     top: &StackItem,

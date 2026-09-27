@@ -1666,6 +1666,15 @@ pub enum SpellEffectKind {
         #[serde(default)]
         filter: CreatureScopeFilter,
     },
+    /// CR 122: put `count` counters on each planeswalker controlled by the resolving ability's
+    /// controller. Brokers Ascendancy and Ajani Steadfast share this resolution-time scope; the
+    /// latter excludes its own source planeswalker for its loyalty-counter clause.
+    PutCountersAllPlaneswalkers {
+        counter: CounterKind,
+        count: Amount,
+        #[serde(default)]
+        exclude_self: bool,
+    },
     /// Heirloom Auntie and Reluctant Dounguard remove counters without paying a cost.
     RemoveCounters {
         counter: CounterKind,
@@ -2761,6 +2770,7 @@ impl SpellEffectKind {
             | SpellEffectKind::UntapAll { .. }
             | SpellEffectKind::PumpAll { .. }
             | SpellEffectKind::PutCountersAll { .. }
+            | SpellEffectKind::PutCountersAllPlaneswalkers { .. }
             | SpellEffectKind::GrantKeywordsAll { .. }
             | SpellEffectKind::RemoveAbilitiesAll { .. }
             | SpellEffectKind::ReturnTriggeredCard { .. }
@@ -2837,6 +2847,7 @@ impl SpellEffectKind {
             | Self::TargetPlayerGainsLife { amount, .. }
             | Self::Mill { count: amount, .. }
             | Self::PutCounters { count: amount, .. }
+            | Self::PutCountersAllPlaneswalkers { count: amount, .. }
             | Self::Amass { count: amount, .. }
             | Self::CreateTokens { count: amount, .. }
             | Self::CreateTokenCopies { count: amount, .. }
@@ -3114,6 +3125,7 @@ impl SpellEffectKind {
                 | SpellEffectKind::TargetPlayerGainsLife { amount, .. }
                 | SpellEffectKind::Mill { count: amount, .. }
                 | SpellEffectKind::PutCounters { count: amount, .. }
+                | SpellEffectKind::PutCountersAllPlaneswalkers { count: amount, .. }
                 | SpellEffectKind::Amass { count: amount, .. }
                 | SpellEffectKind::CreateTokens { count: amount, .. }
                 | SpellEffectKind::CreateTokenCopies { count: amount, .. }
@@ -3373,6 +3385,9 @@ impl SpellEffectKind {
             counter.validate()?;
             filter.validate()?;
         }
+        if let SpellEffectKind::PutCountersAllPlaneswalkers { counter, .. } = self {
+            counter.validate()?;
+        }
         if matches!(self, SpellEffectKind::PutCounterSnapshot { .. })
             && context == EffectContext::Spell
         {
@@ -3595,6 +3610,7 @@ impl SpellEffectKind {
             | SpellEffectKind::TargetPlayerGainsLife { amount, .. }
             | SpellEffectKind::Mill { count: amount, .. }
             | SpellEffectKind::PutCounters { count: amount, .. }
+            | SpellEffectKind::PutCountersAllPlaneswalkers { count: amount, .. }
             | SpellEffectKind::Amass { count: amount, .. }
             | SpellEffectKind::CreateTokens { count: amount, .. }
             | SpellEffectKind::CreateTokenCopies { count: amount, .. }
@@ -4919,6 +4935,7 @@ impl SpellEffectKind {
             | Self::TargetPlayerGainsLife { amount, .. }
             | Self::Mill { count: amount, .. }
             | Self::PutCounters { count: amount, .. }
+            | Self::PutCountersAllPlaneswalkers { count: amount, .. }
             | Self::Amass { count: amount, .. }
             | Self::CreateTokens { count: amount, .. }
             | Self::CreateTokenCopies { count: amount, .. }
@@ -4980,6 +4997,7 @@ impl SpellEffectKind {
             | Self::TargetPlayerGainsLife { amount, .. }
             | Self::Mill { count: amount, .. }
             | Self::PutCounters { count: amount, .. }
+            | Self::PutCountersAllPlaneswalkers { count: amount, .. }
             | Self::Amass { count: amount, .. }
             | Self::CreateTokens { count: amount, .. }
             | Self::CreateTokenCopies { count: amount, .. }

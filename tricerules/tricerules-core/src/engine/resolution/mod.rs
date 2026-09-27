@@ -1772,6 +1772,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::PutCountersAll { .. } => {
                         pump_counters::put_counters_all(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::PutCountersAllPlaneswalkers { .. } => {
+                        pump_counters::put_counters_all_planeswalkers(&mut cx, effect)?
+                    }
                     effect @ (SpellEffectKind::Destroy { .. }
                     | SpellEffectKind::DestroyPreventingRegeneration { .. }) => {
                         misc::destroy(&mut cx, effect)?

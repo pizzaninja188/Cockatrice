@@ -1,0 +1,29 @@
+// Oracle and the official Streets of New Capenna release notes checked 2026-09-26.
+// The ruling confirms a permanent that is both a creature and a planeswalker receives both
+// counter types. CR 122 and 513.1-513.2 govern the counters and end-step timing.
+(
+    id: "brokers_ascendancy",
+    name: "Brokers Ascendancy",
+    face_id: "brokers_ascendancy",
+    mana_cost: "{G}{W}{U}",
+    types: ["Enchantment"],
+    triggered_abilities: [
+        (
+            ability_id: "triggered_01",
+            presentation: OracleLines([1]),
+            trigger: AtBeginningOfEndStep(player: Controller),
+            effect: [
+                PutCountersAll(
+                    counter: PlusOnePlusOne,
+                    count: 1,
+                    filter: (controller: Some(YouControl)),
+                ),
+                PutCountersAllPlaneswalkers(
+                    counter: Loyalty,
+                    count: 1,
+                    exclude_self: false,
+                ),
+            ],
+        ),
+    ],
+)

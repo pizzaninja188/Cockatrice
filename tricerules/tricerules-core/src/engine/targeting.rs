@@ -1490,6 +1490,7 @@ fn validate_effect_targets(
         }
         | SpellEffectKind::PumpAll { .. }
         | SpellEffectKind::PutCountersAll { .. }
+        | SpellEffectKind::PutCountersAllPlaneswalkers { .. }
         | SpellEffectKind::GrantKeywordsAll { .. }
         | SpellEffectKind::RemoveAbilitiesAll { .. }
         | SpellEffectKind::GrantKeywordsAllPermanents { .. }

@@ -88,6 +88,8 @@ mod deck_coverage_battlelands;
 mod deck_coverage_beast_within;
 #[path = "scenario/deck_coverage_berserkers_onslaught.rs"]
 mod deck_coverage_berserkers_onslaught;
+#[path = "scenario/deck_coverage_brokers_ascendancy.rs"]
+mod deck_coverage_brokers_ascendancy;
 #[path = "scenario/deck_coverage_buried_ruin.rs"]
 mod deck_coverage_buried_ruin;
 #[path = "scenario/deck_coverage_checklands.rs"]

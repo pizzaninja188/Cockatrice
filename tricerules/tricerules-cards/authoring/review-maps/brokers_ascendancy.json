@@ -1,0 +1,66 @@
+{
+  "format_version": 1,
+  "oracle_id": "809edfed-89a9-4327-b7db-1bcec63f3e66",
+  "spans": [
+    {
+      "face_id": "brokers_ascendancy",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0",
+        "/faces/0/triggered_abilities/0/effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::AtBeginningOfEndStep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCountersAll",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CreatureScopeController::YouControl",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/PutCountersAll/filter/controller"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCountersAllPlaneswalkers",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    },
+    {
+      "symbol": "CounterKind::Loyalty",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1/PutCountersAllPlaneswalkers/counter"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "deck_coverage_brokers_ascendancy::brokers_ascendancy_registers_its_characteristics_and_end_step_mapping",
+      "covers": "exact registered identity, printed characteristics, end-step controller trigger, and both typed counter clauses"
+    },
+    {
+      "test": "scenario deck_coverage_brokers_ascendancy::end_step_counters_are_delayed_and_limited_to_the_controller",
+      "covers": "both counter clauses resolve only on the ability controller's end step, after the trigger resolves, and affect only that controller's creatures and planeswalkers"
+    },
+    {
+      "test": "scenario deck_coverage_brokers_ascendancy::resolution_uses_current_controller_and_permanent_types",
+      "covers": "the resolving trigger selects current controlled creatures and planeswalkers using their current types and controllers"
+    },
+    {
+      "test": "scenario deck_coverage_brokers_ascendancy::a_dual_creature_planeswalker_gets_both_counter_types",
+      "covers": "a permanent that is both a creature and a planeswalker receives both +1/+1 and loyalty counters"
+    },
+    {
+      "test": "scenario deck_coverage_brokers_ascendancy::a_triggered_ability_resolves_after_brokers_ascendancy_leaves",
+      "covers": "the triggered ability resolves independently after Brokers Ascendancy leaves the battlefield"
+    },
+    {
+      "test": "scenario deck_coverage_brokers_ascendancy::an_ascendancy_entering_after_the_end_step_begins_waits_until_its_next_end_step",
+      "covers": "entering after the end step begins does not trigger retroactively and waits until the next own end step"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
