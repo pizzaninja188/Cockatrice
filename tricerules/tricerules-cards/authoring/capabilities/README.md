@@ -5,11 +5,11 @@ preflighting a complete card. An entry describes reviewed evidence and its limit
 rules source, generator input, registry, or substitute for reviewing the full card.
 
 Phase 2 seeded ten entries from shipped card definitions, review maps, engine paths, and semantic
-scenario assertions. The pilot added a source-counter-scaled mana entry after Astral Cornucopia's
-delivery. The three-batch pilot is underway; entries are lookup aids, not pilot measurements or proof
-of support for a new card. The [pilot protocol](PILOT.md) defines its measurement method. Measurement
-records stay outside the catalogue. The template below is not evidence and must not be counted as
-catalog content.
+scenario assertions. The pilot added source-counter-scaled mana after Astral Cornucopia and life-paid
+modal land entry after two MH3 cards. All three pilot batches completed on 2026-09-27; the
+[pilot protocol](PILOT.md) records the baseline and comparison, including its limits. Entries remain
+lookup aids, not pilot measurements or proof of support for a new card. Measurement records stay
+outside the catalogue. The template below is not evidence and must not be counted as catalog content.
 
 ## Keep three questions separate
 
@@ -83,12 +83,14 @@ authoritative for their respective content; the index points to them instead of 
 | [Quicksmith Genius optional discard then draw](entries/quicksmith-genius-optional-discard-draw.md) | Triggered ability | One controlled artifact entry presents an optional discard-then-draw; repeated events are outside the cited fixture. |
 | [Prosperity X for each player](entries/prosperity-x-each-player-draw.md) | Group draw | Three-player X=2 and two-player X=0 cases are covered; the index does not make a whole-card readiness claim. |
 | [Scavenger Grounds exile all graveyards](entries/scavenger-grounds-all-graveyards-exile.md) | Graveyard effect | Sacrifices a controlled Desert (including itself) as a cost, then exiles cards in all players' graveyards at resolution. |
+| [Modal land face with life-paid untapped entry](entries/modal-land-life-paid-entry.md) | Battlefield-entry replacement | Both named MH3 back faces may pay 3 life to avoid entering tapped; direct-RON definitions and exact life/color outcomes are tested. |
 
 The ten Phase 2 entries inspect the cited RON, review-map, test, and engine source at their recorded
-revisions; those tests were inspected, not run during that documentation work. The source-counter
-entry added during the pilot records Astral Cornucopia's separate delivery evidence and test results.
-No manual client acceptance is claimed for any entry. Whole-card readiness remains unassessed for
-the ten Phase 2 entries. The pilot outcome is not yet determined.
+revisions; those tests were inspected, not run during that documentation work. The two entries
+added during the pilot record separate card evidence and tests for Astral Cornucopia and the two
+named MH3 cards. No manual client acceptance is claimed for any entry. Whole-card readiness remains
+unassessed for the ten Phase 2 entries. The completed pilot did not produce comparable lookup-time
+measurements; see [PILOT.md](PILOT.md) for the results and limits.
 
 ## Catalogue boundary
 

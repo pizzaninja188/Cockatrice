@@ -1,12 +1,13 @@
 # Capability index pilot
 
-**At introduction: NOT RUN; the campaign is PAUSED.** No pilot batches have run and no baseline is
-recorded for this pilot. Run this protocol only after the campaign is explicitly resumed. Do not
-infer measurements from prior work, commits, or this seeded index.
+**Pilot status: COMPLETE (three batches, 2026-09-27).** The baseline was the first batch without
+index lookup; batches 2 and 3 used lookup-first. Initial seed effort and comparable per-batch
+lookup/revalidation effort were not captured, so the pilot cannot quantify time saved. Do not infer
+effort from commits or batch wall time.
 
-The pilot asks whether consulting the [capability pattern index](README.md) reduces duplicated
-lookup and preflight effort while preserving independent-review quality. Three future completed
-batches are the minimum comparison set. The ten seeded entries are candidate lookup aids, not pilot
+The pilot asked whether consulting the [capability pattern index](README.md) reduces duplicated
+lookup and preflight effort while preserving independent-review quality. Three completed batches
+formed the minimum comparison set. The ten seeded entries were candidate lookup aids, not pilot
 results or proof of support for a new card.
 
 ## Workflow
@@ -86,3 +87,53 @@ retaining the index only when measured savings exceed marginal upkeep and the in
 correction rate does not increase. Show the correction count and denominator, and account for
 complexity rather than pooling unlike cohorts. Three batches provide a practical decision signal, not
 a causal guarantee.
+
+## Completed pilot comparison
+
+The pilot used the fallback baseline because no contemporaneous historical phase timings existed.
+Batch 1 skipped only index lookup. Batches 2 and 3 consulted the index. These cohorts differ in
+scope and complexity, so their total elapsed time is descriptive only.
+
+| Batch | Completed cards | Index result | Batch elapsed | Review corrections |
+|---|---:|---|---:|---:|
+| 1 — Vivid Grove | 1 | Skipped (conventional baseline) | 1h 14m 28s | 0 blocking / 1 card |
+| 2 — Astral Cornucopia | 1 | No exact entry; one partial analogy | 2h 31m 47s | 2 blocking / 1 card |
+| 3 — Bridgeworks Battle // Tanglespan Bridgeworks; Sundering Eruption // Volcanic Fissure | 2 | No matching entry; miss/unassessed | 1h 39m 54s | 0 blocking / 2 cards |
+
+Batch 3 ran from 08:55:52 UTC through remote delivery verification at 10:35:46 UTC. Phase evidence
+is in the ignored `build/deck-coverage/capability-pilot-batch-{1,2,3}.txt` records and cited
+verification logs. Approximate captured elapsed spans (not worker effort) are:
+
+| Batch | Research/source | Implementation/focused checks | Metadata | Sol review | Final gate | Delivery |
+|---|---|---|---|---|---|---|
+| 1 | 16m 06s for two recorded screening/source windows; active effort unknown | Not fully timed; setup corrections and focused checks recorded in batch record | 7m 51s | Elapsed/effort unavailable | 8m 22s | About 1m 42s after final gate; active effort unknown |
+| 2 | Active lookup/fetch time unavailable | About 70m 21s from first preserved source-packet milestone through last focused Clippy result; this is a broad span, not isolated coding effort | 7m 39s | Elapsed/effort unavailable | 18m 15s | About 2m 57s to issue reconciliation after final gate; active effort unknown |
+| 3 | 24m 02s from candidate report to exact live-source/rulings snapshot; active effort unknown | About 29m 43s from test creation to final focused scenario pass, overlapping root and Luna | 5m 30s | Elapsed/effort unavailable | 7m 14s | 9m 14s from final gate completion to verified remote push; active effort unknown |
+
+Do not add these phase spans: some overlap across workers, and the available timestamps have
+different boundaries. Worker-active effort was not consistently recorded. Initial ten-entry index
+seeding effort is unavailable. For batch 2, the lookup miss and partial analogy did not isolate
+revalidation duration; batch 3 had no matching entry and its source/revalidation window is not
+comparable to batch 1's screened candidate/source windows. Therefore measured lookup savings versus
+baseline are **unavailable**, not zero. The repeated lookup observations are that the index did not
+supply a directly reusable answer for either indexed cohort; it did motivate two bounded entries
+after the relevant deliveries.
+
+Using blocking independent-review findings per reviewed whole-card identity, counts were 0/1,
+2/1, and 0/2. Optional wording suggestions are excluded from the numerator: batch 1's phrasing
+suggestion and batch 3's evidence-wording suggestion were still corrected. The second batch's two
+required corrections exceed the baseline rate; cohorts also differ materially (the second batch
+introduced a shared engine/client primitive, while the other two reused established entry and spell
+primitives). The evidence does not show that the index caused this difference. It also does not meet
+the protocol's evidence threshold for measured savings exceeding marginal upkeep with no increase
+in review corrections. Treat the three batches as a descriptive pilot, not proof that lookup-first
+reduced elapsed time or improved quality.
+
+Rework causes are recorded in each ignored batch record: batch 1 had two fixture/setup corrections,
+one optional wording correction, and an initial format failure; batch 2 had two blocking Sol
+findings, early test setup attempts, and an unavailable required clang-format v16 executable; batch
+3 had two setup-red attempts before valid expected-red tests, two dynamic-blocker fixture failures,
+a corrected nested JSON-pointer path in a review map, one initial format failure, and one optional
+evidence-wording correction. No command was rerun solely to measure time. The final gates completed
+for all three batches; batch 2's unavailable C++ clang-format v16 remains recorded as a limitation of
+that batch's C++ formatting evidence.
