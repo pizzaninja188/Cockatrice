@@ -1,0 +1,78 @@
+{
+  "format_version": 1,
+  "oracle_id": "5d0f4665-aa10-4251-b590-129b59274fb3",
+  "spans": [
+    {
+      "face_id": "clock_of_omens",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::TapPermanents",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "ObjectPaymentConstraint::ExactCount",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0/TapPermanents/constraint/ExactCount"
+    },
+    {
+      "symbol": "TargetFilter.kind",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0/TapPermanents/filter/kind"
+    },
+    {
+      "symbol": "TargetFilter.controller",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0/TapPermanents/filter/controller"
+    },
+    {
+      "symbol": "TargetFilter.permanent_types",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0/TapPermanents/filter/permanent_types"
+    },
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "EffectSubject::Chosen",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Untap/subject/Chosen"
+    },
+    {
+      "symbol": "TargetFilter.kind",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Untap/subject/Chosen/kind"
+    },
+    {
+      "symbol": "TargetFilter.permanent_types",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Untap/subject/Chosen/permanent_types"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_clock_of_omens::clock_taps_two_artifacts_as_cost_then_untaps_a_tapped_opponents_artifact",
+      "covers": "two controlled untapped artifacts are tapped as the activation cost; an opponent's tapped artifact remains tapped while the ability is pending and untaps on resolution"
+    },
+    {
+      "test": "scenario deck_coverage_clock_of_omens::clock_can_be_one_of_its_two_cost_artifacts_and_its_own_target",
+      "covers": "Clock can be one of the two artifacts tapped for the cost and can be chosen as the artifact target, then untaps on resolution"
+    },
+    {
+      "test": "scenario deck_coverage_clock_of_omens::clock_rejects_incomplete_duplicate_foreign_and_nonartifact_cost_selections_atomically",
+      "covers": "cost selection rejects too few or too many objects, duplicates, an opponent's artifact, a nonartifact, and a tapped artifact without partially tapping the selected objects"
+    },
+    {
+      "test": "scenario deck_coverage_clock_of_omens::clock_rejects_a_nonartifact_target_without_tapping_its_cost_artifacts",
+      "covers": "a nonartifact target is illegal and leaves both would-be cost artifacts untapped"
+    },
+    {
+      "test": "scenario deck_coverage_clock_of_omens::clock_can_target_an_already_untapped_artifact",
+      "covers": "an untapped artifact is a legal target and remains untapped after resolution"
+    },
+    {
+      "test": "deck_coverage_clock_of_omens::clock_of_omens_registers_its_complete_artifact_untap_ability",
+      "covers": "single artifact face, four-mana printed cost, exact two-artifact controlled tap cost including its source, Oracle line presentation, and unrestricted artifact target definition"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
