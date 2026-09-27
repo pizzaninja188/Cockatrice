@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "b99ada26-9a61-4175-9fb8-15a106960220",
+  "spans": [
+    {
+      "face_id": "ohran_frostfang",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    },
+    {
+      "face_id": "ohran_frostfang",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AnthemKeyword",
+      "typed_path": "/faces/0/static_abilities/0"
+    },
+    {
+      "symbol": "CreatureScopeFilter::controller_and_attacking",
+      "typed_path": "/faces/0/static_abilities/0/definition/AnthemKeyword/filter"
+    },
+    {
+      "symbol": "Keyword::Deathtouch",
+      "typed_path": "/faces/0/static_abilities/0/definition/AnthemKeyword/keyword"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverCreatureDealsCombatDamageToPlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "deck_coverage_ohran_frostfang::ohran_frostfang_registers_its_exact_characteristics_and_typed_abilities",
+      "covers": "exact identity, printed characteristics, Oracle line mapping, controller-and-attacking Deathtouch grant, and one draw per controlled creature combat-damage-to-player event"
+    },
+    {
+      "test": "scenario deck_coverage_ohran_frostfang::attacking_creatures_you_control_gain_deathtouch_and_any_damage_kills_a_blocker",
+      "covers": "only the controlled attacker gets Deathtouch, and its damage destroys the 4/4 blocker while the 1/2 attacker dies to combat damage"
+    },
+    {
+      "test": "scenario deck_coverage_ohran_frostfang::draws_once_per_friendly_combat_damager_but_not_for_damage_to_a_creature",
+      "covers": "two controlled attackers dealing player damage produce exactly two draws; damage only to a creature does not trigger a draw"
+    },
+    {
+      "test": "scenario deck_coverage_ohran_frostfang::ignores_noncombat_creature_damage_and_opponent_combat_damage",
+      "covers": "noncombat player damage and an opponent’s combat damage do not trigger Ohran’s draw"
+    },
+    {
+      "test": "scenario deck_coverage_ohran_frostfang::qualifying_draw_triggers_survive_simultaneous_lethal_damage_to_ohran",
+      "covers": "two player-damage triggers are ordered and draw two cards after Ohran dies in the same simultaneous combat damage event"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,33 @@
+(
+    id: "ohran_frostfang",
+    name: "Ohran Frostfang",
+    face_id: "ohran_frostfang",
+    mana_cost: "{3}{G}{G}",
+    supertypes: ["Snow"],
+    types: ["Creature", "Snake"],
+    power: Some(2),
+    toughness: Some(6),
+    keywords: [],
+    static_abilities: [
+        (
+            ability_id: "static_01",
+            presentation: OracleLines([1]),
+            definition: AnthemKeyword(
+                filter: (controller: YouControl, attacking: true),
+                condition: None,
+                keyword: Deathtouch,
+            ),
+        ),
+    ],
+    triggered_abilities: [
+        (
+            ability_id: "triggered_01",
+            presentation: OracleLines([2]),
+            trigger: WheneverCreatureDealsCombatDamageToPlayer(
+                source_controller: Controller,
+                damaged_player: AnyPlayer,
+            ),
+            effect: [Draw(count: 1)],
+        ),
+    ],
+)
