@@ -1,0 +1,29 @@
+// WotC LTR release notes checked 2026-09-26; CR 301.5b, 603.3d, 608.2b, 613.1f, 702.6a, 702.8a, and 702.12a-b.
+(
+  id: "mithril_coat",
+  name: "Mithril Coat",
+  face_id: "mithril_coat",
+  mana_cost: "{3}",
+  supertypes: ["Legendary"],
+  types: ["Artifact", "Equipment"],
+  keywords: [Flash, Indestructible],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([3]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [AttachSource(target: (kind: Creature, controller: You, required_supertypes: ["Legendary"]))],
+    targeting: Some((groups: [(min: 1, max: 1, prompt: "Choose target legendary creature you control", effect_indices: [0])])),
+  )],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([4]),
+    definition: AttachedModifier(keywords: [Indestructible]),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([5]),
+    source_zone: Battlefield,
+    costs: [Mana("{3}")],
+    effect: [Equip(target: (kind: Creature, controller: You))],
+  )],
+)

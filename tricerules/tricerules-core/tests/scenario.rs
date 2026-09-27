@@ -124,6 +124,8 @@ mod deck_coverage_lotus_petal;
 mod deck_coverage_manifold_key;
 #[path = "scenario/deck_coverage_mind_stone.rs"]
 mod deck_coverage_mind_stone;
+#[path = "scenario/deck_coverage_mithril_coat.rs"]
+mod deck_coverage_mithril_coat;
 #[path = "scenario/deck_coverage_mossfire_valley.rs"]
 mod deck_coverage_mossfire_valley;
 #[path = "scenario/deck_coverage_myr_retriever.rs"]

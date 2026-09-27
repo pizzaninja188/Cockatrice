@@ -1,0 +1,117 @@
+{
+  "format_version": 1,
+  "oracle_id": "3dc364f3-3094-4660-80ca-9418588c7fde",
+  "spans": [
+    {
+      "face_id": "mithril_coat",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/keywords"]
+    },
+    {
+      "face_id": "mithril_coat",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/keywords"]
+    },
+    {
+      "face_id": "mithril_coat",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    },
+    {
+      "face_id": "mithril_coat",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    },
+    {
+      "face_id": "mithril_coat",
+      "start_line": 5,
+      "end_line": 5,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flash",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "Keyword::Indestructible",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::AttachSource",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/AttachSource/target/kind"
+    },
+    {
+      "symbol": "TargetController::You",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/AttachSource/target/controller"
+    },
+    {
+      "symbol": "TargetFilter.required_supertypes",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/AttachSource/target/required_supertypes"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Equip",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetKind::Creature",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Equip/target/kind"
+    },
+    {
+      "symbol": "TargetController::You",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Equip/target/controller"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_mithril_coat::mithril_coat_casts_with_flash_without_creatures_and_keeps_its_own_indestructible",
+      "covers": "Flash permits the cast at instant timing with no creatures; the Coat enters unattached, retains its own Indestructible keyword, and the mandatory ETB target trigger is removed when no legal target exists"
+    },
+    {
+      "test": "scenario deck_coverage_mithril_coat::mithril_coat_etb_selects_only_a_legendary_creature_and_grants_indestructible",
+      "covers": "the ETB trigger targets only a legendary creature you control, attaches Mithril Coat, and grants Indestructible through its attached modifier"
+    },
+    {
+      "test": "scenario deck_coverage_mithril_coat::mithril_coat_remains_unattached_if_its_etb_target_becomes_illegal",
+      "covers": "if the chosen legendary creature becomes illegal before resolution, the ETB ability does not resolve and Mithril Coat remains unattached"
+    },
+    {
+      "test": "scenario deck_coverage_mithril_coat::mithril_coat_equip_three_targets_any_controlled_creature_at_sorcery_speed",
+      "covers": "Equip costs three mana, targets any creature you control including a nonlegendary creature, and is rejected outside sorcery timing without payment"
+    },
+    {
+      "test": "deck_coverage_mithril_coat::mithril_coat_registers_its_legendary_etb_and_any_creature_equip",
+      "covers": "registered identity, printed characteristics, keyword abilities, the legendary-only ETB target, line 4 attached modifier, and three-mana Equip target and timing"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
