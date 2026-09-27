@@ -1,0 +1,57 @@
+// Oracle and rulings verified against Scryfall on 2026-09-27. CR 712.11b-c/712.12,
+// 614.1c, 118.3b, 701.23-24, 608.2b, 509.1b, and 611.2a-c.
+(
+  id: "sundering_eruption_volcanic_fissure",
+  name: "Sundering Eruption // Volcanic Fissure",
+  layout: ModalDfc,
+  faces: [
+    (
+      name: "Sundering Eruption",
+      face_id: "sundering_eruption",
+      mana_cost: "{2}{R}",
+      types: ["Sorcery"],
+      spell_effect: [
+        Destroy(subject: Chosen((kind: AnyPermanent, permanent_types: [Land]))),
+        SearchLibrary(
+          who: ControllerOfTargetGroup(group_index: 0),
+          optional: true,
+          filter: Some((card_type: Some(BasicLand))),
+          destination: Battlefield(tapped: true),
+          shuffle: true,
+          reveal: false,
+        ),
+        ApplyCombatRestriction(
+          scope: Matching((kind: Creature, excluded_keywords: [Flying])),
+          restriction: (cant_block: true),
+        ),
+      ],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target land",
+        effect_indices: [0],
+      )])),
+    ),
+    (
+      name: "Volcanic Fissure",
+      face_id: "volcanic_fissure",
+      mana_cost: "",
+      types: ["Land"],
+      activated_abilities: [(
+        ability_id: "activated_01",
+        presentation: OracleLines([2]),
+        costs: [Tap],
+        effect: [ProduceMana(options: [(r: 1)])],
+      )],
+      static_abilities: [(
+        ability_id: "static_01",
+        presentation: OracleLines([1]),
+        definition: EntersTapped(
+          affected: Self_,
+          condition: None,
+          unless_cost: Some(PayLife(amount: 3)),
+        ),
+      )],
+    ),
+  ],
+)

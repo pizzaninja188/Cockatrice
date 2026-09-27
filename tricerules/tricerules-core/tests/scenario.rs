@@ -126,6 +126,8 @@ mod deck_coverage_looting;
 mod deck_coverage_lotus_petal;
 #[path = "scenario/deck_coverage_manifold_key.rs"]
 mod deck_coverage_manifold_key;
+#[path = "scenario/deck_coverage_mh3_mdfcs.rs"]
+mod deck_coverage_mh3_mdfcs;
 #[path = "scenario/deck_coverage_mind_stone.rs"]
 mod deck_coverage_mind_stone;
 #[path = "scenario/deck_coverage_mithril_coat.rs"]

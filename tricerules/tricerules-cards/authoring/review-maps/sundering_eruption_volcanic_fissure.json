@@ -1,0 +1,103 @@
+{
+  "format_version": 1,
+  "oracle_id": "c95309e9-5c2f-4518-b2fd-825d3d0a4ae0",
+  "spans": [
+    {
+      "face_id": "sundering_eruption",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "volcanic_fissure",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/1/static_abilities/0"]
+    },
+    {
+      "face_id": "volcanic_fissure",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/1/activated_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Destroy",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "PlayerRecipient::ControllerOfTargetGroup",
+      "typed_path": "/faces/0/spell_effect/1/SearchLibrary/who"
+    },
+    {
+      "symbol": "SearchDestination::Battlefield",
+      "typed_path": "/faces/0/spell_effect/1/SearchLibrary/destination"
+    },
+    {
+      "symbol": "SpellEffectKind::ApplyCombatRestriction",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "CombatRestrictionScope::Matching",
+      "typed_path": "/faces/0/spell_effect/2/ApplyCombatRestriction/scope"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/1/static_abilities/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/1/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/1/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_mh3_mdfcs::sundering_search_belongs_to_destroyed_land_controller_enters_tapped_and_checks_future_blockers",
+      "covers": "the destroyed land's controller decides whether to search and selects a basic land that enters under that player's control tapped; the matching no-flying restriction is dynamic"
+    },
+    {
+      "test": "scenario deck_coverage_mh3_mdfcs::sundering_decline_skips_search_and_shuffle_but_keeps_restriction_until_cleanup",
+      "covers": "declining leaves the library unchanged and unshuffled while the block restriction still lasts through the turn"
+    },
+    {
+      "test": "scenario deck_coverage_mh3_mdfcs::sundering_indestructible_land_still_allows_search_and_applies_restriction",
+      "covers": "a legal indestructible land remains on the battlefield while its controller may search and the restriction applies"
+    },
+    {
+      "test": "scenario deck_coverage_mh3_mdfcs::sundering_illegal_target_fizzles_search_and_block_restriction_together",
+      "covers": "when the sole land target becomes illegal, the search and temporary restriction do not happen"
+    },
+    {
+      "test": "scenario deck_coverage_mh3_mdfcs::both_mh3_land_faces_offer_three_life_and_produce_their_exact_color",
+      "covers": "this back face charges 3 life or enters tapped on decline/unaffordable payment and produces red"
+    },
+    {
+      "test": "deck_coverage_mh3_mdfcs_registry::pilot3_registers_both_complete_mdfc_identities_and_land_faces",
+      "covers": "whole-card identity, both printed faces, mana cost, type, color, and back-face entry and mana abilities"
+    },
+    {
+      "test": "deck_coverage_mh3_mdfcs_registry::sundering_front_keeps_target_controller_search_and_dynamic_restriction_ordered",
+      "covers": "required land target, target-controller optional basic search, tapped destination, and dynamic matching restriction"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

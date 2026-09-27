@@ -1,0 +1,78 @@
+{
+  "format_version": 1,
+  "oracle_id": "9d581188-ce80-494e-bd38-f411e1f4efb5",
+  "spans": [
+    {
+      "face_id": "bridgeworks_battle",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "tanglespan_bridgeworks",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/1/static_abilities/0"]
+    },
+    {
+      "face_id": "tanglespan_bridgeworks",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/1/activated_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Fight",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/1/static_abilities/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/1/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/1/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_mh3_mdfcs::bridgeworks_requires_its_own_target_and_fights_only_when_the_optional_target_is_chosen",
+      "covers": "the required creature is controlled by the caster; the opposing fight target may be omitted"
+    },
+    {
+      "test": "scenario deck_coverage_mh3_mdfcs::bridgeworks_pumps_before_fight_and_keeps_the_pump_when_its_optional_target_becomes_illegal",
+      "covers": "the +2/+2 resolves before fighting; an illegal optional fight target does not suppress the still-legal pump"
+    },
+    {
+      "test": "scenario deck_coverage_mh3_mdfcs::both_mh3_land_faces_offer_three_life_and_produce_their_exact_color",
+      "covers": "this back face charges 3 life or enters tapped on decline/unaffordable payment and produces green"
+    },
+    {
+      "test": "deck_coverage_mh3_mdfcs_registry::pilot3_registers_both_complete_mdfc_identities_and_land_faces",
+      "covers": "whole-card identity, both printed faces, mana cost, type, color, and back-face entry and mana abilities"
+    },
+    {
+      "test": "deck_coverage_mh3_mdfcs_registry::bridgeworks_front_requires_its_controller_target_and_keeps_fight_optional",
+      "covers": "required and optional target-group bounds, filters, prompts, and effect bindings"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

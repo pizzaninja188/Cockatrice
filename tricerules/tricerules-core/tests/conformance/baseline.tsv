@@ -390,6 +390,9 @@ break_down_the_door	0	cast	exercised
 breakneck_berserker	0	cast	exercised
 breeding_pool	0	ability:0	exercised
 breeding_pool	0	land	exercised
+bridgeworks_battle_tanglespan_bridgeworks	0	cast	exercised
+bridgeworks_battle_tanglespan_bridgeworks	1	ability:0	exercised
+bridgeworks_battle_tanglespan_bridgeworks	1	land	exercised
 brightblade_stoat	0	cast	exercised
 brightclimb_pathway_grimclimb_pathway	0	ability:0	exercised
 brightclimb_pathway_grimclimb_pathway	0	land	exercised
@@ -3013,6 +3016,9 @@ sun-dappled_celebrant	0	cast	exercised
 sun_sentinel	0	cast	exercised
 sunblade_angel	0	cast	exercised
 sunderflock	0	cast	exercised
+sundering_eruption_volcanic_fissure	0	cast	exercised
+sundering_eruption_volcanic_fissure	1	ability:0	exercised
+sundering_eruption_volcanic_fissure	1	land	exercised
 sundial,_dawn_tyrant	0	cast	exercised
 sundown_pass	0	ability:0	exercised
 sundown_pass	0	land	exercised
