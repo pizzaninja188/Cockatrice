@@ -86,7 +86,7 @@
 
 ## Review provenance
 
-- **Reviewed revision:** `34bb8f7ccaee20e69ae3d0c90dde65edaf23f76b`.
+- **Reviewed revision:** `8cdfb09388b74cd98ff41d7940e54487c3899779`.
 - **Reviewed paths:**
   - `tricerules/tricerules-cards/data/voltaic_key.ron`
   - `tricerules/tricerules-cards/authoring/review-maps/voltaic_key.json`
@@ -103,4 +103,4 @@
   - `tricerules/tricerules-core/src/engine/casting.rs`
   - `tricerules/tricerules-core/src/engine/targeting.rs`
   - `tricerules/tricerules-core/src/engine/resolution/misc.rs`
-- **Review note:** Existing assertions were inspected but not rerun in this documentation phase. No GUI acceptance is claimed.
+- **Review note:** Clock's definition, review map, registry test, and scenarios were reviewed against this delivered revision; the root ran the focused and full Rust/CardData gates, and Sol independently approved the frozen patch. No GUI acceptance is claimed.
