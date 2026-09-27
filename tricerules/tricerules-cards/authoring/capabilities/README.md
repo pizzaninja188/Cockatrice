@@ -4,9 +4,9 @@ This directory documents bounded, reusable rules patterns that card authors can 
 preflighting a complete card. An entry describes reviewed evidence and its limits. It is not a
 rules source, generator input, registry, or substitute for reviewing the full card.
 
-Phase 1 establishes the entry contract only. There are no capability entries yet. The planned
-three-batch pilot remains pending; the template below is not evidence and must not be counted as
-catalog content.
+Phase 2 seeds ten entries from shipped card definitions, review maps, engine paths, and semantic
+scenario assertions. The planned three-batch pilot remains pending; these entries are not pilot
+measurements. The template below is not evidence and must not be counted as catalog content.
 
 ## Keep three questions separate
 
@@ -64,6 +64,25 @@ Use repository links to the existing [card authoring guide](../CARD-AUTHORING.md
 semantic fixture to the [Divination definition](../../data/divination.ron) and the
 [scenario test](../../../tricerules-core/tests/scenario/spell_effects.rs). These sources remain
 authoritative for their respective content; the index points to them instead of copying them.
+
+## Seeded patterns
+
+| Entry | Category | Evidence and boundary |
+|---|---|---|
+| [Permanent taps for {C}](entries/permanent-taps-for-colorless.md) | Mana ability | Mind Stone and Scavenger Grounds each tap for one colorless mana without the stack; covers these two shipped definitions. |
+| [Lotus Petal chosen-color mana](entries/lotus-petal-chosen-color-mana.md) | Mana ability | Taps and sacrifices itself for one of five colors; does not cover unrestricted mana choices beyond those options. |
+| [Artifact sacrifice draw](entries/artifact-sacrifice-draw.md) | Activated ability | Mind Stone pays {1}, taps and sacrifices itself before one draw resolves. |
+| [Ichor Wellspring event draw](entries/ichor-wellspring-multizone-draw.md) | Triggered ability | One ability triggers on entry and battlefield-to-graveyard; the fixture checks the second event while the entry trigger waits. |
+| [Myr Retriever death recovery](entries/myr-retriever-dies-recovery.md) | Triggered ability | Selects another artifact card from the trigger controller's graveyard after simultaneous deaths; target departure before resolution is untested. |
+| [Voltaic Key artifact untap](entries/voltaic-key-artifact-untap.md) | Activated ability | Targets an artifact under any player's control, including itself or one already untapped; resolution-time target departure is untested. |
+| [Prized Statue event Treasure](entries/prized-statue-event-treasure.md) | Token creation | One Treasure follows entry and one follows its battlefield-to-graveyard move; its token mana ability is outside this claim. |
+| [Quicksmith Genius optional discard then draw](entries/quicksmith-genius-optional-discard-draw.md) | Triggered ability | One controlled artifact entry presents an optional discard-then-draw; repeated events are outside the cited fixture. |
+| [Prosperity X for each player](entries/prosperity-x-each-player-draw.md) | Group draw | Three-player X=2 and two-player X=0 cases are covered; the index does not make a whole-card readiness claim. |
+| [Scavenger Grounds exile all graveyards](entries/scavenger-grounds-all-graveyards-exile.md) | Graveyard effect | Sacrifices a controlled Desert (including itself) as a cost, then exiles cards in all players' graveyards at resolution. |
+
+The entries inspect the cited RON, review-map, test, and engine source at the recorded revision.
+Tests were inspected, not run in this documentation phase. No manual client acceptance is claimed;
+whole-card readiness remains unassessed in each entry. The three-batch pilot is still pending.
 
 ## Catalogue boundary
 
