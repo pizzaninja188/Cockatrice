@@ -6,7 +6,9 @@ rules source, generator input, registry, or substitute for reviewing the full ca
 
 Phase 2 seeds ten entries from shipped card definitions, review maps, engine paths, and semantic
 scenario assertions. The planned three-batch pilot remains pending; these entries are not pilot
-measurements. The template below is not evidence and must not be counted as catalog content.
+measurements. The [pilot status and measurement protocol](PILOT.md) records that status and defines
+how to measure future use. The template below is not evidence and must not be counted as catalog
+content.
 
 ## Keep three questions separate
 

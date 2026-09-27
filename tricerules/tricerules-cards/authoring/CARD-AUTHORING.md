@@ -89,6 +89,16 @@ reusable typed effect over a card-specific path. `TargetKind::Self_` binds the s
 targeting under CR 115 and is invalid in spell effects; do not treat every effect subject as a
 chosen target.
 
+Before researching a candidate cohort, consult the [capability pattern index](capabilities/README.md)
+and its [pilot status and measurement protocol](capabilities/PILOT.md). Treat an exact entry as a
+lookup aid: check its boundaries and evidence, then fetch the current source and rulings for every
+card as required above. Record a partial match or miss when the behavior differs or no entry fits;
+do not infer runtime support, generator recognition, or whole-card readiness from a nearby pattern.
+Independent review of the authored cards and their actual behavior remains required.
+When following the pilot's fallback baseline, its first batch temporarily skips only this index
+lookup; source checks and independent review still apply. Lookup-first applies to the next two
+measurement batches.
+
 ## 4. Author the card definition
 
 For a hand-authored card:
