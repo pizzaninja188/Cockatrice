@@ -4,13 +4,15 @@
 .DESCRIPTION
     Check writes only logs and a temporary checklist under build. Refresh regenerates existing
     provenance-owned RON and fingerprints, validates the new checklist before replacing CARDS.md,
-    then checks the result. Neither mode downloads sources or includes newly qualifying cards.
+    without repeating the final Check. MetadataOnly skips recipe generation for handwritten cards.
+    Refresh is preparation, not verification. Neither mode downloads sources or includes new cards.
     Relative source paths are resolved from the repository root, independent of the caller's cwd.
 #>
 [CmdletBinding()]
 param(
     [ValidateSet('Check', 'Refresh')]
     [string] $Mode = 'Check',
+    [switch] $MetadataOnly,
     [string] $OracleBulk,
     [string] $CardsXml
 )
@@ -63,6 +65,7 @@ function Test-CanonicalCardData {
 }
 
 try {
+    if ($MetadataOnly -and $Mode -ne 'Refresh') { throw '-MetadataOnly requires -Mode Refresh; Check always validates the full corpus.' }
     if (-not $OracleBulk) { $OracleBulk = 'oracle-cards.jsonl.gz' }
     if (-not $CardsXml) {
         if (-not $env:LOCALAPPDATA) { throw 'LOCALAPPDATA is unavailable; pass -CardsXml.' }
@@ -78,14 +81,17 @@ try {
     $checklist = Join-Path $repo 'tricerules\CARDS.md'
 
     if ($Mode -eq 'Refresh') {
-        $code = Invoke-CardTool 'Refresh existing generated cards' 'gen-cards.ps1' @('--input', $OracleBulk)
+        $refreshArguments = @('--input', $OracleBulk)
+        if ($MetadataOnly) { $refreshArguments += '--refresh-presentation' }
+        $code = Invoke-CardTool 'Refresh card metadata' 'gen-cards.ps1' $refreshArguments
         if ($code -ne 0) { exit $code }
         $code = Invoke-CardTool 'Validate refreshed checklist' 'gen-card-checklist.ps1' @(
             '--cards-xml', $CardsXml, '--out', $candidate, '--check'
         )
         if ($code -ne 0) { exit $code }
         Copy-Item -LiteralPath $candidate -Destination $checklist -Force
-        Write-Host 'Refreshed existing generated data. Review the generated RON, fingerprint, and CARDS.md diff before staging.'
+        Write-Host 'Prepared card data. Review the diff, then run verify.ps1 -Side Rust -CardData (Both if C++ is affected). Refresh is not a verification gate.'
+        exit 0
     }
     exit (Test-CanonicalCardData)
 }

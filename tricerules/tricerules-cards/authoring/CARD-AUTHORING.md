@@ -801,7 +801,7 @@ its Standard subset, distinguishes generator eligibility from registered support
 reviewed evidence before counting a whole identity as unlocked. The clause report above remains
 unchanged.
 
-For an unsupported card chosen from a candidate report, scaffold the clerical source fields from
+When useful, scaffold the clerical source fields for a selected card from
 the same pinned, SHA-verified Oracle bulk input:
 
 ```powershell
@@ -846,11 +846,14 @@ Choose the authoring route in this order:
 4. File a scoped runtime blocker when any required cost, timing, choice, target, effect,
    presentation, or composition semantics are unsupported. Do not partially admit the card.
 
-For the direct-RON route, keep the author-supplied draft outside `data/` and create a version-1 JSON
-review map. Select one pinned source identity with either `oracle_id` or `exact_name`. Cover every
+For the direct-RON route, keep incomplete drafts outside `data/`. A complete copied definition may
+be edited directly in `data/` during the normal red/green workflow; no scaffold/promotion ceremony
+is required. Create a version-1 JSON review map. Select one pinned source identity with either
+`oracle_id` or `exact_name`. Cover every
 normalized Oracle line exactly once with either `typed_paths` (JSON pointers into the validated
-runtime-shaped definition) or a nonblank `unresolved_reason`. List explicit primitive references,
-every referenced token ID, and planned semantic fixtures. The tool does not infer any of these.
+runtime-shaped definition) or a nonblank `unresolved_reason`. Primitive references are optional
+navigation hints: omit routine symbol/path inventories already evident in the typed definition.
+List every referenced token ID and semantic fixtures. The tool does not infer these mappings.
 
 ```powershell
 ./scripts/gen-cards.ps1 `
@@ -975,17 +978,19 @@ Use red/green TDD for behavior changes: add the smallest focused regression, con
 failure, implement one coherent increment, and rerun it. Finish with the exact Rust and card-data
 gates in [`docs/AGENT-VERIFICATION.md`](../../../docs/AGENT-VERIFICATION.md).
 
-For card-data changes, refresh existing generated RON, presentation fingerprints, and the
-validated checklist, review the resulting diff, then run final verification from the repository
-root:
+For handwritten card-data changes, refresh presentation fingerprints and the validated checklist,
+review the resulting diff, then run final verification from the repository root:
 
 ```powershell
-./scripts/update-card-data.ps1 -Mode Refresh
+./scripts/update-card-data.ps1 -Mode Refresh -MetadataOnly
 ./scripts/verify.ps1 -Side Rust -CardData
 ```
 
-Use `-Side Both` when C++ contracts are affected. Refresh uses the existing pinned local input;
-it does not fetch new data or enable `--include-new`. Check is non-mutating for tracked files.
+Use `-Side Both` when C++ contracts are affected. Omit `-MetadataOnly` when changing recipes or
+generated RON. Refresh uses pinned local input and is preparation, not a verification gate;
+it does not fetch new data or enable `--include-new`. The final gate performs the full Check,
+including maps, non-ignored test references, recipes, presentation and checklist drift. Do not
+run another standalone Check between Refresh and that gate. Check leaves tracked files unchanged.
 The legacy checklist generator's `--check` validates names but still writes its output; do not
 use it as a read-only drift check. Source overrides and retained failure evidence are described
 in the verification guide.
@@ -999,7 +1004,8 @@ that presentation transport, visibility, physical identity, and client behavior 
 Keep four contracts separate: primitive behavior, composition (for example, an ETB draw or a
 selected modal effect), each card's reviewed semantic mapping, and unusual interaction regressions.
 Registry shape checks alone do not execute effects; successful command admission alone does not
-prove resolution. The conformance coverage classifications and reviewed baseline remain unchanged.
+prove resolution. New successful generic conformance cases need no baseline entry. Unclassified
+fixture gaps, execution failures and changes to existing reviewed baseline rows still fail.
 
 Reusing mechanics does not require a new bespoke scenario function for every card. For the same
 tested pattern with different parameters, prefer adding the actual card to a shared scenario with
@@ -1075,6 +1081,38 @@ N/A. Focused fixture/registry tests, existing conformance, generator tests and f
 gates remain required. No new rules capability or card identity is introduced.
 
 ### Batch evidence and review discipline
+
+#### Short path for reuse-only batches
+
+Group cards that share tested mechanics so preparation, independent review and the final gate
+are paid once per coherent batch, not once per card. Keep new engine work separate. Use these steps:
+
+1. Fetch exact Oracle/rulings and inspect the closest implemented definitions and assertions.
+   Record one compact preflight: copy from, differences, reused evidence, distinguishing tests,
+   remaining gaps. Reuse source evidence already obtained for the same identity and source version.
+2. Copy the typed structure, check every clause, and add actual-card rows to shared scenarios
+   with independent expectations. A scaffold, candidate/dependency report, capability-index search,
+   new per-card registry test file or bespoke scenario function is not mandatory. Use those tools
+   only when they resolve a concrete uncertainty. Do not regenerate a whole-corpus report per card.
+3. Keep one checked-in review map per handwritten card with source spans, exact semantic test
+   references and complete-definition confirmation. Omit optional primitive inventories and empty
+   token arrays; retain relevant token identities. A separate narrative dossier or pre-review
+   generated packet is not mandatory: reviewers can inspect the source, RON, map and test diff.
+4. Prove focused red/green coverage, format, prepare metadata once with `-MetadataOnly`, and run
+   focused conformance/lint before freezing the batch. Successful new conformance cases require
+   no manual rows or candidate-report run. Investigate exceptions rather than accepting them blindly.
+5. Obtain one independent semantic review, fix material findings, then run one final affected-side
+   gate. Its CardData step validates the whole corpus and generates the audit packets. Do not repeat
+   packet generation, test listing, standalone Check or clerical review as routine separate steps.
+
+For pure reuse, unchanged protocol, client presentation and interaction paths need no repeated
+GUI demonstration solely because a new card was added. Trace those surfaces and state N/A with a
+reason; new or changed visible behavior still requires its relevant acceptance evidence. Never
+claim that generic conformance, copied RON or a successful metadata refresh proves card semantics.
+
+If source access fails with a sandbox socket denial, use the host's supported permission path for
+the same narrow read. Distinguish that from a real HTTP response. Do not spend repeated research
+attempts treating a local network restriction as a missing mechanic or external service outage.
 
 Missing generator recognition is not a runtime blocker. Classify ready cards, unassessed cards,
 generator limitations and genuine runtime blockers separately. Routine selection may be tracked

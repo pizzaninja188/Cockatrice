@@ -26,12 +26,27 @@ try {
     Assert-Workflow ($result.ExitCode -eq 9) 'Fingerprint failure exit code was lost.'
     Assert-Workflow ($result.Output -match 'fingerprint drift') 'Fingerprint failure log was hidden.'
 
-    $result = Invoke-WorkflowFixture $fixture 'update-card-data.ps1' (@('-Mode', 'Refresh') + $arguments)
+    $refreshStart = @(Read-WorkflowTrace $fixture).Count
+    $result = Invoke-WorkflowFixture $fixture 'update-card-data.ps1' (@('-Mode', 'Refresh', '-MetadataOnly') + $arguments)
     Assert-Workflow ($result.ExitCode -eq 0) "Refresh failed: $($result.Output)"
     Assert-Workflow ([IO.File]::ReadAllText($checklist) -eq 'canonical checklist') 'Refresh did not publish validated checklist.'
     Assert-Workflow ([IO.File]::ReadAllText($fingerprint) -eq 'canonical') 'Refresh did not refresh fingerprints.'
+    $refreshCalls = @(Read-WorkflowTrace $fixture | Select-Object -Skip $refreshStart)
+    Assert-Workflow ($refreshCalls.Count -eq 2) 'Refresh repeated final checks instead of preparing metadata once.'
+    Assert-Workflow ($refreshCalls[0].Arguments -contains '--refresh-presentation') 'Metadata-only refresh invoked recipe generation.'
     $result = Invoke-WorkflowFixture $fixture 'update-card-data.ps1' $arguments
     Assert-Workflow ($result.ExitCode -eq 0) "Check after Refresh failed: $($result.Output)"
+
+    $refreshStart = @(Read-WorkflowTrace $fixture).Count
+    $result = Invoke-WorkflowFixture $fixture 'update-card-data.ps1' (@('-Mode', 'Refresh') + $arguments)
+    Assert-Workflow ($result.ExitCode -eq 0) 'Full generated-data Refresh failed.'
+    $refreshCalls = @(Read-WorkflowTrace $fixture | Select-Object -Skip $refreshStart)
+    Assert-Workflow ($refreshCalls.Count -eq 2) 'Full Refresh repeated final checks.'
+    Assert-Workflow ($refreshCalls[0].Arguments -notcontains '--refresh-presentation') 'Full Refresh skipped recipe generation.'
+    $callCount = @(Read-WorkflowTrace $fixture).Count
+    $result = Invoke-WorkflowFixture $fixture 'update-card-data.ps1' (@('-MetadataOnly') + $arguments)
+    Assert-Workflow ($result.ExitCode -ne 0) 'MetadataOnly weakened Check.'
+    Assert-Workflow (@(Read-WorkflowTrace $fixture).Count -eq $callCount) 'Invalid mode ran a tool.'
 
     Set-Content -LiteralPath (Join-Path $fixture 'bad-names') -Value 'invalid'
     [IO.File]::WriteAllText($checklist, 'preserve this checklist')

@@ -658,6 +658,9 @@ fn compare_baseline(actual: &str, expected: &str) -> Result<(), String> {
     let mut changes = vec![];
     for (key, outcome) in &actual {
         match expected.get(key) {
+            // New successful cases need no clerical baseline entry. A later fixture
+            // gap still fails as unclassified; existing reviewed rows remain strict.
+            None if outcome == "exercised" => {}
             None => changes.push(format!("unclassified {key}: {outcome}")),
             Some(old) if old != outcome => {
                 changes.push(format!("changed {key}: {old} -> {outcome}"))
@@ -679,11 +682,17 @@ fn compare_baseline(actual: &str, expected: &str) -> Result<(), String> {
 }
 
 #[test]
-fn baseline_rejects_regressions_unclassified_cases_stale_entries_and_duplicates() {
+fn baseline_accepts_new_successes_but_rejects_unreviewed_gaps_and_regressions() {
     let exercised = "bear\t0\tcast\texercised\n";
     let unsupported = "bear\t0\tcast\tunsupported: no target fixture\n";
     assert!(compare_baseline(unsupported, exercised).is_err());
-    assert!(compare_baseline(exercised, "").is_err());
+    assert!(compare_baseline(exercised, "").is_ok());
+    assert!(compare_baseline(unsupported, "").is_err());
+    assert!(compare_baseline(
+        "bear\t0\tcast\tintentional: face unavailable from hand\n",
+        ""
+    )
+    .is_err());
     assert!(compare_baseline("", exercised).is_err());
     assert!(compare_baseline(exercised, &(exercised.to_owned() + exercised)).is_err());
     assert!(compare_baseline("bear\t0\tcast\tunsupported: \n", unsupported).is_err());

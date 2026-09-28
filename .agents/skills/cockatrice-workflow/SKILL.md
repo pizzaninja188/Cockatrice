@@ -21,9 +21,11 @@ requirements; this skill routes the work rather than replacing them.
 - Query the live `pizzaninja188/Cockatrice` tracker using `gh` with the explicit repository. Check
   dependencies, current code, local history, and existing changes before selecting a candidate.
   `docs/issues.md` is a pointer; upstream Cockatrice issues are a different queue.
-- For high-volume card coverage, use `gen-cards --candidate-report` over the full pinned corpus or
+- When selection needs it, use `gen-cards --candidate-report` over the full pinned corpus or
   an exact-name target file. Rank printing-independent unsupported-clause clusters instead of
   authoring alphabetically or by set; the report routes research and never selects mechanics.
+  Reuse a current inventory; do not rerun whole-corpus reports per card or require one for a
+  ready batch with known implemented analogues.
 - Honor whether the user is available for UI testing. Prefer a bounded Rust/card-data candidate
   when requested, but trace presentation, protocol, relay, physical identity, and Qt consumers
   before declaring those gates N/A.
@@ -69,9 +71,12 @@ requirements; this skill routes the work rather than replacing them.
   Missing generator recognition is not a runtime blocker. File a blocker for missing runtime, choice, target,
   or presentation contracts. An empty route reports its limitation; it never authorizes widening
   a grammar. A recognized clause or recipe name is not evidence of complete support.
-- For an unsupported data-only card or batch, use the source-backed scaffold mode to populate only
+- For a data-only card or batch, optionally use source-backed scaffold mode to populate only
   clerical source fields. Keep scaffolds outside embedded `data/`; mechanically author and review
   every unresolved field before removing both sentinels and promoting a file to `.ron`.
+  Complete copied definitions can be authored directly in `data/` with the usual tests and
+  review maps. Follow the guide's short path for reuse-only batches: omit optional primitive
+  inventories and separate narrative dossiers; generate audit packets in the final CardData gate.
 - New recipe development needs a concrete expected throughput benefit for a named cohort;
   two matching cards alone do not justify it. Actual generator changes still require stable recipe
   IDs, typed emission, positive calibrations and negative near-misses. Preserve existing generated
@@ -110,7 +115,10 @@ requirements; this skill routes the work rather than replacing them.
   and request missing commands from the root. Follow the authoring guide's material-change
   criteria for follow-up review; do not request routine confirmation after every batch.
 - When authored cards change generated metadata, explicitly run
-  `scripts/update-card-data.ps1 -Mode Refresh` from the root and inspect the generated diff.
+  `scripts/update-card-data.ps1 -Mode Refresh -MetadataOnly` for handwritten additions and inspect
+  the diff. Omit `-MetadataOnly` when recipes/generated RON need refreshing. Refresh only prepares
+  data; do not repeat standalone Check before the full final gate. New successful conformance
+  cases need no manual baseline rows; exceptions and existing-row changes still require review.
   Regeneration from existing local inputs is part of authorized card implementation and needs
   no separate approval. Updating external source datasets requires separate authorization.
   A reviewed recipe that deliberately qualifies new cards requires the

@@ -94,17 +94,21 @@ not permission to omit a required gate. Diagnose unrelated baseline drift before
 For card additions, explicitly refresh and review generated changes before final verification:
 
 ```powershell
-./scripts/update-card-data.ps1 -Mode Refresh
-./scripts/update-card-data.ps1 -Mode Check
+./scripts/update-card-data.ps1 -Mode Refresh -MetadataOnly
+./scripts/verify.ps1 -Side Rust -CardData
 ```
 
 Check is the default. It first validates checked-in direct-RON maps and exact non-ignored Cargo
 test references with `scripts/check-card-evidence.ps1`. Listing is not execution evidence: the full
 Rust suite must also pass on the same content. It runs the generator check and validates a temporary checklist,
 then compares that checklist with `tricerules/CARDS.md`, ignoring only CRLF/LF differences. It
-writes only build artifacts. Refresh updates existing generated RON and fingerprints, validates
-the new checklist before replacing `CARDS.md`, then runs Check. Review all resulting changes;
-neither command stages files, downloads sources, or enables `--include-new`.
+writes only build artifacts. For handwritten cards, Refresh with `-MetadataOnly` updates fingerprints
+without evaluating recipes or rewriting generated RON, then validates and replaces `CARDS.md`.
+Omit `-MetadataOnly` when generator recipes or generated card output need refreshing.
+Refresh is preparation only: it does not repeat Check or validate semantic evidence. Review its
+diff and run the final gate, which includes the full Check regardless of refresh mode. Do not
+also run a standalone Check routinely. Neither command stages files, downloads sources, or
+enables `--include-new`. `-MetadataOnly` is rejected with Check; it cannot narrow the final gate.
 
 Optional `-OracleBulk` and `-CardsXml` override the existing local source defaults. Relative paths
 resolve from the repository root. Bulk metadata remains the adjacent `<input>.meta.json` and the
@@ -180,7 +184,8 @@ Report exercised, N/A with a reason, or fixture-blocked; a skipped/rejected acti
 resolution is not passing semantic evidence. A drain result alone proves only completion.
 Keep primitive, composition, per-card mapping and dedicated interaction coverage distinct.
 Applicable illegal paths still need coverage; untargeted effects do not need artificial target
-tests. Complete-definition review and the existing conformance baseline are unchanged.
+tests. Complete-definition review remains required. New successful generic conformance cases
+need no baseline rows; unclassified fixture gaps and changes to existing reviewed rows still fail.
 
 For the reusable fixture pilot, run focused `scenario semantic_fixtures`, the ported Divination
 and Pawpatch scenarios, and the `issue_448_semantic_mapping` and `issue_412_modal_mode_registry`

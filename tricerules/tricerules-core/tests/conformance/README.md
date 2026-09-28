@@ -8,7 +8,9 @@ alternate casting method, triggered/static ability, X value, or interaction.
 
 `baseline.tsv` is sorted by `(card ID, face index, action)`, with four tab-separated columns.
 `cast` means a hand cast, `land` means a land play; `ability:N` identifies a face's printed activated ability.
-Every registry face and printed activated ability has exactly one row:
+Every registry face and printed activated ability is evaluated. New `exercised` cases pass
+without a checked-in row; keep existing rows to preserve their change/removal detection.
+Exceptions require an explicit reviewed row. Outcomes are:
 
 - `exercised`: the initial command was accepted, and its stack and all resulting pending
   choices/triggers finished within 256 commands. Immediate mana abilities may finish without
@@ -21,8 +23,11 @@ Every registry face and printed activated ability has exactly one row:
 
 Once execution begins, rejected commands, unhandled choices, missing published offers, and
 budget exhaustion **fail** with case/seed/actor/command/pending-state diagnostics; they cannot
-be recorded as exercised or silently added as baseline exclusions. Coverage losses, improvements,
-new cases, removed cases, duplicate rows, and changed reasons all require baseline review.
+be recorded as exercised or silently added as baseline exclusions. New successful cases need no
+clerical edit. New exceptions, changes/removal of existing baseline cases, duplicate rows and
+changed reasons require review. A previously implicit success that becomes unsupported fails as
+an unclassified exception. Removal of an implicit successful case is not tracked by this baseline;
+actual-card semantic tests and registry review remain responsible for intended card membership.
 
 Run the normal gate from the repository root:
 
@@ -31,7 +36,7 @@ Run the normal gate from the repository root:
   -Executable cargo -ArgumentList @('test','--quiet','-p','tricerules-core','--test','conformance')
 ```
 
-For a proposed baseline update, run `report_registry_execution` with
+Only when an exception or existing reviewed outcome changes, run `report_registry_execution` with
 `-- --ignored --nocapture` through the same runner and inspect its retained log. The `COVERAGE`
 rows are candidate data only: review every changed outcome and missing-fixture reason before
 editing the baseline. Neither this reporting test nor ordinary tests write the baseline.

@@ -102,6 +102,7 @@ struct Args {
     presentation_registry: PathBuf,
     dry_run: bool,
     check: bool,
+    refresh_presentation: bool,
     include_new: bool,
     limit: Option<usize>,
     audit_presentation: bool,
@@ -132,6 +133,7 @@ fn print_usage() {
          --presentation-registry <path> generated Oracle fingerprint TSV\n  \
          --dry-run          report counts + skip reasons, write nothing\n  \
          --check            verify canonical generated output without writing\n  \
+         --refresh-presentation refresh only Oracle fingerprints; skip recipe evaluation and RON writes\n  \
          --include-new      include newly qualifying cards (requires author review)\n  \
          --limit <N>        emit at most N cards (for spot checks)\n  \
          --audit-presentation report numbered Oracle lines, mappings, suggestions, and exceptions; write nothing\n  \
@@ -141,6 +143,10 @@ fn print_usage() {
 }
 
 fn parse_args() -> Result<Args, String> {
+    parse_args_from(std::env::args().skip(1))
+}
+
+fn parse_args_from(arguments: impl IntoIterator<Item = String>) -> Result<Args, String> {
     let mut input: Option<String> = None;
     let mut metadata: Option<PathBuf> = None;
     let mut oracle_tags: Option<String> = None;
@@ -161,12 +167,13 @@ fn parse_args() -> Result<Args, String> {
     let mut presentation_registry: Option<PathBuf> = None;
     let mut dry_run = false;
     let mut check = false;
+    let mut refresh_presentation = false;
     let mut include_new = false;
     let mut limit: Option<usize> = None;
     let mut audit_presentation = false;
     let mut inspect_card = None;
 
-    let mut it = std::env::args().skip(1);
+    let mut it = arguments.into_iter();
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--input" => input = Some(it.next().ok_or("--input needs a value")?),
@@ -243,6 +250,7 @@ fn parse_args() -> Result<Args, String> {
                 inspect_card = Some(it.next().ok_or("--inspect-card needs a value")?)
             }
             "--check" => check = true,
+            "--refresh-presentation" => refresh_presentation = true,
             "--include-new" => include_new = true,
             "--limit" => {
                 limit = Some(
@@ -279,6 +287,22 @@ fn parse_args() -> Result<Args, String> {
     let scaffolding = scaffold_card.is_some() || scaffold_batch.is_some();
     let reviewing =
         review_draft.is_some() || review_map.is_some() || review_out.is_some() || review_existing;
+    if refresh_presentation
+        && (check
+            || dry_run
+            || include_new
+            || limit.is_some()
+            || audit_presentation
+            || inspect_card.is_some()
+            || out_dir.is_some()
+            || candidate_report.is_some()
+            || dependency_report.is_some()
+            || scaffolding
+            || reviewing
+            || oracle_tags.is_some())
+    {
+        return Err("--refresh-presentation is a separate metadata-only write mode".into());
+    }
     if review_draft.is_some() != review_map.is_some() {
         return Err("--review-draft and --review-map are required together".into());
     }
@@ -396,6 +420,7 @@ fn parse_args() -> Result<Args, String> {
         presentation_registry,
         dry_run,
         check,
+        refresh_presentation,
         include_new,
         limit,
         audit_presentation,
@@ -2878,6 +2903,10 @@ fn main() -> ExitCode {
         }
     };
 
+    run(args)
+}
+
+fn run(args: Args) -> ExitCode {
     let input_path = Path::new(&args.input);
     let provenance = match load_provenance(input_path, &args.metadata) {
         Ok(provenance) => provenance,
@@ -3134,7 +3163,7 @@ fn main() -> ExitCode {
                 }
             }
         }
-        if args.audit_presentation {
+        if args.audit_presentation || args.refresh_presentation {
             return true;
         }
         match evaluate(
@@ -3227,6 +3256,19 @@ fn main() -> ExitCode {
 
     let expected_presentation_registry =
         render_presentation_registry(&provenance, &registry, &presentation_sources);
+
+    if args.refresh_presentation {
+        if let Err(error) =
+            write_if_changed(&args.presentation_registry, &expected_presentation_registry)
+        {
+            eprintln!("cannot refresh Oracle fingerprints: {error}");
+            return ExitCode::FAILURE;
+        }
+        eprintln!(
+            "Refreshed Oracle fingerprints only; run the full CardData Check before delivery."
+        );
+        return ExitCode::SUCCESS;
+    }
 
     if args.check {
         match presentation_audit::run(&presentation_sources, None) {
@@ -3338,6 +3380,82 @@ fn main() -> ExitCode {
 mod tests {
     use super::*;
     use tricerules_cards::primitives::DrawDiscardOrder;
+
+    #[test]
+    fn presentation_refresh_rejects_combined_modes() {
+        for extra in [
+            "--check",
+            "--dry-run",
+            "--include-new",
+            "--audit-presentation",
+        ] {
+            assert!(parse_args_from(
+                ["--input", "source.gz", "--refresh-presentation", extra].map(String::from)
+            )
+            .is_err());
+        }
+        assert!(
+            parse_args_from(["--input", "source.gz", "--refresh-presentation"].map(String::from))
+                .unwrap()
+                .refresh_presentation
+        );
+    }
+
+    #[test]
+    fn presentation_refresh_checks_source_and_never_rewrites_generated_ron() {
+        use std::io::Write;
+        let temp = std::env::temp_dir().join(format!(
+            "presentation-refresh-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(temp.join("generated/f")).unwrap();
+        let input = temp.join("source.gz");
+        let metadata = temp.join("source.gz.meta.json");
+        let output = temp.join("fingerprints.tsv");
+        let generated = temp.join("generated/f/fixture_beast.ron");
+        let sentinel = "// generated by gen-cards from Scryfall sentinel\n";
+        fs::write(&generated, sentinel).unwrap();
+        fs::write(&output, "preserve on invalid source").unwrap();
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        writeln!(encoder, "{}", serde_json::json!({"name":"Llanowar Elves", "layout":"normal", "oracle_text":"{T}: Add {G}.", "type_line":"Creature — Elf Druid"})).unwrap();
+        writeln!(encoder, "{}", serde_json::json!({"name":"Fixture Beast", "layout":"normal", "oracle_text":"", "type_line":"Creature — Beast", "mana_cost":"{1}{G}", "power":"2", "toughness":"2", "oracle_id":"fixture"})).unwrap();
+        fs::write(&input, encoder.finish().unwrap()).unwrap();
+        let mut source_metadata = serde_json::json!({"type":"oracle_cards", "id":"fixture", "updated_at":"2026-09-28", "jsonl_download_uri":"https://example.invalid/source", "sha256":"invalid"});
+        fs::write(&metadata, source_metadata.to_string()).unwrap();
+        let args = || {
+            let mut args = parse_args_from(vec![
+                "--input".into(),
+                input.to_str().unwrap().into(),
+                "--refresh-presentation".into(),
+                "--presentation-registry".into(),
+                output.to_str().unwrap().into(),
+            ])
+            .unwrap();
+            // Isolate writes even if a regression accidentally enters recipe generation.
+            args.out_dir = temp.join("generated");
+            args
+        };
+        assert_eq!(run(args()), ExitCode::FAILURE);
+        assert_eq!(
+            fs::read_to_string(&output).unwrap(),
+            "preserve on invalid source"
+        );
+        source_metadata["sha256"] = hash_file(&input).unwrap().into();
+        fs::write(&metadata, source_metadata.to_string()).unwrap();
+        assert_eq!(run(args()), ExitCode::SUCCESS);
+        assert_eq!(fs::read_to_string(&generated).unwrap(), sentinel);
+        let fingerprints = fs::read_to_string(&output).unwrap();
+        assert!(fingerprints.contains(&format!(
+            "llanowar_elves\tLlanowar Elves\tllanowar_elves\tLlanowar Elves\t{}",
+            normalized_oracle_text_sha256("{T}: Add {G}.")
+        )));
+        assert!(!fingerprints.contains("Fixture Beast"));
+        fs::remove_dir_all(temp).unwrap();
+    }
 
     #[test]
     fn convoke_keyword_is_exact_and_never_accepts_unimplemented_clauses() {
