@@ -221,6 +221,7 @@ fn issue_333_transdimensional_bovine_taps_for_two_mana_of_any_one_color() {
     assert_eq!(
         ability.effect,
         [SpellEffectKind::ProduceMana {
+            commander_color_identity: false,
             options: any_one_color_options(2),
             restriction: None,
             conditional: None,
@@ -250,6 +251,7 @@ fn issue_333_gilded_lotus_taps_for_three_mana_of_any_one_color() {
     assert_eq!(
         ability.effect,
         [SpellEffectKind::ProduceMana {
+            commander_color_identity: false,
             options: any_one_color_options(3),
             restriction: None,
             conditional: None,

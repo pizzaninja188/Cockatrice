@@ -98,7 +98,12 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
         .map(|effect| {
             Some(match effect {
                 SpellEffectKind::ProduceMana {
+                    commander_color_identity: true,
+                    ..
+                } => "Add one mana of any color in your commander's color identity.".into(),
+                SpellEffectKind::ProduceMana {
                     options,
+                    commander_color_identity: false,
                     restriction,
                     conditional: None,
                 } if !options.is_empty() => {

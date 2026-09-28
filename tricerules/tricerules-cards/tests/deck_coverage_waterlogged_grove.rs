@@ -32,6 +32,7 @@ fn waterlogged_grove_registers_both_complete_abilities() {
         [AbilityCost::Tap, AbilityCost::PayLife { amount: 1 }]
     ));
     let [SpellEffectKind::ProduceMana {
+        commander_color_identity: false,
         options,
         restriction: None,
         conditional: None,

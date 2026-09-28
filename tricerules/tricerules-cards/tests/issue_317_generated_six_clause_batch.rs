@@ -208,6 +208,7 @@ fn issue_317_springleaf_drum_taps_a_creature_for_any_color() {
     assert_eq!(
         ability.effect,
         [SpellEffectKind::ProduceMana {
+            commander_color_identity: false,
             options: ['W', 'U', 'B', 'R', 'G']
                 .into_iter()
                 .map(|symbol| {

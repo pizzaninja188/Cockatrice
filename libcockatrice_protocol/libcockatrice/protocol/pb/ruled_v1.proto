@@ -155,6 +155,7 @@ enum DevZone {
   DEV_ZONE_GRAVEYARD = 2;
   DEV_ZONE_EXILE = 3;
   DEV_ZONE_LIBRARY = 4;
+  DEV_ZONE_COMMAND = 5;
 }
 
 // Conjure a named card from outside the game (CR 400.11-shaped, though it obeys none of the
@@ -1405,6 +1406,7 @@ enum ChoiceCandidateSourceZone {
   CHOICE_CANDIDATE_SOURCE_ZONE_BATTLEFIELD = 4;
   CHOICE_CANDIDATE_SOURCE_ZONE_EXILE = 5;
   CHOICE_CANDIDATE_SOURCE_ZONE_STACK = 6;
+  CHOICE_CANDIDATE_SOURCE_ZONE_COMMAND = 7;
 }
 
 
@@ -1830,6 +1832,9 @@ message AbilityInfo {
   // mana ability with zero counters). `mana_produced` remains an accurate description of output.
   repeated string mana_option_labels = 9 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   XCounterManaChoice x_counter_mana_choice = 10 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Engine-authored CR 605.1a classification. Required when a valid mana ability currently
+  // produces no colored/colorless option, such as Arcane Signet without a declared identity.
+  bool is_mana_ability = 11 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 // CR 722. Public designation and exact source linkage, independent of card characteristics.
@@ -1968,6 +1973,8 @@ message RuledPerPlayerView {
   // Public player counter snapshot. Names are rule labels (for example "poison"); omitted kinds
   // have not been tracked by the engine for this player. Counts are absolute, not deltas.
   repeated PlayerCounterView player_counters = 39 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Public Commander cards in declaration order. Their physical card objects stay outside the library.
+  repeated uint32 command_zone_object_ids = 40 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message PlayerCounterView {
@@ -2181,6 +2188,19 @@ message PlayerDeck {
   reserved "mainboard_card_id";
   // Oracle card names (e.g. "Lightning Bolt"), one entry per copy — empty = engine default test deck.
   repeated string mainboard_card_name = 3;
+  // Required when this PlayerDeck is present. The explicit no-commander branch distinguishes a
+  // declared empty setup from an omitted client field; colors are always derived by tricerules.
+  CommanderSetup commander_setup = 4;
+}
+
+message CommanderSetup {
+  message Declared {
+    repeated string card_name = 1; // Oracle names, exactly one or two declarations
+  }
+  oneof declaration {
+    bool no_commander = 1;
+    Declared declared = 2;
+  }
 }
 
 message SessionStart {

@@ -3005,6 +3005,7 @@ fn move_object_to_zone_with_entry_receipt(
         p.battlefield.retain(|&x| x != oid);
         p.graveyard.retain(|&x| x != oid);
         p.exile.retain(|&x| x != oid);
+        p.command_zone.retain(|&x| x != oid);
     }
     // CR 400.3: the battlefield is entered under a *controller*; every other zone belongs to the
     // card's owner, so that is where a permanent goes when it leaves.
@@ -3024,6 +3025,7 @@ fn move_object_to_zone_with_entry_receipt(
         Zone::Library => p.library.push_back(oid),
         Zone::Exile => p.exile.push(oid),
         Zone::Stack => {}
+        Zone::Command => p.command_zone.push(oid),
     }
     if let Some(o) = state.objects.get_mut(&oid) {
         o.zone = z;

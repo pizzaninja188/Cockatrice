@@ -3,9 +3,9 @@
 
 use std::collections::BTreeSet;
 use tricerules_cards::CardRegistry;
-use tricerules_core::{GameEngine, PlayerId};
+use tricerules_core::{EngineDeck, GameEngine, PlayerId};
 use tricerules_proto::ipc_envelope::Msg;
-use tricerules_proto::{IpcEnvelope, IpcResponse, PlayerDeck};
+use tricerules_proto::{commander_setup, IpcEnvelope, IpcResponse, PlayerDeck};
 pub mod replay;
 
 pub const ENGINE_BUILD: &str = env!("TRICERULES_BUILD_FINGERPRINT");
@@ -64,9 +64,19 @@ impl EngineSession {
                     }
                 );
                 match resolve_deck_names(&start.player_ids, &start.player_decks) {
-                    Err(missing) => missing_cards_response(missing),
+                    Err(DeckResolveError::MissingCards(missing)) => missing_cards_response(missing),
+                    Err(DeckResolveError::Invalid(message)) => IpcResponse {
+                        error: message,
+                        ..Default::default()
+                    },
                     Ok(decks) => {
-                        match GameEngine::new(start.seed, &start.player_ids, 20, decks, false) {
+                        match GameEngine::new_with_commander_decks(
+                            start.seed,
+                            &start.player_ids,
+                            20,
+                            decks,
+                            false,
+                        ) {
                             Err(error) => IpcResponse {
                                 error: error.to_string(),
                                 ..Default::default()
@@ -158,34 +168,119 @@ pub fn validate_deck_response(card_names: &[String]) -> IpcResponse {
     }
 }
 
-/// Keep deck ordering and duplicates; resolve identity only through the engine registry.
+/// Keep mainboard ordering and duplicates; resolve Commander names only through the engine registry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeckResolveError {
+    MissingCards(Vec<String>),
+    Invalid(String),
+}
+
 pub fn resolve_deck_names(
     pids: &[PlayerId],
     decks: &[PlayerDeck],
-) -> Result<Option<Vec<Vec<String>>>, Vec<String>> {
+) -> Result<Option<Vec<EngineDeck>>, DeckResolveError> {
     if decks.is_empty() {
         return Ok(None);
     }
+    if decks.len() != pids.len() {
+        return Err(DeckResolveError::Invalid(
+            "every player deck must have one explicit Commander setup".into(),
+        ));
+    }
     let registry = CardRegistry::global();
-    let mut out: Vec<Vec<String>> = pids.iter().map(|_| vec![]).collect();
+    let mut out: Vec<EngineDeck> = pids.iter().map(|_| EngineDeck::default()).collect();
     let mut missing = BTreeSet::new();
+    let mut seen = BTreeSet::new();
     for deck in decks {
         let Some(index) = pids.iter().position(|&id| id == deck.player_id) else {
-            continue;
+            return Err(DeckResolveError::Invalid(format!(
+                "player deck references unknown player {}",
+                deck.player_id
+            )));
+        };
+        if !seen.insert(deck.player_id) {
+            return Err(DeckResolveError::Invalid(format!(
+                "duplicate player deck for player {}",
+                deck.player_id
+            )));
+        }
+        let setup = deck.commander_setup.as_ref().ok_or_else(|| {
+            DeckResolveError::Invalid(format!(
+                "player {} is missing an explicit Commander setup",
+                deck.player_id
+            ))
+        })?;
+        let commander_names = match setup.declaration.as_ref() {
+            Some(commander_setup::Declaration::NoCommander(true)) => &[][..],
+            Some(commander_setup::Declaration::Declared(declared))
+                if (1..=2).contains(&declared.card_name.len()) =>
+            {
+                &declared.card_name
+            }
+            Some(commander_setup::Declaration::NoCommander(false)) => {
+                return Err(DeckResolveError::Invalid(format!(
+                    "player {} no_commander declaration must be true",
+                    deck.player_id
+                )));
+            }
+            Some(commander_setup::Declaration::Declared(_)) => {
+                return Err(DeckResolveError::Invalid(format!(
+                    "player {} must declare one or two Commander cards",
+                    deck.player_id
+                )));
+            }
+            None => {
+                return Err(DeckResolveError::Invalid(format!(
+                    "player {} has an empty Commander setup",
+                    deck.player_id
+                )));
+            }
         };
         for name in &deck.mainboard_card_name {
             match registry.id_for_name(name) {
-                Some(id) => out[index].push(id.to_owned()),
+                Some(id) => {
+                    if registry
+                        .get(id)
+                        .is_some_and(|card| card.commander_setup_only)
+                    {
+                        return Err(DeckResolveError::Invalid(format!(
+                            "{} is available only for Commander setup and cannot be in a mainboard",
+                            name.trim()
+                        )));
+                    }
+                    out[index].mainboard.push(id.to_owned());
+                }
+                None => {
+                    missing.insert(name.trim().to_owned());
+                }
+            }
+        }
+        for name in commander_names {
+            if name.trim().is_empty() {
+                return Err(DeckResolveError::Invalid(format!(
+                    "player {} declared an empty Commander card name",
+                    deck.player_id
+                )));
+            }
+            match registry.id_for_name(name) {
+                Some(id) => out[index].commanders.push(id.to_owned()),
                 None => {
                     missing.insert(name.trim().to_owned());
                 }
             }
         }
     }
+    if seen.len() != pids.len() {
+        return Err(DeckResolveError::Invalid(
+            "every player deck must have one explicit Commander setup".into(),
+        ));
+    }
     if missing.is_empty() {
         Ok(Some(out))
     } else {
-        Err(missing.into_iter().collect())
+        Err(DeckResolveError::MissingCards(
+            missing.into_iter().collect(),
+        ))
     }
 }
 

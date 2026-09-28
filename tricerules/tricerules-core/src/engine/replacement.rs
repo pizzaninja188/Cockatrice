@@ -1832,6 +1832,7 @@ impl GameEngine {
                         Zone::Library => "library",
                         Zone::Stack => "the stack",
                         Zone::Battlefield => "the battlefield",
+                        Zone::Command => "the command zone",
                     }
                 )));
                 events.push(permanent_moved_event(

@@ -1085,6 +1085,7 @@ impl GameEngine {
                             cost_modifiers: Vec::new(),
                             effect: vec![SpellEffectKind::ProduceMana {
                                 options: vec![land_type.mana()],
+                                commander_color_identity: false,
                                 restriction: None,
                                 conditional: None,
                             }],

@@ -60,6 +60,8 @@ struct RuledPlayerBinding
     QVector<quint32> graveyardEngineOidsOldestFirst;
     // Public exile identity for Adventure and other engine-authorized casts from exile.
     QHash<quint32, int> exileEngineOidToServerCardId;
+    // Public Commander objects remain in their separate physical zone for the full session.
+    QHash<quint32, int> commandZoneEngineOidToServerCardId;
     // Dedicated noncard display identities; never used for accepted physical cast moves.
     QHash<quint32, int> preparationCopyServerCardIds;
     // Whether a zone view has ever reconciled this player's hand and library. The engine omits

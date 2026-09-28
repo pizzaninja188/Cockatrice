@@ -42,9 +42,10 @@ pub fn build_resume_plan(
 ) -> Result<tricerules_proto::diagnostics::ResumePlan, String> {
     use sha2::{Digest, Sha256};
     use tricerules_proto::{
+        commander_setup,
         diagnostics::{ResumePlan, ResumeStep},
         ruled_command::Cmd,
-        AutoPassPolicy, PhaseId, PlayerDeck, RuledCommand,
+        AutoPassPolicy, CommanderSetup, PhaseId, PlayerDeck, RuledCommand,
     };
     if options.retry_sequence.is_some() {
         return Err("Live resume requires an accepted prefix, not an isolated retry".into());
@@ -107,9 +108,35 @@ pub fn build_resume_plan(
                             .clone())
                     })
                     .collect::<Result<Vec<_>, String>>()?;
+                let commanders = player
+                    .command_zone
+                    .iter()
+                    .map(|oid| {
+                        let object = engine
+                            .state
+                            .objects
+                            .get(oid)
+                            .ok_or("Commander object missing")?;
+                        Ok(registry
+                            .get(&object.card_id)
+                            .ok_or("Commander card definition missing")?
+                            .name
+                            .clone())
+                    })
+                    .collect::<Result<Vec<_>, String>>()?;
+                let setup = if commanders.is_empty() {
+                    commander_setup::Declaration::NoCommander(true)
+                } else {
+                    commander_setup::Declaration::Declared(commander_setup::Declared {
+                        card_name: commanders,
+                    })
+                };
                 Ok(PlayerDeck {
                     player_id: player.id,
                     mainboard_card_name: names,
+                    commander_setup: Some(CommanderSetup {
+                        declaration: Some(setup),
+                    }),
                 })
             })
             .collect::<Result<Vec<_>, String>>()?

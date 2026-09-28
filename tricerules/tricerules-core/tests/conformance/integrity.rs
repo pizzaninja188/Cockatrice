@@ -375,7 +375,11 @@ pub(super) fn observed_completed_cases() -> std::collections::BTreeSet<String> {
     let mut completed = std::collections::BTreeSet::new();
     let registry = CardRegistry::global();
     // Deterministic order so a failure is reproducible.
-    let mut card_ids: Vec<&str> = registry.definitions().map(|d| d.id.as_str()).collect();
+    let mut card_ids: Vec<&str> = registry
+        .definitions()
+        .filter(|definition| !definition.commander_setup_only)
+        .map(|definition| definition.id.as_str())
+        .collect();
     card_ids.sort_unstable();
 
     for card_id in card_ids {

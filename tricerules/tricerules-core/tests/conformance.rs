@@ -49,7 +49,10 @@ fn play_kind(card: &str, face: usize) -> &'static str {
 }
 fn cases() -> Vec<Case> {
     let mut result = vec![];
-    for def in CardRegistry::global().definitions() {
+    for def in CardRegistry::global()
+        .definitions()
+        .filter(|definition| !definition.commander_setup_only)
+    {
         for (face, data) in def.faces_iter().enumerate() {
             result.push(Case {
                 card: def.id.clone(),

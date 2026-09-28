@@ -102,6 +102,7 @@ public:
 
         QJsonObject commandersObj = obj.value("commanders").toObject();
         if (!commandersObj.isEmpty()) {
+            QList<CardRef> commanders;
             for (auto it = commandersObj.begin(); it != commandersObj.end(); ++it) {
                 QJsonObject cardData = it.value().toObject().value("card").toObject();
                 QString commanderName = cardData.value("name").toString();
@@ -109,9 +110,13 @@ public:
                 QString collectorNumber = cardData.value("cn").toString();
                 QString providerId = cardData.value("scryfall_id").toString();
 
-                deckList.setBannerCard({commanderName, providerId});
-                deckList.addCard(commanderName, DECK_ZONE_MAIN, -1, setName, collectorNumber, providerId);
+                const CardRef commander{commanderName, providerId};
+                if (deckList.getBannerCard().isEmpty()) {
+                    deckList.setBannerCard(commander);
+                }
+                commanders.append(commander);
             }
+            deckList.setCommanders(commanders);
         }
 
         return deckList;

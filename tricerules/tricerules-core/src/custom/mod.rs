@@ -356,7 +356,7 @@ fn public_move_event_destination(zone: Zone) -> Option<rv1::permanent_moved::Des
         // No custom effect reaches the battlefield today, but this is the destination the engine's
         // own reanimation path already emits, so "public zone ⇒ event" holds without an exception.
         Zone::Battlefield => Some(Destination::Battlefield),
-        Zone::Hand | Zone::Library | Zone::Stack => None,
+        Zone::Hand | Zone::Library | Zone::Stack | Zone::Command => None,
     }
 }
 

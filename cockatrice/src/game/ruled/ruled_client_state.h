@@ -68,10 +68,12 @@ struct RuledAbilityEntry
     QStringList manaOptionLabels;
     /// Engine-bounded X and two-color split for storage-counter mana abilities.
     std::optional<RuledXCounterManaChoice> xCounterManaChoice;
+    /// CR 605.1a/605.2 classification supplied by the engine, including no-output game states.
+    bool manaAbility = false;
 
     [[nodiscard]] bool isManaAbility() const
     {
-        return !manaProduced.isEmpty() || !manaOptionLabels.isEmpty() || xCounterManaChoice.has_value();
+        return manaAbility;
     }
 
     [[nodiscard]] QStringList manaOptionsForSelection() const

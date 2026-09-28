@@ -349,6 +349,7 @@ TEST(RuledZoneSnapshotPolicyTest, OpenPermissionMirrorDoesNotDuplicatePublicExil
     EXPECT_TRUE(ruledSnapshotPreservesEventAuthoritativeZone(QString::fromLatin1(ZoneNames::STACK)));
     EXPECT_TRUE(ruledSnapshotPreservesEventAuthoritativeZone(QString::fromLatin1(ZoneNames::GRAVE)));
     EXPECT_TRUE(ruledSnapshotPreservesEventAuthoritativeZone(QString::fromLatin1(ZoneNames::EXILE)));
+    EXPECT_TRUE(ruledSnapshotPreservesEventAuthoritativeZone(QString::fromLatin1(ZoneNames::COMMAND)));
     EXPECT_FALSE(ruledSnapshotPreservesEventAuthoritativeZone(QString::fromLatin1(ZoneNames::HAND)));
 }
 
@@ -4026,6 +4027,7 @@ TEST_F(RuledClientTest, ZoneViewParsesDamageAndPipeDelimitedAbilities)
     manaAbility->set_ability_index(0);
     manaAbility->set_text("Add {G}.");
     manaAbility->set_mana_produced("G");
+    manaAbility->set_is_mana_ability(true);
     manaAbility->set_cost_label("{T}");
     auto *drawAbility = object->add_activated_abilities();
     drawAbility->set_ability_index(1);
@@ -4043,7 +4045,9 @@ TEST_F(RuledClientTest, ZoneViewParsesDamageAndPipeDelimitedAbilities)
     EXPECT_EQ(abilities[1]->text, QStringLiteral("Sacrifice this: draw a card."));
     EXPECT_TRUE(abilities[0]->manaCost.isEmpty());
     EXPECT_EQ(abilities[1]->manaCost, QStringLiteral("1"));
-    // CR 605: an empty produced entry marks a non-mana ability.
+    // Classification comes from the engine; output text remains a separate presentation field.
+    EXPECT_TRUE(abilities[0]->isManaAbility());
+    EXPECT_FALSE(abilities[1]->isManaAbility());
     EXPECT_EQ(abilities[0]->manaProduced, QStringLiteral("G"));
     EXPECT_TRUE(abilities[1]->manaProduced.isEmpty());
     EXPECT_EQ(abilities[0]->costLabel, QStringLiteral("{T}"));
@@ -4128,6 +4132,7 @@ TEST_F(RuledClientTest, AbilityDecodingPreservesSparseSlotsAndPresentationAcross
     ability.mutable_presentation()->set_fallback_text("Presented ability");
     ability.set_mana_cost("{1}");
     ability.set_mana_produced("G");
+    ability.set_is_mana_ability(true);
     ability.set_cost_label("{1}, {T}");
     ability.set_activatable(true);
     ability.set_has_only_tap_cost(true);
@@ -4182,6 +4187,7 @@ TEST_F(RuledClientTest, AbilitySnapshotsRetainBattlefieldButExpireZoneOffersAndR
     ability->set_ability_index(2);
     ability->set_text("{T}: Add {G}.");
     ability->set_mana_produced("G");
+    ability->set_is_mana_ability(true);
     ability->set_cost_label("{T}");
     ability->set_activatable(true);
     auto *zone = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_ability_actions();
@@ -4279,6 +4285,7 @@ TEST_F(RuledClientTest, AbilityDiagnosticsDescribeEntriesAndDropExpiredPrivateOf
     ability->set_text("{1}, {T}: Add {G}.");
     ability->set_mana_cost("{1}");
     ability->set_mana_produced("G");
+    ability->set_is_mana_ability(true);
     ability->set_cost_label("{1}, {T}");
     ability->set_activatable(true);
     auto *zone = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_ability_actions();
@@ -4928,9 +4935,11 @@ TEST_F(RuledClientTest, CastAndCycleAreCombinedIntoOneCardActionMenuModel)
 
 TEST_F(RuledClientTest, ManaPaymentMenuRetainsEveryEngineOptionAndItsIndex)
 {
-    state->activatedAbilitiesByOid[203] = {
-        RuledAbilityEntry{"Tap another permanent: Add one mana of any color.", {}, "W/U/B/R/G", {}, true}, std::nullopt,
-        RuledAbilityEntry{"Add blue or green.", {}, "U/G", {}, false}};
+    RuledAbilityEntry anyColor{"Tap another permanent: Add one mana of any color.", {}, "W/U/B/R/G", {}, true};
+    anyColor.manaAbility = true;
+    RuledAbilityEntry blueOrGreen{"Add blue or green.", {}, "U/G", {}, false};
+    blueOrGreen.manaAbility = true;
+    state->activatedAbilitiesByOid[203] = {anyColor, std::nullopt, blueOrGreen};
     const auto options = RuledPendingCast::cardActionMenuOptions({}, *state, 203);
     ASSERT_EQ(options.size(), 7);
     for (int i = 0; i < 5; ++i) {
@@ -4958,9 +4967,12 @@ TEST_F(RuledClientTest, NestedPaymentMenuOffersOnlyEnginePublishedManaAbilities)
 {
     RuledFaceOption face;
     face.faceName = QStringLiteral("Test spell");
-    state->activatedAbilitiesByOid[203] = {RuledAbilityEntry{"Waterbend {5}: Put a counter.", {}, {}, {}, true},
-                                           RuledAbilityEntry{"{T}: Add {G}.", {}, "G", {}, true},
-                                           RuledAbilityEntry{"{T}: Add {U} or {G}.", {}, "U/G", {}, false}};
+    RuledAbilityEntry green{"{T}: Add {G}.", {}, "G", {}, true};
+    green.manaAbility = true;
+    RuledAbilityEntry blueOrGreen{"{T}: Add {U} or {G}.", {}, "U/G", {}, false};
+    blueOrGreen.manaAbility = true;
+    state->activatedAbilitiesByOid[203] = {
+        RuledAbilityEntry{"Waterbend {5}: Put a counter.", {}, {}, {}, true}, green, blueOrGreen};
     const auto options = RuledPendingCast::cardActionMenuOptions({face}, *state, 203, true);
     ASSERT_EQ(options.size(), 3);
     EXPECT_EQ(options.at(0).kind, RuledCardActionMenuOption::Kind::ActivateAbility);
@@ -4981,6 +4993,7 @@ TEST_F(RuledClientTest, ZeroOutputManaAbilityRetainsItsSelectableOptionsDuringPa
     ability->set_text("{T}: Choose a color. Add one mana of that color for each charge counter on this artifact.");
     ability->set_has_only_tap_cost(true);
     ability->set_activatable(true);
+    ability->set_is_mana_ability(true);
     for (const auto *label : {"W", "U", "B", "R", "G"})
         ability->add_mana_option_labels(label);
     apply(batch);
@@ -5007,6 +5020,35 @@ TEST_F(RuledClientTest, ZeroOutputManaAbilityRetainsItsSelectableOptionsDuringPa
         EXPECT_EQ(ordinaryOptions.at(i).manaOptionIndex, i);
 }
 
+TEST_F(RuledClientTest, EmptyCommanderIdentityStillUsesEnginePublishedManaAbilityClassification)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *object = batch.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    object->set_object_id(203);
+    auto *ability = object->add_activated_abilities();
+    ability->set_ability_index(0);
+    ability->set_text("{T}: Add one mana of any color in your commander's color identity.");
+    ability->set_has_only_tap_cost(true);
+    ability->set_activatable(true);
+    ability->set_is_mana_ability(true);
+    apply(batch);
+
+    const auto decoded = state->activatedAbilityForOid(203, 0);
+    ASSERT_TRUE(decoded);
+    EXPECT_TRUE(decoded->manaProduced.isEmpty());
+    EXPECT_TRUE(decoded->manaOptionLabels.isEmpty());
+    EXPECT_TRUE(decoded->isManaAbility());
+    EXPECT_TRUE(decoded->usesDirectManaActivation());
+    EXPECT_EQ(decoded->manaOptionsForSelection(), QStringList({QString{}}));
+
+    const auto options = RuledPendingCast::cardActionMenuOptions({}, *state, 203, true);
+    ASSERT_EQ(options.size(), 1);
+    EXPECT_EQ(options.first().kind, RuledCardActionMenuOption::Kind::ActivateAbility);
+    EXPECT_EQ(options.first().index, 0);
+    EXPECT_EQ(options.first().manaOptionIndex, 0);
+    EXPECT_TRUE(options.first().enabled);
+}
+
 TEST_F(RuledClientTest, XCounterManaChoiceIsParsedAsAnEnginePublishedManaAbility)
 {
     ruled::v1::RuledEventBatch batch;
@@ -5017,6 +5059,7 @@ TEST_F(RuledClientTest, XCounterManaChoiceIsParsedAsAnEnginePublishedManaAbility
     ability->set_text("{1}, Remove X storage counters: Add X mana in any combination of {U} and {B}.");
     ability->set_mana_cost("{1}");
     ability->set_activatable(true);
+    ability->set_is_mana_ability(true);
     auto *choice = ability->mutable_x_counter_mana_choice();
     choice->set_counter_label("storage");
     choice->set_max_x(4);
@@ -5044,7 +5087,9 @@ TEST_F(RuledClientTest, XCounterManaChoiceIsParsedAsAnEnginePublishedManaAbility
 
 TEST_F(RuledClientTest, PaymentCandidateAndManaAbilityShareOneCardMenu)
 {
-    state->activatedAbilitiesByOid[203] = {RuledAbilityEntry{"{T}: Add {G}.", {}, "G", {}, true}};
+    RuledAbilityEntry green{"{T}: Add {G}.", {}, "G", {}, true};
+    green.manaAbility = true;
+    state->activatedAbilitiesByOid[203] = {green};
     const QVector<QPair<int, QString>> waterbend = {
         {ruled::v1::OBJECT_PAYMENT_KIND_WATERBEND, QStringLiteral("Waterbend — pay {1}")}};
     const auto waterbendOptions = RuledPendingCast::cardActionMenuOptions({}, *state, 203, true, waterbend);

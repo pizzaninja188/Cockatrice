@@ -93,6 +93,11 @@ void Server_Player::setupZones()
     addZone(new Server_CardZone(this, ZoneNames::STACK, false, ServerInfo_Zone::PublicZone));
     addZone(new Server_CardZone(this, ZoneNames::GRAVE, false, ServerInfo_Zone::PublicZone));
     addZone(new Server_CardZone(this, ZoneNames::EXILE, false, ServerInfo_Zone::PublicZone));
+    Server_CardZone *commandZone = nullptr;
+    if (game->getRuledGame()) {
+        commandZone = new Server_CardZone(this, ZoneNames::COMMAND, false, ServerInfo_Zone::PublicZone);
+        addZone(commandZone);
+    }
 
     const int startingLife = game->getRuledGame() ? 20 : game->getStartingLifeTotal();
     addCounter(new Server_Counter(0, "life", makeColor(255, 255, 255), 25, startingLife));
@@ -117,6 +122,12 @@ void Server_Player::setupZones()
 
     insertCardsIntoZone(deck->getCardNodes({DECK_ZONE_MAIN}), deckZone);
     insertCardsIntoZone(deck->getCardNodes({DECK_ZONE_SIDE}), sbZone);
+    for (const CardRef &commander : deck->getCommanders()) {
+        // Freeform deck setup historically treated imported Moxfield commanders as mainboard
+        // cards; preserve that behavior while ruled games keep them in the public command zone.
+        Server_CardZone *targetZone = commandZone ? commandZone : deckZone;
+        targetZone->insertCard(new Server_Card(commander, nextCardId++, 0, 0, targetZone), -1, 0);
+    }
 
     const QList<MoveCard_ToZone> &sideboardPlan = deck->getCurrentSideboardPlan();
     for (const auto &m : sideboardPlan) {

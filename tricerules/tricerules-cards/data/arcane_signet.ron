@@ -1,0 +1,15 @@
+// Source: Scryfall exact-name card and rulings lookup, checked 2026-09-28.
+// CR 605.1a, 903.4: its output is derived from the activating player's declared identity.
+(
+    id: "arcane_signet",
+    name: "Arcane Signet",
+    face_id: "arcane_signet",
+    mana_cost: "{2}",
+    types: ["Artifact"],
+    activated_abilities: [(
+        ability_id: "activated_01",
+        presentation: OracleLines([1]),
+        costs: [Tap],
+        effect: [ProduceMana(options: [], commander_color_identity: true)],
+    )],
+)

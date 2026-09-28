@@ -2,6 +2,8 @@
 sorcerer_of_the_fang	Activated ability omits the tap cost and incorrectly limits planeswalker targets to opponents' planeswalkers.
 cackling_counterpart	Copy-with-modifications remain unsupported.
 gifts_ungiven	1v1 opponent is the automatic target (no separate target step for multi-player)
+bello,_bard_of_the_brambles	Commander identity/setup record only; Oracle static, combat-triggered, and end-step abilities are not implemented.
+daretti,_scrap_savant	Commander identity/setup record only; Oracle loyalty abilities and emblem are not implemented.
 juggernaut	can't be blocked by Walls not enforced
 mossbridge_troll	The automatic destruction replacement that creates a regeneration shield is not implemented
 akki_lavarunner_tok-tok,_volcano_born	Tok-Tok's protection from red and damage-replacement ability are unsupported

@@ -651,6 +651,8 @@ impl GameEngine {
             graveyard_object_ids: p.graveyard.clone(),
             // Engine ObjectIds for each card in this player's public exile zone.
             exile_object_ids: p.exile.clone(),
+            // Declared Commander cards are public, but are not part of this player's library.
+            command_zone_object_ids: p.command_zone.clone(),
             prepare_spell_copies: p
                 .exile
                 .iter()

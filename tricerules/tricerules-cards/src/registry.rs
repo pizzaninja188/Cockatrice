@@ -1408,10 +1408,20 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
             _ => {}
         }
     }
+    let mut defines_colors = false;
     for ability in &face.characteristic_defining_abilities {
         insert_ability_id(&mut siblings, &ability.ability_id)?;
         ability.validate_metadata()?;
         ability.definition.validate()?;
+        if matches!(
+            &ability.definition,
+            crate::CharacteristicDefiningAbility::DefinesColors { .. }
+        ) {
+            if defines_colors {
+                return Err("a face may have only one color-defining CDA".into());
+            }
+            defines_colors = true;
+        }
     }
     validate_linked_exile_pairs(face)?;
     let mut cast_cost_group_ids = HashSet::new();

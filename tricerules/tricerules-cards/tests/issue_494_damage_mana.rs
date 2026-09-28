@@ -38,11 +38,13 @@ fn assert_mana_ability(
 
     let actual_options = match ability.effect.as_slice() {
         [SpellEffectKind::ProduceMana {
+            commander_color_identity: false,
             options,
             restriction: None,
             conditional: None,
         }] if !damage => options,
         [SpellEffectKind::ProduceMana {
+            commander_color_identity: false,
             options,
             restriction: None,
             conditional: None,

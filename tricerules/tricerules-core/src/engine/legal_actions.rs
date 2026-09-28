@@ -526,6 +526,7 @@ pub(super) fn activated_ability_info(
         )),
         ability_index: ability_index as u32,
         x_counter_mana_choice,
+        is_mana_ability: ability.is_mana_ability(),
     }
 }
 

@@ -151,10 +151,15 @@ QByteArray RuledGameSession::canonicalGameplayCommand(int playerId, const ruled:
 
 bool RuledGameSession::validateDecksForStart()
 {
-    const QList<QPair<int, QStringList>> deckByPlayer = mainboardNamesByPlayer();
+    const QList<ruled::v1::PlayerDeck> deckByPlayer = playerDecksByPlayer();
     QStringList allNames;
-    for (const QPair<int, QStringList> &row : deckByPlayer) {
-        allNames += row.second;
+    for (const ruled::v1::PlayerDeck &row : deckByPlayer) {
+        for (const std::string &name : row.mainboard_card_name())
+            allNames.append(QString::fromStdString(name));
+        if (row.has_commander_setup() && row.commander_setup().has_declared()) {
+            for (const std::string &name : row.commander_setup().declared().card_name())
+                allNames.append(QString::fromStdString(name));
+        }
     }
     if (allNames.isEmpty()) {
         return true;
@@ -211,10 +216,14 @@ RuledGameSession::StartResult RuledGameSession::start()
     for (auto *player : game->getPlayers().values()) {
         ids.append(player->getPlayerId());
     }
-    result.deckByPlayer = mainboardNamesByPlayer();
-    const bool anyMainboard = std::any_of(result.deckByPlayer.begin(), result.deckByPlayer.end(),
-                                          [](const auto &row) { return !row.second.isEmpty(); });
-    const QList<QPair<int, QStringList>> *deckPtr = anyMainboard ? &result.deckByPlayer : nullptr;
+    result.deckByPlayer = playerDecksByPlayer();
+    const bool anySubmittedDeck = std::any_of(
+        result.deckByPlayer.begin(), result.deckByPlayer.end(), [](const ruled::v1::PlayerDeck &row) {
+            return row.mainboard_card_name_size() > 0
+                   || (row.has_commander_setup() && row.commander_setup().has_declared()
+                       && row.commander_setup().declared().card_name_size() > 0);
+        });
+    const QList<ruled::v1::PlayerDeck> *deckPtr = anySubmittedDeck ? &result.deckByPlayer : nullptr;
     bool started = false;
     if (resumePlan->enabled()) {
         const auto &plan = resumePlan->plan();
@@ -227,11 +236,8 @@ RuledGameSession::StartResult RuledGameSession::start()
         }
         seed = plan.session_start().seed();
         result.deckByPlayer.clear();
-        for (const auto &deck : plan.display_decks()) {
-            QStringList names;
-            for (const auto &name : deck.mainboard_card_name())
-                names.append(QString::fromStdString(name));
-            result.deckByPlayer.append({deck.player_id(), names});
+        for (const ruled::v1::PlayerDeck &deck : plan.display_decks()) {
+            result.deckByPlayer.append(deck);
         }
         if (capture)
             capture->journal().metadata({{"parent_capture_id", QString::fromStdString(plan.parent_capture_id())},
@@ -358,11 +364,12 @@ void RuledGameSession::handleDepartureRejected(const QString &reason)
     relay.reset();
 }
 
-QList<QPair<int, QStringList>> RuledGameSession::mainboardNamesByPlayer() const
+QList<ruled::v1::PlayerDeck> RuledGameSession::playerDecksByPlayer() const
 {
-    QList<QPair<int, QStringList>> deckByPlayer;
+    QList<ruled::v1::PlayerDeck> deckByPlayer;
     for (Server_AbstractPlayer *player : game->getPlayers().values()) {
-        QStringList mainboardNames;
+        ruled::v1::PlayerDeck row;
+        row.set_player_id(player->getPlayerId());
         if (const DeckList *deck = player->getDeckList()) {
             const QSet<QString> mainOnly = QSet<QString>() << QStringLiteral("main");
             for (const DecklistCardNode *node : deck->getCardNodes(mainOnly)) {
@@ -371,16 +378,28 @@ QList<QPair<int, QStringList>> RuledGameSession::mainboardNamesByPlayer() const
                 }
                 const QString name = node->getName().trimmed();
                 for (int copy = 0; copy < node->getNumber(); ++copy) {
-                    mainboardNames.append(name);
+                    row.add_mainboard_card_name(name.toStdString());
                 }
             }
+            const QList<CardRef> commanders = deck->getCommanders();
+            ruled::v1::CommanderSetup *setup = row.mutable_commander_setup();
+            if (commanders.isEmpty()) {
+                setup->set_no_commander(true);
+            } else {
+                auto *declared = setup->mutable_declared();
+                for (const CardRef &commander : commanders)
+                    declared->add_card_name(commander.name.trimmed().toStdString());
+            }
         }
-        deckByPlayer.append(qMakePair(player->getPlayerId(), mainboardNames));
+        // A missing deck list still has the same explicit empty Commander setup as an ordinary deck.
+        if (!player->getDeckList())
+            row.mutable_commander_setup()->set_no_commander(true);
+        deckByPlayer.append(row);
     }
     return deckByPlayer;
 }
 
-void RuledGameSession::notifyUnimplementedCards(const QList<QPair<int, QStringList>> &deckByPlayer,
+void RuledGameSession::notifyUnimplementedCards(const QList<ruled::v1::PlayerDeck> &deckByPlayer,
                                                 const QStringList &missingNames)
 {
     QSet<QString> missingLower;
@@ -389,9 +408,16 @@ void RuledGameSession::notifyUnimplementedCards(const QList<QPair<int, QStringLi
     }
 
     QStringList perPlayerParts;
-    for (const QPair<int, QStringList> &row : deckByPlayer) {
+    for (const ruled::v1::PlayerDeck &row : deckByPlayer) {
         QMap<QString, int> copiesByName;
-        for (const QString &name : row.second) {
+        QStringList names;
+        for (const std::string &name : row.mainboard_card_name())
+            names.append(QString::fromStdString(name));
+        if (row.has_commander_setup() && row.commander_setup().has_declared()) {
+            for (const std::string &name : row.commander_setup().declared().card_name())
+                names.append(QString::fromStdString(name));
+        }
+        for (const QString &name : names) {
             const QString trimmed = name.trimmed();
             if (missingLower.contains(trimmed.toLower())) {
                 ++copiesByName[trimmed];
@@ -400,9 +426,9 @@ void RuledGameSession::notifyUnimplementedCards(const QList<QPair<int, QStringLi
         if (copiesByName.isEmpty()) {
             continue;
         }
-        Server_AbstractPlayer *player = game->getPlayer(row.first);
-        const QString playerName =
-            player ? QString::fromStdString(player->getUserInfo()->name()) : QString::number(row.first);
+        Server_AbstractPlayer *player = game->getPlayer(row.player_id());
+        const QString playerName = player ? QString::fromStdString(player->getUserInfo()->name())
+                                          : QString::number(row.player_id());
         QStringList cardParts;
         for (auto it = copiesByName.constBegin(); it != copiesByName.constEnd(); ++it) {
             cardParts.append(it.value() > 1 ? QStringLiteral("%1 x%2").arg(it.key()).arg(it.value()) : it.key());

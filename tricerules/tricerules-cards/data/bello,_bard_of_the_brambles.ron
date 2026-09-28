@@ -1,0 +1,16 @@
+// Exact Oracle card and rulings fetched 2026-09-28:
+// https://scryfall.com/card/blc/1/bello-bard-of-the-brambles?utm_source=api
+// https://api.scryfall.com/cards/31e4b7a1-b377-49d2-a92e-4bcb0db35f16/rulings
+// This setup-only definition records printed characteristics for Commander identity binding.
+// Bello's continuous creature grant, combat trigger, and related rulings are not implemented.
+(
+    id: "bello,_bard_of_the_brambles",
+    name: "Bello, Bard of the Brambles",
+    face_id: "bello_bard_of_the_brambles",
+    mana_cost: "{1}{R}{G}",
+    supertypes: ["Legendary"],
+    types: ["Creature", "Raccoon", "Bard"],
+    power: 3,
+    toughness: 3,
+    commander_setup_only: true,
+)

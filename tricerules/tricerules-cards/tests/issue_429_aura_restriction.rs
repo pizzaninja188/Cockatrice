@@ -393,6 +393,7 @@ fn issue_429_new_horizons_counters_and_grants_two_mana_of_one_color() {
                 source_zone: AbilitySourceZone::Battlefield,
                 costs: vec![AbilityCost::Tap],
                 effect: vec![SpellEffectKind::ProduceMana {
+                    commander_color_identity: false,
                     options: two_any_one_color(),
                     restriction: None,
                     conditional: None,

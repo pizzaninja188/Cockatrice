@@ -1433,28 +1433,49 @@ impl GameEngine {
     ) -> Option<Vec<tricerules_cards::ManaAmount>> {
         let default_options = ability.mana_options()?;
         let controller = self.state.objects.get(&permanent_id)?.controller;
-        let options = ability
-            .conditional_mana_output()
-            .filter(|conditional| {
-                self.condition_holds(
-                    &conditional.condition,
-                    ConditionContext {
-                        controller,
-                        source_object_id: permanent_id,
-                        source_zone_change: self
-                            .state
-                            .zone_change_generation
-                            .get(&permanent_id)
-                            .copied()
-                            .unwrap_or(0),
-                        resolving_spell_id: None,
-                        stack_item: None,
-                        previous_effect_result: None,
-                    },
-                )
-            })
-            .map(|conditional| conditional.options.as_slice())
-            .unwrap_or(default_options.as_slice());
+        let options = if ability.commander_color_identity_mana_output().is_some() {
+            let identity = &self
+                .state
+                .players
+                .iter()
+                .find(|player| player.id == controller)?
+                .color_identity;
+            if identity.is_empty() {
+                // CR 605.2 keeps this a mana ability even when the current game state supplies no
+                // legal color; activating it still taps the source and adds 0.
+                vec![tricerules_cards::ManaAmount::default()]
+            } else {
+                identity
+                    .iter()
+                    .copied()
+                    .map(|color| mana_amount_for_color(color, 1))
+                    .collect()
+            }
+        } else {
+            ability
+                .conditional_mana_output()
+                .filter(|conditional| {
+                    self.condition_holds(
+                        &conditional.condition,
+                        ConditionContext {
+                            controller,
+                            source_object_id: permanent_id,
+                            source_zone_change: self
+                                .state
+                                .zone_change_generation
+                                .get(&permanent_id)
+                                .copied()
+                                .unwrap_or(0),
+                            resolving_spell_id: None,
+                            stack_item: None,
+                            previous_effect_result: None,
+                        },
+                    )
+                })
+                .map(|conditional| conditional.options.as_slice())
+                .unwrap_or(default_options.as_slice())
+                .to_vec()
+        };
         let source_counter_multiplier = ability.mana_source_counter().map_or(1, |counter| {
             self.state
                 .objects
@@ -1467,8 +1488,8 @@ impl GameEngine {
             .saturating_mul(self.tapped_permanent_mana_multiplier(permanent_id, ability));
         Some(
             options
-                .iter()
-                .map(|amount| multiply_mana_amount(*amount, multiplier))
+                .into_iter()
+                .map(|amount| multiply_mana_amount(amount, multiplier))
                 .collect(),
         )
     }

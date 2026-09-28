@@ -130,7 +130,7 @@ bool RulesRelay::readFrame(QByteArray &out)
 }
 
 bool RulesRelay::sessionStart(quint64 gameId, quint64 seed, const QList<int> &playerIds,
-                              const QList<QPair<int, QStringList>> *playerDecks, bool devCommandsEnabled,
+                              const QList<ruled::v1::PlayerDeck> *playerDecks, bool devCommandsEnabled,
                               ruled::v1::IpcResponse &out)
 {
     if (!connectIfNeeded()) {
@@ -147,12 +147,8 @@ bool RulesRelay::sessionStart(quint64 gameId, quint64 seed, const QList<int> &pl
         ss->add_player_ids(pid);
     }
     if (playerDecks) {
-        for (const QPair<int, QStringList> &row : *playerDecks) {
-            ruled::v1::PlayerDeck *pd = ss->add_player_decks();
-            pd->set_player_id(row.first);
-            for (const QString &name : row.second) {
-                pd->add_mainboard_card_name(name.toStdString());
-            }
+        for (const ruled::v1::PlayerDeck &row : *playerDecks) {
+            ss->add_player_decks()->CopyFrom(row);
         }
     }
     return sessionStart(*ss, out);

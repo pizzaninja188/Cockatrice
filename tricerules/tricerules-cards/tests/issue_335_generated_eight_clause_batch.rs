@@ -237,6 +237,7 @@ fn issue_335_adventurers_inn_gains_two_life_on_its_own_entry() {
     assert_eq!(
         ability.effect,
         [SpellEffectKind::ProduceMana {
+            commander_color_identity: false,
             options: vec![ManaAmount {
                 c: 1,
                 ..ManaAmount::default()

@@ -8,6 +8,7 @@ fn mana_restriction(face: &CardFace, expected: ManaAmount) -> &ManaSpendingRestr
     let ability = &face.activated_abilities[0];
     assert_eq!(ability.costs, [AbilityCost::Tap]);
     let [SpellEffectKind::ProduceMana {
+        commander_color_identity: false,
         options,
         restriction: Some(restriction),
         conditional: None,

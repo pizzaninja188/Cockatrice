@@ -1712,6 +1712,11 @@ pub enum SpellEffectKind {
     /// picks at activation (dual/filter lands, any-color rocks). Untargeted.
     ProduceMana {
         options: Vec<ManaAmount>,
+        /// Arcane Signet and Command Tower choose dynamically from the activating player's
+        /// frozen Commander identity. Their printed ability has no intrinsic colored symbols,
+        /// so this marker describes the output rule without injecting colors into identity.
+        #[serde(default, skip_serializing_if = "is_false")]
+        commander_color_identity: bool,
         /// CR 106.6: every pip produced by this ability carries the same spending restriction.
         /// Chandra's Embercat and Vodalian Arcanist are the first data consumers; the spell and
         /// ability branches also cover Castle Garenbrig without a card-specific primitive.
@@ -2075,6 +2080,10 @@ pub struct ManaAmount {
 
 fn is_zero_u32(value: &u32) -> bool {
     *value == 0
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// The boundary at which resolving mana stops being retained. `EndOfStep` follows the ordinary
@@ -4681,14 +4690,18 @@ impl SpellEffectKind {
             // empty option set would produce nothing and is rejected as malformed.
             SpellEffectKind::ProduceMana {
                 options,
+                commander_color_identity,
                 restriction,
                 conditional,
             } => {
                 if context == EffectContext::Spell {
                     return Err("ProduceMana is only valid on a mana ability, not a spell".into());
                 }
-                if options.is_empty() {
+                if options.is_empty() && !*commander_color_identity {
                     return Err("ProduceMana requires at least one mana option".into());
+                }
+                if *commander_color_identity && (restriction.is_some() || conditional.is_some()) {
+                    return Err("commander color identity mana cannot have output modifiers".into());
                 }
                 if let Some(restriction) = restriction {
                     restriction.validate()?;

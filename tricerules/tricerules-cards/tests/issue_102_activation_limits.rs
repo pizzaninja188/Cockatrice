@@ -146,7 +146,7 @@ fn devotee_card_data_matches_oracle() {
         );
         assert!(matches!(
             ability.effect.as_slice(),
-            [SpellEffectKind::ProduceMana { options, restriction: None, conditional: None }]
+            [SpellEffectKind::ProduceMana { options, restriction: None, conditional: None, commander_color_identity: false }]
                 if options == expected.mana_options
         ));
         assert_eq!(ability.ability_id.as_str(), "activated_01");

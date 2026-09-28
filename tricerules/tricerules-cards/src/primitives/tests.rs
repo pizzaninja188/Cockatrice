@@ -1806,6 +1806,7 @@ fn activation_limit_rejects_zero_maximum_for_every_scope() {
         costs: vec![],
         cost_modifiers: vec![],
         effect: vec![SpellEffectKind::ProduceMana {
+            commander_color_identity: false,
             options: vec![ManaAmount {
                 g: 1,
                 ..Default::default()
@@ -1828,6 +1829,45 @@ fn activation_limit_rejects_zero_maximum_for_every_scope() {
             .validate_shape()
             .is_err()
     );
+}
+
+#[test]
+fn commander_color_identity_mana_is_a_bounded_zero_or_more_choice_ability() {
+    let ability = ActivatedAbilityDef {
+        ability_id: crate::AbilityId::new("activated_01").unwrap(),
+        presentation: crate::AbilityPresentation::Fallback,
+        source_zone: AbilitySourceZone::Battlefield,
+        costs: vec![AbilityCost::Tap],
+        cost_modifiers: vec![],
+        effect: vec![SpellEffectKind::ProduceMana {
+            options: vec![],
+            commander_color_identity: true,
+            restriction: None,
+            conditional: None,
+        }],
+        targeting: None,
+        timing: ActivationTiming::Normal,
+        conditions: vec![],
+        activation_limit: None,
+    };
+    ability
+        .validate_shape()
+        .expect("the two named Commander cards use this tapped battlefield shape");
+    assert!(ability.is_mana_ability());
+    assert!(ability.mana_options().unwrap().is_empty());
+    assert!(ability.commander_color_identity_mana_output().is_some());
+
+    let mut extra_cost = ability.clone();
+    extra_cost
+        .costs
+        .push(AbilityCost::Mana(ManaCost::parse("{1}").unwrap()));
+    assert!(extra_cost.validate_shape().is_err());
+
+    let mut extra_effect = ability;
+    extra_effect.effect.push(SpellEffectKind::GainLife {
+        amount: Amount::Fixed(1),
+    });
+    assert!(extra_effect.validate_shape().is_err());
 }
 
 fn storage_counter_split_ability(mana_cost: &str) -> ActivatedAbilityDef {
@@ -1895,6 +1935,7 @@ fn mana_then_controller_damage_ability() -> super::ActivatedAbilityDef {
         cost_modifiers: vec![],
         effect: vec![
             super::SpellEffectKind::ProduceMana {
+                commander_color_identity: false,
                 options: vec![
                     super::ManaAmount {
                         r: 1,

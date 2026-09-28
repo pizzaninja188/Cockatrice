@@ -23,6 +23,7 @@ fn scavenger_grounds_registers_colorless_mana_and_all_graveyards_exile() {
     assert!(matches!(
         colorless.effect.as_slice(),
         [SpellEffectKind::ProduceMana {
+            commander_color_identity: false,
             options,
             restriction: None,
             conditional: None,

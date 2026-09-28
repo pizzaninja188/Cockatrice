@@ -363,6 +363,7 @@ fn destination_matches(filter: &ZoneEventDestination, zone: Zone) -> bool {
         Zone::Library => EventZone::Library,
         Zone::Exile => EventZone::Exile,
         Zone::Stack => EventZone::Stack,
+        Zone::Command => EventZone::Command,
     };
     match filter {
         ZoneEventDestination::Any => true,

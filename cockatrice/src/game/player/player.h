@@ -251,6 +251,7 @@ private:
 
     bool dialogSemaphore;
     QList<CardItem *> cardsToDelete;
+    bool commandZoneHasSnapshot = false;
 
     // void eventConnectionStateChanged(const Event_ConnectionStateChanged &event);
 };

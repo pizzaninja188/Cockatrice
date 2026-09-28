@@ -31,6 +31,7 @@ fn mind_stone_registers_its_colorless_mana_and_sacrifice_draw_abilities() {
     );
     assert_eq!(mana_ability.costs, [AbilityCost::Tap]);
     let [SpellEffectKind::ProduceMana {
+        commander_color_identity: false,
         options,
         restriction: None,
         conditional: None,

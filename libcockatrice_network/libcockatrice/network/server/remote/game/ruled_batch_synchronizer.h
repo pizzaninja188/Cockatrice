@@ -46,7 +46,8 @@ public:
                                      const ruled::v1::RuledCommand &command,
                                      const ruled::v1::IpcResponse &response);
     BatchApplyResult applyBatch(const ruled::v1::IpcResponse &response);
-    void applyStartupBatch(const ruled::v1::IpcResponse &response, const QList<QPair<int, QStringList>> &deckByPlayer);
+    void applyStartupBatch(const ruled::v1::IpcResponse &response,
+                           const QList<ruled::v1::PlayerDeck> &deckByPlayer);
     void revealFaceDownPermanentsOnConcede(int concedingPlayerId, GameEventStorage &events);
 
     [[nodiscard]] int priorityPlayer() const;

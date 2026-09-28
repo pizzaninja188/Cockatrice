@@ -242,16 +242,19 @@ async fn write_proto<M: Message>(
 mod tests {
     use super::*;
     use tricerules_core::PlayerId;
-    use tricerules_proto::{ipc_envelope::Msg, PlayerDeck};
+    use tricerules_proto::{commander_setup, ipc_envelope::Msg, CommanderSetup, PlayerDeck};
     use tricerules_server::{
         dev_commands_enabled_for_session, missing_cards_response, resolve_deck_names,
-        validate_deck_response,
+        validate_deck_response, DeckResolveError,
     };
 
     fn deck(player_id: PlayerId, names: &[&str]) -> PlayerDeck {
         PlayerDeck {
             player_id,
             mainboard_card_name: names.iter().map(|s| s.to_string()).collect(),
+            commander_setup: Some(CommanderSetup {
+                declaration: Some(commander_setup::Declaration::NoCommander(true)),
+            }),
         }
     }
 
@@ -266,8 +269,9 @@ mod tests {
         )
         .expect("all names implemented")
         .expect("decks supplied");
-        assert_eq!(decks[0], vec!["lightning_bolt", "mountain"]);
-        assert_eq!(decks[1], vec!["forest"]);
+        assert_eq!(decks[0].mainboard, vec!["lightning_bolt", "mountain"]);
+        assert_eq!(decks[0].commanders, Vec::<String>::new());
+        assert_eq!(decks[1].mainboard, vec!["forest"]);
     }
 
     #[test]
@@ -280,12 +284,105 @@ mod tests {
             ],
         )
         .expect_err("unimplemented names must fail the session");
-        assert_eq!(err, vec!["Black Lotus", "Time Walk"]);
+        assert_eq!(
+            err,
+            DeckResolveError::MissingCards(vec!["Black Lotus".into(), "Time Walk".into()])
+        );
     }
 
     #[test]
     fn resolve_deck_names_empty_means_engine_default_decks() {
         assert!(matches!(resolve_deck_names(&[0, 1], &[]), Ok(None)));
+    }
+
+    #[test]
+    fn resolve_deck_names_requires_a_presence_bearing_commander_setup() {
+        let mut absent = deck(0, &["Forest"]);
+        absent.commander_setup = None;
+        assert_eq!(
+            resolve_deck_names(&[0], &[absent]),
+            Err(DeckResolveError::Invalid(
+                "player 0 is missing an explicit Commander setup".into()
+            ))
+        );
+
+        let mut empty = deck(0, &["Forest"]);
+        empty.commander_setup = Some(CommanderSetup { declaration: None });
+        assert_eq!(
+            resolve_deck_names(&[0], &[empty]),
+            Err(DeckResolveError::Invalid(
+                "player 0 has an empty Commander setup".into()
+            ))
+        );
+    }
+
+    #[test]
+    fn resolve_deck_names_resolves_commander_names_through_the_registry() {
+        let mut deck = deck(0, &["Forest"]);
+        deck.commander_setup = Some(CommanderSetup {
+            declaration: Some(commander_setup::Declaration::Declared(
+                commander_setup::Declared {
+                    card_name: vec!["Atraxa, Praetors' Voice".into()],
+                },
+            )),
+        });
+        let resolved = resolve_deck_names(&[0], &[deck])
+            .expect("source commander exists")
+            .expect("explicit player deck supplied");
+        assert_eq!(resolved[0].mainboard, ["forest"]);
+        assert_eq!(resolved[0].commanders, ["atraxa,_praetors_voice"]);
+    }
+
+    #[test]
+    fn resolve_deck_names_resolves_each_frozen_commander_name() {
+        let names = [
+            "Atraxa, Praetors' Voice",
+            "Kami of the Crescent Moon",
+            "Bello, Bard of the Brambles",
+            "Daretti, Scrap Savant",
+        ];
+        let decks = names
+            .iter()
+            .enumerate()
+            .map(|(player, name)| {
+                let mut row = deck(player as PlayerId, &[]);
+                row.commander_setup = Some(CommanderSetup {
+                    declaration: Some(commander_setup::Declaration::Declared(
+                        commander_setup::Declared {
+                            card_name: vec![(*name).into()],
+                        },
+                    )),
+                });
+                row
+            })
+            .collect::<Vec<_>>();
+        let resolved = resolve_deck_names(&[0, 1, 2, 3], &decks)
+            .expect("all frozen commander records are present")
+            .expect("decks were provided");
+        assert_eq!(
+            resolved
+                .iter()
+                .map(|deck| deck.commanders[0].as_str())
+                .collect::<Vec<_>>(),
+            [
+                "atraxa,_praetors_voice",
+                "kami_of_the_crescent_moon",
+                "bello,_bard_of_the_brambles",
+                "daretti,_scrap_savant",
+            ]
+        );
+    }
+
+    #[test]
+    fn resolve_deck_names_rejects_setup_only_commanders_from_mainboards() {
+        let err = resolve_deck_names(&[0], &[deck(0, &["Bello, Bard of the Brambles"])])
+            .expect_err("setup-only records do not imply mainboard gameplay support");
+        assert_eq!(
+            err,
+            DeckResolveError::Invalid(
+                "Bello, Bard of the Brambles is available only for Commander setup and cannot be in a mainboard".into()
+            )
+        );
     }
 
     fn names(list: &[&str]) -> Vec<String> {
@@ -606,8 +703,12 @@ mod tests {
 
     #[test]
     fn session_start_missing_fills_missing_card_names() {
-        let missing = resolve_deck_names(&[0], &[deck(0, &["Black Lotus", "Mountain"])])
-            .expect_err("Black Lotus is not implemented");
+        let DeckResolveError::MissingCards(missing) =
+            resolve_deck_names(&[0], &[deck(0, &["Black Lotus", "Mountain"])])
+                .expect_err("Black Lotus is not implemented")
+        else {
+            panic!("missing card names have a distinct error response");
+        };
         let resp = missing_cards_response(missing);
         assert!(!resp.ok);
         assert_eq!(resp.missing_card_names, vec!["Black Lotus"]);

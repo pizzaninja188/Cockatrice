@@ -135,6 +135,7 @@ fn assert_conditional_pair_ability(
     assert_eq!(
         ability.effect,
         [SpellEffectKind::ProduceMana {
+            commander_color_identity: false,
             options: options
                 .iter()
                 .map(|(w, u, b, r, g, c)| ManaAmount {

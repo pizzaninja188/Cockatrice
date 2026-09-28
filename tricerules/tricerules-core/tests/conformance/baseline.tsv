@@ -125,6 +125,8 @@ arborback_stomper	0	cast	exercised
 arcane_epiphany	0	cast	exercised
 arcane_sanctum	0	ability:0	exercised
 arcane_sanctum	0	land	exercised
+arcane_signet	0	ability:0	exercised
+arcane_signet	0	cast	exercised
 archangel	0	cast	exercised
 archers_of_qarsi	0	cast	exercised
 archive_dragon	0	cast	exercised
@@ -595,6 +597,8 @@ combustion_technique	0	cast	exercised
 command_bridge	0	ability:0	exercised
 command_bridge	0	land	exercised
 command_the_storm	0	cast	exercised
+command_tower	0	ability:0	exercised
+command_tower	0	land	exercised
 commercial_district	0	land	exercised
 common_crook	0	cast	exercised
 commune_with_nature	0	cast	exercised

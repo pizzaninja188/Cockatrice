@@ -1429,6 +1429,7 @@ fn add_intrinsic_land_mana_ability(
         source_zone: AbilitySourceZone::Battlefield,
         costs: vec![AbilityCost::Tap],
         effect: vec![SpellEffectKind::ProduceMana {
+            commander_color_identity: false,
             options,
             restriction: None,
             conditional: None,
@@ -1777,6 +1778,7 @@ fn render_generated_effect(effect: &SpellEffectKind) -> String {
             quantity: tricerules_cards::primitives::DiscardQuantity::Exact(count),
         } => format!("Discard(who: EachOpponent, quantity: Exact({count}))"),
         SpellEffectKind::ProduceMana {
+            commander_color_identity: false,
             options,
             restriction: None,
             conditional: None,
@@ -2207,7 +2209,8 @@ fn require_power_toughness_is_defined(
                         *toughness_per_match != 0
                     }
                 }
-                CharacteristicDefiningAbility::Changeling => false,
+                CharacteristicDefiningAbility::Changeling
+                | CharacteristicDefiningAbility::DefinesColors { .. } => false,
             })
     };
     if (power.is_none() && !cda_defines(true)) || (toughness.is_none() && !cda_defines(false)) {

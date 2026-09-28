@@ -115,6 +115,7 @@ fn issue_459_abzan_devotee_owns_the_tri_color_mana_and_graveyard_abilities_in_or
     assert_eq!(
         mana_ability.effect,
         [SpellEffectKind::ProduceMana {
+            commander_color_identity: false,
             options: vec![
                 mana(1, 0, 0, 0, 0),
                 mana(0, 0, 1, 0, 0),
@@ -319,6 +320,7 @@ fn issue_459_handwritten_devotee_anchors_keep_the_recipe_shapes() {
             "{id}"
         );
         let [SpellEffectKind::ProduceMana {
+            commander_color_identity: false,
             options: actual,
             restriction: None,
             conditional: None,

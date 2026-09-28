@@ -22,6 +22,7 @@ pub(crate) fn reveal_cards(
             Zone::Battlefield => rv1::ChoiceCandidateSourceZone::Battlefield,
             Zone::Exile => rv1::ChoiceCandidateSourceZone::Exile,
             Zone::Stack => rv1::ChoiceCandidateSourceZone::Stack,
+            Zone::Command => rv1::ChoiceCandidateSourceZone::Command,
         } as i32;
         let group_index = groups
             .iter()

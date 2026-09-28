@@ -1,0 +1,15 @@
+// Exact Oracle card and rulings fetched 2026-09-28:
+// https://scryfall.com/card/cmm/213/daretti-scrap-savant?utm_source=api
+// https://api.scryfall.com/cards/7cb9d4a0-66bd-454d-b676-80192a96c723/rulings
+// This setup-only definition records printed characteristics for Commander identity binding.
+// Daretti's loyalty abilities and delayed emblem return are not implemented.
+(
+    id: "daretti,_scrap_savant",
+    name: "Daretti, Scrap Savant",
+    face_id: "daretti_scrap_savant",
+    mana_cost: "{3}{R}",
+    supertypes: ["Legendary"],
+    types: ["Planeswalker", "Daretti"],
+    loyalty: 3,
+    commander_setup_only: true,
+)

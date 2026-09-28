@@ -15,11 +15,11 @@
 
 use crate::mana::ManaCost;
 use crate::primitives::{
-    ActivatedAbilityDef, AdditionalCost, Amount, CardTypeFilter, CastCostGroupDef,
-    CastCostOptionRef, CastCostReceiptCondition, Color, CountExpression, CounterKind,
-    EffectContext, EntersWithCountersAffected, Evasion, GameCondition, Keyword,
-    PermanentTypeFilter, PowerComparison, ProtectionQuality, SpellCostModifier, SpellEffectKind,
-    StaticAbilityDef, TargetingDef, TriggeredAbilityDef, ZoneCardFilter,
+    AbilityCost, ActivatedAbilityDef, AdditionalCost, Amount, CardTypeFilter, CastCostGroupDef,
+    CastCostOptionDef, CastCostOptionRef, CastCostReceiptCondition, Color, CountExpression,
+    CounterKind, EffectContext, EntersWithCountersAffected, Evasion, GameCondition, Keyword,
+    PermanentTypeFilter, PowerComparison, ProtectionQuality, ResolutionCost, SpellCostModifier,
+    SpellEffectKind, StaticAbilityDef, TargetingDef, TriggeredAbilityDef, ZoneCardFilter,
 };
 use crate::{AbilityId, AbilityPresentation, CardFaceId, IdentifiedAbility, ModeId};
 use serde::{Deserialize, Serialize};
@@ -138,6 +138,10 @@ pub enum Layout {
 pub enum CharacteristicDefiningAbility {
     /// CR 702.73: this object is every creature type in every zone.
     Changeling,
+    /// CR 604.3 / 903.4: the object is defined as one or more colors in every zone. Transguild
+    /// Courier uses this CDA; Sphinx of the Guildpact instead uses a color indicator. This
+    /// contributes defined colors to the object's layer-5 characteristics and Commander identity.
+    DefinesColors { colors: Vec<Color> },
     /// CR 208.2a / 604.3 / 613.4a: define one or both P/T components from a live public count in
     /// every zone. Battlefield counts use pre-layer-7 derived characteristics; graveyard card
     /// counts use printed public card data (CR 404.2). Lumbering Worldwagon defines only power;
@@ -153,6 +157,19 @@ impl CharacteristicDefiningAbility {
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
             Self::Changeling => Ok(()),
+            Self::DefinesColors { colors } => {
+                if colors.is_empty() {
+                    return Err("color-defining ability must define at least one color".into());
+                }
+                let mut unique = Vec::new();
+                for color in colors {
+                    if unique.contains(color) {
+                        return Err("color-defining ability cannot repeat a color".into());
+                    }
+                    unique.push(*color);
+                }
+                Ok(())
+            }
             Self::CountScaledPowerToughness {
                 count,
                 power_per_match,
@@ -722,6 +739,16 @@ impl CardFace {
     /// [`colors_override`](Self::colors_override) for token faces (CR 111.4). A face is colorless
     /// when its mana cost carries no color symbols (lands, `{0}`, generic-only costs).
     pub fn colors(&self) -> Vec<Color> {
+        if let Some(colors) = self
+            .characteristic_defining_abilities
+            .iter()
+            .find_map(|ability| match &ability.definition {
+                CharacteristicDefiningAbility::DefinesColors { colors } => Some(colors),
+                _ => None,
+            })
+        {
+            return colors.clone();
+        }
         match &self.colors_override {
             Some(colors) => colors.clone(),
             None => self
@@ -729,6 +756,102 @@ impl CardFace {
                 .clone()
                 .unwrap_or_else(|| self.mana_cost.colors()),
         }
+    }
+
+    /// CR 903.4: collect every colored mana symbol in this face's printed costs and supported
+    /// rules-text costs, plus its color indicator and colors defined by a CDA. This is a separate
+    /// query from `colors()`: a color indicator sets the face's colors, while color identity also
+    /// retains colored symbols in the mana cost and rules text.
+    pub fn color_identity(&self) -> Vec<Color> {
+        let mut collected = Vec::new();
+        push_mana_cost_colors(&mut collected, &self.mana_cost);
+        for cost in [
+            &self.flashback_cost,
+            &self.harmonize_cost,
+            &self.warp_cost,
+            &self.sneak_cost,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            push_mana_cost_colors(&mut collected, cost);
+        }
+        if let Some(indicator) = &self.color_indicator {
+            collected.extend(indicator.iter().copied());
+        }
+        for cda in &self.characteristic_defining_abilities {
+            if let CharacteristicDefiningAbility::DefinesColors { colors } = &cda.definition {
+                collected.extend(colors.iter().copied());
+            }
+        }
+        for group in &self.cast_cost_groups {
+            for option in &group.options {
+                if let CastCostOptionDef::Mana { cost, .. } = option {
+                    push_mana_cost_colors(&mut collected, cost);
+                }
+            }
+        }
+        for ability in &self.activated_abilities {
+            push_activated_ability_mana_colors(&mut collected, ability);
+        }
+        for ability in &self.triggered_abilities {
+            push_triggered_ability_mana_colors(&mut collected, ability);
+        }
+        for ability in &self.static_abilities {
+            match &ability.definition {
+                StaticAbilityDef::Madness { cost } => {
+                    push_mana_cost_colors(&mut collected, cost);
+                }
+                StaticAbilityDef::AttachedModifier {
+                    activated_abilities,
+                    triggered_abilities,
+                    ..
+                }
+                | StaticAbilityDef::ConditionalSelfModifier {
+                    activated_abilities,
+                    triggered_abilities,
+                    ..
+                } => {
+                    for nested in activated_abilities {
+                        push_activated_ability_mana_colors(&mut collected, nested);
+                    }
+                    for nested in triggered_abilities {
+                        push_triggered_ability_mana_colors(&mut collected, nested);
+                    }
+                }
+                StaticAbilityDef::GrantTriggeredAbilityToPermanents {
+                    triggered_abilities,
+                    ..
+                } => {
+                    for nested in triggered_abilities {
+                        push_triggered_ability_mana_colors(&mut collected, nested);
+                    }
+                }
+                _ => {}
+            }
+        }
+        for effect in &self.spell_effect {
+            push_effect_mana_colors(&mut collected, effect);
+        }
+        if let Some(modal) = &self.modal_spell {
+            for mode in &modal.modes {
+                for effect in &mode.effects {
+                    push_effect_mana_colors(&mut collected, effect);
+                }
+            }
+        }
+
+        // Keep a canonical order so equivalent identities hash and serialize identically.
+        [
+            Color::White,
+            Color::Blue,
+            Color::Black,
+            Color::Red,
+            Color::Green,
+        ]
+        .into_iter()
+        .filter(|color| collected.contains(color))
+        .collect()
     }
 
     /// True if this face's types satisfy a [`PermanentTypeFilter`] (ETB-watcher triggers like
@@ -879,6 +1002,10 @@ pub struct RawCardDefinition {
     pub must_block_if_able: bool,
     #[serde(default)]
     pub color_indicator: Option<Vec<Color>>,
+    /// The engine has only the characteristics needed to declare this card as a Commander;
+    /// rules behavior is intentionally unavailable until its card implementation is complete.
+    #[serde(default)]
+    pub commander_setup_only: bool,
 }
 
 impl RawCardDefinition {
@@ -952,6 +1079,7 @@ impl RawCardDefinition {
             name: self.name,
             layout: self.layout,
             faces,
+            commander_setup_only: self.commander_setup_only,
         })
     }
 }
@@ -967,12 +1095,34 @@ pub struct CardDefinition {
     pub name: String,
     /// Physical layout (CR 709/710/712/715).
     pub layout: Layout,
+    /// Only usable as a declared Commander for identity/setup. Reject from mainboards until the
+    /// card has a complete rules implementation.
+    pub commander_setup_only: bool,
     /// The card's faces in printed order, always non-empty: one for `Normal`, two for
     /// split/MDFC/transform/adventure/flip.
     pub faces: Vec<CardFace>,
 }
 
 impl CardDefinition {
+    /// CR 903.4: color identity uses every face of the physical card, not just its current face.
+    /// The returned colors come only from engine-owned card data, never a client declaration.
+    pub fn color_identity(&self) -> Vec<Color> {
+        let mut collected = Vec::new();
+        for face in &self.faces {
+            collected.extend(face.color_identity());
+        }
+        [
+            Color::White,
+            Color::Blue,
+            Color::Black,
+            Color::Red,
+            Color::Green,
+        ]
+        .into_iter()
+        .filter(|color| collected.contains(color))
+        .collect()
+    }
+
     /// Accepted physical-card names for deck input and display-database coverage. A preparation
     /// inset remains available as a rules name, but is not an alias for the physical card:
     /// Infirmary Healer's inset shares its name with the independently printed Stream of Life.
@@ -1282,9 +1432,169 @@ impl CardDefinition {
     }
 }
 
+fn push_mana_cost_colors(collected: &mut Vec<Color>, cost: &ManaCost) {
+    collected.extend(cost.colors());
+}
+
+fn push_activated_ability_mana_colors(collected: &mut Vec<Color>, ability: &ActivatedAbilityDef) {
+    for cost in &ability.costs {
+        if let AbilityCost::Mana(cost) | AbilityCost::Waterbend(cost) = cost {
+            push_mana_cost_colors(collected, cost);
+        }
+    }
+    for effect in &ability.effect {
+        push_effect_mana_colors(collected, effect);
+    }
+}
+
+fn push_triggered_ability_mana_colors(collected: &mut Vec<Color>, ability: &TriggeredAbilityDef) {
+    for effect in &ability.effect {
+        push_effect_mana_colors(collected, effect);
+    }
+    if let Some(modal) = &ability.modal {
+        for mode in &modal.modes {
+            for effect in &mode.effects {
+                push_effect_mana_colors(collected, effect);
+            }
+        }
+    }
+}
+
+fn push_mana_output_colors(collected: &mut Vec<Color>, options: &[crate::ManaAmount]) {
+    // The current mana-output schema represents "one mana of any color" as five mutually
+    // exclusive, single-color options. Those generated possibilities are not colored symbols in
+    // Oracle text and must not make colorless cards five-color. Fixed output symbols on other
+    // options do appear in the rules text and contribute to color identity.
+    let colors = [
+        Color::White,
+        Color::Blue,
+        Color::Black,
+        Color::Red,
+        Color::Green,
+    ];
+    let has_any_color_choice = colors.iter().all(|color| {
+        options
+            .iter()
+            .any(|amount| single_color_mana_output(amount) == Some(*color))
+    });
+
+    for option in options {
+        if has_any_color_choice && single_color_mana_output(option).is_some() {
+            continue;
+        }
+        if option.w > 0 {
+            collected.push(Color::White);
+        }
+        if option.u > 0 {
+            collected.push(Color::Blue);
+        }
+        if option.b > 0 {
+            collected.push(Color::Black);
+        }
+        if option.r > 0 {
+            collected.push(Color::Red);
+        }
+        if option.g > 0 {
+            collected.push(Color::Green);
+        }
+    }
+}
+
+fn single_color_mana_output(amount: &crate::ManaAmount) -> Option<Color> {
+    Some(
+        match (amount.w, amount.u, amount.b, amount.r, amount.g, amount.c) {
+            (1, 0, 0, 0, 0, 0) => Color::White,
+            (0, 1, 0, 0, 0, 0) => Color::Blue,
+            (0, 0, 1, 0, 0, 0) => Color::Black,
+            (0, 0, 0, 1, 0, 0) => Color::Red,
+            (0, 0, 0, 0, 1, 0) => Color::Green,
+            _ => return None,
+        },
+    )
+}
+
+/// Visit the mana costs represented by the typed Oracle-text tree. Presentation strings are
+/// deliberately excluded: color identity is a rules characteristic, not a display parse.
+fn push_effect_mana_colors(collected: &mut Vec<Color>, effect: &SpellEffectKind) {
+    match effect {
+        SpellEffectKind::ProduceMana {
+            options,
+            conditional,
+            ..
+        } => {
+            push_mana_output_colors(collected, options);
+            if let Some(conditional) = conditional {
+                push_mana_output_colors(collected, &conditional.options);
+            }
+        }
+        SpellEffectKind::ProduceManaPerSourceCounter { options, .. } => {
+            push_mana_output_colors(collected, options);
+        }
+        SpellEffectKind::ProduceSplitManaFromRemovedStorageCounters {
+            first_color,
+            second_color,
+        } => {
+            collected.extend([*first_color, *second_color]);
+        }
+        SpellEffectKind::AddMana { amount, .. } => {
+            push_mana_output_colors(collected, std::slice::from_ref(amount));
+        }
+        SpellEffectKind::Conditional { effect, .. }
+        | SpellEffectKind::ConditionalCastCost { effect, .. } => {
+            push_effect_mana_colors(collected, effect);
+        }
+        SpellEffectKind::MayBehold { if_beheld, .. } => {
+            for effect in if_beheld {
+                push_effect_mana_colors(collected, effect);
+            }
+        }
+        SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
+            for effect in &ability.effect {
+                push_effect_mana_colors(collected, effect);
+            }
+        }
+        SpellEffectKind::GrantTriggeredAbility { ability, .. }
+        | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
+            for effect in &ability.effect {
+                push_effect_mana_colors(collected, effect);
+            }
+            if let Some(modal) = &ability.modal {
+                for mode in &modal.modes {
+                    for effect in &mode.effects {
+                        push_effect_mana_colors(collected, effect);
+                    }
+                }
+            }
+        }
+        SpellEffectKind::ExileWithOwnerCastPermission {
+            alternative_cost, ..
+        } => push_mana_cost_colors(collected, alternative_cost),
+        SpellEffectKind::CastMadness { cost } => push_mana_cost_colors(collected, cost),
+        SpellEffectKind::ChooseResolutionBranch {
+            branches,
+            otherwise,
+            ..
+        } => {
+            for branch in branches {
+                if let ResolutionCost::Mana(cost) | ResolutionCost::Waterbend(cost) = &branch.cost {
+                    push_mana_cost_colors(collected, cost);
+                }
+                for effect in &branch.effects {
+                    push_effect_mana_colors(collected, effect);
+                }
+            }
+            for effect in otherwise {
+                push_effect_mana_colors(collected, effect);
+            }
+        }
+        _ => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::AbilitySourceZone;
 
     fn face(types: &[&str]) -> CardFace {
         let mut face = CardFace {
@@ -1301,7 +1611,122 @@ mod tests {
             name: "Test Card".to_owned(),
             layout,
             faces,
+            commander_setup_only: false,
         }
+    }
+
+    #[test]
+    fn commander_color_identity_uses_all_faces_symbols_indicators_and_color_cdas() {
+        let mut front = face(&["Legendary", "Creature"]);
+        front.mana_cost = ManaCost::parse("{G}").unwrap();
+        front.color_indicator = Some(vec![Color::Red]);
+        front.characteristic_defining_abilities = vec![IdentifiedAbility {
+            ability_id: AbilityId::new("defines_colors").unwrap(),
+            presentation: AbilityPresentation::Fallback,
+            definition: CharacteristicDefiningAbility::DefinesColors {
+                colors: vec![Color::Blue],
+            },
+        }];
+        front.activated_abilities = vec![ActivatedAbilityDef {
+            ability_id: AbilityId::new("black_mana_cost").unwrap(),
+            presentation: AbilityPresentation::Fallback,
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![crate::AbilityCost::Mana(ManaCost::parse("{B}").unwrap())],
+            cost_modifiers: Vec::new(),
+            effect: vec![SpellEffectKind::None],
+            targeting: None,
+            timing: Default::default(),
+            conditions: Vec::new(),
+            activation_limit: None,
+        }];
+        let mut back = face(&["Creature"]);
+        back.mana_cost = ManaCost::parse("{W}").unwrap();
+
+        let card = definition(Layout::Transform, vec![front, back]);
+        assert_eq!(
+            card.color_identity(),
+            vec![
+                Color::White,
+                Color::Blue,
+                Color::Black,
+                Color::Red,
+                Color::Green
+            ]
+        );
+    }
+
+    #[test]
+    fn commander_color_identity_finds_colored_costs_nested_in_rules_effects() {
+        let mut only_blue_text = face(&["Instant"]);
+        only_blue_text.mana_cost = ManaCost::parse("{2}").unwrap();
+        only_blue_text.spell_effect = vec![SpellEffectKind::Conditional {
+            condition: GameCondition::Void,
+            effect: Box::new(SpellEffectKind::CastMadness {
+                cost: ManaCost::parse("{G/U}").unwrap(),
+            }),
+        }];
+
+        assert_eq!(
+            definition(Layout::Normal, vec![only_blue_text]).color_identity(),
+            vec![Color::Blue, Color::Green]
+        );
+    }
+
+    #[test]
+    fn commander_color_identity_counts_mana_symbols_but_not_any_color_output() {
+        let registry = crate::CardRegistry::global();
+        assert_eq!(
+            registry
+                .get("talisman_of_impulse")
+                .expect("Talisman of Impulse")
+                .color_identity(),
+            vec![Color::Red, Color::Green]
+        );
+        assert!(registry
+            .get("decanter_of_endless_water")
+            .expect("Decanter of Endless Water")
+            .color_identity()
+            .is_empty());
+    }
+
+    #[test]
+    fn commander_color_identity_visits_abilities_nested_in_static_modifiers() {
+        let mut face = face(&["Enchantment"]);
+        face.mana_cost = ManaCost::parse("{3}").unwrap();
+        let nested_ability = ActivatedAbilityDef {
+            ability_id: AbilityId::new("nested_ability").unwrap(),
+            presentation: AbilityPresentation::Fallback,
+            source_zone: AbilitySourceZone::Battlefield,
+            costs: vec![AbilityCost::Mana(ManaCost::parse("{B}").unwrap())],
+            cost_modifiers: Vec::new(),
+            effect: vec![SpellEffectKind::None],
+            targeting: None,
+            timing: Default::default(),
+            conditions: Vec::new(),
+            activation_limit: None,
+        };
+        face.static_abilities = vec![IdentifiedAbility {
+            ability_id: AbilityId::new("conditional_static").unwrap(),
+            presentation: AbilityPresentation::Fallback,
+            definition: StaticAbilityDef::ConditionalSelfModifier {
+                condition: GameCondition::Void,
+                set_types: None,
+                add_types: Default::default(),
+                base_power: None,
+                base_toughness: None,
+                delta_power: 0,
+                delta_toughness: 0,
+                keywords: Vec::new(),
+                activated_abilities: vec![nested_ability],
+                triggered_abilities: Vec::new(),
+                can_attack_as_though_without_defender: false,
+            },
+        }];
+
+        assert_eq!(
+            definition(Layout::Normal, vec![face]).color_identity(),
+            vec![Color::Black]
+        );
     }
 
     #[test]

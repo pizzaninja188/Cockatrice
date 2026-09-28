@@ -220,11 +220,11 @@ void shuffleMainDeckForRuledFallback(Server_AbstractPlayer *player)
 
 int expectedMainboardSizeForStartupSync(Server_Game *game,
                                         int playerId,
-                                        const QList<QPair<int, QStringList>> &deckByPlayer)
+                                        const QList<ruled::v1::PlayerDeck> &deckByPlayer)
 {
-    for (const QPair<int, QStringList> &row : deckByPlayer) {
-        if (row.first == playerId) {
-            return static_cast<int>(row.second.size());
+    for (const ruled::v1::PlayerDeck &row : deckByPlayer) {
+        if (row.player_id() == playerId) {
+            return row.mainboard_card_name_size();
         }
     }
     if (Server_AbstractPlayer *player = game->getPlayer(playerId)) {
@@ -1952,7 +1952,7 @@ bool RuledBatchSynchronizer::indexCardCatalogEvents(const ruled::v1::RuledEventB
 }
 
 void RuledBatchSynchronizer::applyStartupBatch(const ruled::v1::IpcResponse &resp,
-                                               const QList<QPair<int, QStringList>> &deckByPlayer)
+                                               const QList<ruled::v1::PlayerDeck> &deckByPlayer)
 {
     if (!resp.has_batch()) {
         return;

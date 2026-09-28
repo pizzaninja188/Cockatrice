@@ -808,6 +808,19 @@ RuledPlayerBinding::applyRuledEngineZoneView(Server_Player *player,
         }
     }
     reconcilePublicZone(zones.value(ZoneNames::EXILE), v.exile_object_ids(), exileEngineOidToServerCardId);
+    Server_CardZone *commandZone = zones.value(ZoneNames::COMMAND);
+    if (commandZone && commandZoneEngineOidToServerCardId.isEmpty() &&
+        v.command_zone_object_ids_size() == commandZone->getCards().size()) {
+        // Server_Player inserts declared commanders in order, and the engine allocates their
+        // command-zone objects in that same order. Seed the initial physical identity mapping
+        // positionally before reconcilePublicZone applies the public pile's reverse display order.
+        const QList<Server_Card *> cards = commandZone->getCards();
+        for (int i = 0; i < v.command_zone_object_ids_size(); ++i) {
+            commandZoneEngineOidToServerCardId.insert(static_cast<quint32>(v.command_zone_object_ids(i)),
+                                                       cards.at(i)->getId());
+        }
+    }
+    reconcilePublicZone(commandZone, v.command_zone_object_ids(), commandZoneEngineOidToServerCardId);
     result.engineOidToServerCardId = engineOidToServerCardId;
     return result;
 }
@@ -822,12 +835,18 @@ Server_Card *RuledPlayerBinding::findCardByEngineOid(const Server_Player *player
         const auto libraryIt = libraryEngineOidToServerCardId.constFind(engineOid);
         if (libraryIt != libraryEngineOidToServerCardId.constEnd()) {
             serverCardId = *libraryIt;
+        } else {
+            const auto commandIt = commandZoneEngineOidToServerCardId.constFind(engineOid);
+            if (commandIt != commandZoneEngineOidToServerCardId.constEnd()) {
+                serverCardId = *commandIt;
+            }
         }
     }
     if (serverCardId < 0) {
         return nullptr;
     }
-    for (const char *zn : {ZoneNames::TABLE, ZoneNames::HAND, ZoneNames::STACK, ZoneNames::DECK}) {
+    for (const char *zn : {ZoneNames::TABLE, ZoneNames::HAND, ZoneNames::STACK, ZoneNames::DECK,
+                           ZoneNames::COMMAND}) {
         if (Server_CardZone *z = player->getZones().value(zn)) {
             if (z->getType() == ServerInfo_Zone::HiddenZone) {
                 for (Server_Card *card : z->getCards()) {

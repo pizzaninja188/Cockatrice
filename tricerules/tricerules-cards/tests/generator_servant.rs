@@ -25,6 +25,7 @@ fn generator_servant_is_authored_with_exact_characteristics_and_mana_rule() {
         [AbilityCost::Tap, AbilityCost::SacrificeSelf]
     );
     let [SpellEffectKind::ProduceMana {
+        commander_color_identity: false,
         options,
         restriction: Some(rule),
         conditional: None,

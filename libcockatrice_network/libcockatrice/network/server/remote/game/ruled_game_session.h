@@ -8,7 +8,6 @@
 #include <QByteArray>
 #include <QHash>
 #include <QList>
-#include <QPair>
 #include <QString>
 #include <QStringList>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
@@ -34,7 +33,7 @@ public:
     {
         StartDisposition disposition = StartDisposition::Blocked;
         ruled::v1::IpcResponse response;
-        QList<QPair<int, QStringList>> deckByPlayer;
+        QList<ruled::v1::PlayerDeck> deckByPlayer;
         quint64 seed = 0;
         QString cardDataHash;
     };
@@ -67,8 +66,8 @@ public:
     [[nodiscard]] QByteArray canonicalGameplayCommand(int playerId, const ruled::v1::RuledCommand &command) const;
 
 private:
-    [[nodiscard]] QList<QPair<int, QStringList>> mainboardNamesByPlayer() const;
-    void notifyUnimplementedCards(const QList<QPair<int, QStringList>> &deckByPlayer, const QStringList &missingNames);
+    [[nodiscard]] QList<ruled::v1::PlayerDeck> playerDecksByPlayer() const;
+    void notifyUnimplementedCards(const QList<ruled::v1::PlayerDeck> &deckByPlayer, const QStringList &missingNames);
     void sendEngineNotice(const QString &title, const QString &message);
     void notifyEngineUnreachable();
 

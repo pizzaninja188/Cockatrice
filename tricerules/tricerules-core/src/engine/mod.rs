@@ -241,6 +241,183 @@ mod face_change_tests {
         oid
     }
 
+    fn commander_engine_deck(mainboard: &[&str], commanders: &[&str]) -> EngineDeck {
+        EngineDeck {
+            mainboard: mainboard.iter().map(|name| (*name).to_owned()).collect(),
+            commanders: commanders.iter().map(|name| (*name).to_owned()).collect(),
+        }
+    }
+
+    #[test]
+    fn commander_identity_stays_outside_library_and_drives_dynamic_mana_for_current_controller() {
+        let mainboard = [
+            "arcane_signet",
+            "command_tower",
+            "forest",
+            "forest",
+            "forest",
+            "forest",
+            "forest",
+            "forest",
+            "forest",
+            "forest",
+        ];
+        let mut engine = GameEngine::new_with_commander_decks(
+            821,
+            &[0, 1],
+            20,
+            Some(vec![
+                commander_engine_deck(&mainboard, &["atraxa,_praetors_voice"]),
+                commander_engine_deck(&["forest"; 10], &["kami_of_the_crescent_moon"]),
+            ]),
+            true,
+        )
+        .expect("Commander decks resolve");
+
+        assert_eq!(
+            engine.state.players[0].color_identity,
+            [Color::White, Color::Blue, Color::Black, Color::Green]
+        );
+        assert_eq!(engine.state.players[1].color_identity, [Color::Blue]);
+        assert_eq!(engine.state.players[0].command_zone.len(), 1);
+        assert_eq!(engine.state.players[1].command_zone.len(), 1);
+        assert_eq!(engine.state.players[0].library.len(), 3);
+        assert!(engine.state.players[0]
+            .command_zone
+            .iter()
+            .all(|object_id| {
+                engine.state.objects[object_id].zone == Zone::Command
+                    && engine.state.objects[object_id].owner == 0
+            }));
+
+        let expected = [
+            ManaAmount {
+                w: 1,
+                ..Default::default()
+            },
+            ManaAmount {
+                u: 1,
+                ..Default::default()
+            },
+            ManaAmount {
+                b: 1,
+                ..Default::default()
+            },
+            ManaAmount {
+                g: 1,
+                ..Default::default()
+            },
+        ];
+        for card_id in ["arcane_signet", "command_tower"] {
+            let source = put_on_battlefield(&mut engine, card_id);
+            let ability = &engine
+                .registry
+                .get(card_id)
+                .unwrap()
+                .primary_face()
+                .activated_abilities[0];
+            assert_eq!(
+                engine.active_mana_options(source, ability),
+                Some(expected.to_vec())
+            );
+            // Color identity follows the source's current controller, not its owner.
+            engine.state.players[0]
+                .battlefield
+                .retain(|object_id| *object_id != source);
+            engine.state.players[1].battlefield.push(source);
+            {
+                let object = engine.state.objects.get_mut(&source).unwrap();
+                object.base_controller = 1;
+                object.controller = 1;
+            }
+            assert_eq!(
+                engine.active_mana_options(source, ability),
+                Some(vec![ManaAmount {
+                    u: 1,
+                    ..Default::default()
+                }])
+            );
+            {
+                let object = engine.state.objects.get_mut(&source).unwrap();
+                object.base_controller = 0;
+                object.controller = 0;
+            }
+            engine.state.players[1]
+                .battlefield
+                .retain(|object_id| *object_id != source);
+            engine.state.players[0].battlefield.push(source);
+        }
+    }
+
+    #[test]
+    fn commander_setup_only_definition_cannot_enter_a_mainboard() {
+        let result = GameEngine::new_with_commander_decks(
+            23,
+            &[0, 1],
+            20,
+            Some(vec![
+                commander_engine_deck(&["bello,_bard_of_the_brambles"], &[]),
+                commander_engine_deck(&[], &[]),
+            ]),
+            false,
+        );
+        assert!(matches!(
+            result,
+            Err(EngineError::Illegal(
+                "Commander setup-only card cannot be used in a mainboard"
+            ))
+        ));
+    }
+
+    #[test]
+    fn commander_mana_without_a_declared_identity_remains_a_zero_output_mana_ability() {
+        let mut engine = GameEngine::new_with_commander_decks(
+            822,
+            &[0, 1],
+            20,
+            Some(vec![
+                commander_engine_deck(
+                    &[
+                        "arcane_signet",
+                        "forest",
+                        "forest",
+                        "forest",
+                        "forest",
+                        "forest",
+                        "forest",
+                        "forest",
+                    ],
+                    &[],
+                ),
+                commander_engine_deck(&["forest"; 8], &[]),
+            ]),
+            true,
+        )
+        .expect("no-commander setup is explicit");
+        let source = put_on_battlefield(&mut engine, "arcane_signet");
+        let ability = &engine
+            .registry
+            .get("arcane_signet")
+            .unwrap()
+            .primary_face()
+            .activated_abilities[0];
+        assert!(ability.is_mana_ability());
+        assert_eq!(
+            engine.active_mana_options(source, ability),
+            Some(vec![ManaAmount::default()])
+        );
+        let info = legal_actions::activated_ability_info(
+            &engine,
+            source,
+            0,
+            0,
+            std::slice::from_ref(&ability.ability_id),
+            ability,
+        );
+        assert!(info.is_mana_ability);
+        assert!(info.mana_produced.is_empty());
+    }
+
     #[test]
     fn issue_176_mana_value_tracks_faces_copies_rooms_and_face_down() {
         let mut engine = engine_with(&[
@@ -785,6 +962,14 @@ fn sacrifice_events(
     events
 }
 
+/// Engine-resolved deck identity. Commander declarations remain physically separate from the
+/// mainboard and are the only input used to derive the player's color identity.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EngineDeck {
+    pub mainboard: Vec<String>,
+    pub commanders: Vec<String>,
+}
+
 pub struct GameEngine {
     pub state: GameState,
     pending_spell_cast_internal: Option<casting::PendingSpellCastInternal>,
@@ -1118,6 +1303,33 @@ impl GameEngine {
         decks: Option<Vec<Vec<String>>>,
         skip_opening_sequence: bool,
     ) -> Result<Self, EngineError> {
+        let decks = decks.map(|decks| {
+            decks
+                .into_iter()
+                .map(|mainboard| EngineDeck {
+                    mainboard,
+                    commanders: Vec::new(),
+                })
+                .collect()
+        });
+        Self::new_with_commander_decks(
+            seed,
+            player_ids,
+            starting_life,
+            decks,
+            skip_opening_sequence,
+        )
+    }
+
+    /// The ordinary constructor plus explicit Commander declarations. Kept alongside `new` so
+    /// scenario fixtures and non-Commander callers retain their established API.
+    pub fn new_with_commander_decks(
+        seed: u64,
+        player_ids: &[PlayerId],
+        starting_life: i32,
+        decks: Option<Vec<EngineDeck>>,
+        skip_opening_sequence: bool,
+    ) -> Result<Self, EngineError> {
         if !SUPPORTED_PLAYER_COUNT.contains(&player_ids.len()) {
             return Err(EngineError::Illegal("free-for-all requires 2 to 4 players"));
         }
@@ -1131,14 +1343,20 @@ impl GameEngine {
 
         for (i, &pid) in player_ids.iter().enumerate() {
             let mut p = PlayerState::new(pid, starting_life);
-            let deck_list: Vec<String> = match &decks {
-                Some(d) if i < d.len() && !d[i].is_empty() => d[i].clone(),
-                _ => events::default_deck_list(i),
-            };
+            let submitted_deck = decks.as_ref().and_then(|decks| decks.get(i));
+            let deck_list = submitted_deck
+                .filter(|deck| !deck.mainboard.is_empty())
+                .map(|deck| deck.mainboard.clone())
+                .unwrap_or_else(|| events::default_deck_list(i));
             for card_id in deck_list {
                 let def = registry
                     .get(&card_id)
                     .ok_or_else(|| EngineError::MissingCard(card_id.clone()))?;
+                if def.commander_setup_only {
+                    return Err(EngineError::Illegal(
+                        "Commander setup-only card cannot be used in a mainboard",
+                    ));
+                }
                 // A library card shows its front face (CR 712.4a), which is also the face whose
                 // printed P/T and combat requirements seed the object.
                 let oid = next_object_id;
@@ -1149,6 +1367,37 @@ impl GameEngine {
                 );
                 p.library.push_back(oid);
             }
+            let mut commander_colors = Vec::new();
+            for card_id in submitted_deck
+                .map(|deck| deck.commanders.as_slice())
+                .unwrap_or_default()
+            {
+                let def = registry
+                    .get(card_id)
+                    .ok_or_else(|| EngineError::MissingCard(card_id.clone()))?;
+                for color in def.color_identity() {
+                    if !commander_colors.contains(&color) {
+                        commander_colors.push(color);
+                    }
+                }
+                let oid = next_object_id;
+                next_object_id += 1;
+                objects.insert(
+                    oid,
+                    new_object_from_card(oid, pid, card_id, Zone::Command, def.primary_face()),
+                );
+                p.command_zone.push(oid);
+            }
+            p.color_identity = [
+                Color::White,
+                Color::Blue,
+                Color::Black,
+                Color::Red,
+                Color::Green,
+            ]
+            .into_iter()
+            .filter(|color| commander_colors.contains(color))
+            .collect();
             let mut rng = StdRng::seed_from_u64(
                 seed.wrapping_add(i as u64)
                     .wrapping_mul(0x9E37_79B9_7F4A_7C15),

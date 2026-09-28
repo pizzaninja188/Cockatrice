@@ -423,6 +423,7 @@ fn dev_zone_to_zone(z: rv1::DevZone) -> Zone {
         rv1::DevZone::Graveyard => Zone::Graveyard,
         rv1::DevZone::Exile => Zone::Exile,
         rv1::DevZone::Library => Zone::Library,
+        rv1::DevZone::Command => Zone::Command,
     }
 }
 
@@ -434,6 +435,7 @@ fn zone_to_dev_zone(z: Zone) -> rv1::DevZone {
         Zone::Exile => rv1::DevZone::Exile,
         // The stack is not a dev destination; report it as the closest thing rather than panic.
         Zone::Library | Zone::Stack => rv1::DevZone::Library,
+        Zone::Command => rv1::DevZone::Command,
     }
 }
 
@@ -446,6 +448,7 @@ fn zone_to_destination(z: Zone) -> rv1::permanent_moved::Destination {
         Zone::Exile => Destination::Exile,
         Zone::Library => Destination::Library,
         Zone::Stack => Destination::Unspecified,
+        Zone::Command => Destination::Unspecified,
     }
 }
 
@@ -457,6 +460,7 @@ fn zone_label(z: Zone) -> &'static str {
         Zone::Exile => "exile",
         Zone::Library => "the library",
         Zone::Stack => "the stack",
+        Zone::Command => "the command zone",
     }
 }
 

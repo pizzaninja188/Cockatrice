@@ -7,6 +7,7 @@ add_test(NAME expression_test COMMAND expression_test)
 add_test(NAME test_age_formatting COMMAND test_age_formatting)
 add_test(NAME password_hash_test COMMAND password_hash_test)
 add_test(NAME ruled_utils_test COMMAND ruled_utils_test)
+add_test(NAME deck_list_commanders_test COMMAND deck_list_commanders_test)
 
 add_test(NAME deck_hash_performance_test COMMAND deck_hash_performance_test)
 set_tests_properties(deck_hash_performance_test PROPERTIES TIMEOUT 5)
@@ -19,6 +20,7 @@ add_executable(test_age_formatting test_age_formatting.cpp)
 add_executable(password_hash_test password_hash_test.cpp)
 add_executable(deck_hash_performance_test deck_hash_performance_test.cpp)
 add_executable(ruled_utils_test ruled_utils_test.cpp)
+add_executable(deck_list_commanders_test deck_list_commanders_test.cpp)
 
 find_package(GTest)
 
@@ -51,6 +53,7 @@ if(NOT GTEST_FOUND)
   add_dependencies(password_hash_test gtest)
   add_dependencies(deck_hash_performance_test gtest)
   add_dependencies(ruled_utils_test gtest)
+  add_dependencies(deck_list_commanders_test gtest)
 endif()
 
 include_directories(${GTEST_INCLUDE_DIRS})
@@ -66,6 +69,9 @@ target_link_libraries(
 )
 target_link_libraries(
   ruled_utils_test libcockatrice_network_server_remote Threads::Threads ${GTEST_BOTH_LIBRARIES} ${TEST_QT_MODULES}
+)
+target_link_libraries(
+  deck_list_commanders_test libcockatrice_deck_list Threads::Threads ${GTEST_BOTH_LIBRARIES} ${TEST_QT_MODULES}
 )
 
 add_subdirectory(card_zone_algorithms)
@@ -95,6 +101,7 @@ if(WIN32)
       test_age_formatting
       password_hash_test
       ruled_utils_test
+      deck_list_commanders_test
       deck_hash_performance_test
       card_zone_algorithms_test
       carddatabase_test

@@ -2666,6 +2666,27 @@ TEST_F(RuledBatchTest, EmptyGraveyardSnapshotClearsTheLastPublishedPhysicalBindi
 // physical zones alone — and, crucially, must not treat the empty concealed fields as a real
 // (and wildly wrong) count, which is what the pre-guard code did: the reconcile bailed on a
 // count mismatch and took the battlefield oid-map rebuild down with it.
+TEST_F(RuledBatchTest, InitialCommandZoneSnapshotBindsCommanderObjectsInDeclaredOrder)
+{
+    auto *command = new Server_CardZone(p1, ZoneNames::COMMAND, false, ServerInfo_Zone::PublicZone);
+    p1->addZone(command);
+    auto *firstCommander = new Server_Card({QStringLiteral("Atraxa, Praetors’ Voice"), QStringLiteral("atraxa")},
+                                           p1->newCardId(), 0, 0, command);
+    auto *secondCommander = new Server_Card({QStringLiteral("Kami of the Crescent Moon"), QStringLiteral("kami")},
+                                            p1->newCardId(), 0, 0, command);
+    command->insertCard(firstCommander, -1, 0);
+    command->insertCard(secondCommander, -1, 0);
+
+    ruled::v1::RuledPerPlayerView view = buildPerPlayerView(p1, {}, {});
+    view.add_command_zone_object_ids(501u);
+    view.add_command_zone_object_ids(502u);
+    GameEventStorage ges;
+    applyZoneView(p1, view, &ges);
+
+    EXPECT_EQ(findCardByEngineOid(p1, 501u), firstCommander);
+    EXPECT_EQ(findCardByEngineOid(p1, 502u), secondCommander);
+}
+
 TEST_F(RuledBatchTest, PrivateZonesUnchangedSkipsTheHandAndLibraryReconcile)
 {
     Server_Card *inHand = addCardToHand(p1, "Hill Giant");

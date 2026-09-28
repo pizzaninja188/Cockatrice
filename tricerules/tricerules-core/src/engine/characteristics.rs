@@ -1773,6 +1773,58 @@ mod tests {
     }
 
     #[test]
+    fn color_defining_cda_sets_base_color_before_layer_five_effects() {
+        let mut engine =
+            GameEngine::new_with_default_decks(903_401, &[0, 1], 20).expect("new engine");
+        let oid = engine.state.players[0].library[0];
+        let mut face = engine
+            .registry
+            .get("grizzly_bears")
+            .expect("Grizzly Bears definition")
+            .primary_face()
+            .clone();
+        face.characteristic_defining_abilities =
+            vec![tricerules_cards::IdentifiedAbility::fallback(
+                "defines_colors",
+                CharacteristicDefiningAbility::DefinesColors {
+                    colors: vec![Color::Blue, Color::White],
+                },
+            )
+            .unwrap()];
+        let object = engine.state.objects.get_mut(&oid).expect("library object");
+        object.zone = Zone::Battlefield;
+        object.copiable_values = Some(CopiableValues {
+            source_card_id: "grizzly_bears".into(),
+            source_face_index: 0,
+            face,
+            room_faces: None,
+            display_name: "Grizzly Bears with a color CDA".into(),
+        });
+        engine.state.players[0].battlefield.push(oid);
+
+        assert_eq!(
+            engine.characteristics(oid).expect("characteristics").colors,
+            vec![Color::Blue, Color::White]
+        );
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(oid),
+            kind: ContinuousEffectKind::Layer5SetColors(vec![Color::Red]),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 0,
+        });
+        assert_eq!(
+            engine
+                .characteristics(oid)
+                .expect("characteristics after layer 5")
+                .colors,
+            vec![Color::Red]
+        );
+    }
+
+    #[test]
     fn changeling_is_a_layer_4_cda_and_type_setting_overwrites_it() {
         let mut engine =
             GameEngine::new_with_default_decks(154_001, &[0, 1], 20).expect("new engine");

@@ -18,6 +18,7 @@ pub enum EventZone {
     Library,
     Exile,
     Stack,
+    Command,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -158,19 +159,48 @@ impl ActivatedAbilityDef {
     /// abilities. The bounded mana-plus-damage shape below is the only composite effect admitted:
     /// it is resolved immediately through the shared damage pipeline.
     pub fn mana_options(&self) -> Option<&Vec<ManaAmount>> {
+        if let Some(options) = self.commander_color_identity_mana_output() {
+            return Some(options);
+        }
         if self.is_loyalty_ability() || self.targeting.is_some() {
             return None;
         }
         match self.effect.as_slice() {
-            [SpellEffectKind::ProduceMana { options, .. }] => Some(options),
+            [SpellEffectKind::ProduceMana {
+                options,
+                commander_color_identity: false,
+                ..
+            }] => Some(options),
             [SpellEffectKind::ProduceManaPerSourceCounter { options, .. }] => Some(options),
             [SpellEffectKind::ProduceMana {
                 options,
+                commander_color_identity: false,
                 restriction: None,
                 conditional: None,
             }, SpellEffectKind::DamagePlayer {
                 amount: super::Amount::Fixed(1),
                 who: super::PlayerRecipient::Controller,
+            }] => Some(options),
+            _ => None,
+        }
+    }
+
+    /// Arcane Signet and Command Tower use the activating player's frozen Commander identity
+    /// rather than a card-authored list of colors. Keep this to the demonstrated printed shape.
+    pub fn commander_color_identity_mana_output(&self) -> Option<&Vec<ManaAmount>> {
+        if self.source_zone != AbilitySourceZone::Battlefield
+            || self.costs.as_slice() != [AbilityCost::Tap]
+            || self.is_loyalty_ability()
+            || self.targeting.is_some()
+        {
+            return None;
+        }
+        match self.effect.as_slice() {
+            [SpellEffectKind::ProduceMana {
+                options,
+                commander_color_identity: true,
+                restriction: None,
+                conditional: None,
             }] => Some(options),
             _ => None,
         }
@@ -290,6 +320,23 @@ impl ActivatedAbilityDef {
         if has_source_counter_scaled_mana && !is_supported_source_counter_mana_ability {
             return Err(
                 "ProduceManaPerSourceCounter must be the sole direct effect of a battlefield activated ability whose only cost is tap"
+                    .into(),
+            );
+        }
+        let has_commander_color_identity_mana = self.effect.iter().any(|effect| {
+            matches!(
+                effect,
+                SpellEffectKind::ProduceMana {
+                    commander_color_identity: true,
+                    ..
+                }
+            )
+        });
+        if has_commander_color_identity_mana
+            && self.commander_color_identity_mana_output().is_none()
+        {
+            return Err(
+                "commander color identity mana must be the sole direct effect of a battlefield activated ability whose only cost is tap"
                     .into(),
             );
         }

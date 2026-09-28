@@ -68,6 +68,7 @@ public:
         QString comments;            ///< Free-form comments or notes.
         QString gameFormat;          ///< The name of the game format this deck contains legal cards for
         CardRef bannerCard;          ///< Optional representative card for the deck.
+        QList<CardRef> commanders;   ///< Declared Commander cards, distinct from mainboard and banner.
         QStringList tags;            ///< User-defined tags for deck classification.
         QString lastLoadedTimestamp; ///< Timestamp string of last load.
 
@@ -114,6 +115,10 @@ public:
     void setBannerCard(const CardRef &_bannerCard = {})
     {
         metadata.bannerCard = _bannerCard;
+    }
+    void setCommanders(const QList<CardRef> &_commanders = {})
+    {
+        metadata.commanders = _commanders;
     }
     void setLastLoadedTimestamp(const QString &_lastLoadedTimestamp = QString())
     {
@@ -167,6 +172,10 @@ public:
     CardRef getBannerCard() const
     {
         return metadata.bannerCard;
+    }
+    QList<CardRef> getCommanders() const
+    {
+        return metadata.commanders;
     }
     QString getLastLoadedTimestamp() const
     {

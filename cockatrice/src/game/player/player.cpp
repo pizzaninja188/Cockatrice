@@ -70,6 +70,9 @@ void Player::initializeZones()
     addZone(new PileZoneLogic(this, ZoneNames::SIDEBOARD, false, false, false, this));
     addZone(new TableZoneLogic(this, ZoneNames::TABLE, true, false, true, this));
     addZone(new StackZoneLogic(this, ZoneNames::STACK, true, false, true, this));
+    if (RuledActions::isRuledGame(game)) {
+        addZone(new PileZoneLogic(this, ZoneNames::COMMAND, false, false, true, this));
+    }
     bool visibleHand = playerInfo->getLocalOrJudge() ||
                        (game->getPlayerManager()->isSpectator() && game->getGameMetaInfo()->spectatorsOmniscient());
     addZone(new HandZoneLogic(this, ZoneNames::HAND, false, false, visibleHand, this));
@@ -91,6 +94,7 @@ Player::~Player()
 void Player::clear()
 {
     clearArrows();
+    commandZoneHasSnapshot = false;
 
     QMapIterator<QString, CardZoneLogic *> i(zones);
     while (i.hasNext()) {
@@ -128,7 +132,9 @@ void Player::processPlayerInfo(const ServerInfo_Player &info)
                                       /* StackZone */
                                       ZoneNames::STACK,
                                       /* HandZone */
-                                      ZoneNames::HAND};
+                                      ZoneNames::HAND,
+                                      /* Ruled Command zone */
+                                      ZoneNames::COMMAND};
     clearCounters();
     clearArrows();
 
@@ -163,9 +169,9 @@ void Player::processPlayerInfo(const ServerInfo_Player &info)
     // copy of every card on top of the ones the view already holds.
     const bool ruledMode = RuledActions::isRuledGame(game);
     auto skipInRuledMode = [&](const QString &zoneName) {
-        return ruledMode && ruledSnapshotPreservesEventAuthoritativeZone(zoneName);
+        return ruledMode && ruledSnapshotPreservesEventAuthoritativeZone(zoneName) &&
+               (zoneName != QLatin1String(ZoneNames::COMMAND) || commandZoneHasSnapshot);
     };
-
     QMutableMapIterator<QString, CardZoneLogic *> zoneIt(zones);
     while (zoneIt.hasNext()) {
         zoneIt.next();
@@ -183,6 +189,9 @@ void Player::processPlayerInfo(const ServerInfo_Player &info)
     }
 
     emit clearCustomZonesMenu();
+    if (ruledMode) {
+        emit addViewCustomZoneActionToCustomZoneMenu(QString::fromLatin1(ZoneNames::COMMAND));
+    }
 
     const int zoneListSize = info.zone_list_size();
     for (int i = 0; i < zoneListSize; ++i) {
@@ -251,6 +260,9 @@ void Player::processPlayerInfo(const ServerInfo_Player &info)
         }
 
         zone->reorganizeCards();
+        if (ruledMode && zoneName == QLatin1String(ZoneNames::COMMAND)) {
+            commandZoneHasSnapshot = true;
+        }
     }
 
     // Resume any tap animation the rebuild above interrupted. The replacement item has already

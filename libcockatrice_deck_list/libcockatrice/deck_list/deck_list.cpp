@@ -25,7 +25,7 @@ static const QString CURRENT_SIDEBOARD_PLAN_KEY = "";
 
 bool DeckList::Metadata::isEmpty() const
 {
-    return name.isEmpty() && comments.isEmpty() && bannerCard.isEmpty() && tags.isEmpty();
+    return name.isEmpty() && comments.isEmpty() && bannerCard.isEmpty() && commanders.isEmpty() && tags.isEmpty();
 }
 
 DeckList::DeckList()
@@ -74,6 +74,17 @@ bool DeckList::readElement(QXmlStreamReader *xml)
             QString providerId = xml->attributes().value("providerId").toString();
             QString cardName = xml->readElementText();
             metadata.bannerCard = {cardName, providerId};
+        } else if (childName == "commanders") {
+            metadata.commanders.clear();
+            while (xml->readNextStartElement()) {
+                if (xml->name().toString() == "commander") {
+                    const QString providerId = xml->attributes().value("providerId").toString();
+                    const QString cardName = xml->readElementText();
+                    metadata.commanders.append({cardName, providerId});
+                } else {
+                    xml->skipCurrentElement();
+                }
+            }
         } else if (childName == "tags") {
             metadata.tags.clear(); // Clear existing tags
             while (xml->readNextStartElement()) {
@@ -103,6 +114,14 @@ static void writeMetadata(QXmlStreamWriter *xml, const DeckList::Metadata &metad
     xml->writeStartElement("bannerCard");
     xml->writeAttribute("providerId", metadata.bannerCard.providerId);
     xml->writeCharacters(metadata.bannerCard.name);
+    xml->writeEndElement();
+    xml->writeStartElement("commanders");
+    for (const CardRef &commander : metadata.commanders) {
+        xml->writeStartElement("commander");
+        xml->writeAttribute("providerId", commander.providerId);
+        xml->writeCharacters(commander.name);
+        xml->writeEndElement();
+    }
     xml->writeEndElement();
     xml->writeTextElement("comments", metadata.comments);
 

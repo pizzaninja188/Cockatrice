@@ -1938,6 +1938,7 @@ fn match_aura_granted_two_mana_any_one_color(
                     source_zone: AbilitySourceZone::Battlefield,
                     costs: vec![AbilityCost::Tap],
                     effect: vec![SpellEffectKind::ProduceMana {
+                        commander_color_identity: false,
                         options: ['W', 'U', 'B', 'R', 'G']
                             .into_iter()
                             .map(|symbol| {
@@ -9539,6 +9540,7 @@ fn match_tap_for_one_mana(text: &str, context: &RecipeContext) -> Option<RecipeE
         source_zone: AbilitySourceZone::Battlefield,
         costs: vec![AbilityCost::Tap],
         effect: vec![SpellEffectKind::ProduceMana {
+            commander_color_identity: false,
             options: vec![amount],
             restriction: None,
             conditional: None,
@@ -9559,6 +9561,7 @@ fn match_tap_for_any_color(text: &str, context: &RecipeContext) -> Option<Recipe
             source_zone: AbilitySourceZone::Battlefield,
             costs: vec![AbilityCost::Tap],
             effect: vec![SpellEffectKind::ProduceMana {
+                commander_color_identity: false,
                 options: ['W', 'U', 'B', 'R', 'G']
                     .into_iter()
                     .map(|symbol| {
@@ -9588,6 +9591,7 @@ fn match_pay_one_tap_for_any_color(text: &str, context: &RecipeContext) -> Optio
                 AbilityCost::Tap,
             ],
             effect: vec![SpellEffectKind::ProduceMana {
+                commander_color_identity: false,
                 options: ['W', 'U', 'B', 'R', 'G']
                     .into_iter()
                     .map(|symbol| {
@@ -9654,6 +9658,7 @@ fn fixed_mana_cost(cost: &str) -> AbilityCost {
 
 fn five_color_mana_effect() -> SpellEffectKind {
     SpellEffectKind::ProduceMana {
+        commander_color_identity: false,
         options: ['W', 'U', 'B', 'R', 'G']
             .into_iter()
             .map(|symbol| parse_mana_amount(symbol).expect("five-color recipe uses valid symbols"))
@@ -9848,6 +9853,7 @@ fn match_pay_one_for_any_color_once_per_turn(
                     ManaCost::parse("{1}").expect("static recipe mana cost"),
                 )],
                 effect: vec![SpellEffectKind::ProduceMana {
+                    commander_color_identity: false,
                     options: ['W', 'U', 'B', 'R', 'G']
                         .into_iter()
                         .map(|symbol| {
@@ -9987,6 +9993,7 @@ fn match_tap_for_multicolor_mana(text: &str, context: &RecipeContext) -> Option<
         source_zone: AbilitySourceZone::Battlefield,
         costs: vec![AbilityCost::Tap],
         effect: vec![SpellEffectKind::ProduceMana {
+            commander_color_identity: false,
             options,
             restriction: None,
             conditional: None,
@@ -10035,6 +10042,7 @@ fn match_activated_tap_conditional_pair_mana(
             source_zone: AbilitySourceZone::Battlefield,
             costs: vec![AbilityCost::Tap],
             effect: vec![SpellEffectKind::ProduceMana {
+                commander_color_identity: false,
                 options: vec![
                     parse_mana_amount(first).expect("reviewed pair uses color symbols"),
                     parse_mana_amount(second).expect("reviewed pair uses color symbols"),
@@ -11345,6 +11353,7 @@ fn tap_for_any_one_color_mana(context: &RecipeContext, per_color: u32) -> Recipe
         source_zone: AbilitySourceZone::Battlefield,
         costs: vec![AbilityCost::Tap],
         effect: vec![SpellEffectKind::ProduceMana {
+            commander_color_identity: false,
             options: any_one_color_mana_options(per_color),
             restriction: None,
             conditional: None,
@@ -13485,6 +13494,7 @@ fn match_mana_tap_add_colorless_two(text: &str, context: &RecipeContext) -> Opti
             context,
             vec![AbilityCost::Tap],
             vec![SpellEffectKind::ProduceMana {
+                commander_color_identity: false,
                 options: vec![ManaAmount {
                     c: 2,
                     ..ManaAmount::default()
@@ -16457,6 +16467,7 @@ fn match_activated_tri_color_mana_once_each_turn(
             ManaCost::parse("{1}").expect("static recipe mana cost"),
         )],
         effect: vec![SpellEffectKind::ProduceMana {
+            commander_color_identity: false,
             options: colors
                 .into_iter()
                 .map(|symbol| {
@@ -37672,6 +37683,7 @@ mod tests {
             assert!(ability.targeting.is_none());
             assert!(ability.activation_limit.is_none());
             let [SpellEffectKind::ProduceMana {
+                commander_color_identity: false,
                 options,
                 restriction,
                 conditional,
@@ -47877,6 +47889,7 @@ mod tests {
         assert_eq!(
             ability.effect,
             [SpellEffectKind::ProduceMana {
+                commander_color_identity: false,
                 options: vec![ManaAmount {
                     c: 2,
                     ..ManaAmount::default()
@@ -52501,6 +52514,7 @@ mod tests {
             assert_eq!(
                 ability.effect,
                 vec![SpellEffectKind::ProduceMana {
+                    commander_color_identity: false,
                     options: vec![
                         parse_mana_amount(first).expect("reviewed color symbol"),
                         parse_mana_amount(second).expect("reviewed color symbol"),
@@ -53351,6 +53365,7 @@ mod tests {
             assert_eq!(
                 ability.effect,
                 [SpellEffectKind::ProduceMana {
+                    commander_color_identity: false,
                     options: options.to_vec(),
                     restriction: None,
                     conditional: None,
@@ -53858,6 +53873,7 @@ mod tests {
                     source_zone: AbilitySourceZone::Battlefield,
                     costs: vec![AbilityCost::Tap],
                     effect: vec![SpellEffectKind::ProduceMana {
+                        commander_color_identity: false,
                         options: two_any_color,
                         restriction: None,
                         conditional: None,

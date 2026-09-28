@@ -7,7 +7,7 @@
 inline bool ruledSnapshotPreservesEventAuthoritativeZone(const QString &zoneName)
 {
     return zoneName == QLatin1String(ZoneNames::STACK) || zoneName == QLatin1String(ZoneNames::GRAVE) ||
-           zoneName == QLatin1String(ZoneNames::EXILE);
+           zoneName == QLatin1String(ZoneNames::EXILE) || zoneName == QLatin1String(ZoneNames::COMMAND);
 }
 
 #endif // COCKATRICE_RULED_ZONE_SNAPSHOT_POLICY_H

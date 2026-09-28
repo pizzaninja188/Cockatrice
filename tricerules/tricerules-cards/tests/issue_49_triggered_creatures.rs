@@ -429,6 +429,7 @@ fn issue_49_untargeted_etbs_compose_existing_effects() {
     assert_eq!(
         visionary.activated_abilities[0].effect,
         [SpellEffectKind::ProduceMana {
+            commander_color_identity: false,
             options: vec![ManaAmount {
                 g: 1,
                 ..ManaAmount::default()

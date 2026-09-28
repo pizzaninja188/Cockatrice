@@ -6,7 +6,6 @@
 #include <QByteArray>
 #include <QList>
 #include <QObject>
-#include <QPair>
 #include <QStringList>
 #include <QtGlobal>
 
@@ -26,12 +25,12 @@ public:
     bool connectIfNeeded();
     void disconnectRelay();
 
-    /// @param playerDecks optional: one entry per player id with mainboard Oracle card names
-    /// (the engine resolves names to its card ids); nullptr = use engine default
+    /// @param playerDecks optional: one entry per player with mainboard and an explicit Commander setup
+    /// (the engine resolves every Oracle name to its card id); nullptr = use engine default
     /// @param devCommandsEnabled ask the sidecar to accept debug cheat commands. Only half the
     /// gate: the sidecar grants it solely if its own TRICERULES_DEV_COMMANDS env var is also set.
     bool sessionStart(quint64 gameId, quint64 seed, const QList<int> &playerIds,
-                      const QList<QPair<int, QStringList>> *playerDecks, bool devCommandsEnabled,
+                      const QList<ruled::v1::PlayerDeck> *playerDecks, bool devCommandsEnabled,
                       ruled::v1::IpcResponse &out);
     bool playerCommand(int playerId, const QByteArray &ruledCommandBytes, ruled::v1::IpcResponse &out);
     bool sessionStart(const ruled::v1::SessionStart &start, ruled::v1::IpcResponse &out);
