@@ -1779,10 +1779,9 @@ impl GameEngine {
                 command.payment.as_ref(),
             )?;
             if resolving_mana_payment {
-                batch.events.push(
-                    self.resolution_payment_choice_event()
-                        .expect("resolution payment remains parked after a mana ability"),
-                );
+                if let Some(event) = self.resolution_payment_choice_event() {
+                    batch.events.push(event);
+                }
             }
             return Ok(batch);
         }
@@ -2311,6 +2310,14 @@ impl GameEngine {
         if !targets.is_empty() {
             return Err(EngineError::Illegal("mana ability takes no targets"));
         }
+        let card_name = self
+            .registry
+            .get(card_id)
+            .map(|definition| definition.name.clone())
+            .unwrap_or_else(|| card_id.to_owned());
+        let mana_damage = ability.mana_ability_damage_to_controller().map(|amount| {
+            self.prepare_mana_ability_damage(permanent_id, player, card_name.clone(), amount)
+        });
         self.validate_activation_mana_choice(
             permanent_id,
             AbilitySourceZone::Battlefield,
@@ -2426,7 +2433,10 @@ impl GameEngine {
 
         let cost_triggers =
             self.collect_committed_cost_triggers(payment.trigger_events, payment.sacrificed);
-        if cost_triggers.is_empty() && matches!(ability.costs.as_slice(), [AbilityCost::Tap]) {
+        if mana_damage.is_none()
+            && cost_triggers.is_empty()
+            && matches!(ability.costs.as_slice(), [AbilityCost::Tap])
+        {
             self.state
                 .undoable_mana_abilities
                 .push(UndoableManaAbility {
@@ -2437,11 +2447,6 @@ impl GameEngine {
                 });
         }
 
-        let card_name = self
-            .registry
-            .get(card_id)
-            .map(|d| d.name.clone())
-            .unwrap_or_else(|| card_id.to_string());
         let ability_text = ability.fallback_text_with_path(&card_name, ability_path);
         let paid_costs_line = format_paid_card_costs_log(&payment.paid_card_costs);
 
@@ -2468,9 +2473,13 @@ impl GameEngine {
                 payment.life_paid
             )));
         }
-        // A mana ability does not use the stack (CR 605.3a). Cost triggers are collected only
-        // after mana is produced, and a consequential trigger disables the undo courtesy above.
+        // A mana ability does not use the stack (CR 605.3a). Cost triggers are staged before its
+        // immediate effect; composite damage also invalidates any earlier float undo.
         self.stage_triggers(cost_triggers);
+        if let Some(damage) = mana_damage {
+            self.state.undoable_mana_abilities.clear();
+            self.resolve_mana_ability_damage(damage, &mut batch.events);
+        }
         Ok(batch)
     }
 

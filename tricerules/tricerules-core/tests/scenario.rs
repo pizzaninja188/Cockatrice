@@ -466,6 +466,8 @@ mod issue_483_feed_the_swarm;
 mod issue_487_red_guardian;
 #[path = "scenario/issue_490_beza_comparison.rs"]
 mod issue_490_beza_comparison;
+#[path = "scenario/issue_494_damage_mana.rs"]
+mod issue_494_damage_mana;
 #[path = "scenario/issue_499_storage_counter_lands.rs"]
 mod issue_499_storage_counter_lands;
 #[path = "scenario/issue_57_targeting_costs.rs"]

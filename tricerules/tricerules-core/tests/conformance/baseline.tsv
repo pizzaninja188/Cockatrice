@@ -1683,6 +1683,9 @@ kalonian_tusker	0	cast	exercised
 kami_of_old_stone	0	cast	exercised
 kami_of_the_crescent_moon	0	cast	exercised
 karais_technique	0	cast	exercised
+karplusan_forest	0	ability:0	exercised
+karplusan_forest	0	ability:1	exercised
+karplusan_forest	0	land	exercised
 kasimir_the_lone_wolf	0	cast	exercised
 kav_landseeker	0	cast	exercised
 kavaron,_memorial_world	0	ability:0	exercised
@@ -3105,6 +3108,9 @@ taken_by_nightmares	0	cast	exercised
 talas_air_ship	0	cast	exercised
 talas_merchant	0	cast	exercised
 talas_scout	0	cast	exercised
+talisman_of_impulse	0	ability:0	exercised
+talisman_of_impulse	0	ability:1	exercised
+talisman_of_impulse	0	cast	exercised
 talon_trooper	0	cast	exercised
 talruum_minotaur	0	cast	exercised
 tangle_mantis	0	cast	exercised
@@ -3625,6 +3631,9 @@ wylie_duke,_atiin_hero	0	cast	exercised
 xande,_dark_mage	0	cast	exercised
 yargle,_glutton_of_urborg	0	cast	exercised
 yargle_and_multani	0	cast	exercised
+yavimaya_coast	0	ability:0	exercised
+yavimaya_coast	0	ability:1	exercised
+yavimaya_coast	0	land	exercised
 yavimaya_wurm	0	cast	exercised
 yip_yip!	0	cast	exercised
 yoked_ox	0	cast	exercised

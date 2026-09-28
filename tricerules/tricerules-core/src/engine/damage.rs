@@ -125,6 +125,38 @@ pub(crate) struct DamageSpec {
     pub source_has_lifelink: bool,
 }
 
+#[derive(Debug, Clone)]
+enum DamageBatchContinuation {
+    Stack {
+        item: Box<StackItem>,
+        resume_effect_index: Option<u32>,
+    },
+    ManaAbility {
+        actor: PlayerId,
+        source_object_id: ObjectId,
+        source_zone_change_generation: u64,
+        resume_resolution: Option<Box<PendingResolution>>,
+    },
+}
+
+impl DamageBatchContinuation {
+    fn source_object_id(&self) -> ObjectId {
+        match self {
+            Self::Stack { item, .. } => item.source_permanent_id.unwrap_or(item.id),
+            Self::ManaAbility {
+                source_object_id, ..
+            } => *source_object_id,
+        }
+    }
+
+    fn fallback_controller(&self) -> PlayerId {
+        match self {
+            Self::Stack { item, .. } => item.controller,
+            Self::ManaAbility { actor, .. } => *actor,
+        }
+    }
+}
+
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct DamageApplicationChoice {
     pub choice_id: u32,
@@ -332,13 +364,112 @@ impl GameEngine {
                 raw_candidates,
             } => {
                 self.park_damage_prevention_choice(
-                    item.clone(),
-                    None,
+                    DamageBatchContinuation::Stack {
+                        item: Box::new(item.clone()),
+                        resume_effect_index: None,
+                    },
                     batch,
                     raw_candidates,
                     events,
                 );
                 None
+            }
+        }
+    }
+
+    /// Capture source qualities before activated costs commit, then resolve this fixed damage
+    /// directly through the shared replacement, prevention, damage-trigger, and life pipeline.
+    pub(crate) fn prepare_mana_ability_damage(
+        &self,
+        source_object_id: ObjectId,
+        actor: PlayerId,
+        source_label: impl Into<String>,
+        amount: u32,
+    ) -> DamageSpec {
+        let generation = self
+            .state
+            .zone_change_generation
+            .get(&source_object_id)
+            .copied()
+            .unwrap_or(0);
+        let source = TargetSourceIdentity::captured(source_object_id, generation);
+        let (colors, types) = source.quality_values(self);
+        let mut event = DamageEvent::noncombat(
+            source_object_id,
+            actor,
+            source_label,
+            DamageRecipient::Player(actor),
+            amount,
+        );
+        event.source.zone_change_generation = Some(generation);
+        event.source.wither = self.effective_has_keyword(source_object_id, Keyword::Wither);
+        event.source.colors = colors;
+        event.source.types = types;
+        DamageSpec {
+            event,
+            source_has_deathtouch: self
+                .effective_has_keyword(source_object_id, Keyword::Deathtouch),
+            source_has_lifelink: self.effective_has_keyword(source_object_id, Keyword::Lifelink),
+        }
+    }
+
+    /// Resolve a mana ability's additional damage effect without creating a stack object or
+    /// handing priority to another player.
+    pub(crate) fn resolve_mana_ability_damage(
+        &mut self,
+        damage: DamageSpec,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let continuation = DamageBatchContinuation::ManaAbility {
+            actor: damage.event.source.controller,
+            source_object_id: damage.event.source.object_id,
+            source_zone_change_generation: damage.event.source.zone_change_generation.unwrap_or(0),
+            resume_resolution: None,
+        };
+        let pending = PendingDamageBatch {
+            damage: vec![PendingDamageEvent {
+                remaining: damage.event.amount,
+                spec: damage,
+                applied_applications: Vec::new(),
+            }],
+            applications: Vec::new(),
+        };
+        match self.advance_damage_batch(pending, events) {
+            DamageBatchProgress::Complete(completed) => {
+                self.commit_completed_damage_batch(&completed, events);
+            }
+            DamageBatchProgress::NeedsChoice {
+                batch,
+                raw_candidates,
+            } => {
+                let actor = continuation.fallback_controller();
+                let suspend_payment =
+                    self.state
+                        .pending_resolution
+                        .as_ref()
+                        .is_some_and(|pending| {
+                            pending.deciding_player == actor
+                                && pending.continuation.mana_window_undo_start().is_some()
+                        });
+                let continuation = match continuation {
+                    DamageBatchContinuation::ManaAbility {
+                        actor,
+                        source_object_id,
+                        source_zone_change_generation,
+                        ..
+                    } => DamageBatchContinuation::ManaAbility {
+                        actor,
+                        source_object_id,
+                        source_zone_change_generation,
+                        resume_resolution: if suspend_payment {
+                            self.state.pending_resolution.take().map(Box::new)
+                        } else {
+                            None
+                        },
+                    },
+                    stack => stack,
+                };
+                self.park_damage_prevention_choice(continuation, batch, raw_candidates, events);
             }
         }
     }
@@ -590,13 +721,13 @@ impl GameEngine {
 
     fn park_damage_prevention_choice(
         &mut self,
-        item: StackItem,
-        resume_effect_index: Option<u32>,
+        completion: DamageBatchContinuation,
         mut batch: PendingDamageBatch,
         raw_candidates: Vec<(usize, DamagePreventionApplication, String)>,
         events: &mut Vec<rv1::RuledEvent>,
     ) {
         let deciding_event = &batch.damage[raw_candidates[0].0].spec.event;
+        let fallback_controller = completion.fallback_controller();
         let deciding_player = match deciding_event.recipient {
             DamageRecipient::Player(player) => player,
             DamageRecipient::Permanent(permanent) => self
@@ -604,7 +735,7 @@ impl GameEngine {
                 .objects
                 .get(&permanent)
                 .map(|object| object.controller)
-                .unwrap_or(item.controller),
+                .unwrap_or(fallback_controller),
         };
         let mut applications = Vec::new();
         let mut candidates = Vec::new();
@@ -676,7 +807,7 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
                     deciding_player_id: deciding_player,
-                    source_object_id: item.id,
+                    source_object_id: completion.source_object_id(),
                     prompt_text: prompt.clone(),
                     choice_kind: rv1::ChoiceKind::ReplacementEffect as i32,
                     candidate_object_ids: candidates.clone(),
@@ -709,7 +840,7 @@ impl GameEngine {
         self.state.pending_resolution = Some(PendingResolution {
             deciding_player,
             presentation: PendingResolutionPresentation {
-                source_object_id: item.id,
+                source_object_id: completion.source_object_id(),
                 candidates,
                 min: 1,
                 max: 1,
@@ -718,13 +849,29 @@ impl GameEngine {
                 choice_kind: rv1::ChoiceKind::ReplacementEffect,
                 unique_names: false,
             },
-            continuation: ResolutionContinuation::DamageReplacement {
-                stack: ParkedStackResolution {
+            continuation: match completion {
+                DamageBatchContinuation::Stack {
                     item,
                     resume_effect_index,
-                    previous_result: EffectResult::default(),
+                } => ResolutionContinuation::DamageReplacement {
+                    stack: ParkedStackResolution {
+                        item: *item,
+                        resume_effect_index,
+                        previous_result: EffectResult::default(),
+                    },
+                    effect_ids: candidate_effect_ids,
                 },
-                effect_ids: candidate_effect_ids,
+                DamageBatchContinuation::ManaAbility {
+                    actor,
+                    source_object_id,
+                    source_zone_change_generation,
+                    resume_resolution,
+                } => ResolutionContinuation::ManaAbilityDamageReplacement {
+                    actor,
+                    source_object_id,
+                    source_zone_change_generation,
+                    resume_resolution,
+                },
             },
         });
     }
@@ -981,8 +1128,24 @@ impl GameEngine {
         pending: PendingResolution,
         chosen_application_id: u32,
     ) -> Result<RuledEventBatch, EngineError> {
-        let stack = match &pending.continuation {
-            ResolutionContinuation::DamageReplacement { stack, .. } => stack.clone(),
+        let completion = match &pending.continuation {
+            ResolutionContinuation::DamageReplacement { stack, .. } => {
+                DamageBatchContinuation::Stack {
+                    item: Box::new(stack.item.clone()),
+                    resume_effect_index: stack.resume_effect_index,
+                }
+            }
+            ResolutionContinuation::ManaAbilityDamageReplacement {
+                actor,
+                source_object_id,
+                source_zone_change_generation,
+                resume_resolution,
+            } => DamageBatchContinuation::ManaAbility {
+                actor: *actor,
+                source_object_id: *source_object_id,
+                source_zone_change_generation: *source_zone_change_generation,
+                resume_resolution: resume_resolution.clone(),
+            },
             _ => {
                 return Err(EngineError::Illegal(
                     "damage-replacement continuation missing",
@@ -1035,8 +1198,7 @@ impl GameEngine {
                 raw_candidates,
             } => {
                 self.park_damage_prevention_choice(
-                    stack.item,
-                    stack.resume_effect_index,
+                    completion.clone(),
                     batch,
                     raw_candidates,
                     &mut events,
@@ -1045,7 +1207,24 @@ impl GameEngine {
             }
         };
         self.commit_completed_damage_batch(&completed, &mut events);
-        self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+        match completion {
+            DamageBatchContinuation::Stack {
+                item,
+                resume_effect_index,
+            } => self.complete_parked_resolution(*item, resume_effect_index, events),
+            DamageBatchContinuation::ManaAbility {
+                resume_resolution, ..
+            } => {
+                if let Some(resume_resolution) = resume_resolution {
+                    self.state.pending_resolution = Some(*resume_resolution);
+                    events.push(
+                        self.resolution_payment_choice_event()
+                            .expect("suspended resolution payment has a prompt"),
+                    );
+                }
+                Ok(finish_with_events(self, events))
+            }
+        }
     }
 
     pub(crate) fn commit_damage_result(

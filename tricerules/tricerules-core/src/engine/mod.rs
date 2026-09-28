@@ -2032,9 +2032,44 @@ impl GameEngine {
         if self.state.opening.is_some() {
             return self.apply_opening_command(player, cmd);
         }
+        let mana_ability_damage_choice_is_pending = self
+            .state
+            .pending_resolution
+            .as_ref()
+            .is_some_and(|choice| {
+                matches!(
+                    &choice.continuation,
+                    ResolutionContinuation::ManaAbilityDamageReplacement { .. }
+                )
+            });
+        if mana_ability_damage_choice_is_pending
+            && !matches!(
+                cmd.cmd.as_ref(),
+                Some(Cmd::SubmitResolutionChoice(_) | Cmd::Concede(_))
+            )
+        {
+            return Err(EngineError::Illegal(
+                "resolve mana-ability damage before continuing payment",
+            ));
+        }
         if let Some(pending) = self.state.pending_spell_cast.as_ref() {
+            let stackless_mana_damage_choice = matches!(
+                cmd.cmd.as_ref(),
+                Some(Cmd::SubmitResolutionChoice(_))
+            ) && self
+                .state
+                .pending_resolution
+                .as_ref()
+                .is_some_and(|choice| {
+                    choice.deciding_player == player
+                        && matches!(
+                            &choice.continuation,
+                            ResolutionContinuation::ManaAbilityDamageReplacement { actor, .. }
+                                if *actor == player
+                        )
+                });
             let allowed = pending.caster == player
-                && matches!(
+                && (matches!(
                     cmd.cmd.as_ref(),
                     Some(
                         Cmd::ActivateAbility(_)
@@ -2042,7 +2077,7 @@ impl GameEngine {
                             | Cmd::CommitSpellCast(_)
                             | Cmd::CancelSpellCast(_)
                     )
-                );
+                ) || stackless_mana_damage_choice);
             if !allowed {
                 return Err(EngineError::Illegal(
                     "only the caster's mana payment actions are legal while casting",
@@ -2216,16 +2251,16 @@ impl GameEngine {
         };
         let mut b = res?;
         self.drain_immediate_observer_actions(None, &mut b.events)?;
-        if self.state.pending_resolution.is_none() {
-            self.commit_pending_library_losses();
-        }
-        self.sweep_life();
-        self.reconcile_departed_players(&mut b.events)?;
         // CR 704.4: SBAs are not checked while a tier-3 resolution is parked mid-resolution; they
         // run when it completes, including the CR 121.4/704.5b library-loss action. Zone view +
         // legal actions still refresh so the deciding player's client sees the drawn/revealed
-        // cards and the choice prompt.
+        // cards and the choice prompt. Spell payment is another incomplete rules transaction: a
+        // mana ability can lower life to 0 during payment, but CR 601.2h must finish before SBAs
+        // eliminate that caster or change priority.
         if self.state.pending_resolution.is_none() && self.state.pending_spell_cast.is_none() {
+            self.commit_pending_library_losses();
+            self.sweep_life();
+            self.reconcile_departed_players(&mut b.events)?;
             let mut d = vec![];
             self.apply_sbas(&mut d)?;
             // CR 704.3 then 603.3b: state-based actions are performed first, and only then are

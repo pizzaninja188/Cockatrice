@@ -154,19 +154,50 @@ impl ActivatedAbilityDef {
         }
         crate::ability_fallback(face_name, "activated ability", ability_path)
     }
-    /// CR 605.1a: a mana ability produces mana, doesn't target, and isn't a loyalty ability.
-    /// Modelled as "the ability's *sole* effect is a mana-production effect" — an ability that produced
-    /// mana alongside another effect would not use the fast no-stack path, and deliberately
-    /// answers `false` here rather than being silently mis-resolved.
+    /// CR 605.1a: supported mana abilities produce mana, don't target, and aren't loyalty
+    /// abilities. The bounded mana-plus-damage shape below is the only composite effect admitted:
+    /// it is resolved immediately through the shared damage pipeline.
     pub fn mana_options(&self) -> Option<&Vec<ManaAmount>> {
-        if self.is_loyalty_ability() {
+        if self.is_loyalty_ability() || self.targeting.is_some() {
             return None;
         }
         match self.effect.as_slice() {
             [SpellEffectKind::ProduceMana { options, .. }] => Some(options),
             [SpellEffectKind::ProduceManaPerSourceCounter { options, .. }] => Some(options),
+            [SpellEffectKind::ProduceMana {
+                options,
+                restriction: None,
+                conditional: None,
+            }, SpellEffectKind::DamagePlayer {
+                amount: super::Amount::Fixed(1),
+                who: super::PlayerRecipient::Controller,
+            }] => Some(options),
             _ => None,
         }
+    }
+
+    /// The supported fixed damage that follows mana production, if this is the bounded
+    /// controller-damage mana ability shape. Consumers use this to keep the immediate no-stack
+    /// path and its consequential float-undo handling aligned with [`Self::mana_options`].
+    pub fn mana_ability_damage_to_controller(&self) -> Option<u32> {
+        if self.is_loyalty_ability() || self.targeting.is_some() {
+            return None;
+        }
+        matches!(
+            self.effect.as_slice(),
+            [
+                SpellEffectKind::ProduceMana {
+                    restriction: None,
+                    conditional: None,
+                    ..
+                },
+                SpellEffectKind::DamagePlayer {
+                    amount: super::Amount::Fixed(1),
+                    who: super::PlayerRecipient::Controller,
+                },
+            ]
+        )
+        .then_some(1)
     }
 
     /// The storage-land output choice, if this ability has the supported source-bound X cost.
@@ -177,7 +208,10 @@ impl ActivatedAbilityDef {
             [AbilityCost::Mana(cost), AbilityCost::RemoveXStorageCountersFromSource]
                 if cost.to_string() == "{1}"
         );
-        if self.source_zone != AbilitySourceZone::Battlefield || !has_printed_generic_one {
+        if self.source_zone != AbilitySourceZone::Battlefield
+            || self.targeting.is_some()
+            || !has_printed_generic_one
+        {
             return None;
         }
         match self.effect.as_slice() {

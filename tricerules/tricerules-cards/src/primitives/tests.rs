@@ -1886,6 +1886,104 @@ fn storage_counter_kind_has_a_distinct_typed_label() {
     assert_ne!(CounterKind::Storage, CounterKind::Charge);
 }
 
+fn mana_then_controller_damage_ability() -> super::ActivatedAbilityDef {
+    super::ActivatedAbilityDef {
+        ability_id: crate::AbilityId::new("activated_01").unwrap(),
+        presentation: crate::AbilityPresentation::Fallback,
+        source_zone: super::AbilitySourceZone::Battlefield,
+        costs: vec![super::AbilityCost::Tap],
+        cost_modifiers: vec![],
+        effect: vec![
+            super::SpellEffectKind::ProduceMana {
+                options: vec![
+                    super::ManaAmount {
+                        r: 1,
+                        ..Default::default()
+                    },
+                    super::ManaAmount {
+                        g: 1,
+                        ..Default::default()
+                    },
+                ],
+                restriction: None,
+                conditional: None,
+            },
+            super::SpellEffectKind::DamagePlayer {
+                amount: super::Amount::Fixed(1),
+                who: super::PlayerRecipient::Controller,
+            },
+        ],
+        targeting: None,
+        timing: super::ActivationTiming::Normal,
+        conditions: vec![],
+        activation_limit: None,
+    }
+}
+
+#[test]
+fn damage_mana_ability_classifier_accepts_only_the_bounded_untargeted_shape() {
+    let ability = mana_then_controller_damage_ability();
+    assert_eq!(
+        ability
+            .mana_options()
+            .expect("Talisman-shaped mana ability"),
+        &vec![
+            super::ManaAmount {
+                r: 1,
+                ..Default::default()
+            },
+            super::ManaAmount {
+                g: 1,
+                ..Default::default()
+            },
+        ]
+    );
+    assert!(ability.is_mana_ability());
+
+    let mut targeted = ability.clone();
+    targeted.targeting = Some(super::TargetingDef { groups: vec![] });
+    assert!(
+        targeted.mana_options().is_none(),
+        "mana abilities cannot target"
+    );
+
+    let mut loyalty = ability.clone();
+    loyalty.costs = vec![super::AbilityCost::Loyalty(1)];
+    assert!(
+        loyalty.mana_options().is_none(),
+        "loyalty abilities are excluded"
+    );
+
+    let mut library_moving = ability.clone();
+    library_moving.effect.push(super::SpellEffectKind::Draw {
+        who: super::PlayerRecipient::Controller,
+        count: super::Amount::Fixed(1),
+    });
+    assert!(
+        library_moving.mana_options().is_none(),
+        "unsupported trailing library movement remains outside the fast path"
+    );
+
+    let mut wrong_recipient = ability.clone();
+    wrong_recipient.effect[1] = super::SpellEffectKind::DamagePlayer {
+        amount: super::Amount::Fixed(1),
+        who: super::PlayerRecipient::EachOpponent,
+    };
+    assert!(
+        wrong_recipient.mana_options().is_none(),
+        "the bounded pattern only supports damage to its controller"
+    );
+
+    let mut extra_effect = ability;
+    extra_effect.effect.push(super::SpellEffectKind::GainLife {
+        amount: super::Amount::Fixed(1),
+    });
+    assert!(
+        extra_effect.mana_options().is_none(),
+        "unsupported trailing effects remain outside the fast path"
+    );
+}
+
 fn source_counter_scaled_mana_effect() -> SpellEffectKind {
     SpellEffectKind::ProduceManaPerSourceCounter {
         counter: CounterKind::Charge,

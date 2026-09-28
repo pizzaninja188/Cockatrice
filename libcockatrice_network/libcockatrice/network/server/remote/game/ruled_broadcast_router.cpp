@@ -128,8 +128,12 @@ void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::I
                 pendingSpellCastState.add_events()->CopyFrom(event);
         }
         // A begun resolution-time cast has superseded its offer prompt until cancel restores it.
-        pendingResolutionChoice.reset();
-        pendingResolutionState.Clear();
+        // Other choices, such as damage replacement during mana payment, remain live alongside
+        // the cast transaction and must be restored to a reconnecting participant.
+        if (pendingResolutionChoice && pendingResolutionChoice->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST) {
+            pendingResolutionChoice.reset();
+            pendingResolutionState.Clear();
+        }
     }
 }
 
@@ -147,10 +151,14 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
         batch->CopyFrom(pendingOpeningState);
     } else if (casting) {
         batch->CopyFrom(pendingSpellCastState);
+        if (pendingResolutionChoice && pendingResolutionChoice->choice_kind() != ruled::v1::CHOICE_KIND_SPECIAL_CAST) {
+            batch->add_events()->mutable_resolution_choice_required()->CopyFrom(*pendingResolutionChoice);
+        }
     } else {
         batch->add_events()->mutable_resolution_choice_required()->CopyFrom(*pendingResolutionChoice);
         *batch->mutable_legal_by_player() = pendingResolutionState.legal_by_player();
-        for (const auto &event : pendingResolutionState.events()) batch->add_events()->CopyFrom(event);
+        for (const auto &event : pendingResolutionState.events())
+            batch->add_events()->CopyFrom(event);
     }
     if (opening || casting ||
         (pendingResolutionChoice && pendingResolutionChoice->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST)) {

@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "40b36bc6-c185-4bda-99e7-0118953c2c97",
+  "spans": [
+    {
+      "face_id": "yavimaya_coast",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "yavimaya_coast",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    }
+  ],
+  "primitive_references": [
+    { "symbol": "AbilityCost::Tap", "typed_path": "/faces/0/activated_abilities/0/costs/0" },
+    { "symbol": "SpellEffectKind::ProduceMana", "typed_path": "/faces/0/activated_abilities/0/effect/0" },
+    { "symbol": "AbilityCost::Tap", "typed_path": "/faces/0/activated_abilities/1/costs/0" },
+    { "symbol": "SpellEffectKind::ProduceMana", "typed_path": "/faces/0/activated_abilities/1/effect/0" },
+    { "symbol": "SpellEffectKind::DamagePlayer", "typed_path": "/faces/0/activated_abilities/1/effect/1" }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "issue_494_damage_mana::issue_494_registers_exact_complete_definitions",
+      "covers": "the exact Oracle identity and both complete activated-ability definitions"
+    },
+    {
+      "test": "scenario issue_494_damage_mana::issue_494_each_in_scope_pain_mana_choice_resolves_without_stack_or_undo",
+      "covers": "the colorless output stays pure mana; green and blue each produce mana plus immediate colorless-source damage without a stack item, and only unprevented damage reaches turn history"
+    },
+    {
+      "test": "scenario issue_494_damage_mana::issue_494_yavimaya_coast_damage_source_is_colorless",
+      "covers": "Yavimaya Coast's damage source snapshot is colorless while retaining its Land type and physical ObjectId"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

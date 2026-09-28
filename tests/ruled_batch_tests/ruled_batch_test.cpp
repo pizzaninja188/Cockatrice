@@ -5349,6 +5349,67 @@ TEST_F(RuledBatchTest, PendingSpellCastReconnectRestoresOnlyTheCastersPrivateTra
     EXPECT_TRUE(afterCompletion.getPostResponseQueue().isEmpty());
 }
 
+TEST_F(RuledBatchTest, DamageReplacementChoiceDuringSpellPaymentRestoresAlongsideCastOnReconnect)
+{
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *batch = response.mutable_batch();
+    auto *choice = batch->add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT);
+    choice->set_prompt_text("Choose a damage prevention effect.");
+    choice->add_candidate_object_ids(8123u);
+    auto *option = choice->add_replacement_options();
+    option->set_application_id(8123u);
+    option->set_source_card_name("Healing Salve");
+    option->set_effect_summary("Prevent the next damage");
+    option->set_source_object_id(101u);
+    option->set_source_zone_change_generation(9u);
+
+    auto *pending = (*batch->mutable_legal_by_player())[p1->getPlayerId()].mutable_pending_spell_cast();
+    pending->set_transaction_id(78u);
+    pending->set_reserved_object_id(902u);
+    pending->set_locked_total_cost("{G}");
+    pending->mutable_announcement()->mutable_source()->set_hand_index(0u);
+    pending->mutable_payment_preview()->set_valid(true);
+    pending->mutable_payment_preview()->set_remaining_cost("{G}");
+    auto *mana = batch->add_events()->mutable_mana_pool_updated();
+    mana->set_player_id(p1->getPlayerId());
+    mana->set_g(1u);
+    updatePendingResolutionChoiceCache(response);
+
+    for (Server_Player *recipient : {p1, p2}) {
+        ResponseContainer reconnect(-1);
+        game->createGameJoinedEvent(recipient, reconnect, true);
+        ASSERT_EQ(reconnect.getPostResponseQueue().size(), 3);
+        const auto *container =
+            dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+
+        const auto restoredChoice =
+            std::find_if(restored.events().begin(), restored.events().end(),
+                         [](const auto &event) { return event.has_resolution_choice_required(); });
+        ASSERT_NE(restoredChoice, restored.events().end())
+            << "the reconnect snapshot must restore the damage decision with spell payment";
+        EXPECT_EQ(restoredChoice->resolution_choice_required().choice_kind(),
+                  ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT);
+        ASSERT_EQ(restoredChoice->resolution_choice_required().replacement_options_size(), 1);
+        EXPECT_EQ(restoredChoice->resolution_choice_required().replacement_options(0).application_id(), 8123u);
+
+        if (recipient == p1) {
+            ASSERT_TRUE(restored.legal_by_player().contains(p1->getPlayerId()));
+            const auto &own = restored.legal_by_player().at(p1->getPlayerId());
+            ASSERT_TRUE(own.has_pending_spell_cast());
+            EXPECT_EQ(own.pending_spell_cast().transaction_id(), 78u);
+        } else {
+            EXPECT_TRUE(restored.legal_by_player().empty());
+            EXPECT_EQ(restored.SerializeAsString().find("{G}"), std::string::npos);
+        }
+    }
+}
+
 TEST_F(RuledBatchTest, ResolvingAbilityCannotBindOrMoveAnIdenticallyNamedPhysicalSpell)
 {
     seedCardCatalog({"Fiery Temper"});

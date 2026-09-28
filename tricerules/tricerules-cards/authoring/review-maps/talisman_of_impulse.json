@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "f2ccc9e8-8e92-4f8c-8728-8c748630e0dd",
+  "spans": [
+    {
+      "face_id": "talisman_of_impulse",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "talisman_of_impulse",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    }
+  ],
+  "primitive_references": [
+    { "symbol": "AbilityCost::Tap", "typed_path": "/faces/0/activated_abilities/0/costs/0" },
+    { "symbol": "SpellEffectKind::ProduceMana", "typed_path": "/faces/0/activated_abilities/0/effect/0" },
+    { "symbol": "AbilityCost::Tap", "typed_path": "/faces/0/activated_abilities/1/costs/0" },
+    { "symbol": "SpellEffectKind::ProduceMana", "typed_path": "/faces/0/activated_abilities/1/effect/0" },
+    { "symbol": "SpellEffectKind::DamagePlayer", "typed_path": "/faces/0/activated_abilities/1/effect/1" }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "issue_494_damage_mana::issue_494_registers_exact_complete_definitions",
+      "covers": "the exact Oracle identity and both complete activated-ability definitions"
+    },
+    {
+      "test": "scenario issue_494_damage_mana::issue_494_each_in_scope_pain_mana_choice_resolves_without_stack_or_undo",
+      "covers": "the colorless output stays pure mana; red and green each produce mana plus immediate damage without a stack item, and only unprevented damage reaches turn history"
+    },
+    {
+      "test": "scenario issue_494_damage_mana::issue_494_pure_talisman_mana_remains_undoable_and_damage_activation_invalidates_prior_float",
+      "covers": "the colorless ability keeps pure-mana undo while the damage ability invalidates prior float undo"
+    },
+    {
+      "test": "scenario issue_494_damage_mana::issue_494_prevention_choice_preserves_source_identity_and_resumes_once",
+      "covers": "damage prevention, affected-player choice, source ObjectId and zone-change generation, and one-time stackless resume"
+    },
+    {
+      "test": "scenario issue_494_damage_mana::issue_494_prevention_choice_keeps_spell_payment_open_until_damage_finishes",
+      "covers": "prevention choice resumes while the spell transaction stays open, then the spell commits"
+    },
+    {
+      "test": "scenario issue_494_damage_mana::issue_494_spell_payment_defers_state_based_actions_until_commit",
+      "covers": "lethal self-damage during payment does not run state-based actions before commit"
+    },
+    {
+      "test": "scenario issue_494_damage_mana::issue_494_activation_and_prevention_choice_replay_deterministically",
+      "covers": "the activation and logged prevention choice replay with identical event batches"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1118,6 +1118,16 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         effect_ids: Vec<u32>,
     },
+    /// CR 605.3b / 405.6c: a mana ability's immediate damage paused for a replacement choice.
+    /// This carries event-time source identity without manufacturing a stack item to resume.
+    ManaAbilityDamageReplacement {
+        actor: PlayerId,
+        source_object_id: ObjectId,
+        source_zone_change_generation: u64,
+        /// A mana-payment decision interrupted by this replacement choice, restored only after
+        /// the damage event and all applicable replacement choices finish.
+        resume_resolution: Option<Box<PendingResolution>>,
+    },
     AuraReturn {
         stack: Option<ParkedStackResolution>,
         exiled: TriggerObjectRef,
@@ -1180,7 +1190,7 @@ impl ResolutionContinuation {
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
             Self::SpecialCast { stack, .. } => Some(stack),
             Self::AuraReturn { stack, .. } => stack.as_ref(),
-            Self::LegendKeep => None,
+            Self::ManaAbilityDamageReplacement { .. } | Self::LegendKeep => None,
         }
     }
 
@@ -1219,7 +1229,7 @@ impl ResolutionContinuation {
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
             Self::SpecialCast { stack, .. } => Some(stack),
             Self::AuraReturn { stack, .. } => stack.as_mut(),
-            Self::LegendKeep => None,
+            Self::ManaAbilityDamageReplacement { .. } | Self::LegendKeep => None,
         }
     }
 

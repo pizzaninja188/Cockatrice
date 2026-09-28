@@ -318,6 +318,9 @@ impl GameEngine {
             ResolutionContinuation::DamageReplacement { .. } => {
                 return self.finish_damage_prevention_choice(pending, chosen[0]);
             }
+            ResolutionContinuation::ManaAbilityDamageReplacement { .. } => {
+                return self.finish_damage_prevention_choice(pending, chosen[0]);
+            }
             ResolutionContinuation::LegendKeep => {
                 return self.finish_legend_sba_choice(pending, chosen);
             }
