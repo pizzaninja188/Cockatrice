@@ -83,6 +83,7 @@ authoritative for their respective content; the index points to them instead of 
 | [Quicksmith Genius optional discard then draw](entries/quicksmith-genius-optional-discard-draw.md) | Triggered ability | One controlled artifact entry presents an optional discard-then-draw; repeated events are outside the cited fixture. |
 | [Prosperity X for each player](entries/prosperity-x-each-player-draw.md) | Group draw | Three-player X=2 and two-player X=0 cases are covered; the index does not make a whole-card readiness claim. |
 | [Scavenger Grounds exile all graveyards](entries/scavenger-grounds-all-graveyards-exile.md) | Graveyard effect | Sacrifices a controlled Desert (including itself) as a cost, then exiles cards in all players' graveyards at resolution. |
+| [Single library search result to battlefield](entries/single-library-search-to-battlefield.md) | Library search | Rampant Growth and Farseek put one filtered result onto the battlefield tapped and shuffle; multiple results or split destinations are outside the evidence. |
 | [Modal land face with life-paid untapped entry](entries/modal-land-life-paid-entry.md) | Battlefield-entry replacement | Both named MH3 back faces may pay 3 life to avoid entering tapped; direct-RON definitions and exact life/color outcomes are tested. |
 
 The ten Phase 2 entries inspect the cited RON, review-map, test, and engine source at their recorded

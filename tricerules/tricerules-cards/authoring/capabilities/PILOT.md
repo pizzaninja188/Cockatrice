@@ -1,5 +1,9 @@
 # Capability index pilot
 
+The next experiment is the [paired research pilot](RESEARCH-PILOT.md), designed but not run.
+It compares the same remaining cards in fresh baseline/index-assisted contexts. The historical
+three-batch workflow and results below are retained as evidence, not instructions to repeat it.
+
 **Pilot status: COMPLETE (three batches, 2026-09-27).** The baseline was the first batch without
 index lookup; batches 2 and 3 used lookup-first. Initial seed effort and comparable per-batch
 lookup/revalidation effort were not captured, so the pilot cannot quantify time saved. Do not infer

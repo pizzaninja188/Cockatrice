@@ -95,9 +95,9 @@ lookup aid: check its boundaries and evidence, then fetch the current source and
 card as required above. Record a partial match or miss when the behavior differs or no entry fits;
 do not infer runtime support, generator recognition, or whole-card readiness from a nearby pattern.
 Independent review of the authored cards and their actual behavior remains required.
-When following the pilot's fallback baseline, its first batch temporarily skips only this index
-lookup; source checks and independent review still apply. Lookup-first applies to the next two
-measurement batches.
+The [paired research pilot](capabilities/RESEARCH-PILOT.md) temporarily skips index lookup only
+for its explicitly assigned baseline researchers. Source checks and independent review still apply.
+Ordinary authoring continues to use lookup-first; the historical three-batch pilot is complete.
 
 ## 4. Author the card definition
 
