@@ -1,0 +1,23 @@
+// Oracle and rulings checked against the exact MH3 Scryfall record on 2026-09-28.
+// CR 702.114 and 613.1e govern Devoid; CR 121.2 governs the second-draw trigger.
+(
+  id: "emrakuls_messenger",
+  name: "Emrakul's Messenger",
+  face_id: "emrakuls_messenger",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Eldrazi", "Faerie", "Rogue"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flying],
+  characteristic_defining_abilities: [(
+    ability_id: "devoid",
+    presentation: OracleLines([1]),
+    definition: Devoid,
+  )],
+  triggered_abilities: [(
+    ability_id: "second_draw",
+    presentation: OracleLines([3]),
+    trigger: WheneverPlayerDrawsNthCard(drawer: Controller, ordinal: 2),
+    effect: [CreateTokens(token: "eldrazi_spawn_c_0_1", count: 1)],
+  )],
+)

@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "31b27775-196b-4022-bff5-25b34290ff7f",
+  "spans": [
+    {
+      "face_id": "from_beyond",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/characteristic_defining_abilities/0"]
+    },
+    {
+      "face_id": "from_beyond",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    },
+    {
+      "face_id": "from_beyond",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    }
+  ],
+  "tokens": ["eldrazi_scion_c_1_1"],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_devoid::devoid_cards_are_colorless_but_keep_their_mana_cost_color_identity",
+      "covers": "From Beyond is colorless while its green mana cost remains in its Commander identity"
+    },
+    {
+      "test": "scenario deck_coverage_devoid::from_beyond_creates_a_scion_at_its_controllers_upkeep",
+      "covers": "the controller's upkeep trigger creates one colorless 1/1 Eldrazi Scion whose sacrifice mana ability adds {C} immediately"
+    },
+    {
+      "test": "scenario deck_coverage_devoid::from_beyond_sacrifices_to_search_reveal_and_shuffle_an_eldrazi_card",
+      "covers": "paying {1}{G} and sacrificing From Beyond searches by Eldrazi subtype, rejects Eldrazi Monument by name alone, reveals and moves an Eldrazi card to hand, and shuffles"
+    },
+    {
+      "test": "scenario deck_coverage_devoid::from_beyond_shuffles_after_searching_without_an_eligible_eldrazi",
+      "covers": "a search with no eligible Eldrazi can fail to find and still shuffles without revealing the name-only match"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

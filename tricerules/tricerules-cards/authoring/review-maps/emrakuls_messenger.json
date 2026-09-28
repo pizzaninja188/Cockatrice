@@ -1,0 +1,40 @@
+{
+  "format_version": 1,
+  "oracle_id": "f1409c9e-f0d9-49e1-b02e-d0f04a658331",
+  "spans": [
+    {
+      "face_id": "emrakuls_messenger",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/characteristic_defining_abilities/0"]
+    },
+    {
+      "face_id": "emrakuls_messenger",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/keywords"]
+    },
+    {
+      "face_id": "emrakuls_messenger",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    }
+  ],
+  "tokens": ["eldrazi_spawn_c_0_1"],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_devoid::devoid_cards_are_colorless_but_keep_their_mana_cost_color_identity",
+      "covers": "Emrakul's Messenger is colorless while its blue mana cost remains in its Commander identity"
+    },
+    {
+      "test": "scenario deck_coverage_devoid::emrakuls_messenger_creates_a_spawn_on_its_controllers_second_draw",
+      "covers": "the controller's second draw creates one colorless 0/1 Eldrazi Spawn whose sacrifice mana ability adds {C} immediately"
+    },
+    {
+      "test": "scenario deck_coverage_devoid::emrakuls_messenger_does_not_trigger_for_an_opponents_second_draw",
+      "covers": "an opponent's second draw does not create a Spawn for Emrakul's Messenger's controller"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

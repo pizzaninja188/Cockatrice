@@ -138,6 +138,9 @@ pub enum Layout {
 pub enum CharacteristicDefiningAbility {
     /// CR 702.73: this object is every creature type in every zone.
     Changeling,
+    /// CR 702.114: this object is colorless in every zone. Its colored mana symbols still
+    /// contribute to color identity under CR 903.4.
+    Devoid,
     /// CR 604.3 / 903.4: the object is defined as one or more colors in every zone. Transguild
     /// Courier uses this CDA; Sphinx of the Guildpact instead uses a color indicator. This
     /// contributes defined colors to the object's layer-5 characteristics and Commander identity.
@@ -157,6 +160,7 @@ impl CharacteristicDefiningAbility {
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
             Self::Changeling => Ok(()),
+            Self::Devoid => Ok(()),
             Self::DefinesColors { colors } => {
                 if colors.is_empty() {
                     return Err("color-defining ability must define at least one color".into());
@@ -737,17 +741,19 @@ impl CardFace {
 
     /// This face's colors, derived from its mana cost (CR 202.2a), or the explicit
     /// [`colors_override`](Self::colors_override) for token faces (CR 111.4). A face is colorless
-    /// when its mana cost carries no color symbols (lands, `{0}`, generic-only costs).
+    /// when its mana cost carries no color symbols (lands, `{0}`, generic-only costs), or when it
+    /// has Devoid (CR 702.114).
     pub fn colors(&self) -> Vec<Color> {
         if let Some(colors) = self
             .characteristic_defining_abilities
             .iter()
             .find_map(|ability| match &ability.definition {
-                CharacteristicDefiningAbility::DefinesColors { colors } => Some(colors),
+                CharacteristicDefiningAbility::Devoid => Some(Vec::new()),
+                CharacteristicDefiningAbility::DefinesColors { colors } => Some(colors.clone()),
                 _ => None,
             })
         {
-            return colors.clone();
+            return colors;
         }
         match &self.colors_override {
             Some(colors) => colors.clone(),
@@ -1613,6 +1619,19 @@ mod tests {
             faces,
             commander_setup_only: false,
         }
+    }
+
+    #[test]
+    fn devoid_sets_colorless_without_erasing_mana_cost_color_identity() {
+        let devoid: CharacteristicDefiningAbility =
+            ron::from_str("Devoid").expect("Devoid is a characteristic-defining ability");
+        let mut face = face(&["Creature"]);
+        face.mana_cost = ManaCost::parse("{U}").unwrap();
+        face.characteristic_defining_abilities =
+            vec![IdentifiedAbility::fallback("devoid", devoid).unwrap()];
+
+        assert!(face.colors().is_empty());
+        assert_eq!(face.color_identity(), vec![Color::Blue]);
     }
 
     #[test]

@@ -1415,7 +1415,8 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
         ability.definition.validate()?;
         if matches!(
             &ability.definition,
-            crate::CharacteristicDefiningAbility::DefinesColors { .. }
+            crate::CharacteristicDefiningAbility::Devoid
+                | crate::CharacteristicDefiningAbility::DefinesColors { .. }
         ) {
             if defines_colors {
                 return Err("a face may have only one color-defining CDA".into());

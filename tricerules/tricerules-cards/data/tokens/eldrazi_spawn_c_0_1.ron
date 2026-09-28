@@ -1,0 +1,15 @@
+// Colorless 0/1 Eldrazi Spawn token with the CR 605 mana ability printed on the token.
+(
+  id: "eldrazi_spawn_c_0_1",
+  name: "Eldrazi Spawn",
+  face_id: "eldrazi_spawn_c_0_1",
+  types: ["Creature", "Eldrazi", "Spawn"],
+  power: Some(0),
+  toughness: Some(1),
+  activated_abilities: [(
+    ability_id: "sacrifice_for_colorless",
+    presentation: Fallback,
+    costs: [SacrificeSelf],
+    effect: [ProduceMana(options: [(c: 1)])],
+  )],
+)

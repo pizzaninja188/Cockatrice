@@ -2235,6 +2235,7 @@ fn require_power_toughness_is_defined(
                     }
                 }
                 CharacteristicDefiningAbility::Changeling
+                | CharacteristicDefiningAbility::Devoid
                 | CharacteristicDefiningAbility::DefinesColors { .. } => false,
             })
     };

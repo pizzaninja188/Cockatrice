@@ -114,6 +114,8 @@ mod deck_coverage_cultivate;
 mod deck_coverage_cycling_taplands;
 #[path = "scenario/deck_coverage_darksteel_plate.rs"]
 mod deck_coverage_darksteel_plate;
+#[path = "scenario/deck_coverage_devoid.rs"]
+mod deck_coverage_devoid;
 #[path = "scenario/deck_coverage_fire_lit_thicket.rs"]
 mod deck_coverage_fire_lit_thicket;
 #[path = "scenario/deck_coverage_garruks_packleader.rs"]

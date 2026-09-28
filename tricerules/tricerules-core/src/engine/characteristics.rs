@@ -1825,6 +1825,65 @@ mod tests {
     }
 
     #[test]
+    fn devoid_remains_applied_after_layer_six_ability_removal() {
+        let mut engine =
+            GameEngine::new_with_default_decks(903_402, &[0, 1], 20).expect("new engine");
+        let oid = engine.state.players[0].library[0];
+        let mut face = engine
+            .registry
+            .get("spyglass_siren")
+            .expect("Spyglass Siren definition")
+            .primary_face()
+            .clone();
+        face.characteristic_defining_abilities =
+            vec![tricerules_cards::IdentifiedAbility::fallback(
+                "devoid",
+                CharacteristicDefiningAbility::Devoid,
+            )
+            .unwrap()];
+        let object = engine.state.objects.get_mut(&oid).expect("library object");
+        object.zone = Zone::Battlefield;
+        object.copiable_values = Some(CopiableValues {
+            source_card_id: "spyglass_siren".into(),
+            source_face_index: 0,
+            face,
+            room_faces: None,
+            display_name: "Spyglass Siren with Devoid".into(),
+        });
+        engine.state.players[0].battlefield.push(oid);
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(oid),
+            kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 0,
+        });
+
+        let characteristics = engine.characteristics(oid).expect("characteristics");
+        assert!(characteristics.colors.is_empty());
+        assert!(!characteristics.has_keyword(Keyword::Flying));
+
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(oid),
+            kind: ContinuousEffectKind::Layer5SetColors(vec![Color::Red]),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1,
+        });
+        assert_eq!(
+            engine
+                .characteristics(oid)
+                .expect("characteristics after layer 5")
+                .colors,
+            vec![Color::Red]
+        );
+    }
+
+    #[test]
     fn changeling_is_a_layer_4_cda_and_type_setting_overwrites_it() {
         let mut engine =
             GameEngine::new_with_default_decks(154_001, &[0, 1], 20).expect("new engine");
