@@ -176,6 +176,8 @@ mod deck_coverage_swan_song;
 mod deck_coverage_thran_dynamo;
 #[path = "scenario/deck_coverage_tri_lands.rs"]
 mod deck_coverage_tri_lands;
+#[path = "scenario/deck_coverage_urzas_cave.rs"]
+mod deck_coverage_urzas_cave;
 #[path = "scenario/deck_coverage_vision_skeins_mikokoro.rs"]
 mod deck_coverage_vision_skeins_mikokoro;
 #[path = "scenario/deck_coverage_vivid_grove.rs"]

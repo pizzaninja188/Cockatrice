@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "4474ecee-0ec3-409b-90df-738d9313fe3c",
+  "spans": [
+    {
+      "face_id": "urzas_cave",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "urzas_cave",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "CardTypeFilter::Land",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/SearchLibrary/filter/card_type"
+    },
+    {
+      "symbol": "SearchDestination::Battlefield",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/SearchLibrary/destination"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_urzas_cave::urzas_cave_taps_for_colorless_mana_without_using_the_stack",
+      "covers": "the tapped colorless mana ability resolves without using the stack"
+    },
+    {
+      "test": "scenario deck_coverage_urzas_cave::urzas_cave_pays_three_sacrifices_and_searches_for_any_land_tapped",
+      "covers": "paying three generic mana, tapping and sacrificing Cave, excluding nonlands, choosing any land, tapped battlefield entry, and shuffling"
+    },
+    {
+      "test": "deck_coverage_urzas_cave::urzas_cave_registers_its_full_type_line_and_both_activated_abilities",
+      "covers": "the complete single-face identity, both printed Oracle-line mappings, costs, mana output, unrestricted land filter, tapped destination, and shuffle flag"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

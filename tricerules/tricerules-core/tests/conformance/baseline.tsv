@@ -3369,6 +3369,9 @@ unsummon	0	cast	exercised
 untamed_hunger	0	cast	exercised
 updraft_elemental	0	cast	exercised
 urenis_rebuff	0	cast	exercised
+urzas_cave	0	ability:0	exercised
+urzas_cave	0	ability:1	exercised
+urzas_cave	0	land	exercised
 uthros_psionicist	0	cast	exercised
 uthros_scanship	0	ability:0	exercised
 uthros_scanship	0	cast	exercised
