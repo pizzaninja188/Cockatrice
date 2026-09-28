@@ -34,6 +34,30 @@ Oracle governs card-specific behavior; the Comprehensive Rules govern the mechan
 governing concepts and any intentional simplification or deferral in the implementation or its
 verification evidence. Do not substitute Oracle Tagger classifications for reading the card.
 
+### Find implemented analogues
+
+Start with the closest implemented card or ability, preferably a complete matching composition.
+Search local definitions, review maps and tests by card name, effect, cost or target shape. When
+the analogue is not obvious, use [Scryfall](https://scryfall.com/) Oracle-text searches or
+[Scryfall Tagger](https://tagger.scryfall.com/) functional categories to discover candidates, then
+match those candidates against the implemented registry. Search across formats for examples;
+this does not authorize admitting cards outside the campaign's scope. External discovery is useful
+when it fills a gap, not a mandatory extra search after a suitable implemented example is found.
+
+Inspect the analogue's exact typed definition and the assertions in its cited tests before copying
+the relevant structure. Compare every face and clause, costs, targets and player scope, quantities,
+timing, choices, identity, tokens and presentation requirements against the new card's Oracle and
+rulings. Tag membership, similar wording, a registry entry or a nearby test name is a discovery
+lead, not proof that these details match. The direct-RON review packet's ranked nearby definitions
+are another navigation aid, not mechanical-equivalence evidence.
+
+Keep routine preflight concise: **copy from; differences; reused evidence; distinguishing tests;
+remaining gaps**. Reuse reviewed evidence for unchanged behavior instead of reconstructing a broad
+primitive audit for every card. Investigate the differences and any uncertainty that could change
+correctness. A missing new-card definition or scenario is ordinary authoring work, not by itself
+an unsupported engine capability; identify a concrete missing semantic contract before declaring
+a runtime blocker. An unassessed composition still needs assessment before admission.
+
 ## 2. Authority boundary
 
 There are two card databases, and they must not be mixed:
@@ -89,15 +113,13 @@ reusable typed effect over a card-specific path. `TargetKind::Self_` binds the s
 targeting under CR 115 and is invalid in spell effects; do not treat every effect subject as a
 chosen target.
 
-Before researching a candidate cohort, consult the [capability pattern index](capabilities/README.md)
-and its [pilot status and measurement protocol](capabilities/PILOT.md). Treat an exact entry as a
-lookup aid: check its boundaries and evidence, then fetch the current source and rulings for every
-card as required above. Record a partial match or miss when the behavior differs or no entry fits;
-do not infer runtime support, generator recognition, or whole-card readiness from a nearby pattern.
-Independent review of the authored cards and their actual behavior remains required.
-The [paired research pilot](capabilities/RESEARCH-PILOT.md) temporarily skips index lookup only
-for its explicitly assigned baseline researchers. Source checks and independent review still apply.
-Ordinary authoring continues to use lookup-first; the historical three-batch pilot is complete.
+The [selected implementation examples](capabilities/README.md) are an optional navigation aid,
+not a capability inventory or required research step. Use an entry when it helps find an analogue;
+if it provides only a loose match, continue directly to definitions and tests. Ordinary authoring
+requires neither index hit/miss reporting nor a pilot protocol. Absence from this narrow collection
+does not imply lack of runtime support. When relying on an entry, check its boundaries and current
+supporting evidence; unrelated freshness warnings do not create a catalogue-wide maintenance task.
+Exact source checks and independent review of the new card remain required.
 
 ## 4. Author the card definition
 
@@ -111,7 +133,9 @@ For a hand-authored card:
    effects. Do not encode rules in comments, labels, or presentation fields.
 5. Add the `.ron` anywhere under `tricerules-cards/data/`; `build.rs` discovers it automatically.
    Do not edit a registry list.
-6. Add happy and illegal scenario coverage with explicit zone, step, priority, and state assertions.
+6. Add the card to applicable shared happy/illegal scenarios with independently reviewed inputs
+   and expectations, or write focused scenarios where reuse does not cover its differences. Keep
+   explicit zone, step, priority and state assertions; see [reusable semantic evidence](#reusable-semantic-evidence).
 
 Stable IDs use canonical snake_case, remain stable when definitions are reordered, and are not
 renumbered after release. Use the specific ID field for each surface:
@@ -977,6 +1001,19 @@ selected modal effect), each card's reviewed semantic mapping, and unusual inter
 Registry shape checks alone do not execute effects; successful command admission alone does not
 prove resolution. The conformance coverage classifications and reviewed baseline remain unchanged.
 
+Reusing mechanics does not require a new bespoke scenario function for every card. For the same
+tested pattern with different parameters, prefer adding the actual card to a shared scenario with
+independent expected values. Reuse existing primitive and unchanged interaction regressions rather
+than duplicating their full test matrix. For new combinations or meaningful differences, add focused
+coverage of the affected behavior; a dedicated scenario is needed only where the shared fixture
+cannot prove it. A new card must still execute with all relevant clauses asserted: copying a RON
+definition or passing registry-shape checks alone does not satisfy this requirement.
+
+This reduces repeated test authoring, not the required verification gates. Keep focused red/green
+checks, independent semantic review, applicable illegal-path coverage and the final affected-side
+gate. Do not remove existing regression coverage or manufacture a generic test abstraction for
+hypothetical future cards.
+
 Use [`scenario/helpers/semantic.rs`](../../tricerules-core/tests/scenario/helpers/semantic.rs)
 for deterministic main-phase setup, accepted commands, explicit object assertions, and bounded
 completion. `complete` counts individual commands, including priority passes and supplied choice
@@ -1115,8 +1152,8 @@ behavior from production RON. Keep routine authoring separate from new engine pr
 - [ ] New token/state-marker displays have the correct exact identity and external database entry; any hands-on acceptance is recorded separately.
 - [ ] Target prompts contain only short, effect-specific click guidance.
 - [ ] RON contains no copied Oracle display prose or freeform choice labels.
-- [ ] Happy and illegal scenarios cover the implemented mechanics and relevant prompt/choice path.
-- [ ] Relevant capability entries were maintained when this batch introduces or materially changes a demonstrated pattern; do not create an entry for every card.
+- [ ] The actual card executes in shared or dedicated scenarios with independent expectations for every relevant clause, applicable illegal paths and prompt/choice behavior; unchanged primitive regressions are reused.
+- [ ] Any optional index entry relied on was checked against current evidence and corrected or qualified if stale. No new entry, hit/miss report or unrelated catalogue upkeep is required for routine authoring.
 - [ ] Genuine deferrals are recorded in `partial-cards.tsv`, not runtime RON.
 - [ ] `CARDS.md`, generator checks, Rust gates, and `git diff --check` pass as applicable.
 - [ ] The final report includes the governed MTG concepts and compliance or deferral note.

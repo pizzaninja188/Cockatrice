@@ -50,6 +50,15 @@ requirements; this skill routes the work rather than replacing them.
   [card authoring guide](../../../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md).
   Use its Oracle/rulings research, complete-support boundary, presentation mappings, and blocker
   tracking. Do not substitute nearby legacy RON for the guide.
+- Follow the guide's [implemented-analogue workflow](../../../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#find-implemented-analogues):
+  find the closest shipped card or ability, inspect its typed definition and test assertions, then
+  copy the relevant structure and check the differences against exact Oracle and rulings. Use
+  Scryfall Oracle-text search or Tagger to discover candidates when useful, then match them against
+  the implemented registry. Discovery across formats does not broaden admission scope.
+  Keep routine preflight to copy-from examples, differences, reused evidence, distinguishing tests
+  and remaining gaps. The narrow capability index is optional; do not require hit/miss reports,
+  new entries or unrelated freshness maintenance. Missing a new-card definition or scenario is
+  not by itself a runtime blocker; identify the missing semantic contract.
 - Apply the guide's [format scope and rules correctness](../../../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#format-scope-and-rules-correctness)
   boundary: campaign format filters select work, not primitive semantics. Check relevant
   cross-cohort interactions without requiring unrelated card authoring or exhaustive searches.
@@ -73,6 +82,12 @@ requirements; this skill routes the work rather than replacing them.
   Update obsolete issue requirements before execution. Let the campaign set batch-size targets;
   reduce scope when semantic risk warrants it. Reuse actual-card semantic
   fixtures with independent expectations; add helpers only for demonstrated repetition.
+- Reuse unchanged primitive and interaction tests. For an existing tested pattern with different
+  parameters, add the actual new card to shared scenarios with independently reviewed expectations;
+  a new bespoke scenario function is not mandatory. Add focused coverage for new compositions or
+  meaningful differences that shared fixtures do not prove. Every relevant clause must still
+  execute and be asserted for the new card; preserve applicable illegal-path coverage, independent
+  review and the final affected-side gate.
 - Follow the [verification ladder](../../../docs/AGENT-VERIFICATION.md): focused red/green tests
   through the quiet runner, then the full affected-side entry point. Choose the affected side
   from the actual contract, not merely changed file extensions. Use Preview if the selected

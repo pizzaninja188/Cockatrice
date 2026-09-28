@@ -1,7 +1,11 @@
 # Paired capability-research pilot
 
-**Status: designed, not run.** This replaces the next experiment, not the historical results in
-[PILOT.md](PILOT.md). The coverage campaign stays paused until separately resumed.
+**Status: completed on 2026-09-28; retained as an experiment protocol.** This is not a required
+authoring workflow or an instruction to rerun the experiment. Ordinary authoring follows the
+[implemented-analogue workflow](../CARD-AUTHORING.md#find-implemented-analogues) with optional index
+lookup. Measurement artifacts remain outside the catalogue. The separate historical results in
+[PILOT.md](PILOT.md) are unchanged. Running a new experiment or resuming coverage requires its own
+task instruction.
 
 ## Question and scope
 

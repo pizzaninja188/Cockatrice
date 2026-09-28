@@ -1,4 +1,10 @@
-# Capability pattern index
+# Selected implementation examples
+
+**Optional navigation aid, not a capability inventory.** The capability index is a narrow collection
+of reviewed examples. Start ordinary authoring with the [implemented-analogue workflow](../CARD-AUTHORING.md#find-implemented-analogues).
+Consult this collection when useful; neither lookup nor hit/miss reporting is mandatory. An absent
+entry says nothing about whether the engine can support a card. Do not expand this collection as
+a separate coverage project.
 
 This directory documents bounded, reusable rules patterns that card authors can look up while
 preflighting a complete card. An entry describes reviewed evidence and its limits. It is not a
@@ -104,8 +110,9 @@ engine behavior, or verification gates.
 
 ## Entry maintenance and scope
 
-Update an affected entry when a change materially alters its behavior boundary, implementation,
-generator route, or supporting card, review-map, test, or presentation evidence. A freshness warning
+When relying on an entry, inspect material changes to its behavior boundary, implementation,
+generator route, or supporting card, review-map, test, or presentation evidence. Correct or qualify
+stale claims found during that work before relying on them. A freshness warning for an entry in use
 is a prompt to inspect the reported path diffs: retain the claim only when the reviewed evidence still
 supports it, and narrow the behavior or downgrade a status when it does not. Update **Reviewed
 revision** only after actually reviewing the relevant paths and the claims that depend on them. A
@@ -113,8 +120,13 @@ new commit, a clean checker run, or an unrelated change is not a reason to blank
 Neither a checker pass nor a revision update automatically promotes runtime support, generator
 recognition, or whole-card readiness.
 
-Look for useful patterns when repeated card research reveals the same reusable behavior or repeated
-lookup misses. Do not try to catalogue every mechanic or create an entry for each card. An outside-
+Routine authoring does not require running the checker or resolving unrelated catalogue warnings.
+Do not turn a shared-source-file change into mandatory review of every entry. Keep known misleading
+claims out of evidence used for admission; direct definitions and tests can be used without an entry.
+
+Add an entry only when repeated real authoring work demonstrates that the reference would provide
+a useful shortcut. A lookup miss or a newly supported mechanic alone does not require one. Do not
+try to catalogue every mechanic or create an entry for each card. An outside-
 deck card may help validate related semantics, but it does not expand the selected campaign or admit
 that card. Keep pilot measurement records outside this catalogue as directed in [PILOT.md](PILOT.md).
 
