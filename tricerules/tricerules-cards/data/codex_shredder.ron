@@ -1,0 +1,36 @@
+(
+  id: "codex_shredder",
+  name: "Codex Shredder",
+  face_id: "codex_shredder",
+  mana_cost: "{1}",
+  // Scryfall Oracle ID ef7b11ab-24e7-4e7c-91a7-920bade6e60b; exact lookup and rulings checked 2026-09-28.
+  // The ruling confirms targets are chosen before costs; sacrificing this source cannot make it
+  // a legal target for its own recovery ability. CR 701.17a-b cover mill; CR 602.2b and 601.2c/h
+  // order targeting before costs, and CR 701.21a covers sacrifice.
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      source_zone: Battlefield,
+      costs: [Tap],
+      effect: [MillTargetPlayer(count: 1, target: (kind: AnyPlayer))],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      source_zone: Battlefield,
+      costs: [Mana("{5}"), Tap, SacrificeSelf],
+      effect: [MoveGraveyardCards(
+        filter: (owner: Controller),
+        destination: Hand,
+      )],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target card from your graveyard",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)

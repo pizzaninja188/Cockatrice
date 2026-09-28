@@ -100,6 +100,8 @@ mod deck_coverage_checklands;
 mod deck_coverage_chromatic_star;
 #[path = "scenario/deck_coverage_clock_of_omens.rs"]
 mod deck_coverage_clock_of_omens;
+#[path = "scenario/deck_coverage_codex_shredder.rs"]
+mod deck_coverage_codex_shredder;
 #[path = "scenario/deck_coverage_commander_mana.rs"]
 mod deck_coverage_commander_mana;
 #[path = "scenario/deck_coverage_copperline_prismatic.rs"]

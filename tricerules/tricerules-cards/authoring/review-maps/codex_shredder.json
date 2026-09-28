@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "ef7b11ab-24e7-4e7c-91a7-920bade6e60b",
+  "spans": [
+    {
+      "face_id": "codex_shredder",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "codex_shredder",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::MillTargetPlayer",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "GraveyardFilter",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/MoveGraveyardCards/filter"
+    },
+    {
+      "symbol": "AbilityTargeting",
+      "typed_path": "/faces/0/activated_abilities/1/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_codex_shredder::codex_shredder_mills_one_card_from_target_player",
+      "covers": "the first actual ability taps Codex Shredder and mills exactly one card from the targeted opponent"
+    },
+    {
+      "test": "scenario deck_coverage_codex_shredder::codex_shredder_recovers_any_own_graveyard_card_after_sacrificing",
+      "covers": "the recovery target must be in the controller's graveyard before costs, including rejection of the source itself before it is sacrificed; the legal ability pays {5}, taps and sacrifices Codex Shredder, then returns a nonartifact card to hand"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
