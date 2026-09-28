@@ -110,6 +110,31 @@ impl GameEngine {
                 );
             }
         }
+        for oid in progress.hand_object_ids {
+            let card_label = self
+                .state
+                .objects
+                .get(&oid)
+                .and_then(|object| self.registry.get(&object.card_id))
+                .map(|definition| definition.name.clone())
+                .unwrap_or_else(|| "card".to_string());
+            let owner = self
+                .state
+                .objects
+                .get(&oid)
+                .map(|object| object.owner)
+                .ok_or(EngineError::Illegal("searched card is stale"))?;
+            self.commit_observed_zone_move(oid, Zone::Hand, None)?;
+            events.push(permanent_moved_event(
+                &self.state,
+                oid,
+                owner,
+                rv1::permanent_moved::Destination::Hand,
+            ));
+            events.push(ev_log(format!(
+                "P{controller} puts {card_label} into their hand."
+            )));
+        }
         if progress.shuffle {
             crate::engine::shuffle_player_library_for_current_command(&mut self.state, controller);
             events.push(ev_log(format!("P{controller} shuffles their library.")));
@@ -717,7 +742,23 @@ impl GameEngine {
                         LibrarySearchEntryProgress {
                             searcher,
                             remaining_object_ids: chosen.to_vec(),
+                            hand_object_ids: Vec::new(),
                             tapped,
+                            shuffle,
+                            searched_library,
+                            result_id,
+                        },
+                        ev,
+                    );
+                }
+                SearchDestination::BattlefieldTappedThenHand => {
+                    return self.continue_library_search_battlefield_entries(
+                        stack,
+                        LibrarySearchEntryProgress {
+                            searcher,
+                            remaining_object_ids: vec![chosen[0]],
+                            hand_object_ids: chosen.iter().skip(1).copied().collect(),
+                            tapped: true,
                             shuffle,
                             searched_library,
                             result_id,
@@ -735,6 +776,179 @@ impl GameEngine {
             }]);
         }
         self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::replacement::PendingReplacementEvent;
+
+    fn library_card(engine: &mut GameEngine, card_id: &str) -> ObjectId {
+        let player = &mut engine.state.players[0];
+        let object_id = player.hand.pop().expect("fixture card in hand");
+        let object = engine
+            .state
+            .objects
+            .get_mut(&object_id)
+            .expect("fixture object");
+        object.card_id = card_id.to_string();
+        object.zone = Zone::Library;
+        player.library.push_back(object_id);
+        object_id
+    }
+
+    fn battlefield_card(engine: &mut GameEngine, card_id: &str) -> ObjectId {
+        let player = &mut engine.state.players[0];
+        let object_id = player.hand.pop().expect("fixture card in hand");
+        let object = engine
+            .state
+            .objects
+            .get_mut(&object_id)
+            .expect("fixture object");
+        object.card_id = card_id.to_string();
+        object.zone = Zone::Battlefield;
+        player.battlefield.push(object_id);
+        object_id
+    }
+
+    fn test_stack_item() -> StackItem {
+        StackItem {
+            id: 90_001,
+            controller: 0,
+            card_id: "cultivate".into(),
+            targets: Vec::new(),
+            ability_text: None,
+            source_permanent_id: None,
+            source_owner: Some(0),
+            source_zone_change: 0,
+            source_face_change: 0,
+            ability_index: None,
+            activated_ability: None,
+            triggered_ability: None,
+            is_triggered: false,
+            is_copy: false,
+            face_index: 0,
+            cast_method: SpellCastMethod::Normal,
+            returned_attacker_assignment: None,
+            chosen_x: 0,
+            chosen_modes: Vec::new(),
+            cast_cost_receipts: Vec::new(),
+            cast_condition_results: Vec::new(),
+            cast_occurrence: None,
+            cast_by: Some(0),
+            payment_result: Default::default(),
+            search_results: Default::default(),
+            resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
+            trigger_context: Default::default(),
+        }
+    }
+
+    #[test]
+    fn parked_library_search_entry_preserves_later_hand_destination() {
+        // Cultivate's first card is already marked tapped when entry replacement checks begin,
+        // so use a real two-replacement land-entry choice to exercise the same parked completion
+        // payload. Multiversal Passage and Orb of Dreams both apply before the land enters.
+        let mut engine = GameEngine::new(90_001, &[0, 1], 20, None, true).expect("engine");
+        let orb = battlefield_card(&mut engine, "orb_of_dreams");
+        let passage = library_card(&mut engine, "multiversal_passage");
+        let to_hand = library_card(&mut engine, "forest");
+        let progress = LibrarySearchEntryProgress {
+            searcher: 0,
+            remaining_object_ids: vec![passage],
+            hand_object_ids: vec![to_hand],
+            tapped: false,
+            shuffle: true,
+            searched_library: true,
+            result_id: None,
+        };
+
+        let batch = engine
+            .continue_library_search_battlefield_entries(
+                ParkedStackResolution::new(test_stack_item()),
+                progress,
+                Vec::new(),
+            )
+            .expect("entry replacements park the search");
+        let choice = batch
+            .events
+            .iter()
+            .find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            })
+            .expect("replacement order choice");
+        assert_eq!(
+            choice.choice_kind,
+            rv1::ChoiceKind::ReplacementEffect as i32
+        );
+        assert_eq!(choice.replacement_options.len(), 2);
+        assert_eq!(engine.state.objects[&passage].zone, Zone::Library);
+        assert_eq!(engine.state.objects[&to_hand].zone, Zone::Library);
+        match engine.state.pending_replacement_event.as_ref() {
+            Some(PendingReplacementEvent::BattlefieldEntry(entry)) => match &entry.completion {
+                BattlefieldEntryCompletion::LibrarySearch { progress, .. } => {
+                    assert_eq!(progress.hand_object_ids, [to_hand]);
+                }
+                other => panic!("unexpected entry completion: {other:?}"),
+            },
+            other => panic!("expected parked battlefield entry: {other:?}"),
+        }
+
+        let orb_option = choice
+            .replacement_options
+            .iter()
+            .position(|option| option.source_object_id == orb)
+            .expect("Orb of Dreams replacement option");
+        let type_choice = engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![choice.candidate_object_ids[orb_option]],
+                    ..Default::default()
+                },
+            )
+            .expect("apply Orb of Dreams first");
+        assert_eq!(engine.state.objects[&to_hand].zone, Zone::Library);
+        assert!(type_choice.events.iter().any(|event| {
+            matches!(&event.ev, Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+                if choice.choice_kind == rv1::ChoiceKind::ResolutionBranch as i32)
+        }));
+
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                    selected_branch_index: 0,
+                    ..Default::default()
+                },
+            )
+            .expect("choose Multiversal Passage's basic land type");
+        assert_eq!(engine.state.objects[&to_hand].zone, Zone::Library);
+        let completed = engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    decision: rv1::ResolutionChoiceDecision::Decline as i32,
+                    ..Default::default()
+                },
+            )
+            .expect("decline the optional life payment");
+
+        assert_eq!(engine.state.objects[&passage].zone, Zone::Battlefield);
+        assert!(engine.state.objects[&passage].tapped);
+        assert_eq!(engine.state.objects[&to_hand].zone, Zone::Hand);
+        assert!(engine.state.players[0].hand.contains(&to_hand));
+        assert_eq!(
+            completed
+                .events
+                .iter()
+                .filter(|event| matches!(&event.ev, Some(rv1::ruled_event::Ev::Log(log)) if log.text == "P0 shuffles their library."))
+                .count(),
+            1
+        );
     }
 }
 

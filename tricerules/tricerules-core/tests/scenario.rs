@@ -108,6 +108,8 @@ mod deck_coverage_commander_mana;
 mod deck_coverage_copperline_prismatic;
 #[path = "scenario/deck_coverage_creature_board_wipes.rs"]
 mod deck_coverage_creature_board_wipes;
+#[path = "scenario/deck_coverage_cultivate.rs"]
+mod deck_coverage_cultivate;
 #[path = "scenario/deck_coverage_cycling_taplands.rs"]
 mod deck_coverage_cycling_taplands;
 #[path = "scenario/deck_coverage_darksteel_plate.rs"]

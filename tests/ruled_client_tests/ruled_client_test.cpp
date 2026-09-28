@@ -6544,6 +6544,48 @@ TEST_F(RuledClientTest, LibrarySearchChoiceEnforcesUniqueNamesAndOpensTheDeckVie
     EXPECT_EQ(state->resolutionHandPickSelected(), 2);
 }
 
+TEST_F(RuledClientTest, OrderedLibrarySearchSubmitsCardsInClickOrder)
+{
+    QSignalSpy started(state, &RuledClientState::librarySearchPickStarted);
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_SEARCH);
+    rcr->set_prompt_text(
+        "Search your library for up to two basic lands. Choose them in order: the first enters the battlefield tapped, and any remaining chosen card goes into your hand.");
+    rcr->set_min(0);
+    rcr->set_max(2);
+    rcr->set_ordered(true);
+    for (const quint32 oid : {81u, 82u}) {
+        rcr->add_candidate_object_ids(oid);
+    }
+    for (const int scid : {0, 1}) {
+        rcr->add_candidate_server_card_ids(scid);
+    }
+    rcr->add_candidate_names("Forest");
+    rcr->add_candidate_names("Island");
+    apply(batch);
+
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_EQ(state->resolutionHandPickZone(), RuledClientState::PickZone::Deck);
+    EXPECT_EQ(state->resolutionHandPickViewTitle(), QStringLiteral("Search your library"));
+    ASSERT_EQ(started.count(), 1);
+    EXPECT_TRUE(state->resolutionHandPickPromptText().contains(QStringLiteral("first enters the battlefield tapped")));
+
+    state->toggleResolutionHandPickCard(1);
+    state->toggleResolutionHandPickCard(0);
+    EXPECT_EQ(state->resolutionHandPickClickOrderFor(1), 1);
+    EXPECT_EQ(state->resolutionHandPickClickOrderFor(0), 2);
+
+    host.sentCommands.clear();
+    state->submitResolutionHandPick();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &submitted = host.sentCommands.first().submit_resolution_choice();
+    ASSERT_EQ(submitted.chosen_object_ids_size(), 2);
+    EXPECT_EQ(submitted.chosen_object_ids(0), 82u);
+    EXPECT_EQ(submitted.chosen_object_ids(1), 81u);
+}
+
 TEST_F(RuledClientTest, HeterogeneousLibrarySearchUsesTheEngineAuthoredDistinctSlotGraph)
 {
     ruled::v1::RuledEventBatch batch;

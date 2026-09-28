@@ -1,0 +1,17 @@
+// Oracle/rulings checked against the pinned Scryfall source and Wizards' Strixhaven release notes.
+// CR 701.23 governs the search; CR 701.24a requires a shuffle. The selected order assigns the
+// first basic land to the battlefield tapped and the second to the hand.
+(
+  id: "cultivate",
+  name: "Cultivate",
+  face_id: "cultivate",
+  mana_cost: "{2}{G}",
+  types: ["Sorcery"],
+  spell_effect: [SearchLibrary(
+    count: 2,
+    filter: Some((card_type: Some(BasicLand))),
+    destination: BattlefieldTappedThenHand,
+    shuffle: true,
+    reveal: true,
+  )],
+)

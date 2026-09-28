@@ -3544,7 +3544,14 @@ pub(in crate::engine) fn park_zone_search_choice(
     } else {
         count
     };
-    let prompt = format!("P{searcher}: search {zone_names} for up to {max} matching card(s).");
+    let ordered = matches!(destination, SearchDestination::BattlefieldTappedThenHand);
+    let prompt = if ordered {
+        format!(
+            "P{searcher}: search {zone_names} for up to {max} matching card(s). Choose them in order: the first enters the battlefield tapped, and any remaining chosen card goes into your hand."
+        )
+    } else {
+        format!("P{searcher}: search {zone_names} for up to {max} matching card(s).")
+    };
     let (candidate_card_ids, candidate_names) = candidate_identities(engine, &candidates);
     let multi_zone = zones.len() > 1 || zones.first() != Some(&CardSearchZone::Library);
     let choice_kind = if multi_zone {
@@ -3623,7 +3630,7 @@ pub(in crate::engine) fn park_zone_search_choice(
                 candidate_names,
                 min,
                 max,
-                ordered: false,
+                ordered,
                 unique_names: false,
                 candidate_server_card_ids: Vec::new(),
                 candidate_selectable: Vec::new(),
@@ -3653,7 +3660,7 @@ pub(in crate::engine) fn park_zone_search_choice(
             candidates,
             min,
             max,
-            ordered: false,
+            ordered,
             unique_names: false,
             prompt,
             choice_kind,

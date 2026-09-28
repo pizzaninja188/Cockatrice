@@ -1996,7 +1996,7 @@ impl ZoneCardFilter {
 /// Where a searched-out card goes (for [`SpellEffectKind::SearchLibrary`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum SearchDestination {
-    /// The card goes to the searching player's hand (Demonic Tutor, Cultivate).
+    /// The card goes to the searching player's hand (Demonic Tutor).
     #[default]
     Hand,
     /// The card is placed on top of the searching player's library (Mystical Tutor).
@@ -2008,6 +2008,9 @@ pub enum SearchDestination {
         #[serde(default)]
         tapped: bool,
     },
+    /// The first selected card enters the battlefield tapped and any remaining selected cards
+    /// go to the searching player's hand (Cultivate, Kodama's Reach).
+    BattlefieldTappedThenHand,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -4877,6 +4880,18 @@ impl SpellEffectKind {
                 }
                 if let Some(conditional) = conditional_destination {
                     conditional.condition.validate_without_self_entry_spell()?;
+                }
+                if *destination == SearchDestination::BattlefieldTappedThenHand
+                    && (*count != 2
+                        || count_by_cast_cost.is_some()
+                        || !slots.is_empty()
+                        || !matches!(zones, SearchZoneSelection::Fixed(zones) if zones == &[CardSearchZone::Library])
+                        || conditional_destination.is_some())
+                {
+                    return Err(
+                        "BattlefieldTappedThenHand requires an unconditional two-card library search"
+                            .into(),
+                    );
                 }
                 if let Some(result_id) = result_id {
                     result_id.validate()?;

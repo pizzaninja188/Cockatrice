@@ -1465,6 +1465,7 @@ pub(crate) struct PendingZoneEntryBatch {
 pub(crate) struct LibrarySearchEntryProgress {
     pub searcher: PlayerId,
     pub remaining_object_ids: Vec<ObjectId>,
+    pub hand_object_ids: Vec<ObjectId>,
     pub tapped: bool,
     pub shuffle: bool,
     pub searched_library: bool,

@@ -1,0 +1,28 @@
+{
+  "format_version": 1,
+  "oracle_id": "8b755881-a72d-4e21-a369-d2924eb4585a",
+  "spans": [
+    {
+      "face_id": "cultivate",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/spell_effect/0"]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_cultivate::cultivate_can_find_zero_basics_and_still_shuffles_once",
+      "covers": "may find no basic land and still shuffles exactly once without revealing a card"
+    },
+    {
+      "test": "scenario deck_coverage_cultivate::cultivate_sends_a_single_found_basic_to_the_battlefield_tapped",
+      "covers": "a single found basic land is revealed and enters the battlefield tapped"
+    },
+    {
+      "test": "scenario deck_coverage_cultivate::cultivate_uses_selection_order_for_the_two_revealed_destinations",
+      "covers": "ordered selection sends the first basic land to the battlefield tapped and the second to hand, excluding nonbasic Taiga"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
