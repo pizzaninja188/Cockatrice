@@ -1,0 +1,68 @@
+{
+  "format_version": 1,
+  "oracle_id": "b7d4b7dd-fbb1-4ca3-875f-ef13a95e66ad",
+  "spans": [
+    {
+      "face_id": "liquimetal_torque",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "liquimetal_torque",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ManaAmount",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/ProduceMana/options"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::AddTypes",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "TargetFilter",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/AddTypes/subject/Chosen"
+    },
+    {
+      "symbol": "AbilityTargeting",
+      "typed_path": "/faces/0/activated_abilities/1/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_liquimetal_torque::liquimetal_torque_taps_for_colorless_without_using_the_stack",
+      "covers": "the actual Torque mana ability taps, adds exactly one colorless mana, and resolves without the stack"
+    },
+    {
+      "test": "scenario deck_coverage_liquimetal_torque::liquimetal_torque_targets_nonland_and_adds_artifact_type",
+      "covers": "the actual Torque ability rejects a land target without paying its tap cost, then targets a nonland permanent and adds Artifact while retaining Creature and Bear"
+    },
+    {
+      "test": "scenario type_adding_effects::liquimetal_coating_adds_artifact_until_cleanup_and_updates_legality",
+      "covers": "the reused temporary Artifact type addition expires at cleanup and changes target legality until then"
+    },
+    {
+      "test": "scenario type_adding_effects::liquimetal_coating_type_addition_does_not_follow_a_zone_change",
+      "covers": "the reused temporary type addition does not follow a permanent through a zone change"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

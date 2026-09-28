@@ -124,6 +124,8 @@ mod deck_coverage_ichor_wellspring;
 mod deck_coverage_khalni_ambush;
 #[path = "scenario/deck_coverage_krark_clan_ironworks.rs"]
 mod deck_coverage_krark_clan_ironworks;
+#[path = "scenario/deck_coverage_liquimetal_torque.rs"]
+mod deck_coverage_liquimetal_torque;
 #[path = "scenario/deck_coverage_looting.rs"]
 mod deck_coverage_looting;
 #[path = "scenario/deck_coverage_lotus_petal.rs"]

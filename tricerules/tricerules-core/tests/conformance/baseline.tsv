@@ -1830,6 +1830,9 @@ lion_heart	0	ability:0	exercised
 lion_heart	0	cast	exercised
 liquimetal_coating	0	ability:0	exercised
 liquimetal_coating	0	cast	exercised
+liquimetal_torque	0	ability:0	exercised
+liquimetal_torque	0	ability:1	exercised
+liquimetal_torque	0	cast	exercised
 live_or_die	0	cast	exercised
 living_phone	0	cast	exercised
 living_tempest	0	cast	exercised
