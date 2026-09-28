@@ -1158,6 +1158,43 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
+    if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_PROLIFERATE) {
+        const int objectCount = rcr.candidate_object_ids_size();
+        const int playerCount = rcr.candidate_player_ids_size();
+        QSet<quint32> objectIds;
+        QSet<int> playerIds;
+        bool valid = rcr.min() == 0 && rcr.max() > 0 && !rcr.ordered() && !rcr.unique_names() &&
+                     objectCount == rcr.candidate_names_size() && objectCount + playerCount == rcr.max() &&
+                     rcr.candidate_card_ids_size() == 0 && rcr.candidate_server_card_ids_size() == 0 &&
+                     rcr.candidate_source_zones_size() == 0 && rcr.candidate_selectable_size() == 0;
+        for (const auto objectId : rcr.candidate_object_ids()) {
+            valid = valid && !objectIds.contains(objectId);
+            objectIds.insert(objectId);
+        }
+        for (const int playerId : rcr.candidate_player_ids()) {
+            valid = valid && playerId >= 0 && !playerIds.contains(playerId);
+            playerIds.insert(playerId);
+        }
+        if (!valid) {
+            qWarning() << "Rejecting malformed Proliferate choice metadata";
+            return;
+        }
+        PendingChoice choice;
+        choice.kind = ChoiceKind::Proliferate;
+        choice.promptText = QString::fromStdString(rcr.prompt_text());
+        choice.mayDecline = true;
+        choice.min = 0;
+        choice.max = static_cast<int>(rcr.max());
+        for (const auto objectId : rcr.candidate_object_ids()) {
+            choice.candidateOids.append(objectId);
+        }
+        for (const auto playerId : rcr.candidate_player_ids()) {
+            choice.candidatePlayerIds.append(static_cast<quint32>(playerId));
+        }
+        state->setPendingChoice(std::move(choice));
+        return;
+    }
+
     const bool isEmptyLibrarySearch = rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_SEARCH &&
                                       rcr.candidate_object_ids_size() == 0 && rcr.min() == 0;
     if (rcr.candidate_object_ids_size() <= 0 && !isEmptyLibrarySearch) {

@@ -358,6 +358,13 @@ protected:
         return out;
     }
 
+    void callPlayerCounterProjection(const ruled::v1::RuledPerPlayerView &view)
+    {
+        ruled::v1::RuledEventBatch batch;
+        *batch.add_events()->mutable_zone_view()->add_per_player() = view;
+        game->ruled()->synchronizer->applyLifeManaAndCombatEvents(batch);
+    }
+
     ruled::v1::RuledEventBatch redactFor(const ruled::v1::RuledEventBatch &batch,
                                          Server_AbstractParticipant *participant)
     {
@@ -3270,6 +3277,60 @@ TEST_F(RuledBatchTest, PendingTapPaymentCohortIsRestoredForPayerAndRedactedForOp
     EXPECT_EQ(opponentChoice.prompt_text(), "Opponent is making a resolution choice.");
 }
 
+TEST_F(RuledBatchTest, ProliferateChoiceShowsPublicPermanentsButRoutesPlayerIdsOnlyToDecider)
+{
+    Server_Card *bear = addCardToTable(p1, QStringLiteral("Grizzly Bears"));
+    ruled::v1::RuledPerPlayerView view = buildPerPlayerView(p1, {601u}, {false});
+    applyZoneView(p1, view, nullptr);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *choice = response.mutable_batch()->add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_PROLIFERATE);
+    choice->set_prompt_text("Choose any number of permanents and/or players with counters.");
+    choice->set_min(0);
+    choice->set_max(3);
+    choice->add_candidate_object_ids(601u);
+    choice->add_candidate_names("Grizzly Bears");
+    choice->add_candidate_player_ids(p1->getPlayerId());
+    choice->add_candidate_player_ids(p2->getPlayerId());
+    updatePendingResolutionChoiceCache(response);
+
+    ResponseContainer deciderReconnect(-1);
+    game->createGameJoinedEvent(p1, deciderReconnect, true);
+    ASSERT_EQ(deciderReconnect.getPostResponseQueue().size(), 3);
+    const auto *deciderContainer =
+        dynamic_cast<const GameEventContainer *>(deciderReconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(deciderContainer, nullptr);
+    ruled::v1::RuledEventBatch deciderBatch;
+    ASSERT_TRUE(deciderBatch.ParseFromString(
+        deciderContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    const auto &deciderChoice = deciderBatch.events(0).resolution_choice_required();
+    ASSERT_EQ(deciderChoice.candidate_object_ids_size(), 1);
+    EXPECT_EQ(deciderChoice.candidate_object_ids(0), 601u);
+    ASSERT_EQ(deciderChoice.candidate_player_ids_size(), 2);
+    EXPECT_EQ(deciderChoice.candidate_player_ids(0), p1->getPlayerId());
+    EXPECT_EQ(deciderChoice.candidate_player_ids(1), p2->getPlayerId());
+    EXPECT_EQ(deciderChoice.prompt_text(), "Choose any number of permanents and/or players with counters.");
+
+    ResponseContainer opponentReconnect(-1);
+    game->createGameJoinedEvent(p2, opponentReconnect, true);
+    ASSERT_EQ(opponentReconnect.getPostResponseQueue().size(), 3);
+    const auto *opponentContainer =
+        dynamic_cast<const GameEventContainer *>(opponentReconnect.getPostResponseQueue().last().second);
+    ASSERT_NE(opponentContainer, nullptr);
+    ruled::v1::RuledEventBatch opponentBatch;
+    ASSERT_TRUE(opponentBatch.ParseFromString(
+        opponentContainer->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    const auto &opponentChoice = opponentBatch.events(0).resolution_choice_required();
+    ASSERT_EQ(opponentChoice.candidate_object_ids_size(), 1);
+    EXPECT_EQ(opponentChoice.candidate_object_ids(0), 601u);
+    EXPECT_EQ(opponentChoice.candidate_player_ids_size(), 0);
+    EXPECT_EQ(opponentChoice.prompt_text(), "Choose any number of permanents and/or players with counters.");
+    EXPECT_EQ(findCardByEngineOid(p1, 601u), bear);
+}
+
 TEST_F(RuledBatchTest, ResolvedOmenMovesTheExactStackCardFaceDownAndReconcilesDuplicateLibraryCards)
 {
     const QString cardId = QStringLiteral("dirgur_island_dragon_skimming_strike");
@@ -4387,6 +4448,27 @@ TEST_F(RuledBatchTest, ApplyRuledBatchUpdatesLifeCounter)
     Server_Counter *p1Life = p1->getCounters().value(0, nullptr);
     ASSERT_NE(p1Life, nullptr);
     EXPECT_EQ(p1Life->getCount(), 20);
+}
+
+TEST_F(RuledBatchTest, ApplyRuledBatchProjectsEnginePlayerCountersToVisibleCounters)
+{
+    ruled::v1::RuledPerPlayerView view;
+    view.set_player_id(p2->getPlayerId());
+    auto *poison = view.add_player_counters();
+    poison->set_name("poison");
+    poison->set_count(4);
+
+    callPlayerCounterProjection(view);
+
+    Server_Counter *poisonCounter = nullptr;
+    for (Server_Counter *counter : p2->getCounters()) {
+        if (counter && counter->getName() == QStringLiteral("poison")) {
+            poisonCounter = counter;
+            break;
+        }
+    }
+    ASSERT_NE(poisonCounter, nullptr) << "the authoritative player counter must be displayed";
+    EXPECT_EQ(poisonCounter->getCount(), 4);
 }
 
 TEST_F(RuledBatchTest, ApplyRuledBatchUsesUpperGeneralCounterForColorlessMana)

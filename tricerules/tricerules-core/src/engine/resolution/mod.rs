@@ -32,6 +32,7 @@ mod destruction_tests;
 pub(super) mod life;
 mod mass;
 mod misc;
+mod proliferate;
 mod pump_counters;
 mod restrictions;
 mod stack_ops;
@@ -1775,6 +1776,7 @@ impl GameEngine {
                     effect @ SpellEffectKind::PutCountersAllPlaneswalkers { .. } => {
                         pump_counters::put_counters_all_planeswalkers(&mut cx, effect)?
                     }
+                    SpellEffectKind::Proliferate => proliferate::proliferate(&mut cx)?,
                     effect @ (SpellEffectKind::Destroy { .. }
                     | SpellEffectKind::DestroyPreventingRegeneration { .. }) => {
                         misc::destroy(&mut cx, effect)?
@@ -2141,6 +2143,7 @@ impl GameEngine {
                 events.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                         rv1::ResolutionChoiceRequired {
+                            candidate_player_ids: Vec::new(),
                             deciding_player_id: owner,
                             source_object_id: exiled.object_id,
                             prompt_text: prompt.clone(),
@@ -3509,6 +3512,185 @@ mod attached_subject_tests {
         ability.effect = effects;
         item.triggered_ability = Some(ability);
         item
+    }
+
+    #[test]
+    fn proliferate_parks_for_a_mixed_any_number_choice() {
+        let mut engine = GameEngine::new_with_default_decks(701_034, &[0, 1], 20).unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        engine.state.objects.get_mut(&source).unwrap().add_counters(
+            CounterKind::PlusOnePlusOne,
+            1,
+            0,
+        );
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .add_counters(CounterKind::Lore, 2, 0);
+        engine.state.players[1]
+            .counters
+            .insert(CounterKind::Poison, 2);
+        let item = quantity_item(
+            source,
+            vec![
+                SpellEffectKind::Proliferate,
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(2),
+                },
+            ],
+        );
+        let (effects, label) = engine.build_resolution_effects(&item);
+        let mut events = Vec::new();
+
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut events)
+            .expect("Proliferate effect");
+
+        let choice = events
+            .iter()
+            .find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                _ => None,
+            })
+            .expect("Proliferate must request an any-number choice");
+        assert_eq!(choice.choice_kind, rv1::ChoiceKind::Proliferate as i32);
+        assert_eq!(choice.candidate_object_ids, [source]);
+        assert_eq!(choice.candidate_player_ids, [1]);
+        assert_eq!(choice.min, 0);
+        assert_eq!(choice.max, 2);
+
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![source],
+                    chosen_player_ids: vec![1],
+                    ..Default::default()
+                },
+            )
+            .expect("accept mixed Proliferate choice");
+        assert_eq!(
+            engine.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),
+            2
+        );
+        assert_eq!(
+            engine.state.objects[&source].counter_count(CounterKind::Lore),
+            3
+        );
+        assert_eq!(
+            engine.state.players[1].counters.get(&CounterKind::Poison),
+            Some(&3)
+        );
+        assert_eq!(engine.state.players[0].life, 22, "effect-list tail resumes");
+        assert!(engine.state.pending_resolution.is_none());
+    }
+
+    #[test]
+    fn proliferate_rejects_an_unoffered_player_and_restores_the_prompt() {
+        let mut engine = GameEngine::new_with_default_decks(701_035, &[0, 1], 20).unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        engine.state.objects.get_mut(&source).unwrap().add_counters(
+            CounterKind::PlusOnePlusOne,
+            1,
+            0,
+        );
+        engine.state.players[1]
+            .counters
+            .insert(CounterKind::Poison, 2);
+        let item = quantity_item(source, vec![SpellEffectKind::Proliferate]);
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .expect("Proliferate effect parks");
+
+        assert!(engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![source],
+                    chosen_player_ids: vec![0],
+                    ..Default::default()
+                },
+            )
+            .is_err());
+        assert!(engine.state.pending_resolution.is_some());
+        assert_eq!(
+            engine.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),
+            1
+        );
+        assert_eq!(
+            engine.state.players[1].counters.get(&CounterKind::Poison),
+            Some(&2)
+        );
+    }
+
+    #[test]
+    fn proliferate_revalidates_candidate_generation_and_counter_eligibility() {
+        let mut engine = GameEngine::new_with_default_decks(701_036, &[0, 1], 20).unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        engine.state.objects.get_mut(&source).unwrap().add_counters(
+            CounterKind::PlusOnePlusOne,
+            1,
+            0,
+        );
+        let item = quantity_item(source, vec![SpellEffectKind::Proliferate]);
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .expect("Proliferate effect parks");
+
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        engine
+            .state
+            .zone_change_generation
+            .insert(source, generation + 1);
+        assert!(engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![source],
+                    ..Default::default()
+                },
+            )
+            .is_err());
+        assert!(engine.state.pending_resolution.is_some());
+        assert_eq!(
+            engine.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),
+            1
+        );
+
+        engine
+            .state
+            .zone_change_generation
+            .insert(source, generation);
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .counters
+            .remove(&CounterKind::PlusOnePlusOne);
+        assert!(engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![source],
+                    ..Default::default()
+                },
+            )
+            .is_err());
+        assert!(engine.state.pending_resolution.is_some());
+        assert_eq!(
+            engine.state.objects[&source].counter_count(CounterKind::PlusOnePlusOne),
+            0
+        );
     }
 
     #[test]

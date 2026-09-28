@@ -431,6 +431,7 @@ fn convolute_rejects_stale_or_malformed_payment_atomically() {
             chosen_combat_defender: None,
             payment: None,
             restricted_mana: vec![],
+            chosen_player_ids: vec![],
         })),
     };
     assert!(e.apply_command(0, &malformed).is_err());

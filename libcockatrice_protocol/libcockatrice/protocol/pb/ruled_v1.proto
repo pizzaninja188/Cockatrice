@@ -140,6 +140,9 @@ message DevCommand {
     DevPutCardInZone put_card_in_zone = 2;
     DevAddMana add_mana = 3;
     DevMoveCard move_card = 4;
+    // Add poison counters during a dev-built multiplayer scenario. This stays behind the same
+    // server-and-session dev-command gate as every other board-construction cheat.
+    DevAddPoisonCounters add_poison_counters = 5;
   }
 }
 
@@ -209,6 +212,11 @@ message DevAddMana {
   uint32 c = 6;
 }
 
+// Add poison counters to a player for dev-built state-based-action and Proliferate scenarios.
+message DevAddPoisonCounters {
+  uint32 count = 1;
+}
+
 enum ResolutionChoiceDecision {
   RESOLUTION_CHOICE_DECISION_UNSPECIFIED = 0;
   RESOLUTION_CHOICE_DECISION_DECLINE = 1;
@@ -240,6 +248,9 @@ message SubmitResolutionChoice {
   // same engine-owned transaction as an ordinary BeginSpellCast and leaves the resolution parked
   // until CommitSpellCast or CancelSpellCast.
   SpellCastAnnouncement spell_cast_announcement = 8;
+  // Player recipients for a mixed-domain resolution choice such as Proliferate. Kept distinct
+  // from chosen_object_ids because PlayerId and ObjectId are separate engine identities.
+  repeated int32 chosen_player_ids = 9 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // A player's answer to a TriggerOrderRequired (CR 603.3b): put THIS trigger on the stack next.
@@ -1382,6 +1393,8 @@ enum ChoiceKind {
   CHOICE_KIND_BEHOLD = 22;
   // Opaque discard replacement applications or private library ordering. Decider-only metadata.
   CHOICE_KIND_PRIVATE_REPLACEMENT = 23;
+  // CR 701.34: any-number choice over permanent ObjectIds and player PlayerIds with counters.
+  CHOICE_KIND_PROLIFERATE = 24;
 }
 
 enum ChoiceCandidateSourceZone {
@@ -1516,6 +1529,8 @@ message ResolutionChoiceRequired {
   // Indices refer to candidate_object_ids and remain private even when candidates are public.
   repeated ResolutionSelectionAlternative selection_alternatives = 26
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // PlayerId candidates for mixed-domain choices. Never encoded as ObjectIds.
+  repeated int32 candidate_player_ids = 27 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // A token entered the battlefield (CR 111). Unlike a resolved permanent spell, a token has no
@@ -1950,6 +1965,14 @@ message RuledPerPlayerView {
   repeated EmblemMarkerView static_emblems = 37 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // Full replacement even when battlefields_unchanged; empty removes synthetic copies.
   repeated PrepareSpellCopyView prepare_spell_copies = 38 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Public player counter snapshot. Names are rule labels (for example "poison"); omitted kinds
+  // have not been tracked by the engine for this player. Counts are absolute, not deltas.
+  repeated PlayerCounterView player_counters = 39 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+}
+
+message PlayerCounterView {
+  string name = 1 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  uint32 count = 2 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
 }
 
 message ZoneViewSync {

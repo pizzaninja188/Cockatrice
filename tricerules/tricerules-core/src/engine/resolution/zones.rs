@@ -78,6 +78,7 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
                 source_object_id: source_id,
                 prompt_text: prompt.clone(),
@@ -498,6 +499,7 @@ pub(in crate::engine) fn park_player_set_discard_choice(
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                candidate_player_ids: Vec::new(),
                 deciding_player_id: choice.player,
                 source_object_id: stack.item.id,
                 prompt_text: prompt.clone(),
@@ -1025,6 +1027,7 @@ pub(super) fn put_in_owners_library(
             cx.events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
+                        candidate_player_ids: Vec::new(),
                         deciding_player_id: owner,
                         source_object_id: cx.top.id,
                         prompt_text: prompt.clone(),
@@ -1473,6 +1476,7 @@ fn choose_hand_cards_for_player(
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                candidate_player_ids: Vec::new(),
                 deciding_player_id: deciding_player,
                 source_object_id: top.id,
                 prompt_text: prompt.clone(),
@@ -1777,6 +1781,7 @@ pub(super) fn target_player_sacrifices(
                 events.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                         rv1::ResolutionChoiceRequired {
+                            candidate_player_ids: Vec::new(),
                             deciding_player_id: pid,
                             source_object_id: top.id,
                             prompt_text: prompt.clone(),
@@ -1909,6 +1914,7 @@ pub(super) fn choose_graveyard_card(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
                 source_object_id: cx.top.id,
                 prompt_text: prompt.clone(),
@@ -2864,6 +2870,7 @@ pub(super) fn explore(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
                 source_object_id: cx.top.id,
                 prompt_text: prompt.clone(),
@@ -3059,6 +3066,7 @@ fn begin_library_partition(
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
                 source_object_id: top.id,
                 prompt_text: prompt.clone(),
@@ -3215,6 +3223,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
                 source_object_id: cx.top.id,
                 prompt_text: prompt.clone(),
@@ -3331,6 +3340,7 @@ pub(super) fn look_choose_to_hand(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
                 source_object_id: cx.top.id,
                 prompt_text: prompt.clone(),
@@ -3603,6 +3613,7 @@ pub(in crate::engine) fn park_zone_search_choice(
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                candidate_player_ids: Vec::new(),
                 deciding_player_id: searcher,
                 source_object_id: top.id,
                 prompt_text: prompt.clone(),
@@ -3727,6 +3738,7 @@ pub(in crate::engine) fn begin_search_request(
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
+                        candidate_player_ids: Vec::new(),
                         deciding_player_id: searcher,
                         source_object_id: top.id,
                         prompt_text: prompt.clone(),
@@ -3828,6 +3840,7 @@ pub(super) fn search_library(
         cx.events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    candidate_player_ids: Vec::new(),
                     deciding_player_id: searcher,
                     source_object_id: cx.top.id,
                     prompt_text: prompt.clone(),

@@ -16,6 +16,7 @@ fn branch_choice(decision: ResolutionChoiceDecision) -> rv1::RuledCommand {
             chosen_combat_defender: None,
             payment: None,
             restricted_mana: Vec::new(),
+            chosen_player_ids: Vec::new(),
         })),
     }
 }

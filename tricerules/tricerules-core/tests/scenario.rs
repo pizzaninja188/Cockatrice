@@ -736,6 +736,8 @@ mod issue_459_devotee_endure_mobilize;
 mod issue_460_reviewed_instances;
 #[path = "scenario/issue_465_token_blockers.rs"]
 mod issue_465_token_blockers;
+#[path = "scenario/issue_500_proliferate_cohort.rs"]
+mod issue_500_proliferate_cohort;
 #[path = "scenario/issue_combat_tricks_batch.rs"]
 mod issue_combat_tricks_batch;
 #[path = "scenario/issue_dies_batch.rs"]

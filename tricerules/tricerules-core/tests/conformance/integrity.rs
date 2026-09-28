@@ -237,6 +237,7 @@ fn try_drain_stack(e: &mut GameEngine) -> bool {
                     chosen_combat_defender: None,
                     payment,
                     restricted_mana: vec![],
+                    chosen_player_ids: vec![],
                 })),
             };
             if e.apply_command(deciding_player, &answer).is_err() {

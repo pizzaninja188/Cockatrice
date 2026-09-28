@@ -60,6 +60,7 @@ struct ObservedState
     QStringList labels;
     std::map<int, int> handSizeByPlayer;
     std::map<int, int> lifeByPlayer;
+    std::map<int, std::map<std::string, int>> playerCountersByPlayer;
     std::map<int, std::vector<Permanent>> battlefieldByPlayer;
     std::vector<ruled::v1::AttackAssignment> latestAttackPreviewAssignments;
     std::vector<ruled::v1::AttackAssignment> latestDeclaredAttackAssignments;

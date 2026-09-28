@@ -806,6 +806,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    candidate_player_ids: Vec::new(),
                     deciding_player_id: deciding_player,
                     source_object_id: completion.source_object_id(),
                     prompt_text: prompt.clone(),

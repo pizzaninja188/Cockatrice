@@ -1455,6 +1455,7 @@ pub(crate) fn submit_resolution_choice(chosen: Vec<u32>) -> RuledCommand {
             chosen_combat_defender: None,
             payment: None,
             restricted_mana: vec![],
+            chosen_player_ids: vec![],
         })),
     }
 }
@@ -1470,6 +1471,7 @@ pub(crate) fn submit_resolution_decision(decision: rv1::ResolutionChoiceDecision
             chosen_combat_defender: None,
             payment: None,
             restricted_mana: vec![],
+            chosen_player_ids: vec![],
         })),
     }
 }

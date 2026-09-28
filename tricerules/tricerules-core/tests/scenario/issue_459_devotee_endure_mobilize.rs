@@ -31,6 +31,7 @@ fn select_branch(index: u32) -> RuledCommand {
             chosen_combat_defender: None,
             payment: None,
             restricted_mana: vec![],
+            chosen_player_ids: vec![],
         })),
     }
 }

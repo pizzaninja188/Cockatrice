@@ -49,6 +49,9 @@ impl GameEngine {
             }
             Some(rv1::dev_command::Dev::MoveCard(m)) => self.dev_move_card(target, m, &mut ev)?,
             Some(rv1::dev_command::Dev::AddMana(m)) => self.dev_add_mana(target, m, &mut ev)?,
+            Some(rv1::dev_command::Dev::AddPoisonCounters(add)) => {
+                self.dev_add_poison_counters(target, add, &mut ev)?
+            }
         }
         Ok(finish_with_events(self, ev))
     }
@@ -352,6 +355,29 @@ impl GameEngine {
         ev.push(ev_log(format!(
             "[dev] P{target} adds mana ({}).",
             mana_label(add)
+        )));
+        Ok(())
+    }
+
+    /// Add player poison counters for dev-built Proliferate and poison-loss scenarios.
+    fn dev_add_poison_counters(
+        &mut self,
+        target: PlayerId,
+        add: &rv1::DevAddPoisonCounters,
+        ev: &mut Vec<RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let idx = self
+            .state
+            .player_idx(target)
+            .ok_or(EngineError::UnknownPlayer(target))?;
+        let poison = self.state.players[idx]
+            .counters
+            .entry(CounterKind::Poison)
+            .or_default();
+        *poison = poison.saturating_add(add.count);
+        ev.push(ev_log(format!(
+            "[dev] P{target} gets {} poison counter(s).",
+            add.count
         )));
         Ok(())
     }

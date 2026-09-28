@@ -137,6 +137,12 @@ RuledTargetClickEligibility RuledTargetUi::playerEligibility(const PlayerActions
         return RuledTargetClickEligibility::NotTargeting;
     }
     const int targetPlayerId = target ? target->getPlayerInfo()->getId() : -1;
+    if (state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::Proliferate)) {
+        return targetPlayerId >= 0 &&
+                       state->isProliferatePlayerCandidate(static_cast<quint32>(targetPlayerId))
+                   ? RuledTargetClickEligibility::Legal
+                   : RuledTargetClickEligibility::Illegal;
+    }
     const auto eligibility = ::ruledTargetClickEligibility(
         actions->pendingRuledSpellCast, actions->pendingActivatedAbility, *state, RuledTargetCandidateKind::Player,
         targetPlayerId >= 0 ? static_cast<quint32>(targetPlayerId) : 0,
@@ -532,6 +538,24 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(PlayerActions *actions, Car
         return true;
     }
 
+    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::Proliferate)) {
+        if (!card || !card->getZone()) {
+            return false;
+        }
+        if (card->getZone()->getName() != ZoneNames::TABLE) {
+            handler->emitLocalLog(PlayerActions::tr("Choose a highlighted permanent with counters."));
+            return true;
+        }
+        const int ownerPlayerId = card->getOwner() ? card->getOwner()->getPlayerInfo()->getId() : -1;
+        const quint32 objectId = handler->engineOidForCardId(ownerPlayerId, card->getId());
+        if (objectId == 0 || !handler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::Proliferate, objectId)) {
+            handler->emitLocalLog(PlayerActions::tr("That permanent is not an eligible Proliferate choice."));
+            return true;
+        }
+        handler->toggleProliferateObject(objectId);
+        return true;
+    }
+
     if (actions->ruledPayment->tryHandlePriorityCostClick(card))
         return true;
 
@@ -702,6 +726,19 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetPlayerClick(PlayerActions *action
 {
     RuledClientState *handler = actions->player->getGame()->getGameEventHandler()->ruled();
     if (handler && handler->isEngineCommandPending()) {
+        return true;
+    }
+
+    if (handler && handler->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::Proliferate)) {
+        if (!targetPlayer) {
+            return false;
+        }
+        const int playerId = targetPlayer->getPlayerInfo()->getId();
+        if (playerId < 0 || !handler->isProliferatePlayerCandidate(static_cast<quint32>(playerId))) {
+            handler->emitLocalLog(PlayerActions::tr("That player is not an eligible Proliferate choice."));
+            return true;
+        }
+        handler->toggleProliferatePlayer(static_cast<quint32>(playerId));
         return true;
     }
 

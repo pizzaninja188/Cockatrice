@@ -1,0 +1,15 @@
+// Exact Oracle card and rulings fetched 2026-09-28:
+// https://scryfall.com/card/eoc/47/tezzerets-gambit
+// https://api.scryfall.com/cards/29ad5bb3-927d-41d0-a000-3826ea117e52/rulings
+// CR 107.4f / 601.2f: the {U/P} choice is made while casting; spell instructions then resolve in order.
+(
+  id: "tezzerets_gambit",
+  name: "Tezzeret's Gambit",
+  face_id: "tezzerets_gambit",
+  mana_cost: "{3}{U/P}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Draw(count: 2),
+    Proliferate,
+  ],
+)

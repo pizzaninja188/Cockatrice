@@ -676,6 +676,7 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
         if (choiceIt.value().choice_kind() == ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT)
             choice->mutable_replacement_options()->CopyFrom(choiceIt.value().replacement_options());
         if (choiceIt.value().deciding_player_id() == participant->getPlayerId()) {
+            choice->mutable_candidate_player_ids()->CopyFrom(choiceIt.value().candidate_player_ids());
             choice->set_waterbend(choiceIt.value().waterbend());
             choice->mutable_resolution_branches()->CopyFrom(choiceIt.value().resolution_branches());
             choice->mutable_combat_defender_options()->CopyFrom(choiceIt.value().combat_defender_options());

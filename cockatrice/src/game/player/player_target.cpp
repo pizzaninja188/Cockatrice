@@ -64,6 +64,7 @@ PlayerTarget::PlayerTarget(Player *_owner, QGraphicsItem *parentItem)
             RuledClientState *ruled = handler->ruled();
             connect(ruled, &RuledClientState::spellTargetSelectionChanged, this, [this]() { update(); });
             connect(ruled, &RuledClientState::spellDamageAllocationUiChanged, this, [this]() { update(); });
+            connect(ruled, &RuledClientState::resolutionCostSelectionChanged, this, [this]() { update(); });
         }
     }
 
@@ -184,6 +185,30 @@ void PlayerTarget::paint(QPainter *painter, const QStyleOptionGraphicsItem * /*o
             painter->setPen(selPen);
             painter->setBrush(Qt::NoBrush);
             painter->drawRoundedRect(selRect, 4.0, 4.0);
+        }
+        if (GameEventHandler *handler = ruledGame->getGameEventHandler()) {
+            RuledClientState *const ruled = handler->ruled();
+            const quint32 playerId = static_cast<quint32>(ownerId);
+            if (ruled->isProliferatePlayerCandidate(playerId)) {
+                const qreal inset = border + 2.0;
+                QRectF candidateRect = avatarBoundingRect.adjusted(inset, inset, -inset, -inset);
+                QPen candidatePen(QColor(80, 200, 255));
+                candidatePen.setWidthF(3.0);
+                candidatePen.setJoinStyle(Qt::RoundJoin);
+                painter->setPen(candidatePen);
+                painter->setBrush(Qt::NoBrush);
+                painter->drawRoundedRect(candidateRect, 4.0, 4.0);
+            }
+            if (ruled->isProliferatePlayerSelected(playerId)) {
+                const qreal inset = border + 6.0;
+                QRectF selectedRect = avatarBoundingRect.adjusted(inset, inset, -inset, -inset);
+                QPen selectedPen(QColor(80, 230, 130));
+                selectedPen.setWidthF(4.0);
+                selectedPen.setJoinStyle(Qt::RoundJoin);
+                painter->setPen(selectedPen);
+                painter->setBrush(Qt::NoBrush);
+                painter->drawRoundedRect(selectedRect, 4.0, 4.0);
+            }
         }
         if (RuledActions::isSpellDamageAllocationDisplayActive(ruledGame)) {
             const int alloc = RuledActions::spellDamageAllocationForPlayerId(ruledGame, ownerId);

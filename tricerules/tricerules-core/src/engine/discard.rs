@@ -248,6 +248,7 @@ impl GameEngine {
         let event = rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    candidate_player_ids: Vec::new(),
                     deciding_player_id: player,
                     source_object_id: stack.item.id,
                     prompt_text: prompt.clone(),

@@ -55,6 +55,7 @@ TEST(RuledUtilsTest, PrivateChoiceKindsAreTheConcealedZoneOnes)
     EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_MANA_PAYMENT));
     EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_AURA_PERMANENT));
     EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_AURA_PLAYER));
+    EXPECT_FALSE(isPrivateChoiceKind(ruled::v1::CHOICE_KIND_PROLIFERATE));
     // A kind this build does not know about is treated as concealing something.
     EXPECT_TRUE(isPrivateChoiceKind(static_cast<ruled::v1::ChoiceKind>(99)));
 }

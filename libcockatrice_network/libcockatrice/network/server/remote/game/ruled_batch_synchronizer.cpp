@@ -14,13 +14,16 @@
 #include <QDebug>
 #include <QSet>
 #include <algorithm>
+#include <limits>
 #include <libcockatrice/protocol/pb/command_move_card.pb.h>
 #include <libcockatrice/protocol/pb/event_attach_card.pb.h>
+#include <libcockatrice/protocol/pb/event_create_counter.pb.h>
 #include <libcockatrice/protocol/pb/event_flip_card.pb.h>
 #include <libcockatrice/protocol/pb/event_game_say.pb.h>
 #include <libcockatrice/protocol/pb/event_reveal_cards.pb.h>
 #include <libcockatrice/protocol/pb/event_set_card_attr.pb.h>
 #include <libcockatrice/protocol/pb/event_set_counter.pb.h>
+#include <libcockatrice/utility/color.h>
 #include <libcockatrice/utility/ruled_debug.h>
 #include <libcockatrice/utility/zone_names.h>
 
@@ -1595,7 +1598,7 @@ void RuledBatchSynchronizer::applyAttachmentRestores(const ruled::v1::RuledEvent
     }
 }
 
-// Combat-related events that depend on the engine OID map (LifeChanged,
+// Player-state events that depend on the engine OID map (LifeChanged,
 // AttackersDeclared) and stack resolution side effects that synthesize standard
 // Cockatrice events for clients. PermanentMoved is handled earlier (before zone_view).
 void RuledBatchSynchronizer::applyLifeManaAndCombatEvents(const ruled::v1::RuledEventBatch &batch)
@@ -1687,6 +1690,49 @@ void RuledBatchSynchronizer::applyLifeManaAndCombatEvents(const ruled::v1::Ruled
                 ev.set_value(it.value());
                 combatGes.enqueueGameEvent(ev, target->getPlayerId());
                 combatGesHasEvents = true;
+            }
+        }
+        if (e.has_zone_view()) {
+            for (const auto &playerView : e.zone_view().per_player()) {
+                Server_AbstractPlayer *target = game->getPlayer(playerView.player_id());
+                if (!target) {
+                    continue;
+                }
+                auto *targetPlayer = static_cast<Server_Player *>(target);
+                for (const auto &playerCounter : playerView.player_counters()) {
+                    const QString counterName = QString::fromStdString(playerCounter.name()).trimmed();
+                    if (counterName.isEmpty()) {
+                        continue;
+                    }
+                    const int count = static_cast<int>(std::min<uint32_t>(
+                        playerCounter.count(), static_cast<uint32_t>(std::numeric_limits<int>::max())));
+                    Server_Counter *counter = nullptr;
+                    for (Server_Counter *candidate : targetPlayer->getCounters()) {
+                        if (candidate && candidate->getName().compare(counterName, Qt::CaseInsensitive) == 0) {
+                            counter = candidate;
+                            break;
+                        }
+                    }
+                    if (!counter) {
+                        if (count == 0) {
+                            continue;
+                        }
+                        counter = new Server_Counter(targetPlayer->newCounterId(), counterName,
+                                                     makeColor(150, 255, 150), 20, count);
+                        targetPlayer->addCounter(counter);
+                        Event_CreateCounter created;
+                        counter->getInfo(created.mutable_counter_info());
+                        combatGes.enqueueGameEvent(created, target->getPlayerId());
+                        combatGesHasEvents = true;
+                    } else if (counter->getCount() != count) {
+                        counter->setCount(count);
+                        Event_SetCounter updated;
+                        updated.set_counter_id(counter->getId());
+                        updated.set_value(count);
+                        combatGes.enqueueGameEvent(updated, target->getPlayerId());
+                        combatGesHasEvents = true;
+                    }
+                }
             }
         }
         if (e.has_attackers_declared()) {

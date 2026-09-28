@@ -1,0 +1,17 @@
+// Exact Oracle card and rulings fetched 2026-09-28:
+// https://scryfall.com/card/mm2/49/inexorable-tide
+// https://api.scryfall.com/cards/40441345-23ca-47e4-b349-bd13d986e41e/rulings
+// CR 601.2i / 603.2: the cast event triggers before the spell that caused it resolves.
+(
+  id: "inexorable_tide",
+  name: "Inexorable Tide",
+  face_id: "inexorable_tide",
+  mana_cost: "{3}{U}{U}",
+  types: ["Enchantment"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerCastsSpell(caster: Controller),
+    effect: [Proliferate],
+  )],
+)

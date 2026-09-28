@@ -1,0 +1,37 @@
+// Exact Oracle card and rulings fetched 2026-09-28:
+// https://scryfall.com/card/one/201/ezuri-stalker-of-spheres
+// https://api.scryfall.com/cards/d38961ce-0257-412f-acec-c5c9886061f8/rulings
+// CR 701.34 / 603.2: two consecutive proliferations allow separate choices and each triggers once,
+// including zero recipients. CR 117.2e gives no priority while the ETB ability is resolving.
+(
+  id: "ezuri,_stalker_of_spheres",
+  name: "Ezuri, Stalker of Spheres",
+  face_id: "ezuri_stalker_of_spheres",
+  mana_cost: "{2}{G}{U}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Phyrexian", "Elf", "Warrior"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [ChooseResolutionBranch(
+        optional: true,
+        branches: [(
+          branch_id: "pay_3",
+          presentation: OracleLines([1]),
+          cost: Mana("{3}"),
+          effects: [Proliferate, Proliferate],
+        )],
+      )],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WheneverYouProliferate,
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

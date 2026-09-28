@@ -641,6 +641,8 @@ impl GameObject {
 pub struct PlayerState {
     pub id: PlayerId,
     pub life: i32,
+    /// CR 122.1: counters on this player, keyed by their named kind.
+    pub counters: BTreeMap<CounterKind, u32>,
     /// Out of game: lost
     pub has_lost: bool,
     /// CR 121.4/704.5b: an instruction attempted to draw more cards than remained in the library
@@ -671,6 +673,7 @@ impl PlayerState {
         PlayerState {
             id,
             life,
+            counters: BTreeMap::new(),
             has_lost: false,
             pending_library_loss: false,
             has_enduring_story: false,
@@ -988,6 +991,12 @@ pub enum ResolutionContinuation {
         hand_filter: ZoneCardFilter,
         permanent_filter: TargetFilter,
     },
+    /// CR 701.34: mixed selection of generation-bound permanents and distinct player ids.
+    Proliferate {
+        stack: ParkedStackResolution,
+        candidate_generations: Vec<(ObjectId, u64)>,
+        candidate_player_ids: Vec<PlayerId>,
+    },
     AmassChoice {
         stack: ParkedStackResolution,
         subtype: ArmySubtype,
@@ -1163,6 +1172,7 @@ impl ResolutionContinuation {
             | Self::AuthoredBranch { stack, .. }
             | Self::PermanentChoice { stack, .. }
             | Self::BeholdChoice { stack, .. }
+            | Self::Proliferate { stack, .. }
             | Self::AmassChoice { stack, .. }
             | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }
@@ -1202,6 +1212,7 @@ impl ResolutionContinuation {
             | Self::AuthoredBranch { stack, .. }
             | Self::PermanentChoice { stack, .. }
             | Self::BeholdChoice { stack, .. }
+            | Self::Proliferate { stack, .. }
             | Self::AmassChoice { stack, .. }
             | Self::WardPayment { stack, .. }
             | Self::HandChoice { stack, .. }

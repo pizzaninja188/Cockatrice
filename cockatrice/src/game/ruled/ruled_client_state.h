@@ -546,6 +546,8 @@ public:
             ReplacementOption,
             /// Public replacement/prevention applications, selected in a dedicated image picker.
             ReplacementEffect,
+            /// CR 701.34: select any number of counter-bearing permanents and players.
+            Proliferate,
         };
 
         Kind kind = Kind::TriggerTarget;
@@ -554,6 +556,9 @@ public:
         /// Click-to-select candidates on the battlefield or player surface.
         QVector<quint32> candidateOids;
         QVector<quint32> selectedObjectOids;
+        /// Proliferate's player ids use a distinct identity domain from battlefield ObjectIds.
+        QVector<quint32> candidatePlayerIds;
+        QVector<quint32> selectedPlayerIds;
         /// Exact generation-bound defender options for an entering attacking token. These are
         /// submitted verbatim; Qt never derives the defending player from display ownership.
         QVector<ruled::v1::CombatDefenderOption> combatDefenderOptions;
@@ -1595,6 +1600,36 @@ public:
     void toggleResolutionCostObject(quint32 oid);
     void submitResolutionCostObjects();
 
+    [[nodiscard]] bool isProliferateObjectSelected(quint32 oid) const
+    {
+        return hasPendingChoiceOfKind(ChoiceKind::Proliferate) && pendingChoice->selectedObjectOids.contains(oid);
+    }
+    [[nodiscard]] bool isProliferatePlayerCandidate(quint32 playerId) const
+    {
+        return hasPendingChoiceOfKind(ChoiceKind::Proliferate) && pendingChoice->candidatePlayerIds.contains(playerId);
+    }
+    [[nodiscard]] bool isProliferatePlayerSelected(quint32 playerId) const
+    {
+        return hasPendingChoiceOfKind(ChoiceKind::Proliferate) && pendingChoice->selectedPlayerIds.contains(playerId);
+    }
+    [[nodiscard]] int proliferateSelectionRequired() const
+    {
+        return hasPendingChoiceOfKind(ChoiceKind::Proliferate) ? pendingChoice->min : 0;
+    }
+    [[nodiscard]] int proliferateSelectionMaximum() const
+    {
+        return hasPendingChoiceOfKind(ChoiceKind::Proliferate) ? pendingChoice->max : 0;
+    }
+    [[nodiscard]] int proliferateSelectionSelectedCount() const
+    {
+        return hasPendingChoiceOfKind(ChoiceKind::Proliferate)
+                   ? pendingChoice->selectedObjectOids.size() + pendingChoice->selectedPlayerIds.size()
+                   : 0;
+    }
+    void toggleProliferateObject(quint32 oid);
+    void toggleProliferatePlayer(quint32 playerId);
+    void submitProliferateChoice();
+
     [[nodiscard]] bool pendingClickChoiceMayDecline() const
     {
         return pendingChoice.has_value() && pendingChoice->mayDecline;
@@ -1990,7 +2025,8 @@ private:
     /// The one SubmitResolutionChoice sender: every non-trigger choice answers this way.
     void sendResolutionChoice(
         const QVector<quint32> &chosenOids,
-        ruled::v1::ResolutionChoiceDecision decision = ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED);
+        ruled::v1::ResolutionChoiceDecision decision = ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED,
+        const QVector<quint32> &chosenPlayerIds = {});
     void submitResolutionPayment(ruled::v1::ResolutionChoiceDecision decision);
 
     RuledClientHost *host;

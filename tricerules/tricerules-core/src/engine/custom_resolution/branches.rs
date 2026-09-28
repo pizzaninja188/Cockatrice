@@ -8,6 +8,7 @@ impl GameEngine {
                 return Some(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                         rv1::ResolutionChoiceRequired {
+                            candidate_player_ids: Vec::new(),
                             deciding_player_id: pending.deciding_player,
                             source_object_id: pending.presentation.source_object_id,
                             prompt_text: pending.presentation.prompt.clone(),
@@ -33,6 +34,7 @@ impl GameEngine {
         Some(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    candidate_player_ids: Vec::new(),
                     deciding_player_id: pending.deciding_player,
                     source_object_id: pending.presentation.source_object_id,
                     prompt_text: pending.presentation.prompt.clone(),
@@ -493,6 +495,7 @@ impl GameEngine {
                 ev.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                         rv1::ResolutionChoiceRequired {
+                            candidate_player_ids: Vec::new(),
                             deciding_player_id: pending.deciding_player,
                             source_object_id: pending.presentation.source_object_id,
                             prompt_text: pending.presentation.prompt.clone(),

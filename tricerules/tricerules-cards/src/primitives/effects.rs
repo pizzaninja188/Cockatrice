@@ -58,8 +58,8 @@ pub enum StaticEmblemEffect {
         keyword: SpellKeyword,
     },
 }
-/// A kind of counter that can sit on a permanent (CR 122.1). `Ord` is required so [`crate`]
-/// consumers can store counters in a `BTreeMap` for deterministic iteration/serialization.
+/// A kind of counter that can sit on a permanent or player (CR 122.1). `Ord` is required so
+/// [`crate`] consumers can store counters in a `BTreeMap` for deterministic iteration/serialization.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum CounterKind {
     /// CR 122 +1/+1 counter — adds 1 to power and toughness each (layer 7d).
@@ -88,6 +88,8 @@ pub enum CounterKind {
     /// CR 122.1h: if a permanent with one or more finality counters would go from the
     /// battlefield to a graveyard, it is exiled instead. This is not a keyword counter.
     Finality,
+    /// CR 122.1 / 704.5c: a player with ten or more poison counters loses the game.
+    Poison,
 }
 
 impl CounterKind {
@@ -107,6 +109,7 @@ impl CounterKind {
             CounterKind::Quest => "quest".into(),
             CounterKind::Foreshadow => "foreshadow".into(),
             CounterKind::Finality => "finality".into(),
+            CounterKind::Poison => "poison".into(),
         }
     }
 
@@ -1678,6 +1681,10 @@ pub enum SpellEffectKind {
         #[serde(default)]
         exclude_self: bool,
     },
+    /// CR 701.34: choose any number of permanents and/or players with counters, then add one of
+    /// each kind already on each chosen recipient. Atraxa, Evolution Sage, Inexorable Tide,
+    /// Tezzeret's Gambit, Flux Channeler, and Karn's Bastion share this action.
+    Proliferate,
     /// Heirloom Auntie and Reluctant Dounguard remove counters without paying a cost.
     RemoveCounters {
         counter: CounterKind,
@@ -2791,6 +2798,7 @@ impl SpellEffectKind {
             | SpellEffectKind::PumpAll { .. }
             | SpellEffectKind::PutCountersAll { .. }
             | SpellEffectKind::PutCountersAllPlaneswalkers { .. }
+            | SpellEffectKind::Proliferate
             | SpellEffectKind::GrantKeywordsAll { .. }
             | SpellEffectKind::RemoveAbilitiesAll { .. }
             | SpellEffectKind::ReturnTriggeredCard { .. }

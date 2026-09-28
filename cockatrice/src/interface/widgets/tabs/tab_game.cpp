@@ -431,6 +431,10 @@ void TabGame::connectToGameEventHandler()
                 ruled->submitResolutionCostObjects();
                 return;
             }
+            if (ruled && ruled->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::Proliferate)) {
+                ruled->submitProliferateChoice();
+                return;
+            }
             const int localId = game->getPlayerManager()->getLocalPlayerId();
             if (Player *local = game->getPlayerManager()->getPlayers().value(localId, nullptr)) {
                 local->getPlayerActions()->confirmRuledGraveyardCostSelection();
@@ -438,7 +442,8 @@ void TabGame::connectToGameEventHandler()
         });
         connect(gamePromptWidget, &GamePromptWidget::ruledCostSelectionCancelRequested, this, [this]() {
             RuledClientState *const ruled = game->getGameEventHandler()->ruled();
-            if (ruled && ruled->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CostObjects)) {
+            if (ruled && (ruled->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CostObjects) ||
+                          ruled->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::Proliferate))) {
                 ruled->declinePendingClickChoice();
                 return;
             }
@@ -770,12 +775,19 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         for (const auto &option : h->pendingChoiceOptions()) {
             state.choiceOptions.append({option.index, option.label, option.enabled});
         }
-    } else if (h->hasPendingChoiceOfKind(ChoiceKind::CostObjects)) {
+    } else if (h->hasPendingChoiceOfKind(ChoiceKind::CostObjects) ||
+               h->hasPendingChoiceOfKind(ChoiceKind::Proliferate)) {
         state.mode = PromptMode::CostSelection;
-        state.required = h->resolutionCostObjectRequired();
-        state.selected = h->resolutionCostObjectSelectedCount();
+        const bool proliferating = h->hasPendingChoiceOfKind(ChoiceKind::Proliferate);
+        state.required = proliferating ? h->proliferateSelectionRequired() : h->resolutionCostObjectRequired();
+        state.selected = proliferating ? h->proliferateSelectionSelectedCount()
+                                       : h->resolutionCostObjectSelectedCount();
         state.canDecline = h->pendingClickChoiceMayDecline();
-        state.text = h->pendingChoicePromptText(ChoiceKind::CostObjects);
+        state.text = h->pendingChoicePromptText(proliferating ? ChoiceKind::Proliferate : ChoiceKind::CostObjects);
+        if (proliferating) {
+            state.max = h->proliferateSelectionMaximum();
+            state.text += tr("\nClick any number of the highlighted permanents and players, then confirm.");
+        }
     } else if (h->isWaitingForChoice()) {
         state.mode = PromptMode::WaitingForChoice;
         if (Player *decider = game->getPlayerManager()->getPlayer(h->choiceWaitingPlayer())) {

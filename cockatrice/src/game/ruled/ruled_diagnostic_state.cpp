@@ -128,13 +128,15 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
             "TriggerTarget", "TriggerMode",       "CopyTarget",        "PermanentChoice",  "CopySource",
             "LegendKeep",    "AuraPermanent",     "AuraPlayer",        "BattleProtector",  "AttackingTokenDefender",
             "CostObjects",   "ResolutionPick",    "ResolutionPayment", "ResolutionBranch", "SpecialCast",
-            "TriggerOrder",  "ReplacementOption", "ReplacementEffect"};
+            "TriggerOrder",  "ReplacementOption", "ReplacementEffect", "Proliferate"};
         QJsonObject choiceState{{"kind", kinds[static_cast<int>(choice.kind)]}};
 #define FIELD(name) choiceState.insert(#name, value(choice.name))
         FIELD(promptText);
         FIELD(mayDecline);
         FIELD(candidateOids);
         FIELD(selectedObjectOids);
+        FIELD(candidatePlayerIds);
+        FIELD(selectedPlayerIds);
         FIELD(combatDefenderOptions);
         FIELD(serverCardIdToOid);
         FIELD(serverCardIdToName);

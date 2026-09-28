@@ -168,6 +168,11 @@ void ObservedState::observeRuledEvent(const ruled::v1::RuledEvent &ev, const std
                                    ev.active_public_reveal_snapshot().reveals().end());
     } else if (ev.has_zone_view()) {
         for (const ruled::v1::RuledPerPlayerView &pp : ev.zone_view().per_player()) {
+            auto &playerCounters = playerCountersByPlayer[pp.player_id()];
+            playerCounters.clear();
+            for (const auto &counter : pp.player_counters()) {
+                playerCounters[counter.name()] = static_cast<int>(counter.count());
+            }
             auto &bf = battlefieldByPlayer[pp.player_id()];
             if (!ev.zone_view().battlefields_unchanged()) {
                 bf.clear();

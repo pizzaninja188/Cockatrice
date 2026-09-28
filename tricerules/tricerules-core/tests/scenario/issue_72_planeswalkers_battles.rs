@@ -433,6 +433,7 @@ fn defeated_siege_casts_back_face_with_exact_physical_identity() {
             chosen_combat_defender: None,
             payment: None,
             restricted_mana: vec![],
+            chosen_player_ids: vec![],
         })),
     };
     let mut forged_payment = command.clone();

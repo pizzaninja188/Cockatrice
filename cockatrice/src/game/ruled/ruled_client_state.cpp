@@ -393,7 +393,8 @@ void RuledClientState::teardownPendingChoice()
         !pendingChoice->publicReveal) {
         emit revealedPickChanged(false, {}, {}, 0, 0);
     }
-    const bool wasCostSelection = pendingChoice->kind == ChoiceKind::CostObjects;
+    const bool wasCostSelection = pendingChoice->kind == ChoiceKind::CostObjects ||
+                                  pendingChoice->kind == ChoiceKind::Proliferate;
     pendingChoice.reset();
     ++pendingChoiceRevision;
     if (wasCostSelection) {
@@ -415,8 +416,9 @@ void RuledClientState::setPendingChoice(RuledPendingChoice choice)
     }
     pendingChoice = std::move(choice);
     ++pendingChoiceRevision;
-    if (pendingChoice->kind == ChoiceKind::CostObjects) {
+    if (pendingChoice->kind == ChoiceKind::CostObjects || pendingChoice->kind == ChoiceKind::Proliferate) {
         emit resolutionCostSelectionChanged();
+        emit combatStateChanged();
     }
 }
 
@@ -468,12 +470,16 @@ void RuledClientState::submitReplacementEffect(int tileIndex, quint64 choiceRevi
 }
 
 void RuledClientState::sendResolutionChoice(const QVector<quint32> &chosenOids,
-                                            ruled::v1::ResolutionChoiceDecision decision)
+                                            ruled::v1::ResolutionChoiceDecision decision,
+                                            const QVector<quint32> &chosenPlayerIds)
 {
     ruled::v1::RuledCommand cmd;
     auto *sub = cmd.mutable_submit_resolution_choice();
     for (const quint32 oid : chosenOids) {
         sub->add_chosen_object_ids(oid);
+    }
+    for (const quint32 playerId : chosenPlayerIds) {
+        sub->add_chosen_player_ids(static_cast<int32_t>(playerId));
     }
     sub->set_decision(decision);
     host->sendRuledCommand(cmd);
@@ -562,6 +568,55 @@ void RuledClientState::submitResolutionCostObjects()
     sendResolutionChoice(chosen);
 }
 
+void RuledClientState::toggleProliferateObject(quint32 oid)
+{
+    if (!hasPendingChoiceOfKind(ChoiceKind::Proliferate) || !pendingChoice->candidateOids.contains(oid)) {
+        return;
+    }
+    const int index = pendingChoice->selectedObjectOids.indexOf(oid);
+    if (index >= 0) {
+        pendingChoice->selectedObjectOids.removeAt(index);
+    } else if (proliferateSelectionSelectedCount() < pendingChoice->max) {
+        pendingChoice->selectedObjectOids.append(oid);
+    } else {
+        return;
+    }
+    emit resolutionCostSelectionChanged();
+    emit combatStateChanged();
+}
+
+void RuledClientState::toggleProliferatePlayer(quint32 playerId)
+{
+    if (!isProliferatePlayerCandidate(playerId)) {
+        return;
+    }
+    const int index = pendingChoice->selectedPlayerIds.indexOf(playerId);
+    if (index >= 0) {
+        pendingChoice->selectedPlayerIds.removeAt(index);
+    } else if (proliferateSelectionSelectedCount() < pendingChoice->max) {
+        pendingChoice->selectedPlayerIds.append(playerId);
+    } else {
+        return;
+    }
+    emit resolutionCostSelectionChanged();
+    emit combatStateChanged();
+}
+
+void RuledClientState::submitProliferateChoice()
+{
+    if (!hasPendingChoiceOfKind(ChoiceKind::Proliferate)) {
+        return;
+    }
+    const int count = proliferateSelectionSelectedCount();
+    if (count < pendingChoice->min || count > pendingChoice->max) {
+        return;
+    }
+    const auto chosenObjects = pendingChoice->selectedObjectOids;
+    const auto chosenPlayers = pendingChoice->selectedPlayerIds;
+    clearPendingChoiceOfKind(ChoiceKind::Proliferate);
+    sendResolutionChoice(chosenObjects, ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED, chosenPlayers);
+}
+
 void RuledClientState::declinePendingClickChoice()
 {
     if (!pendingClickChoiceMayDecline()) {
@@ -575,7 +630,7 @@ void RuledClientState::declinePendingClickChoice()
     }
     if (kind == ChoiceKind::CopySource || kind == ChoiceKind::CopyTarget || kind == ChoiceKind::ResolutionPick ||
         kind == ChoiceKind::CostObjects || kind == ChoiceKind::PermanentChoice || kind == ChoiceKind::AuraPermanent ||
-        kind == ChoiceKind::AuraPlayer) {
+        kind == ChoiceKind::AuraPlayer || kind == ChoiceKind::Proliferate) {
         clearPendingChoiceOfKind(kind);
         sendResolutionChoice({});
         return;

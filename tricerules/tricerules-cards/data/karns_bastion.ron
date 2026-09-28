@@ -1,0 +1,25 @@
+// Exact Oracle card and rulings fetched 2026-09-28:
+// https://scryfall.com/card/eoc/163/karns-bastion
+// https://api.scryfall.com/cards/22017ec2-3552-4865-af76-dba042b141f5/rulings
+// CR 605.1a and 602.1: the first ability is a mana ability; the second uses the stack.
+(
+  id: "karns_bastion",
+  name: "Karn's Bastion",
+  face_id: "karns_bastion",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{4}"), Tap],
+      effect: [Proliferate],
+    ),
+  ],
+)

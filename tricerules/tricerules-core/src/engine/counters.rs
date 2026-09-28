@@ -15,6 +15,7 @@ pub(super) fn counter_option_id(kind: CounterKind) -> u32 {
         CounterKind::Finality => 9,
         CounterKind::Foreshadow => 10,
         CounterKind::Storage => 11,
+        CounterKind::Poison => 12,
         CounterKind::Keyword(keyword) => 256 + keyword as u32,
     }
 }

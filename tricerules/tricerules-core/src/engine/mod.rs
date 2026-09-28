@@ -618,6 +618,10 @@ enum GameEvent {
     Waterbent {
         player: PlayerId,
     },
+    /// CR 701.34a: a completed Proliferate action is distinct even when it affects no recipients.
+    Proliferated {
+        player: PlayerId,
+    },
     /// CR 701.68d: completion, independently of the resulting counter count.
     Blighted(crate::state::BlightReceipt),
     ZoneChanges(zone_events::ZoneEventBatch),

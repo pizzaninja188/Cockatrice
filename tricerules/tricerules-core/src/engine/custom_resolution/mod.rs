@@ -28,6 +28,7 @@ mod hand_choice;
 mod library_order;
 mod library_search;
 mod manifest_dread;
+mod proliferate;
 mod sacrifice_choices;
 mod trigger_choices;
 mod ward;
@@ -167,6 +168,12 @@ impl GameEngine {
         }
         if matches!(
             pending.continuation,
+            ResolutionContinuation::Proliferate { .. }
+        ) {
+            return self.finish_proliferate_choice(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
             ResolutionContinuation::WardPayment {
                 ward: PendingWardPayment {
                     stage: PendingWardPaymentStage::Discard { .. },
@@ -287,6 +294,9 @@ impl GameEngine {
             }
             ResolutionContinuation::BeholdChoice { .. } => {
                 return self.finish_behold_choice(pending, chosen);
+            }
+            ResolutionContinuation::Proliferate { .. } => {
+                unreachable!("Proliferate branch handled before object-choice validation")
             }
             ResolutionContinuation::AmassChoice { .. } => {
                 return self.finish_amass_choice(pending, chosen[0]);
@@ -987,6 +997,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    candidate_player_ids: Vec::new(),
                     deciding_player_id: interrupt.deciding_player,
                     source_object_id: item.id,
                     prompt_text: interrupt.prompt.clone(),

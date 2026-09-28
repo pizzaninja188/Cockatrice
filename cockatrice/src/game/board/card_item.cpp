@@ -257,6 +257,12 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
             if (ruledHandler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::AuraPermanent, ruledOid)) {
                 outlineColor = QColor(180, 100, 255); // violet for a legal returning-Aura recipient
             }
+            if (ruledHandler->isPendingChoiceCandidate(RuledClientState::ChoiceKind::Proliferate, ruledOid)) {
+                outlineColor = QColor(80, 200, 255); // eligible counter-bearing permanent
+            }
+            if (ruledHandler->isProliferateObjectSelected(ruledOid)) {
+                outlineColor = QColor(80, 230, 130); // selected Proliferate recipient
+            }
             if (outlineColor.isValid()) {
                 painter->save();
                 painter->setRenderHint(QPainter::Antialiasing, true);

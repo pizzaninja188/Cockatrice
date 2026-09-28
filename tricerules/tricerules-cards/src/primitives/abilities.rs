@@ -838,6 +838,10 @@ pub enum TriggerCondition {
         #[serde(default)]
         player: CastTriggerPlayer,
     },
+    /// Ezuri, Stalker of Spheres: one trigger when its controller completes a Proliferate action.
+    /// This event is distinct from counter-placement events because choosing zero recipients still
+    /// counts as proliferating.
+    WheneverYouProliferate,
 }
 
 impl TriggerCondition {

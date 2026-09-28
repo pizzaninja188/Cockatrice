@@ -1,0 +1,22 @@
+// Exact Oracle card and rulings fetched 2026-09-28:
+// https://scryfall.com/card/ecc/105/evolution-sage
+// https://api.scryfall.com/cards/1d58d08d-cd62-416d-8d8e-7d9c56d5c4da/rulings
+// CR 603.6a: each land entering under this controller triggers once, regardless of how it entered.
+(
+  id: "evolution_sage",
+  name: "Evolution Sage",
+  face_id: "evolution_sage",
+  mana_cost: "{2}{G}",
+  types: ["Creature", "Elf", "Druid"],
+  power: 3,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Land)),
+    ),
+    effect: [Proliferate],
+  )],
+)

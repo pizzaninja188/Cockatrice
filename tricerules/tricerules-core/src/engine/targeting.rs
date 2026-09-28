@@ -1535,6 +1535,7 @@ fn validate_effect_targets(
         | SpellEffectKind::CastMadness { .. }
         | SpellEffectKind::SiegeDefeat
         | SpellEffectKind::ExileGraveyards { .. }
+        | SpellEffectKind::Proliferate
         | SpellEffectKind::None => {
             if !targets.is_empty() {
                 return Err(EngineError::Illegal("this effect takes no targets"));

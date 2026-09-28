@@ -105,6 +105,21 @@ impl GameEngine {
         if self.state.pending_resolution.is_some() {
             return Ok(changed);
         }
+        // CR 704.5c: a player with ten or more poison counters loses. All players at the
+        // threshold lose in the same SBA pass before their departures are reconciled.
+        for player in &mut self.state.players {
+            if !player.has_lost
+                && player
+                    .counters
+                    .get(&CounterKind::Poison)
+                    .copied()
+                    .unwrap_or(0)
+                    >= 10
+            {
+                player.has_lost = true;
+                changed = true;
+            }
+        }
         let zone_snapshot = self.snapshot_zone_event();
         let mut leaves: Vec<(TriggerSourceSnapshot, bool, bool)> = Vec::new();
         let mut tap_events = Vec::new();
@@ -624,6 +639,7 @@ impl GameEngine {
             out.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
+                        candidate_player_ids: Vec::new(),
                         deciding_player_id: controller,
                         source_object_id: first_id,
                         prompt_text: prompt.clone(),
@@ -720,6 +736,43 @@ mod sba_tests {
         let idx = e.state.player_idx(owner).unwrap();
         e.state.players[idx].battlefield.push(id);
         id
+    }
+
+    #[test]
+    fn poison_counters_cause_a_player_to_lose_at_ten() {
+        // CR 704.5c: the loss is a state-based action at ten or more poison counters.
+        let mut e = engine();
+        e.state.players[0].counters.insert(CounterKind::Poison, 9);
+        e.apply_sbas(&mut Vec::new())
+            .expect("nine poison is not lethal");
+        assert!(!e.state.players[0].has_lost);
+
+        e.state.players[0].counters.insert(CounterKind::Poison, 10);
+        e.apply_sbas(&mut Vec::new()).expect("ten poison is lethal");
+
+        assert!(
+            e.state.players[0].has_lost,
+            "a player with ten poison counters loses as a state-based action"
+        );
+    }
+
+    #[test]
+    fn player_counter_counts_are_in_the_public_zone_view() {
+        let mut e = engine();
+        e.state.players[1].counters.insert(CounterKind::Poison, 3);
+
+        let event = e.ev_zone_view_sync_tracked();
+        let Some(rv1::ruled_event::Ev::ZoneView(view)) = event.ev else {
+            panic!("expected a zone view");
+        };
+        let player = view
+            .per_player
+            .iter()
+            .find(|player| player.player_id == 1)
+            .expect("player view");
+        assert_eq!(player.player_counters.len(), 1);
+        assert_eq!(player.player_counters[0].name, "poison");
+        assert_eq!(player.player_counters[0].count, 3);
     }
 
     #[test]

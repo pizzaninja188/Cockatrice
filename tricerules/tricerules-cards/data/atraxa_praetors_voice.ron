@@ -1,0 +1,21 @@
+// Exact Oracle card and rulings fetched 2026-09-28:
+// https://scryfall.com/card/2xm/190/atraxa-praetors-voice
+// https://api.scryfall.com/cards/d0d33d52-3d28-4635-b985-51e126289259/rulings
+// CR 513.1 / 603.2b: the controller's end-step trigger resolves Proliferate.
+(
+  id: "atraxa,_praetors_voice",
+  name: "Atraxa, Praetors' Voice",
+  face_id: "atraxa_praetors_voice",
+  mana_cost: "{G}{W}{U}{B}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Phyrexian", "Angel", "Horror"],
+  power: 4,
+  toughness: 4,
+  keywords: [Flying, Vigilance, Deathtouch, Lifelink],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: AtBeginningOfEndStep(player: Controller),
+    effect: [Proliferate],
+  )],
+)

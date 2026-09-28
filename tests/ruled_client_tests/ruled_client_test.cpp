@@ -7399,6 +7399,78 @@ TEST_F(RuledClientTest, CancellingResolutionCostObjectsRepaintsClearedSelectionI
     EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids_size(), 0);
 }
 
+TEST_F(RuledClientTest, ProliferateChoiceMixesPermanentAndPlayerIdsWithinOneBoundedSelection)
+{
+    QSignalSpy progressSpy(state, &RuledClientState::resolutionCostSelectionChanged);
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_PROLIFERATE);
+    rcr->set_min(0);
+    rcr->set_max(4);
+    rcr->set_prompt_text("Choose any number of permanents and/or players with counters.");
+    rcr->add_candidate_object_ids(100);
+    rcr->add_candidate_names("Grizzly Bears");
+    rcr->add_candidate_object_ids(101);
+    rcr->add_candidate_names("Timber Wolves");
+    rcr->add_candidate_player_ids(kLocalPlayer);
+    rcr->add_candidate_player_ids(kLocalPlayer + 1);
+    apply(batch);
+
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::Proliferate));
+    EXPECT_TRUE(state->isPendingChoiceCandidate(RuledClientState::ChoiceKind::Proliferate, 100));
+    EXPECT_TRUE(state->isProliferatePlayerCandidate(kLocalPlayer + 1));
+    EXPECT_EQ(state->proliferateSelectionRequired(), 0);
+    EXPECT_EQ(state->proliferateSelectionMaximum(), 4);
+    EXPECT_EQ(progressSpy.count(), 1);
+
+    state->toggleProliferateObject(100);
+    state->toggleProliferatePlayer(kLocalPlayer + 1);
+    state->toggleProliferateObject(101);
+    state->toggleProliferatePlayer(kLocalPlayer);
+    EXPECT_EQ(state->proliferateSelectionSelectedCount(), 4);
+    EXPECT_TRUE(state->isProliferateObjectSelected(100));
+    EXPECT_TRUE(state->isProliferatePlayerSelected(kLocalPlayer + 1));
+    state->toggleProliferateObject(999);
+    EXPECT_EQ(state->proliferateSelectionSelectedCount(), 4);
+
+    host.sentCommands.clear();
+    state->submitProliferateChoice();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &choice = host.sentCommands[0].submit_resolution_choice();
+    ASSERT_EQ(choice.chosen_object_ids_size(), 2);
+    EXPECT_EQ(choice.chosen_object_ids(0), 100u);
+    EXPECT_EQ(choice.chosen_object_ids(1), 101u);
+    ASSERT_EQ(choice.chosen_player_ids_size(), 2);
+    EXPECT_EQ(choice.chosen_player_ids(0), kLocalPlayer + 1);
+    EXPECT_EQ(choice.chosen_player_ids(1), kLocalPlayer);
+    EXPECT_EQ(choice.decision(), ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED);
+    EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::Proliferate));
+}
+
+TEST_F(RuledClientTest, DecliningProliferateSubmitsBothDomainsEmpty)
+{
+    RuledClientState::RuledPendingChoice choice;
+    choice.kind = RuledClientState::ChoiceKind::Proliferate;
+    choice.mayDecline = true;
+    choice.min = 0;
+    choice.max = 2;
+    choice.candidateOids = {100};
+    choice.candidatePlayerIds = {kLocalPlayer + 1};
+    state->setPendingChoice(choice);
+    state->toggleProliferateObject(100);
+    state->toggleProliferatePlayer(kLocalPlayer + 1);
+    host.sentCommands.clear();
+
+    state->declinePendingClickChoice();
+
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &answer = host.sentCommands[0].submit_resolution_choice();
+    EXPECT_EQ(answer.chosen_object_ids_size(), 0);
+    EXPECT_EQ(answer.chosen_player_ids_size(), 0);
+    EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::Proliferate));
+}
+
 TEST_F(RuledClientTest, AuraReturnChoicesUseTypedPermanentAndPlayerClickSurfaces)
 {
     for (const auto &[protoKind, stateKind] :

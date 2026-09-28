@@ -159,6 +159,7 @@ astral_cornucopia	0	cast	exercised
 atlantean_cavalry	0	cast	exercised
 atmospheric_greenhouse	0	ability:0	exercised
 atmospheric_greenhouse	0	cast	exercised
+atraxa,_praetors_voice	0	cast	exercised
 attentive_sunscribe	0	cast	exercised
 attercop	0	cast	exercised
 audacious_thief	0	cast	exercised
@@ -966,6 +967,7 @@ eternal_student	0	cast	exercised
 eumidian_terrabotanist	0	cast	exercised
 evils_thrall	0	cast	exercised
 eviscerate	0	cast	exercised
+evolution_sage	0	cast	exercised
 evolving_wilds	0	ability:0	exercised
 evolving_wilds	0	land	exercised
 exclusion_mage	0	cast	exercised
@@ -983,6 +985,7 @@ extinguisher_battleship	0	ability:0	exercised
 extinguisher_battleship	0	cast	exercised
 exultant_skymarcher	0	cast	exercised
 eyeblights_ending	0	cast	exercised
+ezuri,_stalker_of_spheres	0	cast	exercised
 fabled_passage	0	ability:0	exercised
 fabled_passage	0	land	exercised
 fae_flight	0	cast	exercised
@@ -1103,6 +1106,7 @@ floodpits_drowner	0	ability:0	unsupported: target group 0 needs a richer fixture
 floodpits_drowner	0	cast	exercised
 flow_of_knowledge	0	cast	exercised
 flow_state	0	cast	exercised
+flux_channeler	0	cast	exercised
 flying_dolphin-fish	0	cast	exercised
 flying_men	0	cast	exercised
 focus_the_mind	0	cast	exercised
@@ -1583,6 +1587,7 @@ independent_troops	0	cast	exercised
 indestructibility	0	cast	exercised
 indomitable_ancients	0	cast	exercised
 inevitable_defeat	0	cast	exercised
+inexorable_tide	0	cast	exercised
 infectious_horror	0	cast	exercised
 infernal_scarring	0	cast	exercised
 infestation_sage	0	cast	exercised
@@ -1683,6 +1688,9 @@ kalonian_tusker	0	cast	exercised
 kami_of_old_stone	0	cast	exercised
 kami_of_the_crescent_moon	0	cast	exercised
 karais_technique	0	cast	exercised
+karns_bastion	0	ability:0	exercised
+karns_bastion	0	ability:1	exercised
+karns_bastion	0	land	exercised
 karplusan_forest	0	ability:0	exercised
 karplusan_forest	0	ability:1	exercised
 karplusan_forest	0	land	exercised
@@ -3169,6 +3177,7 @@ territorial_roc	0	cast	exercised
 terror_of_mount_velus	0	cast	exercised
 terror_of_the_fairgrounds	0	cast	exercised
 textbook_tabulator	0	cast	exercised
+tezzerets_gambit	0	cast	exercised
 thaumaton_torpedo	0	ability:0	exercised
 thaumaton_torpedo	0	cast	exercised
 thawbringer	0	cast	exercised

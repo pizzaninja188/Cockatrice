@@ -393,6 +393,14 @@ impl GameEngine {
         let p = &self.state.players[idx];
         rv1::RuledPerPlayerView {
             player_id: p.id,
+            player_counters: p
+                .counters
+                .iter()
+                .map(|(kind, &count)| rv1::PlayerCounterView {
+                    name: kind.label(),
+                    count,
+                })
+                .collect(),
             has_enduring_story: p.has_enduring_story,
             static_emblems: self
                 .state

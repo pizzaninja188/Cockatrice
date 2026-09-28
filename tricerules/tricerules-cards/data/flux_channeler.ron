@@ -1,0 +1,22 @@
+// Exact Oracle card and rulings fetched 2026-09-28:
+// https://scryfall.com/card/cmm/847/flux-channeler
+// https://api.scryfall.com/cards/3c520263-6bad-4521-ba9e-192ca8223b07/rulings
+// CR 601.2i / 603.2: only noncreature spells cast by this controller trigger the ability.
+(
+  id: "flux_channeler",
+  name: "Flux Channeler",
+  face_id: "flux_channeler",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Human", "Wizard"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerCastsSpell(
+      caster: Controller,
+      filter: (card_type: Some(Noncreature)),
+    ),
+    effect: [Proliferate],
+  )],
+)
