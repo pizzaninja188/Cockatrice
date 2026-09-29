@@ -1,0 +1,32 @@
+{
+  "format_version": 1,
+  "oracle_id": "a4e5693f-12a0-451e-818d-d6efc7b4ed25",
+  "spans": [
+    {
+      "face_id": "decimate",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2",
+        "/faces/0/spell_effect/3",
+        "/faces/0/targeting/groups/0",
+        "/faces/0/targeting/groups/1",
+        "/faces/0/targeting/groups/2",
+        "/faces/0/targeting/groups/3"
+      ]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_austere_decimate::decimate_rejects_a_wrong_type_then_allows_one_artifact_creature_for_two_targets",
+      "covers": "a wrong-type artifact target rejects atomically; all four target groups are required, and one artifact creature may fill both artifact and creature groups while the enchantment and land targets are also destroyed"
+    },
+    {
+      "test": "scenario deck_coverage_austere_decimate::both_card_definitions_have_exact_identity_and_choice_shapes",
+      "covers": "the registered name, slug, mana cost, type line, four ordered destruction effects, and four required target groups"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,55 @@
+{
+  "format_version": 1,
+  "oracle_id": "09cc8709-fe10-472a-b05c-e89f3523018d",
+  "spans": [
+    {
+      "face_id": "austere_command",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/modal_spell"]
+    },
+    {
+      "face_id": "austere_command",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/modal_spell/modes/0"]
+    },
+    {
+      "face_id": "austere_command",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/modal_spell/modes/1"]
+    },
+    {
+      "face_id": "austere_command",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": ["/faces/0/modal_spell/modes/2"]
+    },
+    {
+      "face_id": "austere_command",
+      "start_line": 5,
+      "end_line": 5,
+      "typed_paths": ["/faces/0/modal_spell/modes/3"]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_austere_decimate::austere_command_destroys_artifacts_and_creatures_with_mana_value_three_or_less",
+      "covers": "the artifact and mana-value-three-or-less modes affect both players; the mana-value-three artifact creature and low creatures are destroyed while four-or-greater creatures, enchantments, and lands survive"
+    },
+    {
+      "test": "scenario deck_coverage_austere_decimate::austere_command_destroys_enchantments_and_creatures_with_mana_value_four_or_greater",
+      "covers": "the enchantment and mana-value-four-or-greater modes affect both players; mana-value-four creatures and enchantments are destroyed while lower-mana-value creatures, artifacts, and lands survive, with chosen modes resolved in printed order"
+    },
+    {
+      "test": "scenario deck_coverage_austere_decimate::austere_command_rejects_too_few_or_repeated_modes_without_consuming_the_card",
+      "covers": "casting with fewer than two modes or selecting one mode twice is rejected without consuming the card"
+    },
+    {
+      "test": "scenario deck_coverage_austere_decimate::both_card_definitions_have_exact_identity_and_choice_shapes",
+      "covers": "the registered name, slug, mana cost, type line, four printed mode identities, and choose-two bounds"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

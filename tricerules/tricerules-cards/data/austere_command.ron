@@ -1,0 +1,47 @@
+// Oracle text from the pinned Scryfall bulk input; WotC's Commander Legends ruling confirms
+// that the chosen modes happen sequentially. CR 601.2b and 700.2 govern mode announcement/order.
+(
+  id: "austere_command",
+  name: "Austere Command",
+  face_id: "austere_command",
+  mana_cost: "{4}{W}{W}",
+  types: ["Sorcery"],
+  modal_spell: (
+    min_modes: 2,
+    max_modes: 2,
+    modes: [
+      (
+        mode_id: "artifacts",
+        presentation: OracleLines([2]),
+        effects: [DestroyAll(
+          kind: (kind: AnyPermanent, permanent_types: [Artifact]),
+          prevent_regeneration: false,
+        )],
+      ),
+      (
+        mode_id: "enchantments",
+        presentation: OracleLines([3]),
+        effects: [DestroyAll(
+          kind: (kind: AnyPermanent, permanent_types: [Enchantment]),
+          prevent_regeneration: false,
+        )],
+      ),
+      (
+        mode_id: "creatures_mv_3_or_less",
+        presentation: OracleLines([4]),
+        effects: [DestroyAll(
+          kind: (kind: Creature, max_mana_value: Some(3)),
+          prevent_regeneration: false,
+        )],
+      ),
+      (
+        mode_id: "creatures_mv_4_or_greater",
+        presentation: OracleLines([5]),
+        effects: [DestroyAll(
+          kind: (kind: Creature, min_mana_value: Some(4)),
+          prevent_regeneration: false,
+        )],
+      ),
+    ],
+  ),
+)

@@ -295,12 +295,18 @@ fn fixture(case: &Case) -> GameEngine {
         "explosive_apparatus",
     ];
     cards.extend(stack_fixture);
+    if case.card == "decimate" {
+        cards.push("ominous_seas");
+    }
     let deck = helpers::deck_with("forest", &cards);
     let mut e = GameEngine::new(SEED, &[0, 1], 20, Some(vec![deck.clone(), deck]), true).unwrap();
     helpers::advance_to_main1_from_game_start(&mut e);
     for player in 0..e.state.players.len() {
         helpers::relocate_to_battlefield(&mut e, player, "grizzly_bears", false);
         helpers::relocate_to_battlefield(&mut e, player, "explosive_apparatus", false);
+        if case.card == "decimate" {
+            helpers::relocate_to_battlefield(&mut e, player, "ominous_seas", false);
+        }
         helpers::relocate_to_hand(&mut e, player, "grizzly_bears");
         helpers::relocate_to_battlefield(&mut e, player, "forest", false);
         helpers::relocate_to_battlefield(&mut e, player, "island", false);
