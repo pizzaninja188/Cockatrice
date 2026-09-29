@@ -445,11 +445,13 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
     }
     {
         // Redact private candidates of a tier-3 resolution choice (CR 608) from everyone but the
-        // deciding player, unless the engine explicitly authorizes a public reveal. Private kinds
-        // expose a concealed zone (see isPrivateChoiceKind):
+        // deciding player, unless the engine explicitly authorizes a public reveal. Some private
+        // kinds expose a concealed zone (see isPrivateChoiceKind):
         // HAND_CARDS reveals a player's hand, LIBRARY_SEARCH their library, LIBRARY_TOP the top of
         // their library, MANIFEST_DREAD the top two, OPPONENT_HAND another player's hand, so only
-        // the decider sees the candidate object ids / names by default. A choice carrying
+        // the decider sees the candidate object ids / names by default. The simultaneous-entry
+        // order is also private because the candidates have not entered yet, even when their
+        // source zones are public. A choice carrying
         // ALL_PARTICIPANTS publishes those identities to every recipient, but the prompt and
         // eligibility mask remain exclusive to the decider.
         // For HAND_CARDS, inject candidate_server_card_ids for the deciding player

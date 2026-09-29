@@ -1,0 +1,36 @@
+// Scryfall Oracle ID cce643fb-cd88-457c-8f13-c203554df675; Oracle and rulings reviewed 2026-09-29.
+// CR 613.11 orders hand-size effects; CR 603.2c snapshots attacker declaration.
+(
+  id: "twenty-toed_toad",
+  name: "Twenty-Toed Toad",
+  face_id: "twenty_toed_toad",
+  mana_cost: "{3}{U}",
+  types: ["Creature", "Frog", "Wizard"],
+  power: 3,
+  toughness: 3,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: MaximumHandSizeTwenty,
+  )],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WheneverControllerAttacks(min_attackers: Some(2)),
+      effect: [
+        PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source),
+        Draw(count: 1),
+      ],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([3]),
+      trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+      effect: [WinGameIf(condition: AnyOf([
+        SourceTotalCounterCount(min: Some(20)),
+        CardsInHand(players: Relative(Controller), min: Some(20)),
+      ]))],
+    ),
+  ],
+)

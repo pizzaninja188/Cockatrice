@@ -266,6 +266,7 @@ fn issue_168_reanimation_group_waits_for_all_replacement_choices() {
     engine
         .apply_command(0, &submit_resolution_choice(vec![observer]))
         .unwrap();
+    answer_simultaneous_entry_order_in_engine_order(&mut engine);
     assert_eq!(engine.state.objects[&first].zone, Zone::Battlefield);
     assert_eq!(engine.state.objects[&second].zone, Zone::Battlefield);
     assert_eq!(

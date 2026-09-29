@@ -56,7 +56,7 @@ impl GameEngine {
             })
             .collect();
         self.continue_zone_entry_batch(
-            item,
+            ParkedStackResolution::new(item),
             crate::state::PendingZoneEntryBatch {
                 ready: vec![],
                 remaining: entries,
@@ -89,7 +89,7 @@ impl GameEngine {
 
     pub(super) fn continue_zone_entry_batch(
         &mut self,
-        item: StackItem,
+        stack: ParkedStackResolution,
         mut batch: crate::state::PendingZoneEntryBatch,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
@@ -99,7 +99,7 @@ impl GameEngine {
         while !batch.remaining.is_empty() {
             let entry = batch.remaining.remove(0);
             match self.begin_battlefield_entry(
-                item.clone(),
+                stack.item.clone(),
                 entry,
                 BattlefieldEntryCompletion::ZoneEntryBatch(Box::new(batch.clone())),
                 events,
@@ -108,6 +108,23 @@ impl GameEngine {
                 replacement::BattlefieldEntryProgress::Ready(entry) => batch.ready.push(*entry),
             }
         }
+        let Some(SimultaneousEntryBatch::Zone(batch)) = self.begin_entry_timestamp_order(
+            SimultaneousEntryBatch::Zone(batch),
+            Some(stack),
+            events,
+        )?
+        else {
+            return Ok(true);
+        };
+        self.commit_zone_entry_batch_ready(batch, events)?;
+        Ok(false)
+    }
+
+    pub(super) fn commit_zone_entry_batch_ready(
+        &mut self,
+        batch: crate::state::PendingZoneEntryBatch,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
         let snapshot = self.snapshot_zone_event();
         let mut triggers = Vec::new();
         for entry in batch.ready {
@@ -141,7 +158,7 @@ impl GameEngine {
             )));
         }
         self.fire_zone_triggers(snapshot, triggers);
-        Ok(false)
+        Ok(())
     }
 
     pub(super) fn commit_observed_zone_move(
@@ -369,5 +386,238 @@ fn destination_matches(filter: &ZoneEventDestination, zone: Zone) -> bool {
         ZoneEventDestination::Any => true,
         ZoneEventDestination::OneOf(zones) => zones.contains(&zone),
         ZoneEventDestination::Except(zones) => !zones.contains(&zone),
+    }
+}
+
+#[cfg(test)]
+mod timestamp_order_tests {
+    use super::*;
+
+    fn entry_for(
+        engine: &GameEngine,
+        object_id: ObjectId,
+        controller: PlayerId,
+    ) -> BattlefieldEntryEvent {
+        BattlefieldEntryEvent {
+            prepared: false,
+            object_id,
+            deciding_player: controller,
+            destination_controller: controller,
+            battle_protector: None,
+            face_index: 0,
+            unlock_room_door: None,
+            chosen_x: 0,
+            cast_by: None,
+            cast_cost_receipts: vec![],
+            player_life_snapshot: engine.player_life_snapshot(),
+            tapped: false,
+            set_types: None,
+            chosen_basic_land_type: None,
+            entry_counters: Default::default(),
+            entry_modifiers: vec![],
+            applied_effects: vec![],
+        }
+    }
+
+    fn order_choice(chosen_object_ids: Vec<ObjectId>) -> rv1::RuledCommand {
+        rv1::RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    chosen_object_ids,
+                    ..Default::default()
+                },
+            )),
+        }
+    }
+
+    #[test]
+    fn simultaneous_zone_entries_ask_controller_to_order_same_controller_permanents() {
+        let mut engine = GameEngine::new(
+            613_701,
+            &[0, 1],
+            20,
+            Some(vec![vec!["island".into(); 20], vec!["forest".into(); 20]]),
+            true,
+        )
+        .unwrap();
+        let ids: Vec<_> = engine.state.players[0]
+            .hand
+            .iter()
+            .copied()
+            .take(2)
+            .collect();
+        for (oid, card_id) in ids.iter().zip(["folio_of_fancies", "twenty-toed_toad"]) {
+            engine.state.objects.get_mut(oid).unwrap().card_id = card_id.into();
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                *oid,
+                Zone::Graveyard,
+                None,
+            )
+            .unwrap();
+        }
+        let entries = ids.iter().map(|&oid| entry_for(&engine, oid, 0)).collect();
+        let stack = engine.observer_return_item(ids[0], 0);
+        let mut events = Vec::new();
+        assert!(
+            engine
+                .begin_zone_entry_batch(stack, entries, Zone::Graveyard, "return", &mut events)
+                .unwrap(),
+            "the simultaneous cohort must park for a logged timestamp-order choice"
+        );
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("ordered entry choice");
+        assert_eq!(pending.deciding_player, 0);
+        assert_eq!(pending.presentation.candidates.len(), 2);
+        assert!(pending.presentation.ordered);
+        assert!(engine.state.players[0].battlefield.is_empty());
+
+        for choice in [vec![], vec![ids[0], ids[0]], vec![ids[0], 999_999]] {
+            assert!(engine.apply_command(0, &order_choice(choice)).is_err());
+            assert!(engine.state.pending_resolution.is_some());
+            assert!(engine.state.players[0].battlefield.is_empty());
+        }
+        assert!(engine
+            .apply_command(1, &order_choice(vec![ids[1], ids[0]]))
+            .is_err());
+        assert!(engine.state.pending_resolution.is_some());
+        engine
+            .apply_command(0, &order_choice(vec![ids[1], ids[0]]))
+            .expect("controller chooses reverse entry timestamp order");
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(engine.maximum_hand_size(0), usize::MAX);
+        assert!(
+            engine.state.battlefield_entry_timestamps[&ids[1]]
+                < engine.state.battlefield_entry_timestamps[&ids[0]]
+        );
+    }
+
+    #[test]
+    fn simultaneous_entry_order_prompts_each_controller_in_apnap_order() {
+        let mut engine = GameEngine::new(
+            613_702,
+            &[0, 1],
+            20,
+            Some(vec![vec!["island".into(); 20], vec!["forest".into(); 20]]),
+            true,
+        )
+        .unwrap();
+        let p0: Vec<_> = engine.state.players[0]
+            .hand
+            .iter()
+            .copied()
+            .take(2)
+            .collect();
+        let p1: Vec<_> = engine.state.players[1]
+            .hand
+            .iter()
+            .copied()
+            .take(2)
+            .collect();
+        for &oid in p0.iter().chain(p1.iter()) {
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                oid,
+                Zone::Graveyard,
+                None,
+            )
+            .unwrap();
+        }
+        let entries = p1
+            .iter()
+            .map(|&oid| entry_for(&engine, oid, 1))
+            .chain(p0.iter().map(|&oid| entry_for(&engine, oid, 0)))
+            .collect();
+        let stack = engine.observer_return_item(p0[0], 0);
+        assert!(engine
+            .begin_zone_entry_batch(stack, entries, Zone::Graveyard, "return", &mut Vec::new())
+            .unwrap());
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            0
+        );
+        engine
+            .apply_command(0, &order_choice(vec![p0[1], p0[0]]))
+            .expect("active controller chooses order first");
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            1
+        );
+        assert!(engine.state.players[0].battlefield.is_empty());
+        assert!(engine.state.players[1].battlefield.is_empty());
+        engine
+            .apply_command(1, &order_choice(vec![p1[1], p1[0]]))
+            .expect("next controller chooses order second");
+        let stamps = &engine.state.battlefield_entry_timestamps;
+        assert!(stamps[&p0[1]] < stamps[&p0[0]]);
+        assert!(stamps[&p0[0]] < stamps[&p1[1]]);
+        assert!(stamps[&p1[1]] < stamps[&p1[0]]);
+    }
+
+    #[test]
+    fn stale_simultaneous_entry_generation_rejects_without_committing_cohort() {
+        let mut engine = GameEngine::new(
+            613_703,
+            &[0, 1],
+            20,
+            Some(vec![vec!["island".into(); 20], vec!["forest".into(); 20]]),
+            true,
+        )
+        .unwrap();
+        let ids: Vec<_> = engine.state.players[0]
+            .hand
+            .iter()
+            .copied()
+            .take(2)
+            .collect();
+        for &oid in &ids {
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                oid,
+                Zone::Graveyard,
+                None,
+            )
+            .unwrap();
+        }
+        let entries = ids.iter().map(|&oid| entry_for(&engine, oid, 0)).collect();
+        let stack = engine.observer_return_item(ids[0], 0);
+        assert!(engine
+            .begin_zone_entry_batch(stack, entries, Zone::Graveyard, "return", &mut Vec::new())
+            .unwrap());
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            ids[0],
+            Zone::Exile,
+            None,
+        )
+        .unwrap();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            ids[0],
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        assert!(engine.apply_command(0, &order_choice(ids.clone())).is_err());
+        assert!(engine.state.pending_resolution.is_some());
+        assert!(engine.state.players[0].battlefield.is_empty());
     }
 }

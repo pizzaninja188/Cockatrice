@@ -94,6 +94,7 @@ bool isPrivateChoiceKind(ruled::v1::ChoiceKind kind)
 {
     switch (kind) {
         case ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT:
+        case ruled::v1::CHOICE_KIND_SIMULTANEOUS_ENTRY_ORDER: // candidates have not entered yet
         case ruled::v1::CHOICE_KIND_HAND_CARDS:     // the decider's own hand
         case ruled::v1::CHOICE_KIND_LIBRARY_SEARCH: // the decider's library
         case ruled::v1::CHOICE_KIND_OPPONENT_HAND:  // another player's hand, CR 701.7 "look"

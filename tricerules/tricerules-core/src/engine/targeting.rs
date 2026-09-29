@@ -1422,6 +1422,8 @@ fn validate_effect_targets(
         | SpellEffectKind::DrawDiscard { .. }
         | SpellEffectKind::GainLife { .. }
         | SpellEffectKind::Mill { .. }
+        | SpellEffectKind::MillEachOpponentByHandSize
+        | SpellEffectKind::WinGameIf { .. }
         // CR 115.1: "you lose life" does not target. `LifeAmount::TargetManaValue` reads a
         // *sibling* effect's target, so LoseLife itself never declares one.
         | SpellEffectKind::LoseLife { .. }

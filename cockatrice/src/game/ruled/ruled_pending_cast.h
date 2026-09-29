@@ -23,6 +23,7 @@
 #include <QVector>
 #include <QtGlobal>
 #include <algorithm>
+#include <limits>
 #include <optional>
 #include <numeric>
 
@@ -199,6 +200,41 @@ struct PendingActivatedAbility
         command.set_mana_split_first_color_count(manaSplitFirstColorCount);
     }
 };
+
+[[nodiscard]] inline int ruledActivatedManaXPipCount(const QString &manaCost, bool hasCounterManaSplit)
+{
+    return hasCounterManaSplit ? 0 : manaCost.count(QLatin1Char('X'), Qt::CaseInsensitive);
+}
+
+/// The UI stores unpaid generic mana in an int; the bound is representational, not an
+/// affordability guess, because players may produce mana during an activation.
+[[nodiscard]] inline quint32 ruledActivatedXChoiceMaximum(const PendingActivatedAbility &pending, int xPips)
+{
+    if (xPips <= 0 || pending.remainingCost.value(QChar('X'), 0) < xPips) {
+        return 0;
+    }
+    const int fixedGeneric = pending.remainingCost.value(QChar('X'), 0) - xPips;
+    return static_cast<quint32>((std::numeric_limits<int>::max() - fixedGeneric) / xPips);
+}
+
+/// Convert each printed {X} mana pip from the parser's one-generic placeholder to chosen X.
+/// The caller cancels the whole pending activation when the prompt returns no value.
+[[nodiscard]] inline bool ruledApplyActivatedXChoice(PendingActivatedAbility &pending, int xPips,
+                                                      std::optional<quint32> chosenX)
+{
+    if (!chosenX || xPips <= 0 || pending.remainingCost.value(QChar('X'), 0) < xPips ||
+        *chosenX > ruledActivatedXChoiceMaximum(pending, xPips)) {
+        return false;
+    }
+    pending.xValue = *chosenX;
+    const int generic = pending.remainingCost.value(QChar('X'), 0) - xPips + xPips * static_cast<int>(*chosenX);
+    if (generic > 0) {
+        pending.remainingCost[QChar('X')] = generic;
+    } else {
+        pending.remainingCost.remove(QChar('X'));
+    }
+    return true;
+}
 
 enum class RuledXCounterManaPromptStep
 {

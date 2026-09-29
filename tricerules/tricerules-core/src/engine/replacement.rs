@@ -1544,6 +1544,10 @@ impl GameEngine {
         options: TokenEntryBatchOptions,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
+        let result_object_ids = entries
+            .iter()
+            .map(|entry| entry.event.object_id)
+            .collect::<Vec<_>>();
         // CR 616.1: when one simultaneous event requires choices from multiple players, those
         // players make them in APNAP order. Stable sorting preserves mint order within one seat.
         entries.sort_by_key(|entry| self.state.apnap_rank(entry.event.deciding_player));
@@ -1553,6 +1557,7 @@ impl GameEngine {
             let completion =
                 BattlefieldEntryCompletion::TokenBatch(Box::new(PendingTokenEntryBatch {
                     current_created: current.created.clone(),
+                    result_object_ids: result_object_ids.clone(),
                     ready: ready.clone(),
                     remaining: entries.clone(),
                     logs: logs.clone(),
@@ -1571,20 +1576,19 @@ impl GameEngine {
                 }),
             }
         }
-        self.commit_token_entry_batch(
-            &item,
+        self.finish_prepared_token_batch(
+            ParkedStackResolution::new(item),
             ready,
+            result_object_ids,
             logs,
-            options.attacking,
-            options.delayed_sacrifice,
+            options,
             events,
-        )?;
-        Ok(false)
+        )
     }
 
     fn continue_token_entry_batch(
         &mut self,
-        item: StackItem,
+        stack: ParkedStackResolution,
         current: TokenBattlefieldEntry,
         mut batch: PendingTokenEntryBatch,
         events: &mut Vec<rv1::RuledEvent>,
@@ -1595,13 +1599,14 @@ impl GameEngine {
             let completion =
                 BattlefieldEntryCompletion::TokenBatch(Box::new(PendingTokenEntryBatch {
                     current_created: next.created.clone(),
+                    result_object_ids: batch.result_object_ids.clone(),
                     ready: batch.ready.clone(),
                     remaining: batch.remaining.clone(),
                     logs: batch.logs.clone(),
                     options: batch.options.clone(),
                 }));
             match self.advance_or_park_battlefield_entry(
-                item.clone(),
+                stack.item.clone(),
                 next.event,
                 completion,
                 events,
@@ -1613,8 +1618,53 @@ impl GameEngine {
                 }),
             }
         }
+        self.finish_prepared_token_batch(
+            stack,
+            batch.ready,
+            batch.result_object_ids,
+            batch.logs,
+            batch.options,
+            events,
+        )
+    }
+
+    fn finish_prepared_token_batch(
+        &mut self,
+        stack: ParkedStackResolution,
+        ready: Vec<TokenBattlefieldEntry>,
+        result_object_ids: Vec<ObjectId>,
+        logs: Vec<String>,
+        options: TokenEntryBatchOptions,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<bool, EngineError> {
+        if ready.is_empty() {
+            self.commit_token_entry_batch(
+                &stack.item,
+                ready,
+                logs,
+                options.attacking,
+                options.delayed_sacrifice,
+                events,
+            )?;
+            return Ok(false);
+        }
+        let Some(SimultaneousEntryBatch::Token(batch)) = self.begin_entry_timestamp_order(
+            SimultaneousEntryBatch::Token(Box::new(PendingTokenEntryBatch {
+                current_created: ready[0].created.clone(),
+                result_object_ids,
+                ready,
+                remaining: Vec::new(),
+                logs,
+                options,
+            })),
+            Some(stack.clone()),
+            events,
+        )?
+        else {
+            return Ok(true);
+        };
         self.commit_token_entry_batch(
-            &item,
+            &stack.item,
             batch.ready,
             batch.logs,
             batch.options.attacking,
@@ -1624,7 +1674,7 @@ impl GameEngine {
         Ok(false)
     }
 
-    fn commit_token_entry_batch(
+    pub(super) fn commit_token_entry_batch(
         &mut self,
         item: &StackItem,
         entries: Vec<TokenBattlefieldEntry>,
@@ -1875,26 +1925,21 @@ impl GameEngine {
                 attached_to,
                 resume_original_stack,
             } => {
-                let object_id = event.object_id;
-                self.commit_battlefield_entry(event, attached_to)?;
-                events.push(permanent_moved_event(
-                    &self.state,
-                    object_id,
-                    owner,
-                    rv1::permanent_moved::Destination::Battlefield,
-                ));
-                if let Some(recipient) = attached_to {
-                    events.push(rv1::RuledEvent {
-                        ev: Some(rv1::ruled_event::Ev::AuraAttached(rv1::AuraAttached {
-                            aura_object_id: object_id,
-                            attachment_recipient: Some(attachment_recipient_proto(recipient)),
-                        })),
-                    });
-                }
-                events.push(ev_log(format!(
-                    "{object_label} returns to the battlefield under its owner's control."
-                )));
                 let observer_stack = resume_original_stack.then_some(stack.clone());
+                self.state
+                    .pending_observer_return_batch
+                    .get_or_insert_with(|| PendingObserverReturnBatch {
+                        ready: Vec::new(),
+                        remaining: VecDeque::new(),
+                        resume_stack: observer_stack.clone(),
+                    })
+                    .ready
+                    .push(ObserverReturnEntry {
+                        event,
+                        owner,
+                        label: object_label,
+                        attached_to,
+                    });
                 if self.drain_immediate_observer_actions(observer_stack, &mut events)? {
                     return Ok(finish_with_events(self, events));
                 }
@@ -2003,24 +2048,12 @@ impl GameEngine {
                 let amass = batch.options.amass;
                 // CR 608.2: once a parked token batch commits, publish every created object so the
                 // resumed effect list can name "the token it created" via `PreviousEffectObject`.
-                let current_id = event.object_id;
-                let created_ids = batch
-                    .ready
-                    .iter()
-                    .map(|entry| entry.event.object_id)
-                    .chain(std::iter::once(current_id))
-                    .chain(batch.remaining.iter().map(|entry| entry.event.object_id))
-                    .collect::<Vec<_>>();
+                let created_ids = batch.result_object_ids.clone();
                 let current = TokenBattlefieldEntry {
                     event,
                     created: batch.current_created.clone(),
                 };
-                if self.continue_token_entry_batch(
-                    stack.item.clone(),
-                    current,
-                    *batch,
-                    &mut events,
-                )? {
+                if self.continue_token_entry_batch(stack.clone(), current, *batch, &mut events)? {
                     return Ok(finish_with_events(self, events));
                 }
                 if let Some(amass) = amass {
@@ -2039,7 +2072,7 @@ impl GameEngine {
             }
             BattlefieldEntryCompletion::ZoneEntryBatch(mut batch) => {
                 batch.ready.push(event);
-                if self.continue_zone_entry_batch(stack.item.clone(), *batch, &mut events)? {
+                if self.continue_zone_entry_batch(stack.clone(), *batch, &mut events)? {
                     return Ok(finish_with_events(self, events));
                 }
                 self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)

@@ -146,6 +146,8 @@ mod deck_coverage_lotus_petal;
 mod deck_coverage_mana_reflection;
 #[path = "scenario/deck_coverage_manifold_key.rs"]
 mod deck_coverage_manifold_key;
+#[path = "scenario/deck_coverage_maximum_hand_size.rs"]
+mod deck_coverage_maximum_hand_size;
 #[path = "scenario/deck_coverage_mh3_mdfcs.rs"]
 mod deck_coverage_mh3_mdfcs;
 #[path = "scenario/deck_coverage_mind_stone.rs"]
@@ -224,6 +226,8 @@ mod equipment;
 mod font_of_mythos;
 #[path = "scenario/generator_servant.rs"]
 mod generator_servant;
+#[path = "scenario/hand_size_cohort_runtime.rs"]
+mod hand_size_cohort_runtime;
 #[path = "scenario/hand_size_upkeep_cohort.rs"]
 mod hand_size_upkeep_cohort;
 #[path = "scenario/helpers.rs"]
@@ -536,6 +540,8 @@ mod issue_99_rooms;
 mod legend_rule;
 #[path = "scenario/mana.rs"]
 mod mana;
+#[path = "scenario/maximum_hand_size_twenty.rs"]
+mod maximum_hand_size_twenty;
 #[path = "scenario/mill_results.rs"]
 mod mill_results;
 #[path = "scenario/modal_spells.rs"]

@@ -45,12 +45,18 @@ fn resolve_and_collect_tokens(engine: &mut GameEngine) -> Vec<TokenCreated> {
         let first = engine.state.priority_player_id();
         let batch = semantic::accepted(engine, first, &pass());
         created.extend(token_created_events(&batch).into_iter().cloned());
+        for (_, _, order_batch) in answer_simultaneous_entry_order_in_engine_order(engine) {
+            created.extend(token_created_events(&order_batch).into_iter().cloned());
+        }
         if engine.state.stack.is_empty() {
             continue;
         }
         let second = engine.state.priority_player_id();
         let batch = semantic::accepted(engine, second, &pass());
         created.extend(token_created_events(&batch).into_iter().cloned());
+        for (_, _, order_batch) in answer_simultaneous_entry_order_in_engine_order(engine) {
+            created.extend(token_created_events(&order_batch).into_iter().cloned());
+        }
     }
     panic!("Beza stack did not resolve within the bounded scenario");
 }

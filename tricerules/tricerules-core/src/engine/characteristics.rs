@@ -907,6 +907,22 @@ impl CharacteristicsEvaluator<'_> {
                     .unwrap_or(0);
                 condition.matches_value(count)
             }
+            GameCondition::SourceTotalCounterCount { .. } => {
+                let count = self
+                    .state
+                    .objects
+                    .get(&source_oid)
+                    .filter(|object| object.zone == Zone::Battlefield)
+                    .map(|object| {
+                        object
+                            .counters
+                            .values()
+                            .copied()
+                            .fold(0, u32::saturating_add)
+                    })
+                    .unwrap_or(0);
+                condition.matches_value(count)
+            }
             GameCondition::ObjectWasDealtDamageThisTurn { .. } => false,
             GameCondition::ObjectTapped { object, tapped } => {
                 if !matches!(object, ConditionObjectRef::Source) {

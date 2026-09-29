@@ -704,6 +704,29 @@ pub(crate) fn answer_trigger_order_in_engine_order(e: &mut GameEngine) -> bool {
     answered
 }
 
+/// Answer simultaneous-entry timestamp choices in the engine's candidate order.
+///
+/// Most scenarios are about the entered permanents' effects, not CR 613.7m ordering, so shared
+/// resolution helpers choose the presented order. Dedicated timestamp-order tests submit their
+/// own order directly.
+pub(crate) fn answer_simultaneous_entry_order_in_engine_order(
+    e: &mut GameEngine,
+) -> Vec<(i32, RuledCommand, RuledEventBatch)> {
+    let mut answers = Vec::new();
+    while let Some(pending) = e.state.pending_resolution.as_ref() {
+        if pending.presentation.choice_kind != ChoiceKind::SimultaneousEntryOrder {
+            break;
+        }
+        let player = pending.deciding_player;
+        let command = submit_resolution_choice(pending.presentation.candidates.clone());
+        let batch = e
+            .apply_command(player, &command)
+            .expect("submit simultaneous-entry timestamp order");
+        answers.push((player, command, batch));
+    }
+    answers
+}
+
 pub(crate) fn submit_trigger_order(trigger_object_id: u32) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::SubmitTriggerOrder(SubmitTriggerOrder {
@@ -715,6 +738,7 @@ pub(crate) fn submit_trigger_order(trigger_object_id: u32) -> RuledCommand {
 pub(crate) fn pass_both_players(e: &mut GameEngine) {
     // A pending ordering prompt blocks every command, `pass` included — clear it the boring way so
     // scenarios about something else don't have to know this mechanic exists.
+    answer_simultaneous_entry_order_in_engine_order(e);
     answer_trigger_order_in_engine_order(e);
     let first = e.state.priority_player_id();
     let second = if first == e.state.players[0].id {
@@ -725,12 +749,14 @@ pub(crate) fn pass_both_players(e: &mut GameEngine) {
     e.apply_command(first, &pass()).expect("first player pass");
     e.apply_command(second, &pass())
         .expect("second player pass");
+    answer_simultaneous_entry_order_in_engine_order(e);
 }
 
 /// After each stack resolution the active player receives priority (CR-style);
 /// repeat a full two-player pass cycle until the stack is empty.
 pub(crate) fn resolve_entire_stack_two_player(e: &mut GameEngine) {
     loop {
+        answer_simultaneous_entry_order_in_engine_order(e);
         answer_trigger_order_in_engine_order(e);
         if e.state.stack.is_empty() {
             break;

@@ -1572,7 +1572,13 @@ impl GameEngine {
             return Ok(());
         }
 
-        if first_color_count != 0 || x_value != 0 {
+        if first_color_count != 0
+            || (x_value != 0
+                && !ability
+                    .costs
+                    .iter()
+                    .any(|cost| matches!(cost, AbilityCost::Mana(mana) if mana.has_x())))
+        {
             return Err(EngineError::Illegal("unexpected mana X or color split"));
         }
         Ok(())
@@ -1929,7 +1935,7 @@ impl GameEngine {
             triggered_ability: None,
             is_triggered: false,
             is_copy: false,
-            chosen_x: 0,
+            chosen_x: x_value,
             face_index: face_up_index,
             chosen_modes: vec![],
             cast_condition_results: Vec::new(),
@@ -4128,7 +4134,7 @@ mod mana_payment_tests {
     }
 
     #[test]
-    fn issue_499_rejects_generic_x_on_an_ordinary_activated_ability() {
+    fn issue_499_rejects_x_on_an_activated_ability_without_x_mana_cost() {
         let mut e = engine_with_priority();
         let source = e.state.players[0].hand.remove(0);
         e.state.players[0].battlefield.push(source);
@@ -4138,7 +4144,7 @@ mod mana_payment_tests {
             ability_id: tricerules_cards::AbilityId::new("activated_01").unwrap(),
             presentation: tricerules_cards::AbilityPresentation::Fallback,
             source_zone: AbilitySourceZone::Battlefield,
-            costs: vec![AbilityCost::Mana(ManaCost::parse("{X}").unwrap())],
+            costs: vec![AbilityCost::Mana(ManaCost::parse("{1}").unwrap())],
             cost_modifiers: vec![],
             effect: vec![SpellEffectKind::Draw {
                 who: PlayerRecipient::Controller,
@@ -4189,7 +4195,7 @@ mod mana_payment_tests {
 
         let error = e
             .apply_command(0, &command)
-            .expect_err("non-storage activated X is outside the implemented payment path");
+            .expect_err("an ability without {X} rejects an X declaration");
         assert!(error
             .to_string()
             .contains("unexpected mana X or color split"));

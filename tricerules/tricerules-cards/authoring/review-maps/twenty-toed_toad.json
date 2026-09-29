@@ -1,0 +1,27 @@
+{
+  "format_version": 1,
+  "oracle_id": "cce643fb-cd88-457c-8f13-c203554df675",
+  "spans": [
+    {"face_id": "twenty_toed_toad", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/static_abilities/0"]},
+    {"face_id": "twenty_toed_toad", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/triggered_abilities/0"]},
+    {"face_id": "twenty_toed_toad", "start_line": 3, "end_line": 3, "typed_paths": ["/faces/0/triggered_abilities/1"]}
+  ],
+  "primitive_references": [
+    {"symbol": "StaticAbilityDef::MaximumHandSizeTwenty", "typed_path": "/faces/0/static_abilities/0/definition"},
+    {"symbol": "TriggerCondition::WheneverControllerAttacks", "typed_path": "/faces/0/triggered_abilities/0/trigger"},
+    {"symbol": "SpellEffectKind::PutCounters", "typed_path": "/faces/0/triggered_abilities/0/effect/0"},
+    {"symbol": "SpellEffectKind::Draw", "typed_path": "/faces/0/triggered_abilities/0/effect/1"},
+    {"symbol": "TriggerCondition::WheneverSelfAttacks", "typed_path": "/faces/0/triggered_abilities/1/trigger"},
+    {"symbol": "GameCondition::SourceTotalCounterCount", "typed_path": "/faces/0/triggered_abilities/1/effect/0/WinGameIf/condition"},
+    {"symbol": "GameCondition::CardsInHand", "typed_path": "/faces/0/triggered_abilities/1/effect/0/WinGameIf/condition"}
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "scenario deck_coverage_maximum_hand_size::folio_and_toad_apply_the_later_hand_limit_only_during_cleanup", "covers": "twenty-card maximum, timestamp orders, and cleanup-only enforcement"},
+    {"test": "scenario deck_coverage_maximum_hand_size::toad_two_attacker_trigger_adds_counter_and_draws_without_winning", "covers": "two attackers create a counter and draw trigger while self attack resolves below both win thresholds"},
+    {"test": "scenario deck_coverage_maximum_hand_size::toad_self_attack_win_uses_all_counter_kinds_or_resolution_time_hand_count", "covers": "solo self-attack trigger, mixed counter kinds, and hand threshold gained before resolution"},
+    {"test": "scenario hand_size_cohort_runtime::source_total_counter_condition_uses_departed_generations_last_known_counters", "covers": "generation-bound last known counter total when the attacking source leaves before resolution"},
+    {"test": "scenario deck_coverage_maximum_hand_size::maximum_hand_cohort_registry_preserves_exact_faces_and_clauses", "covers": "exact registered face and all three printed clauses"}
+  ],
+  "complete_definition_review_confirmed": true
+}

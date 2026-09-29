@@ -431,6 +431,7 @@ impl GameEngine {
                 StaticAbilityDef::Madness { .. }
                 | StaticAbilityDef::DiscardToLibrary
                 | StaticAbilityDef::NoMaximumHandSize { .. }
+                | StaticAbilityDef::MaximumHandSizeTwenty
                 | StaticAbilityDef::SpellCannotBeCountered
                 | StaticAbilityDef::Storied
                 | StaticAbilityDef::AdditionalTriggeredAbilityInstances { .. }

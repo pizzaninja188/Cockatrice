@@ -1884,6 +1884,8 @@ pub enum StaticAbilityDef {
     /// Spellbook, Decanter of Endless Water, Thought Vessel, Reliquary Tower, and Library of
     /// Leng use the controller scope; Anvil of Bogardan and Folio of Fancies use all players.
     NoMaximumHandSize { players: NoMaximumHandSizeScope },
+    /// Twenty-Toed Toad fixes its controller's maximum hand size at twenty (CR 613.11).
+    MaximumHandSizeTwenty,
 
     /// CR 113.6g / 701.6: this spell cannot be countered while it is on the stack. Countering
     /// spells and abilities can still legally target it and any optional payment still occurs.

@@ -1838,6 +1838,37 @@ TEST_F(RuledBatchTest, PreparationCopiesHaveDedicatedExileIdentityAndFullReplace
     EXPECT_EQ(findCardByEngineOid(p1, 203u), source);
 }
 
+TEST_F(RuledBatchTest, SimultaneousEntryOrderCandidatesStayPrivateUntilEntryCommits)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(1);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_SIMULTANEOUS_ENTRY_ORDER);
+    choice->set_prompt_text("Choose timestamp order");
+    choice->set_min(2);
+    choice->set_max(2);
+    choice->set_ordered(true);
+    choice->add_candidate_object_ids(77);
+    choice->add_candidate_object_ids(78);
+    choice->add_candidate_card_ids("folio_of_fancies");
+    choice->add_candidate_card_ids("twenty-toed_toad");
+    choice->add_candidate_names("Folio of Fancies");
+    choice->add_candidate_names("Twenty-Toed Toad");
+
+    const auto forP1 = redactFor(batch, p1);
+    const auto &owner = forP1.events(0).resolution_choice_required();
+    EXPECT_EQ(owner.candidate_object_ids_size(), 2);
+    EXPECT_EQ(owner.candidate_names_size(), 2);
+    EXPECT_EQ(owner.candidate_server_card_ids_size(), 0);
+    const auto forP2 = redactFor(batch, p2);
+    const auto &observer = forP2.events(0).resolution_choice_required();
+    EXPECT_EQ(observer.candidate_object_ids_size(), 0);
+    EXPECT_EQ(observer.candidate_card_ids_size(), 0);
+    EXPECT_EQ(observer.candidate_names_size(), 0);
+    EXPECT_EQ(observer.candidate_server_card_ids_size(), 0);
+    EXPECT_EQ(observer.prompt_text(), "Opponent is making a resolution choice.");
+}
+
 TEST_F(RuledBatchTest, SpellCastTransactionKeepsHandCardUntilCommit)
 {
     seedCardCatalog({"Lightning Bolt"});

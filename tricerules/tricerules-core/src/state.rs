@@ -970,6 +970,10 @@ pub enum PendingLibraryLookStage {
 /// handler consumes; engine-owned string sentinels and unrelated optional fields are forbidden.
 #[derive(serde::Serialize, Debug, Clone)]
 pub enum ResolutionContinuation {
+    SimultaneousEntryOrder {
+        stack: Option<ParkedStackResolution>,
+        order: Box<PendingEntryTimestampOrder>,
+    },
     DiscardReplacement {
         stack: ParkedStackResolution,
     },
@@ -1206,7 +1210,9 @@ impl ResolutionContinuation {
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
             Self::SpecialCast { stack, .. } => Some(stack),
-            Self::AuraReturn { stack, .. } => stack.as_ref(),
+            Self::AuraReturn { stack, .. } | Self::SimultaneousEntryOrder { stack, .. } => {
+                stack.as_ref()
+            }
             Self::ManaAbilityDamageReplacement { .. } | Self::LegendKeep => None,
         }
     }
@@ -1246,7 +1252,9 @@ impl ResolutionContinuation {
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
             Self::SpecialCast { stack, .. } => Some(stack),
-            Self::AuraReturn { stack, .. } => stack.as_mut(),
+            Self::AuraReturn { stack, .. } | Self::SimultaneousEntryOrder { stack, .. } => {
+                stack.as_mut()
+            }
             Self::ManaAbilityDamageReplacement { .. } | Self::LegendKeep => None,
         }
     }
@@ -1444,10 +1452,42 @@ pub(crate) struct TokenEntryBatchOptions {
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) struct PendingTokenEntryBatch {
     pub current_created: TokenCreated,
+    /// Mint/result order is independent of the controller-chosen entry timestamp order.
+    pub result_object_ids: Vec<ObjectId>,
     pub ready: Vec<TokenBattlefieldEntry>,
     pub remaining: Vec<TokenBattlefieldEntry>,
     pub logs: Vec<String>,
     pub options: TokenEntryBatchOptions,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct ObserverReturnEntry {
+    pub event: BattlefieldEntryEvent,
+    pub owner: PlayerId,
+    pub label: String,
+    pub attached_to: Option<AttachmentRecipient>,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct PendingObserverReturnBatch {
+    pub ready: Vec<ObserverReturnEntry>,
+    pub remaining: VecDeque<ImmediateObserverAction>,
+    pub resume_stack: Option<ParkedStackResolution>,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) enum SimultaneousEntryBatch {
+    Zone(PendingZoneEntryBatch),
+    Token(Box<PendingTokenEntryBatch>),
+    Observer(Box<PendingObserverReturnBatch>),
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub struct PendingEntryTimestampOrder {
+    pub(crate) batch: SimultaneousEntryBatch,
+    pub(crate) original_generations: Vec<(ObjectId, u64, Zone)>,
+    pub(crate) remaining_groups: VecDeque<(PlayerId, Vec<ObjectId>)>,
+    pub(crate) chosen_order: Vec<ObjectId>,
 }
 
 /// One simultaneous reanimation instruction, prepared fully before any member moves.
@@ -2129,6 +2169,11 @@ pub struct GameState {
     /// for relay compatibility, while this generation preserves CR 400.7 identity semantics for
     /// effects that resolve after a source leaves and returns.
     pub zone_change_generation: HashMap<ObjectId, u64>,
+    /// CR 613.11: battlefield-entry timestamps for game-rule effects such as maximum hand size.
+    /// The zone-change funnel replaces the timestamp on re-entry and removes it on departure.
+    pub(crate) battlefield_entry_timestamps: HashMap<ObjectId, u64>,
+    /// Monotonic order for battlefield entries and face-up changes that affect game rules.
+    pub(crate) next_game_rule_timestamp: u64,
     /// Live, generation-bound spell-entry facts; self-entry triggers retain a separate snapshot.
     pub(crate) spell_entry_facts: HashMap<ObjectId, SpellEntryFact>,
     /// Incremented whenever a battlefield permanent changes face/status in place.
@@ -2229,6 +2274,7 @@ pub struct GameState {
     /// Immediate observer work discovered by low-level state transitions. The engine drains this
     /// before the next resolving instruction or priority boundary.
     pub(crate) pending_immediate_observer_actions: Vec<ImmediateObserverAction>,
+    pub(crate) pending_observer_return_batch: Option<PendingObserverReturnBatch>,
     /// The outstanding CR 603.3b ordering prompt, or `None`. At most one at a time; while set it
     /// blocks every command but `SubmitTriggerOrder`.
     pub pending_trigger_order: Option<PendingTriggerOrder>,

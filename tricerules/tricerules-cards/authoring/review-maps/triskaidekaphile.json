@@ -1,0 +1,23 @@
+{
+  "format_version": 1,
+  "oracle_id": "ef238ba8-acf0-4e62-9abd-5291886a32e8",
+  "spans": [
+    {"face_id": "triskaidekaphile", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/static_abilities/0"]},
+    {"face_id": "triskaidekaphile", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/triggered_abilities/0"]},
+    {"face_id": "triskaidekaphile", "start_line": 3, "end_line": 3, "typed_paths": ["/faces/0/activated_abilities/0"]}
+  ],
+  "primitive_references": [
+    {"symbol": "StaticAbilityDef::NoMaximumHandSize", "typed_path": "/faces/0/static_abilities/0/definition"},
+    {"symbol": "TriggerCondition::AtBeginningOfUpkeep", "typed_path": "/faces/0/triggered_abilities/0/trigger"},
+    {"symbol": "GameCondition::CardsInHand", "typed_path": "/faces/0/triggered_abilities/0/intervening_if"},
+    {"symbol": "SpellEffectKind::WinGameIf", "typed_path": "/faces/0/triggered_abilities/0/effect/0"},
+    {"symbol": "SpellEffectKind::Draw", "typed_path": "/faces/0/activated_abilities/0/effect/0"}
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "scenario deck_coverage_maximum_hand_size::triskaidekaphile_checks_thirteen_at_upkeep_start_and_again_on_resolution", "covers": "controller-only no maximum, exact thirteen at trigger time, intervening-if recheck, and four-mana draw activation"},
+    {"test": "scenario hand_size_cohort_runtime::conditional_upkeep_win_uses_the_trigger_controller", "covers": "thirteen at upkeep start wins for the trigger controller"},
+    {"test": "scenario deck_coverage_maximum_hand_size::maximum_hand_cohort_registry_preserves_exact_faces_and_clauses", "covers": "exact registered face and all three printed clauses"}
+  ],
+  "complete_definition_review_confirmed": true
+}

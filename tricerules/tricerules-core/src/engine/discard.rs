@@ -147,19 +147,55 @@ impl GameEngine {
     }
 
     pub(super) fn maximum_hand_size(&self, player: PlayerId) -> usize {
-        if self.player_has_discard_static(|a, controller| match a {
-            StaticAbilityDef::NoMaximumHandSize {
-                players: tricerules_cards::primitives::NoMaximumHandSizeScope::Controller,
-            } => controller == player,
-            StaticAbilityDef::NoMaximumHandSize {
-                players: tricerules_cards::primitives::NoMaximumHandSizeScope::AllPlayers,
-            } => true,
-            _ => false,
-        }) {
-            usize::MAX
-        } else {
-            MAX_HAND_SIZE
+        use tricerules_cards::primitives::NoMaximumHandSizeScope;
+
+        // CR 613.11 applies effects that modify game rules in timestamp order. A later Folio
+        // removes Toad's limit; a later Toad restores the fixed limit for its controller.
+        let mut effects = Vec::new();
+        for oid in self
+            .state
+            .players
+            .iter()
+            .flat_map(|participant| participant.battlefield.iter().copied())
+        {
+            let Some(controller) = self.controller_of(oid) else {
+                continue;
+            };
+            if self.state.objects[&oid].face_down
+                || super::characteristics::latest_remove_all_abilities_timestamp(&self.state, oid)
+                    .is_some()
+            {
+                continue;
+            }
+            let Some(face) = self.effective_face(oid) else {
+                continue;
+            };
+            for ability in &face.static_abilities {
+                let maximum = match &ability.definition {
+                    StaticAbilityDef::NoMaximumHandSize {
+                        players: NoMaximumHandSizeScope::Controller,
+                    } if controller == player => Some(usize::MAX),
+                    StaticAbilityDef::NoMaximumHandSize {
+                        players: NoMaximumHandSizeScope::AllPlayers,
+                    } => Some(usize::MAX),
+                    StaticAbilityDef::MaximumHandSizeTwenty if controller == player => Some(20),
+                    _ => None,
+                };
+                if let Some(maximum) = maximum {
+                    let timestamp = self
+                        .state
+                        .battlefield_entry_timestamps
+                        .get(&oid)
+                        .copied()
+                        .unwrap_or(0);
+                    effects.push((timestamp, oid, maximum));
+                }
+            }
         }
+        effects.sort_by_key(|(timestamp, oid, _)| (*timestamp, *oid));
+        effects
+            .last()
+            .map_or(MAX_HAND_SIZE, |(_, _, maximum)| *maximum)
     }
 
     pub(super) fn start_discard_replacements(
@@ -602,6 +638,43 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn hand_size_effects_entering_in_one_command_follow_entry_order_not_object_id() {
+        let mut e = GameEngine::new(
+            61_371,
+            &[0, 1],
+            20,
+            Some(vec![vec!["island".into(); 20], vec!["forest".into(); 20]]),
+            true,
+        )
+        .unwrap();
+        let mut ids = e.state.players[0]
+            .hand
+            .iter()
+            .chain(e.state.players[0].library.iter())
+            .copied()
+            .collect::<Vec<_>>();
+        ids.sort_unstable();
+        let toad = ids[0];
+        let folio = ids[1];
+        e.state.objects.get_mut(&toad).unwrap().card_id = "twenty-toed_toad".into();
+        e.state.objects.get_mut(&folio).unwrap().card_id = "folio_of_fancies".into();
+        resolution::move_object_to_zone(
+            &mut e.state,
+            e.registry,
+            folio,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .unwrap();
+        resolution::move_object_to_zone(&mut e.state, e.registry, toad, Zone::Battlefield, Some(0))
+            .unwrap();
+        assert_eq!(e.maximum_hand_size(0), 20);
+        assert!(
+            e.state.battlefield_entry_timestamps[&folio]
+                < e.state.battlefield_entry_timestamps[&toad]
+        );
+    }
     #[test]
     fn issue_197_uncast_madness_preserves_only_the_discard_reference() {
         let mut e = GameEngine::new(

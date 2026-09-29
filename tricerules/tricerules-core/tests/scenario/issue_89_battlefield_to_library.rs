@@ -256,6 +256,7 @@ fn a_token_put_into_a_library_ceases_to_exist() {
         .expect("cast Raise the Alarm");
     engine.apply_command(0, &pass()).expect("caster passes");
     engine.apply_command(1, &pass()).expect("tokens resolve");
+    answer_simultaneous_entry_order_in_engine_order(&mut engine);
     let token = battlefield_token_oids(&engine, 0, "soldier_w_1_1")[0];
 
     let totally_lost = hand_index_for_card(&engine, 0, "totally_lost");

@@ -854,6 +854,10 @@ impl CreatureTypeChange {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpellEffectKind {
+    /// Triskaidekaphile and Twenty-Toed Toad check public thresholds as their triggers resolve.
+    WinGameIf {
+        condition: GameCondition,
+    },
     /// Apply one allowlisted instruction only when a current engine-side condition holds. The
     /// instruction may suspend for its existing library choice (Scry or Surveil), whose ordinary
     /// stack-resolution continuation resumes the effect list after the choice. Target roles come
@@ -1524,6 +1528,8 @@ pub enum SpellEffectKind {
         count: u32,
         target: TargetFilter,
     },
+    /// Folio of Fancies counts each opponent's own hand independently as this resolves.
+    MillEachOpponentByHandSize,
     /// CR 701.17: mill the players named by `who` without targeting them. Gorging Vulture and
     /// Tribune of Rot use the default `Controller`; player-relative trigger effects can reuse the
     /// remaining [`PlayerRecipient`] variants without pretending that "you" is a target.
@@ -2825,6 +2831,8 @@ impl SpellEffectKind {
             | SpellEffectKind::EachOpponentLosesLifeYouGainEqual { .. }
             | SpellEffectKind::ExileTopWithPlayPermission { .. }
             | SpellEffectKind::Mill { .. }
+            | SpellEffectKind::MillEachOpponentByHandSize
+            | SpellEffectKind::WinGameIf { .. }
             | SpellEffectKind::DestroyAll { .. }
             | SpellEffectKind::ReturnAllToOwnersHand { .. }
             | SpellEffectKind::DamageAll { .. }

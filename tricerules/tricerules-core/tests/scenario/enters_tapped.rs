@@ -240,6 +240,20 @@ fn token_batch_waits_for_every_replacement_choice_then_enters_simultaneously() {
             .apply_command(0, &submit_resolution_choice(vec![application]))
             .expect("choose an Orb replacement");
     }
+    let pending = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("timestamp order choice for simultaneous token entries");
+    assert_eq!(
+        pending.presentation.choice_kind,
+        ChoiceKind::SimultaneousEntryOrder
+    );
+    assert!(pending.presentation.ordered);
+    let entry_order = pending.presentation.candidates.clone();
+    engine
+        .apply_command(0, &submit_resolution_choice(entry_order))
+        .expect("choose token timestamp order");
     assert_eq!(soldiers_on_battlefield(&engine), 2);
 
     let soldiers: Vec<_> = engine

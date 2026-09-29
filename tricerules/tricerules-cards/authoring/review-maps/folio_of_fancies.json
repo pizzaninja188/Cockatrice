@@ -1,0 +1,24 @@
+{
+  "format_version": 1,
+  "oracle_id": "9030d508-5cfe-46ed-954b-21d970bc3b5a",
+  "spans": [
+    {"face_id": "folio_of_fancies", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/static_abilities/0"]},
+    {"face_id": "folio_of_fancies", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/activated_abilities/0"]},
+    {"face_id": "folio_of_fancies", "start_line": 3, "end_line": 3, "typed_paths": ["/faces/0/activated_abilities/1"]}
+  ],
+  "primitive_references": [
+    {"symbol": "StaticAbilityDef::NoMaximumHandSize", "typed_path": "/faces/0/static_abilities/0/definition"},
+    {"symbol": "AbilityCost::Mana", "typed_path": "/faces/0/activated_abilities/0/costs/0"},
+    {"symbol": "AbilityCost::Tap", "typed_path": "/faces/0/activated_abilities/0/costs/1"},
+    {"symbol": "SpellEffectKind::Draw", "typed_path": "/faces/0/activated_abilities/0/effect/0"},
+    {"symbol": "SpellEffectKind::MillEachOpponentByHandSize", "typed_path": "/faces/0/activated_abilities/1/effect/0"}
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "scenario deck_coverage_maximum_hand_size::folio_pays_double_x_draws_every_player_and_mills_each_opponents_own_hand", "covers": "double X payment, all-player draw, tap exclusivity, and each opponent milling its own hand count in multiplayer"},
+    {"test": "scenario deck_coverage_maximum_hand_size::folio_draws_full_x_then_an_opponent_with_too_few_library_cards_loses", "covers": "an opponent with fewer than X cards loses after the draw ability resolves"},
+    {"test": "scenario deck_coverage_maximum_hand_size::folio_and_toad_apply_the_later_hand_limit_only_during_cleanup", "covers": "all-player no maximum and timestamp ordering against Twenty-Toed Toad in both entry orders"},
+    {"test": "scenario deck_coverage_maximum_hand_size::maximum_hand_cohort_registry_preserves_exact_faces_and_clauses", "covers": "exact registered face and all three printed clauses"}
+  ],
+  "complete_definition_review_confirmed": true
+}

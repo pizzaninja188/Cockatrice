@@ -429,6 +429,12 @@ fn issue_164_token_copy_has_its_own_cap_and_accepted_commands_replay_identically
                 let command = pass();
                 batches.push(engine.apply_command(player, &command).unwrap());
                 commands.push((player, command));
+                for (order_player, order_command, order_batch) in
+                    answer_simultaneous_entry_order_in_engine_order(&mut engine)
+                {
+                    batches.push(order_batch);
+                    commands.push((order_player, order_command));
+                }
             }
         }
         assert_eq!(engine.state.players[0].life, expected_life);

@@ -75,6 +75,7 @@ public:
     QString lastDialogPrompt;
     QVector<quint32> lastDialogCandidateOids;
     QStringList lastDialogCandidateNames;
+    bool lastDialogOrdered = false;
     bool autoSubmitDialogChoice = false;
 
     /// Optional P/T fallback, keyed by engine oid, for the ZoneView-stripped path.
@@ -147,13 +148,14 @@ public:
                                        const QStringList &candidateNames,
                                        int,
                                        int,
-                                       bool,
+                                       bool ordered,
                                        bool) override
     {
         ++dialogRequests;
         lastDialogPrompt = prompt;
         lastDialogCandidateOids = candidateOids;
         lastDialogCandidateNames = candidateNames;
+        lastDialogOrdered = ordered;
         if (autoSubmitDialogChoice && !candidateOids.isEmpty()) {
             ruled::v1::RuledCommand command;
             command.mutable_submit_resolution_choice()->add_chosen_object_ids(candidateOids.first());
@@ -5020,6 +5022,55 @@ TEST_F(RuledClientTest, ZeroOutputManaAbilityRetainsItsSelectableOptionsDuringPa
         EXPECT_EQ(ordinaryOptions.at(i).manaOptionIndex, i);
 }
 
+TEST(RuledPendingCastTest, ActivatedVariableManaCostScalesEveryXPipAndPreservesCancellation)
+{
+    PendingActivatedAbility pending;
+    pending.permanentOid = 501;
+    pending.abilityIndex = 2;
+    pending.remainingCost = RuledPendingCast::parseSimpleManaCost("{X}{X}{U}");
+    EXPECT_EQ(ruledActivatedManaXPipCount("{X}{X}{U}", false), 2);
+    EXPECT_GT(ruledActivatedXChoiceMaximum(pending, 2), 99u);
+    EXPECT_EQ(pending.remainingCost.value(QChar('X')), 2);
+    EXPECT_FALSE(ruledApplyActivatedXChoice(pending, 2, std::nullopt));
+    EXPECT_EQ(pending.xValue, 0u);
+    EXPECT_EQ(pending.remainingCost.value(QChar('X')), 2);
+    EXPECT_FALSE(ruledApplyActivatedXChoice(pending, 2, ruledActivatedXChoiceMaximum(pending, 2) + 1));
+    EXPECT_EQ(pending.remainingCost.value(QChar('X')), 2);
+
+    EXPECT_TRUE(ruledApplyActivatedXChoice(pending, 2, 2u));
+    EXPECT_EQ(pending.xValue, 2u);
+    EXPECT_EQ(pending.remainingCost.value(QChar('X')), 4);
+    EXPECT_EQ(pending.remainingCost.value(QChar('U')), 1);
+    ruled::v1::ActivateAbility command;
+    pending.writeActivationHeader(command);
+    EXPECT_EQ(command.x_value(), 2u);
+
+    PendingActivatedAbility zero;
+    zero.remainingCost = RuledPendingCast::parseSimpleManaCost("{2}{X}{X}");
+    EXPECT_TRUE(ruledApplyActivatedXChoice(zero, 2, 0u));
+    EXPECT_EQ(zero.remainingCost.value(QChar('X')), 2);
+    EXPECT_EQ(zero.xValue, 0u);
+
+    // Storage-counter X is chosen by its bounded split prompt, not by the mana-cost prompt.
+    EXPECT_EQ(ruledActivatedManaXPipCount("{X}", true), 0);
+    const auto split = ruledPromptXCounterManaSplit(
+        4, [](RuledXCounterManaPromptStep step, quint32) -> std::optional<quint32> {
+            return step == RuledXCounterManaPromptStep::ChooseX ? 3u : 2u;
+        });
+    ASSERT_TRUE(split);
+    EXPECT_EQ(split->xValue, 3u);
+    EXPECT_EQ(split->firstColorCount, 2u);
+
+    RuledPendingCast transaction;
+    auto &staged = transaction.beginAbility();
+    staged.remainingCost = RuledPendingCast::parseSimpleManaCost("{X}{X}");
+    EXPECT_TRUE(ruledApplyActivatedXChoice(staged, 2, 2u));
+    transaction.clearAbility(); // same cleanup path after a rejected or cancelled activation
+    auto &retry = transaction.beginAbility();
+    EXPECT_EQ(retry.xValue, 0u);
+    EXPECT_TRUE(retry.remainingCost.isEmpty());
+}
+
 TEST_F(RuledClientTest, EmptyCommanderIdentityStillUsesEnginePublishedManaAbilityClassification)
 {
     ruled::v1::RuledEventBatch batch;
@@ -7484,6 +7535,28 @@ TEST_F(RuledClientTest, CancellingResolutionCostObjectsRepaintsClearedSelectionI
     EXPECT_EQ(repaintSpy.count(), 1);
     ASSERT_EQ(host.sentCommands.size(), 1);
     EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids_size(), 0);
+}
+
+TEST_F(RuledClientTest, SimultaneousEntryTimestampOrderUsesTheOrderedModalChoice)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_SIMULTANEOUS_ENTRY_ORDER);
+    choice->set_prompt_text("Choose timestamp order");
+    choice->set_min(2);
+    choice->set_max(2);
+    choice->set_ordered(true);
+    choice->add_candidate_object_ids(77);
+    choice->add_candidate_object_ids(78);
+    choice->add_candidate_names("Folio of Fancies");
+    choice->add_candidate_names("Twenty-Toed Toad");
+    apply(batch);
+    EXPECT_EQ(host.dialogRequests, 1);
+    EXPECT_TRUE(host.lastDialogOrdered);
+    EXPECT_EQ(host.lastDialogCandidateOids, QVector<quint32>({77, 78}));
+    EXPECT_EQ(host.lastDialogCandidateNames,
+              QStringList({QStringLiteral("Folio of Fancies"), QStringLiteral("Twenty-Toed Toad")}));
 }
 
 TEST_F(RuledClientTest, ProliferateChoiceMixesPermanentAndPlayerIdsWithinOneBoundedSelection)

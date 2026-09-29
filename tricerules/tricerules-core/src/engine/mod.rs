@@ -11,18 +11,19 @@ use crate::state::{
     DelayedTriggerPayload, EffectResult, EntryReplacementApplication, EntryReplacementEffectId,
     EventObserverMatcher, EventObserverPayload, ExilePlayPermissionScope, GameObject, GameState,
     ImmediateObserverAction, LinkedExileKey, LinkedExiledObject, ObjectId, ObservedGameEvent,
-    OpeningSequence, ParkedStackResolution, PendingAmass, PendingBattlefieldEntry,
-    PendingHandChoice, PendingLibraryLookStage, PendingLibraryPartitionKind,
-    PendingLibraryPartitionStage, PendingManaPayment, PendingPlayerDiscardChoice,
+    ObserverReturnEntry, OpeningSequence, ParkedStackResolution, PendingAmass,
+    PendingBattlefieldEntry, PendingEntryTimestampOrder, PendingHandChoice,
+    PendingLibraryLookStage, PendingLibraryPartitionKind, PendingLibraryPartitionStage,
+    PendingManaPayment, PendingObserverReturnBatch, PendingPlayerDiscardChoice,
     PendingPlayerSetDiscard, PendingResolution, PendingResolutionBranch,
     PendingResolutionBranchStage, PendingResolutionPresentation, PendingTokenEntryBatch,
     PendingTrigger, PendingTriggerOrder, PendingWardPayment, PendingWardPaymentStage,
     PersistentActivationUseKey, PlayerId, PlayerState, ReplacementPriority, ResolutionContinuation,
-    ResolutionReceipt, RoomState, SpellCastMethod, StackItem, StackObjectRef, StackPresentation,
-    StackTarget, StagedTrigger, StagedTriggerGroup, StaticEmblemInstance, TokenBattlefieldEntry,
-    TokenEntryBatchOptions, TriggerAbilityOrigin, TriggerContext, TriggerObjectRef,
-    TriggerStackObjectRef, TriggerUseKey, TurnHistory, TurnObjectFact, TurnStep,
-    UndoableManaAbility, Zone,
+    ResolutionReceipt, RoomState, SimultaneousEntryBatch, SpellCastMethod, StackItem,
+    StackObjectRef, StackPresentation, StackTarget, StagedTrigger, StagedTriggerGroup,
+    StaticEmblemInstance, TokenBattlefieldEntry, TokenEntryBatchOptions, TriggerAbilityOrigin,
+    TriggerContext, TriggerObjectRef, TriggerStackObjectRef, TriggerUseKey, TurnHistory,
+    TurnObjectFact, TurnStep, UndoableManaAbility, Zone,
 };
 use crate::state::{DoubleFacedToken, TokenCopySnapshot};
 use prost::Message;
@@ -180,6 +181,7 @@ mod delayed_copy;
 mod dev;
 mod diagnostics;
 mod discard;
+mod entry_order;
 mod events;
 mod history;
 #[cfg(test)]
@@ -1586,6 +1588,8 @@ impl GameEngine {
             last_known_copy_by_generation: HashMap::new(),
             last_known_attached_object_by_generation: HashMap::new(),
             zone_change_generation: HashMap::new(),
+            battlefield_entry_timestamps: HashMap::new(),
+            next_game_rule_timestamp: 0,
             face_change_generation: HashMap::new(),
             room_states: HashMap::new(),
             prepared_permanents: Default::default(),
@@ -1638,6 +1642,7 @@ impl GameEngine {
             spell_entry_facts: HashMap::new(),
             observed_object_cohorts: HashMap::new(),
             pending_immediate_observer_actions: Vec::new(),
+            pending_observer_return_batch: None,
             pending_trigger_order: None,
             pending_resolution: None,
             pending_replacement_event: None,
@@ -1934,6 +1939,10 @@ impl GameEngine {
             .get_mut(&command.object_id)
             .expect("validated permanent")
             .face_down = false;
+        self.state.next_game_rule_timestamp = self.state.next_game_rule_timestamp.saturating_add(1);
+        self.state
+            .battlefield_entry_timestamps
+            .insert(command.object_id, self.state.next_game_rule_timestamp);
         *self
             .state
             .face_change_generation

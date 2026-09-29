@@ -183,6 +183,13 @@ pub enum GameCondition {
         #[serde(default)]
         max: Option<u32>,
     },
+    /// Twenty-Toed Toad checks the total number of all counter kinds on its source.
+    SourceTotalCounterCount {
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
     /// Whether the referenced object generation was actually dealt positive damage this turn.
     ObjectWasDealtDamageThisTurn { object: ConditionObjectRef },
     /// Compare the current tapped status of a bound object. Source references use
@@ -439,7 +446,8 @@ impl GameCondition {
             | GameCondition::CardsDrawnThisTurn { min, max, .. }
             | GameCondition::AttackersDeclaredThisTurn { min, max, .. }
             | GameCondition::PermanentsEnteredThisTurn { min, max, .. }
-            | GameCondition::SourceCounterCount { min, max, .. } => {
+            | GameCondition::SourceCounterCount { min, max, .. }
+            | GameCondition::SourceTotalCounterCount { min, max } => {
                 if let GameCondition::AttackersDeclaredThisTurn { filter, .. } = self {
                     filter.validate()?;
                 }
@@ -515,6 +523,7 @@ impl GameCondition {
             | GameCondition::AttackersDeclaredThisTurn { min, max, .. }
             | GameCondition::PermanentsEnteredThisTurn { min, max, .. }
             | GameCondition::SourceCounterCount { min, max, .. }
+            | GameCondition::SourceTotalCounterCount { min, max }
             | GameCondition::ObjectManaValue { min, max, .. }
             | GameCondition::BattlefieldCreatureCount { min, max, .. }
             | GameCondition::BattlefieldAggregate { min, max, .. }

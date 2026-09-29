@@ -54,6 +54,7 @@ fn issue_478_legal_uncounterable_spell_gives_its_controller_treasure() {
         .unwrap();
     engine.apply_command(1, &pass()).unwrap();
     engine.apply_command(0, &pass()).unwrap();
+    answer_simultaneous_entry_order_in_engine_order(&mut engine);
     assert!(engine.state.stack.iter().any(|item| item.id == eject));
     assert_eq!(battlefield_token_oids(&engine, 0, "treasure").len(), 2);
     assert!(battlefield_token_oids(&engine, 1, "treasure").is_empty());
@@ -89,6 +90,7 @@ fn issue_478_countered_spell_gives_target_controller_treasure() {
         .unwrap();
     engine.apply_command(1, &pass()).unwrap();
     engine.apply_command(0, &pass()).unwrap();
+    answer_simultaneous_entry_order_in_engine_order(&mut engine);
     assert_eq!(engine.state.objects[&target].zone, Zone::Graveyard);
     assert_eq!(battlefield_token_oids(&engine, 0, "treasure").len(), 2);
     assert!(battlefield_token_oids(&engine, 1, "treasure").is_empty());

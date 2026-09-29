@@ -1316,10 +1316,11 @@ message RestrictedManaGroup {
 }
 
 // What the candidate object ids of a ResolutionChoiceRequired refer to, so the client can present
-// them correctly and — crucially — so Servatrice knows which ones expose a concealed zone. The
-// private kinds (HAND_CARDS, LIBRARY_SEARCH, OPPONENT_HAND, LIBRARY_TOP, LIBRARY_LOOK, and
-// MANIFEST_DREAD) are redacted from
-// every player but the decider; see isPrivateChoiceKind() next to the relay's redaction pass.
+// them correctly and — crucially — so Servatrice knows which candidates must stay private.
+// HAND_CARDS, LIBRARY_SEARCH, OPPONENT_HAND, LIBRARY_TOP, LIBRARY_LOOK, and MANIFEST_DREAD
+// may expose concealed cards. SIMULTANEOUS_ENTRY_ORDER is also private because its candidates
+// have not entered the battlefield yet, even when their source zones are public. These kinds
+// are redacted from every player but the decider; see isPrivateChoiceKind() in the relay.
 enum ChoiceKind {
   // Cards in the deciding player's own hand (Brainstorm: pick 2 to put back). Private.
   CHOICE_KIND_HAND_CARDS = 0;
@@ -1396,6 +1397,9 @@ enum ChoiceKind {
   CHOICE_KIND_PRIVATE_REPLACEMENT = 23;
   // CR 701.34: any-number choice over permanent ObjectIds and player PlayerIds with counters.
   CHOICE_KIND_PROLIFERATE = 24;
+  // CR 613.7m: chooser-private order of simultaneous battlefield entrants before they enter.
+  // Candidate ids are engine ObjectIds and remain private until the public entry events commit.
+  CHOICE_KIND_SIMULTANEOUS_ENTRY_ORDER = 25;
 }
 
 enum ChoiceCandidateSourceZone {

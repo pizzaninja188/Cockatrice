@@ -1679,6 +1679,31 @@ pub(super) fn mill(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn mill_each_opponent_by_hand_size(
+    cx: &mut EffectCx<'_>,
+) -> Result<EffectOutcome, EngineError> {
+    // Each recipient's count is read independently as this instruction resolves; an earlier
+    // opponent's mill cannot cause the controller's hand size to stand in for a later opponent.
+    let recipients = cx
+        .engine
+        .state
+        .players
+        .iter()
+        .filter(|player| {
+            !player.has_lost && cx.engine.state.are_opponents(cx.controller, player.id)
+        })
+        .map(|player| (player.id, player.hand.len() as u32))
+        .collect::<Vec<_>>();
+    let mut result = CardResultCohort::default();
+    for (player, count) in recipients {
+        result
+            .cards
+            .extend(mill_players(cx, &[player], count)?.cards);
+    }
+    *cx.effect_result = result.into();
+    Ok(EffectOutcome::Continue)
+}
+
 fn mill_players(
     cx: &mut EffectCx<'_>,
     recipients: &[PlayerId],

@@ -278,9 +278,13 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
         engine.state.players[0].id
     };
     engine.apply_command(first, &pass()).expect("first pass");
-    engine
+    let mut batch = engine
         .apply_command(second, &pass())
-        .expect("second pass resolves stack item")
+        .expect("second pass resolves stack item");
+    for (_, _, order_batch) in answer_simultaneous_entry_order_in_engine_order(engine) {
+        batch.events.extend(order_batch.events);
+    }
+    batch
 }
 
 fn seat_on_top(engine: &mut GameEngine, player: usize, card_id: &str) -> u32 {

@@ -289,6 +289,7 @@ fn issue_234_simultaneous_return_waits_for_copy_choice_then_applies_modifiers() 
     engine
         .apply_command(0, &submit_resolution_choice(vec![model]))
         .unwrap();
+    answer_simultaneous_entry_order_in_engine_order(&mut engine);
     for oid in [clone, bear] {
         assert_eq!(engine.state.objects[&oid].zone, Zone::Battlefield);
         assert_eq!(
@@ -362,6 +363,7 @@ fn issue_234_multiplayer_entry_choices_follow_owner_apnap_before_atomic_return()
     engine
         .apply_command(3, &submit_resolution_choice(vec![model]))
         .unwrap();
+    answer_simultaneous_entry_order_in_engine_order(&mut engine);
 
     for (object_id, owner) in [(first, 1), (second, 3)] {
         let object = &engine.state.objects[&object_id];

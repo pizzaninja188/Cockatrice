@@ -15,9 +15,13 @@ fn resolve_top_stack(engine: &mut GameEngine) -> RuledEventBatch {
         .apply_command(first, &pass())
         .expect("first priority pass");
     let second = engine.state.priority_player_id();
-    engine
+    let mut batch = engine
         .apply_command(second, &pass())
-        .expect("second priority pass resolves stack item")
+        .expect("second priority pass resolves stack item");
+    for (_, _, order_batch) in answer_simultaneous_entry_order_in_engine_order(engine) {
+        batch.events.extend(order_batch.events);
+    }
+    batch
 }
 
 fn three_player_main1(seed: u64) -> GameEngine {

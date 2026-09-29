@@ -109,7 +109,23 @@ fn raise_the_alarm_creates_two_soldier_tokens() {
     e.apply_command(0, &cast_spell(idx, vec![]))
         .expect("cast raise the alarm");
     e.apply_command(0, &pass()).expect("caster pass");
-    let resolved = e.apply_command(1, &pass()).expect("opponent pass");
+    let mut resolved = e.apply_command(1, &pass()).expect("opponent pass");
+    let order = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("simultaneous soldier entries need a timestamp order");
+    assert_eq!(
+        order.presentation.choice_kind,
+        ChoiceKind::SimultaneousEntryOrder
+    );
+    let order_batch = e
+        .apply_command(
+            0,
+            &submit_resolution_choice(order.presentation.candidates.clone()),
+        )
+        .expect("choose the soldiers' timestamp order");
+    resolved.events.extend(order_batch.events);
 
     let soldiers = battlefield_token_oids(&e, 0, "soldier_w_1_1");
     assert_eq!(soldiers.len(), 2, "two soldier tokens created");
@@ -157,7 +173,10 @@ fn call_the_cavalry_token_identity_carries_keywords() {
     e.apply_command(0, &cast_spell(idx, vec![]))
         .expect("cast call the cavalry");
     e.apply_command(0, &pass()).expect("caster pass");
-    let resolved = e.apply_command(1, &pass()).expect("opponent pass");
+    let mut resolved = e.apply_command(1, &pass()).expect("opponent pass");
+    for (_, _, order_batch) in answer_simultaneous_entry_order_in_engine_order(&mut e) {
+        resolved.events.extend(order_batch.events);
+    }
 
     let created = token_created_events(&resolved);
     assert_eq!(created.len(), 2, "two knight tokens created");
@@ -192,7 +211,10 @@ fn goblin_wizardry_tokens_carry_and_trigger_prowess() {
     e.apply_command(0, &cast_spell(idx, vec![]))
         .expect("cast Goblin Wizardry");
     e.apply_command(0, &pass()).expect("caster pass");
-    let resolved = e.apply_command(1, &pass()).expect("opponent pass");
+    let mut resolved = e.apply_command(1, &pass()).expect("opponent pass");
+    for (_, _, order_batch) in answer_simultaneous_entry_order_in_engine_order(&mut e) {
+        resolved.events.extend(order_batch.events);
+    }
 
     let wizards = battlefield_token_oids(&e, 0, "goblin_wizard_r_1_1_prowess");
     assert_eq!(wizards.len(), 2);
@@ -278,6 +300,7 @@ fn bestial_menace_creates_three_distinct_tokens() {
     e.apply_command(0, &cast_spell(idx, vec![])).expect("cast");
     e.apply_command(0, &pass()).expect("pass");
     e.apply_command(1, &pass()).expect("pass");
+    answer_simultaneous_entry_order_in_engine_order(&mut e);
 
     let snake = battlefield_token_oids(&e, 0, "snake_g_1_1");
     let wolf = battlefield_token_oids(&e, 0, "wolf_g_2_2");
@@ -329,6 +352,7 @@ fn token_dies_and_ceases_to_exist() {
     e.apply_command(0, &cast_spell(idx, vec![])).expect("cast");
     e.apply_command(0, &pass()).expect("pass");
     e.apply_command(1, &pass()).expect("pass");
+    answer_simultaneous_entry_order_in_engine_order(&mut e);
 
     let soldiers = battlefield_token_oids(&e, 0, "soldier_w_1_1");
     assert_eq!(soldiers.len(), 2);
@@ -398,6 +422,7 @@ fn bounced_token_ceases_to_exist() {
     e.apply_command(0, &cast_spell(idx, vec![])).expect("cast");
     e.apply_command(0, &pass()).expect("pass");
     e.apply_command(1, &pass()).expect("pass");
+    answer_simultaneous_entry_order_in_engine_order(&mut e);
 
     let victim = battlefield_token_oids(&e, 0, "soldier_w_1_1")[0];
     let hand_before = e.state.players[0].hand.len();
@@ -463,6 +488,7 @@ fn anthem_buffs_token_via_shared_pt_path() {
     e.apply_command(0, &cast_spell(idx, vec![])).expect("cast");
     e.apply_command(0, &pass()).expect("pass");
     e.apply_command(1, &pass()).expect("pass");
+    answer_simultaneous_entry_order_in_engine_order(&mut e);
 
     let token = battlefield_token_oids(&e, 0, "soldier_w_1_1")[0];
     assert_eq!(e.effective_power(token), Some(1));

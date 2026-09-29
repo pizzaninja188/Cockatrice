@@ -241,6 +241,9 @@ impl GameEngine {
         }
 
         match &pending.continuation {
+            ResolutionContinuation::SimultaneousEntryOrder { .. } => {
+                return self.finish_entry_timestamp_order_choice(pending, chosen);
+            }
             ResolutionContinuation::DiscardReplacement { .. } => {
                 return self.finish_discard_replacement(pending, chosen)
             }
@@ -511,26 +514,20 @@ impl GameEngine {
             }
             super::replacement::BattlefieldEntryProgress::Ready(entry) => *entry,
         };
-        self.commit_battlefield_entry_state(entry, Some(recipient))?;
-        self.fire_triggers(&[GameEvent::EntersBattlefield {
-            object_id: exiled.object_id,
-            chosen_x: 0,
-        }]);
-        events.extend([
-            permanent_moved_event(
-                &self.state,
-                exiled.object_id,
+        self.state
+            .pending_observer_return_batch
+            .get_or_insert_with(|| PendingObserverReturnBatch {
+                ready: Vec::new(),
+                remaining: VecDeque::new(),
+                resume_stack: stack.clone(),
+            })
+            .ready
+            .push(ObserverReturnEntry {
+                event: entry,
                 owner,
-                rv1::permanent_moved::Destination::Battlefield,
-            ),
-            rv1::RuledEvent {
-                ev: Some(rv1::ruled_event::Ev::AuraAttached(rv1::AuraAttached {
-                    aura_object_id: exiled.object_id,
-                    attachment_recipient: Some(attachment_recipient_proto(recipient)),
-                })),
-            },
-            ev_log(format!("{label} returns attached to its chosen recipient.")),
-        ]);
+                label,
+                attached_to: Some(recipient),
+            });
         if self.drain_immediate_observer_actions(stack.clone(), &mut events)? {
             return Ok(finish_with_events(self, events));
         }

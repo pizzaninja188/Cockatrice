@@ -304,12 +304,12 @@ fn target_roles_by_group<'a>(
 }
 
 pub(super) struct TokenCreationRequest<'a> {
-    token_id: &'a str,
-    copy: Option<&'a TokenCopySnapshot>,
-    count: u32,
-    recipients: Vec<PlayerId>,
-    spell_label: &'a str,
-    item: &'a StackItem,
+    pub(super) token_id: &'a str,
+    pub(super) copy: Option<&'a TokenCopySnapshot>,
+    pub(super) count: u32,
+    pub(super) recipients: Vec<PlayerId>,
+    pub(super) spell_label: &'a str,
+    pub(super) item: &'a StackItem,
 }
 
 pub(super) fn token_identity(values: &CopiableValues) -> rv1::TokenIdentity {
@@ -1592,6 +1592,21 @@ impl GameEngine {
                     effect_index: index as u32,
                 };
                 match effect {
+                    SpellEffectKind::WinGameIf { condition } => {
+                        if cx.engine.state.winner.is_none()
+                            && cx.engine.condition_holds(
+                                &condition,
+                                ConditionContext::for_stack_item(cx.top)
+                                    .with_previous_effect_result(cx.previous_effect_result),
+                            )
+                        {
+                            cx.engine.state.winner = Some(cx.controller);
+                        }
+                        EffectOutcome::Continue
+                    }
+                    SpellEffectKind::MillEachOpponentByHandSize => {
+                        zones::mill_each_opponent_by_hand_size(&mut cx)?
+                    }
                     SpellEffectKind::Conditional { condition, effect } => {
                         if !cx.engine.condition_holds(
                             &condition,
@@ -2061,10 +2076,22 @@ impl GameEngine {
         resume_stack: Option<ParkedStackResolution>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
-        let mut actions = VecDeque::from(std::mem::take(
+        if self.state.pending_observer_return_batch.is_some()
+            && self.state.pending_resolution.is_some()
+        {
+            return Ok(true);
+        }
+        let prior = self.state.pending_observer_return_batch.take();
+        let mut actions = prior
+            .as_ref()
+            .map_or_else(VecDeque::new, |batch| batch.remaining.clone());
+        actions.extend(std::mem::take(
             &mut self.state.pending_immediate_observer_actions,
         ));
-        let mut entries = Vec::new();
+        let mut entries = prior
+            .as_ref()
+            .map_or_else(Vec::new, |batch| batch.ready.clone());
+        let resume_stack = resume_stack.or_else(|| prior.and_then(|batch| batch.resume_stack));
         while let Some(action) = actions.pop_front() {
             let ImmediateObserverAction::ReturnExiledObject { exiled } = action;
             let generation = self
@@ -2136,9 +2163,11 @@ impl GameEngine {
                 }
                 // Preserve the rest of a simultaneous return cohort. The accepted choice drains
                 // it before resuming the original stack instruction.
-                self.state
-                    .pending_immediate_observer_actions
-                    .extend(actions);
+                self.state.pending_observer_return_batch = Some(PendingObserverReturnBatch {
+                    ready: entries,
+                    remaining: actions,
+                    resume_stack: resume_stack.clone(),
+                });
                 let prompt = format!("Choose what {label} will enchant as it returns.");
                 events.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
@@ -2260,26 +2289,53 @@ impl GameEngine {
                             parked.previous_result = resume.previous_result.clone();
                         }
                     }
-                    self.state
-                        .pending_immediate_observer_actions
-                        .extend(actions);
+                    self.state.pending_observer_return_batch = Some(PendingObserverReturnBatch {
+                        ready: entries,
+                        remaining: actions,
+                        resume_stack: resume_stack.clone(),
+                    });
                     return Ok(true);
                 }
                 super::replacement::BattlefieldEntryProgress::Ready(entry) => {
                     let entry = *entry;
-                    entries.push((entry, owner, label));
+                    entries.push(ObserverReturnEntry {
+                        event: entry,
+                        owner,
+                        label,
+                        attached_to: None,
+                    });
                 }
             }
         }
+        let Some(SimultaneousEntryBatch::Observer(batch)) = self.begin_entry_timestamp_order(
+            SimultaneousEntryBatch::Observer(Box::new(PendingObserverReturnBatch {
+                ready: entries,
+                remaining: VecDeque::new(),
+                resume_stack: resume_stack.clone(),
+            })),
+            resume_stack,
+            events,
+        )?
+        else {
+            return Ok(true);
+        };
+        self.commit_observer_return_batch(batch.ready, events)?;
+        Ok(false)
+    }
 
+    pub(super) fn commit_observer_return_batch(
+        &mut self,
+        entries: Vec<ObserverReturnEntry>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
         let mut trigger_events = Vec::new();
-        for (entry, owner, label) in entries {
-            let object_id = entry.object_id;
-            let chosen_x = entry.chosen_x;
+        for entry in entries {
+            let object_id = entry.event.object_id;
+            let chosen_x = entry.event.chosen_x;
             // Observer returns are independent one-shot effects. Entry replacement ordering is
             // added in the Aura/choice increment; the base path still uses the canonical commit
             // reset and static-registration machinery.
-            let door_event = self.commit_battlefield_entry_state(entry, None)?;
+            let door_event = self.commit_battlefield_entry_state(entry.event, entry.attached_to)?;
             trigger_events.push(GameEvent::EntersBattlefield {
                 object_id,
                 chosen_x,
@@ -2288,15 +2344,24 @@ impl GameEngine {
             events.push(permanent_moved_event(
                 &self.state,
                 object_id,
-                owner,
+                entry.owner,
                 rv1::permanent_moved::Destination::Battlefield,
             ));
+            if let Some(recipient) = entry.attached_to {
+                events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::AuraAttached(rv1::AuraAttached {
+                        aura_object_id: object_id,
+                        attachment_recipient: Some(attachment_recipient_proto(recipient)),
+                    })),
+                });
+            }
             events.push(ev_log(format!(
-                "{label} returns to the battlefield under its owner's control."
+                "{} returns to the battlefield under its owner's control.",
+                entry.label
             )));
         }
         self.fire_triggers(&trigger_events);
-        Ok(false)
+        Ok(())
     }
 
     pub(super) fn observer_return_item(
@@ -2858,6 +2923,7 @@ fn move_object_to_zone_with_entry_receipt(
         })
         .flatten();
     if leaving_battlefield {
+        state.battlefield_entry_timestamps.remove(&oid);
         state.room_states.remove(&oid);
         super::preparation::unprepare_permanent(state, oid);
         state.battle_protectors.remove(&oid);
@@ -3026,6 +3092,12 @@ fn move_object_to_zone_with_entry_receipt(
         Zone::Exile => p.exile.push(oid),
         Zone::Stack => {}
         Zone::Command => p.command_zone.push(oid),
+    }
+    if z == Zone::Battlefield {
+        state.next_game_rule_timestamp = state.next_game_rule_timestamp.saturating_add(1);
+        state
+            .battlefield_entry_timestamps
+            .insert(oid, state.next_game_rule_timestamp);
     }
     if let Some(o) = state.objects.get_mut(&oid) {
         o.zone = z;

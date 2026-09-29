@@ -1311,6 +1311,30 @@ impl GameEngine {
                     .unwrap_or(0);
                 condition.matches_value(count)
             }
+            GameCondition::SourceTotalCounterCount { .. } => {
+                let live = self
+                    .state
+                    .objects
+                    .get(&context.source_object_id)
+                    .filter(|object| object.zone == Zone::Battlefield)
+                    .filter(|_| {
+                        self.state
+                            .zone_change_generation
+                            .get(&context.source_object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == context.source_zone_change
+                    })
+                    .map(|object| &object.counters);
+                let counters = live.or_else(|| {
+                    self.state
+                        .last_known_counters_by_generation
+                        .get(&(context.source_object_id, context.source_zone_change))
+                });
+                let count =
+                    counters.map_or(0, |bag| bag.values().copied().fold(0, u32::saturating_add));
+                condition.matches_value(count)
+            }
             GameCondition::ObjectWasDealtDamageThisTurn { object } => self
                 .condition_object_identity(*object, context)
                 .is_some_and(|identity| {

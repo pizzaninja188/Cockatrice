@@ -2193,6 +2193,19 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     actions->pendingActivatedAbility.remainingCost = manaCost;
     actions->pendingActivatedAbility.flexPips = flexPips;
 
+    const int xPips = ruledActivatedManaXPipCount(
+        manaCostStr, selectedAbility && selectedAbility->xCounterManaChoice.has_value());
+    if (xPips > 0) {
+        const auto chosenX = promptBoundedManaCount(
+            actions->player->getGame()->getTab(), PlayerActions::tr("Choose X"),
+            PlayerActions::tr("Value of X for %1:").arg(actions->pendingActivatedAbility.cardName),
+            ruledActivatedXChoiceMaximum(actions->pendingActivatedAbility, xPips));
+        if (!ruledApplyActivatedXChoice(actions->pendingActivatedAbility, xPips, chosenX)) {
+            cancelPendingActivatedAbility();
+            return true;
+        }
+    }
+
     if (selectedAbility && selectedAbility->xCounterManaChoice) {
         const auto &choice = *selectedAbility->xCounterManaChoice;
         const QString counterName = choice.counterLabel;

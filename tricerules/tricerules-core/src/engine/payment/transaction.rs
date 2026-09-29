@@ -1605,7 +1605,7 @@ impl GameEngine {
             },
             waterbend_limit,
             mana: mana_cost,
-            x_value: 0,
+            x_value,
             extra_generic,
             generic_reduction: 0,
             flex_payments: flex_payments.to_vec(),
