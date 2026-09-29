@@ -1,0 +1,15 @@
+// CR 603.4: each opponent's current hand count is checked at upkeep and resolution.
+(
+  id: "misers_cage",
+  name: "Misers' Cage",
+  face_id: "misers_cage",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: AtBeginningOfUpkeep(player: Opponent),
+    intervening_if: Some(CardsInHand(players: AffectedPlayer, min: Some(5))),
+    effect: [DamagePlayer(amount: 2, who: AffectedPlayer)],
+  )],
+)

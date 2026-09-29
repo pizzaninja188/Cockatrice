@@ -1,0 +1,15 @@
+// CR 603.4: the opponent's current hand count is checked both at upkeep and resolution.
+(
+  id: "ebony_owl_netsuke",
+  name: "Ebony Owl Netsuke",
+  face_id: "ebony_owl_netsuke",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: AtBeginningOfUpkeep(player: Opponent),
+    intervening_if: Some(CardsInHand(players: AffectedPlayer, min: Some(7))),
+    effect: [DamagePlayer(amount: 4, who: AffectedPlayer)],
+  )],
+)

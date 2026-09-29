@@ -443,10 +443,18 @@ impl GameEngine {
                 }
             }
             event_triggers.retain(|trigger| {
-                let requires_event_context = matches!(
-                    trigger.ability.intervening_if.as_ref(),
-                    Some(GameCondition::TriggeringSpellManaSpent { .. })
-                );
+                let requires_event_context =
+                    trigger
+                        .ability
+                        .intervening_if
+                        .as_ref()
+                        .is_some_and(|condition| {
+                            condition.requires_affected_player_context()
+                                || matches!(
+                                    condition,
+                                    GameCondition::TriggeringSpellManaSpent { .. }
+                                )
+                        });
                 !requires_event_context
                     || self.intervening_if_holds_at_generation(
                         trigger.source_id,
@@ -2228,10 +2236,11 @@ impl GameEngine {
             .iter()
             .filter(|(_, ability, _)| filter(&ability.trigger))
             .filter(|(_, ability, _)| {
-                let requires_event_context = matches!(
-                    ability.intervening_if.as_ref(),
-                    Some(GameCondition::TriggeringSpellManaSpent { .. })
-                );
+                let requires_event_context =
+                    ability.intervening_if.as_ref().is_some_and(|condition| {
+                        condition.requires_affected_player_context()
+                            || matches!(condition, GameCondition::TriggeringSpellManaSpent { .. })
+                    });
                 source.event_conditions_checked
                     || requires_event_context
                     || self.intervening_if_holds(

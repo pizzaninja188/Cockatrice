@@ -1,0 +1,28 @@
+{
+  "format_version": 1,
+  "oracle_id": "05b9dccb-2364-4bca-a12e-8cb54a3f3a0b",
+  "spans": [
+    {
+      "face_id": "viseling",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario hand_size_upkeep_cohort::hand_size_upkeep_cards_have_reviewed_identity_and_characteristics",
+      "covers": "the registered Oracle identity, printed characteristics, and upkeep ability"
+    },
+    {
+      "test": "scenario hand_size_upkeep_cohort::iron_maiden_and_viseling_read_live_hand_size_and_clamp_negative_damage",
+      "covers": "hand-size-minus-four damage is read at resolution and negative results become zero"
+    },
+    {
+      "test": "scenario hand_size_upkeep_cohort::opponent_upkeep_damage_covers_each_opponent_in_three_player_game",
+      "covers": "each opponent's upkeep triggers independently in a three-player game; the controller's upkeep does not"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

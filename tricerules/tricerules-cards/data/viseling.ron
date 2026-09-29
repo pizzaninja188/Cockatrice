@@ -1,0 +1,22 @@
+// The signed affine count reads the upkeep player's current hand on resolution.
+(
+  id: "viseling",
+  name: "Viseling",
+  face_id: "viseling",
+  mana_cost: "{4}",
+  types: ["Artifact", "Creature", "Phyrexian", "Construct"],
+  power: 2,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: AtBeginningOfUpkeep(player: Opponent),
+    effect: [DamagePlayer(
+      amount: Count(Affine(constant: -4, terms: [(
+        coefficient: 1,
+        quantity: CardsInHand(players: AffectedPlayer),
+      )])),
+      who: AffectedPlayer,
+    )],
+  )],
+)

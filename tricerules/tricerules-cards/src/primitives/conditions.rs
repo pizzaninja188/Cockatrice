@@ -52,6 +52,16 @@ pub enum GameCondition {
     /// `Controller` is "during your turn" (Daggersail Aeronaut); `Opponents` supports the inverse
     /// without assuming a two-player game.
     ActivePlayer { players: RelativePlayerSet },
+    /// Compare a selected player's live hand count against inclusive bounds. Ebony Owl Netsuke
+    /// and Misers' Cage use this as a CR 603.4 intervening condition for the upkeep player.
+    /// Only the count is read; card identities remain private.
+    CardsInHand {
+        players: ConditionPlayerSet,
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
     /// Whether any opponent who is still in the game has a larger current value than this
     /// condition's controller. Each opponent is compared independently; opponents are never
     /// summed, and hand contents are not inspected when comparing hand size.
@@ -285,6 +295,19 @@ impl GameCondition {
         }
     }
 
+    /// Event-bound conditions need their trigger context before the first CR 603.4 check.
+    pub fn requires_affected_player_context(&self) -> bool {
+        self.any_node_matches(|condition| {
+            matches!(
+                condition,
+                Self::CardsInHand {
+                    players: ConditionPlayerSet::AffectedPlayer,
+                    ..
+                }
+            )
+        })
+    }
+
     /// Validate a condition in a context without a completed spell cast (costs, abilities,
     /// continuous effects, and the snapshot declarations themselves).
     pub(crate) fn validate_live(&self) -> Result<(), String> {
@@ -399,6 +422,12 @@ impl GameCondition {
             GameCondition::PlayerLifeAggregate { min, max, .. } => {
                 validate_optional_bounds(min.as_ref(), max.as_ref(), "PlayerLifeAggregate")
             }
+            GameCondition::CardsInHand { players, min, max } => {
+                if !players.identifies_one_player() {
+                    return Err("CardsInHand requires a single player selector".into());
+                }
+                validate_optional_bounds(min.as_ref(), max.as_ref(), "CardsInHand")
+            }
             GameCondition::CreatureDeathsThisTurn { min, max } => {
                 validate_optional_bounds(min.as_ref(), max.as_ref(), "CreatureDeathsThisTurn")
             }
@@ -482,6 +511,7 @@ impl GameCondition {
             | GameCondition::SpellsCastLastTurn { min, max, .. }
             | GameCondition::CrimesCommittedThisTurn { min, max, .. }
             | GameCondition::CardsDrawnThisTurn { min, max, .. }
+            | GameCondition::CardsInHand { min, max, .. }
             | GameCondition::AttackersDeclaredThisTurn { min, max, .. }
             | GameCondition::PermanentsEnteredThisTurn { min, max, .. }
             | GameCondition::SourceCounterCount { min, max, .. }
@@ -573,6 +603,18 @@ pub enum ConditionPlayerSet {
         group_index: u32,
         target_index: u32,
     },
+}
+
+impl ConditionPlayerSet {
+    /// Whether this selector can identify exactly one player without choosing among a cohort.
+    pub(crate) fn identifies_one_player(&self) -> bool {
+        matches!(
+            self,
+            Self::Relative(RelativePlayerSet::Controller)
+                | Self::AffectedPlayer
+                | Self::ChosenTarget { .. }
+        )
+    }
 }
 
 /// Distinguishes existential and universal player conditions without summing players' facts.
@@ -790,5 +832,35 @@ impl BattlefieldCreatureCountFilter {
             );
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod hand_size_selector_tests {
+    use super::*;
+
+    #[test]
+    fn cards_in_hand_condition_rejects_a_multi_player_selector() {
+        let condition = GameCondition::CardsInHand {
+            players: ConditionPlayerSet::Relative(RelativePlayerSet::Opponents),
+            min: Some(5),
+            max: None,
+        };
+
+        assert_eq!(
+            condition.validate().unwrap_err(),
+            "CardsInHand requires a single player selector"
+        );
+    }
+
+    #[test]
+    fn cards_in_hand_condition_accepts_the_affected_player() {
+        let condition = GameCondition::CardsInHand {
+            players: ConditionPlayerSet::AffectedPlayer,
+            min: Some(5),
+            max: None,
+        };
+
+        assert!(condition.validate().is_ok());
     }
 }

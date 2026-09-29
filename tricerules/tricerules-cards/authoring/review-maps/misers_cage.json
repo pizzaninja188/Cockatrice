@@ -1,0 +1,24 @@
+{
+  "format_version": 1,
+  "oracle_id": "72a1e724-eb32-4781-b44d-3b1ed02a5a8b",
+  "spans": [
+    {
+      "face_id": "misers_cage",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario hand_size_upkeep_cohort::hand_size_upkeep_cards_have_reviewed_identity_and_characteristics",
+      "covers": "the registered Oracle identity, printed characteristics, and upkeep ability"
+    },
+    {
+      "test": "scenario hand_size_upkeep_cohort::misers_cage_checks_five_cards_at_opponents_upkeep_and_resolution",
+      "covers": "the five-card threshold for each opponent, two damage, and resolution recheck"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

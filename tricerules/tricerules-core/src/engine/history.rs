@@ -153,7 +153,7 @@ pub(super) fn commit_life_change(state: &mut GameState, player_idx: usize, delta
     *total = total.saturating_add(u64::from(delta.unsigned_abs()));
 }
 
-fn clamp_public_count(count: usize) -> u32 {
+pub(super) fn clamp_public_count(count: usize) -> u32 {
     u32::try_from(count).unwrap_or(u32::MAX)
 }
 
@@ -330,6 +330,26 @@ fn selected_condition_player(
             PlayerId::try_from(target.object_id).ok()
         }
     }
+}
+
+/// Read only the current count of one bound player's hand. An unbound selection fails closed.
+fn selected_hand_size(
+    state: &GameState,
+    players: ConditionPlayerSet,
+    controller: PlayerId,
+    targets: Option<&[StackTarget]>,
+    affected_player: Option<PlayerId>,
+) -> Option<u32> {
+    let selected = match players {
+        ConditionPlayerSet::Relative(RelativePlayerSet::Controller) => Some(controller),
+        ConditionPlayerSet::Relative(_) => None,
+        _ => selected_condition_player(players, targets, affected_player),
+    }?;
+    state
+        .players
+        .iter()
+        .find(|player| player.id == selected && !player.has_lost)
+        .map(|player| clamp_public_count(player.hand.len()))
 }
 
 pub(super) fn life_changed_this_turn(
@@ -1102,6 +1122,16 @@ impl GameEngine {
                 context.controller,
                 self.state.active_player_id(),
             ),
+            GameCondition::CardsInHand { players, .. } => selected_hand_size(
+                &self.state,
+                *players,
+                context.controller,
+                context.stack_item.map(|item| item.targets.as_slice()),
+                trigger_context
+                    .or_else(|| context.stack_item.map(|item| &item.trigger_context))
+                    .and_then(|trigger| trigger.affected_player),
+            )
+            .is_some_and(|count| condition.matches_value(count)),
             GameCondition::OpponentHasMoreThanYou { metric } => {
                 self.opponent_has_more_than_you(context.controller, *metric)
             }
@@ -1711,6 +1741,16 @@ impl GameEngine {
                 context.stack_item,
                 *exclude_source,
             ) as i64,
+            CountExpression::CardsInHand { players } => selected_hand_size(
+                &self.state,
+                *players,
+                context.controller,
+                context.stack_item.map(|item| item.targets.as_slice()),
+                context
+                    .stack_item
+                    .and_then(|item| item.trigger_context.affected_player),
+            )
+            .map_or(0, i64::from),
             CountExpression::BattlefieldPermanents { .. }
             | CountExpression::BattlefieldMaximum { .. }
             | CountExpression::BattlefieldCreatures { .. } => {

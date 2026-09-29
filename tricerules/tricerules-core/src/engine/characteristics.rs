@@ -706,6 +706,18 @@ impl CharacteristicsEvaluator<'_> {
                 controller,
                 self.state.active_player_id(),
             ),
+            GameCondition::CardsInHand { players, .. } => match players {
+                ConditionPlayerSet::Relative(RelativePlayerSet::Controller) => self
+                    .state
+                    .players
+                    .iter()
+                    .find(|player| player.id == controller && !player.has_lost)
+                    .is_some_and(|player| {
+                        condition
+                            .matches_value(super::history::clamp_public_count(player.hand.len()))
+                    }),
+                _ => false,
+            },
             GameCondition::PlayerLifeAggregate {
                 players, aggregate, ..
             } => player_life_aggregate_value(

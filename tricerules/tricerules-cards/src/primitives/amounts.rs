@@ -24,6 +24,9 @@ pub enum CountExpression {
         #[serde(default)]
         exclude_source: bool,
     },
+    /// A selected player's current hand count. Iron Maiden and Viseling read the upkeep
+    /// player's live count as their damage resolves, without inspecting card identities.
+    CardsInHand { players: ConditionPlayerSet },
     /// Flow of Knowledge and Gold Rush count derived public permanent cohorts.
     BattlefieldPermanents { filter: BattlefieldPermanentFilter },
     /// Chupacabra Echo and Calamitous Cave-In count printed public-zone characteristics.
@@ -155,6 +158,8 @@ impl CountExpression {
                 filter.as_ref().map_or(Ok(()), ZoneCardFilter::validate)
             }
             Self::PlayersWhoLostLifeThisTurn { .. } | Self::SourcePower => Ok(()),
+            Self::CardsInHand { players } if players.identifies_one_player() => Ok(()),
+            Self::CardsInHand { .. } => Err("CardsInHand requires a single player selector".into()),
             Self::DeclaredAttackers { filter, .. } => filter.validate(),
             Self::Affine { terms, .. } => {
                 if terms.is_empty() {
@@ -692,4 +697,30 @@ pub enum LifeAmount {
     /// CR 202.3: the mana value of the object this spell targets (Reanimate). Legal only in an
     /// effect list that also contains a target-bearing effect — enforced at registry load.
     TargetManaValue,
+}
+
+#[cfg(test)]
+mod hand_size_count_tests {
+    use super::*;
+
+    #[test]
+    fn cards_in_hand_count_requires_a_single_player_selector() {
+        let count = CountExpression::CardsInHand {
+            players: ConditionPlayerSet::Relative(RelativePlayerSet::Opponents),
+        };
+
+        assert_eq!(
+            count.validate().unwrap_err(),
+            "CardsInHand requires a single player selector"
+        );
+    }
+
+    #[test]
+    fn cards_in_hand_count_accepts_the_affected_player() {
+        let count = CountExpression::CardsInHand {
+            players: ConditionPlayerSet::AffectedPlayer,
+        };
+
+        assert!(count.validate().is_ok());
+    }
 }

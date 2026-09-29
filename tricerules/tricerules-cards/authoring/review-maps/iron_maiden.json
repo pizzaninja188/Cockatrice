@@ -1,0 +1,24 @@
+{
+  "format_version": 1,
+  "oracle_id": "e0351638-9224-4779-8f7c-f2b11d134a5f",
+  "spans": [
+    {
+      "face_id": "iron_maiden",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario hand_size_upkeep_cohort::hand_size_upkeep_cards_have_reviewed_identity_and_characteristics",
+      "covers": "the registered Oracle identity, printed characteristics, and upkeep ability"
+    },
+    {
+      "test": "scenario hand_size_upkeep_cohort::iron_maiden_and_viseling_read_live_hand_size_and_clamp_negative_damage",
+      "covers": "hand-size-minus-four damage is read at resolution and negative results become zero"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

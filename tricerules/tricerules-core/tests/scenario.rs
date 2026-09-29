@@ -222,6 +222,8 @@ mod equipment;
 mod font_of_mythos;
 #[path = "scenario/generator_servant.rs"]
 mod generator_servant;
+#[path = "scenario/hand_size_upkeep_cohort.rs"]
+mod hand_size_upkeep_cohort;
 #[path = "scenario/helpers.rs"]
 mod helpers;
 #[path = "scenario/issue_100_omen.rs"]
