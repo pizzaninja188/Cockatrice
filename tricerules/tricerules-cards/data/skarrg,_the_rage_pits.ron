@@ -1,0 +1,34 @@
+// Oracle and rulings checked 2026-09-29: https://scryfall.com/card/pca/127/skarrg-the-rage-pits.
+// CR 602.2 and 608.2b govern activation and target legality; 605.1a/605.3b classify and resolve
+// the untargeted mana ability immediately. Pump applies in layer 7c (613.4c), trample adds an
+// ability in layer 6 (613.1f), and both until-end-of-turn effects end during cleanup (514.2).
+(
+  id: "skarrg,_the_rage_pits",
+  name: "Skarrg, the Rage Pits",
+  face_id: "skarrg_the_rage_pits",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{R}{G}"), Tap],
+      effect: [
+        PumpTarget(power: 1, toughness: 1, subject: Chosen((kind: Creature))),
+        GrantKeywords(subject: Chosen((kind: Creature)), keywords: [Trample]),
+      ],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target creature",
+        effect_indices: [0, 1],
+      )])),
+    ),
+  ],
+)

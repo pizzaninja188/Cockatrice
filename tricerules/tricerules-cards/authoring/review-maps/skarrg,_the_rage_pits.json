@@ -1,0 +1,67 @@
+{
+  "format_version": 1,
+  "oracle_id": "92bac34e-2045-4331-842f-185711c1ac56",
+  "spans": [
+    {
+      "face_id": "skarrg_the_rage_pits",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "skarrg_the_rage_pits",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1",
+        "/faces/0/activated_abilities/1/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "TargetFilter.kind",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/PumpTarget/subject/Chosen/kind"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantKeywords",
+      "typed_path": "/faces/0/activated_abilities/1/effect/1"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/1/targeting"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_skarrg::skarrg_adds_colorless_immediately_and_cannot_reactivate_while_tapped",
+      "covers": "playing Skarrg untapped, tapping it to add one colorless mana immediately without a stack object, then rejecting another activation while tapped"
+    },
+    {
+      "test": "scenario deck_coverage_skarrg::skarrg_targets_an_opponents_creature_and_grants_pump_and_trample_until_cleanup",
+      "covers": "rejecting a noncreature target without paying costs, targeting an opponent's creature, paying red and green plus tapping on activation, resolving +1/+1 and trample together, and ending both effects at cleanup"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

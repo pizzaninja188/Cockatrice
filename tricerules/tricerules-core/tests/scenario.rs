@@ -182,6 +182,8 @@ mod deck_coverage_sakura_tribe_elder;
 mod deck_coverage_scavenger_grounds;
 #[path = "scenario/deck_coverage_search_lands.rs"]
 mod deck_coverage_search_lands;
+#[path = "scenario/deck_coverage_skarrg.rs"]
+mod deck_coverage_skarrg;
 #[path = "scenario/deck_coverage_sol_ring.rs"]
 mod deck_coverage_sol_ring;
 #[path = "scenario/deck_coverage_solemn_simulacrum.rs"]
