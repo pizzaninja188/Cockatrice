@@ -104,23 +104,23 @@ pub(crate) fn assert_object(
 }
 
 #[derive(Clone, Copy)]
-pub(crate) enum DrawSurface {
+pub(crate) enum DrawSurface<'a> {
     Spell,
     Etb,
-    Mode { index: u32, id: &'static str },
+    Mode { index: u32, id: &'a str },
 }
 
 /// Independently reviewed values; never derive these from CardRegistry effects or a recipe.
-pub(crate) struct DrawCase {
-    pub card: &'static str,
-    pub surface: DrawSurface,
+pub(crate) struct DrawCase<'a> {
+    pub card: &'a str,
+    pub surface: DrawSurface<'a>,
     pub mana: ManaGift,
     pub recipient: usize,
     pub count: usize,
     pub food: usize,
 }
 
-pub(crate) fn divination() -> DrawCase {
+pub(crate) fn divination() -> DrawCase<'static> {
     DrawCase {
         card: "divination",
         surface: DrawSurface::Spell,
@@ -135,7 +135,7 @@ pub(crate) fn divination() -> DrawCase {
     }
 }
 
-pub(crate) fn visionary() -> DrawCase {
+pub(crate) fn visionary() -> DrawCase<'static> {
     DrawCase {
         card: "elvish_visionary",
         surface: DrawSurface::Etb,
@@ -150,7 +150,7 @@ pub(crate) fn visionary() -> DrawCase {
     }
 }
 
-pub(crate) fn pawpatch() -> DrawCase {
+pub(crate) fn pawpatch() -> DrawCase<'static> {
     DrawCase {
         card: "pawpatch_formation",
         surface: DrawSurface::Mode {
@@ -170,8 +170,11 @@ pub(crate) fn pawpatch() -> DrawCase {
 
 /// Pilot for untargeted controller draw. ETB and mode composition remain explicit contracts.
 /// Returns exercised only after checking both completion and the caller's semantic expectations.
-pub(crate) fn exercise_draw(case: DrawCase) -> Evidence {
-    let mut engine = main_phase(448_001);
+pub(crate) fn exercise_draw(case: DrawCase<'_>) -> Evidence {
+    exercise_draw_in(main_phase(448_001), case)
+}
+
+pub(crate) fn exercise_draw_in(mut engine: GameEngine, case: DrawCase<'_>) -> Evidence {
     let source = inject_card_into_hand(&mut engine, 0, case.card);
     assert_object(&engine, source, case.card, 0, 0, Zone::Hand, 0);
     give_mana(&mut engine, 0, case.mana);

@@ -23,6 +23,13 @@ proptest.workspace = true
 checklist = ["dep:roxmltree"]
 # Fail-closed exact-recipe card generator (see src/bin/gen_cards.rs).
 gencards = ["dep:serde_json", "dep:flate2", "dep:sha2"]
+# Offline authoring tools; never enabled by the game server.
+authoring = ["dep:serde_json", "dep:flate2", "dep:sha2"]
+
+[[bin]]
+name = "card-author"
+path = "src/bin/card_author.rs"
+required-features = ["authoring"]
 
 [[bin]]
 name = "gen-checklist"

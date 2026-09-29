@@ -1086,6 +1086,99 @@ retained. Runtime, protobuf, relay, Qt and freeform contracts are unchanged, so 
 N/A. Focused fixture/registry tests, existing conformance, generator tests and full Rust/card-data
 gates remain required. No new rules capability or card identity is introduced.
 
+### Offline authoring workbench
+
+Use `scripts/card-author.ps1` for discovery and clerical preparation. It reads current RON through
+the runtime validator, builds structural search features in memory, and searches the local pinned
+Oracle bulk when requested. There is no hand-maintained feature catalogue to update. Output is
+readable JSON with paths, structural features, source text when loaded, and existing review-map
+test references. Scores are advisory; they do not prove complete support or replace rulings.
+
+```powershell
+# Structural analogues for an implemented card (actual effect/target/cost trees).
+./scripts/card-author.ps1 search --like divination --limit 5
+# Search typed vocabulary, or rank implemented cards against an exact local Oracle name.
+./scripts/card-author.ps1 search --query "Destroy Creature" --limit 5
+./scripts/card-author.ps1 search --name "Exact New Card Name" --limit 5
+
+# Copy a reviewed analogue into a NEW directory outside embedded data/.
+./scripts/card-author.ps1 clone --from divination --name "Exact New Card Name" --out build/new-card-draft
+```
+
+Clone updates identity and printed characteristics from the SHA-verified local source, preserves
+the analogue's typed mechanics, and emits `.draft.ron`, an **unconfirmed** review map, `source.json`
+and `differences.json`. The report includes source-field differences, copied-file hash and existing
+test references. No semantic expectations or approval are copied. Both unresolved sentinels prevent
+normal validation until the author finishes mechanics and presentation. Review self-references,
+costs, targets and all changed clauses; inherited presentation mappings may be wrong for the new
+Oracle lines. Never interpret copying as approval. Output collisions and embedded-data destinations
+are rejected. The initial clone path supports normal single-face cards with numeric printed stats;
+use existing scaffold/manual authoring for other layouts, variable stats and color indicators.
+Search itself includes multi-face definitions. `--bulk` selects a different already-local snapshot;
+it must have matching adjacent metadata and does not download or update anything.
+
+#### Reusable rows and draft execution
+
+The checked-in [`authoring_rows.json`](../../tricerules-core/tests/scenario/authoring_rows.json)
+demonstrates independently specified spell/ETB/modal draw and single-target destruction families.
+Mana arrays are `[W,U,B,R,G,C]`. Draw rows assert exact hands/libraries, source destination and
+generation, recipient, selected mode and Food count. Destruction rows prove illegal-target rejection
+without state change, the chosen opposing object's destruction, unaffected bystanders and physical
+identity. These families cover only their named behavior. Add a dedicated scenario for other clauses,
+choices, unusual timing or interactions; do not broaden an assertion-free generic command DSL.
+
+For a new card, edit its draft outside `data/`, resolve both sentinels, and write a batch JSON file:
+
+```json
+{
+  "drafts": ["new_card.draft.ron"],
+  "rows": [
+    {"family":"draw", "card":"new_card", "mana":[0,1,0,0,0,2],
+     "surface":"spell", "recipient":0, "count":2, "food":0}
+  ]
+}
+```
+
+Draft paths resolve relative to that JSON file. Expectations must be authored from reviewed source
+semantics, never inferred from the draft. Then run:
+
+```powershell
+./scripts/test-card-drafts.ps1 -BatchPath build/new-card-draft/batch.json
+```
+
+This builds the optional authoring harness once and reads fresh draft RON and row JSON on each run.
+Editing those external files does not recompile embedded card data. Each draft must have an executed
+row; empty batches, malformed schemas, unresolved drafts and duplicate IDs fail. The explicit
+authoring constructor uses the same engine/registry validators, without changing the global registry
+or any production startup path. The harness does not prove client presentation or Oracle correctness.
+New token definitions and replacements for already-implemented IDs are outside this initial overlay
+path; use normal authoring/testing for those cases.
+
+After review, promote the finished RON/map, add its independently reviewed rows to the checked-in
+matrix (or dedicated scenarios), and run preparation plus the ordinary full embedded Rust/CardData
+gate. A draft-only pass never substitutes for that gate or independent semantic review.
+
+#### Small research queue
+
+Save completed research notes with the actual source/rulings, analogue and fixture dependencies:
+
+```powershell
+./scripts/card-author.ps1 queue-save --name "Exact New Card Name" --note "Copy from X; differences Y; remaining checks Z" --depends build/new-card-draft/source.json --depends path/to/rulings.txt --depends path/to/analogue.ron --depends path/to/fixture.rs --out build/new-card-queue.json
+./scripts/card-author.ps1 queue-check --entry build/new-card-queue.json
+```
+
+Entries fingerprint those inputs plus engine/schema/helper sources, Cargo.lock and local bulk
+metadata. Directory dependencies include membership, so additions/deletions also invalidate them.
+Missing inputs are stale. Unrelated commits and unrelated card additions do not invalidate research
+merely by changing HEAD. Include every additional source/token/fixture dependency actually used.
+`fresh: true` means only that recorded inputs match; it is not implementation readiness or semantic
+approval. Recheck corpus membership, ownership and unrecorded assumptions before selecting a batch.
+Keep just a few compatible prepared candidates; do not turn queue upkeep into a per-card gate.
+
+All workbench wrappers cap Cargo jobs and Rust test threads at four. Existing required gates remain
+unchanged. Source availability, narrower clone/family support or a stale queue never authorize
+guessing missing mechanics, broadening admissions or waiving verification.
+
 ### Batch evidence and review discipline
 
 #### Short path for reuse-only batches

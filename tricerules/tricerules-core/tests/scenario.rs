@@ -8,6 +8,10 @@
 #[path = "scenario/semantic_fixtures.rs"]
 mod semantic_fixtures;
 
+#[cfg(feature = "authoring")]
+#[path = "scenario/authoring_drafts.rs"]
+mod authoring_drafts;
+
 #[path = "scenario/anti_venom.rs"]
 mod anti_venom;
 

@@ -1,6 +1,22 @@
 use super::helpers::{semantic::*, *};
 
 #[test]
+fn authoring_rows_exercise_reviewed_draw_and_removal_cards() {
+    super::helpers::authoring_rows::run_rows(include_str!("authoring_rows.json"), || {
+        main_phase(448_010)
+    });
+}
+
+#[test]
+#[should_panic(expected = "exact hand")]
+fn authoring_rows_reject_wrong_independent_expectation() {
+    super::helpers::authoring_rows::run_rows(
+        r#"[{"family":"draw","card":"divination","mana":[0,1,0,0,0,2],"surface":"spell","recipient":0,"count":9,"food":0}]"#,
+        || main_phase(448_011),
+    );
+}
+
+#[test]
 fn semantic_fixtures_registered_draw_pilot() {
     for case in [divination(), visionary(), pawpatch()] {
         exercise_draw(case).require_exercised();

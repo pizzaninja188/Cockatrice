@@ -1432,10 +1432,47 @@ impl GameEngine {
         decks: Option<Vec<EngineDeck>>,
         skip_opening_sequence: bool,
     ) -> Result<Self, EngineError> {
+        Self::new_with_registry(
+            seed,
+            player_ids,
+            starting_life,
+            decks,
+            skip_opening_sequence,
+            CardRegistry::global(),
+        )
+    }
+
+    /// Offline test harness entry point. No production constructor reads draft paths or env vars.
+    #[cfg(feature = "authoring")]
+    pub fn new_for_authoring(
+        seed: u64,
+        player_ids: &[PlayerId],
+        starting_life: i32,
+        decks: Option<Vec<EngineDeck>>,
+        skip_opening_sequence: bool,
+        registry: &'static CardRegistry,
+    ) -> Result<Self, EngineError> {
+        Self::new_with_registry(
+            seed,
+            player_ids,
+            starting_life,
+            decks,
+            skip_opening_sequence,
+            registry,
+        )
+    }
+
+    fn new_with_registry(
+        seed: u64,
+        player_ids: &[PlayerId],
+        starting_life: i32,
+        decks: Option<Vec<EngineDeck>>,
+        skip_opening_sequence: bool,
+        registry: &'static CardRegistry,
+    ) -> Result<Self, EngineError> {
         if !SUPPORTED_PLAYER_COUNT.contains(&player_ids.len()) {
             return Err(EngineError::Illegal("free-for-all requires 2 to 4 players"));
         }
-        let registry = CardRegistry::global();
         let mut objects = HashMap::new();
         // Player targets in commands use raw `PlayerId` values as `TargetRef.object_id`. Game
         // objects must use disjoint ids so e.g. P1 (id 1) is never confused with object id 1.

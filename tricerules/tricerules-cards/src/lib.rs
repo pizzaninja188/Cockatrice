@@ -1,5 +1,7 @@
 //! Card definitions, data-driven registry, and effect primitives.
 
+#[cfg(feature = "authoring")]
+pub mod authoring;
 pub mod card_def;
 pub mod identity;
 pub mod mana;

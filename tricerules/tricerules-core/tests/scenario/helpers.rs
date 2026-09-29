@@ -1,6 +1,8 @@
 //! Shared helpers for scenario tests.
 #![allow(dead_code)]
 
+#[path = "helpers/authoring_rows.rs"]
+pub(crate) mod authoring_rows;
 #[path = "helpers/semantic.rs"]
 pub(crate) mod semantic;
 

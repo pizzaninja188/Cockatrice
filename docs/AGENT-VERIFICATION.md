@@ -199,6 +199,32 @@ If `Enter-VsDevShell` fails because both `Path` and `PATH` exist, invoke the VS 
 
 ## Affected-side matrix
 
+### Offline authoring tooling
+
+The [authoring workbench](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#offline-authoring-workbench)
+is optional development tooling. Production constructors still load embedded data. After changing
+its Rust implementation, run focused tests with `--features authoring`, feature-enabled Clippy,
+and the normal full Rust/CardData gate. Default gates do not enable the draft constructor.
+
+```powershell
+# Run from tricerules through run-quiet-command.ps1:
+cargo test -p tricerules-cards --features authoring --lib authoring::tests
+cargo test -p tricerules-core --features authoring --test scenario semantic_fixtures
+cargo test -p tricerules-core --features authoring --test scenario authoring_drafts::draft_constructor
+cargo clippy -p tricerules-core -p tricerules-cards --features authoring --all-targets -- -D warnings
+cargo build -p tricerules-cards --features authoring --bin card-author
+
+# Run from the repository root through the quiet runner:
+python tests/scripts/card_author_workflow_test.py tricerules/target/debug/card-author.exe
+powershell.exe -NoProfile -File tests/scripts/draft_card_workflow_test.ps1
+```
+
+Repeat the draft wrapper regression with `pwsh.exe` when available. The loop test retains its
+synthetic draft/manifest and logs under build, proves a changed effect fails old expectations,
+then passes corrected independent expectations without changing the test executable hash or mtime.
+It does not admit those synthetic cards. Feature-only execution and embedded final verification
+are separate evidence; both are required for changes to this tooling.
+
 ### Parameterized card evidence
 
 Follow the [semantic evidence contract](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#reusable-semantic-evidence)

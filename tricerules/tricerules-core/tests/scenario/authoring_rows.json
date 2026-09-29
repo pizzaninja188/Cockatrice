@@ -1,0 +1,8 @@
+[
+  {"family":"draw","card":"divination","mana":[0,1,0,0,0,2],"surface":"spell","recipient":0,"count":2,"food":0},
+  {"family":"draw","card":"counsel_of_the_soratami","mana":[0,1,0,0,0,2],"surface":"spell","recipient":0,"count":2,"food":0},
+  {"family":"draw","card":"elvish_visionary","mana":[0,0,0,0,1,1],"surface":"etb","recipient":0,"count":1,"food":0},
+  {"family":"draw","card":"pawpatch_formation","mana":[0,0,0,0,1,1],"surface":"mode","mode_index":2,"mode_id":"mode_03","recipient":0,"count":1,"food":1},
+  {"family":"destroy","card":"murder","mana":[0,0,2,0,0,1],"target":"grizzly_bears","illegal_target":"forest"},
+  {"family":"destroy","card":"go_for_the_throat","mana":[0,0,1,0,0,1],"target":"grizzly_bears","illegal_target":"yotian_soldier"}
+]
