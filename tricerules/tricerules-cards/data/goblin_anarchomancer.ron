@@ -1,0 +1,22 @@
+// Exact Oracle/rulings checked 2026-09-29. CR 601.2f: one OR match, generic only.
+(
+  id: "goblin_anarchomancer",
+  name: "Goblin Anarchomancer",
+  face_id: "goblin_anarchomancer",
+  mana_cost: "{R}{G}",
+  types: ["Creature", "Goblin", "Shaman"],
+  power: 2,
+  toughness: 2,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: SpellGenericReduction(
+      casters: Controller,
+      spell_filter: Some((any_of: Some([
+        (is_color: Some(Red)),
+        (is_color: Some(Green)),
+      ]))),
+      amount: 1,
+    ),
+  )],
+)

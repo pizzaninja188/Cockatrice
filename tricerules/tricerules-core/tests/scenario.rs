@@ -879,3 +879,9 @@ mod issue_misc8_batch;
 mod issue_misc9_batch;
 #[path = "scenario/issue_removal_batch.rs"]
 mod issue_removal_batch;
+
+#[path = "scenario/deck_coverage_anarchomancer_mastermind.rs"]
+mod deck_coverage_anarchomancer_mastermind;
+
+#[path = "scenario/deck_coverage_fair_steel.rs"]
+mod deck_coverage_fair_steel;

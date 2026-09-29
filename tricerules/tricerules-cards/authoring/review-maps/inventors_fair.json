@@ -1,0 +1,45 @@
+{
+  "semantic_fixtures": [
+    {
+      "covers": "fair exact land and mana ability",
+      "test": "scenario deck_coverage_fair_steel::fair_exact_land_and_mana_ability"
+    },
+    {
+      "covers": "fair upkeep checks three artifacts at trigger and resolution",
+      "test": "scenario deck_coverage_fair_steel::fair_upkeep_checks_three_artifacts_at_trigger_and_resolution"
+    },
+    {
+      "covers": "fair activation checks before costs then reveals artifact to hand and shuffles",
+      "test": "scenario deck_coverage_fair_steel::fair_activation_checks_before_costs_then_reveals_artifact_to_hand_and_shuffles"
+    }
+  ],
+  "complete_definition_review_confirmed": true,
+  "oracle_id": "91d4a5fe-fd6d-4b14-a63f-61b4d0ecd9c4",
+  "format_version": 1,
+  "spans": [
+    {
+      "face_id": "inventors_fair",
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ],
+      "start_line": 1,
+      "end_line": 1
+    },
+    {
+      "face_id": "inventors_fair",
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ],
+      "start_line": 2,
+      "end_line": 2
+    },
+    {
+      "face_id": "inventors_fair",
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ],
+      "start_line": 3,
+      "end_line": 3
+    }
+  ]
+}

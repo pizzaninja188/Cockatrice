@@ -1,0 +1,25 @@
+{
+  "semantic_fixtures": [
+    {
+      "covers": "exact characteristics and presentation",
+      "test": "scenario deck_coverage_anarchomancer_mastermind::exact_characteristics_and_presentation"
+    },
+    {
+      "covers": "anarchomancer matches each color once only for its controller and preserves pips",
+      "test": "scenario deck_coverage_anarchomancer_mastermind::anarchomancer_matches_each_color_once_only_for_its_controller_and_preserves_pips"
+    }
+  ],
+  "complete_definition_review_confirmed": true,
+  "oracle_id": "e9319f13-1f2b-429c-9d61-e58a3cbec86a",
+  "format_version": 1,
+  "spans": [
+    {
+      "face_id": "goblin_anarchomancer",
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ],
+      "start_line": 1,
+      "end_line": 1
+    }
+  ]
+}

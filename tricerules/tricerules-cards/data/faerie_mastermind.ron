@@ -1,0 +1,23 @@
+// Exact Oracle/rulings checked 2026-09-29. Individual draw ordinals are per player/turn.
+(
+  id: "faerie_mastermind",
+  name: "Faerie Mastermind",
+  face_id: "faerie_mastermind",
+  mana_cost: "{1}{U}",
+  types: ["Creature", "Faerie", "Rogue"],
+  power: 2,
+  toughness: 1,
+  keywords: [Flash, Flying],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([3]),
+    trigger: WheneverPlayerDrawsNthCard(drawer: Opponent, ordinal: 2),
+    effect: [Draw(who: Controller, count: 1)],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([4]),
+    costs: [Mana("{3}{U}")],
+    effect: [Draw(who: EachPlayer, count: 1)],
+  )],
+)

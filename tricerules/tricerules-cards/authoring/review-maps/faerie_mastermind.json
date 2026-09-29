@@ -1,0 +1,53 @@
+{
+  "semantic_fixtures": [
+    {
+      "covers": "exact characteristics and presentation",
+      "test": "scenario deck_coverage_anarchomancer_mastermind::exact_characteristics_and_presentation"
+    },
+    {
+      "covers": "mastermind enters after first draw and tracks each opponents second not third",
+      "test": "scenario deck_coverage_anarchomancer_mastermind::mastermind_enters_after_first_draw_and_tracks_each_opponents_second_not_third"
+    },
+    {
+      "covers": "mastermind flash casts on opponent turn and draw history resets",
+      "test": "scenario deck_coverage_anarchomancer_mastermind::mastermind_flash_casts_on_opponent_turn_and_draw_history_resets"
+    }
+  ],
+  "complete_definition_review_confirmed": true,
+  "oracle_id": "a984db23-40ea-428d-829f-e944267280f8",
+  "format_version": 1,
+  "spans": [
+    {
+      "face_id": "faerie_mastermind",
+      "typed_paths": [
+        "/faces/0/keywords"
+      ],
+      "start_line": 1,
+      "end_line": 1
+    },
+    {
+      "face_id": "faerie_mastermind",
+      "typed_paths": [
+        "/faces/0/keywords"
+      ],
+      "start_line": 2,
+      "end_line": 2
+    },
+    {
+      "face_id": "faerie_mastermind",
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ],
+      "start_line": 3,
+      "end_line": 3
+    },
+    {
+      "face_id": "faerie_mastermind",
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ],
+      "start_line": 4,
+      "end_line": 4
+    }
+  ]
+}

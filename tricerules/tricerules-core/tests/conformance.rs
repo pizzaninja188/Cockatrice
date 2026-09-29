@@ -298,6 +298,9 @@ fn fixture(case: &Case) -> GameEngine {
     if case.card == "decimate" {
         cards.push("ominous_seas");
     }
+    if case.card == "inventors_fair" {
+        cards.extend(["sol_ring", "sol_ring"]);
+    }
     let deck = helpers::deck_with("forest", &cards);
     let mut e = GameEngine::new(SEED, &[0, 1], 20, Some(vec![deck.clone(), deck]), true).unwrap();
     helpers::advance_to_main1_from_game_start(&mut e);
@@ -306,6 +309,12 @@ fn fixture(case: &Case) -> GameEngine {
         helpers::relocate_to_battlefield(&mut e, player, "explosive_apparatus", false);
         if case.card == "decimate" {
             helpers::relocate_to_battlefield(&mut e, player, "ominous_seas", false);
+        }
+        if case.card == "inventors_fair" {
+            // The search activation requires three artifacts before its costs are paid.
+            // Explosive Apparatus is already present; add the two missing fixture resources.
+            helpers::relocate_to_battlefield(&mut e, player, "sol_ring", false);
+            helpers::relocate_to_battlefield(&mut e, player, "sol_ring", false);
         }
         helpers::relocate_to_hand(&mut e, player, "grizzly_bears");
         helpers::relocate_to_battlefield(&mut e, player, "forest", false);

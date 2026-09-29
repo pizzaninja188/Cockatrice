@@ -1,0 +1,44 @@
+// Exact Oracle/rulings checked 2026-09-29. Upkeep condition rechecks; activation does not.
+(
+  id: "inventors_fair",
+  name: "Inventors' Fair",
+  face_id: "inventors_fair",
+  mana_cost: "",
+  supertypes: ["Legendary"],
+  types: ["Land"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: AtBeginningOfUpkeep(player: Controller),
+    intervening_if: Some(BattlefieldAggregate(
+      filter: (controllers: Controller, card_type: Some(Artifact)),
+      aggregate: Count,
+      min: Some(3),
+    )),
+    effect: [GainLife(amount: 1)],
+  )],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      costs: [Mana("{4}"), Tap, SacrificeSelf],
+      conditions: [BattlefieldAggregate(
+        filter: (controllers: Controller, card_type: Some(Artifact)),
+        aggregate: Count,
+        min: Some(3),
+      )],
+      effect: [SearchLibrary(
+        filter: Some((card_type: Some(Artifact))),
+        destination: Hand,
+        reveal: true,
+        shuffle: true,
+      )],
+    ),
+  ],
+)
