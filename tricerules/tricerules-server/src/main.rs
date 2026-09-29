@@ -334,6 +334,72 @@ mod tests {
     }
 
     #[test]
+    fn resolve_deck_names_rejects_unknown_declared_commander_names() {
+        let mut deck = deck(0, &["Forest"]);
+        deck.commander_setup = Some(CommanderSetup {
+            declaration: Some(commander_setup::Declaration::Declared(
+                commander_setup::Declared {
+                    card_name: vec!["Unknown Commander".into()],
+                },
+            )),
+        });
+        assert_eq!(
+            resolve_deck_names(&[0], &[deck]),
+            Err(DeckResolveError::MissingCards(vec![
+                "Unknown Commander".into()
+            ]))
+        );
+    }
+
+    #[test]
+    fn resolve_deck_names_rejects_unsupported_commander_declarations() {
+        let mut too_many = deck(0, &["Forest"]);
+        too_many.commander_setup = Some(CommanderSetup {
+            declaration: Some(commander_setup::Declaration::Declared(
+                commander_setup::Declared {
+                    card_name: vec![
+                        "Atraxa, Praetors' Voice".into(),
+                        "Kami of the Crescent Moon".into(),
+                        "Daretti, Scrap Savant".into(),
+                    ],
+                },
+            )),
+        });
+        assert_eq!(
+            resolve_deck_names(&[0], &[too_many]),
+            Err(DeckResolveError::Invalid(
+                "player 0 must declare one or two Commander cards".into()
+            ))
+        );
+
+        let mut empty_name = deck(0, &["Forest"]);
+        empty_name.commander_setup = Some(CommanderSetup {
+            declaration: Some(commander_setup::Declaration::Declared(
+                commander_setup::Declared {
+                    card_name: vec![" ".into()],
+                },
+            )),
+        });
+        assert_eq!(
+            resolve_deck_names(&[0], &[empty_name]),
+            Err(DeckResolveError::Invalid(
+                "player 0 declared an empty Commander card name".into()
+            ))
+        );
+
+        let mut false_no_commander = deck(0, &["Forest"]);
+        false_no_commander.commander_setup = Some(CommanderSetup {
+            declaration: Some(commander_setup::Declaration::NoCommander(false)),
+        });
+        assert_eq!(
+            resolve_deck_names(&[0], &[false_no_commander]),
+            Err(DeckResolveError::Invalid(
+                "player 0 no_commander declaration must be true".into()
+            ))
+        );
+    }
+
+    #[test]
     fn resolve_deck_names_resolves_each_frozen_commander_name() {
         let names = [
             "Atraxa, Praetors' Voice",

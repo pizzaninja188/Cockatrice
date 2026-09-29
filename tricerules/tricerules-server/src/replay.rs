@@ -502,17 +502,41 @@ mod tests {
     use crate::{EngineSession, ENGINE_BUILD};
     use prost::Message;
     use std::fs;
-    use tricerules_proto::{diagnostics::Record, ipc_envelope::Msg, ruled_command::Cmd};
+    use tricerules_proto::{
+        commander_setup,
+        diagnostics::Record,
+        ipc_envelope::Msg,
+        ruled::v1::{dev_command, ActivateAbility, DevCommand, DevMoveCard, DevZone, PassPriority},
+        ruled_command::Cmd,
+        CommanderSetup, MulliganDecision, PlayerCommand, PlayerDeck, RuledCommand,
+    };
 
     fn fixture() -> (tempfile::TempDir, Value) {
+        fixture_with_decks(vec![])
+    }
+
+    fn fixture_with_decks(player_decks: Vec<PlayerDeck>) -> (tempfile::TempDir, Value) {
+        fixture_with_decks_and_signet_activation(player_decks, false)
+    }
+
+    fn fixture_with_signet_activation(player_decks: Vec<PlayerDeck>) -> (tempfile::TempDir, Value) {
+        fixture_with_decks_and_signet_activation(player_decks, true)
+    }
+
+    fn fixture_with_decks_and_signet_activation(
+        player_decks: Vec<PlayerDeck>,
+        include_signet_activation: bool,
+    ) -> (tempfile::TempDir, Value) {
         let root = tempfile::tempdir().unwrap();
         fs::create_dir(root.path().join("raw")).unwrap();
-        let mut session = EngineSession::new(false);
+        let mut session = EngineSession::new(include_signet_activation);
         let start = IpcEnvelope {
             msg: Some(Msg::SessionStart(tricerules_proto::SessionStart {
                 game_id: 7,
                 seed: u64::MAX,
                 player_ids: vec![17, 29],
+                player_decks,
+                dev_commands_enabled: include_signet_activation,
                 diagnostic_capture_enabled: true,
                 ..Default::default()
             })),
@@ -520,7 +544,8 @@ mod tests {
         let response = session.process(&start).unwrap();
         let manifest = serde_json::json!({"format_version":1,"source":"server","privacy":"server_only",
             "capture_id":"00000000-0000-4000-8000-000000000007", "engine_build":ENGINE_BUILD,
-            "card_data_hash":response.card_data_hash,"effective_dev_commands_enabled":false,"complete":false});
+            "card_data_hash":response.card_data_hash,
+            "effective_dev_commands_enabled":include_signet_activation,"complete":false});
         fs::write(root.path().join("manifest.json"), manifest.to_string()).unwrap();
         let mut rows = vec![];
         pair(root.path(), &mut rows, &start, &response);
@@ -536,19 +561,120 @@ mod tests {
         let command = tricerules_proto::RuledCommand {
             cmd: Some(Cmd::ChooseStartingPlayer(
                 tricerules_proto::ChooseStartingPlayer {
-                    starting_player_id: 29,
+                    starting_player_id: if include_signet_activation { 17 } else { 29 },
                 },
             )),
         };
-        let request = IpcEnvelope {
-            msg: Some(Msg::PlayerCommand(tricerules_proto::PlayerCommand {
-                player_id: actor,
-                ruled_command: command.encode_to_vec(),
-            })),
-        };
-        let response = session.process(&request).unwrap();
-        assert!(response.ok);
-        pair(root.path(), &mut rows, &request, &response);
+        let response =
+            record_player_command(&mut session, root.path(), &mut rows, actor, command.clone());
+        assert!(
+            response.ok,
+            "starting-player choice rejected: {}",
+            response.error
+        );
+
+        if include_signet_activation {
+            // Complete both keep decisions before priority becomes available.
+            for _ in 0..2 {
+                let actor = session
+                    .engine
+                    .as_ref()
+                    .unwrap()
+                    .state
+                    .opening
+                    .as_ref()
+                    .unwrap()
+                    .mulligan_actor
+                    .unwrap();
+                let response = record_player_command(
+                    &mut session,
+                    root.path(),
+                    &mut rows,
+                    actor,
+                    RuledCommand {
+                        cmd: Some(Cmd::Mulligan(MulliganDecision { keep: true })),
+                    },
+                );
+                assert!(response.ok, "opening keep rejected: {}", response.error);
+            }
+
+            // On the starting player's first turn, two full priority passes advance each step
+            // from upkeep through draw to main phase.
+            for _ in 0..4 {
+                let actor = session.engine.as_ref().unwrap().state.priority_player_id();
+                let response = record_player_command(
+                    &mut session,
+                    root.path(),
+                    &mut rows,
+                    actor,
+                    RuledCommand {
+                        cmd: Some(Cmd::PassPriority(PassPriority {})),
+                    },
+                );
+                assert!(response.ok, "priority pass rejected: {}", response.error);
+            }
+            assert_eq!(
+                session.engine.as_ref().unwrap().state.turn_step,
+                tricerules_core::TurnStep::Main1
+            );
+
+            let response = record_player_command(
+                &mut session,
+                root.path(),
+                &mut rows,
+                17,
+                RuledCommand {
+                    cmd: Some(Cmd::DevCommand(DevCommand {
+                        target_player_id: 17,
+                        dev: Some(dev_command::Dev::MoveCard(DevMoveCard {
+                            card_name: "Arcane Signet".into(),
+                            zone: DevZone::Battlefield as i32,
+                            ready: true,
+                        })),
+                    })),
+                },
+            );
+            assert!(response.ok, "Signet dev move rejected: {}", response.error);
+            let engine = session.engine.as_ref().unwrap();
+            let signet = engine.state.players[0]
+                .battlefield
+                .iter()
+                .copied()
+                .find(|object_id| engine.state.objects[object_id].card_id == "arcane_signet")
+                .expect("moved Signet is on the battlefield");
+            let generation = engine
+                .state
+                .zone_change_generation
+                .get(&signet)
+                .copied()
+                .unwrap_or(0);
+            let stack_len = engine.state.stack.len();
+            let response = record_player_command(
+                &mut session,
+                root.path(),
+                &mut rows,
+                17,
+                RuledCommand {
+                    cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+                        source_object_id: signet,
+                        ability_index: 0,
+                        expected_zone_change_generation: generation,
+                        mana_option_index: 2,
+                        ..Default::default()
+                    })),
+                },
+            );
+            assert!(
+                response.ok,
+                "Signet activation rejected: {}",
+                response.error
+            );
+            let engine = session.engine.as_ref().unwrap();
+            assert!(engine.state.objects[&signet].tapped);
+            assert_eq!(engine.state.players[0].mana_pool.black, 1);
+            assert_eq!(engine.state.stack.len(), stack_len);
+        }
+
         let rejected = IpcEnvelope {
             msg: Some(Msg::PlayerCommand(tricerules_proto::PlayerCommand {
                 player_id: 999,
@@ -568,6 +694,97 @@ mod tests {
                 .diagnostic_snapshot()
                 .unwrap(),
         )
+    }
+
+    fn record_player_command(
+        session: &mut EngineSession,
+        directory: &Path,
+        rows: &mut Vec<String>,
+        player_id: i32,
+        command: RuledCommand,
+    ) -> IpcResponse {
+        let request = IpcEnvelope {
+            msg: Some(Msg::PlayerCommand(PlayerCommand {
+                player_id,
+                ruled_command: command.encode_to_vec(),
+            })),
+        };
+        let response = session.process(&request).unwrap();
+        pair(directory, rows, &request, &response);
+        response
+    }
+
+    #[test]
+    fn resume_plan_preserves_declared_commander_and_no_commander_setups() {
+        let decks = vec![
+            PlayerDeck {
+                player_id: 17,
+                mainboard_card_name: vec!["Arcane Signet".into(); 8],
+                commander_setup: Some(CommanderSetup {
+                    declaration: Some(commander_setup::Declaration::Declared(
+                        commander_setup::Declared {
+                            card_name: vec!["Atraxa, Praetors' Voice".into()],
+                        },
+                    )),
+                }),
+            },
+            PlayerDeck {
+                player_id: 29,
+                mainboard_card_name: vec!["Island".into(); 8],
+                commander_setup: Some(CommanderSetup {
+                    declaration: Some(commander_setup::Declaration::NoCommander(true)),
+                }),
+            },
+        ];
+        let (root, _) = fixture_with_decks(decks.clone());
+        let capture = load_capture(root.path()).unwrap();
+        let plan = build_resume_plan(&capture, &ReplayOptions::default()).unwrap();
+        assert!(reconstruct(&capture, &ReplayOptions::default())
+            .unwrap()
+            .differences
+            .is_empty());
+        assert_eq!(plan.display_decks, decks);
+        assert_eq!(plan.session_start.unwrap().player_decks, decks);
+    }
+
+    #[test]
+    fn replay_repeats_commander_signet_choice_and_mana_pool() {
+        let decks = vec![
+            PlayerDeck {
+                player_id: 17,
+                mainboard_card_name: vec!["Arcane Signet".into(); 8],
+                commander_setup: Some(CommanderSetup {
+                    declaration: Some(commander_setup::Declaration::Declared(
+                        commander_setup::Declared {
+                            card_name: vec!["Atraxa, Praetors' Voice".into()],
+                        },
+                    )),
+                }),
+            },
+            PlayerDeck {
+                player_id: 29,
+                mainboard_card_name: vec!["Island".into(); 8],
+                commander_setup: Some(CommanderSetup {
+                    declaration: Some(commander_setup::Declaration::NoCommander(true)),
+                }),
+            },
+        ];
+        let (root, expected) = fixture_with_signet_activation(decks.clone());
+        let capture = load_capture(root.path()).unwrap();
+        let replayed = reconstruct(&capture, &ReplayOptions::default()).unwrap();
+        assert!(replayed.differences.is_empty());
+        assert_eq!(replayed.accepted_commands, 9);
+        assert_eq!(replayed.state, expected);
+        assert_eq!(
+            replayed.state["state"]["players"][0]["mana_pool"]["black"],
+            1
+        );
+
+        let plan = build_resume_plan(&capture, &ReplayOptions::default()).unwrap();
+        assert_eq!(plan.stop_after, 9);
+        assert!(plan.effective_dev_commands_enabled);
+        assert_eq!(plan.display_decks, decks);
+        assert_eq!(plan.session_start.unwrap().player_decks, decks);
     }
 
     fn pair(root: &Path, rows: &mut Vec<String>, request: &IpcEnvelope, response: &IpcResponse) {

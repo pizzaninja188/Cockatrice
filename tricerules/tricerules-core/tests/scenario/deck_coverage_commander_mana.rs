@@ -1,9 +1,14 @@
 //! Arcane Signet and Command Tower choose mana from the engine-bound Commander identity.
 
 use super::helpers::*;
+use tricerules_cards::Color;
 use tricerules_core::{EngineDeck, GameEngine};
 
 fn commander_mana_engine() -> GameEngine {
+    commander_mana_engine_with_commanders(&["atraxa,_praetors_voice"])
+}
+
+fn commander_mana_engine_with_commanders(commanders: &[&str]) -> GameEngine {
     let mainboard = [
         "arcane_signet",
         "command_tower",
@@ -20,7 +25,7 @@ fn commander_mana_engine() -> GameEngine {
     let decks = Some(vec![
         EngineDeck {
             mainboard,
-            commanders: vec!["atraxa,_praetors_voice".to_owned()],
+            commanders: commanders.iter().map(|name| (*name).to_owned()).collect(),
         },
         EngineDeck {
             mainboard: vec!["island".to_owned(); 8],
@@ -81,4 +86,123 @@ fn signet_and_tower_publish_and_apply_commander_identity_choices() {
     assert_eq!(engine.state.players[0].mana_pool.white, 0);
     assert_eq!(engine.state.players[0].mana_pool.blue, 0);
     assert_eq!(engine.state.players[0].mana_pool.red, 0);
+}
+
+#[test]
+fn same_player_two_commander_declaration_unions_color_identity_for_mana_choices() {
+    // Commander legality such as Partner is not validated by this engine setup path; this
+    // acceptance test covers only the engine's declared-card identity union.
+    let mut engine =
+        commander_mana_engine_with_commanders(&["atraxa,_praetors_voice", "daretti,_scrap_savant"]);
+    assert_eq!(
+        engine.state.players[0].color_identity,
+        [
+            Color::White,
+            Color::Blue,
+            Color::Black,
+            Color::Red,
+            Color::Green
+        ]
+    );
+    let signet = inject_permanent_on_battlefield(&mut engine, 0, "arcane_signet");
+    let batch = engine.initial_response_batch();
+    let zone_view = batch
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::ZoneView(view)) => Some(view),
+            _ => None,
+        })
+        .expect("engine publishes a ruled zone view");
+    let signet_info = zone_view.per_player[0]
+        .battlefield_objects
+        .iter()
+        .find(|object| object.object_id == signet)
+        .unwrap()
+        .activated_abilities
+        .first()
+        .unwrap();
+    assert_eq!(signet_info.mana_produced, "W/U/B/R/G");
+    activate_for_mana(&mut engine, signet, 3);
+    assert_eq!(engine.state.players[0].mana_pool.red, 1);
+}
+
+#[test]
+fn empty_commander_identity_keeps_signet_and_tower_legal_without_adding_mana() {
+    // Eldrazi Devastator is a registry-backed colorless identity fixture. Engine deck setup binds
+    // identity but does not enforce Commander eligibility, so this does not assert it is a legal
+    // Commander card.
+    for commanders in [vec![], vec!["eldrazi_devastator"]] {
+        let mut engine = commander_mana_engine_with_commanders(&commanders);
+        assert!(engine.state.players[0].color_identity.is_empty());
+        let signet = inject_permanent_on_battlefield(&mut engine, 0, "arcane_signet");
+        let tower = inject_permanent_on_battlefield(&mut engine, 0, "command_tower");
+        let batch = engine.initial_response_batch();
+        let zone_view = batch
+            .events
+            .iter()
+            .find_map(|event| match &event.ev {
+                Some(Ev::ZoneView(view)) => Some(view),
+                _ => None,
+            })
+            .expect("engine publishes a ruled zone view");
+
+        for source in [signet, tower] {
+            let info = zone_view.per_player[0]
+                .battlefield_objects
+                .iter()
+                .find(|object| object.object_id == source)
+                .unwrap()
+                .activated_abilities
+                .first()
+                .unwrap();
+            assert!(info.is_mana_ability);
+            assert!(info.activatable);
+            assert!(info.mana_produced.is_empty());
+        }
+
+        let stack_len = engine.state.stack.len();
+        activate_for_mana(&mut engine, signet, 0);
+        activate_for_mana(&mut engine, tower, 0);
+        assert!(engine.state.objects[&signet].tapped);
+        assert!(engine.state.objects[&tower].tapped);
+        assert_eq!(engine.state.players[0].mana_pool, Default::default());
+        assert_eq!(engine.state.stack.len(), stack_len);
+    }
+}
+
+#[test]
+fn forged_signet_color_choice_is_rejected_without_mutating_game_state() {
+    let mut engine = commander_mana_engine();
+    let signet = inject_permanent_on_battlefield(&mut engine, 0, "arcane_signet");
+    let stack_len = engine.state.stack.len();
+    let command_index = engine.state.command_index;
+    let mut stale = activate_ability_for(&engine, signet, 0, vec![]);
+    let Some(Cmd::ActivateAbility(activation)) = stale.cmd.as_mut() else {
+        unreachable!()
+    };
+    activation.expected_zone_change_generation += 1;
+
+    assert!(engine.apply_command(0, &stale).is_err());
+    assert!(!engine.state.objects[&signet].tapped);
+    assert_eq!(engine.state.players[0].mana_pool, Default::default());
+    assert_eq!(engine.state.stack.len(), stack_len);
+    assert_eq!(engine.state.command_index, command_index);
+
+    let mut forged = activate_ability_for(&engine, signet, 0, vec![]);
+    let Some(Cmd::ActivateAbility(activation)) = forged.cmd.as_mut() else {
+        unreachable!()
+    };
+    activation.mana_option_index = 4; // Atraxa's WUBG identity has only four legal choices.
+
+    assert!(engine.apply_command(0, &forged).is_err());
+    assert!(!engine.state.objects[&signet].tapped);
+    assert_eq!(engine.state.players[0].mana_pool, Default::default());
+    assert_eq!(engine.state.stack.len(), stack_len);
+    assert_eq!(engine.state.command_index, command_index);
+
+    // A rejected forged option leaves the legal choices available and the source usable.
+    activate_for_mana(&mut engine, signet, 2);
+    assert!(engine.state.objects[&signet].tapped);
+    assert_eq!(engine.state.players[0].mana_pool.black, 1);
 }

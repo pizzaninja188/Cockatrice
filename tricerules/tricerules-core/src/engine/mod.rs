@@ -350,6 +350,108 @@ mod face_change_tests {
     }
 
     #[test]
+    fn commander_identity_is_frozen_across_zone_and_color_changes() {
+        let mainboard = [
+            "arcane_signet",
+            "forest",
+            "forest",
+            "forest",
+            "forest",
+            "forest",
+            "forest",
+            "forest",
+            "forest",
+        ];
+        let mut engine = GameEngine::new_with_commander_decks(
+            823,
+            &[0, 1],
+            20,
+            Some(vec![
+                commander_engine_deck(&mainboard, &["atraxa,_praetors_voice"]),
+                commander_engine_deck(&["forest"; 9], &[]),
+            ]),
+            true,
+        )
+        .expect("Commander declaration resolves");
+        let identity = engine.state.players[0].color_identity.clone();
+        assert_eq!(
+            identity,
+            [Color::White, Color::Blue, Color::Black, Color::Green]
+        );
+
+        let commander = engine.state.players[0].command_zone[0];
+        let signet = put_on_battlefield(&mut engine, "arcane_signet");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            commander,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .expect("commander moves to battlefield");
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(commander),
+            kind: ContinuousEffectKind::Layer5SetColors(vec![Color::Red]),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 0,
+        });
+        assert_eq!(
+            engine
+                .characteristics(commander)
+                .expect("battlefield characteristics")
+                .colors,
+            [Color::Red]
+        );
+        assert_eq!(engine.state.players[0].color_identity, identity);
+
+        let signet_ability = &engine
+            .registry
+            .get("arcane_signet")
+            .unwrap()
+            .primary_face()
+            .activated_abilities[0];
+        let options = engine.active_mana_options(signet, signet_ability).unwrap();
+        assert_eq!(
+            options,
+            vec![
+                ManaAmount {
+                    w: 1,
+                    ..Default::default()
+                },
+                ManaAmount {
+                    u: 1,
+                    ..Default::default()
+                },
+                ManaAmount {
+                    b: 1,
+                    ..Default::default()
+                },
+                ManaAmount {
+                    g: 1,
+                    ..Default::default()
+                },
+            ]
+        );
+
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            commander,
+            Zone::Graveyard,
+            None,
+        )
+        .expect("commander leaves battlefield");
+        assert_eq!(engine.state.players[0].color_identity, identity);
+        assert_eq!(
+            engine.active_mana_options(signet, signet_ability),
+            Some(options)
+        );
+    }
+
+    #[test]
     fn commander_setup_only_definition_cannot_enter_a_mainboard() {
         let result = GameEngine::new_with_commander_decks(
             23,
