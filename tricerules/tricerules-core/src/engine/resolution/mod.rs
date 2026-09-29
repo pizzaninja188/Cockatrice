@@ -3696,6 +3696,54 @@ mod attached_subject_tests {
     }
 
     #[test]
+    fn proliferate_revalidates_player_counter_eligibility_after_choice_is_offered() {
+        let mut engine = GameEngine::new_with_default_decks(701_037, &[0, 1], 20).unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        engine.state.players[1]
+            .counters
+            .insert(CounterKind::Poison, 1);
+        let item = quantity_item(source, vec![SpellEffectKind::Proliferate]);
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .expect("Proliferate effect parks");
+
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("Proliferate choice remains pending");
+        assert_eq!(
+            pending.presentation.choice_kind,
+            rv1::ChoiceKind::Proliferate
+        );
+        assert!(matches!(
+            &pending.continuation,
+            ResolutionContinuation::Proliferate {
+                candidate_player_ids,
+                ..
+            } if candidate_player_ids == &[1]
+        ));
+
+        engine.state.players[1]
+            .counters
+            .remove(&CounterKind::Poison);
+        assert!(engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_player_ids: vec![1],
+                    ..Default::default()
+                },
+            )
+            .is_err());
+        assert!(engine.state.pending_resolution.is_some());
+        assert!(!engine.state.players[1]
+            .counters
+            .contains_key(&CounterKind::Poison));
+    }
+
+    #[test]
     fn issue_483_life_loss_uses_copied_battlefield_mana_value_after_destroy() {
         let mut engine = GameEngine::new_with_default_decks(483_001, &[0, 1], 20).unwrap();
         let original = add_battlefield_object(&mut engine, 1, "grizzly_bears");

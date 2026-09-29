@@ -4,7 +4,7 @@
 //! CR 601.2i / 603.2, 513.1 / 603.2b, 107.4f, and 701.34 govern these scenarios.
 
 use super::helpers::*;
-use tricerules_cards::primitives::CounterKind;
+use tricerules_cards::primitives::{CounterKind, Keyword};
 use tricerules_cards::{CardFace, CardRegistry};
 use tricerules_core::state::CopiableValues;
 use tricerules_proto::ruled::v1::{
@@ -144,6 +144,20 @@ fn evolution_sage_triggers_on_a_land_entry_and_proliferates_each_existing_counte
 fn atraxa_triggers_at_its_controllers_end_step() {
     let mut engine = cohort_engine(500_002);
     let atraxa = inject_creature_on_battlefield(&mut engine, 0, "atraxa,_praetors_voice");
+    let atraxa_face = CardRegistry::global()
+        .get("atraxa,_praetors_voice")
+        .expect("Atraxa definition")
+        .primary_face();
+    assert_eq!(
+        atraxa_face.keywords,
+        vec![
+            Keyword::Flying,
+            Keyword::Vigilance,
+            Keyword::Deathtouch,
+            Keyword::Lifelink,
+        ],
+        "Atraxa's four printed keywords are part of its complete card definition"
+    );
     set_counter_on_player(&mut engine, 0, CounterKind::Poison, 1);
 
     for _ in 0..8 {
@@ -191,6 +205,13 @@ fn atraxa_triggers_at_its_controllers_end_step() {
 fn inexorable_tide_triggers_on_a_creature_spell_and_resolves_before_it() {
     let mut engine = cohort_engine(500_003);
     inject_permanent_on_battlefield(&mut engine, 0, "inexorable_tide");
+    let countered_creature = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
+    add_permanent_counter(
+        &mut engine,
+        countered_creature,
+        CounterKind::PlusOnePlusOne,
+        1,
+    );
     inject_card_into_hand(&mut engine, 0, "grizzly_bears");
     grant_pool(&mut engine, 0);
     let bears = hand_index_for_card(&engine, 0, "grizzly_bears");
@@ -209,26 +230,40 @@ fn inexorable_tide_triggers_on_a_creature_spell_and_resolves_before_it() {
         1,
         "the creature spell remains on the stack"
     );
+    let creature_spell = engine.state.stack[0].id;
+    let choice = engine
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("Inexorable Tide's Proliferate choice");
+    assert_eq!(choice.presentation.choice_kind, ChoiceKind::Proliferate);
+    assert!(choice.presentation.candidates.contains(&countered_creature));
+    assert_eq!(engine.state.stack[0].card_id, "grizzly_bears");
     assert!(
-        !engine.state.players[0].battlefield.iter().any(|oid| {
-            engine
-                .state
-                .objects
-                .get(oid)
-                .is_some_and(|object| object.card_id == "grizzly_bears")
-        }),
-        "the creature has not resolved yet"
+        !engine.state.players[0]
+            .battlefield
+            .contains(&creature_spell),
+        "the creature spell has not resolved yet"
     );
+
+    engine
+        .apply_command(0, &proliferate_choice(vec![countered_creature], vec![]))
+        .expect("choose the permanent for Inexorable Tide's Proliferate");
+    assert_eq!(
+        engine.state.objects[&countered_creature].counter_count(CounterKind::PlusOnePlusOne),
+        2,
+        "the creature spell's trigger proliferates before that spell resolves"
+    );
+    assert!(engine.state.pending_resolution.is_none());
 
     pass_both_players(&mut engine);
     assert_eq!(engine.state.stack.len(), 0);
-    assert!(engine.state.players[0].battlefield.iter().any(|oid| {
-        engine
-            .state
-            .objects
-            .get(oid)
-            .is_some_and(|object| object.card_id == "grizzly_bears")
-    }));
+    assert!(
+        engine.state.players[0]
+            .battlefield
+            .contains(&creature_spell),
+        "the cast creature spell itself resolved onto the battlefield"
+    );
 }
 
 #[test]
