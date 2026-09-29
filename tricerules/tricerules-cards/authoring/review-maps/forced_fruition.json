@@ -1,0 +1,25 @@
+{
+  "format_version": 1,
+  "oracle_id": "448b27a5-7c0c-4ab6-bddf-bd62b920aacc",
+  "spans": [
+    {
+      "face_id": "forced_fruition",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_fruition_tower::exact_characteristics_and_presentation",
+      "covers": "exact characteristics and presentation"
+    },
+    {
+      "test": "scenario deck_coverage_fruition_tower::forced_fruition_draws_seven_for_each_opponent_before_their_spell_resolves",
+      "covers": "forced fruition draws seven for each opponent before their spell resolves"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

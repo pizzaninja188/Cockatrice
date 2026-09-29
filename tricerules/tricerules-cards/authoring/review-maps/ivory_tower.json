@@ -1,0 +1,29 @@
+{
+  "format_version": 1,
+  "oracle_id": "d416a4ed-9f16-4a8b-8aee-03c630e1eb6c",
+  "spans": [
+    {
+      "face_id": "ivory_tower",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_fruition_tower::exact_characteristics_and_presentation",
+      "covers": "exact characteristics and presentation"
+    },
+    {
+      "test": "scenario deck_coverage_fruition_tower::ivory_tower_uses_live_controller_hand_and_clamps_below_four",
+      "covers": "ivory tower uses live controller hand and clamps below four"
+    },
+    {
+      "test": "scenario deck_coverage_fruition_tower::ivory_tower_does_not_trigger_on_opponent_upkeep",
+      "covers": "ivory tower does not trigger on opponent upkeep"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

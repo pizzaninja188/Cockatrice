@@ -1,0 +1,14 @@
+// CR 603.2 / 121.2: the mandatory draw belongs to the caster captured by the trigger.
+(
+  id: "forced_fruition",
+  name: "Forced Fruition",
+  face_id: "forced_fruition",
+  mana_cost: "{4}{U}{U}",
+  types: ["Enchantment"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerCastsSpell(caster: Opponent),
+    effect: [Draw(who: AffectedPlayer, count: 7)],
+  )],
+)

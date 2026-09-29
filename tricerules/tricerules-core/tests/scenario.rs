@@ -8,6 +8,9 @@
 #[path = "scenario/semantic_fixtures.rs"]
 mod semantic_fixtures;
 
+#[path = "scenario/deck_coverage_fruition_tower.rs"]
+mod deck_coverage_fruition_tower;
+
 #[cfg(feature = "authoring")]
 #[path = "scenario/authoring_drafts.rs"]
 mod authoring_drafts;

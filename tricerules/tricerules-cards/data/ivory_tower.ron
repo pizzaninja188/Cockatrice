@@ -1,0 +1,17 @@
+// CR 608.2h / 107.1b: read the controller's live hand at resolution; clamp below zero.
+(
+  id: "ivory_tower",
+  name: "Ivory Tower",
+  face_id: "ivory_tower",
+  mana_cost: "{1}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: AtBeginningOfUpkeep(player: Controller),
+    effect: [GainLife(amount: Count(Affine(constant: -4, terms: [(
+      coefficient: 1,
+      quantity: CardsInHand(players: Relative(Controller)),
+    )])))],
+  )],
+)
