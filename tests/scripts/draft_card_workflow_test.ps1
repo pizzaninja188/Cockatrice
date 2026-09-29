@@ -8,7 +8,7 @@ $manifest = Join-Path $directory 'batch.json'
 $ron = '(id:"draft_trial",name:"Draft Trial",face_id:"draft_trial",mana_cost:"{2}{U}",types:["Sorcery"],spell_effect:[Draw(count:2)])'
 [IO.File]::WriteAllText($draft,$ron)
 $row = @{ family='draw'; card='draft_trial'; mana=@(0,1,0,0,0,2); surface='spell'; recipient=0; count=2; food=0 }
-function Invoke-Draft([bool] $ExpectedSuccess) {
+function Invoke-Draft([bool] $ExpectedSuccess, [string] $FailurePattern = 'exact hand') {
     $result = & (Join-Path $repo 'scripts/run-quiet-command.ps1') -Label 'Draft loop integration' `
         -Executable $PowerShell -ArgumentList @('-NoProfile','-File',(Join-Path $repo 'scripts/test-card-drafts.ps1'),'-BatchPath',$manifest) -AsResultObject
     if (($result.ExitCode -eq 0) -ne $ExpectedSuccess) {
@@ -16,7 +16,7 @@ function Invoke-Draft([bool] $ExpectedSuccess) {
         throw "Unexpected draft result: $($result.ExitCode)"
     }
     Write-Host $result.Summary
-    if (-not $ExpectedSuccess -and -not (Select-String -LiteralPath $result.LogPath -Pattern 'exact hand')) { throw 'Draft failure did not prove changed draw semantics.' }
+    if (-not $ExpectedSuccess -and -not (Select-String -LiteralPath $result.LogPath -Pattern $FailurePattern)) { throw 'Draft failure did not prove the intended changed semantics.' }
 }
 # Write UTF8 without BOM for serde_json under both PowerShell versions.
 function Write-Batch {
@@ -39,4 +39,16 @@ $row.count = 3
 Write-Batch
 Invoke-Draft $true
 if ((Get-FileHash -LiteralPath $binary).Hash -ne $hash -or (Get-Item -LiteralPath $binary).LastWriteTimeUtc -ne $stamp) { throw 'Draft-only edits rebuilt the test binary.' }
+# Exercise a new family against fresh external mechanics, not only shipped calibration cards.
+$ron = '(id:"draft_trial",name:"Draft Trial",face_id:"draft_trial",types:["Artifact"],activated_abilities:[(ability_id:"activated_01",presentation:Fallback,costs:[Tap],effect:[ProduceMana(options:[(c:2)])])])'
+[IO.File]::WriteAllText($draft,$ron)
+$row = @{ family='mana_activation'; card='draft_trial'; ability_index=0; produced=@(0,0,0,0,0,2) }
+Write-Batch
+Invoke-Draft $true
+[IO.File]::WriteAllText($draft,$ron.Replace('c:2','c:3'))
+Invoke-Draft $false 'exact mana'
+$row.produced = @(0,0,0,0,0,3)
+Write-Batch
+Invoke-Draft $true
+if ((Get-FileHash -LiteralPath $binary).Hash -ne $hash -or (Get-Item -LiteralPath $binary).LastWriteTimeUtc -ne $stamp) { throw 'New-family draft edits rebuilt the test binary.' }
 Write-Output "PASS draft edits change real engine behavior without rebuilding; evidence retained at $directory"

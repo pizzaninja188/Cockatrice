@@ -2,6 +2,7 @@
 
 #[cfg(feature = "authoring")]
 pub mod authoring;
+pub mod authoring_schema;
 pub mod card_def;
 pub mod identity;
 pub mod mana;

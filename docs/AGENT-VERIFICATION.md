@@ -216,6 +216,7 @@ cargo build -p tricerules-cards --features authoring --bin card-author
 
 # Run from the repository root through the quiet runner:
 python tests/scripts/card_author_workflow_test.py tricerules/target/debug/card-author.exe
+python tests/scripts/authoring_batch_test.py
 powershell.exe -NoProfile -File tests/scripts/draft_card_workflow_test.ps1
 ```
 
@@ -224,6 +225,12 @@ synthetic draft/manifest and logs under build, proves a changed effect fails old
 then passes corrected independent expectations without changing the test executable hash or mtime.
 It does not admit those synthetic cards. Feature-only execution and embedded final verification
 are separate evidence; both are required for changes to this tooling.
+
+The batch workbench also requires actual `prepare`, `validate-batch`, assessment `preflight`,
+and freeze/check integration with the built CLI. Source packets and structural preflight are not
+semantic approval; retain evidence of actual row execution. `authoring_schema` is shared between
+the early checker and default/feature-enabled scenario rows; exercise `scenario semantic_fixtures`
+under both configurations. These tools honor ambient worker settings.
 
 ### Parameterized card evidence
 

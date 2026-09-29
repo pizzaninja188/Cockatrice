@@ -8,6 +8,8 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 
+pub mod batch;
+
 pub fn ron_files(root: &Path) -> Result<Vec<PathBuf>, String> {
     let mut files = Vec::new();
     for entry in fs::read_dir(root).map_err(|e| e.to_string())? {

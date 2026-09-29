@@ -86,6 +86,88 @@ class AuthoringWorkflow(unittest.TestCase):
         dep.unlink()
         self.assertFalse(self.call("queue-check", "--entry", entry)["fresh"])
 
+    def test_prepare_resolves_batch_once_and_preserves_unassessed_boundary(self):
+        names = self.root / "names.txt"
+        names.write_text("Authoring Trial\nDivination\n", encoding="utf-8")
+        corpus = self.root / "corpus.tsv"
+        corpus.write_text("Authoring Trial\ttrial\tTest\twhole-card\tAuthoring Trial\nDivination\tdivination\tTest\twhole-card\tDivination\n")
+        out = self.root / "packet"
+        self.call("prepare", "--names", names, "--bulk", self.bulk,
+                  "--corpus", corpus, "--out", out, "--limit", "2")
+        packet = json.loads((out / "packet.json").read_text())
+        self.assertEqual(len(packet["cards"]), 2)
+        trial, registered = packet["cards"]
+        self.assertFalse(trial["registered"])
+        self.assertTrue(registered["registered"])
+        self.assertEqual(trial["route"], "unassessed")
+        self.assertFalse(packet["semantic_approval"])
+        self.assertEqual(trial["oracle_lines"][0]["text"], "Draw three cards.")
+        self.assertIn("oracle_text", [d["field"] for d in trial["analogues"][0]["differences"]])
+        self.assertTrue(self.call("queue-check", "--entry", out / "dependencies.json")["fresh"])
+        corpus.write_text("changed corpus")
+        self.assertFalse(self.call("queue-check", "--entry", out / "dependencies.json")["fresh"])
+        self.call("prepare", "--names", names, "--bulk", self.bulk, "--out", out, ok=False)
+
+    def test_prepare_rejects_scope_mismatch_and_duplicate_names_before_output(self):
+        names = self.root / "names.txt"
+        names.write_text("Authoring Trial\nAuthoring Trial\n")
+        out = self.root / "bad"
+        self.call("prepare", "--names", names, "--bulk", self.bulk, "--out", out, ok=False)
+        self.assertFalse(out.exists())
+        names.write_text("Authoring Trial\n")
+        corpus = self.root / "corpus.tsv"
+        corpus.write_text("Authoring Trial\twrong-id\tTest\twhole-card\tAuthoring Trial\n")
+        self.call("prepare", "--names", names, "--bulk", self.bulk,
+                  "--corpus", corpus, "--out", out, ok=False)
+        self.assertFalse(out.exists())
+
+    def test_validate_batch_rejects_unexercised_drafts_and_unknown_row_fields(self):
+        draft = self.root / "trial.ron"
+        draft.write_text('(id:"authoring_trial",name:"Authoring Trial",face_id:"authoring_trial",mana_cost:"{3}{U}",types:["Sorcery"],spell_effect:[Draw(count:3)])')
+        batch = self.root / "batch.json"
+        row = dict(family="draw", card="authoring_trial", mana=[0,1,0,0,0,3],
+                   surface="spell", recipient=0, count=3, food=0)
+        batch.write_text(json.dumps(dict(drafts=["trial.ron"], rows=[row])))
+        result = self.call("validate-batch", "--batch", batch)
+        self.assertFalse(result["semantic_approval"])
+        self.assertEqual(result["drafts"][0]["id"], "authoring_trial")
+        row["card"] = "divination"
+        batch.write_text(json.dumps(dict(drafts=["trial.ron"], rows=[row])))
+        self.call("validate-batch", "--batch", batch, ok=False)
+        row["card"] = "authoring_trial"
+        row["guessed"] = True
+        batch.write_text(json.dumps(dict(drafts=["trial.ron"], rows=[row])))
+        self.call("validate-batch", "--batch", batch, ok=False)
+
+    def test_preflight_integration_binds_maps_rows_source_and_freshness(self):
+        names = self.root / "names.txt"
+        names.write_text("Authoring Trial\n")
+        prepared = self.root / "prepared"
+        self.call("prepare", "--names", names, "--bulk", self.bulk, "--out", prepared)
+        (self.root / "trial.ron").write_text('(id:"authoring_trial",name:"Authoring Trial",face_id:"authoring_trial",mana_cost:"{3}{U}",types:["Sorcery"],spell_effect:[Draw(count:3)])')
+        rows = [dict(family="draw", card="authoring_trial", mana=[0,1,0,0,0,3], surface="spell", recipient=0, count=3, food=0)]
+        (self.root / "drafts.json").write_text(json.dumps(dict(drafts=["trial.ron"], rows=rows)))
+        (self.root / "rulings.json").write_text('{"object":"list","data":[]}')
+        mapping = dict(format_version=1, oracle_id="trial", spans=[dict(face_id="authoring_trial", start_line=1, end_line=1, typed_paths=["/faces/0/spell_effect/0"])])
+        (self.root / "map.json").write_text(json.dumps(mapping))
+        card = dict(id="authoring_trial", route="reuse_only", differences="Divination quantity differs",
+                    rulings="rulings.json", review_map="map.json", clauses=[dict(face=0, line=1, row_indices=[0], tests=[])],
+                    interactions={k: "Checked: unchanged analogue" for k in ("timing","simultaneous","identity","choices","costs","targets","tokens","presentation","client")})
+        assessment = dict(version=1, packet="prepared/packet.json", freshness="prepared/dependencies.json", draft_batch="drafts.json", cards=[card])
+        manifest = self.root / "assessment.json"
+        manifest.write_text(json.dumps(assessment))
+        report = self.root / "preflight.json"
+        script = REPO / "scripts/authoring-batch.py"
+        def run(*args, ok=True):
+            result = subprocess.run([sys.executable, str(script), *map(str,args)], capture_output=True, text=True)
+            self.assertEqual(result.returncode == 0, ok, result.stderr)
+            return json.loads(result.stdout) if ok else None
+        result = run("preflight", "--manifest", manifest, "--exe", EXE, "--out", report)
+        self.assertFalse(result["semantic_approval"])
+        self.assertTrue(run("check", "--manifest", report)["fresh"])
+        (self.root / "trial.ron").write_text("changed draft")
+        run("check", "--manifest", report, ok=False)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,146 @@
+# Prepared batches and external semantic rows
+
+These optional tools reduce repeated preparation and test-writing. They do not decide rules,
+admit cards, fetch sources, approve semantics, or replace the full affected-side gate. Production
+still loads embedded RON. Prepared outputs belong under ignored `build/`, not a new tracker.
+
+## Prepare several candidates once
+
+Write exact Oracle names, one per line, then:
+
+```powershell
+./scripts/card-author.ps1 prepare --names build/next-names.txt --corpus build/deck-coverage/oracle-map.tsv --out build/next-preparation
+./scripts/card-author.ps1 queue-check --entry build/next-preparation/dependencies.json
+```
+
+Use `--bulk` for an existing local bulk with matching adjacent metadata. Preparation loads the
+source and live on-disk registry once for the whole batch. It preserves exact source records/all
+faces, numbered Oracle lines, registered status, ranked analogue paths/hashes, source differences,
+and existing review-map references. Similarity is advisory. All routes start `unassessed`.
+The optional corpus must contain exactly one matching Oracle ID/canonical-name row per candidate;
+this check preserves the corpus's existing provenance limitations, not deck-section proof.
+Output directories must be new and outside embedded data.
+
+Freshness fingerprints sources, corpus, packet, selected analogue definitions/maps, engine/schema,
+fixture helpers and lockfile. Unrelated card additions do not invalidate an unchanged analogue.
+Missing/changed inputs invalidate preparation. Recheck live ownership separately before selection;
+an old issue snapshot or `registered: true` does not establish complete-card support.
+
+Use `clone` to copy the selected analogue into a draft outside `data/`. Resolve the existing
+mechanics/presentation sentinels after exact source review. Keep readiness assessments concise.
+Do not broaden a batch to fill a target count when compatible ready cards are unavailable.
+
+## More reusable, independently expected rows
+
+The shared schema is `src/authoring_schema.rs`. The calibration matrix is
+`../tricerules-core/tests/scenario/authoring_extended_rows.json` (relative to this package).
+Rows name real cards and expectations supplied by the author, never inferred from RON effects.
+Existing draw/destruction rows remain supported. New families are deliberately limited:
+
+| Family | Supported surface and assertions |
+|---|---|
+| `mana_activation` | Untargeted tap ability with one fixed output. Exact mana, immediate resolution, source identity, wrong-player and tapped-source rejection. |
+| `pump` | Spell or tap activation targeting an opposing Grizzly Bears. Exact paid mana/P/T, source destination/generation, named gained keywords, untouched bystander, unaffordable/invalid-target rejection, cleanup expiry. |
+| `mill` | Spell or tap activation targeting player 0/1. Exact payment, source destination/generation, library order, milled physical objects/generations and graveyard membership, unaffected player, nonexistent-player rejection. |
+| `upkeep_damage` | At most one nonlethal trigger on opponent upkeep; independent hand sizes at trigger/resolution, exact trigger count and damage, unaffected controller, no controller-upkeep trigger. Covers intervening conditions and live amounts. |
+| `graveyard_recovery` | Target one own graveyard card into hand, spell or activation. Exact payment/returned identity/hand size, unaffected same-name cards, opponent-target rejection, source-self rejection before sacrifice. |
+
+Pump/mill/recovery use optional `ability_index`; omission means a spell. Mana is `[W,U,B,R,G,C]`.
+Pump expects final `power`/`toughness` of the 2/2 target, not deltas. Keywords use the existing
+enum spelling, e.g. `"Trample"`. Recovery requires `target` and `sacrifice_source`. Other choices,
+variable X, recipients, durations, layouts and compositions need dedicated scenarios. A row proves
+only its asserted surface; it never establishes complete support for another ability on the card.
+
+```powershell
+./scripts/card-author.ps1 validate-batch --batch build/my-drafts/batch.json
+./scripts/test-card-drafts.ps1 -BatchPath build/my-drafts/batch.json
+```
+
+`validate-batch` shares the executor's strict row schema and runtime registry validation. It rejects
+unresolved/duplicate/noncanonical drafts, absent fixture IDs, invalid ability indices, unknown row
+fields, empty batches and drafts without mapped rows. It does not execute scenarios. The draft
+wrapper runs this cheap check before compiling/running scenarios and honors ambient worker settings.
+Edited external RON/rows still do not rebuild embedded card data.
+
+## Structural readiness before review
+
+Write an assessment JSON alongside your drafts. Paths resolve relative to the assessment:
+
+```json
+{
+  "version": 1,
+  "packet": "../next-preparation/packet.json",
+  "freshness": "../next-preparation/dependencies.json",
+  "draft_batch": "batch.json",
+  "cards": [{
+    "id": "new_card",
+    "route": "reuse_only",
+    "differences": "Copied from X; quantity differs; remaining ability covered separately.",
+    "rulings": "rulings.json",
+    "review_map": "new_card.json",
+    "unresolved": [],
+    "clauses": [{"face": 0, "line": 1, "row_indices": [0], "tests": []}],
+    "interactions": {
+      "timing": "Checked against source and analogue",
+      "simultaneous": "N/A: explained reason",
+      "identity": "Checked generation and source ownership",
+      "choices": "N/A: explained reason",
+      "costs": "Checked exact costs",
+      "targets": "Checked legality and rejection coverage",
+      "tokens": "N/A: explained reason",
+      "presentation": "Mapped every source line",
+      "client": "N/A: existing unchanged contract"
+    }
+  }],
+  "dependencies": []
+}
+```
+
+Face numbers are zero-based; source line numbers are one-based. Each line needs a mapping to
+one or more zero-based row indices for this card or dedicated tests. Dedicated references contain
+`package`, `target`, `test` (full registered name) and `source` (Rust file). The early check confirms
+the function exists in that source; final CardData still confirms exact registered, non-ignored
+references. Rulings must be a saved list response, including `data: []` when none exist. Record all
+additional sources/tokens/fixtures under `dependencies`.
+
+```powershell
+./scripts/authoring-batch.ps1 preflight --manifest build/my-drafts/assessment.json --exe tricerules/target/debug/card-author.exe --out build/my-drafts/preflight.json
+./scripts/authoring-batch.ps1 check --manifest build/my-drafts/preflight.json
+```
+
+Preflight requires the assessed identities to equal the validated draft set, exact source names,
+complete nonoverlapping map coverage, resolvable typed pointers, every source clause mapped to
+evidence, and every interaction addressed. It refuses `engine_capability`/`unresolved` routes.
+`new_composition` is allowed after explicit assessment and distinguishing tests. Readiness is
+human-declared; explanatory prose is not machine-proven semantics. The output always records
+`semantic_approval: false`. Source/rulings verification and independent review remain mandatory.
+
+## Freeze explicit review scope and measure commands
+
+```powershell
+./scripts/authoring-batch.ps1 doctor --minimum-free-gib 8
+./scripts/authoring-batch.ps1 freeze --path tricerules/tricerules-cards/data/new_card.ron --path tricerules/tricerules-cards/authoring/review-maps/new_card.json --evidence build/my-drafts/preflight.json --evidence build/my-drafts/focused.log --out build/my-review
+./scripts/authoring-batch.ps1 check --manifest build/my-review/manifest.json
+./scripts/authoring-batch.ps1 phase --name focused --out build/my-timing -- powershell.exe -NoProfile -File scripts/test-card-drafts.ps1 -BatchPath build/my-drafts/batch.json
+./scripts/authoring-batch.ps1 timing --directory build/my-timing
+```
+
+Freeze requires explicit unique workspace files, includes tracked edits/new files/deletions,
+copies scoped files and supplied evidence, and records base SHA and content hashes. It never
+stages or touches unrelated files. Check proves freshness only for recorded inputs/artifacts,
+not an unchanged entire repository. Supply all material evidence/dependencies and inspect the
+frozen patch before assigning independent read-only review. No bundle is an approval.
+
+Doctor reports free space and exact index-lock metadata without modifying either. Low space exits
+nonzero; choose the threshold for the planned build. Lock presence or zero length does not prove
+staleness. Recovery still requires process/quiescence checks and applicable standing authorization.
+
+Measured phases capture command arguments, UTC start/end, elapsed command wall time, exact exit
+code, full output and its hash. Failure output is printed in full; failed attempts remain in timing
+totals. Summed commands can overlap and exclude investigation/review/dispatch time. Report those
+separately and never label command time as model cost or active authoring effort.
+
+After semantic review, promote the completed RON/map and independently reviewed rows/dedicated
+scenarios. Run metadata preparation once, inspect it, then the full `verify.ps1 -Side Rust -CardData`
+(or Both when contracts require it). Keep focused lint/format and cheap structural checks before
+review/full gates. Reuse unchanged valid delivery evidence; preserve all required acceptance.

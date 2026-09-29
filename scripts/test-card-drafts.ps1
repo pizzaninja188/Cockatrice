@@ -8,8 +8,11 @@ $savedJobs = $env:CARGO_BUILD_JOBS
 $savedThreads = $env:RUST_TEST_THREADS
 try {
     $env:TRICERULES_AUTHORING_BATCH = (Resolve-Path -LiteralPath $BatchPath).Path
-    $env:CARGO_BUILD_JOBS = '4'
-    $env:RUST_TEST_THREADS = '4'
+    # Honor ambient worker settings; no task-specific cap is baked into the tool.
+    $precheck = & (Join-Path $PSScriptRoot 'run-quiet-command.ps1') -Label 'Draft structural precheck' `
+        -WorkingDirectory (Join-Path $repo 'tricerules') -Executable cargo `
+        -ArgumentList @('run','--quiet','-p','tricerules-cards','--features','authoring','--bin','card-author','--','validate-batch','--batch',$env:TRICERULES_AUTHORING_BATCH) -AsResultObject
+    if ($precheck.ExitCode -ne 0) { Get-Content -LiteralPath $precheck.LogPath | Out-Host; exit $precheck.ExitCode }
     $result = & (Join-Path $PSScriptRoot 'run-quiet-command.ps1') -Label 'Draft semantic rows' `
         -WorkingDirectory (Join-Path $repo 'tricerules') -Executable cargo `
         -ArgumentList @('test','--quiet','-p','tricerules-core','--features','authoring','--test','scenario',

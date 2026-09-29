@@ -43,7 +43,7 @@ fn run() -> Result<Value, String> {
     let mut args = std::env::args().skip(1);
     let command = args
         .next()
-        .ok_or("commands: search, clone, queue-save, queue-check")?;
+        .ok_or("commands: search, clone, prepare, validate-batch, queue-save, queue-check")?;
     let mut options: BTreeMap<String, Vec<String>> = BTreeMap::new();
     while let Some(flag) = args.next() {
         let key = flag.strip_prefix("--").ok_or("expected --option value")?;
@@ -52,6 +52,8 @@ fn run() -> Result<Value, String> {
             "clone" => &["from", "name", "bulk", "out"],
             "queue-save" => &["name", "note", "depends", "out"],
             "queue-check" => &["entry"],
+            "prepare" => &["names", "bulk", "corpus", "out", "limit"],
+            "validate-batch" => &["batch"],
             _ => return Err("unknown command".into()),
         };
         if !allowed.contains(&key) || (key != "depends" && options.contains_key(key)) {
@@ -65,6 +67,28 @@ fn run() -> Result<Value, String> {
     let package = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let repo = package.parent().unwrap().parent().unwrap();
     let data = package.join("data");
+    if command == "validate-batch" {
+        return batch::validate_batch(Path::new(required(&options, "batch")?), &data);
+    }
+    if command == "prepare" {
+        let bulk = options
+            .get("bulk")
+            .map(|v| PathBuf::from(&v[0]))
+            .unwrap_or_else(|| repo.join("oracle-cards.jsonl.gz"));
+        let limit = options
+            .get("limit")
+            .map(|v| v[0].parse::<usize>().map_err(|e| e.to_string()))
+            .transpose()?
+            .unwrap_or(3);
+        return batch::prepare(
+            &package,
+            &bulk,
+            Path::new(required(&options, "names")?),
+            options.get("corpus").map(|v| Path::new(&v[0])),
+            Path::new(required(&options, "out")?),
+            limit,
+        );
+    }
     if command == "queue-check" {
         let entry: ResearchEntry = serde_json::from_slice(
             &fs::read(required(&options, "entry")?).map_err(|e| e.to_string())?,

@@ -1,13 +1,12 @@
 <# Offline analogue search, clone preparation and research queue. See CARD-AUTHORING.md. #>
-[CmdletBinding()]
-param([Parameter(ValueFromRemainingArguments)] [string[]] $CommandArgs)
+# Basic script arguments preserve native --flags under Windows PowerShell -File.
+[string[]] $CommandArgs = $args
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $savedJobs = $env:CARGO_BUILD_JOBS
 $savedThreads = $env:RUST_TEST_THREADS
 try {
-    $env:CARGO_BUILD_JOBS = '4'
-    $env:RUST_TEST_THREADS = '4'
+    # Honor ambient worker settings, including explicit campaign caps.
     $result = & (Join-Path $PSScriptRoot 'run-quiet-command.ps1') -Label 'Offline card author' `
         -WorkingDirectory $repo -Executable cargo -ArgumentList (@('run','--quiet','--manifest-path',
         (Join-Path $repo 'tricerules/Cargo.toml'),'-p','tricerules-cards','--features','authoring','--bin','card-author','--') + $CommandArgs) -AsResultObject

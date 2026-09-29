@@ -1,0 +1,17 @@
+[
+  {"family":"mana_activation","card":"thran_dynamo","ability_index":0,"produced":[0,0,0,0,0,3]},
+  {"family":"mana_activation","card":"liquimetal_torque","ability_index":0,"produced":[0,0,0,0,0,1]},
+  {"family":"mana_activation","card":"skarrg,_the_rage_pits","ability_index":0,"produced":[0,0,0,0,0,1]},
+  {"family":"pump","card":"giant_growth","mana":[0,0,0,0,1,0],"power":5,"toughness":5,"keywords":[]},
+  {"family":"pump","card":"skarrg,_the_rage_pits","mana":[0,0,0,1,1,0],"ability_index":1,"power":3,"toughness":3,"keywords":["Trample"]},
+  {"family":"mill","card":"tome_scour","mana":[0,1,0,0,0,0],"recipient":0,"count":5},
+  {"family":"mill","card":"mind_sculpt","mana":[0,1,0,0,0,1],"recipient":1,"count":7},
+  {"family":"mill","card":"codex_shredder","mana":[0,0,0,0,0,0],"ability_index":0,"recipient":1,"count":1},
+  {"family":"upkeep_damage","card":"ebony_owl_netsuke","hand_at_trigger":7,"hand_at_resolution":6,"triggers":1,"damage":0},
+  {"family":"upkeep_damage","card":"misers_cage","hand_at_trigger":4,"hand_at_resolution":4,"triggers":0,"damage":0},
+  {"family":"upkeep_damage","card":"iron_maiden","hand_at_trigger":5,"hand_at_resolution":8,"triggers":1,"damage":4},
+  {"family":"upkeep_damage","card":"viseling","hand_at_trigger":2,"hand_at_resolution":2,"triggers":1,"damage":0},
+  {"family":"graveyard_recovery","card":"raise_dead","mana":[0,0,1,0,0,0],"target":"grizzly_bears","sacrifice_source":false},
+  {"family":"graveyard_recovery","card":"disentomb","mana":[0,0,1,0,0,0],"target":"grizzly_bears","sacrifice_source":false},
+  {"family":"graveyard_recovery","card":"codex_shredder","mana":[0,0,0,0,0,5],"ability_index":1,"target":"grizzly_bears","sacrifice_source":true}
+]

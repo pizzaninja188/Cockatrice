@@ -1175,7 +1175,10 @@ merely by changing HEAD. Include every additional source/token/fixture dependenc
 approval. Recheck corpus membership, ownership and unrecorded assumptions before selecting a batch.
 Keep just a few compatible prepared candidates; do not turn queue upkeep into a per-card gate.
 
-All workbench wrappers cap Cargo jobs and Rust test threads at four. Existing required gates remain
+For prepared multi-card packets, early structural readiness, expanded semantic row families,
+frozen review bundles and phase timing, see [BATCH-WORKBENCH.md](BATCH-WORKBENCH.md).
+
+Workbench wrappers honor ambient Cargo jobs and Rust test threads. Existing required gates remain
 unchanged. Source availability, narrower clone/family support or a stale queue never authorize
 guessing missing mechanics, broadening admissions or waiving verification.
 

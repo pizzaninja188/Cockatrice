@@ -17,6 +17,49 @@ fn authoring_rows_reject_wrong_independent_expectation() {
 }
 
 #[test]
+fn authoring_rows_exercise_mana_pump_mill_and_upkeep_families() {
+    super::helpers::authoring_rows::run_rows(include_str!("authoring_extended_rows.json"), || {
+        main_phase(448_020)
+    });
+}
+
+#[test]
+#[should_panic(expected = "exact mana")]
+fn authoring_rows_reject_wrong_mana_expectation() {
+    super::helpers::authoring_rows::run_rows(
+        r#"[{"family":"mana_activation","card":"thran_dynamo","ability_index":0,"produced":[0,0,0,0,0,2]}]"#,
+        || main_phase(448_021),
+    );
+}
+
+#[test]
+#[should_panic(expected = "exact mill")]
+fn authoring_rows_reject_wrong_mill_expectation() {
+    super::helpers::authoring_rows::run_rows(
+        r#"[{"family":"mill","card":"tome_scour","mana":[0,1,0,0,0,0],"recipient":1,"count":4}]"#,
+        || main_phase(448_022),
+    );
+}
+
+#[test]
+#[should_panic(expected = "exact pump power")]
+fn authoring_rows_reject_wrong_pump_expectation() {
+    super::helpers::authoring_rows::run_rows(
+        r#"[{"family":"pump","card":"giant_growth","mana":[0,0,0,0,1,0],"power":4,"toughness":5,"keywords":[]}]"#,
+        || main_phase(448_023),
+    );
+}
+
+#[test]
+#[should_panic(expected = "exact upkeep damage")]
+fn authoring_rows_reject_wrong_upkeep_expectation() {
+    super::helpers::authoring_rows::run_rows(
+        r#"[{"family":"upkeep_damage","card":"iron_maiden","hand_at_trigger":5,"hand_at_resolution":8,"triggers":1,"damage":1}]"#,
+        || main_phase(448_024),
+    );
+}
+
+#[test]
 fn semantic_fixtures_registered_draw_pilot() {
     for case in [divination(), visionary(), pawpatch()] {
         exercise_draw(case).require_exercised();
