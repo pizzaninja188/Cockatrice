@@ -91,15 +91,36 @@ concerns invalidate that evidence. A commit request alone does not require anoth
 Missing sources or tools are failures,
 not permission to omit a required gate. Diagnose unrelated baseline drift before changing it.
 
-For card additions, explicitly refresh and review generated changes before final verification:
+For handwritten card additions, run the batch preparation command after focused semantic green.
+It runs the canonical-ID regression and generic registry conformance before refreshing metadata,
+stops on failure (including an empty exact test selection), and retains the command logs:
 
 ```powershell
-./scripts/update-card-data.ps1 -Mode Refresh -MetadataOnly
+./scripts/prepare-card-batch.ps1
+# Review the prepared diff and obtain independent semantic approval, then:
 ./scripts/verify.ps1 -Side Rust -CardData
 ```
 
-Check is the default. It first validates checked-in direct-RON maps and exact non-ignored Cargo
-test references with `scripts/check-card-evidence.ps1`. Listing is not execution evidence: the full
+Preparation defaults to four Cargo build jobs and four Rust test threads (`-Workers 1..4`), and
+restores the caller's environment afterward. It accepts the same local `-OracleBulk` and `-CardsXml`
+overrides as Refresh. It does not format code, run semantic scenarios, approve maps, or replace
+the final gate. When the exact prechecks already passed on unchanged content, use the underlying
+`update-card-data.ps1 -Mode Refresh -MetadataOnly` directly rather than repeating them.
+
+For a four-worker cap on all commands in the current PowerShell session, including final gates:
+
+```powershell
+$env:CARGO_BUILD_JOBS = '4'
+$env:RUST_TEST_THREADS = '4'
+$env:CMAKE_BUILD_PARALLEL_LEVEL = '4'
+$env:CTEST_PARALLEL_LEVEL = '4'
+```
+
+Check is the default update mode. It first validates checked-in direct-RON maps and exact non-ignored
+test references with `scripts/check-card-evidence.ps1`. The checker builds referenced test targets
+once per package using Cargo JSON artifacts, then lists normal and ignored tests directly from
+those exact executables. It never searches for old binaries or persists a test inventory cache;
+missing or ambiguous artifacts and failed listings fail the gate. Listing is not execution evidence: the full
 Rust suite must also pass on the same content. It runs the generator check and validates a temporary checklist,
 then compares that checklist with `tricerules/CARDS.md`, ignoring only CRLF/LF differences. It
 writes only build artifacts. For handwritten cards, Refresh with `-MetadataOnly` updates fingerprints
@@ -125,6 +146,9 @@ powershell.exe -NoProfile -File tests/scripts/run_quiet_command_test.ps1
 powershell.exe -NoProfile -File tests/scripts/generator_wrapper_test.ps1
 powershell.exe -NoProfile -File tests/scripts/card_data_wrapper_test.ps1
 powershell.exe -NoProfile -File tests/scripts/update_card_data_test.ps1
+powershell.exe -NoProfile -File tests/scripts/prepare_card_batch_test.ps1
+powershell.exe -NoProfile -File tests/scripts/card_evidence_test.ps1
+powershell.exe -NoProfile -File tests/scripts/card_evidence_workflow_test.ps1
 powershell.exe -NoProfile -File tests/scripts/verify_workflow_test.ps1
 powershell.exe -NoProfile -File tests/scripts/launch_ruled_game_test.ps1
 ```

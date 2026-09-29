@@ -982,11 +982,17 @@ For handwritten card-data changes, refresh presentation fingerprints and the val
 review the resulting diff, then run final verification from the repository root:
 
 ```powershell
-./scripts/update-card-data.ps1 -Mode Refresh -MetadataOnly
+./scripts/prepare-card-batch.ps1
+# Review the prepared diff and obtain independent semantic approval before the final gate.
 ./scripts/verify.ps1 -Side Rust -CardData
 ```
 
-Use `-Side Both` when C++ contracts are affected. Omit `-MetadataOnly` when changing recipes or
+The preparation command catches canonical-ID and generic conformance fixture failures before
+refresh or review, and defaults to four build/test workers. It does not replace the batch's
+actual-card semantic assertions. If these prechecks already passed on unchanged content, call
+`update-card-data.ps1 -Mode Refresh -MetadataOnly` directly to avoid repeating them.
+Use `-Side Both` when C++ contracts are affected. Use `update-card-data.ps1 -Mode Refresh`
+without `-MetadataOnly` when changing recipes or
 generated RON. Refresh uses pinned local input and is preparation, not a verification gate;
 it does not fetch new data or enable `--include-new`. The final gate performs the full Check,
 including maps, non-ignored test references, recipes, presentation and checklist drift. Do not
@@ -1098,8 +1104,10 @@ are paid once per coherent batch, not once per card. Keep new engine work separa
    references and complete-definition confirmation. Omit optional primitive inventories and empty
    token arrays; retain relevant token identities. A separate narrative dossier or pre-review
    generated packet is not mandatory: reviewers can inspect the source, RON, map and test diff.
-4. Prove focused red/green coverage, format, prepare metadata once with `-MetadataOnly`, and run
-   focused conformance/lint before freezing the batch. Successful new conformance cases require
+4. Prove focused red/green coverage, format and run focused lint. Run
+   `scripts/prepare-card-batch.ps1` once before freezing: it checks canonical IDs and generic
+   conformance, then performs metadata-only refresh. Inspect the resulting diff. Reuse unchanged
+   passing prechecks instead of repeating them via this wrapper. Successful new conformance cases require
    no manual rows or candidate-report run. Investigate exceptions rather than accepting them blindly.
 5. Obtain one independent semantic review, fix material findings, then run one final affected-side
    gate. Its CardData step validates the whole corpus and generates the audit packets. Do not repeat

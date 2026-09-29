@@ -52,12 +52,24 @@ try {
             $groups[$key] += $reference
         }
     }
+    # Ask Cargo for fresh artifacts once per package, not twice per test target.
+    # Never glob target/debug: that can select stale binaries from an older build.
+    $executables = @{}
+    foreach ($package in @('tricerules-cards', 'tricerules-core')) {
+        $targets = @($groups.Keys | Where-Object { $_.StartsWith("$package/") } |
+            ForEach-Object { $_.Split('/')[1] } | Sort-Object -Unique)
+        if ($targets.Count -eq 0) { continue }
+        $arguments = @('test', '--quiet', '-p', $package, '--no-run', '--message-format=json')
+        foreach ($target in $targets) { $arguments += @('--test', $target) }
+        $artifacts = @(Invoke-EvidenceTool "Build $package evidence tests" 'cargo' $arguments)
+        $resolved = Get-CardEvidenceExecutables $artifacts $targets
+        foreach ($target in $targets) { $executables["$package/$target"] = $resolved[$target] }
+    }
     foreach ($key in ($groups.Keys | Sort-Object)) {
         $package, $target = $key.Split('/')
         $prefix = if ($package -eq 'tricerules-core') { 'scenario ' } else { "$target`::" }
-        $arguments = @('test', '--quiet', '-p', $package, '--test', $target, '--', '--list')
-        $listed = @(Invoke-EvidenceTool "List $target tests" 'cargo' $arguments)
-        $ignoredList = @(Invoke-EvidenceTool "List $target ignored tests" 'cargo' ($arguments + '--ignored'))
+        $listed = @(Invoke-EvidenceTool "List $target tests" $executables[$key] @('--list'))
+        $ignoredList = @(Invoke-EvidenceTool "List $target ignored tests" $executables[$key] @('--list', '--ignored'))
         $available = @($listed | Where-Object { $_ -cmatch '^(.+): test$' } | ForEach-Object { $prefix + ($_ -creplace ': test$', '') })
         $ignored = @($ignoredList | Where-Object { $_ -cmatch '^(.+): test$' } | ForEach-Object { $prefix + ($_ -creplace ': test$', '') })
         foreach ($reference in $groups[$key]) { Assert-CardEvidenceReference $reference $available $ignored }

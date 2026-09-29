@@ -12,7 +12,7 @@ function New-WorkflowFixture {
     foreach ($directory in @('scripts', 'tricerules', 'bin', 'nested directory', 'Cockatrice\Cockatrice')) {
         New-Item -ItemType Directory -Path (Join-Path $root $directory) -Force | Out-Null
     }
-    foreach ($name in @('run-quiet-command.ps1', 'gen-cards.ps1', 'gen-card-checklist.ps1', 'verify.ps1', 'update-card-data.ps1')) {
+    foreach ($name in @('run-quiet-command.ps1', 'gen-cards.ps1', 'gen-card-checklist.ps1', 'verify.ps1', 'update-card-data.ps1', 'prepare-card-batch.ps1')) {
         $source = Join-Path $sourceRepo "scripts\$name"
         if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination (Join-Path $root "scripts\$name") }
     }
@@ -39,7 +39,8 @@ $tool = $args[0]
 $arguments = @($args | Select-Object -Skip 1)
 $root = Split-Path -Parent $PSScriptRoot
 $joined = $arguments -join ' '
-$record = @{ Tool = $tool; Arguments = $arguments; Cwd = (Get-Location).Path; RequireE2E = $env:RULED_E2E_REQUIRE }
+$record = @{ Tool = $tool; Arguments = $arguments; Cwd = (Get-Location).Path; RequireE2E = $env:RULED_E2E_REQUIRE;
+    BuildJobs = $env:CARGO_BUILD_JOBS; TestThreads = $env:RUST_TEST_THREADS }
 ($record | ConvertTo-Json -Compress) | Add-Content -LiteralPath (Join-Path $root 'trace.jsonl')
 $failure = Join-Path $root 'fail-pattern'
 if ((Test-Path -LiteralPath $failure) -and "$tool $joined" -match ([IO.File]::ReadAllText($failure))) {
@@ -47,6 +48,11 @@ if ((Test-Path -LiteralPath $failure) -and "$tool $joined" -match ([IO.File]::Re
     exit 7
 }
 if ($tool -eq 'cargo') {
+    if ($arguments -contains '--exact') {
+        if (Test-Path -LiteralPath (Join-Path $root 'zero-tests')) {
+            Write-Output 'test result: ok. 0 passed; 0 failed; 0 ignored;'
+        } else { Write-Output 'test result: ok. 1 passed; 0 failed; 0 ignored;' }
+    }
     if ($joined -match '--bin gen-cards ') {
         if ($arguments -contains '--include-new') { throw 'Unexpected bulk expansion' }
         $fingerprint = Join-Path $root 'fingerprint'
