@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "b6cc062c-eb39-46ee-bd6d-17f1db0ac50d",
+  "spans": [
+    {
+      "face_id": "phyrexias_core",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "phyrexias_core",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_sacrifice_artifacts::deck_coverage_phyrexias_core_adds_colorless_mana_without_the_stack",
+      "covers": "the tap ability adds one colorless mana immediately without using the stack"
+    },
+    {
+      "test": "scenario deck_coverage_sacrifice_artifacts::deck_coverage_phyrexias_core_pays_its_artifact_cost_before_gaining_life",
+      "covers": "the controller pays one mana, taps this land, and sacrifices an artifact before the life ability resolves"
+    },
+    {
+      "test": "scenario deck_coverage_sacrifice_artifacts::deck_coverage_phyrexias_core_rejects_nonartifact_and_opponent_costs_atomically",
+      "covers": "only an artifact controlled by the activator can be sacrificed, and invalid payment leaves state unchanged"
+    },
+    {
+      "test": "scenario deck_coverage_sacrifice_artifacts::deck_coverage_sacrifice_artifact_cards_have_exact_registry_faces",
+      "covers": "the registered identity, characteristics, and ability counts"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

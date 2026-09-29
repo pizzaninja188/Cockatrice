@@ -1,0 +1,27 @@
+// Oracle b6cc062c-eb39-46ee-bd6d-17f1db0ac50d; Oracle text and ruling checked against Scryfall on 2026-09-28.
+// Its artifact sacrifice is an activation cost, paid before the life-gain ability resolves.
+(
+  id: "phyrexias_core",
+  name: "Phyrexia's Core",
+  face_id: "phyrexias_core",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [
+        Mana("{1}"),
+        Tap,
+        SacrificePermanent(filter: (kind: AnyPermanent, controller: You, permanent_types: [Artifact])),
+      ],
+      effect: [GainLife(amount: 1)],
+    ),
+  ],
+)

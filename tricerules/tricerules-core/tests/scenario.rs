@@ -168,6 +168,8 @@ mod deck_coverage_proft_eidetic_memory;
 mod deck_coverage_prosperity;
 #[path = "scenario/deck_coverage_quicksmith_genius.rs"]
 mod deck_coverage_quicksmith_genius;
+#[path = "scenario/deck_coverage_sacrifice_artifacts.rs"]
+mod deck_coverage_sacrifice_artifacts;
 #[path = "scenario/deck_coverage_sakura_tribe_elder.rs"]
 mod deck_coverage_sakura_tribe_elder;
 #[path = "scenario/deck_coverage_scavenger_grounds.rs"]

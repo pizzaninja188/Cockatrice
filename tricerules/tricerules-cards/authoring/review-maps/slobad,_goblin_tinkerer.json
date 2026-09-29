@@ -1,0 +1,37 @@
+{
+  "format_version": 1,
+  "oracle_id": "1f2d6cf4-b8f4-440f-ac08-ca47ada868ac",
+  "spans": [
+    {
+      "face_id": "slobad_goblin_tinkerer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_sacrifice_artifacts::deck_coverage_slobad_saves_an_artifact_creature_and_clears_damage_at_cleanup",
+      "covers": "the ability can save an artifact creature from lethal damage, and indestructible and marked damage expire at cleanup"
+    },
+    {
+      "test": "scenario deck_coverage_sacrifice_artifacts::deck_coverage_slobad_can_target_an_artifact_sacrificed_to_pay_its_cost",
+      "covers": "an artifact may be chosen as the target and then sacrificed to pay the cost, leaving the target illegal on resolution"
+    },
+    {
+      "test": "scenario deck_coverage_sacrifice_artifacts::deck_coverage_slobad_rejects_an_invalid_target_or_sacrifice_choice_atomically",
+      "covers": "a nonartifact target and an opponent artifact as the sacrifice cost are rejected atomically"
+    },
+    {
+      "test": "scenario deck_coverage_sacrifice_artifacts::deck_coverage_slobad_can_target_an_opponents_artifact",
+      "covers": "the target artifact may be controlled by an opponent while the sacrificed artifact must be controlled by Slobad's controller"
+    },
+    {
+      "test": "scenario deck_coverage_sacrifice_artifacts::deck_coverage_sacrifice_artifact_cards_have_exact_registry_faces",
+      "covers": "the registered identity, characteristics, and ability count"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
