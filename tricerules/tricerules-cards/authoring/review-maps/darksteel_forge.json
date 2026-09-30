@@ -1,0 +1,23 @@
+{
+  "format_version": 1,
+  "oracle_id": "9b3bec05-441f-4fdf-8b51-69fa8613fcd4",
+  "spans": [
+    {"face_id": "darksteel_forge", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/static_abilities/0"]}
+  ],
+  "primitive_references": [
+    {"symbol": "StaticAbilityDef::GrantKeywordToPermanents", "typed_path": "/faces/0/static_abilities/0/definition"}
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "scenario deck_coverage_darksteel_forge::forge_actual_cast_pays_nine_projects_the_keyword_and_rejects_invented_activation", "covers": "Actual nine-mana cast, public authoritative indestructible projection, no invented activation and rejected insufficient payment without mutation."},
+    {"test": "scenario deck_coverage_darksteel_forge::forge_grants_to_itself_artifact_creatures_and_noncreatures_but_not_opponents", "covers": "Exact registered Forge grants to itself and later entering artifact creatures and noncreatures, excluding opposing artifacts and ordinary creatures."},
+    {"test": "scenario deck_coverage_darksteel_forge::forge_source_and_recipient_removal_have_distinct_ordering_and_restore_on_expiry", "covers": "Generating source ability removal disables grants regardless of timestamp; recipient ability removal follows timestamp. Actual cleanup expiry restores grants."},
+    {"test": "scenario deck_coverage_darksteel_forge::forge_scope_follows_types_source_control_and_recipient_control", "covers": "Live artifact gain and loss and current source and recipient controller changes affect the grant; Forge retains its ability after losing Artifact."},
+    {"test": "scenario deck_coverage_darksteel_forge::forge_prevents_destroy_and_lethal_damage_but_source_ability_removal_exposes_damage", "covers": "Disenchant may legally target indestructible Forge but cannot destroy it; marked lethal damage persists and kills after source ability removal."},
+    {"test": "scenario deck_coverage_darksteel_forge::forge_departure_kills_marked_artifact_and_reentry_uses_a_fresh_incarnation", "covers": "Actual engine departure exposes marked lethal damage; reentry increments the same physical object's generation and emits one fresh grant."},
+    {"test": "scenario deck_coverage_darksteel_forge::forge_does_not_prevent_sacrifice_or_zero_toughness", "covers": "Krark-Clan Ironworks sacrifices indestructible Forge as a cost; an indestructible artifact creature with zero toughness dies to state-based actions."},
+    {"test": "scenario deck_coverage_darksteel_forge::sculpting_steel_copy_of_forge_keeps_its_own_grant_after_donor_departure", "covers": "Actual Sculpting Steel entry-copy owns its generating grant, retains underlying physical identity and continues protecting artifacts after the donor leaves."},
+    {"test": "scenario deck_coverage_darksteel_forge::witness_protection_started_layer_four_component_keeps_removing_forge_ability_after_aura_ability_removal", "covers": "Actual Witness Protection removes the animated Forge's generating ability; removal remains effective after the Aura loses its abilities because its multi-layer effect already started."}
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -378,6 +378,31 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     reason,
                 })?;
         }
+        if let StaticAbilityDef::GrantKeywordToPermanents { filter, .. } = ability {
+            filter
+                .validate_characteristic_constraints()
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+            if !filter.all_terminal_filters_match(|leaf| {
+                matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
+                    && leaf.controller != crate::primitives::TargetController::DefendingPlayer
+                    && leaf.tapped.is_none()
+                    && leaf.power.is_none()
+                    && leaf.toughness.is_none()
+                    && leaf.required_keywords.is_empty()
+                    && leaf.excluded_keywords.is_empty()
+                    && leaf.excluded_objects.iter().all(|excluded| {
+                        *excluded == crate::primitives::TargetObjectExclusion::Source
+                    })
+            }) {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "GrantKeywordToPermanents requires a supported earlier-layer permanent scope without tapped, keyword, P/T, defending-player or attached-object constraints".into(),
+                });
+            }
+        }
         if let StaticAbilityDef::GrantTriggeredAbilityToPermanents {
             filter,
             condition,
@@ -2334,6 +2359,48 @@ include!(concat!(env!("OUT_DIR"), "/embedded_cards.rs"));
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn static_permanent_keyword_grant_accepts_safe_filters_and_rejects_unsupported_leaves() {
+        let definition = |filter: &str| {
+            format!(
+                r#"(id: "keyword_grant_probe", name: "Keyword Grant Probe", face_id: "keyword_grant_probe", types: ["Artifact"],
+                static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                definition: GrantKeywordToPermanents(filter: ({filter}), keyword: Indestructible))])"#
+            )
+        };
+        for filter in [
+            "kind: AnyPermanent, controller: You, permanent_types: [Artifact]",
+            "kind: AnyPermanent, controller: You, excluded_objects: [Source]",
+            "any_of: Some([(kind: AnyPermanent, permanent_types: [Artifact]), (kind: AnyPermanent, permanent_types: [Land])])",
+        ] {
+            CardRegistry::from_chunks(&[&definition(filter)])
+                .expect("earlier-layer permanent filters support a live keyword grant");
+        }
+        for constraint in [
+            "kind: AnyPlayer",
+            "kind: AnyPermanent, controller: DefendingPlayer",
+            "kind: AnyPermanent, tapped: Some(false)",
+            "kind: AnyPermanent, excluded_objects: [AttachedObject]",
+            "kind: Creature, power: Some(AtLeast(1))",
+            "kind: Creature, toughness: Some(AtMost(2))",
+            "kind: Creature, required_keywords: [Flying]",
+            "kind: Creature, excluded_keywords: [Defender]",
+        ] {
+            for filter in [
+                constraint.to_string(),
+                format!("any_of: Some([(kind: AnyPermanent, permanent_types: [Artifact]), ({constraint})])"),
+            ] {
+                assert!(
+                    matches!(
+                        CardRegistry::from_chunks(&[&definition(&filter)]),
+                        Err(RegistryError::InvalidCard { .. })
+                    ),
+                    "must reject unsupported static scope: {filter}"
+                );
+            }
+        }
+    }
     use crate::primitives::{
         Amount, BattlefieldCreatureCountFilter, CastTriggerPlayer, CombatRole, CountExpression,
         CounterKind, CreatureEventFilter, CreatureScopeController, CreatureScopeFilter,

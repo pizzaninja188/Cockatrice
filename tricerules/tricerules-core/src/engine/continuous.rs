@@ -291,6 +291,23 @@ impl GameEngine {
         let Some(condition) = effect.condition.as_ref() else {
             return true;
         };
+        if let AffectedScope::AttachedTo(source) = effect.affected {
+            if let Some(AttachmentRecipient::Object(recipient)) = self
+                .state
+                .objects
+                .get(&source)
+                .and_then(|source| source.attached_to)
+            {
+                if super::characteristics::static_component_started_for(
+                    &self.state,
+                    self.registry,
+                    effect,
+                    recipient,
+                ) {
+                    return true;
+                }
+            }
+        }
         let Some(source_oid) = effect.source_id else {
             return false;
         };
@@ -377,12 +394,11 @@ impl GameEngine {
         if object.face_down {
             return;
         }
-        if super::characteristics::latest_remove_all_abilities_timestamp(&self.state, object_id)
-            .is_some()
-            || super::characteristics::basic_land_type_setting(&self.state, object_id).is_some()
-        {
-            return;
-        }
+        let source_abilities_removed =
+            super::characteristics::latest_remove_all_abilities_timestamp(&self.state, object_id)
+                .is_some();
+        let source_rules_text_removed =
+            super::characteristics::basic_land_type_setting(&self.state, object_id).is_some();
         // CR 604.2 / 611.2: a static ability's continuous effect is created by the permanent's
         // controller, and `CreatureScopeController::YouControl` scopes off this value. Reading the owner
         // here would make a reanimated Glorious Anthem pump its *former* controller's creatures.
@@ -427,7 +443,41 @@ impl GameEngine {
         let timestamp = self.state.command_index;
 
         for (definition, static_ability) in statics {
+            // Retain source-bound keyword records even during suppression. Copy/face refresh
+            // must not permanently erase a grant that should return when suppression expires.
+            if (source_rules_text_removed
+                && !matches!(
+                    static_ability.definition,
+                    StaticAbilityDef::GrantKeywordToPermanents { .. }
+                ))
+                || (source_abilities_removed
+                    && !matches!(
+                        static_ability.definition,
+                        StaticAbilityDef::GrantKeywordToPermanents { .. }
+                            | StaticAbilityDef::AttachedModifier { .. }
+                    ))
+            {
+                continue;
+            }
             match static_ability.definition {
+                StaticAbilityDef::GrantKeywordToPermanents { filter, keyword } => {
+                    self.state.continuous_effects.push(ContinuousEffect {
+                        trigger_grant_origin: None,
+                        source_id: Some(object_id),
+                        affected: AffectedScope::PermanentsMatching {
+                            reference_player: controller,
+                            filter: Box::new(filter),
+                            exclude: Some(object_id),
+                        },
+                        kind: ContinuousEffectKind::Layer6AddKeywordFromStatic {
+                            keyword,
+                            source_zone_change,
+                        },
+                        condition: None,
+                        duration: EffectDuration::WhileSourceOnBattlefield,
+                        timestamp,
+                    });
+                }
                 StaticAbilityDef::Madness { .. }
                 | StaticAbilityDef::DiscardToLibrary
                 | StaticAbilityDef::NoMaximumHandSize { .. }
@@ -593,6 +643,12 @@ impl GameEngine {
                     doesnt_untap_during_untap_step,
                     cant_untap,
                 } => {
+                    let component_start = self.state.continuous_effects.len();
+                    let origin = TriggerAbilityOrigin::StaticGrant {
+                        source_id: object_id,
+                        source_zone_change,
+                        definition: definition.clone(),
+                    };
                     let affected = AffectedScope::AttachedTo(object_id);
                     if let Some(name) = set_name {
                         self.state.continuous_effects.push(ContinuousEffect {
@@ -773,6 +829,11 @@ impl GameEngine {
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,
                         });
+                    }
+                    for effect in &mut self.state.continuous_effects[component_start..] {
+                        if effect.trigger_grant_origin.is_none() {
+                            effect.trigger_grant_origin = Some(origin.clone());
+                        }
                     }
                 }
                 StaticAbilityDef::SelfCombatRestriction {
@@ -1426,6 +1487,511 @@ mod issue_461_activation_prohibition_tests {
         assert!(engine.activated_abilities_prohibited(target_id));
         engine.state.objects.get_mut(&aura_id).unwrap().zone = Zone::Graveyard;
         assert!(!engine.activated_abilities_prohibited(target_id));
+    }
+}
+
+#[cfg(test)]
+mod static_permanent_keyword_grant_tests {
+    use super::*;
+    use tricerules_cards::primitives::{BasicLandType, RelativePlayerSet, TargetObjectExclusion};
+
+    fn fixture(engine: &mut GameEngine, card: &str) -> ObjectId {
+        let id = engine.state.next_object_id;
+        engine.state.next_object_id += 1;
+        let mut object = engine.state.objects.values().next().unwrap().clone();
+        object.id = id;
+        object.owner = 0;
+        object.base_controller = 0;
+        object.controller = 0;
+        object.card_id = card.into();
+        object.zone = Zone::Battlefield;
+        object.power = None;
+        object.toughness = None;
+        engine.state.objects.insert(id, object);
+        engine.state.players[0].battlefield.push(id);
+        engine.emit_static_abilities_on_enter(id);
+        id
+    }
+
+    fn grant(engine: &GameEngine, id: ObjectId) -> bool {
+        engine
+            .characteristics(id)
+            .unwrap()
+            .has_keyword(Keyword::Indestructible)
+    }
+
+    fn witness_with_sibling(engine: &mut GameEngine, host: ObjectId) -> ObjectId {
+        let aura = fixture(engine, "witness_protection");
+        engine.state.objects.get_mut(&aura).unwrap().attached_to =
+            Some(AttachmentRecipient::Object(host));
+        let mut values = engine.copiable_values_for(aura).unwrap();
+        let mut sibling = engine
+            .registry
+            .get("indestructibility")
+            .unwrap()
+            .primary_face()
+            .static_abilities[0]
+            .clone();
+        sibling.ability_id = tricerules_cards::AbilityId::new("static_02").unwrap();
+        values.face.static_abilities.push(sibling);
+        engine.state.objects.get_mut(&aura).unwrap().copiable_values = Some(values);
+        engine.refresh_source_static_abilities(aura);
+        aura
+    }
+
+    #[test]
+    fn static_keyword_grant_started_group_does_not_authorize_unstarted_sibling_after_refresh() {
+        let mut engine = GameEngine::new(613_806, &[0, 1], 20, None, true).unwrap();
+        let host = fixture(&mut engine, "grizzly_bears");
+        let aura = witness_with_sibling(&mut engine, host);
+        assert!(grant(&engine, host));
+        // The resolved removal predates refreshed records. Source removal changes existence,
+        // so its dependency cannot be bypassed by the refreshed timestamp.
+        remove(&mut engine, aura);
+        engine
+            .state
+            .continuous_effects
+            .last_mut()
+            .unwrap()
+            .timestamp = 0;
+        engine.state.command_index = 100;
+        engine.refresh_source_static_abilities(aura);
+        assert!(
+            !grant(&engine, host),
+            "only Witness's actual multi-layer group started"
+        );
+        let snapshot = engine.characteristics(host).unwrap();
+        assert_eq!(snapshot.names, ["Legitimate Businessperson"]);
+        assert_eq!(snapshot.toughness, Some(1));
+        engine
+            .state
+            .continuous_effects
+            .retain(|effect| effect.duration != EffectDuration::UntilEndOfTurn);
+        assert!(grant(&engine, host));
+    }
+
+    #[test]
+    fn static_keyword_grant_false_early_condition_and_unattached_scope_create_no_start() {
+        let mut engine = GameEngine::new(613_807, &[0, 1], 20, None, true).unwrap();
+        let host = fixture(&mut engine, "grizzly_bears");
+        let aura = witness_with_sibling(&mut engine, host);
+        let values = engine
+            .state
+            .objects
+            .get_mut(&aura)
+            .unwrap()
+            .copiable_values
+            .as_mut()
+            .unwrap();
+        let StaticAbilityDef::AttachedModifier { condition, .. } =
+            &mut values.face.static_abilities[0].definition
+        else {
+            panic!("Witness modifier");
+        };
+        *condition = Some(GameCondition::ActivePlayer {
+            players: RelativePlayerSet::Opponents,
+        });
+        remove(&mut engine, aura);
+        engine.refresh_source_static_abilities(aura);
+        let snapshot = engine.characteristics(host).unwrap();
+        assert_eq!(snapshot.names, ["Grizzly Bears"]);
+        assert_eq!(snapshot.toughness, Some(2));
+        assert!(!grant(&engine, host));
+        engine.state.active_player_idx = 1;
+        assert_eq!(engine.characteristics(host).unwrap().toughness, Some(1));
+        engine.state.objects.get_mut(&aura).unwrap().attached_to = None;
+        assert_eq!(engine.characteristics(host).unwrap().toughness, Some(2));
+    }
+
+    #[test]
+    fn static_keyword_grant_started_recipient_and_incarnation_are_not_reused() {
+        let mut engine = GameEngine::new(613_808, &[0, 1], 20, None, true).unwrap();
+        let first = fixture(&mut engine, "grizzly_bears");
+        let second = fixture(&mut engine, "grizzly_bears");
+        let aura = witness_with_sibling(&mut engine, first);
+        remove(&mut engine, aura);
+        assert_eq!(engine.characteristics(first).unwrap().toughness, Some(1));
+        engine.state.objects.get_mut(&aura).unwrap().attached_to =
+            Some(AttachmentRecipient::Object(second));
+        assert_eq!(engine.characteristics(first).unwrap().toughness, Some(2));
+        assert_eq!(engine.characteristics(second).unwrap().toughness, Some(1));
+        engine.state.zone_change_generation.insert(aura, 1);
+        assert_eq!(engine.characteristics(second).unwrap().toughness, Some(2));
+        engine.refresh_source_static_abilities(aura);
+        assert_eq!(engine.characteristics(second).unwrap().toughness, Some(1));
+        engine.state.objects.get_mut(&aura).unwrap().face_down = true;
+        assert_eq!(engine.characteristics(second).unwrap().toughness, Some(2));
+        engine.state.objects.get_mut(&aura).unwrap().face_down = false;
+        engine.state.objects.get_mut(&aura).unwrap().zone = Zone::Graveyard;
+        assert_eq!(engine.characteristics(second).unwrap().toughness, Some(2));
+    }
+
+    #[test]
+    fn static_keyword_grant_started_layer_six_grants_keep_nested_ability_identity() {
+        let mut engine = GameEngine::new(613_809, &[0, 1], 20, None, true).unwrap();
+        let host = fixture(&mut engine, "grizzly_bears");
+        let aura = witness_with_sibling(&mut engine, host);
+        let activated = engine
+            .registry
+            .get("sol_ring")
+            .unwrap()
+            .primary_face()
+            .activated_abilities[0]
+            .clone();
+        let StaticAbilityDef::AttachedModifier {
+            triggered_abilities: triggers,
+            ..
+        } = &engine
+            .registry
+            .get("infernal_scarring")
+            .unwrap()
+            .primary_face()
+            .static_abilities[0]
+            .definition
+        else {
+            panic!("Scarring modifier");
+        };
+        let triggers = triggers.clone();
+        let values = engine
+            .state
+            .objects
+            .get_mut(&aura)
+            .unwrap()
+            .copiable_values
+            .as_mut()
+            .unwrap();
+        let StaticAbilityDef::AttachedModifier {
+            activated_abilities,
+            triggered_abilities,
+            remove_all_abilities,
+            ..
+        } = &mut values.face.static_abilities[0].definition
+        else {
+            panic!("Witness modifier");
+        };
+        *remove_all_abilities = false;
+        *activated_abilities = vec![activated];
+        *triggered_abilities = triggers;
+        engine.refresh_source_static_abilities(aura);
+        remove(&mut engine, aura);
+        assert_eq!(engine.effective_activated_abilities(host).len(), 1);
+        let triggered = engine.effective_triggered_abilities(host, "grizzly_bears", 0);
+        assert_eq!(triggered.len(), 1);
+        let TriggerAbilityOrigin::StaticGrant {
+            source_id,
+            definition,
+            ..
+        } = &triggered[0].2
+        else {
+            panic!("static nested grant");
+        };
+        assert_eq!(*source_id, aura);
+        assert_eq!(definition.ability_path.len(), 2);
+        assert_eq!(definition.ability_path[0].as_str(), "static_01");
+        assert_eq!(definition.ability_path[1].as_str(), "triggered_01");
+        assert_eq!(engine.effective_activated_abilities(host)[0].3.len(), 2);
+    }
+
+    #[test]
+    fn static_keyword_grant_layer_continuation_does_not_preserve_direct_rule_effects() {
+        let mut engine = GameEngine::new(613_810, &[0, 1], 20, None, true).unwrap();
+        let host = fixture(&mut engine, "grizzly_bears");
+        let aura = witness_with_sibling(&mut engine, host);
+        let values = engine
+            .state
+            .objects
+            .get_mut(&aura)
+            .unwrap()
+            .copiable_values
+            .as_mut()
+            .unwrap();
+        let StaticAbilityDef::AttachedModifier {
+            restriction,
+            cant_untap,
+            doesnt_untap_during_untap_step,
+            remove_all_abilities,
+            ..
+        } = &mut values.face.static_abilities[0].definition
+        else {
+            panic!("Witness modifier");
+        };
+        *remove_all_abilities = false;
+        restriction.cant_attack = true;
+        *cant_untap = true;
+        *doesnt_untap_during_untap_step = true;
+        engine.refresh_source_static_abilities(aura);
+        assert!(
+            engine
+                .combat_restrictions_for(host, &engine.characteristics(host).unwrap())
+                .cant_attack
+        );
+        assert!(engine.doesnt_untap_during_untap_step(host));
+        let restriction_effect = engine
+            .state
+            .continuous_effects
+            .iter()
+            .find(|effect| {
+                effect.source_id == Some(aura) && effect.kind == ContinuousEffectKind::ProhibitUntap
+            })
+            .unwrap()
+            .clone();
+        assert!(super::super::characteristics::effect_affects(
+            &engine.state,
+            engine.registry,
+            &restriction_effect,
+            host,
+            &engine.characteristics(host).unwrap()
+        ));
+        remove(&mut engine, aura);
+        engine
+            .state
+            .continuous_effects
+            .last_mut()
+            .unwrap()
+            .timestamp = 0;
+        engine.state.command_index = 100;
+        engine.refresh_source_static_abilities(aura);
+        let snapshot = engine.characteristics(host).unwrap();
+        assert_eq!(snapshot.colors, [Color::White, Color::Green]);
+        assert!(!engine.combat_restrictions_for(host, &snapshot).cant_attack);
+        assert!(!engine.doesnt_untap_during_untap_step(host));
+        assert!(!super::super::characteristics::effect_affects(
+            &engine.state,
+            engine.registry,
+            &restriction_effect,
+            host,
+            &snapshot
+        ));
+    }
+
+    #[test]
+    fn static_keyword_grant_started_condition_is_not_rechecked_after_its_name_change() {
+        let mut engine = GameEngine::new(613_811, &[0, 1], 20, None, true).unwrap();
+        let host = fixture(&mut engine, "grizzly_bears");
+        let aura = witness_with_sibling(&mut engine, host);
+        let values = engine
+            .state
+            .objects
+            .get_mut(&aura)
+            .unwrap()
+            .copiable_values
+            .as_mut()
+            .unwrap();
+        let StaticAbilityDef::AttachedModifier { condition, .. } =
+            &mut values.face.static_abilities[0].definition
+        else {
+            panic!("Witness modifier");
+        };
+        *condition = Some(GameCondition::BattlefieldAggregate {
+            filter: BattlefieldPermanentFilter {
+                token: None,
+                any_of: None,
+                controllers: RelativePlayerSet::Controller,
+                card_type: None,
+                color: None,
+                name: Some("Grizzly Bears".into()),
+                required_subtypes: vec![],
+                exclude_source: false,
+            },
+            aggregate: BattlefieldAggregate::Count,
+            min: Some(1),
+            max: None,
+        });
+        engine.refresh_source_static_abilities(aura);
+        remove(&mut engine, aura);
+        let snapshot = engine.characteristics(host).unwrap();
+        assert_eq!(snapshot.names, ["Legitimate Businessperson"]);
+        assert_eq!(
+            snapshot.toughness,
+            Some(1),
+            "the group started before its own name change"
+        );
+        assert_eq!(snapshot.colors, [Color::White, Color::Green]);
+    }
+
+    #[test]
+    fn static_keyword_grant_copied_aura_group_uses_copy_identity_and_survives_donor_departure() {
+        let mut engine = GameEngine::new(613_812, &[0, 1], 20, None, true).unwrap();
+        let host = fixture(&mut engine, "grizzly_bears");
+        let donor = witness_with_sibling(&mut engine, host);
+        let copy = fixture(&mut engine, "mirrormade");
+        let values = engine.copiable_values_for(donor).unwrap();
+        let object = engine.state.objects.get_mut(&copy).unwrap();
+        object.copiable_values = Some(values);
+        object.attached_to = Some(AttachmentRecipient::Object(host));
+        engine.refresh_source_static_abilities(copy);
+        engine.state.objects.get_mut(&donor).unwrap().zone = Zone::Graveyard;
+        remove(&mut engine, copy);
+        engine.refresh_source_static_abilities(copy);
+        assert_eq!(engine.characteristics(host).unwrap().toughness, Some(1));
+        assert!(engine.state.continuous_effects.iter().filter(|effect| effect.source_id == Some(copy))
+            .all(|effect| matches!(effect.trigger_grant_origin, Some(TriggerAbilityOrigin::StaticGrant {
+                source_id, .. }) if source_id == copy)));
+        engine.state.objects.get_mut(&copy).unwrap().copiable_values = None;
+        assert_eq!(engine.characteristics(host).unwrap().toughness, Some(2));
+    }
+
+    fn remove(engine: &mut GameEngine, source: ObjectId) {
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1_000_000,
+        });
+    }
+
+    #[test]
+    fn static_keyword_grant_refresh_while_suppressed_retains_one_inert_record_and_restores() {
+        let mut engine = GameEngine::new(613_801, &[0, 1], 20, None, true).unwrap();
+        let source = fixture(&mut engine, "darksteel_forge");
+        let ring = fixture(&mut engine, "sol_ring");
+        remove(&mut engine, source);
+        engine.refresh_source_static_abilities(source);
+        engine.refresh_source_static_abilities(source);
+        assert!(!grant(&engine, ring));
+        assert_eq!(
+            engine
+                .state
+                .continuous_effects
+                .iter()
+                .filter(|effect| {
+                    effect.source_id == Some(source)
+                        && matches!(
+                            effect.kind,
+                            ContinuousEffectKind::Layer6AddKeywordFromStatic { .. }
+                        )
+                })
+                .count(),
+            1
+        );
+        engine
+            .state
+            .continuous_effects
+            .retain(|effect| effect.duration != EffectDuration::UntilEndOfTurn);
+        assert!(grant(&engine, ring));
+        engine.state.zone_change_generation.insert(source, 1);
+        assert!(
+            !grant(&engine, ring),
+            "retained record cannot cross incarnations"
+        );
+        engine.refresh_source_static_abilities(source);
+        assert!(grant(&engine, ring));
+    }
+
+    #[test]
+    fn static_keyword_grant_requires_current_copied_face_and_face_up_source() {
+        let mut engine = GameEngine::new(613_802, &[0, 1], 20, None, true).unwrap();
+        let source = fixture(&mut engine, "darksteel_forge");
+        let ring = fixture(&mut engine, "sol_ring");
+        let values = engine.copiable_values_for(ring).unwrap();
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .copiable_values = Some(values);
+        assert!(!grant(&engine, ring));
+        engine.refresh_source_static_abilities(source);
+        assert!(!grant(&engine, ring));
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .copiable_values = None;
+        engine.refresh_source_static_abilities(source);
+        assert!(grant(&engine, ring));
+        engine.state.objects.get_mut(&source).unwrap().face_down = true;
+        assert!(!grant(&engine, ring));
+        engine.state.objects.get_mut(&source).unwrap().face_down = false;
+        assert!(grant(&engine, ring));
+    }
+
+    #[test]
+    fn static_keyword_grant_other_permanents_scope_excludes_its_own_source() {
+        let mut engine = GameEngine::new(613_803, &[0, 1], 20, None, true).unwrap();
+        let source = fixture(&mut engine, "darksteel_forge");
+        let ring = fixture(&mut engine, "sol_ring");
+        let mut values = engine.copiable_values_for(source).unwrap();
+        let StaticAbilityDef::GrantKeywordToPermanents { filter, .. } =
+            &mut values.face.static_abilities[0].definition
+        else {
+            panic!("Forge static");
+        };
+        filter.excluded_objects.push(TargetObjectExclusion::Source);
+        engine
+            .state
+            .objects
+            .get_mut(&source)
+            .unwrap()
+            .copiable_values = Some(values);
+        engine.refresh_source_static_abilities(source);
+        assert!(!grant(&engine, source));
+        assert!(grant(&engine, ring));
+    }
+
+    #[test]
+    fn static_keyword_grant_ignores_false_conditional_and_unattached_removal() {
+        let mut engine = GameEngine::new(613_804, &[0, 1], 20, None, true).unwrap();
+        let source = fixture(&mut engine, "darksteel_forge");
+        let ring = fixture(&mut engine, "sol_ring");
+        remove(&mut engine, source);
+        engine
+            .state
+            .continuous_effects
+            .last_mut()
+            .unwrap()
+            .source_id = Some(source);
+        engine
+            .state
+            .continuous_effects
+            .last_mut()
+            .unwrap()
+            .condition = Some(tricerules_cards::primitives::GameCondition::ActivePlayer {
+            players: RelativePlayerSet::Opponents,
+        });
+        assert!(grant(&engine, ring));
+        engine.state.active_player_idx = 1;
+        assert!(!grant(&engine, ring));
+        engine.state.continuous_effects.pop();
+        let aura = fixture(&mut engine, "indestructibility");
+        remove(&mut engine, source);
+        let removal = engine.state.continuous_effects.last_mut().unwrap();
+        removal.source_id = Some(aura);
+        removal.affected = AffectedScope::AttachedTo(aura);
+        removal.duration = EffectDuration::WhileSourceOnBattlefield;
+        assert!(grant(&engine, ring), "unattached scope removes no ability");
+        engine.state.objects.get_mut(&aura).unwrap().attached_to =
+            Some(AttachmentRecipient::Object(source));
+        assert!(!grant(&engine, ring));
+        engine.state.objects.get_mut(&aura).unwrap().zone = Zone::Graveyard;
+        assert!(grant(&engine, ring), "departed removal source is inactive");
+    }
+
+    #[test]
+    fn static_keyword_grant_basic_land_setting_suppresses_rules_text_and_expiry_restores() {
+        let mut engine = GameEngine::new(613_805, &[0, 1], 20, None, true).unwrap();
+        let source = fixture(&mut engine, "darksteel_forge");
+        let ring = fixture(&mut engine, "sol_ring");
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer4SetBasicLandType(BasicLandType::Forest),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1000,
+        });
+        assert!(!grant(&engine, ring));
+        engine.refresh_source_static_abilities(source);
+        engine
+            .state
+            .continuous_effects
+            .retain(|effect| effect.duration != EffectDuration::UntilEndOfTurn);
+        assert!(grant(&engine, ring));
     }
 }
 

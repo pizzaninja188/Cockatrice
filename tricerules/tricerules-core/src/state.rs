@@ -1859,8 +1859,9 @@ pub enum AffectedScope {
 /// A single active continuous effect (CR 611/613).
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct ContinuousEffect {
-    /// Present only for a granted triggered ability. Retained when unrelated effects expire;
-    /// static grants use authored provenance, resolving grants a deterministic creation ID.
+    /// Ability occurrence provenance. Also groups AttachedModifier's characteristic components
+    /// for CR 613.6; nested granted ability paths retain their own occurrence identity.
+    /// Static grants use authored provenance, resolving grants a deterministic creation ID.
     pub trigger_grant_origin: Option<TriggerAbilityOrigin>,
     /// Spell/ability that created this (for display and future targeted removal).
     pub source_id: Option<ObjectId>,

@@ -2122,6 +2122,13 @@ pub enum StaticAbilityDef {
         condition: Option<GameCondition>,
         keyword: Keyword,
     },
+    /// CR 611.3 / 613.1f: a live static keyword grant to permanent scopes. Darksteel Forge
+    /// grants indestructible to artifacts; Avacyn grants it to other permanents you control.
+    /// Filters read earlier-layer characteristics and supported physical facts, never keywords/P/T.
+    GrantKeywordToPermanents {
+        filter: TargetFilter,
+        keyword: Keyword,
+    },
     /// CR 113.10 / 613.1f: permanents matching `filter` have the listed triggered abilities
     /// while this static ability and its optional condition apply. Thorin Oakenshield grants
     /// ward to artifacts and creatures; Infernal Scarring supplies the attached-object version

@@ -175,8 +175,8 @@ pub(super) fn spell_cast_characteristics(
         signed_toughness: face.toughness.map(i64::from),
     };
     let evaluator = CharacteristicsEvaluator { state, registry };
-    evaluator.apply_layer_4_type(oid, &mut characteristics);
-    evaluator.apply_layer_5_color(oid, &mut characteristics);
+    evaluator.apply_layer_4_type(oid, &mut characteristics, &mut Vec::new());
+    evaluator.apply_layer_5_color(oid, &mut characteristics, &mut Vec::new());
     characteristics
 }
 
@@ -205,7 +205,11 @@ pub(super) fn stack_spell_colors(
         signed_power: None,
         signed_toughness: None,
     };
-    CharacteristicsEvaluator { state, registry }.apply_layer_5_color(item.id, &mut characteristics);
+    CharacteristicsEvaluator { state, registry }.apply_layer_5_color(
+        item.id,
+        &mut characteristics,
+        &mut Vec::new(),
+    );
     Some(characteristics.colors)
 }
 
@@ -312,6 +316,14 @@ impl CharacteristicsEvaluator<'_> {
     /// Snapshot through CR 613 layer 5. Conditional layer-6/7 effects may inspect controller,
     /// type, and color through this boundary without recursively asking for their own result.
     fn characteristics_through_layer_5(&self, oid: ObjectId) -> Option<Characteristics> {
+        self.characteristics_through_layer_5_with_started(oid)
+            .map(|(snapshot, _)| snapshot)
+    }
+
+    fn characteristics_through_layer_5_with_started(
+        &self,
+        oid: ObjectId,
+    ) -> Option<(Characteristics, Vec<TriggerAbilityOrigin>)> {
         let object = self.state.objects.get(&oid)?;
         let definition = self.registry.get(&object.card_id);
         let copied = object.copiable_values.as_ref();
@@ -395,15 +407,16 @@ impl CharacteristicsEvaluator<'_> {
             },
         };
 
+        let mut started = Vec::new();
         self.apply_layer_1_copy(&mut result);
         self.apply_layer_1b_face_down(object, &mut result);
         self.apply_layer_2_control(oid, &mut result);
-        self.apply_layer_3_text(oid, &mut result);
-        self.apply_layer_4_type(oid, &mut result);
-        self.apply_layer_5_color(oid, &mut result);
+        self.apply_layer_3_text(oid, &mut result, &mut started);
+        self.apply_layer_4_type(oid, &mut result, &mut started);
+        self.apply_layer_5_color(oid, &mut result, &mut started);
         result.signed_power = result.power.map(i64::from);
         result.signed_toughness = result.toughness.map(i64::from);
-        Some(result)
+        Some((result, started))
     }
 
     // These identity stages are intentionally separate: adding the first effect in a layer must
@@ -485,7 +498,12 @@ impl CharacteristicsEvaluator<'_> {
         controller
     }
 
-    fn apply_layer_3_text(&self, oid: ObjectId, result: &mut Characteristics) {
+    fn apply_layer_3_text(
+        &self,
+        oid: ObjectId,
+        result: &mut Characteristics,
+        started: &mut Vec<TriggerAbilityOrigin>,
+    ) {
         let mut effects: Vec<(usize, &ContinuousEffect)> = self
             .state
             .continuous_effects
@@ -493,10 +511,19 @@ impl CharacteristicsEvaluator<'_> {
             .enumerate()
             .filter(|(_, effect)| matches!(effect.kind, ContinuousEffectKind::Layer3SetName(_)))
             .filter(|(_, effect)| effect_affects(self.state, self.registry, effect, oid, result))
-            .filter(|(_, effect)| self.characteristic_effect_condition_holds(effect, oid, result))
+            .filter(|(_, effect)| {
+                component_group(self.state, self.registry, effect)
+                    .is_some_and(|origin| started.contains(&origin))
+                    || self.characteristic_effect_condition_holds(effect, oid, result)
+            })
             .collect();
         effects.sort_by_key(|(index, effect)| (effect.timestamp, *index));
         for (_, effect) in effects {
+            if let Some(origin) = component_group(self.state, self.registry, effect) {
+                if !started.contains(&origin) {
+                    started.push(origin);
+                }
+            }
             let ContinuousEffectKind::Layer3SetName(name) = &effect.kind else {
                 unreachable!("filtered to layer-3 name effects");
             };
@@ -506,7 +533,12 @@ impl CharacteristicsEvaluator<'_> {
 
     /// CR 205.1b / 613.1d: additive type-changing effects retain every printed and previously
     /// added type. Equal timestamps use insertion order so replay remains deterministic.
-    fn apply_layer_4_type(&self, oid: ObjectId, result: &mut Characteristics) {
+    fn apply_layer_4_type(
+        &self,
+        oid: ObjectId,
+        result: &mut Characteristics,
+        started: &mut Vec<TriggerAbilityOrigin>,
+    ) {
         let mut effects: Vec<(usize, &ContinuousEffect)> = self
             .state
             .continuous_effects
@@ -523,11 +555,20 @@ impl CharacteristicsEvaluator<'_> {
                 )
             })
             .filter(|(_, effect)| effect_affects(self.state, self.registry, effect, oid, result))
-            .filter(|(_, effect)| self.characteristic_effect_condition_holds(effect, oid, result))
+            .filter(|(_, effect)| {
+                component_group(self.state, self.registry, effect)
+                    .is_some_and(|origin| started.contains(&origin))
+                    || self.characteristic_effect_condition_holds(effect, oid, result)
+            })
             .collect();
         effects.sort_by_key(|(index, effect)| (effect.timestamp, *index));
 
         for (_, effect) in effects {
+            if let Some(origin) = component_group(self.state, self.registry, effect) {
+                if !started.contains(&origin) {
+                    started.push(origin);
+                }
+            }
             match &effect.kind {
                 ContinuousEffectKind::Layer4AddTypes(addition) => {
                     apply_type_line_addition(result, addition);
@@ -558,7 +599,12 @@ impl CharacteristicsEvaluator<'_> {
         }
     }
 
-    fn apply_layer_5_color(&self, oid: ObjectId, result: &mut Characteristics) {
+    fn apply_layer_5_color(
+        &self,
+        oid: ObjectId,
+        result: &mut Characteristics,
+        started: &mut Vec<TriggerAbilityOrigin>,
+    ) {
         let mut effects: Vec<(usize, &ContinuousEffect)> = self
             .state
             .continuous_effects
@@ -566,15 +612,93 @@ impl CharacteristicsEvaluator<'_> {
             .enumerate()
             .filter(|(_, effect)| matches!(effect.kind, ContinuousEffectKind::Layer5SetColors(_)))
             .filter(|(_, effect)| effect_affects(self.state, self.registry, effect, oid, result))
-            .filter(|(_, effect)| self.characteristic_effect_condition_holds(effect, oid, result))
+            .filter(|(_, effect)| {
+                component_group(self.state, self.registry, effect)
+                    .is_some_and(|origin| started.contains(&origin))
+                    || self.characteristic_effect_condition_holds(effect, oid, result)
+            })
             .collect();
         effects.sort_by_key(|(index, effect)| (effect.timestamp, *index));
         for (_, effect) in effects {
+            if let Some(origin) = component_group(self.state, self.registry, effect) {
+                if !started.contains(&origin) {
+                    started.push(origin);
+                }
+            }
             let ContinuousEffectKind::Layer5SetColors(colors) = &effect.kind else {
                 unreachable!("filtered to layer-5 color effects");
             };
             result.colors.clone_from(colors);
         }
+    }
+
+    /// Whether a one-layer static keyword grant still has its generating ability. Only removal
+    /// candidates are examined, from a through-layer-5 snapshot, avoiding a recursive layer-6
+    /// query. CR 613.8 makes this grant depend on removal of the source's generating ability.
+    fn static_keyword_grant_source_is_active(&self, effect: &ContinuousEffect) -> bool {
+        let ContinuousEffectKind::Layer6AddKeywordFromStatic {
+            keyword,
+            source_zone_change,
+        } = effect.kind
+        else {
+            return true;
+        };
+        let Some(source) = effect.source_id else {
+            return false;
+        };
+        let Some(object) = self.state.objects.get(&source) else {
+            return false;
+        };
+        if object.zone != Zone::Battlefield
+            || object.face_down
+            || self
+                .state
+                .zone_change_generation
+                .get(&source)
+                .copied()
+                .unwrap_or(0)
+                != source_zone_change
+            || basic_land_type_setting(self.state, source).is_some()
+        {
+            return false;
+        }
+        let AffectedScope::PermanentsMatching { filter, .. } = &effect.affected else {
+            return false;
+        };
+        let still_grants =
+            effective_face_from(self.state, self.registry, source).is_some_and(|face| {
+                face.static_abilities.iter().any(|ability| {
+                    matches!(&ability.definition, StaticAbilityDef::GrantKeywordToPermanents {
+                    filter: current_filter, keyword: current_keyword,
+                } if current_keyword == &keyword && current_filter == filter.as_ref())
+                })
+            });
+        if !still_grants {
+            return false;
+        }
+        !self.source_has_active_ability_removal(source)
+    }
+
+    fn source_has_active_ability_removal(&self, source: ObjectId) -> bool {
+        let Some(snapshot) = self.characteristics_through_layer_5(source) else {
+            return false;
+        };
+        self.state.continuous_effects.iter().any(|removal| {
+            matches!(removal.kind, ContinuousEffectKind::Layer6RemoveAllAbilities)
+                && (removal.duration != EffectDuration::WhileSourceOnBattlefield
+                    || removal.source_id.is_some_and(|id| {
+                        self.state
+                            .objects
+                            .get(&id)
+                            .is_some_and(|candidate| candidate.zone == Zone::Battlefield)
+                        }))
+                && static_source_identity_is_current(self.state, self.registry, removal)
+                // Raw scope avoids asking whether another source-removal query suppresses
+                // this candidate. Authored static removal producers start before layer six;
+                // removal-only dependency ordering is a separate, unsupported boundary.
+                && effect_scope_affects(self.state, self.registry, removal, source, &snapshot)
+                && self.characteristic_effect_condition_holds(removal, source, &snapshot)
+        })
     }
 
     /// Active layer-6 effects in CR 613.7 timestamp order. The original vector index makes equal
@@ -595,6 +719,7 @@ impl CharacteristicsEvaluator<'_> {
                     effect.kind,
                     ContinuousEffectKind::Layer6RemoveAllAbilities
                         | ContinuousEffectKind::Layer6AddKeyword(_)
+                        | ContinuousEffectKind::Layer6AddKeywordFromStatic { .. }
                         | ContinuousEffectKind::Layer6AddProtection(_)
                 )
             })
@@ -648,6 +773,9 @@ impl CharacteristicsEvaluator<'_> {
         queried_oid: ObjectId,
         queried_pre_layer_6: &Characteristics,
     ) -> bool {
+        if static_component_started_for(self.state, self.registry, effect, queried_oid) {
+            return true;
+        }
         let Some(condition) = effect.condition.as_ref() else {
             return true;
         };
@@ -1119,6 +1247,9 @@ pub(super) fn effect_affects(
     oid: ObjectId,
     characteristics: &Characteristics,
 ) -> bool {
+    if !static_source_identity_is_current(state, registry, effect) {
+        return false;
+    }
     if !matches!(effect.affected, AffectedScope::Single(_))
         && !state
             .objects
@@ -1127,15 +1258,49 @@ pub(super) fn effect_affects(
     {
         return false;
     }
+    // Resolved removal is independent of subsequent source ability loss for every duration.
+    let resolved_removal = matches!(effect.kind, ContinuousEffectKind::Layer6RemoveAllAbilities)
+        && component_group(state, registry, effect).is_none();
+    let independent_at_this_layer = is_earlier_characteristic_component(&effect.kind)
+        || resolved_removal
+        || matches!(
+            effect.kind,
+            ContinuousEffectKind::Layer6AddKeywordFromStatic { .. }
+        )
+        || static_component_started_for(state, registry, effect, oid);
     if effect.duration == EffectDuration::WhileSourceOnBattlefield
-        && !matches!(effect.kind, ContinuousEffectKind::Layer6RemoveAllAbilities)
+        && !independent_at_this_layer
         && effect.source_id.is_some_and(|source_id| {
-            latest_remove_all_abilities_timestamp(state, source_id)
-                .is_some_and(|removed_at| effect.timestamp <= removed_at)
+            if component_group(state, registry, effect).is_some()
+                && !matches!(effect.kind, ContinuousEffectKind::Layer6RemoveAllAbilities)
+            {
+                // A refreshed unstarted component still depends on its generating ability.
+                // Removal components keep their existing same-layer boundary; this does not
+                // add an algorithm for removal-only static dependency cycles.
+                (CharacteristicsEvaluator { state, registry })
+                    .source_has_active_ability_removal(source_id)
+            } else {
+                latest_remove_all_abilities_timestamp(state, source_id)
+                    .is_some_and(|removed_at| effect.timestamp <= removed_at)
+            }
         })
     {
         return false;
     }
+    if !(CharacteristicsEvaluator { state, registry }).static_keyword_grant_source_is_active(effect)
+    {
+        return false;
+    }
+    effect_scope_affects(state, registry, effect, oid, characteristics)
+}
+
+fn effect_scope_affects(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    effect: &ContinuousEffect,
+    oid: ObjectId,
+    characteristics: &Characteristics,
+) -> bool {
     match &effect.affected {
         AffectedScope::Single(id) => *id == oid,
         AffectedScope::AllCreatures => characteristics.is_creature(),
@@ -1200,6 +1365,130 @@ pub(super) fn effect_affects(
         }
         AffectedScope::Player(_) => false,
     }
+}
+
+fn static_source_identity_is_current(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    effect: &ContinuousEffect,
+) -> bool {
+    let Some(TriggerAbilityOrigin::StaticGrant {
+        source_id,
+        source_zone_change,
+        ..
+    }) = &effect.trigger_grant_origin
+    else {
+        return true;
+    };
+    state.objects.get(source_id).is_some_and(|source| {
+        source.zone == Zone::Battlefield
+            && !source.face_down
+            && state
+                .zone_change_generation
+                .get(source_id)
+                .copied()
+                .unwrap_or(0)
+                == *source_zone_change
+    }) && (!matches!(effect.affected, AffectedScope::AttachedTo(_))
+        || component_group(state, registry, effect).is_some())
+}
+
+fn is_earlier_characteristic_component(kind: &ContinuousEffectKind) -> bool {
+    matches!(
+        kind,
+        ContinuousEffectKind::Layer3SetName(_)
+            | ContinuousEffectKind::Layer4AddTypes(_)
+            | ContinuousEffectKind::Layer4SetTypeLine(_)
+            | ContinuousEffectKind::Layer4SetBasicLandType(_)
+            | ContinuousEffectKind::Layer4SetCreatureTypes(_)
+            | ContinuousEffectKind::Layer4SetAllCreatureTypes
+            | ContinuousEffectKind::Layer5SetColors(_)
+    )
+}
+
+fn is_characteristic_component(kind: &ContinuousEffectKind) -> bool {
+    is_earlier_characteristic_component(kind)
+        || matches!(
+            kind,
+            ContinuousEffectKind::Layer6RemoveAllAbilities
+                | ContinuousEffectKind::Layer6AddKeyword(_)
+                | ContinuousEffectKind::Layer6AddProtection(_)
+                | ContinuousEffectKind::GrantActivatedAbility(_)
+                | ContinuousEffectKind::GrantTriggeredAbility(_)
+                | ContinuousEffectKind::Layer7bSetPt { .. }
+                | ContinuousEffectKind::PtModify { .. }
+                | ContinuousEffectKind::PtModifyByCount { .. }
+        )
+}
+
+/// Resolve the containing AttachedModifier before normalizing a nested grant's path. An
+/// unrelated static ability on the same permanent never becomes part of this logical effect.
+fn component_group(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    effect: &ContinuousEffect,
+) -> Option<TriggerAbilityOrigin> {
+    let TriggerAbilityOrigin::StaticGrant {
+        source_id,
+        source_zone_change,
+        definition,
+    } = effect.trigger_grant_origin.as_ref()?
+    else {
+        return None;
+    };
+    if effect.source_id != Some(*source_id)
+        || effect.duration != EffectDuration::WhileSourceOnBattlefield
+    {
+        return None;
+    }
+    let object = state.objects.get(source_id)?;
+    let face = effective_face_from(state, registry, *source_id)?;
+    let card_id = object
+        .copiable_values
+        .as_ref()
+        .or(object.token_origin.as_ref())
+        .filter(|values| !values.source_card_id.is_empty())
+        .map(|values| values.source_card_id.as_str())
+        .unwrap_or(&object.card_id);
+    if card_id != definition.card_id || face.face_id != definition.face_id {
+        return None;
+    }
+    let outer = definition.ability_path.first()?;
+    let ability = face.static_abilities.iter().find(|ability| {
+        &ability.ability_id == outer
+            && matches!(
+                ability.definition,
+                StaticAbilityDef::AttachedModifier { .. }
+            )
+    })?;
+    let mut outer_definition = definition.clone();
+    outer_definition.ability_path = vec![ability.ability_id.clone()];
+    Some(TriggerAbilityOrigin::StaticGrant {
+        source_id: *source_id,
+        source_zone_change: *source_zone_change,
+        definition: outer_definition,
+    })
+}
+
+/// Pure, recipient-specific CR 613.6 start lookup. Earlier passes never ask about layer-six
+/// suppression, so recomputing this boundary cannot recurse through a later-layer component.
+pub(super) fn static_component_started_for(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    effect: &ContinuousEffect,
+    oid: ObjectId,
+) -> bool {
+    if !is_characteristic_component(&effect.kind)
+        || is_earlier_characteristic_component(&effect.kind)
+    {
+        return false;
+    }
+    let Some(origin) = component_group(state, registry, effect) else {
+        return false;
+    };
+    (CharacteristicsEvaluator { state, registry })
+        .characteristics_through_layer_5_with_started(oid)
+        .is_some_and(|(_, started)| started.contains(&origin))
 }
 
 /// Latest remove-all-abilities timestamp for the scopes currently capable of creating that
@@ -1553,7 +1842,9 @@ impl CharacteristicsEvaluator<'_> {
                 result.evasions.clear();
                 last_removal_timestamp = Some(effect.timestamp);
             }
-            if let ContinuousEffectKind::Layer6AddKeyword(keyword) = effect.kind {
+            if let ContinuousEffectKind::Layer6AddKeyword(keyword)
+            | ContinuousEffectKind::Layer6AddKeywordFromStatic { keyword, .. } = effect.kind
+            {
                 if !result.keywords.contains(&keyword) {
                     result.keywords.push(keyword);
                 }

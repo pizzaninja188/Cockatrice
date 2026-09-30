@@ -8,6 +8,8 @@
 #[path = "scenario/authoring_actions.rs"]
 mod authoring_actions;
 
+#[path = "scenario/deck_coverage_darksteel_forge.rs"]
+mod deck_coverage_darksteel_forge;
 #[path = "scenario/deck_coverage_psychosis_crawler.rs"]
 mod deck_coverage_psychosis_crawler;
 
