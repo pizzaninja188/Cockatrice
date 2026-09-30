@@ -1,0 +1,38 @@
+(
+  id: "interplanar_beacon",
+  name: "Interplanar Beacon",
+  face_id: "interplanar_beacon",
+  mana_cost: "",
+  types: ["Land"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerCastsSpell(caster: Controller, filter: (card_type: Some(Planeswalker))),
+    effect: [GainLife(amount: 1)],
+  )],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      costs: [Mana("{1}"), Tap],
+      effect: [ProduceMana(
+        options: [
+          (w: 1, u: 1), (w: 1, b: 1), (w: 1, r: 1), (w: 1, g: 1),
+          (u: 1, b: 1), (u: 1, r: 1), (u: 1, g: 1),
+          (b: 1, r: 1), (b: 1, g: 1), (r: 1, g: 1),
+        ],
+        restriction: Some((
+          restriction_id: "restriction_01",
+          presentation: OracleLines([3]),
+          cast_spell: [(card_type: Some(Planeswalker))],
+        )),
+      )],
+    ),
+  ],
+)

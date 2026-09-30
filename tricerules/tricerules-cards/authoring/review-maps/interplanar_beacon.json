@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "073169f2-da3a-4a93-8c01-b3fd8558d225",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "interplanar_beacon",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "interplanar_beacon",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "interplanar_beacon",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_beacon_chandra::exact_single_face_characteristics_and_complete_ability_counts",
+      "covers": "exact identities, single faces, printed types, cost, starting loyalty and complete ability counts"
+    },
+    {
+      "test": "scenario deck_coverage_beacon_chandra::beacon_colorless_and_all_ten_restricted_pairs_pay_only_planeswalker_spells",
+      "covers": "actual colorless ability; every distinct pair; atomic unpaid, wrong-player, invalid option and tapped rejection; nonplaneswalker spell and ability restriction; both units spent on one planeswalker; restriction presentation and life trigger order"
+    },
+    {
+      "test": "scenario deck_coverage_beacon_chandra::beacon_two_mana_can_pay_different_planeswalkers_and_unspent_mana_expires",
+      "covers": "same contribution split across two different planeswalkers; remaining unit preserved then spent; unspent restricted mana expires at boundary"
+    },
+    {
+      "test": "scenario deck_coverage_beacon_chandra::beacon_cast_trigger_survives_counter_and_ignores_other_spells_and_players",
+      "covers": "life trigger survives countering triggering spell; nonplaneswalker and opponent cast do not trigger"
+    }
+  ]
+}

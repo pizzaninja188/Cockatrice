@@ -378,6 +378,14 @@ fn evaluate(case: &Case) -> Result<Outcome, String> {
             }
             let oid = helpers::relocate_to_battlefield(&mut e, 0, &case.card, false);
             e.state.objects.get_mut(&oid).unwrap().face_up_index = case.face;
+            if case.card == "chandra,_novice_pyromancer" {
+                // Relocation skips entry; seed the actual printed starting loyalty.
+                e.state
+                    .objects
+                    .get_mut(&oid)
+                    .unwrap()
+                    .set_counter(tricerules_cards::primitives::CounterKind::Loyalty, 5);
+            }
             let batch = e.initial_response_batch();
             let legal = &batch.legal_by_player[&actor];
             let key = (u64::from(oid) << 32) | index as u64;
@@ -731,6 +739,9 @@ fn fresh_fixtures_cover_each_land_ability_and_nonfront_face() {
         ("escape_tunnel", 0, Some(1)),
         ("barkchannel_pathway_tidechannel_pathway", 1, Some(0)),
         ("barkchannel_pathway_tidechannel_pathway", 1, None),
+        ("chandra,_novice_pyromancer", 0, Some(0)),
+        ("chandra,_novice_pyromancer", 0, Some(1)),
+        ("chandra,_novice_pyromancer", 0, Some(2)),
     ] {
         let case = Case {
             card: card.into(),

@@ -1,0 +1,49 @@
+{
+  "format_version": 1,
+  "oracle_id": "882619f7-69b4-4ce0-be4e-1e34e608f925",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "chandra_novice_pyromancer",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "chandra_novice_pyromancer",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    },
+    {
+      "face_id": "chandra_novice_pyromancer",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2"
+      ]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_beacon_chandra::exact_single_face_characteristics_and_complete_ability_counts",
+      "covers": "exact identities, single faces, printed types, cost, starting loyalty and complete ability counts"
+    },
+    {
+      "test": "scenario deck_coverage_beacon_chandra::chandra_pump_is_a_controlled_elemental_snapshot_and_expires_at_cleanup",
+      "covers": "immediate plus-one loyalty cost; controlled Elementals only; no pump before resolution; later entrants excluded; toughness unchanged and cleanup expiry; second loyalty activation rejects atomically"
+    },
+    {
+      "test": "scenario deck_coverage_beacon_chandra::chandra_red_mana_uses_the_stack_and_expires_at_the_step_boundary",
+      "covers": "minus-one loyalty paid immediately; RR only after stack resolution; red pays red spell; remaining mana expires; repeat activation and opponent-turn timing reject atomically"
+    },
+    {
+      "test": "scenario deck_coverage_beacon_chandra::chandra_two_damage_accepts_every_any_target_kind_and_rejects_a_land",
+      "covers": "minus-two loyalty cost; player, creature, planeswalker and battle damage results; land rejects without paying loyalty"
+    }
+  ]
+}
