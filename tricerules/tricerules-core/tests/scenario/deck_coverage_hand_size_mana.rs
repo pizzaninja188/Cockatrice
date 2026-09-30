@@ -84,3 +84,82 @@ fn thought_vessel_removes_its_controllers_hand_limit_at_cleanup() {
 fn reliquary_tower_removes_its_controllers_hand_limit_at_cleanup() {
     verify_no_maximum_hand_size("reliquary_tower", 20_260_954, true, 0);
 }
+
+#[test]
+fn hand_limit_mana_sources_produce_every_printed_option_immediately() {
+    type Mana = (u32, u32, u32, u32, u32, u32);
+    let cards: [(&str, bool, u32, &[Mana]); 3] = [
+        ("thought_vessel", false, 2, &[(0, 0, 0, 0, 0, 1)]),
+        (
+            "decanter_of_endless_water",
+            false,
+            3,
+            &[
+                (1, 0, 0, 0, 0, 0),
+                (0, 1, 0, 0, 0, 0),
+                (0, 0, 1, 0, 0, 0),
+                (0, 0, 0, 1, 0, 0),
+                (0, 0, 0, 0, 1, 0),
+            ],
+        ),
+        ("reliquary_tower", true, 0, &[(0, 0, 0, 0, 0, 1)]),
+    ];
+    for (card_index, (card, is_land, cost, options)) in cards.iter().enumerate() {
+        for (option, expected) in options.iter().enumerate() {
+            let mut engine = two_player_engine(20_261_100 + (card_index * 5 + option) as u64);
+            let source = inject_card_into_hand(&mut engine, 0, card);
+            let slot = hand_index_for_card(&engine, 0, card);
+            if *is_land {
+                engine
+                    .apply_command(0, &play_land(slot))
+                    .expect("play land");
+            } else {
+                engine.state.players[0].mana_pool.colorless = *cost;
+                engine
+                    .apply_command(0, &cast_spell(slot, vec![]))
+                    .expect("cast artifact");
+                resolve_entire_stack_two_player(&mut engine);
+            }
+            assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
+            assert!(!engine.state.objects[&source].tapped);
+            engine.state.players[0].mana_pool = Default::default();
+            let mut command = activate_ability_for(&engine, source, 0, vec![]);
+            let Some(Cmd::ActivateAbility(ability)) = command.cmd.as_mut() else {
+                unreachable!()
+            };
+            ability.mana_option_index = option as u32;
+            let before = serde_json::to_value(&engine.state).unwrap();
+            engine
+                .apply_command(1, &command)
+                .expect_err("opponent cannot tap this source");
+            assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
+            engine
+                .apply_command(0, &command)
+                .expect("produce printed mana");
+            let pool = &engine.state.players[0].mana_pool;
+            assert_eq!(
+                (
+                    pool.white,
+                    pool.blue,
+                    pool.black,
+                    pool.red,
+                    pool.green,
+                    pool.colorless
+                ),
+                *expected,
+                "{card} option {option}"
+            );
+            assert!(engine.state.objects[&source].tapped);
+            assert!(
+                engine.state.stack.is_empty(),
+                "mana ability resolves immediately"
+            );
+            assert!(engine.state.pending_resolution.is_none());
+            let after = serde_json::to_value(&engine.state).unwrap();
+            engine
+                .apply_command(0, &command)
+                .expect_err("tapped source cannot pay again");
+            assert_eq!(serde_json::to_value(&engine.state).unwrap(), after);
+        }
+    }
+}

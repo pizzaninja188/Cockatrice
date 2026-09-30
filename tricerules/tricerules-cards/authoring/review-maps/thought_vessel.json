@@ -36,6 +36,10 @@
   "tokens": [],
   "semantic_fixtures": [
     {
+      "test": "scenario deck_coverage_hand_size_mana::hand_limit_mana_sources_produce_every_printed_option_immediately",
+      "covers": "Actual Thought Vessel taps for one colorless mana immediately; opponent and repeated tapped activations preserve state on rejection"
+    },
+    {
       "test": "scenario deck_coverage_hand_size_mana::thought_vessel_removes_its_controllers_hand_limit_at_cleanup",
       "covers": "Thought Vessel keeps its controller's nine-card hand through cleanup while the opponent still has a seven-card maximum"
     }
