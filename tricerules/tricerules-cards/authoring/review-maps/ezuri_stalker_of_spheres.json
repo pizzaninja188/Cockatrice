@@ -1,0 +1,38 @@
+{
+  "oracle_id": "cffec16f-373b-43e7-a04c-4452987d7e02",
+  "semantic_fixtures": [
+    {
+      "covers": "ezuri declining the optional branch does not pay or proliferate",
+      "test": "scenario issue_500_proliferate_cohort::ezuri_declining_the_optional_branch_does_not_pay_or_proliferate"
+    },
+    {
+      "covers": "ezuri pays once proliferates twice without priority and triggers even on zero",
+      "test": "scenario issue_500_proliferate_cohort::ezuri_pays_once_proliferates_twice_without_priority_and_triggers_even_on_zero"
+    },
+    {
+      "covers": "replacement-aware permanent counter addition and poison state-based loss",
+      "test": "scenario issue_500_proliferate_cohort::proliferate_observes_counter_replacement_and_poison_state_based_loss"
+    }
+  ],
+  "format_version": 1,
+  "spans": [
+    {
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0"
+      ],
+      "face_id": "ezuri_stalker_of_spheres",
+      "start_line": 1
+    },
+    {
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1"
+      ],
+      "face_id": "ezuri_stalker_of_spheres",
+      "start_line": 2
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

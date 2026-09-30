@@ -1,0 +1,25 @@
+{
+  "oracle_id": "b45fdeab-00cc-4422-af9f-66f30a880a7c",
+  "semantic_fixtures": [
+    {
+      "covers": "evolution sage triggers on a land entry and proliferates each existing counter kind",
+      "test": "scenario issue_500_proliferate_cohort::evolution_sage_triggers_on_a_land_entry_and_proliferates_each_existing_counter_kind"
+    },
+    {
+      "covers": "replacement-aware permanent counter addition and poison state-based loss",
+      "test": "scenario issue_500_proliferate_cohort::proliferate_observes_counter_replacement_and_poison_state_based_loss"
+    }
+  ],
+  "format_version": 1,
+  "spans": [
+    {
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ],
+      "face_id": "evolution_sage",
+      "start_line": 1
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,25 @@
+{
+  "oracle_id": "83874e60-291b-47a7-ba9f-69437fa7e3c7",
+  "semantic_fixtures": [
+    {
+      "covers": "flux channeler triggers for noncreature spells but not creatures",
+      "test": "scenario issue_500_proliferate_cohort::flux_channeler_triggers_for_noncreature_spells_but_not_creatures"
+    },
+    {
+      "covers": "replacement-aware permanent counter addition and poison state-based loss",
+      "test": "scenario issue_500_proliferate_cohort::proliferate_observes_counter_replacement_and_poison_state_based_loss"
+    }
+  ],
+  "format_version": 1,
+  "spans": [
+    {
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ],
+      "face_id": "flux_channeler",
+      "start_line": 1
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

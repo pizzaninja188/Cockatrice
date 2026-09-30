@@ -1,0 +1,34 @@
+{
+  "oracle_id": "b33d2b77-f068-4fdc-a1a8-0353a35e3973",
+  "semantic_fixtures": [
+    {
+      "covers": "tezzerets gambit draws before proliferating and accepts phyrexian life",
+      "test": "scenario issue_500_proliferate_cohort::tezzerets_gambit_draws_before_proliferating_and_accepts_phyrexian_life"
+    },
+    {
+      "covers": "replacement-aware permanent counter addition and poison state-based loss",
+      "test": "scenario issue_500_proliferate_cohort::proliferate_observes_counter_replacement_and_poison_state_based_loss"
+    }
+  ],
+  "format_version": 1,
+  "spans": [
+    {
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/mana_cost"
+      ],
+      "face_id": "tezzerets_gambit",
+      "start_line": 1
+    },
+    {
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ],
+      "face_id": "tezzerets_gambit",
+      "start_line": 2
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

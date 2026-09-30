@@ -1,0 +1,25 @@
+{
+  "oracle_id": "40ec0a47-badf-4074-b0a8-749bb7c17b95",
+  "semantic_fixtures": [
+    {
+      "covers": "inexorable tide triggers on a creature spell and resolves before it",
+      "test": "scenario issue_500_proliferate_cohort::inexorable_tide_triggers_on_a_creature_spell_and_resolves_before_it"
+    },
+    {
+      "covers": "replacement-aware permanent counter addition and poison state-based loss",
+      "test": "scenario issue_500_proliferate_cohort::proliferate_observes_counter_replacement_and_poison_state_based_loss"
+    }
+  ],
+  "format_version": 1,
+  "spans": [
+    {
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ],
+      "face_id": "inexorable_tide",
+      "start_line": 1
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,0 +1,33 @@
+{
+  "oracle_id": "7e6b9b59-cd68-4e3c-827b-38833c92d6eb",
+  "semantic_fixtures": [
+    {
+      "covers": "atraxa triggers at its controllers end step",
+      "test": "scenario issue_500_proliferate_cohort::atraxa_triggers_at_its_controllers_end_step"
+    },
+    {
+      "covers": "replacement-aware permanent counter addition and poison state-based loss",
+      "test": "scenario issue_500_proliferate_cohort::proliferate_observes_counter_replacement_and_poison_state_based_loss"
+    }
+  ],
+  "format_version": 1,
+  "spans": [
+    {
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ],
+      "face_id": "atraxa_praetors_voice",
+      "start_line": 1
+    },
+    {
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ],
+      "face_id": "atraxa_praetors_voice",
+      "start_line": 2
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

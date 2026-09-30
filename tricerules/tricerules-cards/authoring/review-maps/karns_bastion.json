@@ -1,0 +1,33 @@
+{
+  "oracle_id": "9fb8cd81-403a-4988-8f1c-b8eccf8abd9c",
+  "semantic_fixtures": [
+    {
+      "covers": "karns bastion keeps its colorless mana and proliferate abilities distinct",
+      "test": "scenario issue_500_proliferate_cohort::karns_bastion_keeps_its_colorless_mana_and_proliferate_abilities_distinct"
+    },
+    {
+      "covers": "replacement-aware permanent counter addition and poison state-based loss",
+      "test": "scenario issue_500_proliferate_cohort::proliferate_observes_counter_replacement_and_poison_state_based_loss"
+    }
+  ],
+  "format_version": 1,
+  "spans": [
+    {
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ],
+      "face_id": "karns_bastion",
+      "start_line": 1
+    },
+    {
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ],
+      "face_id": "karns_bastion",
+      "start_line": 2
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
