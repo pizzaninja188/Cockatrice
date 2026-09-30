@@ -30,6 +30,50 @@ Use `clone` to copy the selected analogue into a draft outside `data/`. Resolve 
 mechanics/presentation sentinels after exact source review. Keep readiness assessments concise.
 Do not broaden a batch to fill a target count when compatible ready cards are unavailable.
 
+## Remember assessed candidates by exact identity
+
+After a concrete preflight, save the exact Oracle ID, routing decision and reason once:
+
+```powershell
+./scripts/authoring-batch.ps1 candidate-save --oracle-id <id> --name "Exact Name" `
+  --status blocked --reason "Missing recipient choice" --depends build/source.json `
+  --depends build/rulings.json --depends tricerules/tricerules-core/src/engine/relevant_contract.rs `
+  --out build/candidates/exact-name.json
+./scripts/authoring-batch.ps1 candidate-list --directory build/candidates
+```
+
+Include source, rulings, relevant implementation/schema contracts and any selection prerequisites
+that could invalidate the assessment. File membership additions require including the relevant
+module/index file too. Unrelated card changes leave the decision intact; changed or missing
+dependencies reopen it as `unassessed` with the prior reason preserved. Add a new version of the
+record after reassessment; saves refuse overwrite. `ready` is a routing claim, never approval.
+Check this queue before selecting new work, then recheck current registry and live ownership.
+Do not repeatedly investigate a fresh blocked/held identity to avoid an unresolved policy question.
+
+## Generate evidence scaffolds from typed definitions
+
+```powershell
+./scripts/card-author.ps1 inspect --draft build/draft.ron
+# Save the JSON result as build/typed.json; source.json is the exact saved card API record.
+./scripts/authoring-batch.ps1 map-scaffold --typed build/typed.json --source build/source.json `
+  --test "scenario module::actual_card_test" --out build/map-scaffold
+```
+
+The new directory contains `review-map.json` and a hashed `typed-paths.json` catalogue. Recursive
+OracleLines mappings include nested granted abilities; unmapped clauses stay explicitly unresolved.
+Token references are collected with the final validator's CreateTokens/CreateAttackingTokens rule.
+Primitive references and independently asserted coverage descriptions still need manual review.
+The map always starts unconfirmed, including when every line has an explicit presentation pointer.
+Neither copying OracleLines nor a successful structural inspection proves mechanical equivalence.
+Scaffolds cannot be emitted into embedded data and refuse to overwrite existing outputs.
+
+Use `prepare-card-batch.ps1 -FocusedTests ... -ReviewMapPath ...` before freezing review. The optional
+focused-test file is an array of exact `{package,target,test,features?}` entries. Test both default
+and authoring feature configurations when conditional helper code changes. Resolve structural
+findings before review, then run one final gate on the stable compatible batch and deliver it.
+Do not add another card after final verification while delivery is pending; prepare the next queue
+read-only, or resolve the blocker. The final gate always checks the complete corpus and approval.
+
 ## More reusable, independently expected rows
 
 The shared schema is `src/authoring_schema.rs`. The calibration matrix is
@@ -76,6 +120,11 @@ remaining players and already recorded passes;
 `advance_to_main1_from_game_start` uses it for both opening steps. It does not answer arbitrary
 resolution/target/payment choices or silently drain a scenario. These helpers are test-only;
 production, protocol, relay and UI contracts are unchanged.
+
+`helpers::authoring_fixture::library_top(engine, player_index, card_ids)` seeds named physical
+objects in the supplied draw order. Tolarian Winds and Greater Good share this setup while retaining
+their distinct expected hand/graveyard identities, counts and choices. It bypasses entry events
+and is not proof of casting, ownership, library search, or replacement behavior.
 
 ```powershell
 ./scripts/card-author.ps1 validate-batch --batch build/my-drafts/batch.json

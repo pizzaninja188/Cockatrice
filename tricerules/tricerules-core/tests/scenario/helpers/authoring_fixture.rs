@@ -2,6 +2,22 @@
 use super::*;
 use tricerules_core::Zone;
 
+/// Seed independently named draws in order; card expectations belong to the caller.
+/// Injection is fixture setup, not a simulated rules command or entry-event proof.
+pub(crate) fn library_top(engine: &mut GameEngine, player: usize, card_ids: &[&str]) -> Vec<u32> {
+    let objects: Vec<u32> = card_ids
+        .iter()
+        .map(|card_id| inject_library_card(engine, player, card_id))
+        .collect();
+    engine.state.players[player]
+        .library
+        .retain(|object_id| !objects.contains(object_id));
+    for object_id in objects.iter().rev() {
+        engine.state.players[player].library.push_front(*object_id);
+    }
+    objects
+}
+
 pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize>) -> GameEngine {
     let mut cards = vec![
         card,

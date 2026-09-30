@@ -835,6 +835,45 @@ pub(super) fn run(
     provenance: &str,
     inspect_existing: bool,
 ) -> Result<String, String> {
+    run_with_confirmation(
+        cards,
+        draft_path,
+        map_path,
+        output_path,
+        provenance,
+        inspect_existing,
+        true,
+    )
+}
+
+pub(super) fn run_preparation(
+    cards: Vec<Value>,
+    draft_path: &Path,
+    map_path: &Path,
+    output_path: Option<&Path>,
+    provenance: &str,
+    inspect_existing: bool,
+) -> Result<String, String> {
+    run_with_confirmation(
+        cards,
+        draft_path,
+        map_path,
+        output_path,
+        provenance,
+        inspect_existing,
+        false,
+    )
+}
+
+fn run_with_confirmation(
+    cards: Vec<Value>,
+    draft_path: &Path,
+    map_path: &Path,
+    output_path: Option<&Path>,
+    provenance: &str,
+    inspect_existing: bool,
+    require_confirmation: bool,
+) -> Result<String, String> {
     let data_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data");
     if map_path.is_dir() {
         if !inspect_existing || !draft_path.is_dir() {
@@ -869,7 +908,7 @@ pub(super) fn run(
             )?;
             let evidence: Value =
                 serde_json::from_str(&packet).map_err(|error| error.to_string())?;
-            if evidence["promotion_ready_for_human_review"] != true {
+            if require_confirmation && evidence["promotion_ready_for_human_review"] != true {
                 return Err(format!(
                     "{}: checked-in map has unresolved or unconfirmed review",
                     map.display()
@@ -973,6 +1012,26 @@ mod tests {
         )
         .unwrap_err()
         .contains("unresolved or unconfirmed"));
+        let prepared = root.join("prepared");
+        run_preparation(sources(), &drafts, &maps, Some(&prepared), "fixture", true).unwrap();
+        let packet: Value =
+            serde_json::from_slice(&fs::read(prepared.join("first.packet.json")).unwrap()).unwrap();
+        assert_eq!(packet["complete_definition_review_confirmed"], false);
+        assert_eq!(packet["promotion_ready_for_human_review"], false);
+        let invalid = fs::read_to_string(&first_map)
+            .unwrap()
+            .replace("/faces/0/spell_effect/0", "/faces/0/missing");
+        fs::write(&first_map, invalid).unwrap();
+        assert!(run_preparation(
+            sources(),
+            &drafts,
+            &maps,
+            Some(&root.join("invalid")),
+            "fixture",
+            true
+        )
+        .unwrap_err()
+        .contains("does not exist"));
         fs::remove_dir_all(&root).unwrap();
     }
 

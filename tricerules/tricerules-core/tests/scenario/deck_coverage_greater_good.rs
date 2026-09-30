@@ -43,20 +43,6 @@ fn activate_greater_good(engine: &GameEngine, source: u32, creature: u32) -> Rul
     command
 }
 
-fn seat_on_top(engine: &mut GameEngine, card_ids: &[&str]) -> Vec<u32> {
-    let objects: Vec<u32> = card_ids
-        .iter()
-        .map(|card_id| inject_library_card(engine, 0, card_id))
-        .collect();
-    engine.state.players[0]
-        .library
-        .retain(|object_id| !objects.contains(object_id));
-    for object_id in objects.iter().rev() {
-        engine.state.players[0].library.push_front(*object_id);
-    }
-    objects
-}
-
 fn resolve_top_ability(engine: &mut GameEngine) -> RuledEventBatch {
     let first = engine.state.priority_player_id();
     let second = if first == engine.state.players[0].id {
@@ -81,7 +67,11 @@ fn greater_good_uses_sacrificed_creatures_last_known_power_then_discards_three()
         .add_counters(CounterKind::PlusOnePlusOne, 1, engine.state.command_index);
     assert_eq!(engine.effective_power(sacrificed), Some(3));
 
-    let drawn = seat_on_top(&mut engine, &["serra_angel", "hill_giant", "storm_crow"]);
+    let drawn = authoring_fixture::library_top(
+        &mut engine,
+        0,
+        &["serra_angel", "hill_giant", "storm_crow"],
+    );
     let hand_before = engine.state.players[0].hand.clone();
     let activation = activate_greater_good(&engine, source, sacrificed);
     semantic::accepted(&mut engine, 0, &activation);

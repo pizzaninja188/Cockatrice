@@ -98,6 +98,7 @@ struct Args {
     review_map: Option<PathBuf>,
     review_out: Option<PathBuf>,
     review_existing: bool,
+    review_preparation: bool,
     out_dir: PathBuf,
     presentation_registry: PathBuf,
     dry_run: bool,
@@ -129,6 +130,7 @@ fn print_usage() {
          --review-map <path> explicit source-span review map JSON for --review-draft\n  \
          --review-out <path> write the deterministic review packet (stdout by default)\n  \
          --review-existing allow inspect-only review of an already registered matching identity\n  \
+         --review-preparation validate structure before confirmation (never grants approval)\n  \
          --out-dir <path>   output root (default: data/generated, relative to this crate)\n  \
          --presentation-registry <path> generated Oracle fingerprint TSV\n  \
          --dry-run          report counts + skip reasons, write nothing\n  \
@@ -163,6 +165,7 @@ fn parse_args_from(arguments: impl IntoIterator<Item = String>) -> Result<Args, 
     let mut review_map = None;
     let mut review_out = None;
     let mut review_existing = false;
+    let mut review_preparation = false;
     let mut out_dir: Option<PathBuf> = None;
     let mut presentation_registry: Option<PathBuf> = None;
     let mut dry_run = false;
@@ -236,6 +239,7 @@ fn parse_args_from(arguments: impl IntoIterator<Item = String>) -> Result<Args, 
                 ))
             }
             "--review-existing" => review_existing = true,
+            "--review-preparation" => review_preparation = true,
             "--out-dir" => {
                 out_dir = Some(PathBuf::from(it.next().ok_or("--out-dir needs a value")?))
             }
@@ -285,8 +289,14 @@ fn parse_args_from(arguments: impl IntoIterator<Item = String>) -> Result<Args, 
         return Err("--scaffold-card and --scaffold-batch are mutually exclusive".into());
     }
     let scaffolding = scaffold_card.is_some() || scaffold_batch.is_some();
-    let reviewing =
-        review_draft.is_some() || review_map.is_some() || review_out.is_some() || review_existing;
+    let reviewing = review_draft.is_some()
+        || review_map.is_some()
+        || review_out.is_some()
+        || review_existing
+        || review_preparation;
+    if review_preparation && (!review_existing || review_draft.is_none()) {
+        return Err("--review-preparation requires --review-existing and --review-draft".into());
+    }
     if refresh_presentation
         && (check
             || dry_run
@@ -416,6 +426,7 @@ fn parse_args_from(arguments: impl IntoIterator<Item = String>) -> Result<Args, 
         review_map,
         review_out,
         review_existing,
+        review_preparation,
         out_dir,
         presentation_registry,
         dry_run,
@@ -2946,7 +2957,12 @@ fn run(args: Args) -> ExitCode {
             eprintln!("error: failed to read {}: {error}", args.input);
             return ExitCode::FAILURE;
         }
-        return match review::run(
+        let run_review = if args.review_preparation {
+            review::run_preparation
+        } else {
+            review::run
+        };
+        return match run_review(
             cards,
             draft_path,
             map_path,

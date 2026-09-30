@@ -23,39 +23,14 @@ fn clear_hand(engine: &mut GameEngine, player: usize) {
     assert!(engine.state.players[player].hand.is_empty());
 }
 
-fn seat_on_top(engine: &mut GameEngine, card_ids: &[&str]) -> Vec<u32> {
-    let objects: Vec<u32> = card_ids
-        .iter()
-        .map(|card_id| inject_library_card(engine, 0, card_id))
-        .collect();
-    engine.state.players[0]
-        .library
-        .retain(|object_id| !objects.contains(object_id));
-    for object_id in objects.iter().rev() {
-        engine.state.players[0].library.push_front(*object_id);
-    }
-    objects
-}
-
 fn resolve_top_spell(engine: &mut GameEngine) {
-    let first = engine.state.priority_player_id();
-    let second = if first == engine.state.players[0].id {
-        engine.state.players[1].id
-    } else {
-        engine.state.players[0].id
-    };
-    engine
-        .apply_command(first, &pass())
-        .expect("first player passes");
-    engine
-        .apply_command(second, &pass())
-        .expect("second player passes and the spell resolves");
+    pass_priority_round(engine);
 }
 
 #[test]
 fn tolarian_winds_draws_the_number_of_cards_actually_discarded() {
     let mut engine = winds_engine(20_260_930);
-    let drawn = seat_on_top(&mut engine, &["forest", "island", "hill_giant"]);
+    let drawn = authoring_fixture::library_top(&mut engine, 0, &["forest", "island", "hill_giant"]);
     let spell = inject_card_into_hand(&mut engine, 0, TOLARIAN_WINDS);
     let discarded: Vec<u32> = ["hill_giant", "mountain", "grizzly_bears"]
         .into_iter()

@@ -46,6 +46,91 @@ def cli(exe, *args):
     return json.loads(result.stdout)
 
 
+def candidate_record(oracle_id, name, status, reason, dependencies):
+    """Persist a human-assessed route, never infer readiness from a cache hit."""
+    if not oracle_id.strip() or not name.strip() or not reason.strip():
+        raise ValueError("candidate needs exact Oracle identity, name and reason")
+    if status not in ("blocked", "held", "ready", "unassessed") or len(dependencies) < 2:
+        raise ValueError("candidate needs a valid status, source and relevant contract dependencies")
+    hashes = {}
+    for path in dependencies:
+        path = Path(path).resolve()
+        if not path.is_file():
+            raise ValueError(f"candidate dependency must be an existing file: {path}")
+        hashes[str(path)] = sha(path)
+    if len(hashes) < 2:
+        raise ValueError("source and contract dependencies must be distinct")
+    return {"version": 1, "oracle_id": oracle_id, "name": name, "status": status,
+            "reason": reason, "dependencies": hashes, "semantic_approval": False}
+
+
+def candidate_status(entry):
+    if (entry.get("version") != 1 or not entry.get("oracle_id") or not entry.get("name") or
+            entry.get("status") not in ("blocked", "held", "ready", "unassessed") or
+            not entry.get("reason") or len(entry.get("dependencies", {})) < 2):
+        raise ValueError("invalid candidate decision record")
+    if any(not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)
+           for digest in entry["dependencies"].values()):
+        raise ValueError("invalid candidate dependency digest")
+    changed = [p for p, digest in entry["dependencies"].items() if sha(p) != digest]
+    return {"oracle_id": entry["oracle_id"], "name": entry["name"], "reason": entry["reason"],
+            "recorded_status": entry["status"], "effective_status": "unassessed" if changed else entry["status"],
+            "changed_dependencies": changed, "semantic_approval": False,
+            "meaning": "Selection aid only; recheck current registry, ownership, source and complete-card readiness before execution."}
+
+
+def map_scaffold(typed, source, tests):
+    """Use explicit presentation pointers, not Oracle text similarity, to draft line mappings."""
+    if typed.get("name") != source.get("name") or not source.get("oracle_id"):
+        raise ValueError("typed definition and exact Oracle source identity must match")
+    faces = typed.get("faces", [])
+    source_faces = source.get("card_faces") or [source]
+    if not faces or len(faces) != len(source_faces):
+        raise ValueError("typed/source face count mismatch")
+    spans, catalogue, tokens = [], [], set()
+    for index, (face, external) in enumerate(zip(faces, source_faces)):
+        if face.get("name") != external.get("name") or not face.get("face_id"):
+            raise ValueError("typed/source face identity mismatch")
+        text = external.get("oracle_text", "").replace("\r\n", "\n").replace("\r", "\n")
+        lines = [line.strip() for line in text.split("\n") if line.strip()]
+        by_line = {n: [] for n in range(1, len(lines) + 1)}
+
+        def walk(value, pointer):
+            catalogue.append(pointer)
+            if isinstance(value, dict):
+                presentation = value.get("presentation")
+                if isinstance(presentation, dict) and "OracleLines" in presentation:
+                    numbers = presentation["OracleLines"]
+                    if (not isinstance(numbers, list) or not numbers or
+                            any(type(n) is not int or n not in by_line for n in numbers) or
+                            numbers != sorted(set(numbers))):
+                        raise ValueError(f"invalid OracleLines at {pointer}")
+                    for number in numbers:
+                        by_line[number].append(pointer)
+                for key, child in value.items():
+                    if key in ("CreateTokens", "CreateAttackingTokens") and isinstance(child, dict) and isinstance(child.get("token"), str):
+                        tokens.add(child["token"])
+                    walk(child, pointer + "/" + key.replace("~", "~0").replace("/", "~1"))
+            elif isinstance(value, list):
+                for n, child in enumerate(value):
+                    walk(child, f"{pointer}/{n}")
+
+        walk(face, f"/faces/{index}")
+        for number, paths in by_line.items():
+            span = dict(face_id=face["face_id"], start_line=number, end_line=number, typed_paths=paths)
+            if not paths:
+                span["unresolved_reason"] = "UNREVIEWED: map this source clause to the exact typed paths"
+            spans.append(span)
+    fixtures = []
+    for test in tests:
+        if not re.fullmatch(r"(?:scenario |[A-Za-z0-9_]+::)[A-Za-z0-9_]+(?:::[A-Za-z0-9_]+)*", test):
+            raise ValueError(f"noncanonical semantic test reference: {test}")
+        fixtures.append({"test": test, "covers": "UNREVIEWED: specify independently asserted clause coverage"})
+    return ({"format_version": 1, "oracle_id": source["oracle_id"], "spans": spans,
+             "primitive_references": [], "tokens": sorted(tokens), "semantic_fixtures": fixtures,
+             "complete_definition_review_confirmed": False}, catalogue)
+
+
 def validate_assessments(packet, cards, rows, parent):
     identities = {card["id"]: card for card in packet["cards"]}
     seen = set()
@@ -312,6 +397,20 @@ def main():
     p.add_argument("--directory", type=Path, required=True)
     p = sub.add_parser("doctor")
     p.add_argument("--minimum-free-gib", type=float, default=8)
+    p = sub.add_parser("candidate-save")
+    p.add_argument("--oracle-id", required=True)
+    p.add_argument("--name", required=True)
+    p.add_argument("--status", choices=("blocked", "held", "ready", "unassessed"), required=True)
+    p.add_argument("--reason", required=True)
+    p.add_argument("--depends", type=Path, action="append", required=True)
+    p.add_argument("--out", type=Path, required=True)
+    p = sub.add_parser("candidate-list")
+    p.add_argument("--directory", type=Path, required=True)
+    p = sub.add_parser("map-scaffold")
+    p.add_argument("--typed", type=Path, required=True)
+    p.add_argument("--source", type=Path, required=True)
+    p.add_argument("--test", action="append", default=[])
+    p.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     if args.action == "preflight":
         result = preflight(args.manifest, args.exe.resolve(), args.out)
@@ -325,6 +424,22 @@ def main():
         result = run_phase(args.repo, args.out, args.name, command)
     elif args.action == "doctor":
         result = doctor(args.repo, args.minimum_free_gib)
+    elif args.action == "candidate-save":
+        result = candidate_record(args.oracle_id, args.name, args.status, args.reason, args.depends)
+        with args.out.open("x", encoding="utf-8") as destination:
+            destination.write(json.dumps(result, indent=2) + "\n")
+    elif args.action == "candidate-list":
+        result = {"candidates": [candidate_status(read(p)) for p in sorted(args.directory.glob("*.json"))],
+                  "semantic_approval": False}
+    elif args.action == "map-scaffold":
+        if args.out.resolve().is_relative_to((args.repo / "tricerules/tricerules-cards/data").resolve()):
+            raise ValueError("scaffolds must stay outside embedded card data")
+        mapping, catalogue = map_scaffold(read(args.typed), read(args.source), args.test)
+        args.out.mkdir(parents=True, exist_ok=False)
+        write(args.out / "review-map.json", mapping)
+        write(args.out / "typed-paths.json", {"paths": catalogue, "typed_sha256": sha(args.typed),
+                                            "source_sha256": sha(args.source), "semantic_approval": False})
+        result = {"directory": str(args.out), "semantic_approval": False}
     else:
         phases = [read(p) for p in args.directory.glob("*.json")]
         result = {"phases": sorted(phases, key=lambda p: p["started_at"]),

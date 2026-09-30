@@ -16,6 +16,10 @@ $root = Split-Path -Parent $PSScriptRoot
 @{ Tool = $Executable; Arguments = $ArgumentList } | ConvertTo-Json -Compress | Add-Content (Join-Path $root 'trace.jsonl')
 $lines = @()
 $code = 0
+if ((Test-Path (Join-Path $root 'unconfirmed')) -and $ArgumentList -contains '--review-map') {
+    $i = [Array]::IndexOf($ArgumentList, '--review-map')
+    if ($ArgumentList[$i + 1] -notlike '*.json' -and $ArgumentList -notcontains '--review-preparation') { $code = 17; $lines = @('unconfirmed review cannot pass final evidence') }
+}
 if ($Executable -eq 'cargo') {
     if ($ArgumentList -notcontains '--no-run' -or $ArgumentList -notcontains '--message-format=json') { throw 'Expected one artifact build' }
     for ($i = 0; $i -lt $ArgumentList.Count; $i++) {
@@ -45,6 +49,14 @@ $log = Join-Path $LogDirectory ([guid]::NewGuid().ToString() + '.log')
         Assert-Workflow ($result.ExitCode -ne 0) "Accepted $failure evidence"
         Remove-Item -LiteralPath (Join-Path $fixture $failure)
     }
+    Set-Content -LiteralPath (Join-Path $fixture 'unconfirmed') -Value 'fixture'
+    $result = Invoke-WorkflowFixture $fixture 'check-card-evidence.ps1'
+    Assert-Workflow ($result.ExitCode -ne 0) 'Final evidence accepted unconfirmed review.'
+    $result = Invoke-WorkflowFixture $fixture 'check-card-evidence.ps1' @('-Preparation')
+    Assert-Workflow ($result.ExitCode -eq 0) "Structural preparation rejected unconfirmed review: $($result.Output)"
+    $mapSelection = ConvertTo-Json -InputObject @((Join-Path $maps 'fixture.json')) -Compress
+    $result = Invoke-WorkflowFixture $fixture 'check-card-evidence.ps1' @('-MapListJson', $mapSelection)
+    Assert-Workflow ($result.ExitCode -ne 0) 'Final evidence allowed subset selection.'
 }
 finally { Remove-WorkflowFixture $fixture }
 Write-Output 'PASS evidence builds each package once and rejects ignored or failed binary listings'

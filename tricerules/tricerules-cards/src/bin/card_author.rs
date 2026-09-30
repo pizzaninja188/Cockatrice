@@ -41,15 +41,16 @@ fn new_file(path: &Path, text: &str) -> Result<(), String> {
 }
 fn run() -> Result<Value, String> {
     let mut args = std::env::args().skip(1);
-    let command = args
-        .next()
-        .ok_or("commands: search, clone, prepare, validate-batch, queue-save, queue-check")?;
+    let command = args.next().ok_or(
+        "commands: search, clone, inspect, prepare, validate-batch, queue-save, queue-check",
+    )?;
     let mut options: BTreeMap<String, Vec<String>> = BTreeMap::new();
     while let Some(flag) = args.next() {
         let key = flag.strip_prefix("--").ok_or("expected --option value")?;
         let allowed: &[&str] = match command.as_str() {
             "search" => &["query", "like", "name", "bulk", "limit"],
             "clone" => &["from", "name", "bulk", "out"],
+            "inspect" => &["draft"],
             "queue-save" => &["name", "note", "depends", "out"],
             "queue-check" => &["entry"],
             "prepare" => &["names", "bulk", "corpus", "out", "limit"],
@@ -67,6 +68,23 @@ fn run() -> Result<Value, String> {
     let package = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let repo = package.parent().unwrap().parent().unwrap();
     let data = package.join("data");
+    if command == "inspect" {
+        let draft = fs::read_to_string(required(&options, "draft")?).map_err(|e| e.to_string())?;
+        if draft.contains("__mechanics_unresolved")
+            || draft.contains("__presentation_review_unresolved")
+        {
+            return Err("inspect requires resolved scaffold sentinels".into());
+        }
+        let registry = tricerules_cards::CardRegistry::from_authoring_draft(&draft)
+            .map_err(|e| e.to_string())?;
+        let definitions = registry.definitions().collect::<Vec<_>>();
+        let [definition] = definitions.as_slice() else {
+            return Err("inspect requires exactly one definition".into());
+        };
+        return Ok(json!({"id":definition.id,"name":definition.name,
+            "layout":format!("{:?}",definition.layout),"faces":definition.faces,
+            "semantic_approval":false,"meaning":"Normalized typed structure only; not execution or admission evidence."}));
+    }
     if command == "validate-batch" {
         return batch::validate_batch(Path::new(required(&options, "batch")?), &data);
     }

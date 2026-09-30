@@ -13,6 +13,15 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 class AuthoringWorkflow(unittest.TestCase):
+    def test_inspect_returns_normalized_definition_without_admission(self):
+        draft = self.root / "trial.ron"
+        draft.write_text('(id:"authoring_trial",name:"Authoring Trial",face_id:"authoring_trial",mana_cost:"{3}{U}",types:["Sorcery"],spell_effect:[Draw(count:3)])')
+        result = self.call("inspect", "--draft", draft)
+        self.assertEqual(result["name"], "Authoring Trial")
+        self.assertEqual(result["faces"][0]["face_id"], "authoring_trial")
+        self.assertFalse(result["semantic_approval"])
+        self.assertFalse((REPO / "tricerules/tricerules-cards/data/authoring_trial.ron").exists())
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="card-author-")
         self.root = Path(self.temp.name)

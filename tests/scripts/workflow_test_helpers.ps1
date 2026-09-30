@@ -17,7 +17,7 @@ function New-WorkflowFixture {
         if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination (Join-Path $root "scripts\$name") }
     }
     Set-Content -LiteralPath (Join-Path $root 'scripts/check-card-evidence.ps1') -Value @'
-param([string] $OracleBulk)
+param([string] $OracleBulk, [switch] $Preparation, [string] $MapListJson)
 if (-not (Test-Path -LiteralPath $OracleBulk)) { exit 13 }
 if (Test-Path -LiteralPath (Join-Path $PSScriptRoot '../bad-evidence')) { Write-Output 'invalid evidence reference'; exit 13 }
 Write-Output 'fixture evidence check'

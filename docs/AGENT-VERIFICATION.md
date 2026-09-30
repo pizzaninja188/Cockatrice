@@ -96,20 +96,29 @@ Missing sources or tools are failures,
 not permission to omit a required gate. Diagnose unrelated baseline drift before changing it.
 
 For handwritten card additions, run the batch preparation command after focused semantic green.
-It runs the canonical-ID regression and generic registry conformance before refreshing metadata,
-stops on failure (including an empty exact test selection), and retains the command logs:
+It checks formatting, canonical IDs, generic registry conformance, optional exact actual-card
+tests, authoring-feature lint, and evidence structure/test references before refreshing metadata.
+It stops on failure (including an empty exact test selection) and retains the command logs:
 
 ```powershell
 ./scripts/prepare-card-batch.ps1
+# Optional focused.json is an array of {package,target,test,features?}; tests use exact names.
+./scripts/prepare-card-batch.ps1 -FocusedTests build/batch/focused.json `
+  -ReviewMapPath tricerules/tricerules-cards/authoring/review-maps/example.json
 # Review the prepared diff and obtain independent semantic approval, then:
 ./scripts/verify.ps1 -Side Rust -CardData
 ```
 
-Preparation defaults to four Cargo build jobs and four Rust test threads (`-Workers 1..4`), and
+Preparation honors ambient/default Cargo jobs and test threads (`-Workers 1..192` overrides), and
 restores the caller's environment afterward. It accepts the same local `-OracleBulk` and `-CardsXml`
-overrides as Refresh. It does not format code, run semantic scenarios, approve maps, or replace
+overrides as Refresh. It checks formatting without editing code, runs specified scenarios, and
+checks unconfirmed maps structurally through inspect-only packets; this does not approve maps or replace
 the final gate. When the exact prechecks already passed on unchanged content, use the underlying
-`update-card-data.ps1 -Mode Refresh -MetadataOnly` directly rather than repeating them.
+`update-card-data.ps1 -Mode Refresh -MetadataOnly` directly rather than repeating them. Preparation's
+optional map subset is never accepted by the final evidence gate, which checks every map and
+requires independent review confirmation. Freeze a compatible ready batch after preparation and
+review it together; run one final affected-side gate on the stable combined batch. Additions to an
+already verified batch invalidate its evidence, so deliver it before starting the next increment.
 
 For a four-worker cap on all commands in the current PowerShell session, including final gates:
 

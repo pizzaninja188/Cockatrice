@@ -8,12 +8,26 @@
     "scenario module::test" (tricerules-core) or "integration_target::test" (tricerules-cards).
 #>
 [CmdletBinding()]
-param([string] $OracleBulk)
+param([string] $OracleBulk, [switch] $Preparation, [string] $MapListJson)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 if ($OracleBulk -and -not [IO.Path]::IsPathRooted($OracleBulk)) { $OracleBulk = Join-Path $repo $OracleBulk }
 Import-Module (Join-Path $PSScriptRoot 'card-evidence.psm1') -Force
 $maps = @(Get-ChildItem -LiteralPath (Join-Path $repo 'tricerules/tricerules-cards/authoring/review-maps') -Filter '*.json')
+if ($MapListJson) {
+    if (-not $Preparation) { throw 'Map selection is preparation-only; final evidence checks the full corpus.' }
+    $parsedMaps = ConvertFrom-Json $MapListJson
+    $requested = @($parsedMaps)
+    if (-not $requested.Count) { throw 'Empty map selection.' }
+    $maps = @($requested | ForEach-Object {
+        $path = [string]$_
+        if (-not [IO.Path]::IsPathRooted($path)) { $path = Join-Path $repo $path }
+        $item = Get-Item -LiteralPath $path
+        $mapDirectory = [IO.Path]::GetFullPath((Join-Path $repo 'tricerules/tricerules-cards/authoring/review-maps'))
+        if ($item.Extension -ne '.json' -or $item.DirectoryName -ne $mapDirectory) { throw 'Map must be a checked-in review-map path.' }
+        $item
+    })
+}
 if ($maps.Count -eq 0) { throw 'No direct-RON review maps found' }
 $logs = Join-Path $repo ('build/verification-logs/card-evidence-' + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $logs -Force | Out-Null
@@ -34,6 +48,20 @@ try {
         '--review-map', (Join-Path $repo 'tricerules/tricerules-cards/authoring/review-maps'),
         '--review-out', (Join-Path $logs 'packets'))
     if ($OracleBulk) { $arguments += @('--input', $OracleBulk) }
+    if ($Preparation) {
+        $arguments += '--review-preparation'
+        if ($MapListJson) {
+            $selected = Join-Path $logs 'selected-maps'
+            New-Item -ItemType Directory -Path $selected | Out-Null
+            foreach ($map in $maps) {
+                $destination = Join-Path $selected $map.Name
+                if (Test-Path -LiteralPath $destination) { throw "Duplicate selected map: $($map.Name)" }
+                Copy-Item -LiteralPath $map.FullName -Destination $destination
+            }
+            $mapIndex = [Array]::IndexOf($arguments, '--review-map')
+            $arguments[$mapIndex + 1] = $selected
+        }
+    }
     $null = Invoke-EvidenceTool 'Review map batch' `
         (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe') $arguments
     foreach ($map in $maps) {
@@ -74,7 +102,7 @@ try {
         $ignored = @($ignoredList | Where-Object { $_ -cmatch '^(.+): test$' } | ForEach-Object { $prefix + ($_ -creplace ': test$', '') })
         foreach ($reference in $groups[$key]) { Assert-CardEvidenceReference $reference $available $ignored }
     }
-    Write-Output "PASS $($maps.Count) direct-RON review maps and their executable test references"
+    Write-Output "PASS $($maps.Count) direct-RON review maps and their executable test references (preparation=$Preparation; semantic approval is separate)"
     exit 0
 }
 catch {

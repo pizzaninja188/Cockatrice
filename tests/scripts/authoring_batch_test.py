@@ -17,6 +17,57 @@ spec.loader.exec_module(module)
 
 
 class BatchTest(unittest.TestCase):
+    def test_scaffold_cli_refuses_overwrite_and_embedded_output(self):
+        typed = self.root / "typed.json"
+        source = self.root / "source.json"
+        typed.write_text(json.dumps({"name": "Trial", "faces": [{"name": "Trial", "face_id": "trial"}]}))
+        source.write_text(json.dumps({"name": "Trial", "oracle_id": "oracle", "oracle_text": "Draw."}))
+        command = [sys.executable, str(ROOT / "scripts/authoring-batch.py"), "--repo", str(self.root),
+                   "map-scaffold", "--typed", str(typed), "--source", str(source), "--out"]
+        output = self.root / "scaffold"
+        self.assertEqual(subprocess.run(command + [str(output)], capture_output=True).returncode, 0)
+        before = (output / "review-map.json").read_bytes()
+        self.assertNotEqual(subprocess.run(command + [str(output)], capture_output=True).returncode, 0)
+        self.assertEqual((output / "review-map.json").read_bytes(), before)
+        embedded = self.root / "tricerules/tricerules-cards/data/scaffold"
+        self.assertNotEqual(subprocess.run(command + [str(embedded)], capture_output=True).returncode, 0)
+        self.assertFalse(embedded.exists())
+
+    def test_map_scaffold_walks_nested_presentations_without_granting_approval(self):
+        typed = {"id": "trial", "name": "Trial", "faces": [{"face_id": "trial", "name": "Trial",
+                 "activated_abilities": [{"presentation": {"OracleLines": [1]}, "effect": [
+                     {"GrantTriggeredAbility": {"ability": {"presentation": {"OracleLines": [1]}}}}]}]}]}
+        source = {"name": "Trial", "oracle_id": "oracle", "oracle_text": "An ability.\nUnmapped clause."}
+        mapping, catalogue = module.map_scaffold(typed, source, ["scenario trial::test"])
+        self.assertFalse(mapping["complete_definition_review_confirmed"])
+        self.assertEqual(len(mapping["spans"][0]["typed_paths"]), 2)
+        self.assertIn("unresolved_reason", mapping["spans"][1])
+        self.assertTrue(any("GrantTriggeredAbility/ability" in p for p in catalogue))
+        self.assertEqual(mapping["semantic_fixtures"][0]["test"], "scenario trial::test")
+        self.assertIn("UNREVIEWED", mapping["semantic_fixtures"][0]["covers"])
+        with self.assertRaises(ValueError):
+            module.map_scaffold(typed, dict(source, name="Wrong identity"), [])
+        typed["faces"][0]["spell_effect"] = [{"CreateTokens": {"token": "goat_w_0_1"}}]
+        self.assertEqual(module.map_scaffold(typed, source, [])[0]["tokens"], ["goat_w_0_1"])
+        with self.assertRaises(ValueError):
+            module.map_scaffold(typed, source, ["cargo test trial"])
+
+    def test_candidate_decisions_survive_unrelated_changes_but_reopen_changed_contracts(self):
+        source = self.root / "source.json"
+        contract = self.root / "contract.rs"
+        source.write_text("exact source")
+        contract.write_text("no recipient choice")
+        entry = module.candidate_record("oracle", "Trial", "blocked", "Aura recipient missing", [source, contract])
+        (self.root / "unrelated.rs").write_text("other card")
+        self.assertEqual(module.candidate_status(entry)["effective_status"], "blocked")
+        contract.write_text("recipient choice added")
+        status = module.candidate_status(entry)
+        self.assertEqual(status["effective_status"], "unassessed")
+        self.assertEqual(status["reason"], "Aura recipient missing")
+        self.assertFalse(status["semantic_approval"])
+        with self.assertRaises(ValueError):
+            module.candidate_record("", "Trial", "blocked", "gap", [source])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
