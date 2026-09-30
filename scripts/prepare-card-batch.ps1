@@ -70,7 +70,11 @@ try {
         if (-not [IO.Path]::IsPathRooted($evidenceBulk)) { $evidenceBulk = Join-Path $repo $evidenceBulk }
         $evidenceArgs += @('-OracleBulk', $evidenceBulk)
     }
-    if ($ReviewMapPath) { $evidenceArgs += @('-MapListJson', (ConvertTo-Json -InputObject @($ReviewMapPath) -Compress)) }
+    if ($ReviewMapPath) {
+        $mapListPath = Join-Path $logs 'selected-review-maps.json'
+        [IO.File]::WriteAllText($mapListPath, (ConvertTo-Json -InputObject @($ReviewMapPath) -Compress))
+        $evidenceArgs += @('-MapListFile', $mapListPath)
+    }
     & (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe') @evidenceArgs
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     $arguments = @('-Mode', 'Refresh', '-MetadataOnly')

@@ -1,0 +1,29 @@
+(
+  id: "kenriths_transformation",
+  name: "Kenrith's Transformation",
+  face_id: "kenriths_transformation",
+  mana_cost: "{1}{G}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: Creature))],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Draw(count: 1)],
+    ),
+  ],
+  static_abilities: [
+    (
+      ability_id: "static_01",
+      presentation: OracleLines([3]),
+      definition: AttachedModifier(
+        set_types: Some((card_types: [Creature], creature_types: ["Elk"])),
+        set_colors: Some([Green]),
+        set_power: 3,
+        set_toughness: 3,
+        remove_all_abilities: true,
+      ),
+    ),
+  ],
+)

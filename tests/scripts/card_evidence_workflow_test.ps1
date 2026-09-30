@@ -54,6 +54,10 @@ $log = Join-Path $LogDirectory ([guid]::NewGuid().ToString() + '.log')
     Assert-Workflow ($result.ExitCode -ne 0) 'Final evidence accepted unconfirmed review.'
     $result = Invoke-WorkflowFixture $fixture 'check-card-evidence.ps1' @('-Preparation')
     Assert-Workflow ($result.ExitCode -eq 0) "Structural preparation rejected unconfirmed review: $($result.Output)"
+    $mapSelectionPath = Join-Path $fixture 'selected-maps.json'
+    [IO.File]::WriteAllText($mapSelectionPath, (ConvertTo-Json -InputObject @((Join-Path $maps 'fixture.json')) -Compress))
+    $result = Invoke-WorkflowFixture $fixture 'check-card-evidence.ps1' @('-Preparation', '-MapListFile', $mapSelectionPath)
+    Assert-Workflow ($result.ExitCode -eq 0) "File-based preparation map selection failed: $($result.Output)"
     $mapSelection = ConvertTo-Json -InputObject @((Join-Path $maps 'fixture.json')) -Compress
     $result = Invoke-WorkflowFixture $fixture 'check-card-evidence.ps1' @('-MapListJson', $mapSelection)
     Assert-Workflow ($result.ExitCode -ne 0) 'Final evidence allowed subset selection.'

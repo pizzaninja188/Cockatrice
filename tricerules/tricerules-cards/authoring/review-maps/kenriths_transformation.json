@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "a492a323-df8a-40fd-bff0-50091baa7700",
+  "spans": [
+    {
+      "face_id": "kenriths_transformation",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/spell_effect/0"]
+    },
+    {
+      "face_id": "kenriths_transformation",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    },
+    {
+      "face_id": "kenriths_transformation",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_kenriths_transformation::kenrith_transformation_draws_and_sets_the_enchanted_creature_characteristics",
+      "covers": "Aura entry attaches to each targeted creature; ETB draws the exact top card; attached layer effects make a legendary white creature a green Elk while preserving its legendary supertype and +1/+1 counter, remove original abilities and artifact type, set base 3/3, and retain a later gained ability."
+    },
+    {
+      "test": "scenario deck_coverage_kenriths_transformation::kenrith_transformation_does_not_enter_or_draw_if_its_target_becomes_illegal",
+      "covers": "If the sole creature target becomes illegal before resolution, the Aura spell does not enter and its ETB draw does not happen."
+    },
+    {
+      "test": "scenario deck_coverage_kenriths_transformation::kenrith_transformation_rejects_a_noncreature_spell_target",
+      "covers": "A noncreature land is rejected as an Enchant creature spell target without moving it or consuming the Aura card."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

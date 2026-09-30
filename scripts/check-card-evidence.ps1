@@ -8,15 +8,21 @@
     "scenario module::test" (tricerules-core) or "integration_target::test" (tricerules-cards).
 #>
 [CmdletBinding()]
-param([string] $OracleBulk, [switch] $Preparation, [string] $MapListJson)
+param([string] $OracleBulk, [switch] $Preparation, [string] $MapListJson, [string] $MapListFile)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 if ($OracleBulk -and -not [IO.Path]::IsPathRooted($OracleBulk)) { $OracleBulk = Join-Path $repo $OracleBulk }
 Import-Module (Join-Path $PSScriptRoot 'card-evidence.psm1') -Force
 $maps = @(Get-ChildItem -LiteralPath (Join-Path $repo 'tricerules/tricerules-cards/authoring/review-maps') -Filter '*.json')
-if ($MapListJson) {
+if ($MapListJson -and $MapListFile) { throw 'Specify only one map selection input.' }
+if ($MapListJson -or $MapListFile) {
     if (-not $Preparation) { throw 'Map selection is preparation-only; final evidence checks the full corpus.' }
-    $parsedMaps = ConvertFrom-Json $MapListJson
+    $mapSelection = if ($MapListFile) {
+        Get-Content -LiteralPath $MapListFile -Raw
+    } else {
+        $MapListJson
+    }
+    $parsedMaps = ConvertFrom-Json $mapSelection
     $requested = @($parsedMaps)
     if (-not $requested.Count) { throw 'Empty map selection.' }
     $maps = @($requested | ForEach-Object {
@@ -50,7 +56,7 @@ try {
     if ($OracleBulk) { $arguments += @('--input', $OracleBulk) }
     if ($Preparation) {
         $arguments += '--review-preparation'
-        if ($MapListJson) {
+        if ($MapListJson -or $MapListFile) {
             $selected = Join-Path $logs 'selected-maps'
             New-Item -ItemType Directory -Path $selected | Out-Null
             foreach ($map in $maps) {

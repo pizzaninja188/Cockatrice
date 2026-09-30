@@ -25,6 +25,9 @@ mod deck_coverage_trailtracker_scout;
 #[path = "scenario/deck_coverage_raging_ravine.rs"]
 mod deck_coverage_raging_ravine;
 
+#[path = "scenario/deck_coverage_kenriths_transformation.rs"]
+mod deck_coverage_kenriths_transformation;
+
 #[path = "scenario/deck_coverage_staff_of_compleation.rs"]
 mod deck_coverage_staff_of_compleation;
 
