@@ -104,7 +104,10 @@ impl GameEngine {
                 BattlefieldEntryCompletion::ZoneEntryBatch(Box::new(batch.clone())),
                 events,
             ) {
-                replacement::BattlefieldEntryProgress::Parked => return Ok(true),
+                replacement::BattlefieldEntryProgress::Parked => {
+                    self.transfer_entry_choice_resume(&stack);
+                    return Ok(true);
+                }
                 replacement::BattlefieldEntryProgress::Ready(entry) => batch.ready.push(*entry),
             }
         }
@@ -133,7 +136,7 @@ impl GameEngine {
             let owner = self.state.objects[&oid].owner;
             let label = events::object_display_name(&self.state, self.registry, oid);
             triggers.extend(
-                self.commit_battlefield_entry_state(entry, None)?
+                self.commit_battlefield_entry_state(entry.clone(), entry.attached_to)?
                     .into_iter()
                     .filter(|event| !matches!(event, GameEvent::ZoneChanges(_))),
             );
@@ -415,6 +418,9 @@ mod timestamp_order_tests {
             chosen_basic_land_type: None,
             entry_counters: Default::default(),
             entry_modifiers: vec![],
+            attached_to: None,
+            pending_copy_candidate: None,
+            pending_aura_recipient: None,
             applied_effects: vec![],
         }
     }

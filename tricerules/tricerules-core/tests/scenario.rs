@@ -112,6 +112,7 @@ mod conditional_spell_costs;
 mod control;
 #[path = "scenario/copy_effects.rs"]
 mod copy_effects;
+
 #[path = "scenario/counters_and_pump.rs"]
 mod counters_and_pump;
 #[path = "scenario/current_standard_coverage_2026_09_10.rs"]
@@ -258,6 +259,9 @@ mod end_step_triggers;
 mod enters_tapped;
 #[path = "scenario/enters_with_counters.rs"]
 mod enters_with_counters;
+#[cfg(feature = "authoring")]
+#[path = "scenario/entry_copy_auras.rs"]
+mod entry_copy_auras;
 #[path = "scenario/equipment.rs"]
 mod equipment;
 #[path = "scenario/font_of_mythos.rs"]
@@ -929,3 +933,6 @@ mod deck_coverage_greater_good;
 
 #[path = "scenario/deck_coverage_flusterstorm.rs"]
 mod deck_coverage_flusterstorm;
+
+#[path = "scenario/deck_coverage_copy_aura_cards.rs"]
+mod deck_coverage_copy_aura_cards;

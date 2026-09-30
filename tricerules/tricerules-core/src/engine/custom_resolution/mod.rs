@@ -310,6 +310,9 @@ impl GameEngine {
             ResolutionContinuation::EntryCopySource { .. } => {
                 return self.finish_entry_copy_source_choice(pending, chosen);
             }
+            ResolutionContinuation::EntryAuraRecipient { .. } => {
+                return self.finish_entry_aura_recipient_choice(pending, chosen[0]);
+            }
             ResolutionContinuation::Populate { .. } => {
                 return self.finish_populate_choice(pending, chosen[0]);
             }
@@ -482,6 +485,9 @@ impl GameEngine {
             chosen_basic_land_type: None,
             entry_counters: BTreeMap::new(),
             entry_modifiers: Vec::new(),
+            attached_to: None,
+            pending_copy_candidate: None,
+            pending_aura_recipient: None,
             applied_effects: Vec::new(),
         };
         let resume_original_stack = stack.is_some();

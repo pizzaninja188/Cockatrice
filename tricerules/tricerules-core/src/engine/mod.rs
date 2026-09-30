@@ -12,7 +12,7 @@ use crate::state::{
     EventObserverMatcher, EventObserverPayload, ExilePlayPermissionScope, GameObject, GameState,
     ImmediateObserverAction, LinkedExileKey, LinkedExiledObject, ObjectId, ObservedGameEvent,
     ObserverReturnEntry, OpeningSequence, ParkedStackResolution, PendingAmass,
-    PendingBattlefieldEntry, PendingEntryTimestampOrder, PendingHandChoice,
+    PendingBattlefieldEntry, PendingCopyCandidate, PendingEntryTimestampOrder, PendingHandChoice,
     PendingLibraryLookStage, PendingLibraryPartitionKind, PendingLibraryPartitionStage,
     PendingManaPayment, PendingObserverReturnBatch, PendingPlayerDiscardChoice,
     PendingPlayerSetDiscard, PendingResolution, PendingResolutionBranch,

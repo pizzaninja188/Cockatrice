@@ -63,6 +63,9 @@ impl GameEngine {
             chosen_basic_land_type: None,
             entry_counters: BTreeMap::new(),
             entry_modifiers: Vec::new(),
+            attached_to: None,
+            pending_copy_candidate: None,
+            pending_aura_recipient: None,
             applied_effects: Vec::new(),
         };
         let completion = BattlefieldEntryCompletion::ManifestDread {

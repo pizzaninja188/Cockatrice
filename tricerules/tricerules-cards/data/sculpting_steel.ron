@@ -1,0 +1,9 @@
+(
+  id: "sculpting_steel",
+  name: "Sculpting Steel",
+  face_id: "sculpting_steel",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  // CR 303.4f-g applies if the artifact copied is an Aura; CR 707.2, 707.3, 707.5 govern the copy.
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: EntersAsCopy(filter: (kind: AnyPermanent, permanent_types: [Artifact])))],
+)

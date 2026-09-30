@@ -1110,6 +1110,10 @@ pub enum ResolutionContinuation {
     EntryCopySource {
         stack: ParkedStackResolution,
     },
+    /// CR 303.4f: select a legal recipient after an entry-copy choice reveals an Aura.
+    EntryAuraRecipient {
+        stack: ParkedStackResolution,
+    },
     Populate {
         stack: ParkedStackResolution,
         candidate_generations: Vec<(ObjectId, u64)>,
@@ -1200,6 +1204,7 @@ impl ResolutionContinuation {
             | Self::Explore { stack, .. }
             | Self::ManifestDread { stack, .. }
             | Self::EntryCopySource { stack }
+            | Self::EntryAuraRecipient { stack }
             | Self::Populate { stack, .. }
             | Self::Blight { stack, .. }
             | Self::EntryReplacement { stack }
@@ -1242,6 +1247,7 @@ impl ResolutionContinuation {
             | Self::Explore { stack, .. }
             | Self::ManifestDread { stack, .. }
             | Self::EntryCopySource { stack }
+            | Self::EntryAuraRecipient { stack }
             | Self::Populate { stack, .. }
             | Self::Blight { stack, .. }
             | Self::EntryReplacement { stack }
@@ -1417,6 +1423,14 @@ pub struct BattlefieldEntryEvent {
     /// battlefield. They apply simultaneously with entry and persist for this incarnation.
     pub entry_modifiers: Vec<ResolvingPermanentModifier>,
     pub applied_effects: Vec<EntryReplacementEffectId>,
+    /// Copy values installed provisionally while other entry replacements are processed, before
+    /// an Aura's required attachment recipient is chosen and the permanent is committed.
+    pub(crate) pending_copy_candidate: Option<PendingCopyCandidate>,
+    /// Legal recipient selection for any copy entering as an Aura, including copied tokens.
+    pub(crate) pending_aura_recipient: Option<PendingAuraEntryRecipient>,
+    /// Recipient chosen for an Aura revealed by an `EntersAsCopy` replacement. This remains
+    /// provisional until the ordinary battlefield-entry commit.
+    pub attached_to: Option<AttachmentRecipient>,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -1568,7 +1582,31 @@ pub(crate) struct PendingBattlefieldEntry {
     pub applications: Vec<EntryReplacementApplication>,
     /// Present while an `EntersAsCopy` application is waiting for its source selection.
     pub copy_source_effect: Option<EntryReplacementEffectId>,
+    /// Object generations frozen when the copy-source prompt was created.
+    pub copy_source_candidates: Vec<(ObjectId, u64)>,
     pub completion: BattlefieldEntryCompletion,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct PendingCopyCandidate {
+    pub source_id: ObjectId,
+    pub source_generation: u64,
+    pub source_filter: TargetFilter,
+    pub entering_zone_generation: u64,
+    pub entering_copy_revision: u64,
+    pub entering_copiable_values: Option<CopiableValues>,
+    pub entering_must_attack_if_able: bool,
+    pub entering_must_block_if_able: bool,
+    pub values: CopiableValues,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct PendingAuraEntryRecipient {
+    pub filter: TargetFilter,
+    pub entering_zone_generation: u64,
+    pub entering_copy_revision: u64,
+    pub recipient_generations: Vec<(ObjectId, u64)>,
+    pub copy_candidate: Option<PendingCopyCandidate>,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]

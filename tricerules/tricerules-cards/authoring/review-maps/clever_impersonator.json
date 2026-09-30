@@ -1,0 +1,23 @@
+{
+  "format_version": 1,
+  "oracle_id": "d4ec0df9-a4a3-48cf-a0aa-b1aea5c49142",
+  "spans": [
+    {
+      "face_id": "clever_impersonator",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_copy_aura_cards::clever_impersonator_copies_nonland_permanents_and_attaches_when_copying_an_aura",
+      "covers": "copy-source choices include nonland permanents across card types and omit lands; choosing an Aura opens the separate legal attachment choice before entry"
+    },
+    {
+      "test": "scenario deck_coverage_copy_aura_cards::reanimated_clever_impersonator_stays_in_its_graveyard_when_its_copied_aura_has_no_recipient",
+      "covers": "a copied Aura with no legal recipient leaves the reanimated card in its graveyard, produces no battlefield move or Aura ETB trigger, and lets Reanimate finish its later life-loss instruction"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

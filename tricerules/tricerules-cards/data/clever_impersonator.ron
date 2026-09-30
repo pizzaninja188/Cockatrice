@@ -1,0 +1,11 @@
+(
+  id: "clever_impersonator",
+  name: "Clever Impersonator",
+  face_id: "clever_impersonator",
+  mana_cost: "{2}{U}{U}",
+  types: ["Creature", "Shapeshifter"],
+  power: 0,
+  toughness: 0,
+  // CR 707.2, 707.3, 707.5: choose a nonland permanent and copy its copiable values.
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: EntersAsCopy(filter: (kind: AnyPermanent, excluded_permanent_types: [Land])))],
+)

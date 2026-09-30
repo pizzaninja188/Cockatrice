@@ -2179,6 +2179,9 @@ pub(super) fn move_graveyard_cards(
                 chosen_basic_land_type: None,
                 entry_counters: BTreeMap::new(),
                 entry_modifiers: Vec::new(),
+                attached_to: None,
+                pending_copy_candidate: None,
+                pending_aura_recipient: None,
                 applied_effects: vec![],
             })
             .collect();
@@ -2312,6 +2315,9 @@ pub(super) fn return_linked_exiled_cards(
                 chosen_basic_land_type: None,
                 entry_counters: entry_counters.clone(),
                 entry_modifiers: entry_modifiers.clone(),
+                attached_to: None,
+                pending_copy_candidate: None,
+                pending_aura_recipient: None,
                 applied_effects: Vec::new(),
             }
         })
@@ -2420,6 +2426,9 @@ pub(super) fn return_triggered_card(
             chosen_basic_land_type: None,
             entry_counters,
             entry_modifiers: Vec::new(),
+            attached_to: None,
+            pending_copy_candidate: None,
+            pending_aura_recipient: None,
             applied_effects: Vec::new(),
         },
         BattlefieldEntryCompletion::ResolutionEffect {
@@ -2504,6 +2513,9 @@ pub(super) fn put_ability_source_onto_battlefield_tapped_and_attacking(
             chosen_basic_land_type: None,
             entry_counters: BTreeMap::new(),
             entry_modifiers: Vec::new(),
+            attached_to: None,
+            pending_copy_candidate: None,
+            pending_aura_recipient: None,
             applied_effects: Vec::new(),
         },
         BattlefieldEntryCompletion::Ninjutsu {
@@ -2643,6 +2655,9 @@ pub(super) fn exile_source_then_return_transformed(
             chosen_basic_land_type: None,
             entry_counters,
             entry_modifiers: Vec::new(),
+            attached_to: None,
+            pending_copy_candidate: None,
+            pending_aura_recipient: None,
             applied_effects: Vec::new(),
         },
         BattlefieldEntryCompletion::ResolutionEffect {
@@ -3202,6 +3217,9 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 chosen_basic_land_type: None,
                 entry_counters: BTreeMap::new(),
                 entry_modifiers: Vec::new(),
+                attached_to: None,
+                pending_copy_candidate: None,
+                pending_aura_recipient: None,
                 applied_effects: Vec::new(),
             },
             BattlefieldEntryCompletion::ManifestDread {

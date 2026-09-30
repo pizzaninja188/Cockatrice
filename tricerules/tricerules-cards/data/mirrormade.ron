@@ -1,0 +1,10 @@
+(
+  id: "mirrormade",
+  name: "Mirrormade",
+  face_id: "mirrormade",
+  mana_cost: "{1}{U}{U}",
+  types: ["Enchantment"],
+  // CR 303.4f-g: a copied Aura chooses a legal attachment recipient before entry.
+  // CR 707.2, 707.3, 707.5: copy only printed/copied values, not status or counters.
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([1]), definition: EntersAsCopy(filter: (kind: AnyPermanent, permanent_types: [Artifact, Enchantment])))],
+)

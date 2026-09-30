@@ -1,0 +1,23 @@
+{
+  "format_version": 1,
+  "oracle_id": "6c85271c-c711-49b0-a72e-9e576c33714d",
+  "spans": [
+    {
+      "face_id": "sculpting_steel",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_copy_aura_cards::sculpting_steel_copies_only_artifacts",
+      "covers": "the entry choice offers an artifact and excludes an Aura, creature, and land when they are not artifacts"
+    },
+    {
+      "test": "scenario deck_coverage_copy_aura_cards::sculpting_steel_can_copy_an_aura_that_is_an_artifact",
+      "covers": "an Aura that currently has the artifact type qualifies as a source; its copied Aura characteristics require a separate legal attachment choice before entry"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

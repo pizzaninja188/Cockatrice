@@ -1,0 +1,19 @@
+{
+  "format_version": 1,
+  "oracle_id": "79a71fe5-38ce-4bb5-aea0-c9b9a856d397",
+  "spans": [
+    {
+      "face_id": "mirrormade",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_copy_aura_cards::mirrormade_limits_copy_sources_to_artifacts_or_enchantments",
+      "covers": "copy-source choices include artifacts and enchantments but omit creatures and lands; copying an Aura prompts for and installs a legal attachment recipient before entry"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

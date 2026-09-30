@@ -14,7 +14,7 @@ use super::resolution::{
 };
 use super::targeting::{battlefield_objects_matching, object_matches_mass_filter};
 use super::*;
-use crate::state::ReplacementSourcePresentation;
+use crate::state::{PendingAuraEntryRecipient, ReplacementSourcePresentation};
 
 impl ReplacementSourcePresentation {
     pub(super) fn option(
@@ -656,6 +656,7 @@ impl GameEngine {
                 event,
                 applications: Vec::new(),
                 copy_source_effect: None,
+                copy_source_candidates: Vec::new(),
                 completion,
             }),
         ));
@@ -750,6 +751,7 @@ impl GameEngine {
                 event,
                 applications: Vec::new(),
                 copy_source_effect: None,
+                copy_source_candidates: Vec::new(),
                 completion,
             }),
         ));
@@ -831,6 +833,7 @@ impl GameEngine {
                 event,
                 applications: Vec::new(),
                 copy_source_effect: None,
+                copy_source_candidates: Vec::new(),
                 completion,
             }),
         ));
@@ -858,10 +861,412 @@ impl GameEngine {
         event: &BattlefieldEntryEvent,
         filter: &TargetFilter,
     ) -> Vec<ObjectId> {
-        battlefield_objects_matching(self, filter)
+        let candidates = battlefield_objects_matching(self, filter);
+        candidates
             .into_iter()
             .filter(|oid| *oid != event.object_id)
             .collect()
+    }
+
+    fn copy_source_description(filter: &TargetFilter) -> String {
+        use tricerules_cards::primitives::{PermanentTypeFilter, TargetKind};
+
+        let noun = match filter.permanent_types.as_slice() {
+            [PermanentTypeFilter::Artifact] => "artifact".to_string(),
+            [PermanentTypeFilter::Enchantment] => "enchantment".to_string(),
+            [PermanentTypeFilter::Artifact, PermanentTypeFilter::Enchantment] => {
+                "artifact or enchantment".to_string()
+            }
+            [] if filter
+                .excluded_permanent_types
+                .contains(&PermanentTypeFilter::Land) =>
+            {
+                "nonland permanent".to_string()
+            }
+            [] if filter.kind == TargetKind::Creature => "creature".to_string(),
+            [] => "permanent".to_string(),
+            _ => "matching permanent".to_string(),
+        };
+        let article = if matches!(noun.chars().next(), Some('a' | 'e' | 'i' | 'o' | 'u')) {
+            "an"
+        } else {
+            "a"
+        };
+        format!("{article} {noun}")
+    }
+
+    fn copied_aura_attachment_filter(values: &CopiableValues) -> Option<TargetFilter> {
+        values
+            .face
+            .spell_effect
+            .iter()
+            .find_map(|effect| match effect {
+                SpellEffectKind::AuraAttach { target } => Some(target.clone()),
+                _ => None,
+            })
+    }
+
+    /// Evaluate legal recipients against the prospective copy's characteristics, without
+    /// exposing or committing those values while the second entry choice is pending.
+    fn entry_copy_aura_candidates(
+        &mut self,
+        object_id: ObjectId,
+        controller: PlayerId,
+        values: &CopiableValues,
+        filter: &TargetFilter,
+    ) -> Vec<ObjectId> {
+        let Some(object) = self.state.objects.get_mut(&object_id) else {
+            return Vec::new();
+        };
+        let saved = (
+            object.copiable_values.clone(),
+            object.copy_revision,
+            object.must_attack_if_able,
+            object.must_block_if_able,
+        );
+        object.copiable_values = Some(values.clone());
+        object.copy_revision = object.copy_revision.saturating_add(1);
+        object.must_attack_if_able = values.face.must_attack_if_able;
+        object.must_block_if_able = values.face.must_block_if_able;
+
+        let mut candidates = if filter.is_player() {
+            self.state
+                .players
+                .iter()
+                .map(|player| player.id as ObjectId)
+                .filter(|player_id| {
+                    super::targeting::attachment_filter_legal(
+                        self,
+                        filter,
+                        AttachmentRecipient::Player(*player_id as PlayerId),
+                        object_id,
+                        controller,
+                    )
+                })
+                .collect::<Vec<_>>()
+        } else {
+            let mut object_ids = self
+                .state
+                .objects
+                .values()
+                .filter(|object| object.zone == Zone::Battlefield)
+                .map(|object| object.id)
+                .collect::<Vec<_>>();
+            object_ids.sort_unstable();
+            object_ids
+                .into_iter()
+                .filter(|recipient_id| {
+                    super::targeting::attachment_filter_legal(
+                        self,
+                        filter,
+                        AttachmentRecipient::Object(*recipient_id),
+                        object_id,
+                        controller,
+                    )
+                })
+                .collect()
+        };
+        candidates.sort_unstable();
+
+        if let Some(object) = self.state.objects.get_mut(&object_id) {
+            object.copiable_values = saved.0;
+            object.copy_revision = saved.1;
+            object.must_attack_if_able = saved.2;
+            object.must_block_if_able = saved.3;
+        }
+        candidates
+    }
+
+    fn park_entry_copy_aura_recipient_choice(
+        &mut self,
+        stack: ParkedStackResolution,
+        event: BattlefieldEntryEvent,
+        completion: BattlefieldEntryCompletion,
+        filter: TargetFilter,
+        recipients: Vec<ObjectId>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let choice_kind = if filter.is_player() {
+            rv1::ChoiceKind::AuraPlayer
+        } else {
+            rv1::ChoiceKind::AuraPermanent
+        };
+        let name = event
+            .pending_aura_recipient
+            .as_ref()
+            .and_then(|recipient| recipient.copy_candidate.as_ref())
+            .map(|candidate| candidate.values.display_name.clone())
+            .or_else(|| {
+                self.state
+                    .objects
+                    .get(&event.object_id)
+                    .and_then(|object| {
+                        object
+                            .copiable_values
+                            .as_ref()
+                            .or(object.token_origin.as_ref())
+                    })
+                    .map(|values| values.display_name.clone())
+            })
+            .unwrap_or_else(|| "this Aura".to_string());
+        let prompt = format!("Choose what {name} will enchant as it enters.");
+        let candidate_card_ids =
+            if filter.is_player() {
+                vec![String::new(); recipients.len()]
+            } else {
+                recipients
+                    .iter()
+                    .map(|object_id| {
+                        if self.state.objects.get(object_id).is_some_and(|object| {
+                            object.zone == Zone::Battlefield && object.face_down
+                        }) {
+                            return String::new();
+                        }
+                        self.effective_card_identity(*object_id)
+                            .map(|(card_id, _)| card_id.to_string())
+                            .unwrap_or_default()
+                    })
+                    .collect()
+            };
+        let candidate_names = recipients
+            .iter()
+            .map(|recipient| {
+                if filter.is_player() {
+                    format!("P{recipient}")
+                } else {
+                    super::events::object_display_name(&self.state, self.registry, *recipient)
+                }
+            })
+            .collect();
+        events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    deciding_player_id: event.deciding_player,
+                    source_object_id: event.object_id,
+                    prompt_text: prompt.clone(),
+                    choice_kind: choice_kind as i32,
+                    candidate_object_ids: recipients.clone(),
+                    candidate_card_ids,
+                    candidate_names,
+                    candidate_selectable: vec![true; recipients.len()],
+                    min: 1,
+                    max: 1,
+                    ..Default::default()
+                },
+            )),
+        });
+        events.push(ev_log(prompt.clone()));
+        let deciding_player = event.deciding_player;
+        self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
+            Box::new(PendingBattlefieldEntry {
+                event,
+                applications: Vec::new(),
+                copy_source_effect: None,
+                copy_source_candidates: Vec::new(),
+                completion,
+            }),
+        ));
+        self.state.pending_resolution = Some(PendingResolution {
+            deciding_player,
+            presentation: PendingResolutionPresentation {
+                source_object_id: stack.item.id,
+                candidates: recipients,
+                min: 1,
+                max: 1,
+                ordered: false,
+                prompt,
+                choice_kind,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::EntryAuraRecipient { stack },
+        });
+    }
+
+    pub(super) fn transfer_entry_choice_resume(&mut self, stack: &ParkedStackResolution) {
+        if let Some(pending) = self.state.pending_resolution.as_mut() {
+            if let Some(parked) = pending.continuation.stack_mut() {
+                parked.resume_effect_index = stack.resume_effect_index;
+                parked.previous_result = stack.previous_result.clone();
+            }
+        }
+    }
+
+    fn finish_entry_copy_without_recipient(
+        &mut self,
+        stack: ParkedStackResolution,
+        event: BattlefieldEntryEvent,
+        completion: BattlefieldEntryCompletion,
+        mut events: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        match completion {
+            BattlefieldEntryCompletion::PermanentSpell { .. } => {
+                let owner = self
+                    .state
+                    .objects
+                    .get(&event.object_id)
+                    .map(|object| object.owner);
+                events.push(rv1::RuledEvent {
+                    ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
+                        object_id: event.object_id,
+                        destination: rv1::StackResolveDestination::Graveyard as i32,
+                        owner_player_id: owner,
+                    })),
+                });
+                move_object_to_zone(
+                    &mut self.state,
+                    self.registry,
+                    event.object_id,
+                    Zone::Graveyard,
+                    None,
+                )?;
+                self.complete_parked_resolution(stack.item, Some(0), events)
+            }
+            BattlefieldEntryCompletion::ResolutionEffect { .. }
+            | BattlefieldEntryCompletion::Ninjutsu { .. } => {
+                self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+            }
+            BattlefieldEntryCompletion::LibrarySearch { progress, .. } => {
+                self.continue_library_search_battlefield_entries(stack, progress, events)
+            }
+            BattlefieldEntryCompletion::ZoneEntryBatch(batch) => {
+                if self.continue_zone_entry_batch(stack.clone(), *batch, &mut events)? {
+                    Ok(finish_with_events(self, events))
+                } else {
+                    self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+                }
+            }
+            BattlefieldEntryCompletion::TokenBatch(batch) => self
+                .continue_token_entry_batch_without_current(stack, *batch, event.object_id, events),
+            BattlefieldEntryCompletion::ObserverReturn {
+                resume_original_stack,
+                ..
+            } => {
+                if self.drain_immediate_observer_actions(
+                    resume_original_stack.then_some(stack.clone()),
+                    &mut events,
+                )? {
+                    return Ok(finish_with_events(self, events));
+                }
+                if resume_original_stack {
+                    self.complete_parked_resolution_with_previous(
+                        stack.item,
+                        stack.resume_effect_index,
+                        stack.previous_result,
+                        events,
+                    )
+                } else {
+                    self.apply_sbas(&mut events)?;
+                    if let Some(index) = self.state.player_idx(self.state.active_player_id()) {
+                        self.state.priority_idx = index;
+                    }
+                    events.push(ev_priority_changed(self));
+                    Ok(finish_with_events(self, events))
+                }
+            }
+            BattlefieldEntryCompletion::ManifestDread { .. }
+            | BattlefieldEntryCompletion::LandPlay { .. }
+            | BattlefieldEntryCompletion::DevPlacement { .. } => {
+                self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+            }
+        }
+    }
+
+    fn continue_token_entry_batch_without_current(
+        &mut self,
+        stack: ParkedStackResolution,
+        mut batch: PendingTokenEntryBatch,
+        failed_object_id: ObjectId,
+        mut events: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        self.state.objects.remove(&failed_object_id);
+        batch
+            .result_object_ids
+            .retain(|object_id| *object_id != failed_object_id);
+        let spell_label = batch
+            .logs
+            .first()
+            .and_then(|log| log.rsplit_once(" ("))
+            .map(|(_, suffix)| suffix.trim_end_matches(").").to_string())
+            .unwrap_or_else(|| stack.item.card_id.clone());
+        let remaining_entries = batch
+            .ready
+            .iter()
+            .chain(batch.remaining.iter())
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut counts = BTreeMap::<(PlayerId, String), usize>::new();
+        for entry in remaining_entries {
+            let name = entry
+                .created
+                .identity
+                .as_ref()
+                .map(|identity| identity.name.clone())
+                .unwrap_or_else(|| entry.created.card_id.clone());
+            *counts
+                .entry((entry.event.destination_controller, name))
+                .or_default() += 1;
+        }
+        batch.logs = counts
+            .into_iter()
+            .map(|((player, name), count)| {
+                let noun = if count == 1 { "token" } else { "tokens" };
+                format!("P{player} creates {count} {name} {noun} ({spell_label}).")
+            })
+            .collect();
+
+        while !batch.remaining.is_empty() {
+            let next = batch.remaining.remove(0);
+            let completion =
+                BattlefieldEntryCompletion::TokenBatch(Box::new(PendingTokenEntryBatch {
+                    current_created: next.created.clone(),
+                    result_object_ids: batch.result_object_ids.clone(),
+                    ready: batch.ready.clone(),
+                    remaining: batch.remaining.clone(),
+                    logs: batch.logs.clone(),
+                    options: batch.options.clone(),
+                }));
+            match self.advance_or_park_battlefield_entry(
+                stack.item.clone(),
+                next.event,
+                completion,
+                &mut events,
+            ) {
+                BattlefieldEntryProgress::Parked => {
+                    self.transfer_entry_choice_resume(&stack);
+                    return Ok(finish_with_events(self, events));
+                }
+                BattlefieldEntryProgress::Ready(event) => {
+                    batch.ready.push(TokenBattlefieldEntry {
+                        event: *event,
+                        created: next.created,
+                    });
+                }
+            }
+        }
+        let amass = batch.options.amass;
+        let created_ids = batch.result_object_ids.clone();
+        if self.finish_prepared_token_batch(
+            stack.clone(),
+            batch.ready,
+            batch.result_object_ids,
+            batch.logs,
+            batch.options,
+            &mut events,
+        )? {
+            return Ok(finish_with_events(self, events));
+        }
+        if let Some(amass) = amass {
+            return self.finish_amass_after_token_entry(stack, amass, events);
+        }
+        self.complete_parked_resolution_with_previous(
+            stack.item,
+            stack.resume_effect_index,
+            EffectResult {
+                produced_objects: self.token_entry_object_refs(&created_ids),
+                ..EffectResult::default()
+            },
+            events,
+        )
     }
 
     fn park_copy_source_choice(
@@ -879,9 +1284,13 @@ impl GameEngine {
             .get(&event.object_id)
             .and_then(|object| self.registry.get(&object.card_id))
             .map(|definition| definition.name.clone())
-            .unwrap_or_else(|| "this creature".to_string());
+            .unwrap_or_else(|| "this permanent".to_string());
+        let source_filter = self
+            .entry_copy_filter(&event, &effect_id)
+            .expect("copy-source prompt requires an active copy filter");
+        let source_description = Self::copy_source_description(&source_filter);
         let prompt = format!(
-            "Choose a creature for {physical_name} to copy, or Decline to enter as {physical_name}."
+            "Choose {source_description} for {physical_name} to copy, or Decline to enter as {physical_name}."
         );
         let candidate_card_ids = candidates
             .iter()
@@ -933,6 +1342,19 @@ impl GameEngine {
                 event,
                 applications: Vec::new(),
                 copy_source_effect: Some(effect_id),
+                copy_source_candidates: candidates
+                    .iter()
+                    .map(|candidate| {
+                        (
+                            *candidate,
+                            self.state
+                                .zone_change_generation
+                                .get(candidate)
+                                .copied()
+                                .unwrap_or(0),
+                        )
+                    })
+                    .collect(),
                 completion,
             }),
         ));
@@ -1164,6 +1586,7 @@ impl GameEngine {
                                         event,
                                         applications: Vec::new(),
                                         copy_source_effect: None,
+                                        copy_source_candidates: Vec::new(),
                                         completion,
                                     },
                                 )));
@@ -1327,6 +1750,7 @@ impl GameEngine {
                                 event,
                                 applications,
                                 copy_source_effect: None,
+                                copy_source_candidates: Vec::new(),
                                 completion,
                             },
                         )));
@@ -1357,6 +1781,7 @@ impl GameEngine {
         event: BattlefieldEntryEvent,
         attached_to: Option<AttachmentRecipient>,
     ) -> Result<(), EngineError> {
+        let attached_to = attached_to.or(event.attached_to);
         let object_id = event.object_id;
         let chosen_x = event.chosen_x;
         let door_event = self.commit_battlefield_entry_state(event, attached_to)?;
@@ -1611,7 +2036,10 @@ impl GameEngine {
                 completion,
                 events,
             ) {
-                BattlefieldEntryProgress::Parked => return Ok(true),
+                BattlefieldEntryProgress::Parked => {
+                    self.transfer_entry_choice_resume(&stack);
+                    return Ok(true);
+                }
                 BattlefieldEntryProgress::Ready(event) => batch.ready.push(TokenBattlefieldEntry {
                     event: *event,
                     created: next.created,
@@ -1631,12 +2059,129 @@ impl GameEngine {
     fn finish_prepared_token_batch(
         &mut self,
         stack: ParkedStackResolution,
-        ready: Vec<TokenBattlefieldEntry>,
-        result_object_ids: Vec<ObjectId>,
-        logs: Vec<String>,
+        mut ready: Vec<TokenBattlefieldEntry>,
+        mut result_object_ids: Vec<ObjectId>,
+        mut logs: Vec<String>,
         options: TokenEntryBatchOptions,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
+        let mut aura_ready = Vec::new();
+        while !ready.is_empty() {
+            let current = ready.remove(0);
+            let copied_values =
+                self.state
+                    .objects
+                    .get(&current.event.object_id)
+                    .and_then(|object| {
+                        object
+                            .copiable_values
+                            .as_ref()
+                            .or(object.token_origin.as_ref())
+                            .cloned()
+                    });
+            let aura_filter = current
+                .event
+                .attached_to
+                .is_none()
+                .then(|| {
+                    copied_values
+                        .as_ref()
+                        .and_then(Self::copied_aura_attachment_filter)
+                })
+                .flatten();
+            if let (Some(values), Some(filter)) = (copied_values, aura_filter) {
+                let recipients = self.entry_copy_aura_candidates(
+                    current.event.object_id,
+                    current.event.destination_controller,
+                    &values,
+                    &filter,
+                );
+                if recipients.is_empty() {
+                    self.state.objects.remove(&current.event.object_id);
+                    result_object_ids.retain(|object_id| *object_id != current.event.object_id);
+                    let spell_label = logs
+                        .first()
+                        .and_then(|log| log.rsplit_once(" ("))
+                        .map(|(_, suffix)| suffix.trim_end_matches(").").to_string())
+                        .unwrap_or_else(|| stack.item.card_id.clone());
+                    let mut counts = BTreeMap::<(PlayerId, String), usize>::new();
+                    for entry in aura_ready.iter().chain(ready.iter()) {
+                        let name = entry
+                            .created
+                            .identity
+                            .as_ref()
+                            .map(|identity| identity.name.clone())
+                            .unwrap_or_else(|| entry.created.card_id.clone());
+                        *counts
+                            .entry((entry.event.destination_controller, name))
+                            .or_default() += 1;
+                    }
+                    logs = counts
+                        .into_iter()
+                        .map(|((player, name), count)| {
+                            let noun = if count == 1 { "token" } else { "tokens" };
+                            format!("P{player} creates {count} {name} {noun} ({spell_label}).")
+                        })
+                        .collect();
+                    continue;
+                }
+                let recipient_generations = if filter.is_player() {
+                    Vec::new()
+                } else {
+                    recipients
+                        .iter()
+                        .map(|recipient| {
+                            (
+                                *recipient,
+                                self.state
+                                    .zone_change_generation
+                                    .get(recipient)
+                                    .copied()
+                                    .unwrap_or(0),
+                            )
+                        })
+                        .collect()
+                };
+                let entering_copy_revision = self
+                    .state
+                    .objects
+                    .get(&current.event.object_id)
+                    .map(|object| object.copy_revision)
+                    .unwrap_or(0);
+                let entering_zone_generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&current.event.object_id)
+                    .copied()
+                    .unwrap_or(0);
+                let mut event = current.event;
+                event.pending_aura_recipient = Some(PendingAuraEntryRecipient {
+                    filter: filter.clone(),
+                    entering_zone_generation,
+                    entering_copy_revision,
+                    recipient_generations,
+                    copy_candidate: None,
+                });
+                self.park_entry_copy_aura_recipient_choice(
+                    stack,
+                    event,
+                    BattlefieldEntryCompletion::TokenBatch(Box::new(PendingTokenEntryBatch {
+                        current_created: current.created,
+                        result_object_ids,
+                        ready: aura_ready,
+                        remaining: ready,
+                        logs,
+                        options,
+                    })),
+                    filter,
+                    recipients,
+                    events,
+                );
+                return Ok(true);
+            }
+            aura_ready.push(current);
+        }
+        ready = aura_ready;
         if ready.is_empty() {
             self.commit_token_entry_batch(
                 &stack.item,
@@ -1693,7 +2238,9 @@ impl GameEngine {
                 object_id: entry.event.object_id,
                 chosen_x: entry.event.chosen_x,
             });
-            trigger_events.extend(self.commit_battlefield_entry_state(entry.event.clone(), None)?);
+            trigger_events.extend(
+                self.commit_battlefield_entry_state(entry.event.clone(), entry.event.attached_to)?,
+            );
         }
         let added_assignments = if let Some(attacking) = &attacking {
             self.add_attacking_objects(&object_ids, &attacking.defenders)?
@@ -1824,7 +2371,7 @@ impl GameEngine {
     pub(super) fn complete_pending_battlefield_entry(
         &mut self,
         pending: PendingResolution,
-        event: BattlefieldEntryEvent,
+        mut event: BattlefieldEntryEvent,
         completion: BattlefieldEntryCompletion,
         mut events: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
@@ -1835,6 +2382,135 @@ impl GameEngine {
                 "battlefield-entry continuation missing",
             ))?
             .clone();
+        if let Some(candidate) = event.pending_copy_candidate.take() {
+            let Some(filter) = Self::copied_aura_attachment_filter(&candidate.values) else {
+                return Err(EngineError::Illegal(
+                    "pending entry-copy candidate is no longer an Aura",
+                ));
+            };
+            let recipients = self.entry_copy_aura_candidates(
+                event.object_id,
+                event.destination_controller,
+                &candidate.values,
+                &filter,
+            );
+            if recipients.is_empty() {
+                self.restore_entry_copy_candidate(event.object_id, &candidate)?;
+                return self.finish_entry_copy_without_recipient(stack, event, completion, events);
+            }
+            let recipient_generations = if !filter.is_player() {
+                recipients
+                    .iter()
+                    .map(|recipient| {
+                        (
+                            *recipient,
+                            self.state
+                                .zone_change_generation
+                                .get(recipient)
+                                .copied()
+                                .unwrap_or(0),
+                        )
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            event.pending_aura_recipient = Some(PendingAuraEntryRecipient {
+                filter: filter.clone(),
+                entering_zone_generation: candidate.entering_zone_generation,
+                entering_copy_revision: candidate.entering_copy_revision.saturating_add(1),
+                recipient_generations,
+                copy_candidate: Some(candidate),
+            });
+            self.park_entry_copy_aura_recipient_choice(
+                stack,
+                event,
+                completion,
+                filter,
+                recipients,
+                &mut events,
+            );
+            return Ok(finish_with_events(self, events));
+        }
+        let completion_has_attachment = matches!(
+            &completion,
+            BattlefieldEntryCompletion::PermanentSpell {
+                attached_to: Some(_)
+            } | BattlefieldEntryCompletion::ObserverReturn {
+                attached_to: Some(_),
+                ..
+            }
+        );
+        if event.pending_aura_recipient.is_none()
+            && event.attached_to.is_none()
+            && !completion_has_attachment
+        {
+            let copied_values = self.state.objects.get(&event.object_id).and_then(|object| {
+                object
+                    .copiable_values
+                    .as_ref()
+                    .or(object.token_origin.as_ref())
+                    .cloned()
+            });
+            if let Some(values) = copied_values {
+                if let Some(filter) = Self::copied_aura_attachment_filter(&values) {
+                    let recipients = self.entry_copy_aura_candidates(
+                        event.object_id,
+                        event.destination_controller,
+                        &values,
+                        &filter,
+                    );
+                    if recipients.is_empty() {
+                        return self
+                            .finish_entry_copy_without_recipient(stack, event, completion, events);
+                    }
+                    let recipient_generations = if filter.is_player() {
+                        Vec::new()
+                    } else {
+                        recipients
+                            .iter()
+                            .map(|recipient| {
+                                (
+                                    *recipient,
+                                    self.state
+                                        .zone_change_generation
+                                        .get(recipient)
+                                        .copied()
+                                        .unwrap_or(0),
+                                )
+                            })
+                            .collect()
+                    };
+                    let entering_copy_revision = self
+                        .state
+                        .objects
+                        .get(&event.object_id)
+                        .map(|object| object.copy_revision)
+                        .unwrap_or(0);
+                    event.pending_aura_recipient = Some(PendingAuraEntryRecipient {
+                        filter: filter.clone(),
+                        entering_zone_generation: self
+                            .state
+                            .zone_change_generation
+                            .get(&event.object_id)
+                            .copied()
+                            .unwrap_or(0),
+                        entering_copy_revision,
+                        recipient_generations,
+                        copy_candidate: None,
+                    });
+                    self.park_entry_copy_aura_recipient_choice(
+                        stack,
+                        event,
+                        completion,
+                        filter,
+                        recipients,
+                        &mut events,
+                    );
+                    return Ok(finish_with_events(self, events));
+                }
+            }
+        }
         match completion {
             BattlefieldEntryCompletion::LandPlay { player, land_name } => {
                 let object_id = event.object_id;
@@ -2135,8 +2811,30 @@ impl GameEngine {
             return Err(EngineError::Illegal("copy replacement is stale"));
         };
 
+        let mut events = Vec::new();
         if let Some(&source_id) = chosen.first() {
+            let Some(source_generation) =
+                entry
+                    .copy_source_candidates
+                    .iter()
+                    .find_map(|(candidate, generation)| {
+                        (*candidate == source_id).then_some(*generation)
+                    })
+            else {
+                entry.copy_source_effect = Some(effect_id);
+                self.state.pending_replacement_event =
+                    Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("copy source is stale"));
+            };
+            let current_generation = self
+                .state
+                .zone_change_generation
+                .get(&source_id)
+                .copied()
+                .unwrap_or(0);
             if source_id == entry.event.object_id
+                || source_generation != current_generation
                 || !object_matches_mass_filter(self, source_id, &filter)
             {
                 entry.copy_source_effect = Some(effect_id);
@@ -2152,28 +2850,246 @@ impl GameEngine {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal("copy source is stale"));
             };
-            let Some(object) = self.state.objects.get_mut(&entry.event.object_id) else {
+            let Some(entering) = self.state.objects.get(&entry.event.object_id) else {
                 entry.copy_source_effect = Some(effect_id);
                 self.state.pending_replacement_event =
                     Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal("entering copy object is stale"));
             };
-            object.must_attack_if_able = values.face.must_attack_if_able;
-            object.must_block_if_able = values.face.must_block_if_able;
-            object.copiable_values = Some(values);
-            object.copy_revision = object.copy_revision.saturating_add(1);
+            let candidate = PendingCopyCandidate {
+                source_id,
+                source_generation,
+                source_filter: filter,
+                entering_zone_generation: self
+                    .state
+                    .zone_change_generation
+                    .get(&entry.event.object_id)
+                    .copied()
+                    .unwrap_or(0),
+                entering_copy_revision: entering.copy_revision,
+                entering_copiable_values: entering.copiable_values.clone(),
+                entering_must_attack_if_able: entering.must_attack_if_able,
+                entering_must_block_if_able: entering.must_block_if_able,
+                values,
+            };
+            let copied_aura = Self::copied_aura_attachment_filter(&candidate.values).is_some();
+            self.install_entry_copy_candidate(entry.event.object_id, &candidate)?;
+            if copied_aura {
+                entry.event.pending_copy_candidate = Some(candidate);
+            }
+            if let BattlefieldEntryCompletion::PermanentSpell { attached_to } =
+                &mut entry.completion
+            {
+                // The target chosen to cast an Aura spell applies only if its printed Aura
+                // identity remains. A copied source supplies a different Aura restriction (or
+                // may cease to be an Aura entirely), so the original target cannot be reused.
+                *attached_to = None;
+            }
         }
         entry.event.applied_effects.push(effect_id);
-
-        let mut events = Vec::new();
         let event = match self.advance_or_park_battlefield_entry(
-            stack.item,
+            stack.item.clone(),
             entry.event,
             entry.completion.clone(),
             &mut events,
         ) {
-            BattlefieldEntryProgress::Parked => return Ok(finish_with_events(self, events)),
+            BattlefieldEntryProgress::Parked => {
+                self.transfer_entry_choice_resume(&stack);
+                return Ok(finish_with_events(self, events));
+            }
+            BattlefieldEntryProgress::Ready(event) => *event,
+        };
+        self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
+    }
+
+    fn install_entry_copy_candidate(
+        &mut self,
+        object_id: ObjectId,
+        candidate: &PendingCopyCandidate,
+    ) -> Result<(), EngineError> {
+        let current_source_generation = self
+            .state
+            .zone_change_generation
+            .get(&candidate.source_id)
+            .copied()
+            .unwrap_or(0);
+        let current_object_generation = self
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0);
+        let Some(object) = self.state.objects.get(&object_id) else {
+            return Err(EngineError::Illegal("entering copy object is stale"));
+        };
+        if current_source_generation != candidate.source_generation
+            || !object_matches_mass_filter(self, candidate.source_id, &candidate.source_filter)
+            || current_object_generation != candidate.entering_zone_generation
+            || object.copy_revision != candidate.entering_copy_revision
+        {
+            return Err(EngineError::Illegal("copy source choice is stale"));
+        }
+        let Some(object) = self.state.objects.get_mut(&object_id) else {
+            return Err(EngineError::Illegal("entering copy object is stale"));
+        };
+        object.must_attack_if_able = candidate.values.face.must_attack_if_able;
+        object.must_block_if_able = candidate.values.face.must_block_if_able;
+        object.copiable_values = Some(candidate.values.clone());
+        object.copy_revision = object.copy_revision.saturating_add(1);
+        Ok(())
+    }
+
+    fn restore_entry_copy_candidate(
+        &mut self,
+        object_id: ObjectId,
+        candidate: &PendingCopyCandidate,
+    ) -> Result<(), EngineError> {
+        let generation = self
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0);
+        let Some(object) = self.state.objects.get_mut(&object_id) else {
+            return Err(EngineError::Illegal("entering copy object is stale"));
+        };
+        if generation != candidate.entering_zone_generation
+            || object.copy_revision != candidate.entering_copy_revision.saturating_add(1)
+        {
+            return Err(EngineError::Illegal("provisional copy state is stale"));
+        }
+        object.copiable_values = candidate.entering_copiable_values.clone();
+        object.copy_revision = candidate.entering_copy_revision;
+        object.must_attack_if_able = candidate.entering_must_attack_if_able;
+        object.must_block_if_able = candidate.entering_must_block_if_able;
+        Ok(())
+    }
+
+    pub(super) fn finish_entry_aura_recipient_choice(
+        &mut self,
+        pending: PendingResolution,
+        chosen: ObjectId,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let stack = match &pending.continuation {
+            ResolutionContinuation::EntryAuraRecipient { stack } => stack.clone(),
+            _ => return Err(EngineError::Illegal("Aura-copy continuation missing")),
+        };
+        let Some(pending_event) = self.state.pending_replacement_event.take() else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("Aura-copy recipient choice is stale"));
+        };
+        let mut entry = match pending_event {
+            PendingReplacementEvent::BattlefieldEntry(entry) => *entry,
+            other => {
+                self.state.pending_replacement_event = Some(other);
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("Aura-copy recipient choice is stale"));
+            }
+        };
+        let Some(aura_choice) = entry.event.pending_aura_recipient.take() else {
+            self.state.pending_replacement_event =
+                Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("Aura-copy recipient choice is stale"));
+        };
+        let filter = aura_choice.filter.clone();
+        if !filter.is_player()
+            && !aura_choice
+                .recipient_generations
+                .iter()
+                .any(|(oid, generation)| {
+                    *oid == chosen
+                        && self
+                            .state
+                            .zone_change_generation
+                            .get(oid)
+                            .copied()
+                            .unwrap_or(0)
+                            == *generation
+                })
+        {
+            entry.event.pending_aura_recipient = Some(aura_choice);
+            self.state.pending_replacement_event =
+                Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("Aura recipient choice is stale"));
+        }
+        let recipient = if filter.is_player() {
+            AttachmentRecipient::Player(chosen as PlayerId)
+        } else {
+            AttachmentRecipient::Object(chosen)
+        };
+        let entering_generation = self
+            .state
+            .zone_change_generation
+            .get(&entry.event.object_id)
+            .copied()
+            .unwrap_or(0);
+        let entering_revision = self
+            .state
+            .objects
+            .get(&entry.event.object_id)
+            .map(|object| object.copy_revision);
+        let source_is_valid = aura_choice.copy_candidate.as_ref().is_none_or(|candidate| {
+            self.state
+                .zone_change_generation
+                .get(&candidate.source_id)
+                .copied()
+                .unwrap_or(0)
+                == candidate.source_generation
+                && object_matches_mass_filter(self, candidate.source_id, &candidate.source_filter)
+        });
+        if entering_generation != aura_choice.entering_zone_generation
+            || entering_revision != Some(aura_choice.entering_copy_revision)
+            || !source_is_valid
+            || !super::targeting::attachment_filter_legal(
+                self,
+                &filter,
+                recipient,
+                entry.event.object_id,
+                entry.event.destination_controller,
+            )
+        {
+            entry.event.pending_aura_recipient = Some(aura_choice);
+            self.state.pending_replacement_event =
+                Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("Aura recipient is no longer legal"));
+        }
+        if let AttachmentRecipient::Object(object_id) = recipient {
+            let generation = self
+                .state
+                .zone_change_generation
+                .get(&object_id)
+                .copied()
+                .unwrap_or(0);
+            if aura_choice
+                .recipient_generations
+                .iter()
+                .find(|(candidate_id, _)| *candidate_id == object_id)
+                .is_none_or(|(_, expected)| *expected != generation)
+            {
+                entry.event.pending_aura_recipient = Some(aura_choice);
+                self.state.pending_replacement_event =
+                    Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("Aura recipient choice is stale"));
+            }
+        }
+        entry.event.attached_to = Some(recipient);
+        entry.event.pending_aura_recipient = None;
+        let mut events = Vec::new();
+        let event = match self.advance_or_park_battlefield_entry(
+            stack.item.clone(),
+            entry.event,
+            entry.completion.clone(),
+            &mut events,
+        ) {
+            BattlefieldEntryProgress::Parked => {
+                self.transfer_entry_choice_resume(&stack);
+                return Ok(finish_with_events(self, events));
+            }
             BattlefieldEntryProgress::Ready(event) => *event,
         };
         self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
@@ -2225,13 +3141,14 @@ impl GameEngine {
             let sources = self.copy_source_candidates(&entry.event, &filter);
             if !sources.is_empty() {
                 self.park_copy_source_choice(
-                    stack.item,
+                    stack.item.clone(),
                     entry.event,
                     entry.completion,
                     application.effect_id,
                     sources,
                     &mut events,
                 );
+                self.transfer_entry_choice_resume(&stack);
                 return Ok(finish_with_events(self, events));
             }
             entry.event.applied_effects.push(application.effect_id);
@@ -2239,43 +3156,49 @@ impl GameEngine {
             self.entry_read_ahead_final_chapter(&entry.event, &application.effect_id)
         {
             self.park_read_ahead_choice(
-                stack.item,
+                stack.item.clone(),
                 entry.event,
                 entry.completion,
                 application.effect_id,
                 final_chapter,
                 &mut events,
             );
+            self.transfer_entry_choice_resume(&stack);
             return Ok(finish_with_events(self, events));
         } else if self.entry_needs_basic_land_type_choice(&entry.event, &application.effect_id) {
             self.park_basic_land_type_choice(
-                stack.item,
+                stack.item.clone(),
                 entry.event,
                 entry.completion,
                 application.effect_id,
                 &mut events,
             );
+            self.transfer_entry_choice_resume(&stack);
             return Ok(finish_with_events(self, events));
         } else if let Some(cost) = self.entry_unless_cost(&entry.event, &application.effect_id) {
             self.park_entry_cost_choice(
-                stack.item,
+                stack.item.clone(),
                 entry.event,
                 entry.completion,
                 application.effect_id,
                 cost,
                 &mut events,
             );
+            self.transfer_entry_choice_resume(&stack);
             return Ok(finish_with_events(self, events));
         } else {
             self.apply_entry_replacement(&mut entry.event, application.effect_id);
         }
         let event = match self.advance_or_park_battlefield_entry(
-            stack.item,
+            stack.item.clone(),
             entry.event,
             entry.completion.clone(),
             &mut events,
         ) {
-            BattlefieldEntryProgress::Parked => return Ok(finish_with_events(self, events)),
+            BattlefieldEntryProgress::Parked => {
+                self.transfer_entry_choice_resume(&stack);
+                return Ok(finish_with_events(self, events));
+            }
             BattlefieldEntryProgress::Ready(event) => *event,
         };
 
@@ -2349,13 +3272,14 @@ impl GameEngine {
             chosen.as_str()
         ))];
         self.park_entry_cost_choice(
-            stack.item,
+            stack.item.clone(),
             entry.event,
             entry.completion,
             effect_id,
             cost,
             &mut events,
         );
+        self.transfer_entry_choice_resume(&stack);
         Ok(finish_with_events(self, events))
     }
 
@@ -2447,12 +3371,15 @@ impl GameEngine {
         }
 
         let event = match self.advance_or_park_battlefield_entry(
-            stack.item,
+            stack.item.clone(),
             entry.event,
             entry.completion.clone(),
             &mut events,
         ) {
-            BattlefieldEntryProgress::Parked => return Ok(finish_with_events(self, events)),
+            BattlefieldEntryProgress::Parked => {
+                self.transfer_entry_choice_resume(&stack);
+                return Ok(finish_with_events(self, events));
+            }
             BattlefieldEntryProgress::Ready(event) => *event,
         };
         self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
@@ -2523,12 +3450,15 @@ impl GameEngine {
             saga_chapter_label(chapter)
         ))];
         let event = match self.advance_or_park_battlefield_entry(
-            stack.item,
+            stack.item.clone(),
             entry.event,
             entry.completion.clone(),
             &mut events,
         ) {
-            BattlefieldEntryProgress::Parked => return Ok(finish_with_events(self, events)),
+            BattlefieldEntryProgress::Parked => {
+                self.transfer_entry_choice_resume(&stack);
+                return Ok(finish_with_events(self, events));
+            }
             BattlefieldEntryProgress::Ready(event) => *event,
         };
         self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
@@ -2564,6 +3494,9 @@ mod tests {
                 (CounterKind::Stun, 2),
             ]),
             entry_modifiers: Vec::new(),
+            attached_to: None,
+            pending_copy_candidate: None,
+            pending_aura_recipient: None,
             applied_effects: Vec::new(),
         };
         engine.commit_battlefield_entry(event, None).unwrap();
@@ -2604,6 +3537,9 @@ mod tests {
             chosen_basic_land_type: None,
             entry_counters: BTreeMap::new(),
             entry_modifiers: Vec::new(),
+            attached_to: None,
+            pending_copy_candidate: None,
+            pending_aura_recipient: None,
             applied_effects: Vec::new(),
         };
         let condition = GameCondition::PlayerLifeAggregate {
@@ -2675,6 +3611,9 @@ mod tests {
             chosen_basic_land_type: None,
             entry_counters: BTreeMap::new(),
             entry_modifiers: Vec::new(),
+            attached_to: None,
+            pending_copy_candidate: None,
+            pending_aura_recipient: None,
             applied_effects: Vec::new(),
         };
 
@@ -2736,6 +3675,9 @@ mod tests {
                     creature_types: vec!["Dragon".into()],
                 },
             )],
+            attached_to: None,
+            pending_copy_candidate: None,
+            pending_aura_recipient: None,
             applied_effects: Vec::new(),
         };
 
