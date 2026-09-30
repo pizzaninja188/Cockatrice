@@ -1,0 +1,21 @@
+{
+  "format_version": 1,
+  "oracle_id": "b2c6aa39-2d2a-459c-a555-fb48ba993373",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "island",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_basic_mana::scoped_basic_lands_tap_for_only_their_printed_color_and_reject_invalid_actors_or_reuse",
+      "covers": "exact single-face basic-land characteristics; played named land taps for its sole printed color, publishes exact pool immediately, retains priority and rejects foreign activation or tapped reuse atomically"
+    }
+  ]
+}
