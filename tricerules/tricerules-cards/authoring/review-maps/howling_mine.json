@@ -1,0 +1,54 @@
+{
+  "format_version": 1,
+  "oracle_id": "d26b27db-a567-4631-b4b6-7294222fbdd1",
+  "spans": [
+    {
+      "face_id": "howling_mine",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::AtBeginningOfDrawStep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "GameCondition::ObjectTapped",
+      "typed_path": "/faces/0/triggered_abilities/0/intervening_if"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario triggers::howling_mine_draws_an_extra_card_on_each_players_draw_step",
+      "covers": "Actual Howling Mine draws one additional card for each active player, including the controller and opponent"
+    },
+    {
+      "test": "scenario triggers::tapped_howling_mine_never_triggers",
+      "covers": "Tapped Howling Mine puts no draw trigger on the stack"
+    },
+    {
+      "test": "scenario triggers::howling_mine_tapped_in_response_does_nothing",
+      "covers": "Howling Mine's untapped condition is checked again on resolution"
+    },
+    {
+      "test": "scenario triggers::turn_based_draw_precedes_the_draw_step_trigger",
+      "covers": "The ordinary draw occurs before Howling Mine's additional draw trigger resolves"
+    },
+    {
+      "test": "scenario triggers::howling_mine_bounced_while_untapped_still_draws",
+      "covers": "The departed source's last known untapped state permits the additional draw"
+    },
+    {
+      "test": "scenario triggers::howling_mine_bounced_while_tapped_does_nothing",
+      "covers": "The departed source's last known tapped state prevents the additional draw despite the live object's reset tap state"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
