@@ -1,0 +1,73 @@
+{
+  "format_version": 1,
+  "oracle_id": "11c7662f-e688-40a6-98fd-6ae89d231b44",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "staff_of_compleation",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "staff_of_compleation",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    },
+    {
+      "face_id": "staff_of_compleation",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2"
+      ]
+    },
+    {
+      "face_id": "staff_of_compleation",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/activated_abilities/3"
+      ]
+    },
+    {
+      "face_id": "staff_of_compleation",
+      "start_line": 5,
+      "end_line": 5,
+      "typed_paths": [
+        "/faces/0/activated_abilities/4"
+      ]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_staff_of_compleation::exact_artifact_and_five_complete_abilities",
+      "covers": "exact single-face artifact, printed cost, five abilities, actual cast and entry"
+    },
+    {
+      "test": "scenario deck_coverage_staff_of_compleation::destroy_uses_physical_owner_independent_of_controller_and_can_target_staff",
+      "covers": "foreign-owned friendly target rejects without costs; owned opponent-controlled permanent and source itself are legal; life/tap immediate, destroy only on resolution into owner graveyard"
+    },
+    {
+      "test": "scenario deck_coverage_staff_of_compleation::paid_life_mana_is_immediate_and_has_exactly_five_color_options",
+      "covers": "every color exactly one, no colorless or stack; exactly two life/tap paid; wrong-player, invalid option and already-tapped rejection without mutation"
+    },
+    {
+      "test": "scenario deck_coverage_staff_of_compleation::all_four_life_costs_reject_unaffordable_payment_and_allow_exact_payment",
+      "covers": "all four life amounts: insufficient life rejects atomically; exact current total payable and zero life eliminated by state-based actions in three-seat game"
+    },
+    {
+      "test": "scenario deck_coverage_staff_of_compleation::draw_and_generic_untap_use_the_stack_and_untap_has_no_tap_cost",
+      "covers": "four life/tap paid immediately, exactly one controller card only at resolution; generic five insufficient rejection/exact payment; untap delayed and callable while already untapped; red can pay generic"
+    },
+    {
+      "test": "scenario deck_coverage_staff_of_compleation::staff_proliferates_mixed_recipients_or_none_and_rejects_invalid_choices",
+      "covers": "three life/tap paid before resolution; mixed player and multiple permanent counter kinds each gain one; choosing none succeeds; wrong-player and counterless recipient reject atomically"
+    }
+  ]
+}
