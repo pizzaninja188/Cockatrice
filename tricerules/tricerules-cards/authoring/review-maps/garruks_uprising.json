@@ -1,0 +1,61 @@
+{
+  "format_version": 1,
+  "oracle_id": "3127ae9b-a7a7-43ec-89d7-688f8445b33d",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "garruks_uprising",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "garruks_uprising",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "garruks_uprising",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1"
+      ]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_garruks_uprising::exact_characteristics_and_three_printed_clauses",
+      "covers": "exact oneface enchantment identity/cost and mandatory threeclauses; only selfentry uses intervening-if"
+    },
+    {
+      "test": "scenario deck_coverage_garruks_uprising::entry_draw_checks_current_controlled_power_twice_and_draws_only_once",
+      "covers": "none/under4/4/derived5 threshold, opponent exclusion, current qualifying creature recheck and replacement qualifier, exactly one draw despite multiple qualifiers"
+    },
+    {
+      "test": "scenario deck_coverage_garruks_uprising::trample_tracks_current_control_and_source_lifetime",
+      "covers": "old/new and foreignowned friendly creatures gaintrample; currentcreature/sourcecontrol and source removal update scope"
+    },
+    {
+      "test": "scenario deck_coverage_garruks_uprising::creature_entry_uses_event_power_and_controller_without_resolution_recheck",
+      "covers": "3versus4 boundary, opponent exclusion and qualifyingcreature departure stilldraws"
+    },
+    {
+      "test": "scenario deck_coverage_garruks_uprising::creature_entry_sees_static_bonus_counters_and_copied_values",
+      "covers": "derived4 after actualstaticanthem, EndlessOne entrycounters4 and Clone copying4 all trigger one mandatorydraw"
+    },
+    {
+      "test": "scenario deck_coverage_garruks_uprising::triggered_draw_survives_uprising_leaving_the_battlefield",
+      "covers": "alreadytriggered draw resolves aftersource destroyed whiletrample grant disappears"
+    },
+    {
+      "test": "scenario deck_coverage_garruks_uprising::casting_requires_green_and_rejection_preserves_the_card_and_resources",
+      "covers": "missinggreen cast rejects without hand/library/mana/command orstack mutation"
+    }
+  ]
+}

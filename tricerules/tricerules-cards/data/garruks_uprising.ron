@@ -1,0 +1,38 @@
+// Exact Oracle ID 3127ae9b-a7a7-43ec-89d7-688f8445b33d and Wizards rulings checked 2026-09-30 UTC.
+// CR 603.4 rechecks the self-entry condition; the other creature-entry trigger uses event-time
+// derived power, including static effects, entry counters and copied characteristics.
+(
+  id: "garruks_uprising",
+  name: "Garruk's Uprising",
+  face_id: "garruks_uprising",
+  mana_cost: "{2}{G}",
+  types: ["Enchantment"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AnthemKeyword(filter: (controller: YouControl), keyword: Trample),
+  )],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      intervening_if: Some(BattlefieldAggregate(
+        filter: (controllers: Controller, card_type: Some(Creature)),
+        aggregate: MaximumPower,
+        min: Some(4),
+      )),
+      effect: [Draw(who: Controller, count: 1)],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([3]),
+      trigger: WheneverPermanentEntersBattlefield(
+        controller: Controller,
+        filter: (permanent_type: Some(Creature)),
+        creature_filter: Some((power: Some(AtLeast(4)))),
+      ),
+      effect: [Draw(who: Controller, count: 1)],
+    ),
+  ],
+)
