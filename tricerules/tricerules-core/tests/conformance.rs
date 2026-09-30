@@ -4,8 +4,7 @@
 mod helpers;
 #[path = "conformance/integrity.rs"]
 mod integrity;
-#[path = "conformance/offers.rs"]
-mod offers;
+use helpers::authoring_actions as offers;
 use ruled_command::Cmd;
 use ruled_event::Ev;
 use tricerules_cards::CardRegistry;
@@ -286,60 +285,7 @@ fn fixture(case: &Case) -> GameEngine {
         "flashfreeze" => Some("hill_giant"),
         _ => None,
     };
-    let mut cards = vec![
-        case.card.as_str(),
-        "grizzly_bears",
-        "grizzly_bears",
-        "grizzly_bears",
-        "island",
-        "explosive_apparatus",
-    ];
-    cards.extend(stack_fixture);
-    if case.card == "decimate" {
-        cards.push("ominous_seas");
-    }
-    if case.card == "inventors_fair" {
-        cards.extend(["sol_ring", "sol_ring"]);
-    }
-    if case.card == "trash_for_treasure" {
-        cards.push("mind_stone");
-    }
-    if case.card == "fanatic_of_rhonas" && case.ability == Some(1) {
-        cards.push("air_elemental");
-    }
-    let deck = helpers::deck_with("forest", &cards);
-    let mut e = GameEngine::new(SEED, &[0, 1], 20, Some(vec![deck.clone(), deck]), true).unwrap();
-    helpers::advance_to_main1_from_game_start(&mut e);
-    for player in 0..e.state.players.len() {
-        helpers::relocate_to_battlefield(&mut e, player, "grizzly_bears", false);
-        helpers::relocate_to_battlefield(&mut e, player, "explosive_apparatus", false);
-        if case.card == "decimate" {
-            helpers::relocate_to_battlefield(&mut e, player, "ominous_seas", false);
-        }
-        if case.card == "inventors_fair" {
-            // The search activation requires three artifacts before its costs are paid.
-            // Explosive Apparatus is already present; add the two missing fixture resources.
-            helpers::relocate_to_battlefield(&mut e, player, "sol_ring", false);
-            helpers::relocate_to_battlefield(&mut e, player, "sol_ring", false);
-        }
-        helpers::relocate_to_hand(&mut e, player, "grizzly_bears");
-        helpers::relocate_to_battlefield(&mut e, player, "forest", false);
-        helpers::relocate_to_battlefield(&mut e, player, "island", false);
-        let dead = helpers::take_oid_from_library_or_hand(&mut e, player, "grizzly_bears");
-        e.state.players[player].graveyard.push(dead);
-        e.state.objects.get_mut(&dead).unwrap().zone = tricerules_core::Zone::Graveyard;
-        if case.card == "trash_for_treasure" {
-            // A separate graveyard artifact is required before paying the sacrifice cost.
-            let dead = helpers::take_oid_from_library_or_hand(&mut e, player, "mind_stone");
-            e.state.players[player].graveyard.push(dead);
-            e.state.objects.get_mut(&dead).unwrap().zone = tricerules_core::Zone::Graveyard;
-        }
-        helpers::grant_pool(&mut e, player);
-    }
-    if case.card == "fanatic_of_rhonas" && case.ability == Some(1) {
-        // Ferocious needs a controlled creature with current power at least four.
-        helpers::relocate_to_battlefield(&mut e, 0, "air_elemental", false);
-    }
+    let mut e = helpers::authoring_fixture::game(SEED, &[0, 1], &case.card, case.ability);
     if let Some(card) = stack_fixture {
         helpers::relocate_to_hand(&mut e, 0, card);
         let slot = helpers::hand_index_for_card(&e, 0, card);
@@ -383,64 +329,9 @@ fn evaluate(case: &Case) -> Result<Outcome, String> {
             if !def.face(case.face).unwrap().is_permanent() {
                 return Err("nonbattlefield activated ability needs a zone fixture".into());
             }
-            let eternalize = case.card == "fanatic_of_rhonas" && index == 2;
-            let oid = if eternalize {
-                let oid = helpers::take_oid_from_library_or_hand(&mut e, 0, &case.card);
-                e.state.players[0].graveyard.push(oid);
-                e.state.objects.get_mut(&oid).unwrap().zone = tricerules_core::Zone::Graveyard;
-                oid
-            } else {
-                helpers::relocate_to_battlefield(&mut e, 0, &case.card, false)
-            };
-            e.state.objects.get_mut(&oid).unwrap().face_up_index = case.face;
-            if case.card == "chandra,_novice_pyromancer" {
-                // Relocation skips entry; seed the actual printed starting loyalty.
-                e.state
-                    .objects
-                    .get_mut(&oid)
-                    .unwrap()
-                    .set_counter(tricerules_cards::primitives::CounterKind::Loyalty, 5);
-            }
-            let batch = e.initial_response_batch();
-            let legal = &batch.legal_by_player[&actor];
-            let key = (u64::from(oid) << 32) | index as u64;
-            let (source_zone, generation, costs) = if eternalize {
-                let action = legal
-                    .zone_ability_actions
-                    .iter()
-                    .find(|action| {
-                        action.object_id == oid
-                            && action.ability_index == index as u32
-                            && action.source_zone() == AbilitySourceZone::Graveyard
-                            && action
-                                .ability
-                                .as_ref()
-                                .is_some_and(|ability| ability.activatable)
-                    })
-                    .ok_or("Eternalize not offered by graveyard fixture")?;
-                (action.source_zone, action.zone_change_generation, vec![])
-            } else {
-                let costs = legal
-                    .cost_choices_by_ability
-                    .get(&key)
-                    .ok_or("ability not offered by generic battlefield fixture")?;
-                (
-                    AbilitySourceZone::Battlefield as i32,
-                    0,
-                    offers::costs(Some(costs))?,
-                )
-            };
-            RuledCommand {
-                cmd: Some(Cmd::ActivateAbility(ActivateAbility {
-                    source_object_id: oid,
-                    source_zone,
-                    expected_zone_change_generation: generation,
-                    ability_index: index as u32,
-                    targets: offers::targets(&e, actor, legal.valid_targets_by_ability.get(&key))?,
-                    cost_selections: costs,
-                    ..Default::default()
-                })),
-            }
+            let oid =
+                helpers::authoring_fixture::ability_source(&mut e, 0, &case.card, case.face, index);
+            offers::activation(&mut e, actor, oid, index as u32)?
         } else {
             let oid = helpers::relocate_to_hand(&mut e, 0, &case.card);
             let slot = e.state.players[0]
@@ -481,7 +372,10 @@ fn evaluate(case: &Case) -> Result<Outcome, String> {
                 }
             }
         };
-        if !matches!(command.cmd, Some(Cmd::PlayLand(_))) {
+        if !matches!(
+            command.cmd,
+            Some(Cmd::PlayLand(_) | Cmd::ActivateAbility(_))
+        ) {
             offers::pay(&e, actor, &mut command)?;
         }
         Ok(command)

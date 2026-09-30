@@ -43,6 +43,13 @@ function Add-VerificationStep {
     })
 }
 
+if ($CardData) {
+    # Reject incomplete maps, presentation metadata and generated-data drift before
+    # the full suites. Check still builds/lists its referenced test targets.
+    Add-VerificationStep 'Card data' $windowsPowerShell @(
+        '-NoProfile', '-File', (Join-Path $PSScriptRoot 'update-card-data.ps1'), '-Mode', 'Check'
+    )
+}
 if ($Side -in @('Rust', 'Both')) {
     $rust = Join-Path $repo 'tricerules'
     Add-VerificationStep 'Rust tests' 'cargo' @('test') $rust
@@ -56,11 +63,6 @@ if ($Side -in @('Cpp', 'Both')) {
     Add-VerificationStep 'C++ tests' 'ctest' @(
         '--test-dir', 'build/windows-ninja-all', '--output-on-failure', '--no-tests=error'
     ) $repo $true
-}
-if ($CardData) {
-    Add-VerificationStep 'Card data' $windowsPowerShell @(
-        '-NoProfile', '-File', (Join-Path $PSScriptRoot 'update-card-data.ps1'), '-Mode', 'Check'
-    )
 }
 Add-VerificationStep 'Git diff check' 'git' @('diff', '--check')
 

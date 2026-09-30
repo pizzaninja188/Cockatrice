@@ -51,6 +51,32 @@ enum spelling, e.g. `"Trample"`. Recovery requires `target` and `sacrifice_sourc
 variable X, recipients, durations, layouts and compositions need dedicated scenarios. A row proves
 only its asserted surface; it never establishes complete support for another ability on the card.
 
+## Shared setup and engine-offered activations
+
+Dedicated scenarios and registry conformance share
+`tricerules-core/tests/scenario/helpers/authoring_fixture.rs`. Its `game(seed, players, card, ability)`
+seeds the reviewed target/cost resources; `ability_source` places the reviewed activation source.
+The narrow resources include Decimate's enchantment, Inventors' Fair's three artifacts,
+Trash for Treasure's graveyard artifact, Fanatic's Ferocious/Graveyard setup and Chandra's loyalty.
+Add a necessary new resource here once and exercise it in the new card's actual scenario, rather
+than building a second unrelated setup inside conformance. Uncovered zone/composition requirements
+still need an explicit fixture. Direct setup skips entry events and is not entry-semantic evidence.
+
+For positive activation scenarios, use `helpers::authoring_actions::activation(&mut engine,
+actor_id, source_object_id, ability_index)`. It consumes current engine offers for source zone,
+generation, targets and nonmana choices, then fills and checks the payment preview. It returns an
+error for an unoffered actor/ability or insufficient resources; it does not fund or advance the game.
+Its deterministic target/cost choices are for simple fixtures: assert the chosen identities and
+independent expected results, and use dedicated selection for more complex cases. Unsupported X,
+aggregate/counter costs and other unsupported choices fail closed. Keep raw command constructors
+for intentional wrong-player, invalid-target, stale-generation and unaffordable negative tests.
+
+`helpers::pass_priority_round` completes the current round using actual priority holders,
+remaining players and already recorded passes;
+`advance_to_main1_from_game_start` uses it for both opening steps. It does not answer arbitrary
+resolution/target/payment choices or silently drain a scenario. These helpers are test-only;
+production, protocol, relay and UI contracts are unchanged.
+
 ```powershell
 ./scripts/card-author.ps1 validate-batch --batch build/my-drafts/batch.json
 ./scripts/test-card-drafts.ps1 -BatchPath build/my-drafts/batch.json

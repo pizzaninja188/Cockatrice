@@ -1,6 +1,10 @@
 //! Shared helpers for scenario tests.
 #![allow(dead_code)]
 
+#[path = "helpers/authoring_actions.rs"]
+pub(crate) mod authoring_actions;
+#[path = "helpers/authoring_fixture.rs"]
+pub(crate) mod authoring_fixture;
 #[path = "helpers/authoring_rows.rs"]
 pub(crate) mod authoring_rows;
 #[path = "helpers/semantic.rs"]
@@ -790,9 +794,30 @@ pub(crate) fn exile_cast_source(object_id: u32, generation: u64) -> CastSource {
 
 pub(crate) fn advance_to_main1_from_game_start(e: &mut GameEngine) {
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Upkeep);
-    pass_both_players(e); // upkeep -> draw
-    pass_both_players(e); // draw -> main1
+    pass_priority_round(e); // upkeep -> draw
+    pass_priority_round(e); // draw -> main1
     assert_eq!(e.state.turn_step, tricerules_core::TurnStep::Main1);
+}
+
+/// Complete the current priority round, respecting already recorded passes.
+/// This settles one stack item or advances one step; it does not choose targets/payments.
+pub(crate) fn pass_priority_round(e: &mut GameEngine) {
+    answer_simultaneous_entry_order_in_engine_order(e);
+    answer_trigger_order_in_engine_order(e);
+    let count = e
+        .state
+        .players
+        .iter()
+        .filter(|p| !p.has_lost)
+        .count()
+        .checked_sub(e.state.passes_since_stack_change as usize)
+        .expect("consistent priority pass count");
+    for _ in 0..count {
+        let actor = e.state.priority_player_id();
+        e.apply_command(actor, &pass())
+            .expect("current priority holder passes");
+    }
+    answer_simultaneous_entry_order_in_engine_order(e);
 }
 
 pub(crate) fn put_creature_on_battlefield(e: &mut GameEngine, player: usize, card_id: &str) -> u32 {

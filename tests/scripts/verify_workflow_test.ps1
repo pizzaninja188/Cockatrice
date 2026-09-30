@@ -2,6 +2,25 @@ param([string] $PowerShell = (Get-Process -Id $PID).Path)
 . (Join-Path $PSScriptRoot 'workflow_test_helpers.ps1')
 $fixture = New-WorkflowFixture
 try {
+    # Invalid card evidence must stop before the full Rust suite or C++ work.
+    Set-Content -LiteralPath (Join-Path $fixture 'bad-evidence') -Value 'invalid'
+    $earlyFailure = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Both', '-CardData')
+    Assert-Workflow ($earlyFailure.ExitCode -eq 13) 'Card evidence failure code was lost.'
+    Assert-Workflow (@(Read-WorkflowTrace $fixture).Count -eq 0) 'Expensive gates ran before invalid card evidence was rejected.'
+    $earlySummary = Get-ChildItem -LiteralPath (Join-Path $fixture 'build/verification-logs') -Filter summary.json -Recurse |
+        ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json }
+    Assert-Workflow ($earlySummary.Steps[0].Label -eq 'Card data' -and $earlySummary.Steps[0].Status -eq 'Fail') 'Card gate was not first.'
+    foreach ($step in $earlySummary.Steps | Select-Object -Skip 1) {
+        Assert-Workflow ($step.Status -eq 'NotRun') 'Failed card gate did not stop verification.'
+    }
+    Remove-Item -LiteralPath (Join-Path $fixture 'bad-evidence')
+    [IO.File]::WriteAllText((Join-Path $fixture 'fingerprint'), 'drift')
+    $earlyFailure = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Rust', '-CardData')
+    Assert-Workflow ($earlyFailure.ExitCode -eq 9) 'Generated-data drift failure code was lost.'
+    $earlyTrace = @(Read-WorkflowTrace $fixture)
+    Assert-Workflow ($earlyTrace.Count -eq 1 -and $earlyTrace[0].Arguments -contains 'gen-cards' -and $earlyTrace[0].Arguments -contains '--check') 'Full suites ran before generated-data drift was rejected.'
+    Remove-WorkflowFixture $fixture
+    $fixture = New-WorkflowFixture
     $nested = Join-Path $fixture 'nested directory'
     $result = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Both', '-CardData', '-Preview') $nested
     Assert-Workflow ($result.ExitCode -eq 0) "Preview failed: $($result.Output)"
@@ -17,12 +36,12 @@ try {
     Assert-Workflow ($result.ExitCode -eq 0) "Combined verification failed: $($result.Output)"
     Assert-Workflow ($result.Output -notmatch 'fixture successful (stdout|stderr)') 'Successful command output was noisy.'
     $trace = @(Read-WorkflowTrace $fixture)
-    Assert-Workflow (($trace.Tool -join ',') -eq 'cargo,cargo,cargo,build,ctest,cargo,cargo,git') 'Wrong combined gate order.'
-    foreach ($call in $trace[0..2]) {
+    Assert-Workflow (($trace.Tool -join ',') -eq 'cargo,cargo,cargo,cargo,cargo,build,ctest,git') 'Wrong combined gate order.'
+    foreach ($call in $trace[2..4]) {
         Assert-Workflow ($call.Cwd -eq (Join-Path $fixture 'tricerules')) 'Rust command ran outside tricerules.'
     }
-    Assert-Workflow ($trace[4].RequireE2E -eq '1') 'CTest did not require E2E prerequisites.'
-    Assert-Workflow ($trace[4].Arguments -contains '--no-tests=error') 'CTest could accept an empty suite.'
+    Assert-Workflow ($trace[6].RequireE2E -eq '1') 'CTest did not require E2E prerequisites.'
+    Assert-Workflow ($trace[6].Arguments -contains '--no-tests=error') 'CTest could accept an empty suite.'
     $summaries = @(Get-ChildItem -LiteralPath (Join-Path $fixture 'build\verification-logs') -Filter summary.json -Recurse)
     Assert-Workflow ($summaries.Count -eq 1) 'Combined run did not save one summary.'
     $summary = Get-Content -LiteralPath $summaries[0].FullName -Raw | ConvertFrom-Json

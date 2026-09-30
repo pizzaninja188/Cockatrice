@@ -80,6 +80,10 @@ Rust selects full tests, all-target Clippy with warnings denied, and format chec
 the full Ninja build and CTest. `-CardData` adds the read-only card check and requires Rust or Both.
 Every selection ends with `git diff --check`. Preview prints argument arrays and working
 directories without running commands or creating artifacts.
+With `-CardData`, the complete read-only card check runs first, before the full suites.
+It rejects invalid evidence/presentation metadata and generated-data drift early; its own
+referenced-target compilation/listing still runs. All affected-side tests and lint remain
+mandatory afterward. Do not add a second routine standalone Check before this final gate.
 
 Each run retains logs and `summary.json` in a unique directory under `build/verification-logs`.
 The summary records selected gates, commands, working directories, exit codes, and log paths.

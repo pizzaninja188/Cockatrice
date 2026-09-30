@@ -1,8 +1,87 @@
 //! Deterministic choices from engine-authored offers; unsupported shapes remain explicit.
-use super::*;
+use super::{Cmd, Ev, GameEngine};
 use tricerules_cards::mana::{ManaCost, ManaSymbol};
+use tricerules_proto::ruled::v1::*;
 
-pub(super) fn targets(
+/// Build a positive fixture activation from current engine offers, including zone,
+/// generation, targets, nonmana choices and a complete payment preview. Expectations
+/// still belong in the calling test. Unsupported choices/resources return an error.
+/// Keep raw constructors for deliberately illegal/stale commands in negative tests.
+pub(crate) fn activation(
+    e: &mut GameEngine,
+    actor: i32,
+    object: u32,
+    index: u32,
+) -> Result<RuledCommand, String> {
+    let batch = e.initial_response_batch();
+    let legal = batch
+        .legal_by_player
+        .get(&actor)
+        .ok_or("unknown fixture actor")?;
+    let key = (u64::from(object) << 32) | u64::from(index);
+    let choices = legal
+        .cost_choices_by_ability
+        .get(&key)
+        .ok_or("ability not offered by generic battlefield fixture")?;
+    let costs = costs(Some(choices))?;
+    let (zone, generation, activatable) = if let Some(action) = legal
+        .zone_ability_actions
+        .iter()
+        .find(|a| a.object_id == object && a.ability_index == index)
+    {
+        let ability = action
+            .ability
+            .as_ref()
+            .ok_or("zone offer omitted ability")?;
+        (
+            action.source_zone,
+            action.zone_change_generation,
+            ability.activatable,
+        )
+    } else {
+        let source = batch
+            .events
+            .iter()
+            .find_map(|event| match &event.ev {
+                Some(Ev::ZoneView(view)) => view
+                    .per_player
+                    .iter()
+                    .find(|p| p.player_id == actor)
+                    .and_then(|p| p.battlefield_objects.iter().find(|o| o.object_id == object)),
+                _ => None,
+            })
+            .ok_or("source not offered to fixture actor")?;
+        let ability = source
+            .activated_abilities
+            .iter()
+            .find(|a| a.ability_index == index)
+            .ok_or("ability not offered by generic battlefield fixture")?;
+        (
+            AbilitySourceZone::Battlefield as i32,
+            source.zone_change_generation,
+            ability.activatable,
+        )
+    };
+    let mut command = RuledCommand {
+        cmd: Some(Cmd::ActivateAbility(ActivateAbility {
+            source_object_id: object,
+            source_zone: zone,
+            expected_zone_change_generation: generation,
+            ability_index: index,
+            targets: targets(e, actor, legal.valid_targets_by_ability.get(&key))?,
+            cost_selections: costs,
+            ..Default::default()
+        })),
+    };
+    // Preserve specific payment diagnostics for unsupported conformance fixtures.
+    pay(e, actor, &mut command)?;
+    if !activatable {
+        return Err("fixture ability is not currently activatable".into());
+    }
+    Ok(command)
+}
+
+pub(crate) fn targets(
     e: &GameEngine,
     actor: i32,
     offer: Option<&SpellTargets>,
@@ -23,7 +102,7 @@ pub(super) fn targets(
         if group.can_target_self {
             candidates.push((1, actor as u32));
         }
-        // Fixtures use ordinary two-seat games, where the other seat is the opponent.
+        // Select only other actual player IDs; fixtures may have more than two seats.
         if group.can_target_opponent {
             candidates.extend(
                 e.state
@@ -77,7 +156,7 @@ pub(super) fn targets(
     Ok(result)
 }
 
-pub(super) fn modes(
+pub(crate) fn modes(
     e: &GameEngine,
     actor: i32,
     min: u32,
@@ -104,7 +183,7 @@ pub(super) fn modes(
     Ok(result)
 }
 
-pub(super) fn costs(offer: Option<&LegalCostChoices>) -> Result<Vec<CostSelection>, String> {
+pub(crate) fn costs(offer: Option<&LegalCostChoices>) -> Result<Vec<CostSelection>, String> {
     let Some(offer) = offer else {
         return Ok(vec![]);
     };
@@ -174,7 +253,7 @@ pub(super) fn costs(offer: Option<&LegalCostChoices>) -> Result<Vec<CostSelectio
     Ok(result)
 }
 
-pub(super) fn pay(e: &GameEngine, actor: i32, command: &mut RuledCommand) -> Result<(), String> {
+pub(crate) fn pay(e: &GameEngine, actor: i32, command: &mut RuledCommand) -> Result<(), String> {
     fn query(command: &RuledCommand) -> PreviewPayment {
         let mut q = PreviewPayment {
             transaction_id: 1,
