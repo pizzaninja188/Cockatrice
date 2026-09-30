@@ -236,6 +236,39 @@ impl CharacteristicsEvaluator<'_> {
         context: ConditionContext<'_>,
     ) -> Option<i64> {
         match expression {
+            CountExpression::CardsInHand {
+                players: ConditionPlayerSet::Relative(RelativePlayerSet::Controller),
+            } => {
+                // CR 109.5: "you" means the current controller on the battlefield/stack,
+                // and the owner in a zone where the card has no controller. Stack objects
+                // retain their owner as base_controller, so read the actual spell controller.
+                let object = self.state.objects.get(&context.source_object_id)?;
+                let player = match object.zone {
+                    Zone::Battlefield => context.controller,
+                    Zone::Stack => self
+                        .state
+                        .stack
+                        .iter()
+                        .find(|item| item.id == object.id)
+                        .map(|item| item.controller)
+                        .or_else(|| {
+                            self.state
+                                .pending_spell_cast
+                                .as_ref()
+                                .filter(|pending| pending.reserved_object_id == object.id)
+                                .map(|pending| pending.caster)
+                        })
+                        .unwrap_or(context.controller),
+                    _ => object.owner,
+                };
+                self.state
+                    .players
+                    .iter()
+                    .find(|candidate| candidate.id == player && !candidate.has_lost)
+                    .map(|candidate| {
+                        i64::from(super::history::clamp_public_count(candidate.hand.len()))
+                    })
+            }
             CountExpression::BattlefieldPermanents { .. }
             | CountExpression::BattlefieldCreatures { .. }
             | CountExpression::BattlefieldMaximum { .. } => {
@@ -1559,9 +1592,11 @@ impl CharacteristicsEvaluator<'_> {
         let abilities_removed = effects
             .iter()
             .any(|effect| matches!(effect.kind, ContinuousEffectKind::Layer6RemoveAllAbilities));
-        // CR 613.4b: apply setters in timestamp order; the last one wins.
-        let mut power = result.power.map(i64::from);
-        let mut toughness = result.toughness.map(i64::from);
+        // CR 208.5: a creature with an undefined power or toughness uses zero.
+        // This also supplies the base values when layer 6 removes a */* CDA.
+        let creature_default = result.is_creature().then_some(0);
+        let mut power = result.power.or(creature_default).map(i64::from);
+        let mut toughness = result.toughness.or(creature_default).map(i64::from);
         if !object.face_down && !abilities_removed {
             if let Some(face) = effective_face_from(self.state, self.registry, oid) {
                 for ability in &face.characteristic_defining_abilities {

@@ -215,6 +215,20 @@ fn an_entry_copy_rechecks_the_copied_watery_grave_ability() {
         timestamp: engine.state.command_index,
     });
 
+    // A creature-animation fixture needs defined toughness to survive CR 208.5/704.5f.
+    engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(watery_grave),
+        kind: ContinuousEffectKind::Layer7bSetPt {
+            power: 2,
+            toughness: 2,
+        },
+        condition: None,
+        duration: EffectDuration::Indefinite,
+        timestamp: engine.state.command_index,
+    });
+
     give_mana(
         &mut engine,
         0,

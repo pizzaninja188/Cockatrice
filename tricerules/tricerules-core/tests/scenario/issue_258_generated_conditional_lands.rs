@@ -187,6 +187,19 @@ fn a_copy_of_a_generated_fast_land_rechecks_its_intrinsic_entry_condition() {
         timestamp: engine.state.command_index,
     });
 
+    // Keep the animated copy source alive; adding Creature alone makes it 0/0.
+    engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(source),
+        kind: ContinuousEffectKind::Layer7bSetPt {
+            power: 2,
+            toughness: 2,
+        },
+        condition: None,
+        duration: EffectDuration::Indefinite,
+        timestamp: engine.state.command_index,
+    });
     grant_pool(&mut engine, 0);
     relocate_to_hand(&mut engine, 0, "clone");
     let clone_index = hand_index_for_card(&engine, 0, "clone");

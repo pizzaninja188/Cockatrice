@@ -1,0 +1,29 @@
+{
+  "format_version": 1,
+  "oracle_id": "2876e74f-a242-4995-9702-0b737a1ab67a",
+  "spans": [
+    {"face_id": "psychosis_crawler", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/characteristic_defining_abilities/0"]},
+    {"face_id": "psychosis_crawler", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/triggered_abilities/0"]}
+  ],
+  "primitive_references": [
+    {"symbol": "CharacteristicDefiningAbility::CountScaledPowerToughness", "typed_path": "/faces/0/characteristic_defining_abilities/0/definition"},
+    {"symbol": "CountExpression::CardsInHand", "typed_path": "/faces/0/characteristic_defining_abilities/0/definition/CountScaledPowerToughness/count/CardsInHand"},
+    {"symbol": "TriggerCondition::WheneverPlayerDrawsCard", "typed_path": "/faces/0/triggered_abilities/0/trigger"},
+    {"symbol": "SpellEffectKind::LoseLife", "typed_path": "/faces/0/triggered_abilities/0/effect/0"}
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "scenario deck_coverage_psychosis_crawler::crawler_reserved_cast_cda_uses_the_pending_caster_before_stack_publication", "covers": "Actual BeginSpellCast reserves Crawler on stack before publication; its live CDA uses the pending caster's unequal hand size rather than the physical owner."},
+    {"test": "scenario deck_coverage_psychosis_crawler::crawler_projects_live_size_and_rejects_an_unoffered_activation_without_mutation", "covers": "Existing battlefield projection publishes authoritative live 3/3 without an activated ability; an invented activation is rejected without state mutation."},
+    {"test": "scenario deck_coverage_psychosis_crawler::crawler_cda_is_live_outside_battlefield_and_uses_current_controller_on_battlefield", "covers": "The live all-zone CDA counts the owner outside battlefield, itself in hand, and current battlefield controller; layer 7b setter and layer 7c modifier/counter apply after the CDA."},
+    {"test": "scenario deck_coverage_psychosis_crawler::crawler_cast_counts_the_smaller_hand_and_copy_cda_is_not_a_frozen_size", "covers": "Actual cast counts the reduced hand on stack/entry; an actual token copy retains the CDA and uses its own controller rather than freezing source size; face-down values and ability removal suppress the CDA."},
+    {"test": "scenario deck_coverage_psychosis_crawler::crawler_stack_cda_uses_the_spell_controller_instead_of_the_card_owner", "covers": "A spell controlled by another player uses that player's unequal hand size, independently of physical owner/base controller."},
+    {"test": "scenario deck_coverage_psychosis_crawler::crawler_draws_create_separate_life_loss_triggers_and_opponents_draws_do_not", "covers": "Two successful draws create two distinct triggers; controller life is unchanged, opponent loses two life; opponent draw does not trigger."},
+    {"test": "scenario deck_coverage_psychosis_crawler::crawler_dies_with_no_cards_at_the_next_state_based_action_check", "covers": "A zero-hand unmodified Crawler is 0/0 and moves to its owner's graveyard at the next SBA check."},
+    {"test": "scenario deck_coverage_psychosis_crawler::casting_the_last_hand_card_kills_crawler_before_the_later_draw_spell_resolves", "covers": "Casting the last draw spell causes Crawler to die before resolution; those later successful draws do not create triggers from the absent source."},
+    {"test": "scenario deck_coverage_psychosis_crawler::crawler_survives_a_resolving_discard_then_draw_with_a_temporarily_empty_hand", "covers": "No SBA interrupts Tolarian Winds during the temporary empty hand; Crawler survives the completed discard/draw and generates one trigger per drawn card."},
+    {"test": "scenario deck_coverage_psychosis_crawler::failed_draw_creates_no_crawler_life_loss_trigger", "covers": "Empty-library attempts produce no draw event or Crawler trigger."},
+    {"test": "scenario deck_coverage_psychosis_crawler::captured_crawler_triggers_keep_their_controller_after_source_departure_in_multiplayer", "covers": "Captured triggers retain their controller after source departure/new generation; all three opponents each lose two life, and the controller is unchanged."}
+  ],
+  "complete_definition_review_confirmed": true
+}

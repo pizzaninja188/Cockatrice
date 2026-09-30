@@ -8,6 +8,9 @@
 #[path = "scenario/authoring_actions.rs"]
 mod authoring_actions;
 
+#[path = "scenario/deck_coverage_psychosis_crawler.rs"]
+mod deck_coverage_psychosis_crawler;
+
 #[path = "scenario/deck_coverage_fanatic_of_rhonas.rs"]
 mod deck_coverage_fanatic_of_rhonas;
 

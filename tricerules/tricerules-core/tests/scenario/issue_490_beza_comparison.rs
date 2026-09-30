@@ -145,7 +145,7 @@ fn issue_490_beza_comparisons_use_resolution_time_values() {
 }
 
 fn animate_all_artifacts_as_creatures(engine: &mut GameEngine) {
-    engine.state.continuous_effects.push(ContinuousEffect {
+    let animation = ContinuousEffect {
         trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::PermanentsMatching {
@@ -164,6 +164,15 @@ fn animate_all_artifacts_as_creatures(engine: &mut GameEngine) {
         condition: None,
         duration: EffectDuration::Indefinite,
         timestamp: engine.state.command_index,
+    };
+    engine.state.continuous_effects.push(animation.clone());
+    // The Treasure must survive the post-resolution SBA as a defined 2/2.
+    engine.state.continuous_effects.push(ContinuousEffect {
+        kind: ContinuousEffectKind::Layer7bSetPt {
+            power: 2,
+            toughness: 2,
+        },
+        ..animation
     });
 }
 

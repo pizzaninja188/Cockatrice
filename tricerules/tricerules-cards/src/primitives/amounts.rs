@@ -128,20 +128,24 @@ impl CountExpression {
         if self.is_static_scaling_safe() {
             Ok(())
         } else {
-            Err("static P/T scaling requires a public pre-layer-7 count of battlefield permanents/creatures or graveyard cards; other quantities require CR 613.8 dependency ordering".into())
+            Err("static P/T scaling requires a public pre-layer-7 count of battlefield permanents/creatures, graveyard cards, or the source controller's hand; other quantities require CR 613.8 dependency ordering".into())
         }
     }
 
     /// Whether a static P/T modifier can evaluate this count while computing characteristics.
     /// Battlefield counts read pre-layer-7 derived characteristics; graveyard counts read printed
-    /// public card data (CR 404.2, 613.8). Event, result, and source-relative quantities are
-    /// excluded because they are undefined outside a resolving event or need layer-7 ordering.
+    /// public card data (CR 404.2, 613.8); a hand count reads only its public size. Event, result,
+    /// and source-relative quantities are excluded because they are undefined outside a
+    /// resolving event or need layer-7 ordering.
     fn is_static_scaling_safe(&self) -> bool {
         match self {
             Self::BattlefieldPermanents { .. } => true,
             // A keyword-dependent creature scope would need CR 613 dependency ordering in layer 6.
             Self::BattlefieldCreatures { filter } => filter.required_keywords.is_empty(),
             Self::GraveyardCards { .. } | Self::GraveyardCardsNamed { .. } => true,
+            Self::CardsInHand {
+                players: ConditionPlayerSet::Relative(RelativePlayerSet::Controller),
+            } => true,
             Self::Affine { terms, .. } => terms
                 .iter()
                 .all(|term| term.quantity.is_static_scaling_safe()),
@@ -702,6 +706,26 @@ pub enum LifeAmount {
 #[cfg(test)]
 mod hand_size_count_tests {
     use super::*;
+
+    #[test]
+    fn static_hand_size_count_accepts_only_the_source_controller() {
+        assert!(CountExpression::CardsInHand {
+            players: ConditionPlayerSet::Relative(RelativePlayerSet::Controller),
+        }
+        .validate_static_count()
+        .is_ok());
+        for players in [
+            ConditionPlayerSet::AffectedPlayer,
+            ConditionPlayerSet::ChosenTarget {
+                group_index: 0,
+                target_index: 0,
+            },
+        ] {
+            assert!(CountExpression::CardsInHand { players }
+                .validate_static_count()
+                .is_err());
+        }
+    }
 
     #[test]
     fn cards_in_hand_count_requires_a_single_player_selector() {

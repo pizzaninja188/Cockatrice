@@ -1,0 +1,23 @@
+// Exact Oracle and WotC ruling verified 2026-09-30; CR 604.3, 613.4a, 121.2.
+(
+  id: "psychosis_crawler",
+  name: "Psychosis Crawler",
+  face_id: "psychosis_crawler",
+  mana_cost: "{5}",
+  types: ["Artifact", "Creature", "Phyrexian", "Horror"],
+  characteristic_defining_abilities: [(
+    ability_id: "characteristic_01",
+    presentation: OracleLines([1]),
+    definition: CountScaledPowerToughness(
+      count: CardsInHand(players: Relative(Controller)),
+      power_per_match: 1,
+      toughness_per_match: 1,
+    ),
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPlayerDrawsCard(drawer: Controller),
+    effect: [LoseLife(amount: Fixed(1), who: EachOpponent)],
+  )],
+)
