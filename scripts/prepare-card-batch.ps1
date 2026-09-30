@@ -15,6 +15,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'focused-test-plan.ps1')
 $logs = Join-Path $repo ('build/verification-logs/prepare-card-batch-' + [guid]::NewGuid())
 $savedJobs = $env:CARGO_BUILD_JOBS
 $savedThreads = $env:RUST_TEST_THREADS
@@ -32,22 +33,7 @@ try {
     )
     if ($FocusedTests) {
         if (-not [IO.Path]::IsPathRooted($FocusedTests)) { $FocusedTests = Join-Path $repo $FocusedTests }
-        $parsedTests = Get-Content -LiteralPath $FocusedTests -Raw | ConvertFrom-Json
-        $tests = @($parsedTests)
-        if ($tests.Count -eq 0) { throw 'FocusedTests must contain at least one exact test.' }
-        foreach ($test in $tests) {
-            foreach ($field in @('package', 'target', 'test')) {
-                if ([string]$test.$field -cnotmatch '^[A-Za-z0-9_-]+(?:::[A-Za-z0-9_]+)*$') { throw "Invalid focused test $field" }
-            }
-            if (@($test.PSObject.Properties.Name | Where-Object { $_ -notin @('package','target','test','features') }).Count) { throw 'Unknown focused test field.' }
-            $testArgs = @('test', '--quiet', '-p', [string]$test.package, '--test', [string]$test.target)
-            if ($test.features) {
-                if ([string]$test.features -cnotmatch '^[A-Za-z0-9_/-]+(?:,[A-Za-z0-9_/-]+)*$') { throw 'Invalid focused test features.' }
-                $testArgs += @('--features', [string]$test.features)
-            }
-            $testArgs += @([string]$test.test, '--', '--exact')
-            $checks += @{ Label = "Actual card: $($test.test)"; Args = $testArgs; Exact = $true }
-        }
+        $checks += @(Get-FocusedTestChecks -Manifest $FocusedTests)
     }
     $checks += @{ Label = 'Authoring lint'; Args = @('clippy', '--quiet', '-p', 'tricerules-cards', '-p',
         'tricerules-core', '--all-targets', '--features', 'tricerules-cards/authoring', '--', '-D', 'warnings'); Exact = $false }
@@ -59,9 +45,7 @@ try {
         if ($result.ShowLog) { Get-Content -LiteralPath $result.LogPath | Out-Host }
         if ($result.ExitCode -ne 0) { exit $result.ExitCode }
         # An exact filter that silently matches nothing must not authorize refresh.
-        if ($check.Exact -and -not (Select-String -LiteralPath $result.LogPath -Pattern 'test result: ok\. 1 passed; 0 failed; 0 ignored;')) {
-            throw "Expected one executed, non-ignored test for $($check.Label); see $($result.LogPath)"
-        }
+        if ($check.Exact) { Assert-ExactTestResult -Label $check.Label -LogPath $result.LogPath }
     }
     # Full evidence structure and executable references, without claiming semantic approval.
     $evidenceArgs = @('-NoProfile', '-File', (Join-Path $repo 'scripts/check-card-evidence.ps1'), '-Preparation')

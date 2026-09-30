@@ -76,6 +76,11 @@ read-only, or resolve the blocker. The final gate always checks the complete cor
 
 ## More reusable, independently expected rows
 
+For engine capability preparation, use `scripts/prepare-engine-batch.ps1` as described in
+[the verification guide](../../../docs/AGENT-VERIFICATION.md#engine-capability-preparation).
+It shares exact-test selection with card preparation, accepts `target: "lib"` for library tests,
+retains failure logs, and optionally freezes explicit paths plus evidence without granting approval.
+
 The shared schema is `src/authoring_schema.rs`. The calibration matrix is
 `../tricerules-core/tests/scenario/authoring_extended_rows.json` (relative to this package).
 Rows name real cards and expectations supplied by the author, never inferred from RON effects.

@@ -6,7 +6,7 @@ Use the host's permitted delegation mechanism and the campaign's configured mode
 
 ## Scope supplied by the root
 
-- Review type: initial review or material delta review.
+- Review type: capability design, frozen implementation, or material delta review.
 - Repository, branch, base SHA and current HEAD.
 - Existing issue(s), if any, or the task's routine batch preflight; exact Oracle identities,
   changed paths, frozen patch path and SHA-256. A routine batch does not need an issue.
@@ -18,6 +18,16 @@ Use the host's permitted delegation mechanism and the campaign's configured mode
 - For a delta: prior reviewed patch/hash, prior verdict, exact changed paths/hunks, findings
   addressed, and which evidence remains valid or requires the root to rerun it. Preserve both
   patch versions; do not overwrite the prior artifact and ask the reviewer to reconstruct it.
+
+## Capability design review
+
+For substantial engine work, review the bounded contract before implementation: exact sources,
+existing APIs/analogue, named complete-card unlocks, proposed producer/consumer changes,
+choice/resume and identity behavior, relevant interaction risks and independent regression
+expectations. Link evidence already present; do not require another dossier or broad audit.
+Return concrete design defects, missing semantic decisions and distinguishing tests. Production
+code, green logs and final gates are not expected yet and are not blocking design evidence gaps.
+This verdict does not approve the future code or replace frozen implementation review.
 
 ## Instructions to the reviewer
 

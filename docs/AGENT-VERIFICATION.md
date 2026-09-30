@@ -120,7 +120,38 @@ requires independent review confirmation. Freeze a compatible ready batch after 
 review it together; run one final affected-side gate on the stable combined batch. Additions to an
 already verified batch invalidate its evidence, so deliver it before starting the next increment.
 
+## Engine-capability preparation
+
+After intended red/green and relevant stabilization, supply exact selected regressions:
+
+```powershell
+./scripts/prepare-engine-batch.ps1 -FocusedTests build/capability/focused.json `
+  -OutDirectory build/capability/prepared `
+  -Path @('tricerules/tricerules-core/src/engine/replacement.rs',
+          'tricerules/tricerules-core/tests/scenario/entry_copy_auras.rs') `
+  -Evidence @('build/capability/contract.md', 'build/capability/red.log')
+```
+
+The JSON array uses `{package,target,test,features?}`; `target: "lib"` selects library tests,
+otherwise it names an integration target. Empty, duplicate, unknown-field and zero-execution
+selections fail closed. Preparation runs formatting, each exact non-ignored regression, and
+all-target lint for selected packages with default and specified feature configurations.
+It honors ambient workers unless explicitly overridden. No card metadata is refreshed.
+
+The new output directory retains logs, exit codes and command timestamps in `summary.json`.
+With explicit `-Path`, its `review/` subdirectory contains the existing workbench's frozen patch,
+source copies, supplied evidence, test plan and preparation logs. Run workbench `check` to verify
+freshness before review. Without `-Path`, it only checks and retains evidence. Both modes leave
+semantic approval false and the final gate pending. This is not red evidence, design review,
+package stabilization, semantic approval or final affected-side verification. After independent
+frozen-patch review, run the normal full gate on unchanged content. Reuse passing preparation
+instead of executing it again solely to assemble another review packet.
+
+## Worker example
+
 For a four-worker cap on all commands in the current PowerShell session, including final gates:
+
+Campaign overrides, including ambient/default workers, take precedence over this example.
 
 ```powershell
 $env:CARGO_BUILD_JOBS = '4'
