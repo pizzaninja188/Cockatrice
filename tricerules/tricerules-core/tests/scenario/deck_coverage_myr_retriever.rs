@@ -95,3 +95,40 @@ fn myr_retriever_targets_another_artifact_that_dies_at_the_same_time() {
         Zone::Graveyard
     );
 }
+
+#[test]
+fn myr_retriever_uses_its_controller_at_death_and_not_its_owner_for_graveyard_targets() {
+    let mut engine = engine(2026093008);
+    let retriever = inject_creature_under_foreign_control(&mut engine, 0, 1, MYR_RETRIEVER);
+    let owners_artifact = inject_graveyard_card(&mut engine, 0, "chromatic_star");
+    let controllers_artifact = inject_graveyard_card(&mut engine, 1, "mind_stone");
+    cast_wrath_of_god(&mut engine);
+    assert_eq!(engine.state.objects[&retriever].zone, Zone::Graveyard);
+    assert!(engine.state.players[0].graveyard.contains(&retriever));
+    assert!(!engine.state.players[1].graveyard.contains(&retriever));
+    assert_eq!(engine.state.pending_triggers.len(), 1);
+    let legal = engine.initial_response_batch();
+    let ability_key = u64::from(retriever) << 32;
+    let candidates = &legal.legal_by_player[&1].valid_targets_by_ability[&ability_key].groups[0]
+        .valid_graveyard_ids;
+    assert!(candidates.contains(&controllers_artifact));
+    assert!(!candidates.contains(&owners_artifact));
+    assert!(!candidates.contains(&retriever));
+    let pending = format!("{:?}", engine.state.pending_triggers);
+    engine
+        .apply_command(0, &choose_graveyard_target(controllers_artifact))
+        .expect_err("only the event-time controller chooses");
+    assert_eq!(format!("{:?}", engine.state.pending_triggers), pending);
+    engine
+        .apply_command(1, &choose_graveyard_target(owners_artifact))
+        .expect_err("source owner's graveyard is not your graveyard");
+    assert_eq!(format!("{:?}", engine.state.pending_triggers), pending);
+    engine
+        .apply_command(1, &choose_graveyard_target(controllers_artifact))
+        .unwrap();
+    assert_eq!(engine.state.stack.last().unwrap().controller, 1);
+    resolve_entire_stack_two_player(&mut engine);
+    assert!(engine.state.players[1].hand.contains(&controllers_artifact));
+    assert!(!engine.state.players[0].hand.contains(&controllers_artifact));
+    assert_eq!(engine.state.objects[&owners_artifact].zone, Zone::Graveyard);
+}

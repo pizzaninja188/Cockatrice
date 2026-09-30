@@ -6,13 +6,17 @@
       "face_id": "buried_ruin",
       "start_line": 1,
       "end_line": 1,
-      "typed_paths": ["/faces/0/activated_abilities/0"]
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
     },
     {
       "face_id": "buried_ruin",
       "start_line": 2,
       "end_line": 2,
-      "typed_paths": ["/faces/0/activated_abilities/1"]
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
     }
   ],
   "primitive_references": [
@@ -66,6 +70,10 @@
     {
       "test": "deck_coverage_buried_ruin::buried_ruin_registers_colorless_mana_and_targeted_artifact_recovery",
       "covers": "exact land identity, printed mana cost and type, both battlefield activations, ordered costs, artifact-only controller graveyard filter, hand destination, and mandatory single-target presentation"
+    },
+    {
+      "test": "scenario deck_coverage_buried_ruin::buried_ruin_uses_its_ability_controllers_graveyard_and_returns_the_source_to_its_owner",
+      "covers": "foreign-owned source uses activating controller graveyard, rejects owner graveyard without costs, pays2/sacrifices source to owner, then returns exact artifact to ability controller"
     }
   ],
   "complete_definition_review_confirmed": true

@@ -92,3 +92,46 @@ fn buried_ruin_taps_for_colorless_and_recovers_an_artifact_after_sacrificing() {
         Zone::Graveyard
     );
 }
+
+#[test]
+fn buried_ruin_uses_its_ability_controllers_graveyard_and_returns_the_source_to_its_owner() {
+    let mut engine = engine(2026093007);
+    let ruin = inject_permanent_on_battlefield(&mut engine, 0, BURIED_RUIN);
+    engine.state.players[0].battlefield.retain(|id| *id != ruin);
+    engine.state.players[1].battlefield.push(ruin);
+    let object = engine.state.objects.get_mut(&ruin).unwrap();
+    object.controller = 1;
+    object.base_controller = 1;
+    assert_eq!(object.owner, 0);
+    let owners_artifact = inject_graveyard_card(&mut engine, 0, "chromatic_star");
+    let controllers_artifact = inject_graveyard_card(&mut engine, 1, "mind_stone");
+    give_mana(
+        &mut engine,
+        1,
+        ManaGift {
+            c: 2,
+            ..Default::default()
+        },
+    );
+    engine.state.priority_idx = 1;
+    let invalid = activate_ability_for(&engine, ruin, 1, graveyard_target(owners_artifact));
+    let command_index = engine.state.command_index;
+    engine
+        .apply_command(1, &invalid)
+        .expect_err("source owner is not the ability controller");
+    assert_eq!(engine.state.command_index, command_index);
+    assert_eq!(engine.state.players[1].mana_pool.colorless, 2);
+    assert!(!engine.state.objects[&ruin].tapped);
+    assert_eq!(engine.state.objects[&ruin].zone, Zone::Battlefield);
+    let activation = activate_ability_for(&engine, ruin, 1, graveyard_target(controllers_artifact));
+    engine.apply_command(1, &activation).unwrap();
+    assert_eq!(engine.state.players[1].mana_pool.colorless, 0);
+    assert_eq!(engine.state.objects[&ruin].zone, Zone::Graveyard);
+    assert!(engine.state.players[0].graveyard.contains(&ruin));
+    assert!(!engine.state.players[1].graveyard.contains(&ruin));
+    assert_eq!(engine.state.stack[0].controller, 1);
+    resolve_entire_stack_two_player(&mut engine);
+    assert!(engine.state.players[1].hand.contains(&controllers_artifact));
+    assert!(!engine.state.players[0].hand.contains(&controllers_artifact));
+    assert_eq!(engine.state.objects[&owners_artifact].zone, Zone::Graveyard);
+}
