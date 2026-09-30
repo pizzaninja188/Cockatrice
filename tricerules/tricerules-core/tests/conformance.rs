@@ -304,6 +304,9 @@ fn fixture(case: &Case) -> GameEngine {
     if case.card == "trash_for_treasure" {
         cards.push("mind_stone");
     }
+    if case.card == "fanatic_of_rhonas" && case.ability == Some(1) {
+        cards.push("air_elemental");
+    }
     let deck = helpers::deck_with("forest", &cards);
     let mut e = GameEngine::new(SEED, &[0, 1], 20, Some(vec![deck.clone(), deck]), true).unwrap();
     helpers::advance_to_main1_from_game_start(&mut e);
@@ -332,6 +335,10 @@ fn fixture(case: &Case) -> GameEngine {
             e.state.objects.get_mut(&dead).unwrap().zone = tricerules_core::Zone::Graveyard;
         }
         helpers::grant_pool(&mut e, player);
+    }
+    if case.card == "fanatic_of_rhonas" && case.ability == Some(1) {
+        // Ferocious needs a controlled creature with current power at least four.
+        helpers::relocate_to_battlefield(&mut e, 0, "air_elemental", false);
     }
     if let Some(card) = stack_fixture {
         helpers::relocate_to_hand(&mut e, 0, card);
@@ -376,7 +383,15 @@ fn evaluate(case: &Case) -> Result<Outcome, String> {
             if !def.face(case.face).unwrap().is_permanent() {
                 return Err("nonbattlefield activated ability needs a zone fixture".into());
             }
-            let oid = helpers::relocate_to_battlefield(&mut e, 0, &case.card, false);
+            let eternalize = case.card == "fanatic_of_rhonas" && index == 2;
+            let oid = if eternalize {
+                let oid = helpers::take_oid_from_library_or_hand(&mut e, 0, &case.card);
+                e.state.players[0].graveyard.push(oid);
+                e.state.objects.get_mut(&oid).unwrap().zone = tricerules_core::Zone::Graveyard;
+                oid
+            } else {
+                helpers::relocate_to_battlefield(&mut e, 0, &case.card, false)
+            };
             e.state.objects.get_mut(&oid).unwrap().face_up_index = case.face;
             if case.card == "chandra,_novice_pyromancer" {
                 // Relocation skips entry; seed the actual printed starting loyalty.
@@ -389,16 +404,40 @@ fn evaluate(case: &Case) -> Result<Outcome, String> {
             let batch = e.initial_response_batch();
             let legal = &batch.legal_by_player[&actor];
             let key = (u64::from(oid) << 32) | index as u64;
-            let costs = legal
-                .cost_choices_by_ability
-                .get(&key)
-                .ok_or("ability not offered by generic battlefield fixture")?;
+            let (source_zone, generation, costs) = if eternalize {
+                let action = legal
+                    .zone_ability_actions
+                    .iter()
+                    .find(|action| {
+                        action.object_id == oid
+                            && action.ability_index == index as u32
+                            && action.source_zone() == AbilitySourceZone::Graveyard
+                            && action
+                                .ability
+                                .as_ref()
+                                .is_some_and(|ability| ability.activatable)
+                    })
+                    .ok_or("Eternalize not offered by graveyard fixture")?;
+                (action.source_zone, action.zone_change_generation, vec![])
+            } else {
+                let costs = legal
+                    .cost_choices_by_ability
+                    .get(&key)
+                    .ok_or("ability not offered by generic battlefield fixture")?;
+                (
+                    AbilitySourceZone::Battlefield as i32,
+                    0,
+                    offers::costs(Some(costs))?,
+                )
+            };
             RuledCommand {
                 cmd: Some(Cmd::ActivateAbility(ActivateAbility {
                     source_object_id: oid,
+                    source_zone,
+                    expected_zone_change_generation: generation,
                     ability_index: index as u32,
                     targets: offers::targets(&e, actor, legal.valid_targets_by_ability.get(&key))?,
-                    cost_selections: offers::costs(Some(costs))?,
+                    cost_selections: costs,
                     ..Default::default()
                 })),
             }
@@ -742,6 +781,9 @@ fn fresh_fixtures_cover_each_land_ability_and_nonfront_face() {
         ("chandra,_novice_pyromancer", 0, Some(0)),
         ("chandra,_novice_pyromancer", 0, Some(1)),
         ("chandra,_novice_pyromancer", 0, Some(2)),
+        ("fanatic_of_rhonas", 0, Some(0)),
+        ("fanatic_of_rhonas", 0, Some(1)),
+        ("fanatic_of_rhonas", 0, Some(2)),
     ] {
         let case = Case {
             card: card.into(),

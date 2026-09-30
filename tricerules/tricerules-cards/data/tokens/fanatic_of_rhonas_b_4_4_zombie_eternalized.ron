@@ -1,0 +1,37 @@
+// CR 702.129a and the exact Fanatic rulings: all three printed abilities remain copiable.
+(
+  id: "fanatic_of_rhonas_b_4_4_zombie_eternalized",
+  name: "Fanatic of Rhonas",
+  face_id: "fanatic_of_rhonas_b_4_4_zombie_eternalized",
+  types: ["Creature", "Snake", "Druid", "Zombie"],
+  colors: [Black],
+  power: 4,
+  toughness: 4,
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: Fallback,
+      costs: [Tap],
+      effect: [ProduceMana(options: [(g: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: Fallback,
+      costs: [Tap],
+      conditions: [BattlefieldAggregate(
+        filter: (controllers: Controller, card_type: Some(Creature)),
+        aggregate: MaximumPower,
+        min: Some(4),
+      )],
+      effect: [ProduceMana(options: [(g: 4)])],
+    ),
+    (
+      ability_id: "activated_03",
+      presentation: Fallback,
+      source_zone: Graveyard,
+      costs: [Mana("{2}{G}{G}"), ExileSelf],
+      effect: [CreateTokens(token: "fanatic_of_rhonas_b_4_4_zombie_eternalized", count: 1)],
+      timing: SorcerySpeed,
+    ),
+  ],
+)

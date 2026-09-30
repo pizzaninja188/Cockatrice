@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "7973820b-fdaf-46ec-9e3e-d4c0e77b5067",
+  "complete_definition_review_confirmed": true,
+  "tokens": [
+    "fanatic_of_rhonas_b_4_4_zombie_eternalized"
+  ],
+  "spans": [
+    {
+      "face_id": "fanatic_of_rhonas",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "fanatic_of_rhonas",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    },
+    {
+      "face_id": "fanatic_of_rhonas",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2"
+      ]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_fanatic_of_rhonas::exact_source_and_token_preserve_all_three_copiable_abilities",
+      "covers": "Exact source identity, cost, type, power/toughness; modified-copy token keeps all three abilities, black color and no mana cost"
+    },
+    {
+      "test": "scenario deck_coverage_fanatic_of_rhonas::both_mana_abilities_respect_summoning_sickness_and_tap_costs",
+      "covers": "Both tap abilities reject summoning sickness and tapped source; actual next turn makes them usable; stackless exact green amounts"
+    },
+    {
+      "test": "scenario deck_coverage_fanatic_of_rhonas::ferocious_requires_current_derived_power_of_a_controlled_creature",
+      "covers": "Opponent power four excluded; controlled power three rejects; counter-derived power four qualifies; current loss of threshold rejects"
+    },
+    {
+      "test": "scenario deck_coverage_fanatic_of_rhonas::eternalize_exiles_immediately_and_creates_exact_printed_value_token_on_resolution",
+      "covers": "Actual death grants own-main priority; exile and payment immediate, creation delayed; old counters/pump/tap ignored; exact token values and self-qualifying mana after sickness expires"
+    },
+    {
+      "test": "scenario deck_coverage_fanatic_of_rhonas::eternalize_rejects_wrong_actor_stale_generation_and_insufficient_colored_payment",
+      "covers": "Explicit graveyard command: wrong actor, stale object generation, insufficient or missing-green payment reject without mutation; exact payment succeeds; exiled source cannot activate again"
+    },
+    {
+      "test": "scenario deck_coverage_fanatic_of_rhonas::eternalize_requires_own_main_priority_and_empty_stack",
+      "covers": "Explicit graveyard activation rejects occupied stack, combat and opponent turn"
+    },
+    {
+      "test": "scenario deck_coverage_fanatic_of_rhonas::clone_copies_all_eternalized_values_and_abilities_but_remains_a_physical_card",
+      "covers": "Actual Clone entry choice copies name, black 4/4 Zombie Snake Druid, zero mana value and all three abilities; Clone remains physical non-token"
+    }
+  ]
+}
