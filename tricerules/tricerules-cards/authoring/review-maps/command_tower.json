@@ -1,0 +1,29 @@
+{
+  "format_version": 1,
+  "oracle_id": "0895c9b7-ae7d-4bb3-af17-3b75deb50a25",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "command_tower",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "deck_coverage_commander_mana::arcane_signet_and_command_tower_use_only_the_commanders_declared_identity",
+      "covers": "exact typed definition and dynamic commander-identity mana primitive"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::same_player_two_commander_declaration_unions_color_identity_for_mana_choices",
+      "covers": "declared two-card identity union publishes all combined colors and each source taps to add red immediately without a stack item"
+    },
+    {
+      "test": "scenario deck_coverage_commander_mana::empty_commander_identity_keeps_signet_and_tower_legal_without_adding_mana",
+      "covers": "empty or colorless declared identity allows tapping each source without producing mana"
+    }
+  ]
+}

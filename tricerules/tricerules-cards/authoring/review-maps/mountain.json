@@ -1,0 +1,25 @@
+{
+  "format_version": 1,
+  "oracle_id": "a3fb7228-e76b-4e96-a40e-20b5fed75685",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "mountain",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario mana::mana_ability_taps_land_and_fills_pool",
+      "covers": "played Mountain taps, produces exactly red mana immediately and retains priority"
+    },
+    {
+      "test": "scenario mana::cannot_activate_mana_ability_when_already_tapped",
+      "covers": "already tapped Mountain cannot activate again"
+    }
+  ]
+}

@@ -105,6 +105,7 @@ fn same_player_two_commander_declaration_unions_color_identity_for_mana_choices(
         ]
     );
     let signet = inject_permanent_on_battlefield(&mut engine, 0, "arcane_signet");
+    let tower = inject_permanent_on_battlefield(&mut engine, 0, "command_tower");
     let batch = engine.initial_response_batch();
     let zone_view = batch
         .events
@@ -125,6 +126,21 @@ fn same_player_two_commander_declaration_unions_color_identity_for_mana_choices(
     assert_eq!(signet_info.mana_produced, "W/U/B/R/G");
     activate_for_mana(&mut engine, signet, 3);
     assert_eq!(engine.state.players[0].mana_pool.red, 1);
+    let tower_info = zone_view.per_player[0]
+        .battlefield_objects
+        .iter()
+        .find(|object| object.object_id == tower)
+        .unwrap()
+        .activated_abilities
+        .first()
+        .unwrap();
+    assert_eq!(tower_info.mana_produced, "W/U/B/R/G");
+    activate_for_mana(&mut engine, tower, 3);
+    assert!(engine.state.objects[&signet].tapped);
+    assert!(engine.state.objects[&tower].tapped);
+    assert_eq!(engine.state.players[0].mana_pool.red, 2);
+    assert_eq!(engine.state.players[0].mana_pool.blue, 0);
+    assert!(engine.state.stack.is_empty());
 }
 
 #[test]
