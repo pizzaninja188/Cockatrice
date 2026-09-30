@@ -1,0 +1,38 @@
+{
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_artifact_tutors::exact_characteristics_and_ability_counts",
+      "covers": "exact characteristics and ability counts"
+    },
+    {
+      "test": "scenario deck_coverage_artifact_tutors::trash_targets_before_sacrifice_pays_red_and_returns_exact_artifact_with_etb",
+      "covers": "trash targets before sacrifice pays red and returns exact artifact with etb"
+    },
+    {
+      "test": "scenario deck_coverage_artifact_tutors::trash_rejects_missing_red_and_revalidates_target_incarnation",
+      "covers": "trash rejects missing red and revalidates target incarnation"
+    }
+  ],
+  "format_version": 1,
+  "oracle_id": "e69279f6-50a1-4db5-83be-30a2ea7fc6a9",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "start_line": 1,
+      "typed_paths": [
+        "/faces/0/additional_costs/0"
+      ],
+      "end_line": 1,
+      "face_id": "trash_for_treasure"
+    },
+    {
+      "start_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/targeting"
+      ],
+      "end_line": 2,
+      "face_id": "trash_for_treasure"
+    }
+  ]
+}

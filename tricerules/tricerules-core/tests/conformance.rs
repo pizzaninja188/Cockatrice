@@ -301,6 +301,9 @@ fn fixture(case: &Case) -> GameEngine {
     if case.card == "inventors_fair" {
         cards.extend(["sol_ring", "sol_ring"]);
     }
+    if case.card == "trash_for_treasure" {
+        cards.push("mind_stone");
+    }
     let deck = helpers::deck_with("forest", &cards);
     let mut e = GameEngine::new(SEED, &[0, 1], 20, Some(vec![deck.clone(), deck]), true).unwrap();
     helpers::advance_to_main1_from_game_start(&mut e);
@@ -322,6 +325,12 @@ fn fixture(case: &Case) -> GameEngine {
         let dead = helpers::take_oid_from_library_or_hand(&mut e, player, "grizzly_bears");
         e.state.players[player].graveyard.push(dead);
         e.state.objects.get_mut(&dead).unwrap().zone = tricerules_core::Zone::Graveyard;
+        if case.card == "trash_for_treasure" {
+            // A separate graveyard artifact is required before paying the sacrifice cost.
+            let dead = helpers::take_oid_from_library_or_hand(&mut e, player, "mind_stone");
+            e.state.players[player].graveyard.push(dead);
+            e.state.objects.get_mut(&dead).unwrap().zone = tricerules_core::Zone::Graveyard;
+        }
         helpers::grant_pool(&mut e, player);
     }
     if let Some(card) = stack_fixture {

@@ -1,0 +1,21 @@
+// Exact Oracle/rulings checked 2026-09-29. Targets are selected before additional sacrifice costs.
+(
+  id: "trash_for_treasure",
+  name: "Trash for Treasure",
+  face_id: "trash_for_treasure",
+  mana_cost: "{2}{R}",
+  types: ["Sorcery"],
+  additional_costs: [SacrificePermanent(
+    filter: (kind: AnyPermanent, controller: You, permanent_types: [Artifact]),
+  )],
+  spell_effect: [MoveGraveyardCards(
+    filter: (owner: Controller, card: Some((card_type: Some(Artifact)))),
+    destination: Battlefield(tapped: false),
+  )],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target artifact card from your graveyard",
+    effect_indices: [0],
+  )])),
+)

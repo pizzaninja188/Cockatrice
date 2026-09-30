@@ -1,0 +1,33 @@
+{
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_artifact_tutors::exact_characteristics_and_ability_counts",
+      "covers": "exact characteristics and ability counts"
+    },
+    {
+      "test": "scenario deck_coverage_artifact_tutors::terrain_puts_only_own_basic_hand_land_tapped_or_declines_without_land_play_or_shuffle",
+      "covers": "terrain puts only own basic hand land tapped or declines without land play or shuffle"
+    }
+  ],
+  "format_version": 1,
+  "oracle_id": "a949c96c-362c-45a3-bd5c-ce5ce153ee9e",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "start_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ],
+      "end_line": 1,
+      "face_id": "terrain_generator"
+    },
+    {
+      "start_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ],
+      "end_line": 2,
+      "face_id": "terrain_generator"
+    }
+  ]
+}

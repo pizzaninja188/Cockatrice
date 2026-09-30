@@ -885,3 +885,6 @@ mod deck_coverage_anarchomancer_mastermind;
 
 #[path = "scenario/deck_coverage_fair_steel.rs"]
 mod deck_coverage_fair_steel;
+
+#[path = "scenario/deck_coverage_artifact_tutors.rs"]
+mod deck_coverage_artifact_tutors;
