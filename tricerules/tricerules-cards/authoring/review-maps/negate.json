@@ -1,0 +1,30 @@
+{
+  "format_version": 1,
+  "oracle_id": "3407fe41-fdd3-4119-8f70-4bc4590a379f",
+  "spans": [
+    {
+      "face_id": "negate",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/spell_effect/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardTypeFilter::Noncreature",
+      "typed_path": "/faces/0/spell_effect/0/CounterTargetSpell/spell_filter/card_type"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario priority_and_turns::essence_scatter_and_negate_respect_spell_type",
+      "covers": "Actual Negate rejects a creature spell and successfully counters a noncreature spell"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
