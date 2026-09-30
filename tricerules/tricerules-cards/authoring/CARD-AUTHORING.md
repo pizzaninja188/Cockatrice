@@ -8,6 +8,11 @@ Repository-level authority, architecture, and verification rules still apply. Fo
 [`tricerules/AGENTS.md`](../../AGENTS.md) and use
 [`docs/AGENT-VERIFICATION.md`](../../../docs/AGENT-VERIFICATION.md) as the command source of truth.
 
+Execution order lives in [AUTHORING-WORKFLOW.md](../../../docs/AUTHORING-WORKFLOW.md).
+This document is the card-specific reference. Read source/authority/tier sections for a new task,
+then search the relevant mechanics, presentation, recipe or evidence section as needed. Do not
+load every recipe/example as a mandatory batch step. Current campaign policy owns model settings.
+
 ## 1. Research before editing
 
 Never implement a card from memory.
@@ -1186,28 +1191,11 @@ guessing missing mechanics, broadening admissions or waiving verification.
 
 #### Short path for reuse-only batches
 
-Group cards that share tested mechanics so preparation, independent review and the final gate
-are paid once per coherent batch, not once per card. Keep new engine work separate. Use these steps:
-
-1. Fetch exact Oracle/rulings and inspect the closest implemented definitions and assertions.
-   Record one compact preflight: copy from, differences, reused evidence, distinguishing tests,
-   remaining gaps. Reuse source evidence already obtained for the same identity and source version.
-2. Copy the typed structure, check every clause, and add actual-card rows to shared scenarios
-   with independent expectations. A scaffold, candidate/dependency report, capability-index search,
-   new per-card registry test file or bespoke scenario function is not mandatory. Use those tools
-   only when they resolve a concrete uncertainty. Do not regenerate a whole-corpus report per card.
-3. Keep one checked-in review map per handwritten card with source spans, exact semantic test
-   references and complete-definition confirmation. Omit optional primitive inventories and empty
-   token arrays; retain relevant token identities. A separate narrative dossier or pre-review
-   generated packet is not mandatory: reviewers can inspect the source, RON, map and test diff.
-4. Prove focused red/green coverage, format and run focused lint. Run
-   `scripts/prepare-card-batch.ps1` once before freezing: it checks canonical IDs and generic
-   conformance, then performs metadata-only refresh. Inspect the resulting diff. Reuse unchanged
-   passing prechecks instead of repeating them via this wrapper. Successful new conformance cases require
-   no manual rows or candidate-report run. Investigate exceptions rather than accepting them blindly.
-5. Obtain one independent semantic review, fix material findings, then run one final affected-side
-   gate. Its CardData step validates the whole corpus and generates the audit packets. Do not repeat
-   packet generation, test listing, standalone Check or clerical review as routine separate steps.
+Use the [reuse-only execution path](../../../docs/AUTHORING-WORKFLOW.md#reuse-only-cards).
+The exact map/reference requirements below remain authoritative. Routine batches need no separate
+issue, narrative dossier, optional index upkeep or pre-review generated packet. Keep one map per
+handwritten card; optional primitive inventories/empty token arrays may be omitted. Successful new
+conformance cases require no manual baseline rows. Investigate exceptions rather than accepting them.
 
 For pure reuse, unchanged protocol, client presentation and interaction paths need no repeated
 GUI demonstration solely because a new card was added. Trace those surfaces and state N/A with a
@@ -1246,8 +1234,7 @@ tests. Canonical CardData Check includes it. Listing is not proof of execution: 
 must pass on the same content, and review must confirm the cases exercise the named cards and
 clauses. Draft packets may still describe planned fixtures before tests exist.
 
-Use default effort for routine implementation and independent read-only review; escalate for a
-specific unresolved correctness risk. Run formatting and focused lint before freezing the patch.
+Use the current campaign model/effort policy for implementation and independent review. Run formatting and focused lint before freezing the patch.
 Resolve blocking defects and missing required evidence before the final full gate. Optional polish
 may be deferred without another review cycle. Changes after a passing gate require affected
 reverification; avoid optional changes after that gate. Reuse unchanged passing evidence.

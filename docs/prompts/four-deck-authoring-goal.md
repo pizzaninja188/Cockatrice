@@ -1,43 +1,78 @@
-Start a new goal to finish authoring the missing/new cards needed for ruled support in the mainboards and commander sections of these four original decks:
+# Four-deck new-card campaign policy
+
+Finish source-backed ruled support for missing/new cards in the mainboards and commander sections
+of these original decks. Exclude sideboards, considering/maybeboard sections, tokens and other decks.
 
 - https://moxfield.com/decks/QSPE5wn8MUuMgx7tnv2Leg
 - https://moxfield.com/decks/Zz1Ss9NGqka3P2UXo33Ffg
 - https://moxfield.com/decks/dIk0nOs7k0SHGbUQBzPkIQ
 - https://moxfield.com/decks/ITpDyA9B3k69J2FUaNA5oA
 
-Work in C:\Users\pizza\CodingProjects\Cockatrice. Follow AGENTS.md, the Cockatrice workflow skill, CARD-AUTHORING.md, BATCH-WORKBENCH.md, and the verification guide. This explicitly authorizes creating scoped reviewed commits on master and pushing them to origin/master, as well as implementation of necessary cards and underlying capabilities and reconciliation of directly affected issues. Preserve unrelated work. Do not resume or message any old paused goals (01a0eb69-f053-7ac1-8e28-f201f65c081f, 01a0e9b2-4841-73e3-8798-117046f2547a, 01a0ef4a-bdf0-7150-af5c-bbc8227c8cc1); this is the replacement goal session.
+## Authority and scope
 
-At startup inspect current code/history/worktree and live tracker. The supervisor's new authoring tooling must already be committed and pushed before this session starts; verify HEAD/remote and use that content. Preserve the pre-existing engine edits and exclude them from scoped delivery.
+Work in C:\Users\pizza\CodingProjects\Cockatrice. Implementation of selected new cards and their
+necessary engine capabilities, directly affected issue reconciliation, scoped reviewed commits on
+master, and pushes to origin/master are explicitly authorized for this entire session. Carry this
+permission forward; do not ask for renewed delivery approval. Never bypass sandbox review.
+Preserve unrelated changes. There is one writer; only the root runs builds, tests, generators,
+formatting, metadata and Git operations. Do not resume or message superseded paused goals.
 
-Use the v3 workbench operations: `inspect` plus `map-scaffold` for normalized typed evidence scaffolds; `candidate-save`/`candidate-list` for exact Oracle identity decisions with relevant dependency hashes; and the extended `prepare-card-batch.ps1` for formatting, exact actual-card tests, authoring lint and structural evidence before review. Read fresh held/blocked decisions before selecting candidates; do not redo them each turn or claim readiness from freshness. Migrate only the held preflights you need, using current source/rulings and relevant implementation dependencies. Compatible ready cards share one preparation/review/final gate. Deliver a verified batch before writing the next increment; while delivery is pending, restrict further work to bounded independent preparation. Do not accumulate a growing undelivered batch and repeatedly run full gates. Model settings and scope remain Luna high/new cards only; no general audits.
+General audits of existing registrations are deferred and are not a completion gate. Investigate
+existing cards only for a concrete defect or a prerequisite of the selected new-card batch.
+Preserve known defects and fail-closed admission. A registration, recipe or primitive is not proof
+of complete support. Completion requires the remaining new-card scope, correctness, semantic and
+presentation evidence, all required verification, acceptance and delivery.
 
-Continue from build/new-goal/checkpoint-paused-after-batch13.json and .md, audit-ledger.json and the current inventory. The prior goal delivered Fanatic of Rhonas at d46099c291d3bb7438ef8498879675b6eed31c73 with a passing full gate. Its checkpoint has 12 new verified/delivered cards and 160 initial incomplete identities remaining (158 initially absent plus two setup-only partial commanders). Reconcile against current code before claiming counts; do not count historical existing-card audits as new deliveries. Skullclamp source/rulings/rules research is preserved under build/new-goal/batch14-skullclamp; no production files were started. Verify freshness and reuse it instead of restarting the research.
+Attempt bounded live deck retrieval. If inaccessible, the authorized operational fallback is
+build/deck-coverage/oracle-map.tsv: 313 exact identities, SHA-256
+1162a2f4aaa535e26d052fc72128ae5dad4bbb5e050c409766171918b0b10c55.
+Verify this hash; its deck-section provenance remains unresolved. Do not imply live section proof.
 
-Focus ONLY on new/missing cards in the original four decks, including necessary engine capabilities and the two partial commanders. General auditing of already-registered cards is deferred and is not a completion gate. Investigate an existing card only for a concrete defect or a prerequisite directly relevant to the selected new-card batch. Preserve known defects and fail-closed admission; do not re-admit held cards or ignore a broken dependency to increase counts. Keep existing historical audit work separate.
+## Model and collaboration policy
 
-Attempt live deck retrieval with bounded timeouts through supported network access, filtering mainboards and commanders only. Exclude sideboards, considering/maybeboard sections, tokens, and unrelated decks. If Moxfield remains inaccessible, use the explicitly authorized operational fallback build/deck-coverage/oracle-map.tsv: 313 identities, SHA-256 1162a2f4aaa535e26d052fc72128ae5dad4bbb5e050c409766171918b0b10c55. Verify that hash first. The fallback's deck-section provenance remains unresolved; do not claim live mainboard membership was verified. Do not silently expand the corpus or replace it with a Standard-only cohort.
+Root: gpt-6.1-sol HIGH. Narrow source preparation: Luna MEDIUM. Routine independent review:
+Luna HIGH. Substantial engine design and frozen implementation review: independent Sol HIGH;
+use Sol XHIGH for difficult layers/dependencies, replacement ordering, resumable choices,
+physical identity, hidden information, or a material finding unresolved at HIGH. Record actual
+worker dispatch settings and escalation reason. This replaces the prior Luna-root/escalation-only
+Sol policy; no model-policy decision is pending.
 
-Reduce time per verified complete card, aiming for at least a 50% improvement on comparable routine work. Preserve correctness and report the measured result honestly; larger batches alone are not proof of lower single-card latency. Keep routine authoring and engine-capability development in separate timing categories.
+Use at most three read-only workers plus the root. Reuse workers where suitable; use self-contained
+bounded packets for explicit model overrides. Workers inspect or propose; the root applies changes.
+Independent next-capability research may overlap review, without competing writers or Cargo runs.
+Use ambient/default build/test worker counts, not the historical four-worker cap.
 
-Use the new code tooling as the normal path where applicable:
+## Execution and handoff
 
-1. Build a current inventory once, then prepare a small queue of compatible exact candidates with `scripts/card-author.ps1 prepare --names ... --corpus build/deck-coverage/oracle-map.tsv --out ...`. Reuse unchanged dependency-fresh preparation instead of restarting corpus/ownership/source research each turn. Verify live ownership before execution. Similarity, registration, and freshness are not readiness.
-2. Inspect the closest implemented analogue and all source differences. Check every face/clause/cost/target/choice/token/presentation requirement and relevant interactions before implementation. Explicitly classify reuse-only, new composition, engine capability, or unresolved. Discover simultaneous events, timestamp/face changes, pause/resume, X limits, and protocol/client requirements early. Missing generator recognition is not a runtime blocker.
-3. For compatible routine candidates, prefer batches of roughly 3-8 cards when that many genuinely ready identities exist. Reduce scope for semantic risk; do not broaden scope or manufacture a batch when readiness is empty. Share one final gate across compatible complete ready cards. Do not delay a ready batch just to reach a count. Prepare a few next candidates while the current batch is reviewed, without writing concurrently to shared authoring paths.
-4. Use clone/drafts outside embedded data and the expanded independently expected semantic rows where they fit. Run `validate-batch` and assessment preflight before expensive integration. Run `test-card-drafts.ps1` through the real engine. Never derive test expectations from emitted card effects. For dedicated scenarios, reuse authoring_fixture setup and authoring_actions engine-offered activations where their documented bounds fit; extend shared setup once for demonstrated resources, and exercise it both in actual-card scenarios and conformance. Keep intentional illegal/stale commands explicit. Every clause needs executed/asserted evidence; use dedicated scenarios for unsupported row surfaces and interactions. A mana row, for example, does not prove another ability on the same card.
-5. Use `authoring-batch.ps1 doctor` before substantial build work. Freeze explicit intended paths and relevant evidence with `authoring-batch.ps1 freeze`; supply the immutable bundle to independent read-only semantic review. Fix material findings and rerun affected focused checks. Promote finished definitions/maps and independently reviewed rows, prepare metadata once, inspect its diff, and run one full affected-side gate on stable final content. Preserve red/green, formatting, lint, exact non-ignored scenario references, CardData, and `git diff --check`. The CardData-enabled final gate now checks full card data BEFORE the full suites; use that order to catch map token dependencies and declared token fallback exceptions early. Do not routinely duplicate standalone Check. Default/full gates remain mandatory; draft-only passes are insufficient.
-6. Select necessary runtime blockers by verified complete-card unlocks within this corpus, with one primary owner per unresolved identity. Trace engine, protocol, relay, client, identity and visibility contracts. Finish the rules interaction checklist and all affected producer/consumer changes; do not declare a partially implemented card complete to satisfy throughput targets.
+Follow [the authoring execution path](../AUTHORING-WORKFLOW.md), loading only applicable reference
+sections. Group compatible ready cards (often 3-8) or named complete-card unlocks sharing a necessary
+engine contract. Do not delay ready delivery to reach a count or force a speculative larger batch.
+Deliver stable verified content before another code increment. During delivery waits, do only bounded
+independent preparation. Current permissions and this policy override stale task notes.
 
-Use gpt-6-luna HIGH as the root/base model. Use gpt-6-luna MEDIUM for narrowly specified source extraction/preparation and HIGH for routine authoring proposals and independent review. Difficult engine/primitive, complex composition, targeting/choice, identity, hidden-information or protocol/client review uses an independent Luna XHIGH reviewer first. Sol is not a routine default: use gpt-6.1-sol MEDIUM only after a concrete Luna capability failure or unresolved material semantic finding persists despite the deeper Luna review. Record the reason and actual dispatch settings when escalating; do not claim runtime introspection when unavailable. This model policy replaces the earlier blanket Sol review preference for this goal. Preserve correctness rather than waive review to save usage. Keep the root on Luna high.
+Start with current HEAD, remote, worktree, live tracker and saved checkpoint/candidate evidence.
+Use dependency-fresh source preparation; do not restart inherited research. The launch message
+supplies the latest delivered SHA, counts, acceptance deferrals and carry-in work. Reconcile exact
+identities before repeating counts. Old checkpoints and historical audits are context, not deliveries.
 
-Use at most three subagents plus the root, one writer at a time. Reuse a small set of researcher/reviewer agents with followup_task instead of spawning a new agent every batch. For explicit model/effort overrides use fork_turns="none" and a self-contained bounded packet. Give each research worker the exact saved source and rulings paths/hashes, selected implemented analogue and its assertions, exact clauses/differences, and a concrete requested result. Require source-backed corrections and exact enum/API references; do not let workers reconstruct card descriptions from memory. Workers propose code or expectations in their replies; the root applies edits. Parallelize independent read-only research/review only. Only the root runs builds, tests, generators, Refresh/Check, formatting, packet commands and Git delivery; reviewer agents inspect existing frozen evidence and never rerun commands that write artifacts.
+For confirmed stale Git index locks, existing user authorization allows narrow recovery: serialize,
+quiesce writers and relevant Git/build/test processes, inspect the exact unchanged lock, then remove
+only that confirmed stale file through supported approval. Zero size alone is insufficient; never
+remove an active/ambiguous lock or change ACLs. Read-only Git uses --no-optional-locks.
 
-Use the ambient/default build and test worker counts; do not reintroduce the old four-worker cap. Keep reports concise and checkpoint at verified delivery. Separate research and engine-capability development from routine authoring, and retain failed attempts.
+Required visible two-client acceptance uses trusted native computer control and interactive Windows
+ownership. If unavailable or stopped by physical Escape, stop and record unperformed acceptance.
+Explicit manual deferral permits automated verification/delivery; do not mark deferred acceptance
+performed or declare the entire scope complete while acceptance requirements remain unresolved.
 
-Carry forward this delivery authorization. For this checkout, confirmed stale Git index locks may be removed without asking again: serialize recovery, quiesce all writers and relevant Git/build/test processes, verify the exact unchanged stale lock/path, and remove only that file through supported approval. Zero length alone is insufficient. Never bypass sandbox review, change ACLs, or delete an active/ambiguous lock. Use `git --no-optional-locks` for read-only checks.
+## Measurement and continuation
 
-When UI, transport, hidden information, or physical identity changes, perform the required real two-client acceptance through the trusted computer-use path and interactive Windows context. If unavailable or stopped by physical Escape, stop that interaction and report acceptance as unperformed. Do not equate E2E with visible acceptance. If manual testing is explicitly deferred, continue applicable automated gates and authorized delivery, while preserving the unresolved acceptance record.
+Aim for a 50% improvement only on genuinely comparable completed batches. Follow the execution
+path's phase accounting; retain failures, carry-in work and supervisor pauses. Separate engine
+capability work from reuse-only authoring, elapsed session time from command/worker spans, warm
+from cold caches when known, and historical audits from new complete-card unlocks. Model, workflow
+and tooling change together: do not claim an isolated model effect or invent cost/usage.
 
-Measure commands with `authoring-batch.ps1 phase` and retain failed attempts. Report selection/research, drafting, focused tests, review preparation, review, final gates, infrastructure recovery and delivery separately. Distinguish elapsed session time, command wall time, dispatch delays and summed worker spans; do not call them active effort or cost. Track verified complete-card unlocks and rework, rather than recognition counts or registry entries. Reuse stable evidence instead of rerunning gates merely for timing.
-
-Continue the goal until the missing/new-card scope has complete source-backed support, semantic/presentation evidence, required verification/acceptance, and authorized delivery. Do not treat registry presence or an issue closure as complete-card proof for newly authored cards; this does not authorize a general audit of previous registrations. Report per-deck readiness and the exact remaining identities/blockers at checkpoints. Do not mark the goal complete while any requirement remains unresolved. Finish with delivery state, evidence/acceptance distinctions, measured throughput, and MTG applicability.
+Continue the same original new-card objective until complete. Report concise verified delivery
+checkpoints, per-deck readiness, exact remaining blockers and acceptance limits. Do not stop merely
+because a batch ended; settled scope, model and delivery permissions require no new user decision.

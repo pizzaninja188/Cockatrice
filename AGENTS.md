@@ -51,11 +51,8 @@ Load only the guidance relevant to the task:
 Use the exact commands and affected-side matrix in [docs/AGENT-VERIFICATION.md](docs/AGENT-VERIFICATION.md).
 Use `scripts/verify.ps1` for final affected-side verification; keep focused red/green commands on the quiet runner. Card-data verification uses `scripts/update-card-data.ps1 -Mode Check`. Regenerating required metadata from existing local inputs with `-Mode Refresh` is part of authorized card implementation; review its diff. Updating external source datasets requires separate authorization.
 
-1. **Red:** run the smallest regression that proves the missing or broken behavior.
-2. **Green:** apply one coherent implementation increment and rerun that regression.
-3. **Stabilize:** run the affected package or targeted CTest group while iterating.
-4. **Finish:** once stable, run the full build and full suite for every affected side, plus lint, format, generated-data checks, and `git diff --check` as applicable.
-5. **Manual:** run or recommend the real two-client flow when UI, networking, hidden information, or physical identity is material.
+The verification guide owns the red/green, stabilization, final and manual ladder; do not duplicate
+its command sequence in task records. Card campaigns use [docs/AUTHORING-WORKFLOW.md](docs/AUTHORING-WORKFLOW.md).
 
 Reuse passing final verification evidence for delivery when tested content, dependencies, and the relevant environment remain unchanged. Rerun affected gates only when changes, failures, or unresolved concerns invalidate that evidence; a later commit request alone does not invalidate it.
 

@@ -1,162 +1,33 @@
 ---
 name: cockatrice-workflow
-description: Plan Cockatrice fork issues, implement requested rules or client changes, and carry out explicitly requested delivery using the repository's Windows verification and card-data workflows. Use for Cockatrice issue work, not unrelated projects or general MTG questions.
+description: Plan Cockatrice issues, implement requested rules or client changes, and carry out authorized delivery using the Windows verification and card-data workflows.
 ---
 
 # Cockatrice workflow
 
-Determine the phase from the current request and accepted plan. Carry forward the user's testing
-availability, scope, and existing delivery authorization. A direct implementation or fix request,
-or an accepted plan, authorizes implementation within that scope without another plan approval.
-Neither by itself authorizes a commit, push, or issue mutation. Infer routine details from current
-code and context; ask only when unresolved information materially changes scope or correctness.
-Do not reopen settled design choices or ask again for actions already authorized.
+Determine the phase from the request. Carry forward scope, delivery authorization and manual
+acceptance deferrals. Do not ask again for the same authorized action, scope and destination.
+Read root [AGENTS.md](../../../AGENTS.md), then load only relevant subsystem guidance.
 
-The repository root is three directories above this skill. Read the root
-[AGENTS.md](../../../AGENTS.md) and only the subsystem guides relevant to the task. They own the
-requirements; this skill routes the work rather than replacing them.
+| Need | Owner |
+|---|---|
+| Card or engine-capability execution | [Authoring workflow](../../../docs/AUTHORING-WORKFLOW.md) |
+| Exact typed semantics, source research and presentation | [Card authoring reference](../../../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md) |
+| Commands, affected-side gates and evidence reuse | [Verification guide](../../../docs/AGENT-VERIFICATION.md) |
+| Independent inspection-only review | [Reviewer contract](reviewer-template.md) |
+| UI and physical two-client acceptance | [Game guide](../../../cockatrice/src/game/AGENTS.md) |
+| Structural ownership | [Architecture](../../../docs/ARCHITECTURE.md) and [roadmap](../../../docs/REFACTOR-ROADMAP.md) |
 
-## Select and plan
+For selection, query the live `pizzaninja188/Cockatrice` tracker with `gh`, then inspect current
+code/history/worktree. Keep planning read-only. Plans and candidate reports are research aids,
+not current implementation truth. Use decision-complete issues for new design decisions or
+deferred blockers; routine supported-card batches need no separate issue or dossier.
 
-- Query the live `pizzaninja188/Cockatrice` tracker using `gh` with the explicit repository. Check
-  dependencies, current code, local history, and existing changes before selecting a candidate.
-  `docs/issues.md` is a pointer; upstream Cockatrice issues are a different queue.
-- When selection needs it, use `gen-cards --candidate-report` over the full pinned corpus or
-  an exact-name target file. Rank printing-independent unsupported-clause clusters instead of
-  authoring alphabetically or by set; the report routes research and never selects mechanics.
-  Reuse a current inventory; do not rerun whole-corpus reports per card or require one for a
-  ready batch with known implemented analogues.
-- Honor whether the user is available for UI testing. Prefer a bounded Rust/card-data candidate
-  when requested, but trace presentation, protocol, relay, physical identity, and Qt consumers
-  before declaring those gates N/A.
-- Compare proposed primitives with their closest existing consumers. Explain reuse, extension,
-  or necessary separation; complete the
-  [rules interaction checklist](../../../docs/RULES-INTERACTION-CHECKLIST.md) for substantive ruled work.
-- Finish a decision-complete plan for the selected candidate. If current code already implements
-  a candidate, continue selection within the user's criteria rather than planning duplicate work.
-  Keep this phase read-only, including tracker state.
-- For routine supported-card batches, satisfy planning with a brief semantic preflight in the
-  task before editing: selected Oracle identities, complete-card readiness, source/rulings reviewed,
-  reused primitives and important semantic distinctions, distinguishing tests, and exclusions.
-  No separate GitHub issue, planning artifact, or approval cycle is required. The single active
-  batch and generated audit track routine selection; absence of an issue is not absence of support.
-- Use decision-complete issues for work requiring design decisions: new primitives, complex or
-  ambiguous compositions, cross-component changes, and deferred blockers. Reuse existing routine
-  inventories when useful. Preserve one primary tracking owner for issue-backed unresolved cards;
-  dependencies and historical mentions are not duplicate ownership. Reconcile affected existing
-  issue scopes after delivery, but do not create retrospective issues for completed routine batches.
+For authorized delivery, inspect valid verification evidence, stage only reviewed paths/hunks,
+inspect the staged diff, commit, push to the authorized remote/branch, and verify the remote SHA.
+Reconcile directly affected issues when authorized. Preserve unrelated work. A permission error
+on the index lock is an access boundary: use supported approval, never bypass it. An ambiguous
+or active lock must not be removed; confirmed stale recovery follows existing user authorization.
 
-## Implement and verify
-
-- For card work, load the canonical
-  [card authoring guide](../../../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md).
-  Use its Oracle/rulings research, complete-support boundary, presentation mappings, and blocker
-  tracking. Do not substitute nearby legacy RON for the guide.
-- Follow the guide's [implemented-analogue workflow](../../../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#find-implemented-analogues):
-  find the closest shipped card or ability, inspect its typed definition and test assertions, then
-  copy the relevant structure and check the differences against exact Oracle and rulings. Use
-  Scryfall Oracle-text search or Tagger to discover candidates when useful, then match them against
-  the implemented registry. Discovery across formats does not broaden admission scope.
-  Keep routine preflight to copy-from examples, differences, reused evidence, distinguishing tests
-  and remaining gaps. The narrow capability index is optional; do not require hit/miss reports,
-  new entries or unrelated freshness maintenance. Missing a new-card definition or scenario is
-  not by itself a runtime blocker; identify the missing semantic contract.
-- Apply the guide's [format scope and rules correctness](../../../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md#format-scope-and-rules-correctness)
-  boundary: campaign format filters select work, not primitive semantics. Check relevant
-  cross-cohort interactions without requiring unrelated card authoring or exhaustive searches.
-  Follow campaign scope for broader admissions and report their coverage separately.
-- Preflight the complete card before writing anything: enumerate every face, clause, cost, target,
-  choice, token, and presentation prerequisite. Use reviewed handwritten RON by default for
-  supported cards, including repeated templates; reuse a shipped complete recipe when convenient.
-  Missing generator recognition is not a runtime blocker. File a blocker for missing runtime, choice, target,
-  or presentation contracts. An empty route reports its limitation; it never authorizes widening
-  a grammar. A recognized clause or recipe name is not evidence of complete support.
-- For a data-only card or batch, optionally use source-backed scaffold mode to populate only
-  clerical source fields. Keep scaffolds outside embedded `data/`; mechanically author and review
-  every unresolved field before removing both sentinels and promoting a file to `.ron`.
-  Complete copied definitions can be authored directly in `data/` with the usual tests and
-  review maps. Follow the guide's short path for reuse-only batches: omit optional primitive
-  inventories and separate narrative dossiers; generate audit packets in the final CardData gate.
-- New recipe development needs a concrete expected throughput benefit for a named cohort;
-  two matching cards alone do not justify it. Actual generator changes still require stable recipe
-  IDs, typed emission, positive calibrations and negative near-misses. Preserve existing generated
-  cards and checks; do not migrate them solely to standardize routes.
-- Separate ready cards, unassessed cards, generator limitations and genuine runtime blockers.
-  Routine cards may be tracked by the active batch and audit without an issue. Deferred blockers
-  need an explicit issue and per-identity evidence, with one primary owner and linked dependencies.
-  Update obsolete issue requirements before execution. Let the campaign set batch-size targets;
-  reduce scope when semantic risk warrants it. Reuse actual-card semantic
-  fixtures with independent expectations; add helpers only for demonstrated repetition.
-- Reuse unchanged primitive and interaction tests. For an existing tested pattern with different
-  parameters, add the actual new card to shared scenarios with independently reviewed expectations;
-  a new bespoke scenario function is not mandatory. Add focused coverage for new compositions or
-  meaningful differences that shared fixtures do not prove. Every relevant clause must still
-  execute and be asserted for the new card; preserve applicable illegal-path coverage, independent
-  review and the final affected-side gate.
-- Follow the [verification ladder](../../../docs/AGENT-VERIFICATION.md): focused red/green tests
-  through the quiet runner, then the full affected-side entry point. Choose the affected side
-  from the actual contract, not merely changed file extensions. Use Preview if the selected
-  final command sequence needs inspection.
-- Freeze the intended patch before independent review: snapshot and hash the diff, give a
-  read-only reviewer that exact patch plus its evidence, and run the focused and full gates on the
-  same frozen content. Return review findings as rework before treating evidence as final.
-  Use default effort for routine authoring and review. Run formatting and focused lint before
-  review; resolve required findings before the final gate. Optional polish need not cause rework.
-  Use focused/package checks while iterating; do not habitually run the full suite before review
-  and then repeat it inside the final gate. Broaden early testing when a failure or specific risk
-  warrants it. A full gate remains required on stable final content; reuse valid existing evidence.
-  Escalate review depth for demonstrated semantic risk; keep engine and primitive changes on the
-  deeper-review path. Reuse prior valid evidence instead of re-running gates solely to measure.
-- For card-authoring review delegations, read and instantiate the
-  [reviewer template](reviewer-template.md), including its restrictions. Do not replace them with
-  ambiguous permission for "read-only test runs." Only the root runs Cargo, tests, builds,
-  verification, formatting, generators, Refresh/Check, or packet generation; these commands can
-  write artifacts even when tracked files remain unchanged. Reviewers inspect existing evidence
-  and request missing commands from the root. Follow the authoring guide's material-change
-  criteria for follow-up review; do not request routine confirmation after every batch.
-- When authored cards change generated metadata, explicitly run
-  `scripts/update-card-data.ps1 -Mode Refresh -MetadataOnly` for handwritten additions and inspect
-  the diff. Omit `-MetadataOnly` when recipes/generated RON need refreshing. Refresh only prepares
-  data; do not repeat standalone Check before the full final gate. New successful conformance
-  cases need no manual baseline rows; exceptions and existing-row changes still require review.
-  Regeneration from existing local inputs is part of authorized card implementation and needs
-  no separate approval. Updating external source datasets requires separate authorization.
-  A reviewed recipe that deliberately qualifies new cards requires the
-  `gen-cards --dry-run --include-new` preview followed by `gen-cards --include-new`; Refresh alone
-  updates only already tracked generated files. Inspect every newly generated card before the
-  final gate.
-  Final card verification uses the read-only Check mode through
-  `scripts/verify.ps1 -Side Rust -CardData` or `-Side Both -CardData`.
-  Do not silently refresh external sources or accept unrelated generated churn.
-- Select shared blockers by verified complete-card unlocks, not unsupported-clause frequency.
-  Assign a blocker only when its deliverable is the last remaining reviewed requirement for named
-  identities, verify its runtime/protocol/UI impact first, keep one owner for the mechanism, and
-  return the unlocked identities to a single routine owner. Do not implement unrelated blockers
-  to grow a batch, and never count a blocker-only mapping as implemented coverage.
-- For a reported UI defect, use the
-  [game guide](../../../cockatrice/src/game/AGENTS.md) to trace the engine offer through physical
-  identity into the actual click/render path. Reuse the existing two-client launcher and logged
-  dev setup. Record exact setup, observations, and any remaining acceptance steps.
-- Report manual acceptance as agent-performed, user-confirmed, deferred, or N/A with a reason.
-  Explicit deferral does not block applicable automated verification or authorized delivery.
-  Automated E2E success is separate from hands-on GUI acceptance.
-
-## Deliver when requested
-
-- Inspect the intended diff and current verification evidence; stage only the reviewed paths,
-  inspect the staged diff, and make the focused commit when authorized. Preserve unrelated edits.
-  Reuse passing final gates when tested content, dependencies, and the relevant environment
-  remain unchanged, as specified in the verification guide; a commit request alone needs no rerun.
-- For an authorized push, verify the configured remote URL and branch against the requested
-  destination. Carry the exact destination and issue through the delivery operation. A generic
-  implementation request is not publication authorization.
-- Complete the authorized push and issue reconciliation, verifying their actual results before
-  reporting completion. Do not close an issue solely because a local commit exists. Leave
-  unrelated follow-ups alone unless their publication was requested.
-- Treat `.git/index.lock: Permission denied` as a permissions failure, not evidence of a stale
-  lock. Use the supported approval path for the narrow authorized operation; do not delete locks
-  or bypass a rejected review. If an operation remains blocked, name the exact unfinished step
-  and the review's stated reason.
-- Summarize behavior changed, actual verification exit codes and evidence, manual acceptance,
-  delivery state, and MTG applicability. Keep this in the task response; do not create another
-  tracker or persistent workflow-state file.
+Report behavior, exact gate status, acceptance performed/deferred/N/A, delivery state and MTG
+applicability. Do not create another persistent workflow tracker.

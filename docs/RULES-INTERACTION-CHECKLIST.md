@@ -6,6 +6,10 @@ For the card-specific implementation workflow, use the canonical
 [card authoring guide](../tricerules/tricerules-cards/authoring/CARD-AUTHORING.md). This checklist
 remains the separate interaction audit for substantive ruled changes.
 
+Use this as the interaction section of the existing capability contract, not a separate dossier.
+Link exact source, test and review evidence rather than copying it. Assess only relevant risks;
+record N/A briefly. See [execution order](AUTHORING-WORKFLOW.md#necessary-engine-capabilities).
+
 ## 1. Rules authority and intended behavior
 
 - Record the current Oracle text and relevant rulings for card-specific behavior.
