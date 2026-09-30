@@ -1,0 +1,25 @@
+// Oracle/rulings verified 2026-09-30. CR 608.2h uses the sacrificed creature's last known power.
+(
+  id: "greater_good",
+  name: "Greater Good",
+  face_id: "greater_good",
+  mana_cost: "{2}{G}{G}",
+  types: ["Enchantment"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [SacrificePermanent(filter: (kind: Creature, controller: You))],
+    effect: [
+      Draw(count: Count(CardResultCharacteristicSum(
+        filter: (
+          source: Payment,
+          action: Sacrifice,
+          players: Controller,
+          card_type: Some(Creature),
+        ),
+        characteristic: Power,
+      ))),
+      Discard(quantity: Exact(3)),
+    ],
+  )],
+)

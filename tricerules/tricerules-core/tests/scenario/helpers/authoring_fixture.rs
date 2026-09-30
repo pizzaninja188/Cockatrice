@@ -14,6 +14,7 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
     cards.extend(match card {
         "annul" => Some("short_sword"),
         "flashfreeze" => Some("hill_giant"),
+        "flusterstorm" => Some("divination"),
         _ => None,
     });
     if card == "decimate" {
@@ -24,6 +25,10 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
     }
     if card == "trash_for_treasure" {
         cards.push("mind_stone");
+    }
+    if card == "trading_post" && ability == Some(2) {
+        // This ability targets an artifact already in the graveyard before paying its cost.
+        cards.push("sol_ring");
     }
     if card == "fanatic_of_rhonas" && ability == Some(1) {
         cards.push("air_elemental");
@@ -52,6 +57,11 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
         if card == "trash_for_treasure" {
             // A separate graveyard artifact is required before paying the sacrifice cost.
             let dead = super::take_oid_from_library_or_hand(&mut e, player, "mind_stone");
+            e.state.players[player].graveyard.push(dead);
+            e.state.objects.get_mut(&dead).unwrap().zone = tricerules_core::Zone::Graveyard;
+        }
+        if card == "trading_post" && ability == Some(2) && player == 0 {
+            let dead = super::take_oid_from_library_or_hand(&mut e, player, "sol_ring");
             e.state.players[player].graveyard.push(dead);
             e.state.objects.get_mut(&dead).unwrap().zone = tricerules_core::Zone::Graveyard;
         }

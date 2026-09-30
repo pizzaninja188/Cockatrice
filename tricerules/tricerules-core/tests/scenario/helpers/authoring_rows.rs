@@ -293,6 +293,92 @@ pub(crate) fn run_rows(text: &str, mut engine: impl FnMut() -> GameEngine) -> BT
                 }
                 exercised.insert(card);
             }
+            Row::SkullclampAttachedCreatureDiesDraw => {
+                let card = "skullclamp";
+                let ability_index = 0;
+                let spell_mana = [0, 0, 0, 0, 0, 1];
+                let gift = [0, 0, 0, 0, 0, 1];
+                let power_delta = 1;
+                let toughness_delta = -1;
+                let draws = 2;
+                let mut e = engine();
+                let source = inject_card_into_hand(&mut e, 0, card);
+                give_mana(&mut e, 0, mana(spell_mana));
+                let slot = hand_index_for_card(&e, 0, card);
+                accepted(&mut e, 0, &cast_spell(slot, vec![]));
+                assert_eq!(pool(&e, 0), [0; 6], "exact equipment spell payment");
+                complete(&mut e, 8, |_| None).require_exercised();
+                assert_object(&e, source, card, 0, 0, Zone::Battlefield, 2);
+                let equipped = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+                let opponent_creature = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+                assert_eq!(pool(&e, 0), [0; 6], "equipment fixture starts unfunded");
+                assert!(
+                    authoring_actions::activation(&mut e, 0, source, ability_index).is_err(),
+                    "unaffordable equip must not be offered as a usable activation"
+                );
+                give_mana(&mut e, 0, mana(gift));
+                let command = authoring_actions::activation(&mut e, 0, source, ability_index)
+                    .expect("engine-offered equip activation");
+                let Cmd::ActivateAbility(activation) = command.cmd.as_ref().unwrap() else {
+                    panic!("engine offer was not an ability activation")
+                };
+                assert_eq!(activation.targets.len(), 1, "Equip selects one creature");
+                assert_eq!(
+                    activation.targets[0].object_id, equipped,
+                    "Equip targets the controller's creature"
+                );
+                let mut invalid = command.clone();
+                let Cmd::ActivateAbility(invalid_activation) = invalid.cmd.as_mut().unwrap() else {
+                    unreachable!()
+                };
+                invalid_activation.targets = target_object(opponent_creature);
+                reject_unchanged(&mut e, 0, &invalid);
+
+                accepted(&mut e, 0, &command);
+                assert_eq!(pool(&e, 0), [0; 6], "exact equip payment");
+                pass_both_players(&mut e);
+                assert_eq!(e.state.stack.len(), 0, "Equip resolved");
+                assert_eq!(
+                    e.state.objects[&source].attached_to,
+                    Some(tricerules_core::AttachmentRecipient::Object(equipped))
+                );
+                assert_eq!(
+                    e.effective_power(equipped),
+                    Some(u32::try_from(2i32 + power_delta).expect("nonnegative fixture power")),
+                    "exact attached power"
+                );
+                assert_eq!(
+                    e.effective_toughness(equipped),
+                    Some(
+                        u32::try_from(2i32 + toughness_delta)
+                            .expect("nonnegative fixture toughness")
+                    ),
+                    "exact attached toughness"
+                );
+
+                let controller_hand = e.state.players[0].hand.len();
+                let opponent_hand = e.state.players[1].hand.len();
+                let life = e.state.players.iter().map(|p| p.life).collect::<Vec<_>>();
+                e.state.objects.get_mut(&equipped).unwrap().damage = 1;
+                pass_both_players(&mut e);
+                assert_eq!(e.state.objects[&equipped].zone, Zone::Graveyard);
+                assert_eq!(e.state.objects[&source].zone, Zone::Battlefield);
+                assert_eq!(e.state.objects[&source].attached_to, None);
+                assert_eq!(
+                    e.state.stack.len(),
+                    1,
+                    "attached-object dies trigger uses LKI"
+                );
+                complete(&mut e, 8, |_| None).require_exercised();
+                assert_eq!(e.state.players[0].hand.len(), controller_hand + draws);
+                assert_eq!(e.state.players[1].hand.len(), opponent_hand);
+                assert_eq!(
+                    e.state.players.iter().map(|p| p.life).collect::<Vec<_>>(),
+                    life,
+                    "draw trigger does not change life"
+                );
+                exercised.insert(card.to_owned());
+            }
             Row::Destroy {
                 card,
                 mana: gift,

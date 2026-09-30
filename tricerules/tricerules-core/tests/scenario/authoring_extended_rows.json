@@ -13,5 +13,6 @@
   {"family":"upkeep_damage","card":"viseling","hand_at_trigger":2,"hand_at_resolution":2,"triggers":1,"damage":0},
   {"family":"graveyard_recovery","card":"raise_dead","mana":[0,0,1,0,0,0],"target":"grizzly_bears","sacrifice_source":false},
   {"family":"graveyard_recovery","card":"disentomb","mana":[0,0,1,0,0,0],"target":"grizzly_bears","sacrifice_source":false},
-  {"family":"graveyard_recovery","card":"codex_shredder","mana":[0,0,0,0,0,5],"ability_index":1,"target":"grizzly_bears","sacrifice_source":true}
+  {"family":"graveyard_recovery","card":"codex_shredder","mana":[0,0,0,0,0,5],"ability_index":1,"target":"grizzly_bears","sacrifice_source":true},
+  {"family":"skullclamp_attached_creature_dies_draw"}
 ]

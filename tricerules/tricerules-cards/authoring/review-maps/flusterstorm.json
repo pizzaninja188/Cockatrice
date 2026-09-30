@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "86bf58f2-7f25-4e10-b797-25e0e8e67769",
+  "spans": [
+    {
+      "face_id": "flusterstorm",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/0/CounterTargetSpell/spell_filter/card_type",
+        "/faces/0/spell_effect/0/CounterTargetSpell/unless_controller_pays"
+      ]
+    },
+    {
+      "face_id": "flusterstorm",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/spell_keywords/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "CardTypeFilter::InstantOrSorcery",
+      "typed_path": "/faces/0/spell_effect/0/CounterTargetSpell/spell_filter/card_type"
+    },
+    {
+      "symbol": "SpellKeyword::Storm",
+      "typed_path": "/faces/0/spell_keywords/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_flusterstorm::flusterstorm_copies_and_each_copy_resolves_its_own_one_mana_payment",
+      "covers": "the actual spell targets a sorcery, Storm creates a separately targeted copy, that copy can be stopped by paying one generic mana, and the original independently counters the target when its controller declines the second payment"
+    },
+    {
+      "test": "scenario deck_coverage_flusterstorm::flusterstorm_rejects_a_creature_spell_as_its_target",
+      "covers": "the actual spell rejects a creature spell as a target without changing the hand or stack"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

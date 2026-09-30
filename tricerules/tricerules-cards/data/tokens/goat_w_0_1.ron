@@ -1,0 +1,10 @@
+// 0/1 white Goat creature token (Trading Post).
+(
+  id: "goat_w_0_1",
+  name: "Goat",
+  face_id: "goat",
+  types: ["Creature", "Goat"],
+  colors: [White],
+  power: 0,
+  toughness: 1,
+)

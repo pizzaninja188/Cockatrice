@@ -1,0 +1,45 @@
+// Scryfall Oracle ID 8d38194e-b607-4ff4-9c19-0e8636d463bf; exact source and three WotC rulings checked 2026-09-30.
+// CR 302.6/508.1 govern the animated creature's summoning sickness; CR 611.2a and 613.1d-g govern its temporary animation.
+(
+  id: "raging_ravine",
+  name: "Raging Ravine",
+  face_id: "raging_ravine",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(r: 1), (g: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      costs: [Mana("{2}{R}{G}")],
+      effect: [
+        AnimateSelf(
+          base_power: 3,
+          base_toughness: 3,
+          colors: Some([Red, Green]),
+          creature_types: Replace(["Elemental"]),
+          duration: UntilEndOfTurn,
+        ),
+        GrantTriggeredAbility(
+          subject: Source,
+          ability: (
+            ability_id: "granted_01",
+            presentation: Fallback,
+            trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+            effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+          ),
+        ),
+      ],
+    ),
+  ],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: EntersTapped(affected: Self_),
+  )],
+)

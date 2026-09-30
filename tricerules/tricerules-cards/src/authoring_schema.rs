@@ -61,6 +61,7 @@ pub enum Row {
         target: String,
         sacrifice_source: bool,
     },
+    SkullclampAttachedCreatureDiesDraw,
 }
 
 #[derive(Debug, Deserialize)]
@@ -81,6 +82,7 @@ impl Row {
             | Self::Mill { card, .. }
             | Self::UpkeepDamage { card, .. }
             | Self::GraveyardRecovery { card, .. } => card,
+            Self::SkullclampAttachedCreatureDiesDraw => "skullclamp",
         }
     }
 

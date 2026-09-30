@@ -1,0 +1,92 @@
+{
+  "format_version": 1,
+  "oracle_id": "63788566-e25a-44bb-bb55-197e1b93b3e8",
+  "spans": [
+    {
+      "face_id": "trading_post",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "trading_post",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    },
+    {
+      "face_id": "trading_post",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/activated_abilities/2"]
+    },
+    {
+      "face_id": "trading_post",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": ["/faces/0/activated_abilities/3"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Discard",
+      "typed_path": "/faces/0/activated_abilities/0/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::GainLife",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::PayLife",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/2/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0"
+    },
+    {
+      "symbol": "TargetGroupDef",
+      "typed_path": "/faces/0/activated_abilities/2/targeting/groups/0"
+    },
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/3/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/3/effect/0"
+    }
+  ],
+  "tokens": ["goat_w_0_1"],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_trading_post::trading_post_discard_ability_gains_four_life_on_resolution",
+      "covers": "the actual card pays one mana, taps, discards one card, and gains four life only when its ability resolves"
+    },
+    {
+      "test": "scenario deck_coverage_trading_post::trading_post_life_ability_creates_a_white_goat",
+      "covers": "the actual card pays one life as an activation cost and creates one 0/1 white Goat token on resolution"
+    },
+    {
+      "test": "scenario deck_coverage_trading_post::trading_post_sacrifices_a_creature_to_return_a_target_artifact",
+      "covers": "the actual card sacrifices a creature as an activation cost and returns the selected artifact from its controller's graveyard only on resolution"
+    },
+    {
+      "test": "scenario deck_coverage_trading_post::trading_post_rejects_invalid_recovery_targets_and_sacrifice_costs_atomically",
+      "covers": "the recovery ability rejects a nonartifact or opposing graveyard target, and the draw ability rejects a creature sacrifice without paying costs"
+    },
+    {
+      "test": "scenario deck_coverage_trading_post::trading_post_sacrifices_an_artifact_to_draw_a_card",
+      "covers": "the actual card sacrifices an artifact as a cost and draws one card only when the ability resolves"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

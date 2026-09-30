@@ -1,0 +1,57 @@
+// Scryfall Oracle ID 63788566-e25a-44bb-bb55-197e1b93b3e8; exact lookup/rulings checked 2026-09-30 (none).
+// CR 602.2a-b / 701.21a cover activation and sacrifice costs; CR 115.1c / 608.2b cover the target;
+// CR 118.3b / 119.4 cover paying life, while 119.3 and 701.7a cover life gain and token creation.
+(
+  id: "trading_post",
+  name: "Trading Post",
+  face_id: "trading_post",
+  mana_cost: "{4}",
+  types: ["Artifact"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      source_zone: Battlefield,
+      costs: [Mana("{1}"), Tap, Discard],
+      effect: [GainLife(amount: 4)],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      source_zone: Battlefield,
+      costs: [Mana("{1}"), Tap, PayLife(amount: 1)],
+      effect: [CreateTokens(token: "goat_w_0_1", count: 1)],
+    ),
+    (
+      ability_id: "activated_03",
+      presentation: OracleLines([3]),
+      source_zone: Battlefield,
+      costs: [
+        Mana("{1}"),
+        Tap,
+        SacrificePermanent(filter: (kind: Creature, controller: You)),
+      ],
+      effect: [MoveGraveyardCards(
+        filter: (owner: Controller, card: Some((card_type: Some(Artifact)))),
+        destination: Hand,
+      )],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target artifact card from your graveyard",
+        effect_indices: [0],
+      )])),
+    ),
+    (
+      ability_id: "activated_04",
+      presentation: OracleLines([4]),
+      source_zone: Battlefield,
+      costs: [
+        Mana("{1}"),
+        Tap,
+        SacrificePermanent(filter: (kind: AnyPermanent, controller: You, permanent_types: [Artifact])),
+      ],
+      effect: [Draw(count: 1)],
+    ),
+  ],
+)

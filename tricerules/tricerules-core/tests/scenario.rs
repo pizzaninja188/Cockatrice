@@ -11,6 +11,20 @@ mod authoring_actions;
 #[path = "scenario/deck_coverage_fanatic_of_rhonas.rs"]
 mod deck_coverage_fanatic_of_rhonas;
 
+#[path = "scenario/deck_coverage_skullclamp.rs"]
+mod deck_coverage_skullclamp;
+
+#[path = "scenario/deck_coverage_tolarian_winds.rs"]
+mod deck_coverage_tolarian_winds;
+#[path = "scenario/deck_coverage_trading_post.rs"]
+mod deck_coverage_trading_post;
+
+#[path = "scenario/deck_coverage_trailtracker_scout.rs"]
+mod deck_coverage_trailtracker_scout;
+
+#[path = "scenario/deck_coverage_raging_ravine.rs"]
+mod deck_coverage_raging_ravine;
+
 #[path = "scenario/deck_coverage_staff_of_compleation.rs"]
 mod deck_coverage_staff_of_compleation;
 
@@ -906,3 +920,9 @@ mod deck_coverage_fair_steel;
 
 #[path = "scenario/deck_coverage_artifact_tutors.rs"]
 mod deck_coverage_artifact_tutors;
+
+#[path = "scenario/deck_coverage_greater_good.rs"]
+mod deck_coverage_greater_good;
+
+#[path = "scenario/deck_coverage_flusterstorm.rs"]
+mod deck_coverage_flusterstorm;

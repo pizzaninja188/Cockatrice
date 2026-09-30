@@ -1,0 +1,13 @@
+// Oracle and rulings verified 2026-09-30. CR 702.40a, 608.2b, 701.6a, and 118.12.
+(
+  id: "flusterstorm",
+  name: "Flusterstorm",
+  face_id: "flusterstorm",
+  mana_cost: "{U}",
+  types: ["Instant"],
+  spell_keywords: [Storm],
+  spell_effect: [CounterTargetSpell(
+    spell_filter: (card_type: Some(InstantOrSorcery)),
+    unless_controller_pays: Some(1),
+  )],
+)

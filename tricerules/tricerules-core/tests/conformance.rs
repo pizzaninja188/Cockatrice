@@ -283,6 +283,7 @@ fn fixture(case: &Case) -> GameEngine {
     let stack_fixture = match case.card.as_str() {
         "annul" => Some("short_sword"),
         "flashfreeze" => Some("hill_giant"),
+        "flusterstorm" => Some("divination"),
         _ => None,
     };
     let mut e = helpers::authoring_fixture::game(SEED, &[0, 1], &case.card, case.ability);
@@ -405,6 +406,24 @@ fn registry_execution_matches_reviewed_baseline() {
     let expected = include_str!("conformance/baseline.tsv").replace("\r\n", "\n");
     compare_baseline(&actual, &expected).unwrap_or_else(|err| panic!("{err}"));
 }
+
+#[test]
+fn trading_post_activated_abilities_have_complete_fixtures() {
+    for ability in 0..4 {
+        let case = Case {
+            card: "trading_post".into(),
+            face: 0,
+            ability: Some(ability),
+        };
+        assert_eq!(
+            evaluate(&case).expect("evaluate Trading Post conformance fixture"),
+            Outcome::Exercised,
+            "{}",
+            case.key()
+        );
+    }
+}
+
 #[test]
 fn drain_rejects_exhaustion_and_rejected_progression() {
     let case = Case {

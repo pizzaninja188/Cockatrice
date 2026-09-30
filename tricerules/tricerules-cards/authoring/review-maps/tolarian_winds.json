@@ -1,0 +1,41 @@
+{
+  "format_version": 1,
+  "oracle_id": "686cce6e-18ec-45b0-8d2e-74fa353a905e",
+  "spans": [
+    {
+      "face_id": "tolarian_winds",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "CountExpression::CardsMatchingResult",
+      "typed_path": "/faces/0/spell_effect/1/Draw/count/Count/CardsMatchingResult"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_tolarian_winds::tolarian_winds_draws_the_number_of_cards_actually_discarded",
+      "covers": "the actual card discards three physical cards, then draws exactly three from the library; the resolving spell remains on the stack and is not counted"
+    },
+    {
+      "test": "scenario deck_coverage_tolarian_winds::tolarian_winds_does_not_count_itself_and_does_nothing_with_no_hand_cards",
+      "covers": "the actual card resolves with no other card in hand, moves to the graveyard, and draws zero cards"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

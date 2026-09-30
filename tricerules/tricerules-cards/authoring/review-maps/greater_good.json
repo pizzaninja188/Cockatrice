@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "dc0593c2-ccb4-4648-a592-c5bcd121dc72",
+  "spans": [
+    {
+      "face_id": "greater_good",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/effect/0",
+        "/faces/0/activated_abilities/0/effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::SacrificePermanent",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "CountExpression::CardResultCharacteristicSum",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0/Draw/count/Count/CardResultCharacteristicSum"
+    },
+    {
+      "symbol": "SpellEffectKind::Discard",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_greater_good::greater_good_uses_sacrificed_creatures_last_known_power_then_discards_three",
+      "covers": "the actual ability sacrifices a 3-power creature as a cost, uses its last known power to draw three on resolution, then lets its controller discard exactly three during the same resolution"
+    },
+    {
+      "test": "scenario deck_coverage_greater_good::greater_good_rejects_an_opponents_creature_or_a_noncreature_as_its_cost",
+      "covers": "an opponent's creature and the controller's noncreature permanent are rejected as sacrifice costs without moving either object or putting an ability on the stack"
+    },
+    {
+      "test": "scenario deck_coverage_greater_good::greater_good_with_zero_power_draws_zero_and_discards_a_smaller_hand",
+      "covers": "sacrificing a zero-power creature draws no cards and, with only one card in hand, discards that available card rather than requiring three"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

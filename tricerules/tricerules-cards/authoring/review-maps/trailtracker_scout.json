@@ -1,0 +1,55 @@
+{
+  "format_version": 1,
+  "oracle_id": "d38646dc-d1ea-473c-aaf1-df8ba327459f",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "trailtracker_scout",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "trailtracker_scout",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPlayerExpendsMana",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::MoveGraveyardCards",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TargetGroupDef",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting/groups/0"
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_trailtracker_scout::trailtracker_scout_returns_a_target_permanent_card_at_expend_eight",
+      "covers": "exact card identity, type line, power, toughness and mana value; trigger at the eighth mana spent on spells; positive land and nonland permanent targets in the controller's graveyard; rejection of an instant and an opponent's card; return to hand; no second same-turn trigger"
+    },
+    {
+      "test": "scenario deck_coverage_trailtracker_scout::trailtracker_scout_can_decline_its_optional_target",
+      "covers": "the required expend trigger permits choosing zero targets for its up-to-one graveyard group"
+    },
+    {
+      "test": "scenario deck_coverage_trailtracker_scout::trailtracker_scout_adds_the_chosen_color_without_using_the_stack",
+      "covers": "all five mana colors are selectable; the Scout taps, adds exactly that color, and the mana ability does not use the stack"
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "format_version": 1,
+  "oracle_id": "8d38194e-b607-4ff4-9c19-0e8636d463bf",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "raging_ravine",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    },
+    {
+      "face_id": "raging_ravine",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/activated_abilities/0"]
+    },
+    {
+      "face_id": "raging_ravine",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/activated_abilities/1"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::AnimateSelf",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::GrantTriggeredAbility",
+      "typed_path": "/faces/0/activated_abilities/1/effect/1"
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_raging_ravine::raging_ravine_enters_tapped",
+      "covers": "actual land play and the enters-tapped clause"
+    },
+    {
+      "test": "scenario deck_coverage_raging_ravine::raging_ravine_repeated_animations_grant_matching_attack_triggers_and_counters_persist",
+      "covers": "3/3 red-green Elemental land animation; repeated activation gives repeated attack triggers; each adds a +1/+1 counter; animation expires while counters stay"
+    },
+    {
+      "test": "scenario deck_coverage_raging_ravine::raging_ravine_mana_ability_offers_red_or_green_without_using_the_stack",
+      "covers": "both mana choices, tapping as the cost, and immediate mana ability resolution without the stack"
+    },
+    {
+      "test": "scenario deck_coverage_raging_ravine::raging_ravine_creature_obeys_summoning_sickness",
+      "covers": "a newly controlled animated land cannot attack or use its tap-symbol mana ability that turn"
+    }
+  ]
+}
