@@ -1,0 +1,13 @@
+// Exact Oracle and three WotC rulings verified 2026-09-30.
+(
+  id: "unwinding_clock",
+  name: "Unwinding Clock",
+  face_id: "unwinding_clock",
+  mana_cost: "{4}",
+  types: ["Artifact"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: UntapControlledPermanentsDuringOtherPlayersUntapSteps(permanent_types: [Artifact]),
+  )],
+)

@@ -2103,6 +2103,13 @@ pub enum StaticAbilityDef {
     /// use, while Clone/Phyrexian Metamorph-style copy effects preserve it through copiable
     /// values; layer-6 ability removal suppresses either form.
     UntapsDuringOtherPlayersUntapSteps,
+    /// Unwinding Clock untaps controlled artifacts; Seedborn Muse untaps every controlled
+    /// permanent. These are mandatory parts of each other player's simultaneous untap action.
+    UntapControlledPermanentsDuringOtherPlayersUntapSteps {
+        /// Empty selects all permanents; otherwise any listed current card type matches.
+        #[serde(default)]
+        permanent_types: Vec<PermanentTypeFilter>,
+    },
     /// CR 502.3: exclude this permanent from the ordinary untap-step action while `condition`
     /// is false. Bombur, Gentle Dreamer and Deep-Slumber Titan exercise conditional exceptions
     /// to the same turn-based untap restriction.

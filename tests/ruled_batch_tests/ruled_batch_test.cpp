@@ -2936,15 +2936,19 @@ TEST_F(RuledBatchTest, ApplyRuledBatchAppliesUntapEffectMidTurn)
 // replacement; the relay already has the ObjectId binding from the preceding full view.
 TEST_F(RuledBatchTest, ApplyRuledBatchAppliesReportedUntapWhenBattlefieldIsOmitted)
 {
+    game->setActivePlayer(p2->getPlayerId());
     Server_Card *bear = addCardToTable(p1, "Grizzly Bears");
+    Server_Card *wolf = addCardToTable(p1, "Timber Wolves");
     bear->setTapped(true);
+    wolf->setTapped(true);
 
     ruled::v1::IpcResponse seedResp;
     seedResp.set_ok(true);
     auto *seedView = seedResp.mutable_batch()->add_events()->mutable_zone_view();
-    *seedView->add_per_player() = buildPerPlayerView(p1, {101u}, {true});
+    *seedView->add_per_player() = buildPerPlayerView(p1, {101u, 102u}, {true, true});
     ASSERT_TRUE(callBatchApply(seedResp).zoneViewApplied);
     ASSERT_EQ(findCardByEngineOid(p1, 101u), bear);
+    ASSERT_EQ(findCardByEngineOid(p1, 102u), wolf);
 
     ruled::v1::IpcResponse untapResp;
     untapResp.set_ok(true);
@@ -2960,6 +2964,7 @@ TEST_F(RuledBatchTest, ApplyRuledBatchAppliesReportedUntapWhenBattlefieldIsOmitt
     EXPECT_TRUE(result.zoneViewApplied);
     EXPECT_TRUE(result.tapStateEventsQueued);
     EXPECT_FALSE(bear->getTapped());
+    EXPECT_TRUE(wolf->getTapped());
 }
 
 TEST_F(RuledBatchTest, ApplyRuledBatchMovesPermanentToGraveyard)

@@ -1,0 +1,20 @@
+{
+  "format_version": 1,
+  "oracle_id": "153fac93-5d2b-4348-a468-a5eef6a12da3",
+  "spans": [
+    {"face_id": "unwinding_clock", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/static_abilities/0"]}
+  ],
+  "primitive_references": [
+    {"symbol": "StaticAbilityDef::UntapControlledPermanentsDuringOtherPlayersUntapSteps", "typed_path": "/faces/0/static_abilities/0"}
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "scenario deck_coverage_unwinding_clock::clock_actual_cast_untaps_only_its_controllers_artifacts_on_another_players_turn", "covers": "Exact four-mana cast, insufficient payment and invented activation reject atomically; the controller's tapped Clock and artifact untap with the active player's artifact, while a nonartifact remains tapped; exact public untap edges and no invented activated offer."},
+    {"test": "scenario deck_coverage_unwinding_clock::clock_actual_card_scopes_artifact_creatures_noncreatures_and_nonconsecutive_players", "covers": "Three nonconsecutive player IDs; controlled artifact creature and noncreature qualify, nonartifact and a third player's artifact remain tapped; real cleanup completes before the untap boundary."},
+    {"test": "scenario deck_coverage_unwinding_clock::clock_suppression_and_turn_start_restoration_follow_the_current_source", "covers": "Current ability suppression disables the source; turn-start expiry restores it before determining the untap cohort."},
+    {"test": "scenario deck_coverage_unwinding_clock::clock_departure_and_reentry_use_the_same_physical_card_with_a_new_generation", "covers": "A departed Clock supplies no hook; the same physical card reenters with a fresh generation and supplies its current hook."},
+    {"test": "scenario deck_coverage_unwinding_clock::sculpting_steel_copy_of_clock_survives_donor_departure_and_owns_its_hook", "covers": "A real Sculpting Steel copy retains the hook after donor departure, preserves its own underlying identity, and stops supplying it when its own abilities are removed."},
+    {"test": "scenario deck_coverage_unwinding_clock::clock_logged_real_mana_activation_and_turn_boundary_replay_identically", "covers": "Only logged commands place actual cards, pay Sol Ring's real tap cost and advance the turn; the tapped Ring untaps with unchanged generation, the already upright Clock emits no edge, and every batch and final state replay identically."}
+  ],
+  "complete_definition_review_confirmed": true
+}

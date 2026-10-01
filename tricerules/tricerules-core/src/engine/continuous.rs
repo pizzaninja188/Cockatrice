@@ -505,7 +505,10 @@ impl GameEngine {
                     // CR 614.1c / 122.6 entry replacements are evaluated against the proposed
                     // event in `engine::replacement`; there is no post-entry effect to emit.
                 }
-                StaticAbilityDef::UntapsDuringOtherPlayersUntapSteps => {
+                StaticAbilityDef::UntapsDuringOtherPlayersUntapSteps
+                | StaticAbilityDef::UntapControlledPermanentsDuringOtherPlayersUntapSteps {
+                    ..
+                } => {
                     // CR 502.3 turn-based hook, queried at the untap boundary. It emits no
                     // independent continuous-effect record.
                 }
@@ -1355,14 +1358,11 @@ impl GameEngine {
     /// CR 502.3: this printed/copied static ability adds an untap attempt during each other
     /// player's untap step. A layer-6 remove-all-abilities effect suppresses the hook.
     pub(super) fn untaps_during_other_players_untap_steps(&self, oid: ObjectId) -> bool {
-        let Some(object) = self.state.objects.get(&oid) else {
-            return false;
-        };
-        if object.zone != Zone::Battlefield
-            || object.face_down
-            || super::characteristics::latest_remove_all_abilities_timestamp(&self.state, oid)
-                .is_some()
-        {
+        if !super::characteristics::printed_static_source_is_available(
+            &self.state,
+            self.registry,
+            oid,
+        ) {
             return false;
         }
         self.effective_face(oid).is_some_and(|face| {
@@ -1370,6 +1370,52 @@ impl GameEngine {
                 ability.definition == StaticAbilityDef::UntapsDuringOtherPlayersUntapSteps
             })
         })
+    }
+
+    /// CR 502.3: determine nonactive recipients before any part of the untap action changes state.
+    pub(super) fn other_player_untap_cohort(&self, active: PlayerId) -> BTreeSet<ObjectId> {
+        let candidates = self
+            .state
+            .objects
+            .values()
+            .filter(|object| object.zone == Zone::Battlefield)
+            .filter_map(|object| {
+                self.characteristics(object.id)
+                    .map(|snapshot| (object.id, snapshot))
+            })
+            .filter(|(_, snapshot)| snapshot.controller != active)
+            .collect::<Vec<_>>();
+        let mut groups = Vec::new();
+        let mut recipients = BTreeSet::new();
+        for (source, snapshot) in &candidates {
+            if !super::characteristics::printed_static_source_is_available(
+                &self.state,
+                self.registry,
+                *source,
+            ) {
+                continue;
+            }
+            if self.untaps_during_other_players_untap_steps(*source) {
+                recipients.insert(*source);
+            }
+            if let Some(face) = self.effective_face(*source) {
+                for ability in &face.static_abilities {
+                    if let StaticAbilityDef::UntapControlledPermanentsDuringOtherPlayersUntapSteps { permanent_types } = &ability.definition {
+                        groups.push((snapshot.controller, permanent_types.clone()));
+                    }
+                }
+            }
+        }
+        for (oid, snapshot) in candidates {
+            if groups.iter().any(|(controller, types)| {
+                *controller == snapshot.controller
+                    && (types.is_empty()
+                        || types.iter().any(|kind| snapshot.has_type(kind.as_str())))
+            }) {
+                recipients.insert(oid);
+            }
+        }
+        recipients
     }
 
     /// CR 514.2: remove marked damage and expire turn-scoped prevention/regeneration shields.

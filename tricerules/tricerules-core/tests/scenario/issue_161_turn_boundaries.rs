@@ -86,7 +86,7 @@ fn waterskin_untaps_at_another_players_untap_boundary_unless_it_lost_the_ability
         affected: AffectedScope::Single(silenced),
         kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
         condition: None,
-        duration: EffectDuration::WhileSourceOnBattlefield,
+        duration: EffectDuration::Indefinite,
         timestamp: engine.state.command_index,
     });
     engine.state.turn_step = tricerules_core::TurnStep::EndStep;

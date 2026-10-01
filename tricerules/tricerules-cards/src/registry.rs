@@ -333,6 +333,18 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 reason,
             })?;
         let ability = &identified.definition;
+        if let StaticAbilityDef::UntapControlledPermanentsDuringOtherPlayersUntapSteps {
+            permanent_types,
+        } = ability
+        {
+            let unique: std::collections::HashSet<_> = permanent_types.iter().collect();
+            if unique.len() != permanent_types.len() {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "group untap permanent types cannot contain duplicates".into(),
+                });
+            }
+        }
         if let StaticAbilityDef::MultiplyManaFromTappedPermanents { multiplier } = ability {
             if *multiplier < 2 {
                 return Err(RegistryError::InvalidCard {
@@ -3275,6 +3287,33 @@ mod tests {
             assert!(matches!(error, RegistryError::InvalidCard { reason, .. }
                 if reason.contains("graveyard and/or exile")));
         }
+    }
+
+    #[test]
+    fn group_untap_accepts_all_or_any_permanent_type_and_rejects_duplicates() {
+        fn probe(types: &str) -> String {
+            format!(
+                r#"(
+                id: "group_untap_probe", name: "Group Untap Probe", face_id: "group_untap_probe",
+                mana_cost: "{{4}}", types: ["Artifact"],
+                static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                    definition: UntapControlledPermanentsDuringOtherPlayersUntapSteps({types}))],
+            )"#
+            )
+        }
+        for fields in [
+            "",
+            "permanent_types: [],",
+            "permanent_types: [Artifact],",
+            "permanent_types: [Artifact, Creature],",
+        ] {
+            CardRegistry::from_chunks(&[&probe(fields)]).expect("all or any listed permanent type");
+        }
+        let error = CardRegistry::from_chunks(&[&probe("permanent_types: [Artifact, Artifact],")])
+            .expect_err("duplicate group untap types must reject");
+        assert!(matches!(error, RegistryError::InvalidCard { reason, .. }
+            if reason.contains("group untap permanent types cannot contain duplicates")));
+        assert!(CardRegistry::from_chunks(&[&probe("permanent_types: [Instant],")]).is_err());
     }
 
     #[test]

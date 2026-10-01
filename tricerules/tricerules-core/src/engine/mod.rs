@@ -200,6 +200,8 @@ mod state_based;
 mod storm;
 mod targeting;
 mod triggers;
+#[cfg(test)]
+mod untap_clock_tests;
 mod warp;
 mod zone_events;
 
@@ -1288,6 +1290,13 @@ pub(super) enum UntapOutcome {
     ReplacedByStun,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(super) struct PreparedUntap {
+    object_id: ObjectId,
+    generation: u64,
+    remaining_stun: Option<u32>,
+}
+
 /// CR 122.1d / 614.1a: apply replacements to one rules-driven untap attempt.
 ///
 /// Stun counters create an applicable replacement only while the permanent is tapped. Removing
@@ -1296,29 +1305,57 @@ pub(super) enum UntapOutcome {
 /// intrinsic stun-counter rule; when another untap replacement is modeled, this is the shared
 /// collection boundary that will feed the existing CR 616 ordering prompt.
 pub(super) fn attempt_untap(engine: &mut GameEngine, oid: ObjectId) -> UntapOutcome {
+    prepare_untap(engine, oid)
+        .map(|plan| commit_untap(engine, plan))
+        .unwrap_or(UntapOutcome::NoChange)
+}
+
+/// Freeze prohibition and replacement outcomes before a simultaneous action mutates state.
+pub(super) fn prepare_untap(engine: &GameEngine, oid: ObjectId) -> Option<PreparedUntap> {
+    let object = engine.state.objects.get(&oid)?;
+    if object.zone != Zone::Battlefield || !object.tapped {
+        return None;
+    }
     if engine.characteristics(oid).is_some_and(|c| {
         engine.state.continuous_effects.iter().any(|effect| {
             effect.kind == ContinuousEffectKind::ProhibitUntap
                 && characteristics::effect_affects(&engine.state, engine.registry, effect, oid, &c)
         })
     }) {
-        return UntapOutcome::NoChange;
+        return None;
     }
+    let stun = object.counter_count(CounterKind::Stun);
+    Some(PreparedUntap {
+        object_id: oid,
+        generation: engine
+            .state
+            .zone_change_generation
+            .get(&oid)
+            .copied()
+            .unwrap_or(0),
+        remaining_stun: (stun > 0).then(|| stun - 1),
+    })
+}
+
+/// Commit the prepared event for its exact incarnation without re-reading live rule conditions.
+pub(super) fn commit_untap(engine: &mut GameEngine, plan: PreparedUntap) -> UntapOutcome {
     let state = &mut engine.state;
+    let oid = plan.object_id;
     let Some(object) = state.objects.get(&oid) else {
         return UntapOutcome::NoChange;
     };
-    if object.zone != Zone::Battlefield || !object.tapped {
+    if object.zone != Zone::Battlefield
+        || !object.tapped
+        || state.zone_change_generation.get(&oid).copied().unwrap_or(0) != plan.generation
+    {
         return UntapOutcome::NoChange;
     }
-
-    let stun_count = object.counter_count(CounterKind::Stun);
-    if stun_count > 0 {
+    if let Some(remaining) = plan.remaining_stun {
         state
             .objects
             .get_mut(&oid)
             .expect("untap object remained present")
-            .set_counter(CounterKind::Stun, stun_count - 1);
+            .set_counter(CounterKind::Stun, remaining);
         return UntapOutcome::ReplacedByStun;
     }
 

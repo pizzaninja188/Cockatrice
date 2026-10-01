@@ -884,42 +884,62 @@ impl GameEngine {
         self.state.turn_step = TurnStep::Untap;
         ev.push(ev_phase(self, rv1::PhaseId::Untap));
 
-        // CR 502.1 / 502.3: in their untap step the active player untaps the permanents they
-        // control and any creature they've controlled since their last turn began loses summoning
-        // sickness. Scope to the active player's battlefield, not every object they *own*: untapping
-        // is a battlefield-only action (cards in hand/graveyard/library/exile have no tap state),
-        // and a permanent is untapped by its controller, not its owner — untapping by owner would
-        // wrongly untap a permanent its owner no longer controls and skip one they took control of.
-        // The battlefield zone list *is* the control list (see `GameObject::controller`), so this
-        // is correct even when a permanent is controlled by someone other than its owner.
-        if let Some(idx) = self.state.player_idx(ap) {
-            for &oid in &self.state.players[idx].battlefield.clone() {
-                let generation = self
-                    .state
-                    .zone_change_generation
-                    .get(&oid)
-                    .copied()
-                    .unwrap_or(0);
-                let skip_untap = self.state.skip_next_untap.remove(&(oid, generation));
-                let doesnt_untap = self.doesnt_untap_during_untap_step(oid);
-                if !skip_untap && !doesnt_untap {
-                    super::attempt_untap(self, oid);
-                }
-                if let Some(c) = self.state.objects.get_mut(&oid) {
-                    c.summoning_sick = false;
-                }
+        // CR 502.3: membership, source availability, restrictions and replacement outcomes all
+        // read the same boundary. No tapped/counter/skip/sickness mutation precedes preparation.
+        let active_cohort = self
+            .state
+            .objects
+            .values()
+            .filter(|object| object.zone == Zone::Battlefield)
+            .filter(|object| {
+                self.characteristics(object.id)
+                    .is_some_and(|c| c.controller == ap)
+            })
+            .map(|object| {
+                (
+                    object.id,
+                    self.state
+                        .zone_change_generation
+                        .get(&object.id)
+                        .copied()
+                        .unwrap_or(0),
+                )
+            })
+            .collect::<BTreeSet<_>>();
+        let mut cohort = self.other_player_untap_cohort(ap);
+        for &(oid, generation) in &active_cohort {
+            if !self.state.skip_next_untap.contains(&(oid, generation))
+                && !self.doesnt_untap_during_untap_step(oid)
+            {
+                cohort.insert(oid);
             }
         }
-        let additional_untaps = self
-            .state
-            .players
-            .iter()
-            .filter(|player| player.id != ap)
-            .flat_map(|player| player.battlefield.iter().copied())
-            .filter(|oid| self.untaps_during_other_players_untap_steps(*oid))
+        let plans = cohort
+            .into_iter()
+            .filter_map(|oid| super::prepare_untap(self, oid))
             .collect::<Vec<_>>();
-        for oid in additional_untaps {
-            super::attempt_untap(self, oid);
+        for plan in plans {
+            super::commit_untap(self, plan);
+        }
+        for (oid, generation) in active_cohort {
+            self.state.skip_next_untap.remove(&(oid, generation));
+            if self
+                .state
+                .zone_change_generation
+                .get(&oid)
+                .copied()
+                .unwrap_or(0)
+                == generation
+            {
+                if let Some(object) = self
+                    .state
+                    .objects
+                    .get_mut(&oid)
+                    .filter(|object| object.zone == Zone::Battlefield)
+                {
+                    object.summoning_sick = false;
+                }
+            }
         }
         // Servatrice only applies engine untaps during batches that include phase_changed("untap").
         // Emit zone_view in this same batch so battlefield_tapped reaches Cockatrice while

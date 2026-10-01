@@ -1236,6 +1236,23 @@ pub(super) fn apply_face_down_values(result: &mut Characteristics) {
     result.toughness = Some(2);
 }
 
+/// Availability of printed/copied static hooks using the same pure removal predicate as static
+/// keyword grants. This does not resolve removal-only dependency cycles.
+pub(super) fn printed_static_source_is_available(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    source: ObjectId,
+) -> bool {
+    state.objects.get(&source).is_some_and(|object| {
+        object.zone == Zone::Battlefield
+            && !object.face_down
+            && basic_land_type_setting(state, source).is_none()
+            && effective_face_from(state, registry, source).is_some()
+            && !(CharacteristicsEvaluator { state, registry })
+                .source_has_active_ability_removal(source)
+    })
+}
+
 /// Whether an effect applies, evaluated from the relevant characteristic snapshot and direct
 /// combat state. Characteristic predicates only depend on controller, types, and colors, avoiding
 /// recursive full-characteristic queries. Dependency ordering becomes necessary once scopes can
