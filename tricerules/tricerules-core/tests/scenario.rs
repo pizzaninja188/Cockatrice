@@ -967,3 +967,6 @@ mod deck_coverage_glorious_sunrise;
 
 #[path = "scenario/deck_coverage_summoning_station.rs"]
 mod deck_coverage_summoning_station;
+
+#[path = "scenario/deck_coverage_frantic_search.rs"]
+mod deck_coverage_frantic_search;

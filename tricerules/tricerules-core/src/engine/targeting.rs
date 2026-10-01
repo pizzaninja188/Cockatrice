@@ -1439,6 +1439,7 @@ fn validate_effect_targets(
         | SpellEffectKind::DamageAll { .. }
         | SpellEffectKind::TapAll { .. }
         | SpellEffectKind::UntapAll { .. }
+        | SpellEffectKind::UntapChosenPermanents
         | SpellEffectKind::CopyNextSpellThisTurn
         | SpellEffectKind::CopyCapturedSpell { .. }
         | SpellEffectKind::Untap {

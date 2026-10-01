@@ -1222,6 +1222,8 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
             choice.max = static_cast<int>(rcr.max());
         } else if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS) {
             choice.kind = ChoiceKind::PermanentChoice;
+            choice.min = static_cast<int>(rcr.min());
+            choice.max = static_cast<int>(rcr.max());
         } else if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_LEGEND_KEEP) {
             choice.kind = ChoiceKind::LegendKeep;
         } else if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_COPY_SOURCE) {

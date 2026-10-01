@@ -23,6 +23,8 @@ pub(super) use choices::resolution_branch_is_live;
 pub(in crate::engine) use choices::{card_result_characteristic_sum, card_result_count};
 mod amass;
 mod blight;
+#[cfg(test)]
+mod chosen_untap_tests;
 mod damage;
 mod destruction;
 #[cfg(test)]
@@ -1921,6 +1923,9 @@ impl GameEngine {
                     }
                     effect @ SpellEffectKind::TapAll { .. } => mass::tap_all(&mut cx, effect)?,
                     effect @ SpellEffectKind::UntapAll { .. } => mass::untap_all(&mut cx, effect)?,
+                    SpellEffectKind::UntapChosenPermanents => {
+                        mass::untap_chosen_permanents(&mut cx)?
+                    }
                     effect @ SpellEffectKind::DestroyAll { .. } => {
                         mass::destroy_all(&mut cx, effect)?
                     }

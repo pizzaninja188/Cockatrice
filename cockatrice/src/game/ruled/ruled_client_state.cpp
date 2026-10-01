@@ -394,7 +394,7 @@ void RuledClientState::teardownPendingChoice()
         emit revealedPickChanged(false, {}, {}, 0, 0);
     }
     const bool wasCostSelection = pendingChoice->kind == ChoiceKind::CostObjects ||
-                                  pendingChoice->kind == ChoiceKind::Proliferate;
+                                  pendingChoice->kind == ChoiceKind::Proliferate || hasPermanentChoiceCohort();
     pendingChoice.reset();
     ++pendingChoiceRevision;
     if (wasCostSelection) {
@@ -416,7 +416,8 @@ void RuledClientState::setPendingChoice(RuledPendingChoice choice)
     }
     pendingChoice = std::move(choice);
     ++pendingChoiceRevision;
-    if (pendingChoice->kind == ChoiceKind::CostObjects || pendingChoice->kind == ChoiceKind::Proliferate) {
+    if (pendingChoice->kind == ChoiceKind::CostObjects || pendingChoice->kind == ChoiceKind::Proliferate ||
+        hasPermanentChoiceCohort()) {
         emit resolutionCostSelectionChanged();
         emit combatStateChanged();
     }
@@ -533,8 +534,49 @@ void RuledClientState::submitResolutionPayment(ruled::v1::ResolutionChoiceDecisi
 
 void RuledClientState::submitPendingChoiceObject(quint32 oid)
 {
+    if (hasPermanentChoiceCohort()) {
+        if (pendingChoice->permanentChoiceSubmitting || !pendingChoice->candidateOids.contains(oid))
+            return;
+        const int index = pendingChoice->selectedObjectOids.indexOf(oid);
+        if (index >= 0)
+            pendingChoice->selectedObjectOids.removeAt(index);
+        else if (pendingChoice->selectedObjectOids.size() < pendingChoice->max)
+            pendingChoice->selectedObjectOids.append(oid);
+        else
+            return;
+        emit resolutionCostSelectionChanged();
+        emit combatStateChanged();
+        return;
+    }
     clearPendingChoice();
     sendResolutionChoice({oid});
+}
+
+void RuledClientState::submitPermanentChoiceObjects()
+{
+    if (!hasPermanentChoiceCohort() || pendingChoice->permanentChoiceSubmitting)
+        return;
+    const int count = pendingChoice->selectedObjectOids.size();
+    if (count < pendingChoice->min || count > pendingChoice->max)
+        return;
+    const quint64 revision = pendingChoiceRevision;
+    ruled::v1::RuledCommand command;
+    auto *choice = command.mutable_submit_resolution_choice();
+    for (quint32 oid : pendingChoice->selectedObjectOids)
+        choice->add_chosen_object_ids(oid);
+    pendingChoice->permanentChoiceSubmitting = true;
+    emit resolutionCostSelectionChanged();
+    host->sendRuledCommandExpectingAck(command, [self = QPointer<RuledClientState>(this), revision](bool accepted) {
+        if (!self || self->pendingChoiceRevision != revision || !self->hasPermanentChoiceCohort())
+            return;
+        if (accepted) {
+            self->clearPendingChoice();
+        } else {
+            self->pendingChoice->permanentChoiceSubmitting = false;
+            emit self->resolutionCostSelectionChanged();
+            emit self->combatStateChanged();
+        }
+    });
 }
 
 void RuledClientState::toggleResolutionCostObject(quint32 oid)
@@ -623,6 +665,13 @@ void RuledClientState::declinePendingClickChoice()
         return;
     }
     const ChoiceKind kind = pendingChoice->kind;
+    if (hasPermanentChoiceCohort()) {
+        if (!pendingChoice->permanentChoiceSubmitting) {
+            pendingChoice->selectedObjectOids.clear();
+            submitPermanentChoiceObjects();
+        }
+        return;
+    }
     if (kind == ChoiceKind::ResolutionPick) {
         pendingChoice->selectedServerCardIds.clear();
         submitResolutionHandPick();

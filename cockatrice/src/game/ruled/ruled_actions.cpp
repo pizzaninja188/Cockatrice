@@ -725,6 +725,12 @@ bool isSelectedGraveyardCostObject(const AbstractGame *game, quint32 oid)
            (state && state->isResolutionCostObjectSelected(oid));
 }
 
+bool isSelectedPermanentChoiceObject(const AbstractGame *game, quint32 oid)
+{
+    RuledClientState *state = stateFor(game);
+    return state && state->isPermanentChoiceObjectSelected(oid);
+}
+
 bool isPlayerSelectedAsSpellTarget(const AbstractGame *game, int playerId)
 {
     PlayerActions *actions = localPlayerActions(game);

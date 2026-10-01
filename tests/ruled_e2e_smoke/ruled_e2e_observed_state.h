@@ -65,7 +65,8 @@ struct ObservedState
     std::vector<ruled::v1::AttackAssignment> latestAttackPreviewAssignments;
     std::vector<ruled::v1::AttackAssignment> latestDeclaredAttackAssignments;
     std::vector<ruled::v1::AttackAssignment> latestAddedAttackAssignments;
-    std::set<int> physicallyTappedCardIds;
+    // Physical card ids are scoped to the player, including across opposing land choices.
+    std::set<std::pair<int, int>> physicallyTappedCardIds;
     std::set<int> physicallyAttackingCardIds;
     std::map<std::pair<int, int>, std::pair<int, QString>> physicalRowAndPt;
     std::vector<Event_CreateToken> physicalCreateTokenEvents;

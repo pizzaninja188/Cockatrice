@@ -150,6 +150,7 @@ bool tryHandleCombatRightClick(CardItem *card);
 [[nodiscard]] bool isSelectedSpellTarget(const AbstractGame *game, quint32 oid);
 [[nodiscard]] bool isSelectedCastCostPermanent(const AbstractGame *game, quint32 oid);
 [[nodiscard]] bool isSelectedGraveyardCostObject(const AbstractGame *game, quint32 oid);
+[[nodiscard]] bool isSelectedPermanentChoiceObject(const AbstractGame *game, quint32 oid);
 [[nodiscard]] bool isPlayerSelectedAsSpellTarget(const AbstractGame *game, int playerId);
 [[nodiscard]] bool isSpellDamageAllocationMode(const AbstractGame *game);
 [[nodiscard]] bool isSpellDamageAllocationDisplayActive(const AbstractGame *game);

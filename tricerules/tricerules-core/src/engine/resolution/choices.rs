@@ -18,6 +18,11 @@ use tricerules_cards::primitives::{
 fn permanent_choice_prompt(filter: &TargetFilter, min: u32, max: u32) -> String {
     let (singular, plural) = if filter.any_of.is_none() && filter.kind == TargetKind::Creature {
         ("creature", "creatures")
+    } else if filter.any_of.is_none()
+        && filter.kind == TargetKind::AnyPermanent
+        && filter.permanent_types == [tricerules_cards::primitives::PermanentTypeFilter::Land]
+    {
+        ("land", "lands")
     } else {
         ("permanent", "permanents")
     };

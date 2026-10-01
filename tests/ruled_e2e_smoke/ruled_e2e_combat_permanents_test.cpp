@@ -725,8 +725,8 @@ TEST_F(RuledE2ESmokeTest, MobilizeDefenderChoiceAndTokenLifecycleReachBothClient
     ASSERT_TRUE(p2.serverCardByEngineOid.count(tokenOid));
     const int physicalTokenId = p1.serverCardByEngineOid[tokenOid];
     EXPECT_EQ(p2.serverCardByEngineOid[tokenOid], physicalTokenId);
-    EXPECT_TRUE(p1.physicallyTappedCardIds.count(physicalTokenId));
-    EXPECT_TRUE(p2.physicallyTappedCardIds.count(physicalTokenId));
+    EXPECT_TRUE(p1.physicallyTappedCardIds.count({p1.myId, physicalTokenId}));
+    EXPECT_TRUE(p2.physicallyTappedCardIds.count({p1.myId, physicalTokenId}));
     EXPECT_TRUE(p1.physicallyAttackingCardIds.count(physicalTokenId));
     EXPECT_TRUE(p2.physicallyAttackingCardIds.count(physicalTokenId));
     ASSERT_EQ(p1.latestAddedAttackAssignments.size(), 1u);
@@ -1185,8 +1185,8 @@ TEST_F(RuledE2ESmokeTest, TappedOrdinaryTokenReachesBothClientsWithoutCombatStat
     ASSERT_TRUE(p2.serverCardByEngineOid.count(tokenOid));
     const int physicalTokenId = p1.serverCardByEngineOid[tokenOid];
     EXPECT_EQ(p2.serverCardByEngineOid[tokenOid], physicalTokenId);
-    EXPECT_TRUE(p1.physicallyTappedCardIds.count(physicalTokenId));
-    EXPECT_TRUE(p2.physicallyTappedCardIds.count(physicalTokenId));
+    EXPECT_TRUE(p1.physicallyTappedCardIds.count({p1.myId, physicalTokenId}));
+    EXPECT_TRUE(p2.physicallyTappedCardIds.count({p1.myId, physicalTokenId}));
     EXPECT_FALSE(p1.physicallyAttackingCardIds.count(physicalTokenId));
     EXPECT_FALSE(p2.physicallyAttackingCardIds.count(physicalTokenId));
     const auto p1Robot = findToken(p1, p1.myId, tokenOid);

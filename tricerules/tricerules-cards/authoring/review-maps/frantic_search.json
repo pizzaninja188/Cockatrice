@@ -1,0 +1,37 @@
+{
+  "format_version": 1,
+  "oracle_id": "16e015b2-f8a3-4b1a-80be-58a8f5fb5e8c",
+  "spans": [{
+    "face_id": "frantic_search",
+    "start_line": 1,
+    "end_line": 1,
+    "typed_paths": ["/faces/0/spell_effect/0", "/faces/0/spell_effect/1", "/faces/0/spell_effect/2"]
+  }],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_frantic_search::frantic_search_paid_cast_private_discard_then_zero_one_three_lands",
+      "covers": "Actual paid2U Instant cast, draw2 then mandatory private discard2 then untargeted public any-player land choice0to3, no intervening priority, zero/one/three selections and unchanged unselected lands"
+    },
+    {
+      "test": "scenario deck_coverage_frantic_search::frantic_search_rejects_illegal_and_stale_land_choices_without_mutation",
+      "covers": "Wrong actor, duplicates, nonland, oversize, noncandidate and stale incarnation choices reject full-state atomically, followed by successful valid retry"
+    },
+    {
+      "test": "scenario deck_coverage_frantic_search::frantic_search_untargeted_lands_include_opponents_and_respect_stun_and_prohibition",
+      "covers": "Opposing hexproof/shroud lands remain eligible; chosen stun land consumes one counter, prohibition preserves counters; already-untapped land is legal and unchanged"
+    },
+    {
+      "test": "scenario deck_coverage_frantic_search::frantic_search_no_lands_finishes_after_private_discard",
+      "covers": "Actual paid cast with no battlefield lands finishes after draw/discard without an empty public interruption"
+    },
+    {
+      "test": "scenario deck_coverage_frantic_search::frantic_search_with_only_the_spell_in_hand_draws_and_discards_both_cards",
+      "covers": "Only the spell in hand before cast; both drawn cards discarded and resolution completes"
+    },
+    {
+      "test": "scenario deck_coverage_frantic_search::frantic_search_paid_cast_and_both_choices_replay_deterministically",
+      "covers": "Identical seeded paid cast, private discard and public three-land choices reproduce every event batch and final state"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1178,6 +1178,10 @@ pub enum SpellEffectKind {
         #[serde(default)]
         subject: EffectSubject,
     },
+    /// Untap the entire generation-bound receipt of an immediately preceding direct
+    /// `ChoosePermanents`. Frantic Search chooses lands; Snap uses the same untargeted
+    /// choice mechanic after returning its target. All surviving objects untap simultaneously.
+    UntapChosenPermanents,
     /// CR 722.3: the same designation transition serves prepared entry and later instructions.
     SetPrepared {
         subject: EffectSubject,
@@ -2833,6 +2837,7 @@ impl SpellEffectKind {
             | SpellEffectKind::LookChooseToHand { .. }
             | SpellEffectKind::TapAll { .. }
             | SpellEffectKind::UntapAll { .. }
+            | SpellEffectKind::UntapChosenPermanents
             | SpellEffectKind::PumpAll { .. }
             | SpellEffectKind::PutCountersAll { .. }
             | SpellEffectKind::PutCountersAllPlaneswalkers { .. }
@@ -3286,6 +3291,14 @@ impl SpellEffectKind {
             let previous = index
                 .checked_sub(1)
                 .and_then(|previous| effects.get(previous));
+            if matches!(effect, SpellEffectKind::UntapChosenPermanents)
+                && !matches!(previous, Some(SpellEffectKind::ChoosePermanents { .. }))
+            {
+                return Err(
+                    "UntapChosenPermanents requires an immediately preceding direct ChoosePermanents"
+                        .into(),
+                );
+            }
             if matches!(
                 effect,
                 SpellEffectKind::CreateTokens {

@@ -315,9 +315,12 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
             painter->drawPath(shape());
             painter->restore();
         }
-        if (zone && (zone->getName() == ZoneNames::GRAVE || zone->getName() == ZoneNames::TABLE) && owner &&
-            owner->getPlayerInfo()->getLocal() && ruledTargetSelectionOid != 0 &&
-            RuledActions::isSelectedGraveyardCostObject(ruledGame, ruledTargetSelectionOid)) {
+        if (zone && ruledTargetSelectionOid != 0 &&
+            ((zone->getName() == ZoneNames::TABLE &&
+              RuledActions::isSelectedPermanentChoiceObject(ruledGame, ruledTargetSelectionOid)) ||
+             ((zone->getName() == ZoneNames::GRAVE || zone->getName() == ZoneNames::TABLE) && owner &&
+              owner->getPlayerInfo()->getLocal() &&
+              RuledActions::isSelectedGraveyardCostObject(ruledGame, ruledTargetSelectionOid)))) {
             painter->save();
             painter->setRenderHint(QPainter::Antialiasing, true);
             QPen pen(QColor(255, 165, 0));

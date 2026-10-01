@@ -64,9 +64,9 @@ void ObservedState::observePhysicalEvent(const GameEvent &ev)
         }
         if (attr.attribute() == AttrTapped) {
             if (attr.attr_value() == "1") {
-                physicallyTappedCardIds.insert(attr.card_id());
+                physicallyTappedCardIds.insert({ev.player_id(), attr.card_id()});
             } else {
-                physicallyTappedCardIds.erase(attr.card_id());
+                physicallyTappedCardIds.erase({ev.player_id(), attr.card_id()});
             }
         } else if (attr.attribute() == AttrAttacking) {
             if (attr.attr_value() == "1") {

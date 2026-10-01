@@ -558,6 +558,8 @@ public:
         /// Click-to-select candidates on the battlefield or player surface.
         QVector<quint32> candidateOids;
         QVector<quint32> selectedObjectOids;
+        /// Keep a bounded permanent choice and its highlights until acknowledgement or replacement.
+        bool permanentChoiceSubmitting = false;
         /// Proliferate's player ids use a distinct identity domain from battlefield ObjectIds.
         QVector<quint32> candidatePlayerIds;
         QVector<quint32> selectedPlayerIds;
@@ -1589,6 +1591,15 @@ public:
     /// For LegendKeep the chosen permanent is the one KEPT (CR 704.5j); the engine sacrifices
     /// the rest. Clears the choice and sends SubmitResolutionChoice.
     void submitPendingChoiceObject(quint32 oid);
+    [[nodiscard]] bool hasPermanentChoiceCohort() const
+    {
+        return hasPendingChoiceOfKind(ChoiceKind::PermanentChoice) && pendingChoice->max > 1;
+    }
+    [[nodiscard]] bool isPermanentChoiceObjectSelected(quint32 oid) const
+    {
+        return hasPermanentChoiceCohort() && pendingChoice->selectedObjectOids.contains(oid);
+    }
+    void submitPermanentChoiceObjects();
     [[nodiscard]] bool isResolutionCostObjectSelected(quint32 oid) const
     {
         return hasPendingChoiceOfKind(ChoiceKind::CostObjects) && pendingChoice->selectedObjectOids.contains(oid);

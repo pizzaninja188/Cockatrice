@@ -1,6 +1,6 @@
 use super::destruction::{attempt_destroy, DestroyLogStyle, DestroyOutcome, DestroySnapshot};
 use super::*;
-use crate::engine::{attempt_untap, UntapOutcome};
+use crate::engine::{attempt_untap, commit_untap, prepare_untap, UntapOutcome};
 
 #[cfg(test)]
 #[path = "mass_tap_tests.rs"]
@@ -254,6 +254,45 @@ pub(super) fn untap_all(
         cx.spell_label
     )));
 
+    Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn untap_chosen_permanents(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
+    // CR 608.2f: determine every replacement/prohibition before changing any object.
+    // A returned physical object is a new rules object and cannot consume the old receipt.
+    let plans = cx
+        .previous_effect_result
+        .produced_objects
+        .iter()
+        .filter(|chosen| {
+            cx.engine
+                .state
+                .objects
+                .get(&chosen.object_id)
+                .is_some_and(|object| {
+                    object.zone == Zone::Battlefield
+                        && cx
+                            .engine
+                            .state
+                            .zone_change_generation
+                            .get(&chosen.object_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == chosen.zone_change_generation
+                })
+        })
+        .filter_map(|chosen| prepare_untap(cx.engine, chosen.object_id))
+        .collect::<Vec<_>>();
+    let mut untapped = 0;
+    for plan in plans {
+        if commit_untap(cx.engine, plan) == UntapOutcome::Untapped {
+            untapped += 1;
+        }
+    }
+    cx.events.push(ev_log(format!(
+        "{} untaps {untapped} chosen permanent(s)",
+        cx.spell_label
+    )));
     Ok(EffectOutcome::Continue)
 }
 

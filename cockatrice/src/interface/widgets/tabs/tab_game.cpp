@@ -428,6 +428,10 @@ void TabGame::connectToGameEventHandler()
                 this, [this]() { refreshRuledPromptState(); });
         connect(gamePromptWidget, &GamePromptWidget::ruledCostSelectionConfirmRequested, this, [this]() {
             RuledClientState *const ruled = game->getGameEventHandler()->ruled();
+            if (ruled && ruled->hasPermanentChoiceCohort()) {
+                ruled->submitPermanentChoiceObjects();
+                return;
+            }
             if (ruled && ruled->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CostObjects)) {
                 ruled->submitResolutionCostObjects();
                 return;
@@ -776,6 +780,14 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         for (const auto &option : h->pendingChoiceOptions()) {
             state.choiceOptions.append({option.index, option.label, option.enabled});
         }
+    } else if (h->hasPermanentChoiceCohort()) {
+        state.mode = h->pendingChoice->permanentChoiceSubmitting ? PromptMode::CommandPending : PromptMode::CostSelection;
+        state.required = h->pendingChoice->min;
+        state.selected = h->pendingChoice->selectedObjectOids.size();
+        state.max = h->pendingChoice->max;
+        state.text = h->pendingChoice->promptText +
+                     tr("\nSelected: %1 (%2–%3). Click cards to toggle; click again to deselect, then confirm.")
+                         .arg(state.selected).arg(state.required).arg(state.max);
     } else if (h->hasPendingChoiceOfKind(ChoiceKind::CostObjects) ||
                h->hasPendingChoiceOfKind(ChoiceKind::Proliferate)) {
         state.mode = PromptMode::CostSelection;

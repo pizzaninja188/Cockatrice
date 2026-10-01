@@ -8608,6 +8608,154 @@ TEST_F(RuledClientTest, OptionalHandPickDeclinesWithEmptySelectionAndClosesThePi
     EXPECT_EQ(closed.last().at(0).toInt(), -1);
 }
 
+TEST_F(RuledClientTest, PermanentChoiceRetainsEngineBoundsForFranticSearch)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS);
+    choice->set_min(0);
+    choice->set_max(3);
+    choice->set_prompt_text("Choose 0–3 lands.");
+    for (quint32 oid : {100u, 101u, 102u, 103u})
+        choice->add_candidate_object_ids(oid);
+    apply(batch);
+    ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::PermanentChoice));
+    EXPECT_EQ(state->pendingChoice->min, 0);
+    EXPECT_EQ(state->pendingChoice->max, 3);
+    EXPECT_EQ(state->pendingChoice->candidateOids.size(), 4);
+}
+
+TEST_F(RuledClientTest, FranticLandClicksToggleUniqueBoundedSelectionUntilConfirmation)
+{
+    RuledClientState::RuledPendingChoice choice;
+    choice.kind = RuledClientState::ChoiceKind::PermanentChoice;
+    choice.min = 0;
+    choice.max = 3;
+    choice.candidateOids = {100, 101, 102, 103};
+    state->setPendingChoice(choice);
+    QSignalSpy repaint(state, &RuledClientState::combatStateChanged);
+    state->submitPendingChoiceObject(999);
+    EXPECT_TRUE(state->pendingChoice->selectedObjectOids.isEmpty());
+    for (quint32 oid : {100u, 101u, 102u, 103u})
+        state->submitPendingChoiceObject(oid);
+    EXPECT_EQ(state->pendingChoice->selectedObjectOids, QVector<quint32>({100, 101, 102}));
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    state->submitPendingChoiceObject(101);
+    EXPECT_FALSE(state->isPermanentChoiceObjectSelected(101));
+    state->submitPendingChoiceObject(103);
+    EXPECT_EQ(state->pendingChoice->selectedObjectOids, QVector<quint32>({100, 102, 103}));
+    EXPECT_EQ(repaint.count(), 5);
+    state->submitPermanentChoiceObjects();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &submitted = host.sentCommands.last().submit_resolution_choice();
+    ASSERT_EQ(submitted.chosen_object_ids_size(), 3);
+    EXPECT_EQ(submitted.chosen_object_ids(0), 100u);
+    EXPECT_EQ(submitted.chosen_object_ids(1), 102u);
+    EXPECT_EQ(submitted.chosen_object_ids(2), 103u);
+    EXPECT_TRUE(state->isPermanentChoiceObjectSelected(103));
+    state->submitPendingChoiceObject(100);
+    state->submitPermanentChoiceObjects();
+    EXPECT_EQ(host.sentCommands.size(), 1);
+    host.answerPendingAck(true);
+    EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::PermanentChoice));
+    EXPECT_FALSE(state->isPermanentChoiceObjectSelected(103));
+}
+
+TEST_F(RuledClientTest, FranticZeroOneThreeRejectedChoicesRetainSelectionForRetry)
+{
+    for (int count : {0, 1, 3}) {
+        RuledClientState::RuledPendingChoice choice;
+        choice.kind = RuledClientState::ChoiceKind::PermanentChoice;
+        choice.min = 0;
+        choice.max = 3;
+        choice.candidateOids = {100, 101, 102};
+        state->setPendingChoice(choice);
+        for (int index = 0; index < count; ++index)
+            state->submitPendingChoiceObject(100 + index);
+        const auto selected = state->pendingChoice->selectedObjectOids;
+        const quint64 revision = state->pendingChoiceRevision;
+        host.sentCommands.clear();
+        state->submitPermanentChoiceObjects();
+        ASSERT_EQ(host.sentCommands.size(), 1);
+        EXPECT_EQ(host.sentCommands.last().submit_resolution_choice().chosen_object_ids_size(), count);
+        host.answerPendingAck(false);
+        ASSERT_TRUE(state->hasPermanentChoiceCohort());
+        EXPECT_EQ(state->pendingChoiceRevision, revision);
+        EXPECT_EQ(state->pendingChoice->selectedObjectOids, selected);
+        EXPECT_FALSE(state->pendingChoice->permanentChoiceSubmitting);
+        state->submitPermanentChoiceObjects();
+        EXPECT_EQ(host.sentCommands.size(), 2);
+        host.answerPendingAck(true);
+    }
+}
+
+TEST_F(RuledClientTest, FranticAcknowledgementCannotReplaceANewerEngineChoice)
+{
+    for (bool accepted : {false, true}) {
+        RuledClientState::RuledPendingChoice old;
+        old.kind = RuledClientState::ChoiceKind::PermanentChoice;
+        old.max = 3;
+        old.candidateOids = {100};
+        state->setPendingChoice(old);
+        state->submitPermanentChoiceObjects();
+        RuledClientState::RuledPendingChoice next;
+        next.kind = RuledClientState::ChoiceKind::PermanentChoice;
+        next.min = 1;
+        next.max = 2;
+        next.promptText = "A newer engine choice";
+        next.candidateOids = {200, 201};
+        state->setPendingChoice(next);
+        state->submitPendingChoiceObject(200);
+        const quint64 revision = state->pendingChoiceRevision;
+        host.answerPendingAck(accepted);
+        ASSERT_TRUE(state->hasPermanentChoiceCohort());
+        EXPECT_EQ(state->pendingChoiceRevision, revision);
+        EXPECT_EQ(state->pendingChoice->promptText, next.promptText);
+        EXPECT_EQ(state->pendingChoice->selectedObjectOids, QVector<quint32>({200}));
+        EXPECT_FALSE(state->pendingChoice->permanentChoiceSubmitting);
+    }
+}
+
+TEST_F(RuledClientTest, PermanentCohortConfirmationHonorsMandatoryMinimum)
+{
+    RuledClientState::RuledPendingChoice choice;
+    choice.kind = RuledClientState::ChoiceKind::PermanentChoice;
+    choice.min = 2;
+    choice.max = 3;
+    choice.candidateOids = {100, 101};
+    state->setPendingChoice(choice);
+    state->submitPermanentChoiceObjects();
+    state->submitPendingChoiceObject(100);
+    state->submitPermanentChoiceObjects();
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    state->submitPendingChoiceObject(101);
+    state->submitPermanentChoiceObjects();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    host.answerPendingAck(true);
+}
+
+TEST_F(RuledClientTest, PermanentOneOfOneRetainsImmediateClickSubmission)
+{
+    for (int minimum : {0, 1}) {
+        ruled::v1::RuledEventBatch batch;
+        auto *choice = batch.add_events()->mutable_resolution_choice_required();
+        choice->set_deciding_player_id(kLocalPlayer);
+        choice->set_choice_kind(ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS);
+        choice->set_min(minimum);
+        choice->set_max(1);
+        choice->add_candidate_object_ids(101);
+        apply(batch);
+        host.sentCommands.clear();
+        EXPECT_FALSE(state->hasPermanentChoiceCohort());
+        state->submitPendingChoiceObject(101);
+        ASSERT_EQ(host.sentCommands.size(), 1);
+        ASSERT_EQ(host.sentCommands.last().submit_resolution_choice().chosen_object_ids_size(), 1);
+        EXPECT_EQ(host.sentCommands.last().submit_resolution_choice().chosen_object_ids(0), 101u);
+        EXPECT_FALSE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::PermanentChoice));
+    }
+}
+
 TEST_F(RuledClientTest, OptionalPermanentChoiceDeclinesButMandatoryChoiceDoesNot)
 {
     for (int minimum : {0, 1}) {

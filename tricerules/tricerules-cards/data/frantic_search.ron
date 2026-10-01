@@ -1,0 +1,19 @@
+// Oracle and rulings checked 2026-10-01: https://scryfall.com/card/tle/159/frantic-search
+// Lands are chosen during resolution, may belong to any player, and are not targets.
+(
+  id: "frantic_search",
+  name: "Frantic Search",
+  face_id: "frantic_search",
+  mana_cost: "{2}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    DrawDiscard(draw_count: 2, discard_count: 2, order: DrawThenDiscard),
+    ChoosePermanents(
+      chooser: Controller,
+      filter: (kind: AnyPermanent, permanent_types: [Land]),
+      min: 0,
+      max: 3,
+    ),
+    UntapChosenPermanents,
+  ],
+)

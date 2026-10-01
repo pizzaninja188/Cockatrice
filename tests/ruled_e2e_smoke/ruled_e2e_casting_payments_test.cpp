@@ -1757,8 +1757,8 @@ TEST_F(RuledE2ESmokeTest, ConvokeAndWaterbendPreviewsArePrivateReadOnlyAndCommit
     ASSERT_TRUE(p1.serverCardByEngineOid.count(bear->oid));
     ASSERT_TRUE(p2.serverCardByEngineOid.count(bear->oid));
     EXPECT_EQ(p1.serverCardByEngineOid[bear->oid], p2.serverCardByEngineOid[bear->oid]);
-    EXPECT_TRUE(p1.physicallyTappedCardIds.count(p1.serverCardByEngineOid[bear->oid]));
-    EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[bear->oid]));
+    EXPECT_TRUE(p1.physicallyTappedCardIds.count({p1.myId, p1.serverCardByEngineOid[bear->oid]}));
+    EXPECT_TRUE(p2.physicallyTappedCardIds.count({p1.myId, p2.serverCardByEngineOid[bear->oid]}));
     EXPECT_EQ(p1.myPool.total(), 0);
 
     // Waterbend uses the same private preview and physical-object transaction during activation.
@@ -1803,8 +1803,8 @@ TEST_F(RuledE2ESmokeTest, ConvokeAndWaterbendPreviewsArePrivateReadOnlyAndCommit
     ASSERT_TRUE(send(p1, activate, QStringLiteral("commit mixed Waterbend activation")));
     for (const auto &object : {*vine, *pick}) {
         EXPECT_EQ(p1.serverCardByEngineOid[object.oid], p2.serverCardByEngineOid[object.oid]);
-        EXPECT_TRUE(p1.physicallyTappedCardIds.count(p1.serverCardByEngineOid[object.oid]));
-        EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[object.oid]));
+        EXPECT_TRUE(p1.physicallyTappedCardIds.count({p1.myId, p1.serverCardByEngineOid[object.oid]}));
+        EXPECT_TRUE(p2.physicallyTappedCardIds.count({p1.myId, p2.serverCardByEngineOid[object.oid]}));
     }
     EXPECT_EQ(p1.myPool.total(), 0);
     auto pass = [&]() {
@@ -1887,8 +1887,8 @@ TEST_F(RuledE2ESmokeTest, ConvokeAndWaterbendPreviewsArePrivateReadOnlyAndCommit
     EXPECT_EQ(p1.handSizeByPlayer[p1.myId], handBeforeDraw + 3);
     EXPECT_EQ(p1.stackDepth, 0);
     EXPECT_EQ(p1.myPool.total(), 0);
-    EXPECT_TRUE(p1.physicallyTappedCardIds.count(p1.serverCardByEngineOid[thopter->oid]));
-    EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[thopter->oid]));
+    EXPECT_TRUE(p1.physicallyTappedCardIds.count({p1.myId, p1.serverCardByEngineOid[thopter->oid]}));
+    EXPECT_TRUE(p2.physicallyTappedCardIds.count({p1.myId, p2.serverCardByEngineOid[thopter->oid]}));
 }
 
 TEST_F(RuledE2ESmokeTest, SelectableTapCounterAndBlightPaymentsPreservePrivacyAndExactCardsForBothClients)
@@ -2015,10 +2015,10 @@ TEST_F(RuledE2ESmokeTest, SelectableTapCounterAndBlightPaymentsPreservePrivacyAn
     ASSERT_TRUE(p2.serverCardByEngineOid.count(gene->oid) && p2.serverCardByEngineOid.count(bear->oid));
     EXPECT_EQ(p1.serverCardByEngineOid[gene->oid], p2.serverCardByEngineOid[gene->oid]);
     EXPECT_EQ(p1.serverCardByEngineOid[bear->oid], p2.serverCardByEngineOid[bear->oid]);
-    EXPECT_TRUE(p1.physicallyTappedCardIds.count(p1.serverCardByEngineOid[gene->oid]));
-    EXPECT_TRUE(p1.physicallyTappedCardIds.count(p1.serverCardByEngineOid[bear->oid]));
-    EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[gene->oid]));
-    EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[bear->oid]));
+    EXPECT_TRUE(p1.physicallyTappedCardIds.count({p1.myId, p1.serverCardByEngineOid[gene->oid]}));
+    EXPECT_TRUE(p1.physicallyTappedCardIds.count({p1.myId, p1.serverCardByEngineOid[bear->oid]}));
+    EXPECT_TRUE(p2.physicallyTappedCardIds.count({p1.myId, p2.serverCardByEngineOid[gene->oid]}));
+    EXPECT_TRUE(p2.physicallyTappedCardIds.count({p1.myId, p2.serverCardByEngineOid[bear->oid]}));
     EXPECT_EQ(p1.myPool.total(), 1);
 
     // Station reuses the same private, generation-bound tap picker, while its counters and
@@ -2478,8 +2478,8 @@ TEST_F(RuledE2ESmokeTest, AggregatePowerAndManaValuePaymentsReachBothClientsWith
         ASSERT_TRUE(p1.serverCardByEngineOid.count(object.object_id()));
         ASSERT_TRUE(p2.serverCardByEngineOid.count(object.object_id()));
         EXPECT_EQ(p1.serverCardByEngineOid[object.object_id()], p2.serverCardByEngineOid[object.object_id()]);
-        EXPECT_TRUE(p1.physicallyTappedCardIds.count(p1.serverCardByEngineOid[object.object_id()]));
-        EXPECT_TRUE(p2.physicallyTappedCardIds.count(p2.serverCardByEngineOid[object.object_id()]));
+        EXPECT_TRUE(p1.physicallyTappedCardIds.count({p1.myId, p1.serverCardByEngineOid[object.object_id()]}));
+        EXPECT_TRUE(p2.physicallyTappedCardIds.count({p1.myId, p2.serverCardByEngineOid[object.object_id()]}));
     }
     EXPECT_FALSE(findPermanent(p1, p1.myId, QStringLiteral("mossbridge_troll"))->tapped);
     ASSERT_TRUE(pass());

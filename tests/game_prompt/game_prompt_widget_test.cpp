@@ -427,6 +427,31 @@ TEST_F(GamePromptWidgetTest, MandatoryResolutionCostSelectionDoesNotOfferCancel)
     EXPECT_FALSE(btn("openingBottomCancelButton")->isHidden());
 }
 
+TEST_F(GamePromptWidgetTest, FranticLandSelectionConfirmsZeroOneThreeAndSuppressesPriority)
+{
+    QSignalSpy confirmed(widget.get(), &GamePromptWidget::ruledCostSelectionConfirmRequested);
+    widget->setLocalPlayerHasPriority(true);
+    for (int count : {0, 1, 3}) {
+        GamePromptWidget::RuledPromptState state;
+        state.mode = PromptMode::CostSelection;
+        state.required = 0;
+        state.selected = count;
+        state.max = 3;
+        state.text = QString("Choose 0–3 lands. Selected: %1 (0–3). Click cards to toggle; then confirm.").arg(count);
+        widget->setRuledPromptState(state);
+        EXPECT_FALSE(btn("resolutionHandPickConfirmButton")->isHidden());
+        EXPECT_TRUE(btn("resolutionHandPickConfirmButton")->isEnabled());
+        EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+        EXPECT_TRUE(btn("declineClickChoiceButton")->isHidden());
+        btn("resolutionHandPickConfirmButton")->click();
+        state.mode = PromptMode::CommandPending;
+        widget->setRuledPromptState(state);
+        EXPECT_TRUE(btn("resolutionHandPickConfirmButton")->isHidden());
+        EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+    }
+    EXPECT_EQ(confirmed.count(), 3);
+}
+
 TEST_F(GamePromptWidgetTest, ChoiceOptionsRenderAsOrdinaryLabeledButtons)
 {
     QSignalSpy optionSpy(widget.get(), &GamePromptWidget::ruledChoiceOptionRequested);
