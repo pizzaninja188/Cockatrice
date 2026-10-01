@@ -976,3 +976,6 @@ mod deck_coverage_wash_out;
 
 #[path = "scenario/deck_coverage_anger.rs"]
 mod deck_coverage_anger;
+
+#[path = "scenario/deck_coverage_ghalta.rs"]
+mod deck_coverage_ghalta;

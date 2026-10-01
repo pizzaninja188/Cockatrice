@@ -73,6 +73,7 @@ pub(super) fn battlefield_quantity_value(
         CountExpression::BattlefieldPermanents { .. }
             | CountExpression::BattlefieldCreatures { .. }
             | CountExpression::BattlefieldMaximum { .. }
+            | CountExpression::BattlefieldPowerSum { .. }
     ) {
         return None;
     }
@@ -83,7 +84,8 @@ pub(super) fn battlefield_quantity_value(
         .filter_map(|oid| characteristics(oid).map(|c| (oid, c)))
         .filter(|(oid, c)| match expression {
             CountExpression::BattlefieldPermanents { filter }
-            | CountExpression::BattlefieldMaximum { filter, .. } => {
+            | CountExpression::BattlefieldMaximum { filter, .. }
+            | CountExpression::BattlefieldPowerSum { filter } => {
                 battlefield_permanent_matches(state, filter, *oid, c, context)
             }
             CountExpression::BattlefieldCreatures { filter } => {
@@ -117,6 +119,9 @@ pub(super) fn battlefield_quantity_value(
         })
         .map(|(_, c)| c);
     Some(match expression {
+        CountExpression::BattlefieldPowerSum { .. } => values
+            .filter_map(|c| c.signed_power)
+            .fold(0_i64, i64::saturating_add),
         CountExpression::BattlefieldMaximum { characteristic, .. } => values
             .filter_map(|c| match characteristic {
                 tricerules_cards::BattlefieldQuantityCharacteristic::Power => c.signed_power,
@@ -1782,6 +1787,7 @@ impl GameEngine {
             .map_or(0, i64::from),
             CountExpression::BattlefieldPermanents { .. }
             | CountExpression::BattlefieldMaximum { .. }
+            | CountExpression::BattlefieldPowerSum { .. }
             | CountExpression::BattlefieldCreatures { .. } => {
                 battlefield_quantity_value(&self.state, expression, condition_context, |oid| {
                     self.characteristics(oid)
@@ -2477,6 +2483,63 @@ mod tests {
             true,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn ghalta_power_sum_preserves_signed_affine_intermediates_and_final_clamp() {
+        let mut engine = quantity_engine();
+        let quantity = CountExpression::BattlefieldPowerSum {
+            filter: BattlefieldPermanentFilter {
+                token: None,
+                any_of: None,
+                controllers: RelativePlayerSet::Controller,
+                card_type: Some(CardTypeFilter::Creature),
+                color: None,
+                name: None,
+                required_subtypes: vec![],
+                exclude_source: false,
+            },
+        };
+        assert_eq!(
+            engine.resolve_amount(&Amount::Count(quantity.clone()), quantity_context(0)),
+            0
+        );
+        let bear = move_to_battlefield(&mut engine, 0, "grizzly_bears");
+        engine.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            trigger_grant_origin: None,
+            affected: AffectedScope::Single(bear),
+            kind: ContinuousEffectKind::PtModify {
+                delta_power: -5,
+                delta_toughness: 0,
+            },
+            condition: None,
+            duration: EffectDuration::Indefinite,
+            timestamp: 1,
+        });
+        assert_eq!(engine.characteristics(bear).unwrap().signed_power, Some(-3));
+        assert_eq!(
+            engine.resolve_amount(&Amount::Count(quantity.clone()), quantity_context(bear)),
+            0
+        );
+        let affine = Amount::Count(CountExpression::Affine {
+            constant: 6,
+            terms: vec![tricerules_cards::QuantityTerm {
+                coefficient: 1,
+                quantity: quantity.clone(),
+            }],
+        });
+        assert_eq!(
+            engine.resolve_amount(&affine, quantity_context(bear)),
+            3,
+            "negative three must subtract before the final amount clamp"
+        );
+        let angel = move_to_battlefield(&mut engine, 0, "serra_angel");
+        assert_eq!(engine.characteristics(angel).unwrap().signed_power, Some(4));
+        assert_eq!(
+            engine.resolve_amount(&Amount::Count(quantity), quantity_context(bear)),
+            1
+        );
     }
 
     #[test]

@@ -211,6 +211,25 @@ pub(in crate::engine) fn announcement_from_cast(
 }
 
 impl GameEngine {
+    /// Mana abilities can create new payment resources after CR 601.2f locks the cost.
+    /// Refresh eligibility against the accepted spell face without preparing its cost again.
+    pub(super) fn eligible_restricted_mana_for_pending_spell_cast(
+        &self,
+        pending: &crate::state::PendingSpellCastState,
+    ) -> Result<Vec<u32>, EngineError> {
+        let prepared = &self
+            .pending_spell_cast_internal
+            .as_ref()
+            .ok_or(EngineError::Illegal("missing locked spell cost"))?
+            .prepared;
+        let face = self
+            .registry
+            .get(&prepared.card_id)
+            .and_then(|definition| definition.face(pending.announcement.face_index as usize))
+            .ok_or(EngineError::Illegal("locked spell face is unavailable"))?;
+        Ok(self.eligible_restricted_mana_for_spell(prepared.idx, face))
+    }
+
     pub(super) fn begin_spell_cast(
         &mut self,
         player: PlayerId,
@@ -390,6 +409,8 @@ impl GameEngine {
             .clone()
             .ok_or(EngineError::Illegal("missing locked spell cost"))?;
         let mut prepared = internal.prepared.clone();
+        prepared.payment.eligible_restricted_mana =
+            self.eligible_restricted_mana_for_pending_spell_cast(state)?;
         prepared.payment.restricted_mana = command.restricted_mana.clone();
         let mut cast = cast_from_announcement(&state.announcement);
         cast.payment = command.payment.clone();

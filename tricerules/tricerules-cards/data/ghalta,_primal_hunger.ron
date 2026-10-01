@@ -1,0 +1,16 @@
+// Exact Oracle and all four cost rulings checked 2026-10-01.
+// https://scryfall.com/card/fdn/222/ghalta-primal-hunger
+(
+  id: "ghalta,_primal_hunger",
+  name: "Ghalta, Primal Hunger",
+  face_id: "ghalta_primal_hunger",
+  mana_cost: "{10}{G}{G}",
+  supertypes: ["Legendary"],
+  types: ["Creature", "Elder", "Dinosaur"],
+  power: 12,
+  toughness: 12,
+  keywords: [Trample],
+  cost_modifiers: [GenericReduction(amount: Count(BattlefieldPowerSum(
+    filter: (controllers: Controller, card_type: Some(Creature)),
+  )))],
+)

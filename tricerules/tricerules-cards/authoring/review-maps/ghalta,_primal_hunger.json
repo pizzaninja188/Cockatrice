@@ -1,0 +1,24 @@
+{
+  "format_version": 1,
+  "oracle_id": "b0b6be0c-41cf-4757-9f0e-87227b6ba6b3",
+  "spans": [
+    {"face_id":"ghalta_primal_hunger","start_line":1,"end_line":1,"typed_paths":["/faces/0/cost_modifiers/0"]},
+    {"face_id":"ghalta_primal_hunger","start_line":2,"end_line":2,"typed_paths":["/faces/0/keywords"]}
+  ],
+  "primitive_references": [
+    {"symbol":"SpellCostModifier::GenericReduction","typed_path":"/faces/0/cost_modifiers/0"},
+    {"symbol":"CountExpression::BattlefieldPowerSum","typed_path":"/faces/0/cost_modifiers/0/GenericReduction/amount/Count/BattlefieldPowerSum"},
+    {"symbol":"Keyword::Trample","typed_path":"/faces/0/keywords"}
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test":"scenario deck_coverage_ghalta::ghalta_cost_sums_signed_current_creature_powers","covers":"Five plus negative three gives two reduction, not five; actual Ghalta begins at eight generic and two green"},
+    {"test":"scenario deck_coverage_ghalta::ghalta_empty_zero_and_negative_totals_leave_full_cost","covers":"Empty, zero and negative controlled totals give no reduction; both opponents excluded"},
+    {"test":"scenario deck_coverage_ghalta::ghalta_reads_current_control_types_pumps_and_counters_before_announcement","covers":"Current controller, creature type, pump and plus-one counters affect the cost when announcement locks it"},
+    {"test":"scenario deck_coverage_ghalta::ghalta_discount_preserves_green_and_rejects_bad_actor_stale_or_incomplete_payment_atomically","covers":"Generic discount floors at zero and preserves both green pips; wrong actor, stale transaction and insufficient green reject without mutation"},
+    {"test":"scenario deck_coverage_ghalta::ghalta_locked_sacrifice_mana_payment_paid_cast_and_serialized_replay","covers":"Cost locks before counted creature sacrifice mana ability; exact paid cast resolves Legendary 12/12 Trample with mana value 12; serialized commands reproduce events and state"},
+    {"test":"scenario deck_coverage_ghalta::ghalta_accepts_generator_servant_mana_produced_after_cost_lock","covers":"Actual Generator Servant sacrifice after announcement creates spendable tagged mana; partial preview, complete payment and commit preserve locked cost; invalid group rejects atomically; resolved Ghalta gains haste"},
+    {"test":"deck_coverage_ghalta::ghalta_exact_printed_definition_and_generic_only_current_creature_power_cost","covers":"Exact identity, printed cost, legendary supertype, creature subtypes, 12/12 and Trample; precisely scoped generic-only power expression"}
+  ],
+  "complete_definition_review_confirmed": true
+}

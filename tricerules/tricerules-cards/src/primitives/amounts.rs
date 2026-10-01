@@ -41,6 +41,10 @@ pub enum CountExpression {
         filter: BattlefieldPermanentFilter,
         characteristic: BattlefieldQuantityCharacteristic,
     },
+    /// Ghalta, Primal Hunger and Volcanic Salvo reduce their generic casting cost by
+    /// the signed total of current creature powers. Negative powers subtract before
+    /// the final amount is clamped; this layer-7 quantity is unsafe for static P/T scaling.
+    BattlefieldPowerSum { filter: BattlefieldPermanentFilter },
     /// Brambleguard Captain and Boulderbranch Golem use the original source's power.
     SourcePower,
     /// Witchstalker Frenzy and Search Party Captain count distinct declared creatures.
@@ -155,9 +159,9 @@ impl CountExpression {
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
             Self::SpellsCastThisTurn { filter, .. } => filter.validate(),
-            Self::BattlefieldPermanents { filter } | Self::BattlefieldMaximum { filter, .. } => {
-                filter.validate()
-            }
+            Self::BattlefieldPermanents { filter }
+            | Self::BattlefieldMaximum { filter, .. }
+            | Self::BattlefieldPowerSum { filter } => filter.validate(),
             Self::GraveyardCards { filter, .. } => {
                 filter.as_ref().map_or(Ok(()), ZoneCardFilter::validate)
             }
@@ -708,6 +712,32 @@ pub enum LifeAmount {
 #[cfg(test)]
 mod hand_size_count_tests {
     use super::*;
+
+    #[test]
+    fn ghalta_power_sum_schema_rejects_static_scaling_and_invalid_filters() {
+        let text = "BattlefieldPowerSum(filter:(controllers:Controller,card_type:Some(Creature)))";
+        let quantity: CountExpression = ron::from_str(text).unwrap();
+        assert!(quantity.validate().is_ok());
+        assert!(quantity.validate_static_count().is_err());
+        assert_eq!(
+            ron::from_str::<CountExpression>(&ron::to_string(&quantity).unwrap()).unwrap(),
+            quantity
+        );
+        let affine = CountExpression::Affine {
+            constant: 6,
+            terms: vec![QuantityTerm {
+                coefficient: 1,
+                quantity,
+            }],
+        };
+        assert!(affine.validate().is_ok());
+        assert!(affine.validate_static_count().is_err());
+        let invalid: CountExpression = ron::from_str(
+            "BattlefieldPowerSum(filter:(controllers:Controller,required_subtypes:[\"\"]))",
+        )
+        .unwrap();
+        assert!(invalid.validate().is_err());
+    }
 
     #[test]
     fn static_hand_size_count_accepts_only_the_source_controller() {

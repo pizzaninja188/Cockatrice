@@ -226,6 +226,8 @@ impl GameEngine {
                 .as_ref()
                 .ok_or(EngineError::Illegal("missing locked spell cost"))?;
             let mut prepared = internal.prepared.payment.clone();
+            prepared.eligible_restricted_mana =
+                self.eligible_restricted_mana_for_pending_spell_cast(pending)?;
             prepared.restricted_mana = command.restricted_mana.clone();
             (
                 prepared,
