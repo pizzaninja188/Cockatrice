@@ -1,0 +1,10 @@
+// Pentavus's exact colorless artifact creature token; associated Scryfall token verified 2026-09-30.
+(
+  id: "pentavite_c_1_1_flying",
+  name: "Pentavite",
+  face_id: "pentavite",
+  types: ["Artifact", "Creature", "Pentavite"],
+  power: 1,
+  toughness: 1,
+  keywords: [Flying],
+)

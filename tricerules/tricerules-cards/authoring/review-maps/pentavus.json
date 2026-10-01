@@ -1,0 +1,24 @@
+{
+  "format_version": 1,
+  "oracle_id": "1c0d4f28-2494-45b0-acb8-921fee602c01",
+  "spans": [
+    {"face_id": "pentavus", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/static_abilities/0"]},
+    {"face_id": "pentavus", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/activated_abilities/0"]},
+    {"face_id": "pentavus", "start_line": 3, "end_line": 3, "typed_paths": ["/faces/0/activated_abilities/1"]}
+  ],
+  "primitive_references": [
+    {"symbol": "StaticAbilityDef::EntersWithCounters", "typed_path": "/faces/0/static_abilities/0/definition"},
+    {"symbol": "AbilityCost::RemoveCounters", "typed_path": "/faces/0/activated_abilities/0/costs/1"},
+    {"symbol": "SpellEffectKind::CreateTokens", "typed_path": "/faces/0/activated_abilities/0/effect/0"},
+    {"symbol": "AbilityCost::SacrificePermanent", "typed_path": "/faces/0/activated_abilities/1/costs/1"},
+    {"symbol": "SpellEffectKind::PutCounters", "typed_path": "/faces/0/activated_abilities/1/effect/0"}
+  ],
+  "tokens": ["pentavite_c_1_1_flying"],
+  "semantic_fixtures": [
+    {"test": "scenario deck_coverage_pentavus::pentavus_actual_cast_enters_as_five_five_with_five_counters", "covers": "Real seven-mana cast and entry produce five counters before state-based actions, with derived 5/5 stats."},
+    {"test": "scenario deck_coverage_pentavus::pentavus_removes_any_plus_counter_as_cost_then_creates_exact_token", "covers": "An additional counter of any provenance pays with one mana before resolution; stun counters are excluded. Wrong actor, missing mana and stale counter-source incarnation reject atomically. Exactly one colorless 1/1 flying artifact creature Pentavite token is created, then can be sacrificed as a cost before a counter is placed."},
+    {"test": "scenario deck_coverage_pentavus::pentavus_sacrifices_current_controlled_nontoken_pentavite_and_rejects_other_costs", "covers": "A real non-token creature with current Pentavite subtype qualifies. Wrong subtype, opponent-controlled Pentavite, wrong actor and missing mana reject atomically. Mana and the sacrifice precede counter placement."},
+    {"test": "scenario deck_coverage_pentavus::pentavus_cannot_pay_with_stun_and_paid_creation_survives_source_death", "covers": "A surviving zero-plus-counter source cannot pay with stun counters and has an unpayable offer. Removing its final plus counter from its printed 0/0 sends it to the graveyard while the independent paid ability still creates its token."}
+  ],
+  "complete_definition_review_confirmed": true
+}

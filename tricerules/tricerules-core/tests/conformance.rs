@@ -408,6 +408,23 @@ fn registry_execution_matches_reviewed_baseline() {
 }
 
 #[test]
+fn pentavus_activated_abilities_have_complete_fixtures() {
+    for ability in 0..2 {
+        let case = Case {
+            card: "pentavus".into(),
+            face: 0,
+            ability: Some(ability),
+        };
+        assert_eq!(
+            evaluate(&case).expect("evaluate Pentavus conformance fixture"),
+            Outcome::Exercised,
+            "{}",
+            case.key()
+        );
+    }
+}
+
+#[test]
 fn trading_post_activated_abilities_have_complete_fixtures() {
     for ability in 0..4 {
         let case = Case {

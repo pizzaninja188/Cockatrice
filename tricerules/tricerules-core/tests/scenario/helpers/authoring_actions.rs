@@ -23,7 +23,31 @@ pub(crate) fn activation(
         .cost_choices_by_ability
         .get(&key)
         .ok_or("ability not offered by generic battlefield fixture")?;
-    let costs = costs(Some(choices))?;
+    let costs = if e.state.objects[&object].card_id == "pentavus" && index == 0 {
+        // Bounded Pentavus fixture: select its single engine-authored fixed-kind source cost.
+        if !choices.non_mana_costs_payable || choices.choices.len() != 1 {
+            return Err("Pentavus counter fixture is not payable".into());
+        }
+        let choice = &choices.choices[0];
+        let removal = choice
+            .counter_removal
+            .as_ref()
+            .ok_or("missing counter offer")?;
+        if removal.count != 1 || removal.options.len() != 1 {
+            return Err("unexpected Pentavus counter offer".into());
+        }
+        vec![CostSelection {
+            cost_index: choice.cost_index,
+            selection: Some(cost_selection::Selection::CounterRemoval(
+                CounterRemovalSelection {
+                    source: removal.source,
+                    option_id: removal.options[0].option_id,
+                },
+            )),
+        }]
+    } else {
+        costs(Some(choices))?
+    };
     let (zone, generation, activatable) = if let Some(action) = legal
         .zone_ability_actions
         .iter()

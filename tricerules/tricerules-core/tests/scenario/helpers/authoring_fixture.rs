@@ -115,5 +115,35 @@ pub(crate) fn ability_source(
             .unwrap()
             .set_counter(tricerules_cards::CounterKind::Loyalty, 5);
     }
+    if card == "pentavus" {
+        // Direct relocation skips entry. Actual-card scenarios independently prove entry.
+        e.state
+            .objects
+            .get_mut(&oid)
+            .unwrap()
+            .set_counter(tricerules_cards::CounterKind::PlusOnePlusOne, 5);
+        if ability == 1 {
+            // Any controlled Pentavite creature pays, including a real non-token creature.
+            let payment = e.state.players[player]
+                .battlefield
+                .iter()
+                .copied()
+                .find(|id| e.state.objects[id].card_id == "grizzly_bears")
+                .expect("existing conformance creature resource");
+            e.state
+                .continuous_effects
+                .push(tricerules_core::ContinuousEffect {
+                    trigger_grant_origin: None,
+                    source_id: None,
+                    affected: tricerules_core::AffectedScope::Single(payment),
+                    kind: tricerules_cards::ContinuousEffectKind::Layer4SetCreatureTypes(vec![
+                        "Pentavite".into(),
+                    ]),
+                    condition: None,
+                    duration: tricerules_cards::EffectDuration::Indefinite,
+                    timestamp: e.state.command_index,
+                });
+        }
+    }
     oid
 }

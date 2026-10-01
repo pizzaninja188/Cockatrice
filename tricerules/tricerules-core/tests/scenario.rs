@@ -14,6 +14,9 @@ mod deck_coverage_spine_of_ish_sah;
 #[path = "scenario/deck_coverage_unwinding_clock.rs"]
 mod deck_coverage_unwinding_clock;
 
+#[path = "scenario/deck_coverage_pentavus.rs"]
+mod deck_coverage_pentavus;
+
 #[path = "scenario/deck_coverage_darksteel_forge.rs"]
 mod deck_coverage_darksteel_forge;
 #[path = "scenario/deck_coverage_psychosis_crawler.rs"]
