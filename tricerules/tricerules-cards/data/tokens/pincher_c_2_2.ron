@@ -1,0 +1,10 @@
+// Summoning Station's colorless 2/2 Pincher creature token (CR 111); not an artifact.
+(
+  id: "pincher_c_2_2",
+  name: "Pincher",
+  face_id: "pincher",
+  types: ["Creature", "Pincher"],
+  colors: [],
+  power: 2,
+  toughness: 2,
+)

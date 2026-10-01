@@ -964,3 +964,6 @@ mod deck_coverage_forgemaster;
 
 #[path = "scenario/deck_coverage_glorious_sunrise.rs"]
 mod deck_coverage_glorious_sunrise;
+
+#[path = "scenario/deck_coverage_summoning_station.rs"]
+mod deck_coverage_summoning_station;

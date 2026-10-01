@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "01bba3b8-6372-437e-ab34-ae2c8105cd28",
+  "spans": [
+    {
+      "face_id": "summoning_station",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "summoning_station",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "tokens": [
+    "pincher_c_2_2"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_summoning_station::summoning_station_paid_cast_tap_and_exact_pincher",
+      "covers": "Actual seven-mana one-face Artifact cast, immediate noncreature tap, deferred one exact colorless2/2 nonartifact Pincher with public identity; wrong controller/repeated tapped activation reject atomically"
+    },
+    {
+      "test": "scenario deck_coverage_summoning_station::summoning_station_any_player_artifact_death_optional_resolution",
+      "covers": "All three player IDs artifact-creature deaths capture one optional untap; accept/decline at resolution only; wrong actor/invalid branch reject full pending state; original sacrifice still gains life"
+    },
+    {
+      "test": "scenario deck_coverage_summoning_station::summoning_station_counts_each_simultaneous_artifact_not_pincher",
+      "covers": "Actual Wrath kills two different players artifact creatures and a Pincher; two unique Station triggers, not OneOrMore; actual tap/create between independent untaps"
+    },
+    {
+      "test": "scenario deck_coverage_summoning_station::summoning_station_only_actual_artifact_battlefield_to_graveyard_counts",
+      "covers": "Actual artifact bounce/exile do not trigger; replacement-adjusted sacrifice exile excluded; actual nonartifact Pincher death excluded; logged hand-to-graveyard dev fixture excluded"
+    },
+    {
+      "test": "scenario deck_coverage_summoning_station::summoning_station_artifact_token_sacrifice_triggers",
+      "covers": "Actual Fountainport creates Treasure; its real sacrificed immediate mana ability captures one artifact-token death untap despite retirement"
+    },
+    {
+      "test": "scenario deck_coverage_summoning_station::summoning_station_source_departure_and_new_generation_are_distinct",
+      "covers": "Captured creation survives actual source bounce; logged same-physical source reentry increases generation and old untap cannot mutate new incarnation"
+    },
+    {
+      "test": "scenario deck_coverage_summoning_station::summoning_station_capture_control_suppression_and_self_departure",
+      "covers": "Ability suppression before capture blocks and after capture preserves; internal transfer keeps captured chooser distinct from current source controller; actual Shatterstorm captures self-departure but cannot untap graveyard source"
+    },
+    {
+      "test": "scenario deck_coverage_summoning_station::summoning_station_optional_untap_respects_stun_and_prohibition",
+      "covers": "Optional decline preserves two stun counters; each accepted untap removes exactly one before eventual untap; explicit ProhibitUntap prevents both counter consumption and untap"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

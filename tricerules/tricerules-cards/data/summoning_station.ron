@@ -1,0 +1,28 @@
+// Exact Oracle 01bba3b8-6372-437e-ab34-ae2c8105cd28 and empty rulings checked 2026-10-01.
+// CR 603.5 chooses the optional untap at resolution; CR 603.6c/603.10a observe each
+// artifact's replacement-adjusted battlefield departure. Pinchers are not artifacts.
+(
+  id: "summoning_station",
+  name: "Summoning Station",
+  face_id: "summoning_station",
+  mana_cost: "{7}",
+  types: ["Artifact"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Tap],
+    effect: [CreateTokens(token: "pincher_c_2_2", count: 1)],
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverPermanentLeavesBattlefield(
+      controller: AnyPlayer,
+      filter: (permanent_type: Some(Artifact)),
+      destination: OneOf([Graveyard]),
+      cardinality: EachObject,
+    ),
+    effect: [Untap(subject: Source)],
+    may: true,
+  )],
+)
