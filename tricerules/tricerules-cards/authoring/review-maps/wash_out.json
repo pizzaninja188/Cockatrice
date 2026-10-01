@@ -1,0 +1,33 @@
+{
+  "format_version": 1,
+  "oracle_id": "54748cb1-d92a-4212-ad76-417ee79b5ef1",
+  "spans": [{
+    "face_id": "wash_out",
+    "start_line": 1,
+    "end_line": 1,
+    "typed_paths": ["/faces/0/spell_effect/0"]
+  }],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_wash_out::wash_out_paid_cast_offers_all_five_colors_even_when_no_permanents_match",
+      "covers": "Actual paid3U untargeted Sorcery; mandatory resolution choice with all five color-specific selectable labels even for absent colors; wrong actor, decline and out-of-range reject atomically; empty chosen color completes"
+    },
+    {
+      "test": "scenario deck_coverage_wash_out::wash_out_each_color_returns_only_matching_permanents_across_all_players",
+      "covers": "Every color executed; chosen color returned to each owning player's hand across three players, other colors and colorless artifact preserved"
+    },
+    {
+      "test": "scenario deck_coverage_wash_out::wash_out_uses_current_colors_and_returns_untargetable_borrowed_and_token_cohort",
+      "covers": "Current colors after cast, multicolor noncreature, hexproof/shroud/protection, borrowed permanent returns owner, colored token ceases, nonmatching/colorless objects preserved and owner-scoped movements"
+    },
+    {
+      "test": "scenario deck_coverage_wash_out::wash_out_snapshots_the_color_cohort_before_any_departure_changes_colors",
+      "covers": "Simultaneous cohort retained when a departed color-granting source would change remaining permanent's color"
+    },
+    {
+      "test": "scenario deck_coverage_wash_out::wash_out_paid_cast_and_color_choice_replay_deterministically",
+      "covers": "Seeded paid cast and logged chosen color reproduce both event batches, public response, every player and object, zone generations and turn history"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

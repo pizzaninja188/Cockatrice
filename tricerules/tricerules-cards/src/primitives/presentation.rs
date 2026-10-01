@@ -227,6 +227,25 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
                     quantity: super::DiscardQuantity::All,
                 } => "Discard your hand.".into(),
                 SpellEffectKind::Blight { count } => format!("Blight {count}."),
+                SpellEffectKind::ReturnAllToOwnersHand { kind } => {
+                    let color = kind.is_color?;
+                    let exact = TargetFilter {
+                        kind: TargetKind::AnyPermanent,
+                        is_color: Some(color),
+                        ..TargetFilter::default()
+                    };
+                    if *kind != exact {
+                        return None;
+                    }
+                    let color = match color {
+                        super::Color::White => "white",
+                        super::Color::Blue => "blue",
+                        super::Color::Black => "black",
+                        super::Color::Red => "red",
+                        super::Color::Green => "green",
+                    };
+                    format!("Return all {color} permanents to their owners' hands.")
+                }
                 SpellEffectKind::Sacrifice {
                     subject: EffectSubject::Source,
                 } => "Sacrifice this permanent.".into(),

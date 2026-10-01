@@ -970,3 +970,6 @@ mod deck_coverage_summoning_station;
 
 #[path = "scenario/deck_coverage_frantic_search.rs"]
 mod deck_coverage_frantic_search;
+
+#[path = "scenario/deck_coverage_wash_out.rs"]
+mod deck_coverage_wash_out;
