@@ -15,6 +15,7 @@ inline bool ruledCostUsesObjectRefs(RuledCostChoiceKind kind)
 inline bool ruledCostUsesObjectRefs(const RuledCostChoice &choice)
 {
     return choice.zone == RuledCostChoiceZone::Graveyard || ruledCostUsesObjectRefs(choice.kind) ||
+           (choice.kind == RuledCostChoiceKind::Sacrifice && choice.max > 1) ||
            (choice.kind == RuledCostChoiceKind::RemoveCounters && choice.counterSourceId == 0);
 }
 
@@ -77,6 +78,8 @@ inline QString ruledCostSelectionPrompt(const RuledCostChoice &choice, const QSt
                 .arg(name);
     if (choice.kind == RuledCostChoiceKind::Tap)
         return tr("Choose %1 untapped permanent(s) to tap for %2.").arg(choice.max).arg(name);
+    if (choice.kind == RuledCostChoiceKind::Sacrifice && choice.max > 1)
+        return tr("Choose %1 permanents to sacrifice for %2.").arg(choice.min).arg(name);
     return tr("Choose a permanent to sacrifice for %1.").arg(name);
 }
 

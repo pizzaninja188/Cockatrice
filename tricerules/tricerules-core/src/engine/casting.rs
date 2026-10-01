@@ -4504,9 +4504,10 @@ mod mana_payment_tests {
         };
         let costs = [
             AbilityCost::SacrificePermanent {
+                count: 1,
                 filter: filter.clone(),
             },
-            AbilityCost::SacrificePermanent { filter },
+            AbilityCost::SacrificePermanent { filter, count: 1 },
         ];
         let selections = [
             rv1::CostSelection {

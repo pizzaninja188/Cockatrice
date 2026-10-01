@@ -6734,7 +6734,7 @@ mod tests {
             assert_eq!(ability.costs.len(), 2);
             assert!(matches!(
                 ability.costs.as_slice(),
-                [AbilityCost::Mana(cost), AbilityCost::SacrificePermanent { filter }]
+                [AbilityCost::Mana(cost), AbilityCost::SacrificePermanent { filter, count: 1 }]
                     if cost.to_string() == "{2}{R}"
                         && filter.kind == TargetKind::AnyPermanent
                         && filter.controller == TargetController::You

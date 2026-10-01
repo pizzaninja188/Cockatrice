@@ -5983,6 +5983,61 @@ TEST_F(RuledClientTest, SelectedCounterRemovalUsesAnAuthoritativePermanentPicker
     EXPECT_FALSE(ruledCounterSelectionStillLegal(payment, stale));
 }
 
+TEST_F(RuledClientTest, PluralSacrificeUsesOneExactGenerationBoundCohort)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *costs = &(*(*batch.mutable_legal_by_player())[kLocalPlayer].mutable_cost_choices_by_ability())[900ull << 32];
+    auto *choice = costs->add_choices();
+    choice->set_cost_index(1);
+    choice->set_zone(ruled::v1::COST_CHOICE_ZONE_BATTLEFIELD);
+    choice->set_kind(ruled::v1::COST_CHOICE_KIND_SACRIFICE);
+    choice->set_min(3);
+    choice->set_max(3);
+    for (quint32 id : {900u, 901u, 902u}) {
+        choice->add_candidate_ids(id);
+        auto *object = choice->add_candidate_objects()->mutable_object();
+        object->set_object_id(id);
+        object->set_zone_change_generation(id - 888);
+    }
+    apply(batch);
+    const auto choices = state->abilityCostChoices(900, 0);
+    ASSERT_EQ(choices.size(), 1);
+    const auto &parsed = choices.front();
+    EXPECT_TRUE(ruledCostUsesObjectRefs(parsed));
+    EXPECT_TRUE(ruledCostNeedsConfirmation(parsed));
+    EXPECT_TRUE(ruledCostSelectionPrompt(parsed, QStringLiteral("Kuldotha Forgemaster")).contains("3"));
+    PendingActivatedAbility pending;
+    pending.valid = true;
+    pending.waitingForCost = true;
+    pending.costChoices = choices;
+    pending.costSelections = {{1, RuledCostChoiceZone::Battlefield, {}, {}}};
+    for (int count = 0; count <= 3; ++count) {
+        auto &selected = pending.costSelections.front();
+        selected.selectedIds = {902, 900, 901};
+        selected.selectedGenerations = {14, 12, 13};
+        selected.selectedIds.resize(count);
+        selected.selectedGenerations.resize(count);
+        const auto progress = ruledPendingGraveyardCostSelectionProgress(pending);
+        ASSERT_TRUE(progress.has_value());
+        EXPECT_EQ(progress->confirmable, count == 3);
+    }
+    ruled::v1::CostSelection command;
+    ruledWriteCostObjectRefs(pending.costSelections.front(), command);
+    ASSERT_EQ(command.battlefield_objects().objects_size(), 3);
+    EXPECT_EQ(command.battlefield_objects().objects(0).object_id(), 902u);
+    EXPECT_EQ(command.battlefield_objects().objects(0).zone_change_generation(), 14u);
+    EXPECT_EQ(command.battlefield_objects().objects(1).object_id(), 900u);
+    EXPECT_EQ(command.battlefield_objects().objects(1).zone_change_generation(), 12u);
+    EXPECT_EQ(command.battlefield_objects().objects(2).object_id(), 901u);
+    EXPECT_EQ(command.battlefield_objects().objects(2).zone_change_generation(), 13u);
+    pending.costSelections.front().selectedGenerations[1] = 11;
+    EXPECT_FALSE(ruledPendingGraveyardCostSelectionProgress(pending)->confirmable);
+    RuledCostChoice singleton = parsed;
+    singleton.min = singleton.max = 1;
+    EXPECT_FALSE(ruledCostUsesObjectRefs(singleton));
+    EXPECT_FALSE(ruledCostNeedsConfirmation(singleton));
+}
+
 TEST_F(RuledClientTest, BlightCostsUseAnAuthoritativeCreaturePicker)
 {
     ruled::v1::RuledEventBatch batch;

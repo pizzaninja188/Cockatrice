@@ -548,6 +548,7 @@ fn issue_417_registry_identities_types_keywords_and_payloads() {
         [
             AbilityCost::Mana(ManaCost::parse("{2}").expect("printed cost")),
             AbilityCost::SacrificePermanent {
+                count: 1,
                 filter: TargetFilter {
                     any_of: Some(vec![
                         TargetFilter {

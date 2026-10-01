@@ -189,7 +189,7 @@ fn issue_misc4_batch_maps_definitions() {
     };
     assert!(matches!(mana, AbilityCost::Mana(c) if c.to_string() == "{2}"));
     assert_eq!(*tap, AbilityCost::Tap);
-    let AbilityCost::SacrificePermanent { filter } = sacrifice else {
+    let AbilityCost::SacrificePermanent { filter, count: 1 } = sacrifice else {
         panic!("sacrifice cost, got {sacrifice:?}");
     };
     let any_of = filter.any_of.as_ref().expect("artifact or land");

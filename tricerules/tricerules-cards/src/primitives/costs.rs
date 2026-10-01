@@ -151,7 +151,13 @@ pub enum AbilityCost {
     /// Sacrifice another or the source permanent when it matches the filter (e.g. Portcullis
     /// Vine's "Sacrifice a creature with defender"). This is selection, not targeting: shroud
     /// and hexproof do not apply.
-    SacrificePermanent { filter: TargetFilter },
+    SacrificePermanent {
+        filter: TargetFilter,
+        /// One authored instruction sacrifices this many permanents simultaneously.
+        /// Kuldotha Forgemaster and Bolas's Citadel require three and ten respectively.
+        #[serde(default = "default_one", skip_serializing_if = "is_one")]
+        count: u32,
+    },
     /// Exile exactly `count` matching cards from the activating player's graveyard. This is a
     /// selection cost, not targeting. Say Its Name excludes its own source object; Bearscape and
     /// Grim Lavamancer reuse the same bounded graveyard-cohort payment without source exclusion.
@@ -206,6 +212,9 @@ impl AbilityCost {
                     counter.validate()?;
                 }
                 Ok(())
+            }
+            Self::SacrificePermanent { count: 0, .. } => {
+                Err("sacrifice cost requires a positive count".into())
             }
             Self::Blight { count: 0 } => Err("blight cost requires a positive count".into()),
             Self::PayLife { amount: 0 } => {
@@ -292,6 +301,43 @@ pub struct CastCostGroupDef {
 
 fn default_one() -> u32 {
     1
+}
+
+fn is_one(count: &u32) -> bool {
+    *count == 1
+}
+
+#[cfg(test)]
+mod sacrifice_count_tests {
+    use super::*;
+
+    #[test]
+    fn sacrifice_count_defaults_preserve_singleton_data_and_reject_zero() {
+        let default: AbilityCost =
+            ron::from_str("SacrificePermanent(filter: (kind: AnyPermanent, controller: You))")
+                .unwrap();
+        assert!(matches!(
+            default,
+            AbilityCost::SacrificePermanent { count: 1, .. }
+        ));
+        assert!(!ron::to_string(&default).unwrap().contains("count:"));
+        for count in [3, 10] {
+            let plural: AbilityCost = ron::from_str(&format!(
+                "SacrificePermanent(filter: (kind: AnyPermanent, controller: You), count: {count})"
+            ))
+            .unwrap();
+            plural.validate().unwrap();
+            assert_eq!(
+                ron::from_str::<AbilityCost>(&ron::to_string(&plural).unwrap()).unwrap(),
+                plural
+            );
+        }
+        let zero: AbilityCost = ron::from_str(
+            "SacrificePermanent(filter: (kind: AnyPermanent, controller: You), count: 0)",
+        )
+        .unwrap();
+        assert!(zero.validate().is_err());
+    }
 }
 
 /// One mutually distinguishable option in a cast-cost group.

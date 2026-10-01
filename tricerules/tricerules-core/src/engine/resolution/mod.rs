@@ -2838,13 +2838,32 @@ pub(crate) fn move_object_to_zone(
 
 /// Ordinary moves commit the returned history receipt immediately. The sole exception is
 /// early custom-resolution bookkeeping, whose receipt belongs to the resolution completion.
-fn move_object_to_zone_with_entry_receipt(
-    state: &mut GameState,
+struct PreparedZoneMove {
+    oid: ObjectId,
+    owner: PlayerId,
+    old_zone: Option<Zone>,
+    prior_generation: u64,
+    z: Zone,
+    leaving_battlefield: bool,
+    last_known_characteristics: Option<super::characteristics::Characteristics>,
+    copy: Option<crate::state::TokenCopySnapshot>,
+    last_known_attached_object: Option<(ObjectId, u64)>,
+    front_face_values: Option<(Option<u32>, Option<u32>, bool, bool)>,
+    counters: std::collections::BTreeMap<CounterKind, u32>,
+    tapped: bool,
+    old_controller: PlayerId,
+    holder: PlayerId,
+    holder_index: usize,
+}
+
+/// Prepare every departure in a simultaneous instruction against the same battlefield.
+fn prepare_zone_move(
+    state: &GameState,
     registry: &'static CardRegistry,
     oid: ObjectId,
     mut z: Zone,
     controller: Option<PlayerId>,
-) -> Result<Option<crate::state::PermanentHistoryFact>, EngineError> {
+) -> Result<Option<PreparedZoneMove>, EngineError> {
     let owner = state
         .objects
         .get(&oid)
@@ -2877,21 +2896,12 @@ fn move_object_to_zone_with_entry_receipt(
     {
         z = Zone::Exile;
     }
-    if leaving_battlefield {
-        state.death_replacement_effects.retain(|effect| {
-            effect.object_id != oid || effect.zone_change_generation != prior_generation
-        });
-    }
     let last_known_characteristics = leaving_battlefield
         .then(|| super::characteristics::characteristics_from(state, registry, oid))
         .flatten();
-    if leaving_battlefield {
-        if let Some(snapshot) = copying::token_copy_snapshot_from(state, registry, oid) {
-            state
-                .last_known_copy_by_generation
-                .insert((oid, prior_generation), snapshot);
-        }
-    }
+    let copy = leaving_battlefield
+        .then(|| copying::token_copy_snapshot_from(state, registry, oid))
+        .flatten();
     let last_known_attached_object = leaving_battlefield
         .then(|| {
             state
@@ -2935,12 +2945,94 @@ fn move_object_to_zone_with_entry_receipt(
                 })
         })
         .flatten();
+    let object = &state.objects[&oid];
+    let counters = object.counters.clone();
+    let tapped = object.tapped;
+    let old_controller = object.controller;
+    let holder = if z == Zone::Battlefield {
+        controller.unwrap_or(owner)
+    } else {
+        owner
+    };
+    let holder_index = state
+        .player_idx(holder)
+        .ok_or(EngineError::Illegal("no such player"))?;
+    Ok(Some(PreparedZoneMove {
+        oid,
+        owner,
+        old_zone,
+        prior_generation,
+        z,
+        leaving_battlefield,
+        last_known_characteristics,
+        copy,
+        last_known_attached_object,
+        front_face_values,
+        counters,
+        tapped,
+        old_controller,
+        holder,
+        holder_index,
+    }))
+}
+
+fn move_object_to_zone_with_entry_receipt(
+    state: &mut GameState,
+    registry: &'static CardRegistry,
+    oid: ObjectId,
+    z: Zone,
+    controller: Option<PlayerId>,
+) -> Result<Option<crate::state::PermanentHistoryFact>, EngineError> {
+    let Some(prepared) = prepare_zone_move(state, registry, oid, z, controller)? else {
+        return Ok(None);
+    };
+    commit_zone_move(state, registry, prepared)
+}
+
+fn commit_zone_move(
+    state: &mut GameState,
+    registry: &'static CardRegistry,
+    prepared: PreparedZoneMove,
+) -> Result<Option<crate::state::PermanentHistoryFact>, EngineError> {
+    let PreparedZoneMove {
+        oid,
+        owner,
+        old_zone,
+        prior_generation,
+        z,
+        leaving_battlefield,
+        last_known_characteristics,
+        copy,
+        last_known_attached_object,
+        front_face_values,
+        counters,
+        tapped,
+        old_controller,
+        holder,
+        holder_index,
+    } = prepared;
+    debug_assert_eq!(state.objects[&oid].owner, owner);
+    debug_assert_eq!(state.objects[&oid].zone, old_zone.unwrap());
+    debug_assert_eq!(
+        state.zone_change_generation.get(&oid).copied().unwrap_or(0),
+        prior_generation
+    );
+    if leaving_battlefield {
+        state.death_replacement_effects.retain(|effect| {
+            effect.object_id != oid || effect.zone_change_generation != prior_generation
+        });
+        if let Some(snapshot) = copy {
+            state
+                .last_known_copy_by_generation
+                .insert((oid, prior_generation), snapshot);
+        }
+    }
     if leaving_battlefield {
         state.battlefield_entry_timestamps.remove(&oid);
         state.room_states.remove(&oid);
         super::preparation::unprepare_permanent(state, oid);
         state.battle_protectors.remove(&oid);
-        if let Some(old_controller) = state.objects.get(&oid).map(|object| object.controller) {
+        {
             let object = TriggerObjectRef {
                 object_id: oid,
                 zone_change_generation: prior_generation,
@@ -3018,11 +3110,11 @@ fn move_object_to_zone_with_entry_receipt(
             o.deathtouch_damage = false;
             // CR 608.2h: snapshot before clearing — an ability still on the stack that asks about
             // this permanent's tap status gets its last known information, not the reset value.
-            let was_tapped = o.tapped;
+            let was_tapped = tapped;
             o.tapped = false;
             state
                 .last_known_counters_by_generation
-                .insert((oid, prior_generation), o.counters.clone());
+                .insert((oid, prior_generation), counters);
             o.counters.clear();
             o.counter_timestamps.clear();
             o.attached_to = None;
@@ -3088,15 +3180,7 @@ fn move_object_to_zone_with_entry_receipt(
     }
     // CR 400.3: the battlefield is entered under a *controller*; every other zone belongs to the
     // card's owner, so that is where a permanent goes when it leaves.
-    let holder = if z == Zone::Battlefield {
-        controller.unwrap_or(owner)
-    } else {
-        owner
-    };
-    let idx = state
-        .player_idx(holder)
-        .ok_or(EngineError::Illegal("no such player"))?;
-    let p = &mut state.players[idx];
+    let p = &mut state.players[holder_index];
     match z {
         Zone::Graveyard => p.graveyard.push(oid),
         Zone::Hand => p.hand.push(oid),
@@ -3216,6 +3300,46 @@ pub(super) fn sacrifice_permanent(
         ));
     }
     put_permanent_in_graveyard(state, registry, oid)
+}
+
+/// One sacrifice instruction freezes all replacement destinations and departure LKI before
+/// the first move. The caller owns its single zone-event boundary and per-object receipts.
+pub(super) fn sacrifice_permanents(
+    state: &mut GameState,
+    registry: &'static CardRegistry,
+    objects: &[ObjectId],
+) -> Result<Vec<bool>, EngineError> {
+    let mut distinct = HashSet::new();
+    let mut prepared = Vec::with_capacity(objects.len());
+    for &oid in objects {
+        if !distinct.insert(oid)
+            || !state
+                .objects
+                .get(&oid)
+                .is_some_and(|object| object.zone == Zone::Battlefield)
+        {
+            return Err(EngineError::Illegal(
+                "sacrifice group requires distinct battlefield permanents",
+            ));
+        }
+        prepared.push(
+            prepare_zone_move(state, registry, oid, Zone::Graveyard, None)?
+                .ok_or(EngineError::Illegal("sacrifice permanent missing"))?,
+        );
+    }
+    let mut deaths = Vec::with_capacity(prepared.len());
+    for movement in prepared {
+        let died = movement.z == Zone::Graveyard;
+        if let Some(fact) = commit_zone_move(state, registry, movement)? {
+            state
+                .turn_history
+                .current
+                .permanent_cards_entered_graveyard
+                .push(fact);
+        }
+        deaths.push(died);
+    }
+    Ok(deaths)
 }
 
 /// CR 608.2n: the spell enters its owner's graveyard after its effects have been applied. A

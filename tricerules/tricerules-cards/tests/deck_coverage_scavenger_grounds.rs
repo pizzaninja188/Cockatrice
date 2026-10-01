@@ -43,7 +43,7 @@ fn scavenger_grounds_registers_colorless_mana_and_all_graveyards_exile() {
     };
     assert!(matches!(mana, AbilityCost::Mana(cost) if cost.to_string() == "{2}"));
     assert_eq!(*tap, AbilityCost::Tap);
-    let AbilityCost::SacrificePermanent { filter } = sacrifice else {
+    let AbilityCost::SacrificePermanent { filter, count: 1 } = sacrifice else {
         panic!("the final cost sacrifices a controlled Desert");
     };
     assert_eq!(filter.kind, TargetKind::AnyPermanent);

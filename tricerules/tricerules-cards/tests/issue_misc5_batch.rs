@@ -110,7 +110,7 @@ fn issue_misc5_batch_maps_definitions() {
     let [acolyte_ability] = acolyte.activated_abilities.as_slice() else {
         panic!("one ability");
     };
-    let [AbilityCost::Tap, AbilityCost::SacrificePermanent { filter }] =
+    let [AbilityCost::Tap, AbilityCost::SacrificePermanent { filter, count: 1 }] =
         acolyte_ability.costs.as_slice()
     else {
         panic!("{:?}", acolyte_ability.costs);
@@ -141,7 +141,8 @@ fn issue_misc5_batch_maps_definitions() {
     let [bartolome_ability] = bartolome.activated_abilities.as_slice() else {
         panic!("one ability");
     };
-    let [AbilityCost::SacrificePermanent { filter }] = bartolome_ability.costs.as_slice() else {
+    let [AbilityCost::SacrificePermanent { filter, count: 1 }] = bartolome_ability.costs.as_slice()
+    else {
         panic!("{:?}", bartolome_ability.costs);
     };
     assert!(filter.any_of.is_some(), "creature or artifact");

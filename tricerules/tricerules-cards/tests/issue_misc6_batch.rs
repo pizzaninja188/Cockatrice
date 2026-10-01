@@ -187,7 +187,7 @@ fn issue_misc6_batch_maps_definitions() {
         panic!("two costs, got {:?}", rites.costs);
     };
     assert!(matches!(mana, AbilityCost::Mana(c) if c.to_string() == "{1}{B}"));
-    let AbilityCost::SacrificePermanent { filter } = sacrifice else {
+    let AbilityCost::SacrificePermanent { filter, count: 1 } = sacrifice else {
         panic!("sacrifice cost, got {sacrifice:?}");
     };
     assert_eq!(filter.kind, TargetKind::Creature);

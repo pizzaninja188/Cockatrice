@@ -595,6 +595,7 @@ fn issue_423_planets_grant_their_twelve_plus_activated_abilities() {
             AbilityCost::Mana(ManaCost::parse("{1}{R}").expect("printed cost")),
             AbilityCost::Tap,
             AbilityCost::SacrificePermanent {
+                count: 1,
                 filter: TargetFilter {
                     kind: TargetKind::AnyPermanent,
                     controller: TargetController::You,
@@ -621,6 +622,7 @@ fn issue_423_planets_grant_their_twelve_plus_activated_abilities() {
             AbilityCost::Tap,
             AbilityCost::PayLife { amount: 2 },
             AbilityCost::SacrificePermanent {
+                count: 1,
                 filter: TargetFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::You,

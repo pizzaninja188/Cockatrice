@@ -34,7 +34,7 @@ fn krark_clan_ironworks_registers_its_artifact_sacrifice_mana_ability() {
         ability.presentation,
         AbilityPresentation::OracleLines(vec![1])
     );
-    let [AbilityCost::SacrificePermanent { filter }] = ability.costs.as_slice() else {
+    let [AbilityCost::SacrificePermanent { filter, count: 1 }] = ability.costs.as_slice() else {
         panic!("the ability sacrifices one artifact");
     };
     assert_eq!(filter.kind, TargetKind::AnyPermanent);

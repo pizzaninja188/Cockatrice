@@ -5492,6 +5492,7 @@ fn match_land_sacrifice_draw_one(text: &str, context: &RecipeContext) -> Option<
                 vec![
                     fixed_mana_cost("{2}{R}"),
                     AbilityCost::SacrificePermanent {
+                        count: 1,
                         filter: TargetFilter {
                             kind: TargetKind::AnyPermanent,
                             controller: TargetController::You,
@@ -7986,6 +7987,7 @@ fn issue_423_kavaron_inner_activation(context: &RecipeContext, line: u16) -> Act
             fixed_mana_cost("{1}{R}"),
             AbilityCost::Tap,
             AbilityCost::SacrificePermanent {
+                count: 1,
                 filter: TargetFilter {
                     kind: TargetKind::AnyPermanent,
                     controller: TargetController::You,
@@ -8033,6 +8035,7 @@ fn issue_423_susur_secundi_inner_activation(
             AbilityCost::Tap,
             AbilityCost::PayLife { amount: 2 },
             AbilityCost::SacrificePermanent {
+                count: 1,
                 filter: TargetFilter {
                     kind: TargetKind::Creature,
                     controller: TargetController::You,
@@ -13662,6 +13665,7 @@ fn match_sacrifice_another_creature_or_token_draw_sorcery(
             costs: vec![
                 fixed_mana_cost("{2}"),
                 AbilityCost::SacrificePermanent {
+                    count: 1,
                     filter: issue_417_another_creature_or_token(),
                 },
             ],
@@ -29151,6 +29155,7 @@ mod tests {
                 [
                     AbilityCost::Mana(ManaCost::parse("{2}{R}").unwrap()),
                     AbilityCost::SacrificePermanent {
+                        count: 1,
                         filter: TargetFilter {
                             kind: TargetKind::AnyPermanent,
                             controller: TargetController::You,
@@ -48149,6 +48154,7 @@ mod tests {
             [
                 fixed_mana_cost("{2}"),
                 AbilityCost::SacrificePermanent {
+                    count: 1,
                     filter: issue_417_another_creature_or_token(),
                 },
             ]
@@ -48568,6 +48574,7 @@ mod tests {
                 fixed_mana_cost("{1}{R}"),
                 AbilityCost::Tap,
                 AbilityCost::SacrificePermanent {
+                    count: 1,
                     filter: TargetFilter {
                         kind: TargetKind::AnyPermanent,
                         controller: TargetController::You,
@@ -48634,6 +48641,7 @@ mod tests {
                 AbilityCost::Tap,
                 AbilityCost::PayLife { amount: 2 },
                 AbilityCost::SacrificePermanent {
+                    count: 1,
                     filter: TargetFilter {
                         kind: TargetKind::Creature,
                         controller: TargetController::You,

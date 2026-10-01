@@ -113,7 +113,7 @@ fn issue_misc10_batch_maps_definitions() {
 
     // Umbral Collar Zealot: sacrifice another creature or artifact -> surveil 1.
     let zealot = activated(registry, "umbral_collar_zealot");
-    let [AbilityCost::SacrificePermanent { filter }] = zealot.costs.as_slice() else {
+    let [AbilityCost::SacrificePermanent { filter, count: 1 }] = zealot.costs.as_slice() else {
         panic!("{:?}", zealot.costs);
     };
     assert!(filter.any_of.is_some(), "creature or artifact");
@@ -176,7 +176,7 @@ fn issue_misc10_batch_maps_definitions() {
         panic!("{:?}", tactician.costs);
     };
     assert!(matches!(mana, AbilityCost::Mana(c) if c.to_string() == "{1}"));
-    let AbilityCost::SacrificePermanent { filter } = sacrifice else {
+    let AbilityCost::SacrificePermanent { filter, count: 1 } = sacrifice else {
         panic!("sacrifice cost, got {sacrifice:?}");
     };
     assert_eq!(filter.kind, TargetKind::AnyPermanent);

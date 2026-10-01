@@ -952,3 +952,6 @@ mod deck_coverage_flusterstorm;
 
 #[path = "scenario/deck_coverage_copy_aura_cards.rs"]
 mod deck_coverage_copy_aura_cards;
+
+#[path = "scenario/deck_coverage_forgemaster.rs"]
+mod deck_coverage_forgemaster;

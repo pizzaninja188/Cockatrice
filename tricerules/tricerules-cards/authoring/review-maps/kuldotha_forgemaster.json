@@ -1,0 +1,16 @@
+{
+  "format_version": 1,
+  "oracle_id": "b0f99367-4313-4bb1-a9fd-7711bc4ce40e",
+  "spans": [
+    {"face_id": "kuldotha_forgemaster", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/activated_abilities/0"]}
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "scenario deck_coverage_forgemaster::forgemaster_actual_cast_has_exact_three_five", "covers": "Actual five-mana cast resolves to the exact artifact creature Construct 3/5; its tap cost cannot be paid while summoning sick."},
+    {"test": "scenario deck_coverage_forgemaster::forgemaster_three_artifact_cohort_includes_source_then_search_and_shuffle", "covers": "The engine publishes one exact-three artifact cohort with generation-bound candidates. Source inclusion is legal. Under/over/duplicate/foreign/nonartifact/wrong-actor/stale-source/stale-member/duplicate-cost-index/scalar replies reject without any state change. Three selected artifacts leave once, then the ability survives its source to offer a private artifact search, move a selected physical card to the battlefield and shuffle once; invalid search replies reject atomically."},
+    {"test": "scenario deck_coverage_forgemaster::forgemaster_single_three_artifact_cost_has_one_simultaneous_departure_group", "covers": "The actual Forgemaster sacrifice includes a departing Blood Artist granted artifact type; that observer captures all three creature deaths from one simultaneous group."},
+    {"test": "scenario deck_coverage_forgemaster::forgemaster_fewer_artifacts_unpayable_and_failure_to_find_still_shuffles", "covers": "Fewer than three artifacts makes the non-mana cost unpayable; a qualified hidden search may fail to find and still shuffles exactly once."},
+    {"test": "scenario deck_coverage_forgemaster::forgemaster_departing_observer_distinguishes_each_object_from_one_or_more", "covers": "Three nonconsecutive seats, mixed ownership and a granted departing observer on the actual Forgemaster capture exactly one OneOrMore occurrence or three EachObject occurrences from the same group."}
+  ],
+  "complete_definition_review_confirmed": true
+}

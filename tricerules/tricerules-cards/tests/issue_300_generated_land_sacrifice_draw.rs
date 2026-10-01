@@ -77,6 +77,7 @@ fn assert_land_sacrifice_draw(ability: &tricerules_cards::ActivatedAbilityDef, l
         [
             AbilityCost::Mana(ManaCost::parse("{2}{R}").unwrap()),
             AbilityCost::SacrificePermanent {
+                count: 1,
                 filter: TargetFilter {
                     kind: TargetKind::AnyPermanent,
                     controller: TargetController::You,

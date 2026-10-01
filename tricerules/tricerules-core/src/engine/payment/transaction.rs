@@ -1,7 +1,7 @@
 //! Atomic non-mana and mana debit plans shared by casting, activation, and resolution.
 
 use super::super::events::object_display_name;
-use super::super::resolution::{permanent_moved_event, sacrifice_permanent};
+use super::super::resolution::{permanent_moved_event, sacrifice_permanents};
 use super::super::*;
 use super::components::{ObjectPaymentComponent, PermanentPaymentFilter, PlannedObjectPayment};
 use super::mana::{
@@ -85,9 +85,9 @@ pub(super) enum CostDebit {
         source: ObjectId,
         exclude_source: bool,
     },
-    Sacrifice {
-        snapshot: SacrificeSnapshot,
-        owner: PlayerId,
+    /// One authored sacrifice instruction, including singleton costs.
+    SacrificeGroup {
+        objects: Vec<(SacrificeSnapshot, PlayerId)>,
     },
     ReturnUnblockedAttacker {
         object: rv1::CostObjectRef,
@@ -816,7 +816,7 @@ impl GameEngine {
                         let oid = selected.object_id;
                         debits.push(self.plan_object_payment(
                             player,
-                            ObjectPaymentComponent::announced_sacrifice(None, filter),
+                            ObjectPaymentComponent::announced_sacrifice(None, filter, 1),
                             &[*selected],
                         )?);
                         vec![CastCostObjectReceipt::ChosenPermanent {
@@ -955,7 +955,7 @@ impl GameEngine {
                     }
                     debits.push(self.plan_object_payment(
                         player,
-                        ObjectPaymentComponent::announced_sacrifice(None, filter),
+                        ObjectPaymentComponent::announced_sacrifice(None, filter, 1),
                         &[self.payment_object_ref(oid)],
                     )?);
                 }
@@ -1486,30 +1486,45 @@ impl GameEngine {
                     debits.push(self.plan_object_payment(
                         player,
                         ObjectPaymentComponent::Sacrifice {
+                            count: 1,
                             filter: PermanentPaymentFilter::Controlled,
                             only_source: Some(reference),
                         },
                         &[reference],
                     )?);
                 }
-                AbilityCost::SacrificePermanent { filter } => {
+                AbilityCost::SacrificePermanent { filter, count } => {
                     expected_selections += 1;
                     let Some(selection) = by_index.get(&cost_index) else {
                         return Err(EngineError::Illegal("missing sacrifice cost selection"));
                     };
-                    let Some(Selection::PermanentId(oid)) = selection.selection else {
-                        return Err(EngineError::Illegal(
-                            "sacrifice cost requires a battlefield permanent",
-                        ));
+                    let objects = match selection.selection.as_ref() {
+                        Some(Selection::PermanentId(oid)) if *count == 1 => {
+                            vec![self.payment_object_ref(*oid)]
+                        }
+                        Some(Selection::BattlefieldObjects(selected)) if *count > 1 => {
+                            selected.objects.clone()
+                        }
+                        _ => {
+                            return Err(EngineError::Illegal(
+                                "sacrifice cost requires its exact battlefield cohort",
+                            ))
+                        }
                     };
-                    if !consumed.insert(oid) {
-                        return Err(EngineError::Illegal("one object cannot pay two costs"));
-                    }
                     debits.push(self.plan_object_payment(
                         player,
-                        ObjectPaymentComponent::announced_sacrifice(Some(permanent_id), filter),
-                        &[self.payment_object_ref(oid)],
+                        ObjectPaymentComponent::announced_sacrifice(
+                            Some(permanent_id),
+                            filter,
+                            *count,
+                        ),
+                        &objects,
                     )?);
+                    for object in objects {
+                        if !consumed.insert(object.object_id) {
+                            return Err(EngineError::Illegal("one object cannot pay two costs"));
+                        }
+                    }
                 }
                 AbilityCost::ExileGraveyardCards {
                     constraint,
@@ -1659,7 +1674,7 @@ impl GameEngine {
             plan.debits.sort_by_key(|debit| {
                 matches!(
                     debit,
-                    CostDebit::Sacrifice { .. }
+                    CostDebit::SacrificeGroup { .. }
                         | CostDebit::Exile { .. }
                         | CostDebit::ExileGroup { .. }
                         | CostDebit::Discard { .. }
@@ -1687,7 +1702,7 @@ impl GameEngine {
                 &debit,
                 CostDebit::Exile { .. }
                     | CostDebit::ExileGroup { .. }
-                    | CostDebit::Sacrifice { .. }
+                    | CostDebit::SacrificeGroup { .. }
                     | CostDebit::ReturnUnblockedAttacker { .. }
             )
             .then(|| self.snapshot_zone_event());
@@ -1868,39 +1883,51 @@ impl GameEngine {
                         self.commit_exile_cost(&mut payment, oid, owner);
                     }
                 }
-                CostDebit::Sacrifice { snapshot, owner } => {
-                    let oid = snapshot.source.object_id;
-                    let mut snapshot = self
-                        .sacrifice_snapshot(oid)
-                        .expect("prevalidated sacrifice source");
-                    let card_name = object_display_name(&self.state, self.registry, oid);
-                    // Capture the receipt against the pre-departure incarnation. The
-                    // post-move generation has no last-known P/T entry, so a later
-                    // `CardResultCharacteristicSum { action: Sacrifice }` (Susur Secundi) would
-                    // otherwise read 0 instead of the sacrificed creature's power.
-                    let result = card_result_entry(
-                        &self.state,
-                        self.registry,
-                        CardResultAction::Sacrifice,
-                        owner,
-                        oid,
-                    );
-                    snapshot.died = sacrifice_permanent(&mut self.state, self.registry, oid)
-                        .expect("prevalidated sacrifice cost must commit");
-                    payment.sacrificed.push(snapshot);
-                    payment.move_events.push(permanent_moved_event(
-                        &self.state,
-                        oid,
-                        owner,
-                        rv1::permanent_moved::Destination::Graveyard,
-                    ));
-                    let paid_cost = PaidCardCost::Sacrifice {
-                        object_id: oid,
-                        card_name,
-                        result,
-                    };
-                    debug_assert_eq!(paid_cost.object_id(), oid);
-                    payment.paid_card_costs.push(paid_cost);
+                CostDebit::SacrificeGroup { objects } => {
+                    // Capture all members after preceding nondeparture debits, before any group
+                    // member moves. Static-source departure cannot alter another member's LKI.
+                    let captured: Vec<_> = objects
+                        .into_iter()
+                        .map(|(planned, owner)| {
+                            let oid = planned.source.object_id;
+                            let snapshot = self
+                                .sacrifice_snapshot(oid)
+                                .expect("prevalidated sacrifice source");
+                            let name = object_display_name(&self.state, self.registry, oid);
+                            let result = card_result_entry(
+                                &self.state,
+                                self.registry,
+                                CardResultAction::Sacrifice,
+                                owner,
+                                oid,
+                            );
+                            (snapshot, owner, name, result)
+                        })
+                        .collect();
+                    let ids: Vec<_> = captured
+                        .iter()
+                        .map(|(snapshot, _, _, _)| snapshot.source.object_id)
+                        .collect();
+                    let died = sacrifice_permanents(&mut self.state, self.registry, &ids)
+                        .expect("prevalidated sacrifice group must commit");
+                    for ((mut snapshot, owner, card_name, result), died) in
+                        captured.into_iter().zip(died)
+                    {
+                        let oid = snapshot.source.object_id;
+                        snapshot.died = died;
+                        payment.sacrificed.push(snapshot);
+                        payment.move_events.push(permanent_moved_event(
+                            &self.state,
+                            oid,
+                            owner,
+                            rv1::permanent_moved::Destination::Graveyard,
+                        ));
+                        payment.paid_card_costs.push(PaidCardCost::Sacrifice {
+                            object_id: oid,
+                            card_name,
+                            result,
+                        });
+                    }
                 }
                 CostDebit::ReturnUnblockedAttacker {
                     object,
@@ -2060,7 +2087,9 @@ impl GameEngine {
                 CostDebit::Discard { object_id, .. }
                 | CostDebit::PutHandCardOnLibraryBottom { object_id, .. }
                 | CostDebit::Exile { object_id, .. } => consumed.insert(*object_id),
-                CostDebit::Sacrifice { snapshot, .. } => consumed.insert(snapshot.source.object_id),
+                CostDebit::SacrificeGroup { objects } => objects
+                    .iter()
+                    .all(|(snapshot, _)| consumed.insert(snapshot.source.object_id)),
                 CostDebit::ReturnUnblockedAttacker { object, .. } => {
                     consumed.insert(object.object_id)
                 }
@@ -2264,19 +2293,22 @@ impl GameEngine {
                                 )
                         })
                 }
-                CostDebit::Sacrifice { snapshot, owner } => {
-                    let object_id = snapshot.source.object_id;
-                    self.state.objects.get(&object_id).is_some_and(|object| {
-                        object.zone == Zone::Battlefield
-                            && object.owner == *owner
-                            && self.state.player_idx(*owner).is_some()
-                    }) && self
-                        .state
-                        .zone_change_generation
-                        .get(&object_id)
-                        .copied()
-                        .unwrap_or(0)
-                        == snapshot.source.zone_change_generation
+                CostDebit::SacrificeGroup { objects } => {
+                    !objects.is_empty()
+                        && objects.iter().all(|(snapshot, owner)| {
+                            let object_id = snapshot.source.object_id;
+                            self.state.objects.get(&object_id).is_some_and(|object| {
+                                object.zone == Zone::Battlefield
+                                    && object.owner == *owner
+                                    && self.state.player_idx(*owner).is_some()
+                            }) && self
+                                .state
+                                .zone_change_generation
+                                .get(&object_id)
+                                .copied()
+                                .unwrap_or(0)
+                                == snapshot.source.zone_change_generation
+                        })
                 }
                 CostDebit::ReturnUnblockedAttacker {
                     object,
@@ -2502,6 +2534,248 @@ mod convoke_transaction_tests {
     use super::*;
 
     #[test]
+    fn counted_sacrifice_preserves_pre_group_lki_and_replacement_receipts() {
+        let mut engine = GameEngine::new(50201, &[0, 1], 20, None, true).unwrap();
+        let ids = [
+            engine.state.players[0].hand[0],
+            engine.state.players[1].hand[0],
+            engine.state.players[0].hand[1],
+        ];
+        for &oid in &ids {
+            engine.state.objects.get_mut(&oid).unwrap().card_id = "grizzly_bears".into();
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                oid,
+                Zone::Battlefield,
+                Some(0),
+            )
+            .unwrap();
+        }
+        // The first member supplies static effects that must still describe every other
+        // member at this single departure boundary, even when it leaves first.
+        for &oid in &ids[1..] {
+            for kind in [
+                ContinuousEffectKind::PtModify {
+                    delta_power: 3,
+                    delta_toughness: 3,
+                },
+                ContinuousEffectKind::Layer4AddTypes(tricerules_cards::TypeLineAddition {
+                    card_types: vec![PermanentTypeFilter::Enchantment],
+                    ..Default::default()
+                }),
+                ContinuousEffectKind::Layer5SetColors(vec![tricerules_cards::Color::Red]),
+                ContinuousEffectKind::Layer6AddKeyword(Keyword::Flying),
+            ] {
+                engine.state.continuous_effects.push(ContinuousEffect {
+                    trigger_grant_origin: None,
+                    source_id: Some(ids[0]),
+                    affected: AffectedScope::Single(oid),
+                    kind,
+                    condition: None,
+                    duration: EffectDuration::WhileSourceOnBattlefield,
+                    timestamp: 1,
+                });
+            }
+            let object = engine.state.objects.get_mut(&oid).unwrap();
+            object.add_counters(CounterKind::PlusOnePlusOne, 1, 0);
+            object.tapped = true;
+            object.attached_to = Some(AttachmentRecipient::Object(ids[0]));
+        }
+        engine
+            .state
+            .objects
+            .get_mut(&ids[1])
+            .unwrap()
+            .add_counters(CounterKind::Finality, 1, 0);
+        let generations: Vec<_> = ids
+            .iter()
+            .map(|oid| engine.state.zone_change_generation[oid])
+            .collect();
+        let cost = [AbilityCost::SacrificePermanent {
+            filter: TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                controller: TargetController::You,
+                ..Default::default()
+            },
+            count: 3,
+        }];
+        let selection = [rv1::CostSelection {
+            cost_index: 0,
+            selection: Some(rv1::cost_selection::Selection::BattlefieldObjects(
+                rv1::CostObjectRefs {
+                    objects: ids
+                        .iter()
+                        .map(|oid| engine.payment_object_ref(*oid))
+                        .collect(),
+                },
+            )),
+        }];
+        let plan = engine
+            .plan_ability_costs(0, 0, ids[0], &cost, &[], &selection, &[], 0, 0)
+            .unwrap();
+        let receipt = engine.commit_cost_transaction(plan).unwrap();
+        assert_eq!(receipt.sacrificed.len(), 3);
+        assert_eq!(receipt.paid_card_costs.len(), 3);
+        assert_eq!(receipt.move_events.len(), 3);
+        assert_eq!(receipt.sacrificed.iter().filter(|s| s.died).count(), 2);
+        assert_eq!(engine.state.objects[&ids[1]].zone, Zone::Exile);
+        assert!(engine.state.players[1].exile.contains(&ids[1]));
+        assert_eq!(engine.state.objects[&ids[1]].controller, 1);
+        for (i, &oid) in ids.iter().enumerate() {
+            let snapshot = &receipt.sacrificed[i];
+            assert_eq!(snapshot.source.controller, 0);
+            assert_eq!(snapshot.source.zone_change_generation, generations[i]);
+            assert_eq!(
+                receipt.paid_card_costs[i].result().zone_change_generation,
+                generations[i]
+            );
+            assert_eq!(
+                engine.state.zone_change_generation[&oid],
+                generations[i] + 1
+            );
+            assert!(engine
+                .state
+                .last_known_copy_by_generation
+                .contains_key(&(oid, generations[i])));
+        }
+        for (i, &oid) in ids.iter().enumerate().skip(1) {
+            let key = (oid, generations[i]);
+            assert_eq!(
+                engine.state.last_known_pt_by_generation[&key],
+                (Some(6), Some(6))
+            );
+            assert_eq!(
+                engine.state.last_known_colors_by_generation[&key],
+                [tricerules_cards::Color::Red]
+            );
+            assert!(engine.state.last_known_types_by_generation[&key]
+                .iter()
+                .any(|t| t == "Enchantment"));
+            assert!(engine.state.last_known_keywords_by_generation[&key].contains(&Keyword::Flying));
+            assert_eq!(engine.state.last_known_controller_by_generation[&key], 0);
+            assert!(engine.state.last_known_tapped_by_generation[&key]);
+            assert_eq!(
+                engine.state.last_known_counters_by_generation[&key][&CounterKind::PlusOnePlusOne],
+                1
+            );
+            assert_eq!(
+                engine.state.last_known_attached_object_by_generation[&key],
+                (ids[0], generations[0])
+            );
+        }
+        let batches: Vec<_> = receipt
+            .trigger_events
+            .iter()
+            .filter_map(|event| {
+                if let GameEvent::ZoneChanges(batch) = event {
+                    Some(batch)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(batches.len(), 1);
+        assert_eq!(batches[0].moves.len(), 3);
+        assert_eq!(
+            batches[0]
+                .moves
+                .iter()
+                .filter(|m| m.destination == Zone::Graveyard)
+                .count(),
+            2
+        );
+        let replaced = batches[0]
+            .moves
+            .iter()
+            .find(|movement| movement.before.object_id == ids[1])
+            .unwrap();
+        assert_eq!(replaced.before.owner, 1);
+        assert_eq!(replaced.before.controller, 0);
+        let events: Vec<_> = payment_sacrifice_events(receipt.sacrificed).collect();
+        assert_eq!(
+            events
+                .iter()
+                .filter(|e| matches!(e, GameEvent::Sacrificed { .. }))
+                .count(),
+            3
+        );
+        assert_eq!(
+            events
+                .iter()
+                .filter(|e| matches!(e, GameEvent::Dies { .. }))
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn separate_authored_singleton_sacrifices_keep_distinct_zone_boundaries() {
+        let (mut engine, source, _) = battlefield_self_exile_fixture();
+        let second = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&second).unwrap().card_id = "grizzly_bears".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            second,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .unwrap();
+        let cost = AbilityCost::SacrificePermanent {
+            count: 1,
+            filter: TargetFilter {
+                kind: TargetKind::Creature,
+                controller: TargetController::You,
+                ..Default::default()
+            },
+        };
+        let selections: Vec<_> = [source, second]
+            .iter()
+            .enumerate()
+            .map(|(i, oid)| rv1::CostSelection {
+                cost_index: i as u32,
+                selection: Some(rv1::cost_selection::Selection::PermanentId(*oid)),
+            })
+            .collect();
+        let plan = engine
+            .plan_ability_costs(
+                0,
+                0,
+                source,
+                &[cost.clone(), cost],
+                &[],
+                &selections,
+                &[],
+                0,
+                0,
+            )
+            .unwrap();
+        let receipt = engine.commit_cost_transaction(plan).unwrap();
+        let batches: Vec<_> = receipt
+            .trigger_events
+            .iter()
+            .filter_map(|event| {
+                if let GameEvent::ZoneChanges(batch) = event {
+                    Some(batch)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert_eq!(batches.len(), 2);
+        assert!(batches.iter().all(|batch| batch.moves.len() == 1));
+        assert!(batches[0]
+            .sources
+            .iter()
+            .any(|snapshot| snapshot.object_id == source));
+        assert!(!batches[1]
+            .sources
+            .iter()
+            .any(|snapshot| snapshot.object_id == source));
+    }
+
+    #[test]
     fn issue_195_resolution_sacrifice_uses_atomic_payment_receipts() {
         let (mut engine, source, _) = battlefield_self_exile_fixture();
         let reference = object_ref(&engine, source);
@@ -2676,7 +2950,7 @@ mod convoke_transaction_tests {
                             filter: filter.clone(),
                             source_only: false,
                         },
-                        AbilityCost::SacrificePermanent { filter },
+                        AbilityCost::SacrificePermanent { filter, count: 1 },
                         source_ref,
                         rv1::cost_selection::Selection::PermanentId(source),
                     ),
@@ -3247,7 +3521,9 @@ mod convoke_transaction_tests {
         let snapshot = engine.sacrifice_snapshot(oid).unwrap();
         let receipt = engine
             .commit_cost_transaction(plan(vec![
-                CostDebit::Sacrifice { snapshot, owner: 0 },
+                CostDebit::SacrificeGroup {
+                    objects: vec![(snapshot, 0)],
+                },
                 debit(),
             ]))
             .unwrap();
@@ -3364,7 +3640,9 @@ mod convoke_transaction_tests {
             player_idx: 0,
             cast_cost_receipts: vec![],
             debits: vec![
-                CostDebit::Sacrifice { snapshot, owner: 0 },
+                CostDebit::SacrificeGroup {
+                    objects: vec![(snapshot, 0)],
+                },
                 CostDebit::Blight {
                     object: rv1::CostObjectRef {
                         object_id: oid,

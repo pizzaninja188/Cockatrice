@@ -486,7 +486,10 @@ pub(super) fn activated_ability_info(
             AbilityCost::DiscardSelf => "Discard this card".to_string(),
             AbilityCost::ExileSelf => "Exile this card".to_string(),
             AbilityCost::SacrificeSelf => "Sacrifice this".to_string(),
-            AbilityCost::SacrificePermanent { .. } => "Sacrifice a permanent".to_string(),
+            AbilityCost::SacrificePermanent { count: 1, .. } => "Sacrifice a permanent".to_string(),
+            AbilityCost::SacrificePermanent { count, .. } => {
+                format!("Sacrifice {count} permanents")
+            }
             AbilityCost::ExileGraveyardCards { constraint, .. } => match constraint {
                 ObjectPaymentConstraint::ExactCount(count) => {
                     format!("Exile {count} graveyard cards")
@@ -964,20 +967,20 @@ fn legal_ability_cost_choices(
             AbilityCost::SacrificeSelf | AbilityCost::DiscardSelf | AbilityCost::ExileSelf => {
                 structurally_payable &= consumed.insert(source);
             }
-            AbilityCost::SacrificePermanent { filter } => {
+            AbilityCost::SacrificePermanent { filter, count } => {
                 let candidate_ids =
-                    ObjectPaymentComponent::announced_sacrifice(Some(source), filter)
+                    ObjectPaymentComponent::announced_sacrifice(Some(source), filter, *count)
                         .candidates(eng, player);
                 requirements.push(ObjectPaymentRequirement::Exact {
                     candidates: candidate_ids.clone(),
-                    count: 1,
+                    count: *count,
                 });
                 choices.push(rv1::LegalCostChoice {
                     cost_index: cost_index as u32,
                     zone: rv1::CostChoiceZone::Battlefield as i32,
                     candidate_ids: candidate_ids.clone(),
-                    min: 1,
-                    max: 1,
+                    min: *count,
+                    max: *count,
                     blight_count: 0,
                     counter_removal: None,
                     kind: rv1::CostChoiceKind::Sacrifice as i32,
@@ -1180,7 +1183,7 @@ fn legal_spell_cost_choices(
                 });
             }
             AdditionalCost::SacrificePermanent { filter } => {
-                let candidate_ids = ObjectPaymentComponent::announced_sacrifice(None, filter)
+                let candidate_ids = ObjectPaymentComponent::announced_sacrifice(None, filter, 1)
                     .candidates(eng, player);
                 requirements.push(ObjectPaymentRequirement::Exact {
                     candidates: candidate_ids.clone(),
@@ -1636,8 +1639,9 @@ fn legal_spell_cost_choices(
                         filter,
                         ..
                     } => {
-                        let candidates = ObjectPaymentComponent::announced_sacrifice(None, filter)
-                            .candidates(eng, player);
+                        let candidates =
+                            ObjectPaymentComponent::announced_sacrifice(None, filter, 1)
+                                .candidates(eng, player);
                         rv1::LegalCastCostOption {
                             option_index: option_index as u32,
                             label: option.fallback_label(),

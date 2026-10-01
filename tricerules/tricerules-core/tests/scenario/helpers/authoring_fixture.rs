@@ -42,6 +42,9 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
     if card == "trash_for_treasure" {
         cards.push("mind_stone");
     }
+    if card == "kuldotha_forgemaster" && ability == Some(0) {
+        cards.push("sol_ring");
+    }
     if card == "trading_post" && ability == Some(2) {
         // This ability targets an artifact already in the graveyard before paying its cost.
         cards.push("sol_ring");
@@ -55,6 +58,11 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
     for player in 0..e.state.players.len() {
         super::relocate_to_battlefield(&mut e, player, "grizzly_bears", false);
         super::relocate_to_battlefield(&mut e, player, "explosive_apparatus", false);
+        if card == "kuldotha_forgemaster" && ability == Some(0) && player == 0 {
+            // The source and Explosive Apparatus supply two of the three artifacts.
+            // Complete this exact activation fixture without changing the baseline.
+            super::relocate_to_battlefield(&mut e, player, "sol_ring", false);
+        }
         if card == "decimate" {
             super::relocate_to_battlefield(&mut e, player, "ominous_seas", false);
         }

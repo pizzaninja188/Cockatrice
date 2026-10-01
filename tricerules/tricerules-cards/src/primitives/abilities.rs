@@ -454,7 +454,7 @@ impl ActivatedAbilityDef {
         }
         for cost in &self.costs {
             cost.validate()?;
-            if let AbilityCost::SacrificePermanent { filter }
+            if let AbilityCost::SacrificePermanent { filter, .. }
             | AbilityCost::TapPermanents { filter, .. } = cost
             {
                 filter.validate_characteristic_constraints()?;

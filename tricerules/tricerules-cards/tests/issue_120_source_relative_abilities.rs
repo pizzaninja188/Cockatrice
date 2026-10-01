@@ -10,7 +10,7 @@ fn issue_120_creatures_use_source_excluding_sacrifice_costs() {
         let [ability] = face.activated_abilities.as_slice() else {
             panic!("card has one activated ability");
         };
-        let [AbilityCost::Mana(mana), AbilityCost::SacrificePermanent { filter }] =
+        let [AbilityCost::Mana(mana), AbilityCost::SacrificePermanent { filter, count: 1 }] =
             ability.costs.as_slice()
         else {
             panic!("ability uses mana plus a selected sacrifice");

@@ -440,6 +440,13 @@ receipt so triggers can distinguish Teamwork, Kicker, and ordinary additional pa
 matching labels. Copies retain the announced receipt but never pay the object cost or emit its tap
 or sacrifice actions again.
 
+For activated abilities, `SacrificePermanent(filter: ..., count: 3)` represents one simultaneous
+three-permanent sacrifice instruction (Kuldotha Forgemaster). Count defaults to one, is omitted
+when serializing singleton costs, and must be positive. Bolas's Citadel demonstrates the same
+contract with ten nonland permanents. Use separate costs only for separate authored instructions;
+repeating three singleton costs does not represent one sacrifice-three instruction. Plural
+activation payments use the existing generation-bound battlefield cohort and explicit confirmation.
+
 ```ron
 options: [
   TapPermanents(

@@ -35,7 +35,9 @@ fn issue_52_cards_have_complete_composite_cost_definitions() {
     let vine_definition = registry.get("portcullis_vine").unwrap();
     let vine = vine_definition.primary_face();
     assert_eq!(vine.keywords, [Keyword::Defender]);
-    let AbilityCost::SacrificePermanent { filter } = &vine.activated_abilities[0].costs[2] else {
+    let AbilityCost::SacrificePermanent { filter, count: 1 } =
+        &vine.activated_abilities[0].costs[2]
+    else {
         panic!("Portcullis Vine needs a filtered sacrifice component");
     };
     assert_eq!(filter.kind, TargetKind::Creature);

@@ -32,6 +32,7 @@ pub(in crate::engine) enum ObjectPaymentComponent {
     },
     PutHandCardOnLibraryBottom,
     Sacrifice {
+        count: u32,
         filter: PermanentPaymentFilter,
         only_source: Option<rv1::CostObjectRef>,
     },
@@ -72,8 +73,10 @@ impl ObjectPaymentComponent {
     pub(in crate::engine) fn announced_sacrifice(
         source: Option<ObjectId>,
         filter: &TargetFilter,
+        count: u32,
     ) -> Self {
         Self::Sacrifice {
+            count,
             filter: PermanentPaymentFilter::Announced {
                 source,
                 filter: Box::new(filter.clone()),
@@ -118,6 +121,7 @@ impl ObjectPaymentComponent {
                 filter,
                 source_only,
             } => Self::Sacrifice {
+                count: 1,
                 filter: PermanentPaymentFilter::Resolution {
                     source,
                     filter: Box::new(filter.clone()),
@@ -185,6 +189,7 @@ impl ObjectPaymentComponent {
             Self::Sacrifice {
                 filter,
                 only_source,
+                ..
             } => {
                 only_source.is_none_or(|source| {
                     source.object_id == oid && engine.payment_object_ref(oid) == source
@@ -247,6 +252,7 @@ impl ObjectPaymentComponent {
             Self::Tap { constraint, .. } => {
                 engine.object_payment_selection_satisfies(*constraint, objects)
             }
+            Self::Sacrifice { count, .. } => *count > 0 && objects.len() == *count as usize,
             _ => objects.len() == 1,
         };
         let candidates = self.candidates(engine, player);
@@ -354,11 +360,16 @@ impl GameEngine {
                     owner: self.state.objects[&objects[0].object_id].owner,
                 }
             }
-            ObjectPaymentComponent::Sacrifice { .. } => CostDebit::Sacrifice {
-                snapshot: self
-                    .sacrifice_snapshot(objects[0].object_id)
-                    .ok_or(EngineError::Illegal("sacrifice permanent missing"))?,
-                owner: self.state.objects[&objects[0].object_id].owner,
+            ObjectPaymentComponent::Sacrifice { .. } => CostDebit::SacrificeGroup {
+                objects: objects
+                    .into_iter()
+                    .map(|object| {
+                        let snapshot = self
+                            .sacrifice_snapshot(object.object_id)
+                            .ok_or(EngineError::Illegal("sacrifice permanent missing"))?;
+                        Ok((snapshot, self.state.objects[&object.object_id].owner))
+                    })
+                    .collect::<Result<_, EngineError>>()?,
             },
             ObjectPaymentComponent::Tap {
                 constraint,
