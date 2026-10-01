@@ -202,6 +202,71 @@ fn scoped_battlefield_objects(
         .collect()
 }
 
+pub(super) fn sacrifice_all(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::SacrificeAll { players, filter } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let cohort = scoped_battlefield_objects(
+        cx.engine,
+        cx.controller,
+        players,
+        &filter,
+        cx.targets,
+        cx.target_group_indices,
+    );
+    let snapshot = cx.engine.snapshot_zone_event();
+    let before = cohort
+        .iter()
+        .map(|&oid| {
+            let source = snapshot
+                .source(oid)
+                .ok_or(EngineError::Illegal("sacrifice source missing"))?;
+            let name = object_display_name(&cx.engine.state, cx.engine.registry, oid);
+            let was_creature = source.types.iter().any(|kind| kind == "Creature");
+            Ok((oid, source, name, was_creature))
+        })
+        .collect::<Result<Vec<_>, EngineError>>()?;
+    // Freeze every replacement destination before the first member leaves the battlefield.
+    let died = sacrifice_permanents(&mut cx.engine.state, cx.engine.registry, &cohort)?;
+    let mut departures = Vec::new();
+    for ((oid, source, name, was_creature), died) in before.into_iter().zip(died) {
+        cx.events
+            .push(ev_log(format!("P{} sacrifices {name}.", source.controller)));
+        cx.events.push(permanent_moved_event(
+            &cx.engine.state,
+            oid,
+            source.owner,
+            rv1::permanent_moved::Destination::Graveyard,
+        ));
+        cx.effect_result.cards.push(payment::card_result_entry(
+            &cx.engine.state,
+            cx.engine.registry,
+            CardResultAction::Sacrifice,
+            source.controller,
+            oid,
+        ));
+        departures.push(super::super::mass_sacrifice::SacrificeDeparture {
+            source,
+            was_creature,
+            died,
+        });
+    }
+    let GameEvent::ZoneChanges(zone) = cx.engine.finish_zone_event(snapshot) else {
+        unreachable!()
+    };
+    if cx
+        .engine
+        .begin_mass_sacrifice_order(cx.top.clone(), zone, departures, cx.events)
+    {
+        Ok(EffectOutcome::Suspended)
+    } else {
+        Ok(EffectOutcome::Continue)
+    }
+}
+
 pub(super) fn tap_all(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

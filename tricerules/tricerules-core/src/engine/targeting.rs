@@ -1437,6 +1437,7 @@ fn validate_effect_targets(
         | SpellEffectKind::DestroyAll { .. }
         | SpellEffectKind::ReturnAllToOwnersHand { .. }
         | SpellEffectKind::DamageAll { .. }
+        | SpellEffectKind::SacrificeAll { .. }
         | SpellEffectKind::TapAll { .. }
         | SpellEffectKind::UntapAll { .. }
         | SpellEffectKind::UntapChosenPermanents

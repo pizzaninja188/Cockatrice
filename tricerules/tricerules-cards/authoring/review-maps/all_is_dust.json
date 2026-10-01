@@ -1,0 +1,80 @@
+{
+  "format_version": 1,
+  "oracle_id": "14693689-d087-43b6-9c3f-63ab0648fc20",
+  "spans": [
+    {
+      "face_id": "all_is_dust",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::SacrificeAll",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_all_is_dust::all_is_dust_owner_order_survives_immediate_returning_aura_choice",
+      "covers": "Actual All Is Dust preserves every owner order before a linked Pacifism Aura return choice; exact attachment, once-only departure observer and final spell completion"
+    },
+    {
+      "test": "scenario deck_coverage_all_is_dust::all_is_dust_immediate_aura_return_preserves_following_effect_tail",
+      "covers": "The following gain-life instruction waits through owner ordering and the intervening Aura return choice, then executes once"
+    },
+    {
+      "test": "scenario deck_coverage_all_is_dust::all_is_dust_paid_cast_sacrifices_once_and_orders_each_owners_arrivals",
+      "covers": "paid cast sacrifices once and orders each owners arrivals"
+    },
+    {
+      "test": "scenario deck_coverage_all_is_dust::all_is_dust_choice_rejections_preserve_pending_and_older_graveyard_order",
+      "covers": "choice rejections preserve pending and older graveyard order"
+    },
+    {
+      "test": "scenario deck_coverage_all_is_dust::all_is_dust_uses_resolution_colors_deduplicates_multicolor_and_excludes_tokens_from_order",
+      "covers": "uses resolution colors deduplicates multicolor and excludes tokens from order"
+    },
+    {
+      "test": "scenario deck_coverage_all_is_dust::all_is_dust_sacrifice_bypasses_indestructible_regeneration_and_targeting_protection",
+      "covers": "sacrifice bypasses indestructible regeneration and targeting protection"
+    },
+    {
+      "test": "scenario deck_coverage_all_is_dust::all_is_dust_nonconsecutive_players_use_owner_not_controller_for_apnap_order",
+      "covers": "nonconsecutive players use owner not controller for apnap order"
+    },
+    {
+      "test": "scenario deck_coverage_all_is_dust::all_is_dust_departing_observers_collect_once_after_all_owner_choices",
+      "covers": "departing observers collect once after all owner choices"
+    },
+    {
+      "test": "scenario deck_coverage_all_is_dust::all_is_dust_replacement_exile_still_observes_sacrifice_without_death_or_ordering",
+      "covers": "replacement exile still observes sacrifice without death or ordering"
+    },
+    {
+      "test": "scenario deck_coverage_all_is_dust::all_is_dust_empty_colored_cohort_finishes_without_a_choice",
+      "covers": "empty colored cohort finishes without a choice"
+    },
+    {
+      "test": "scenario deck_coverage_all_is_dust::all_is_dust_freezes_membership_before_a_color_granting_source_departs",
+      "covers": "freezes membership before a color granting source departs"
+    },
+    {
+      "test": "scenario deck_coverage_all_is_dust::all_is_dust_mass_sacrifice_effect_tail_runs_once_after_the_last_owner_order",
+      "covers": "mass sacrifice effect tail runs once after the last owner order"
+    },
+    {
+      "test": "scenario deck_coverage_all_is_dust::all_is_dust_paid_cast_and_owner_choices_replay_serialized_commands_identically",
+      "covers": "paid cast and owner choices replay serialized commands identically"
+    },
+    {
+      "test": "deck_coverage_all_is_dust::all_is_dust_exact_printed_kindred_eldrazi_definition_and_five_color_union",
+      "covers": "Exact printed colorless seven mana Kindred Sorcery Eldrazi identity and single untargeted five color union"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

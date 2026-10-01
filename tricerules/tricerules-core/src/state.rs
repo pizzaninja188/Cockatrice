@@ -1035,6 +1035,10 @@ pub enum ResolutionContinuation {
     Sacrifice {
         stack: ParkedStackResolution,
     },
+    MassSacrificeGraveyardOrder {
+        stack: ParkedStackResolution,
+        sacrifice: Box<crate::engine::PendingMassSacrifice>,
+    },
     CopyTargets {
         stack: ParkedStackResolution,
         copy_source_object_id: ObjectId,
@@ -1194,6 +1198,7 @@ impl ResolutionContinuation {
             | Self::PlayerSetDiscard { stack, .. }
             | Self::GraveyardChoice { stack, .. }
             | Self::Sacrifice { stack }
+            | Self::MassSacrificeGraveyardOrder { stack, .. }
             | Self::CopyTargets { stack, .. }
             | Self::SearchLibrary { stack, .. }
             | Self::SearchZoneScope { stack, .. }
@@ -1237,6 +1242,7 @@ impl ResolutionContinuation {
             | Self::PlayerSetDiscard { stack, .. }
             | Self::GraveyardChoice { stack, .. }
             | Self::Sacrifice { stack }
+            | Self::MassSacrificeGraveyardOrder { stack, .. }
             | Self::CopyTargets { stack, .. }
             | Self::SearchLibrary { stack, .. }
             | Self::SearchZoneScope { stack, .. }

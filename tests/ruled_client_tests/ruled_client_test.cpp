@@ -20,6 +20,7 @@
 #include "game/ruled/ruled_presentation_resolver.h"
 #include "game/ruled/ruled_restricted_mana_model.h"
 #include "game/ruled/ruled_zone_snapshot_policy.h"
+#include "game/ruled/ruled_public_zone_order_plan.h"
 
 #include <QBuffer>
 #include <QJsonArray>
@@ -8851,4 +8852,132 @@ TEST(RuledPendingTargetProgressionTest, PerTargetDamageSkipsAllocationAndDisplay
     pending.clearSpell();
     EXPECT_FALSE(pending.isSpellDamageAllocationDisplayActive());
     EXPECT_EQ(spell.damageDivision, ruled::v1::DAMAGE_DIVISION_CHOOSE_AT_CAST);
+}
+
+namespace
+{
+struct GraveyardOrderCard
+{
+    int id;
+    QString name;
+    QString annotation;
+    int getId() const
+    {
+        return id;
+    }
+};
+
+ServerInfo_Zone graveyardOrderSnapshot(std::initializer_list<int> ids)
+{
+    ServerInfo_Zone info;
+    info.set_name(ZoneNames::GRAVE);
+    info.set_type(ServerInfo_Zone::PublicZone);
+    info.set_card_count(static_cast<int>(ids.size()));
+    for (int id : ids) {
+        info.add_card_list()->set_id(id);
+    }
+    return info;
+}
+} // namespace
+
+TEST(RuledPublicZoneOrderTest, OwnerPermutationPreservesDuplicateNamesPointersAndAnnotations)
+{
+    GraveyardOrderCard first{40, "Grizzly Bears", "first physical card"};
+    GraveyardOrderCard second{41, "Grizzly Bears", "second physical card"};
+    GraveyardOrderCard hill{42, "Hill Giant", "chosen oldest arrival"};
+    GraveyardOrderCard older{44, "Island", "older graveyard prefix"};
+    const QList<GraveyardOrderCard *> original{&hill, &second, &first, &older};
+    const auto info = graveyardOrderSnapshot({41, 40, 42, 44});
+    const auto ordered = RuledPublicZoneOrderDetail::snapshot(true, true, QStringLiteral("grave"), original, info);
+    ASSERT_TRUE(ordered);
+    EXPECT_EQ(*ordered, QList<GraveyardOrderCard *>({&second, &first, &hill, &older}));
+    EXPECT_EQ(original, QList<GraveyardOrderCard *>({&hill, &second, &first, &older}));
+    EXPECT_EQ(second.annotation, QStringLiteral("second physical card"));
+    EXPECT_EQ(first.id, 40);
+    const auto repeated = RuledPublicZoneOrderDetail::snapshot(true, true, QStringLiteral("grave"), *ordered, info);
+    ASSERT_TRUE(repeated);
+    EXPECT_EQ(*repeated, *ordered);
+}
+
+TEST(RuledPublicZoneOrderTest, MalformedOrPartialSnapshotsAreAtomic)
+{
+    GraveyardOrderCard first{40, "Grizzly Bears", "retained"};
+    GraveyardOrderCard second{41, "Grizzly Bears", "retained"};
+    const QList<GraveyardOrderCard *> original{&first, &second};
+    QList<ServerInfo_Zone> invalid;
+    invalid.append(graveyardOrderSnapshot({40}));
+    invalid.append(graveyardOrderSnapshot({40, 40}));
+    invalid.append(graveyardOrderSnapshot({40, 99}));
+    auto countMismatch = graveyardOrderSnapshot({41, 40});
+    countMismatch.set_card_count(3);
+    invalid.append(countMismatch);
+    auto missingCount = graveyardOrderSnapshot({41, 40});
+    missingCount.clear_card_count();
+    invalid.append(missingCount);
+    auto missingId = graveyardOrderSnapshot({41, 40});
+    missingId.mutable_card_list(0)->clear_id();
+    invalid.append(missingId);
+    for (const auto &info : invalid) {
+        EXPECT_FALSE(RuledPublicZoneOrderDetail::snapshot(true, true, QStringLiteral("grave"), original, info));
+        EXPECT_EQ(original, QList<GraveyardOrderCard *>({&first, &second}));
+    }
+    const auto valid = graveyardOrderSnapshot({41, 40});
+    EXPECT_FALSE(RuledPublicZoneOrderDetail::snapshot(true, true, QStringLiteral("grave"),
+                                                      QList<GraveyardOrderCard *>({&first, &first}), valid));
+    EXPECT_FALSE(RuledPublicZoneOrderDetail::snapshot(true, true, QStringLiteral("grave"),
+                                                      QList<GraveyardOrderCard *>({&first, nullptr}), valid));
+}
+
+TEST(RuledPublicZoneOrderTest, FullAndPartialTrackedViewsPreserveCopiesOrInvalidateChangedMembership)
+{
+    GraveyardOrderCard first{40, "Grizzly Bears", "view first"};
+    GraveyardOrderCard second{41, "Grizzly Bears", "view second"};
+    GraveyardOrderCard hill{42, "Hill Giant", "view hill"};
+    const QList<int> originOrder{41, 40, 42};
+    const auto full =
+        RuledPublicZoneOrderDetail::view(QList<GraveyardOrderCard *>({&hill, &first, &second}), originOrder, -1);
+    ASSERT_TRUE(full);
+    EXPECT_EQ(*full, QList<GraveyardOrderCard *>({&second, &first, &hill}));
+    const auto partial =
+        RuledPublicZoneOrderDetail::view(QList<GraveyardOrderCard *>({&first, &second}), originOrder, 2);
+    ASSERT_TRUE(partial);
+    EXPECT_EQ(*partial, QList<GraveyardOrderCard *>({&second, &first}));
+    EXPECT_FALSE(RuledPublicZoneOrderDetail::view(QList<GraveyardOrderCard *>({&hill, &first}), originOrder, 2));
+    EXPECT_FALSE(
+        RuledPublicZoneOrderDetail::view(QList<GraveyardOrderCard *>({&first, &first, &hill}), originOrder, -1));
+    EXPECT_EQ(first.annotation, QStringLiteral("view first"));
+}
+
+TEST(RuledPublicZoneOrderTest, EmptyCompletePublicGraveyardIsValid)
+{
+    const auto ordered = RuledPublicZoneOrderDetail::snapshot(
+        true, true, QStringLiteral("grave"), QList<GraveyardOrderCard *>(), graveyardOrderSnapshot({}));
+    ASSERT_TRUE(ordered);
+    EXPECT_TRUE(ordered->isEmpty());
+    const auto view = RuledPublicZoneOrderDetail::view(QList<GraveyardOrderCard *>(), QList<int>(), -1);
+    ASSERT_TRUE(view);
+    EXPECT_TRUE(view->isEmpty());
+}
+
+TEST(RuledPublicZoneOrderTest, FreeformHiddenAndOtherZonesRetainExistingPaths)
+{
+    GraveyardOrderCard synthetic{999, "Triggered ability", "synthetic stack object"};
+    const QList<GraveyardOrderCard *> cards{&synthetic};
+    const auto info = graveyardOrderSnapshot({999});
+    EXPECT_FALSE(RuledPublicZoneOrderDetail::snapshot(false, true, QStringLiteral("grave"), cards, info));
+    EXPECT_FALSE(RuledPublicZoneOrderDetail::snapshot(true, false, QStringLiteral("grave"), cards, info));
+    for (const char *name : {"stack", "exile", "command", "table", "hand", "deck"}) {
+        auto other = info;
+        other.set_name(name);
+        EXPECT_FALSE(RuledPublicZoneOrderDetail::snapshot(true, true, QString::fromLatin1(name), cards, other));
+    }
+    auto hidden = info;
+    hidden.set_type(ServerInfo_Zone::HiddenZone);
+    EXPECT_FALSE(RuledPublicZoneOrderDetail::snapshot(true, true, QStringLiteral("grave"), cards, hidden));
+    hidden.set_type(ServerInfo_Zone::PrivateZone);
+    EXPECT_FALSE(RuledPublicZoneOrderDetail::snapshot(true, true, QStringLiteral("grave"), cards, hidden));
+    auto coordinates = info;
+    coordinates.set_with_coords(true);
+    EXPECT_FALSE(RuledPublicZoneOrderDetail::snapshot(true, true, QStringLiteral("grave"), cards, coordinates));
+    EXPECT_EQ(synthetic.annotation, QStringLiteral("synthetic stack object"));
 }

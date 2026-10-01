@@ -21,9 +21,11 @@ class QMenu;
 class QAction;
 class QPainter;
 class CardDragItem;
+class RuledPublicZoneOrder;
 
 class CardZoneLogic : public QObject
 {
+    friend class RuledPublicZoneOrder;
     Q_OBJECT
 
 signals:

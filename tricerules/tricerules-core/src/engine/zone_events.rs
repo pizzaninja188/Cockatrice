@@ -18,7 +18,7 @@ impl ZoneEventSnapshot {
     }
 }
 
-#[derive(Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub(super) struct ZoneChangeReceipt {
     pub origin: Zone,
     pub destination: Zone,
@@ -26,7 +26,7 @@ pub(super) struct ZoneChangeReceipt {
     pub destination_generation: u64,
 }
 
-#[derive(Clone)]
+#[derive(serde::Serialize, Debug, Clone)]
 pub(super) struct ZoneEventBatch {
     pub sources: Vec<TriggerSourceSnapshot>,
     pub moves: Vec<ZoneChangeReceipt>,

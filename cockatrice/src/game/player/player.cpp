@@ -1,6 +1,7 @@
 #include "player.h"
 
 #include "../ruled/ruled_actions.h"
+#include "../ruled/ruled_public_zone_order.h"
 #include "../ruled/ruled_zone_snapshot_policy.h"
 #include "../../interface/theme_manager.h"
 #include "../../interface/widgets/tabs/tab_game.h"
@@ -199,6 +200,7 @@ void Player::processPlayerInfo(const ServerInfo_Player &info)
 
         QString zoneName = QString::fromStdString(zoneInfo.name());
         if (skipInRuledMode(zoneName)) {
+            RuledPublicZoneOrder::apply(zones.value(zoneName, nullptr), zoneInfo);
             continue;
         }
         CardZoneLogic *zone = zones.value(zoneName, 0);

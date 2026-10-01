@@ -1821,6 +1821,9 @@ impl GameEngine {
                         misc::destroy(&mut cx, effect)?
                     }
                     effect @ SpellEffectKind::Sacrifice { .. } => misc::sacrifice(&mut cx, effect)?,
+                    effect @ SpellEffectKind::SacrificeAll { .. } => {
+                        mass::sacrifice_all(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::DestroyAttached { .. } => {
                         mass::destroy_attached(&mut cx, effect)?
                     }
@@ -2106,6 +2109,21 @@ impl GameEngine {
         resume_stack: Option<ParkedStackResolution>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
+        // CR 404.3 completes the simultaneous departure's owner ordering before a CR 610.3
+        // return may park another choice. Never overwrite its frozen event continuation.
+        if self
+            .state
+            .pending_resolution
+            .as_ref()
+            .is_some_and(|pending| {
+                matches!(
+                    pending.continuation,
+                    ResolutionContinuation::MassSacrificeGraveyardOrder { .. }
+                )
+            })
+        {
+            return Ok(false);
+        }
         if self.state.pending_observer_return_batch.is_some()
             && self.state.pending_resolution.is_some()
         {

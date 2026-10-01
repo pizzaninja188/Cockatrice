@@ -979,3 +979,6 @@ mod deck_coverage_anger;
 
 #[path = "scenario/deck_coverage_ghalta.rs"]
 mod deck_coverage_ghalta;
+
+#[path = "scenario/deck_coverage_all_is_dust.rs"]
+mod deck_coverage_all_is_dust;

@@ -187,6 +187,7 @@ mod history;
 #[cfg(test)]
 mod issue_169_taps;
 mod legal_actions;
+mod mass_sacrifice;
 mod opening;
 mod payment;
 mod preparation;
@@ -204,6 +205,7 @@ mod triggers;
 mod untap_clock_tests;
 mod warp;
 mod zone_events;
+pub use mass_sacrifice::PendingMassSacrifice;
 
 #[cfg(test)]
 mod zone_card_filter_tests;
@@ -826,7 +828,7 @@ pub enum EngineError {
 
 /// Internal game events emitted at state-change sites to drive the unified trigger-collection pass
 /// (CR 603.2). Each variant carries the minimum data needed to identify which triggers match.
-#[derive(Clone, Debug)]
+#[derive(serde::Serialize, Clone, Debug)]
 struct TriggerSourceSnapshot {
     copy_snapshot: Option<Box<TokenCopySnapshot>>,
     counters: BTreeMap<CounterKind, u32>,
@@ -862,7 +864,7 @@ struct TapActionSnapshot {
 
 /// Event-time attachment identity captured with a trigger source. Object recipients include
 /// their zone-change generation so a leave-and-return permanent cannot satisfy the old relation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(serde::Serialize, Clone, Copy, Debug, PartialEq, Eq)]
 enum AttachmentSnapshot {
     Object(ObjectId, u64),
     Player(PlayerId),

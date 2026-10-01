@@ -1586,6 +1586,13 @@ pub enum SpellEffectKind {
         #[serde(default)]
         prevent_regeneration: bool,
     },
+    /// CR 701.21: each affected controller sacrifices the matching simultaneous cohort.
+    /// All Is Dust selects colored permanents; Living Death selects every creature.
+    SacrificeAll {
+        #[serde(default, skip_serializing_if = "relative_player_set_is_all")]
+        players: RelativePlayerSet,
+        filter: TargetFilter,
+    },
     /// CR 701.19: put a regeneration shield on target creature. The next time that creature would
     /// be destroyed this turn, instead tap it, remove it from combat, and clear all damage from it.
     /// Legal only as an activated ability effect — never a spell (validated at load). Covers
@@ -2460,6 +2467,10 @@ impl SpellEffectKind {
                 players: RelativePlayerSet::TargetedPlayer { group_index, kind },
                 ..
             }
+            | Self::SacrificeAll {
+                players: RelativePlayerSet::TargetedPlayer { group_index, kind },
+                ..
+            }
             | Self::TapAll {
                 players: RelativePlayerSet::TargetedPlayer { group_index, kind },
                 ..
@@ -2859,6 +2870,7 @@ impl SpellEffectKind {
             | SpellEffectKind::MillEachOpponentByHandSize
             | SpellEffectKind::WinGameIf { .. }
             | SpellEffectKind::DestroyAll { .. }
+            | SpellEffectKind::SacrificeAll { .. }
             | SpellEffectKind::ReturnAllToOwnersHand { .. }
             | SpellEffectKind::DamageAll { .. }
             | SpellEffectKind::CreateTokens { .. }
@@ -4586,6 +4598,7 @@ impl SpellEffectKind {
             // Mass effects select objects, not players, and never use AnyTarget (which includes
             // players). Only Creature / AnyPermanent are honored by the engine.
             SpellEffectKind::DestroyAll { kind, .. }
+            | SpellEffectKind::SacrificeAll { filter: kind, .. }
             | SpellEffectKind::ReturnAllToOwnersHand { kind }
             | SpellEffectKind::DamageAll { kind, .. }
             | SpellEffectKind::TapAll { filter: kind, .. }

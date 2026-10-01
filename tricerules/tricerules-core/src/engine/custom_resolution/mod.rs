@@ -289,6 +289,9 @@ impl GameEngine {
             ResolutionContinuation::Sacrifice { .. } => {
                 return self.finish_sacrifice_chosen(pending, chosen);
             }
+            ResolutionContinuation::MassSacrificeGraveyardOrder { .. } => {
+                return self.finish_mass_sacrifice_graveyard_order(pending, chosen);
+            }
             ResolutionContinuation::AuthoredBranch { .. } => {
                 return self.finish_resolution_branch_object(pending, chosen);
             }
