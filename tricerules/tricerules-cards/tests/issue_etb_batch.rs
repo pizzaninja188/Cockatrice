@@ -105,7 +105,7 @@ fn issue_etb_batch_maps_definitions() {
         trigger.effect,
         [
             SpellEffectKind::TargetPlayerDraws {
-                count: 1,
+                count: Amount::Fixed(1),
                 target: any_player()
             },
             SpellEffectKind::TargetPlayerLosesLife {

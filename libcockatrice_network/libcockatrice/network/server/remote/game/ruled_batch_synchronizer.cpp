@@ -535,7 +535,7 @@ void RuledBatchSynchronizer::applyStackResolvedEvent(const ruled::v1::StackResol
                 destPlayer = cp;
             }
         }
-        if (goesToLibrary && stackResolved.has_owner_player_id()) {
+        if (!goesToBattlefield && stackResolved.has_owner_player_id()) {
             if (Server_AbstractPlayer *owner = game->getPlayer(stackResolved.owner_player_id())) {
                 destPlayer = owner;
             }

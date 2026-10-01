@@ -1789,7 +1789,7 @@ enum StackResolveDestination {
   STACK_RESOLVE_DESTINATION_GRAVEYARD = 1;
   STACK_RESOLVE_DESTINATION_BATTLEFIELD = 2;
   STACK_RESOLVE_DESTINATION_EXILE = 3; // CR 702.34: a spell cast with flashback
-  STACK_RESOLVE_DESTINATION_LIBRARY = 4; // CR 720.3d: a successfully resolving Omen
+  STACK_RESOLVE_DESTINATION_LIBRARY = 4; // Resolving spell returns to library: Omen or explicit self-shuffle.
 }
 
 message StackResolved {

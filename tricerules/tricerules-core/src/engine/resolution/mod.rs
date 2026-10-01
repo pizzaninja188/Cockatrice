@@ -1738,6 +1738,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::TargetPlayerDraws { .. } => {
                         zones::target_player_draws(&mut cx, effect)?
                     }
+                    SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary => {
+                        zones::shuffle_resolving_spell_into_owners_library(&mut cx)?
+                    }
                     effect @ SpellEffectKind::Discard { .. } => zones::discard(&mut cx, effect)?,
                     effect @ SpellEffectKind::DrawDiscard { .. } => {
                         zones::draw_discard(&mut cx, effect)?
@@ -3739,6 +3742,86 @@ mod attached_subject_tests {
         ability.effect = effects;
         item.triggered_ability = Some(ability);
         item
+    }
+
+    #[test]
+    fn blue_spell_shuffle_continues_tail_and_never_moves_an_off_stack_incarnation() {
+        for on_stack in [true, false] {
+            let mut engine = GameEngine::new(504_008, &[0, 1], 20, None, true).unwrap();
+            let source = add_battlefield_object(&mut engine, 0, "blue_suns_zenith");
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                source,
+                if on_stack {
+                    Zone::Stack
+                } else {
+                    Zone::Graveyard
+                },
+                None,
+            )
+            .unwrap();
+            let generation = engine.state.zone_change_generation[&source];
+            let mut top = triggered_item(source, 0);
+            top.id = source;
+            top.card_id = "blue_suns_zenith".into();
+            top.controller = 1;
+            top.is_triggered = false;
+            top.ability_text = None;
+            top.source_permanent_id = None;
+            top.ability_index = None;
+            let mut events = Vec::new();
+            let effects = vec![
+                SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary,
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(2),
+                },
+            ]
+            .into_iter()
+            .map(|effect| ResolutionEffect {
+                effect,
+                targets: vec![],
+                target_damage: vec![],
+                target_group_indices: vec![],
+                role_group_indices: vec![],
+            })
+            .collect();
+            engine
+                .run_effect_list(&top, "Blue Sun fixture", effects, 0, &mut events)
+                .unwrap();
+            assert_eq!(
+                engine.state.players[1].life, 22,
+                "tail executes after the source leaves stack"
+            );
+            assert_eq!(
+                engine.state.objects[&source].zone,
+                if on_stack {
+                    Zone::Library
+                } else {
+                    Zone::Graveyard
+                }
+            );
+            assert_eq!(
+                engine.state.zone_change_generation[&source],
+                generation + u64::from(on_stack)
+            );
+            assert_eq!(
+                events
+                    .iter()
+                    .filter(|event| matches!(&event.ev,
+                Some(rv1::ruled_event::Ev::StackResolved(exit)) if exit.object_id == source))
+                    .count(),
+                usize::from(on_stack)
+            );
+            assert_eq!(
+                events
+                    .iter()
+                    .filter(|event| matches!(&event.ev,
+                Some(rv1::ruled_event::Ev::Log(log)) if log.text == "P0 shuffles their library."))
+                    .count(),
+                1
+            );
+        }
     }
 
     #[test]

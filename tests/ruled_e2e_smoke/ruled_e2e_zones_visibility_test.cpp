@@ -4,6 +4,232 @@ namespace ruled_e2e
 {
 namespace
 {
+class BlueSunDriver : public OpeningDriver
+{
+public:
+    using OpeningDriver::OpeningDriver;
+    std::vector<ruled::v1::StackPushed> bluePushes;
+    std::vector<ruled::v1::StackResolved> blueExits;
+    std::vector<Event_MoveCard> sourceLibraryMoves;
+    std::map<int, QStringList> handNames;
+    std::map<int, int> physicalHandCounts;
+    QStringList shuffleLogs;
+    bool blueFlow = false;
+    int blueSourcePhysicalId = -1;
+    int blueDrawer = -1;
+    void onPhysicalEvent(const GameEvent &event) override
+    {
+        if (!blueFlow) {
+            return;
+        }
+        if (event.HasExtension(Event_GameStateChanged::ext)) {
+            for (const auto &player : event.GetExtension(Event_GameStateChanged::ext).player_list()) {
+                for (const auto &zone : player.zone_list()) {
+                    const int playerId = player.properties().player_id();
+                    if (zone.name() == ZoneNames::HAND) {
+                        handNames[playerId].clear();
+                        physicalHandCounts[playerId] = zone.card_count();
+                        for (const auto &card : zone.card_list()) {
+                            handNames[playerId].push_back(QString::fromStdString(card.name()));
+                            if (playerId != myId) {
+                                EXPECT_TRUE(card.name().empty()) << "private hand name leaked in physical snapshot";
+                            }
+                        }
+                    } else if (zone.name() == ZoneNames::DECK) {
+                        EXPECT_EQ(zone.card_list_size(), 0) << "concealed library contents leaked";
+                    }
+                }
+            }
+        }
+        if (!event.HasExtension(Event_MoveCard::ext)) {
+            return;
+        }
+        const auto &move = event.GetExtension(Event_MoveCard::ext);
+        if (move.start_zone() == ZoneNames::STACK && move.target_zone() == ZoneNames::DECK &&
+            move.card_id() == blueSourcePhysicalId) {
+            sourceLibraryMoves.push_back(move);
+        }
+    }
+    void onRuledEvent(const ruled::v1::RuledEvent &event) override
+    {
+        OpeningDriver::onRuledEvent(event);
+        if (event.has_stack_pushed() && event.stack_pushed().card_id() == "blue_suns_zenith") {
+            bluePushes.push_back(event.stack_pushed());
+        }
+        if (event.has_stack_resolved()) {
+            blueExits.push_back(event.stack_resolved());
+        }
+        if (event.has_log() && QString::fromStdString(event.log().text()).contains("shuffles their library.")) {
+            shuffleLogs.push_back(QString::fromStdString(event.log().text()));
+        }
+    }
+};
+
+TEST_F(RuledE2ESmokeTest, BlueSunRealTwincastDrawsPrivatelyAndMovesOnlyTheOriginalToLibrary)
+{
+    const auto started = startServers();
+    ASSERT_TRUE(started) << started.message();
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+    BlueSunDriver p1(true, QStringLiteral("bluep1"), &transcript);
+    BlueSunDriver p2(false, QStringLiteral("bluep2"), &transcript);
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "Blue start P1"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "Blue start P2"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    auto send = [&](BlueSunDriver &sender, const ruled::v1::RuledCommand &command, const QString &description) {
+        const quint64 before1 = p1.stateVersion;
+        const quint64 before2 = p2.stateVersion;
+        const int stackBefore = p1.stackDepth;
+        // BeginCast announcements increment observer counters differently from the
+        // caster's. Wait for the actual committed stack entry on both clients.
+        auto observed = [&] {
+            return p1.stateVersion > before1 && p2.stateVersion > before2 && p1.priorityPlayer == p2.priorityPlayer &&
+                   p1.stackDepth == p2.stackDepth && !sender.legacyCastCommit && !sender.translatedCastCommitInFlight &&
+                   (!command.has_cast_spell() || p1.stackDepth == stackBefore + 1);
+        };
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while (!observed() && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return observed();
+    };
+    auto put = [&](int player, const char *name) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(player);
+        dev->mutable_put_card_in_zone()->set_card_name(name);
+        dev->mutable_put_card_in_zone()->set_zone(ruled::v1::DEV_ZONE_HAND);
+        return send(p1, command, QStringLiteral("Blue fixture %1").arg(name));
+    };
+    auto mana = [&](int player) {
+        ruled::v1::RuledCommand command;
+        command.mutable_dev_command()->set_target_player_id(player);
+        command.mutable_dev_command()->mutable_add_mana()->set_u(10);
+        return send(p1, command, QStringLiteral("Blue fixture mana"));
+    };
+    auto pass = [&] {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(p1.priorityPlayer == p1.myId ? p1 : p2, command, QStringLiteral("Blue priority"));
+    };
+    ASSERT_TRUE(put(p1.myId, "Blue Sun's Zenith"));
+    ASSERT_TRUE(put(p2.myId, "Twincast"));
+    ASSERT_TRUE(mana(p1.myId));
+    ASSERT_TRUE(mana(p2.myId));
+    const auto *blue = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Blue Sun's Zenith"));
+    ASSERT_NE(blue, nullptr);
+    ASSERT_TRUE(p1.handServerCardBySlot.count(blue->hand_index()));
+    const int physicalId = p1.handServerCardBySlot.at(blue->hand_index());
+    p1.blueFlow = p2.blueFlow = true;
+    p1.blueSourcePhysicalId = p2.blueSourcePhysicalId = physicalId;
+    p1.blueDrawer = p2.blueDrawer = p2.myId;
+    ruled::v1::RuledCommand cast;
+    auto *spell = cast.mutable_cast_spell();
+    spell->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    spell->mutable_source()->set_hand_index(blue->hand_index());
+    spell->set_x_value(2);
+    auto *target = spell->add_targets();
+    target->set_object_id(p2.myId);
+    target->set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+    ASSERT_TRUE(send(p1, cast, QStringLiteral("cast Blue X2")));
+    ASSERT_EQ(p1.bluePushes.size(), 1u);
+    ASSERT_EQ(p2.bluePushes.size(), 1u);
+    const quint32 original = p1.bluePushes[0].object_id();
+    ASSERT_FALSE(p1.bluePushes[0].is_copy());
+    ASSERT_TRUE(pass());
+    ASSERT_EQ(p1.priorityPlayer, p2.myId);
+    const auto *twincast = p2.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Twincast"));
+    ASSERT_NE(twincast, nullptr);
+    ruled::v1::RuledCommand copyCommand;
+    auto *copySpell = copyCommand.mutable_cast_spell();
+    copySpell->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    copySpell->mutable_source()->set_hand_index(twincast->hand_index());
+    auto *copyTarget = copySpell->add_targets();
+    copyTarget->set_object_id(original);
+    copyTarget->set_kind(ruled::v1::TARGET_REF_KIND_STACK);
+    ASSERT_TRUE(send(p2, copyCommand, QStringLiteral("actual Twincast at Blue")));
+    ASSERT_TRUE(pass());
+    ASSERT_TRUE(pass());
+    ASSERT_TRUE(p2.pendingChoice.has_value());
+    ruled::v1::RuledCommand choose;
+    choose.mutable_submit_resolution_choice()->add_chosen_object_ids(p2.myId);
+    ASSERT_TRUE(send(p2, choose, QStringLiteral("keep Blue copy target")));
+    ASSERT_EQ(p1.bluePushes.size(), 2u);
+    ASSERT_TRUE(p1.bluePushes[1].is_copy());
+    const quint32 copy = p1.bluePushes[1].object_id();
+    const int handBefore = p2.handSizeByPlayer.at(p2.myId);
+    ASSERT_TRUE(pass());
+    ASSERT_TRUE(pass());
+    ASSERT_EQ(p1.stackDepth, 1);
+    ASSERT_EQ(p2.stackDepth, 1);
+    EXPECT_EQ(p2.handSizeByPlayer.at(p2.myId), handBefore + 2);
+    EXPECT_TRUE(p1.sourceLibraryMoves.empty());
+    EXPECT_TRUE(p2.sourceLibraryMoves.empty());
+    ASSERT_TRUE(pass());
+    ASSERT_TRUE(pass());
+    ASSERT_EQ(p1.stackDepth, 0);
+    ASSERT_EQ(p2.stackDepth, 0);
+    EXPECT_EQ(p2.handSizeByPlayer.at(p2.myId), handBefore + 4);
+    QElapsedTimer snapshots;
+    snapshots.start();
+    while ((p1.physicalHandCounts[p2.myId] != handBefore + 4 || p2.physicalHandCounts[p2.myId] != handBefore + 4) &&
+           snapshots.elapsed() < 10000) {
+        p1.pump(25);
+        p2.pump(25);
+    }
+    EXPECT_EQ(p1.physicalHandCounts[p2.myId], handBefore + 4);
+    EXPECT_EQ(p2.physicalHandCounts[p2.myId], handBefore + 4);
+    EXPECT_TRUE(p1.handNames[p2.myId].empty());
+    ASSERT_EQ(p2.handNames[p2.myId].size(), handBefore + 4);
+    for (const auto &name : p2.handNames[p2.myId]) {
+        EXPECT_EQ(name, QStringLiteral("Island"));
+    }
+    for (BlueSunDriver *client : {&p1, &p2}) {
+        ASSERT_EQ(client->sourceLibraryMoves.size(), 1u);
+        const auto &move = client->sourceLibraryMoves[0];
+        EXPECT_EQ(move.target_player_id(), p1.myId);
+        EXPECT_EQ(move.card_id(), physicalId);
+        EXPECT_TRUE(client->libraryDetailsStayedConcealed);
+        EXPECT_EQ(client->shuffleLogs.count(QStringLiteral("P%1 shuffles their library.").arg(p1.myId)), 1);
+        EXPECT_EQ(client->shuffleLogs.count(QStringLiteral("P%1 shuffles their library.").arg(p2.myId)), 1);
+        EXPECT_EQ(std::count_if(client->blueExits.begin(), client->blueExits.end(),
+                                [&](const auto &exit) { return exit.object_id() == copy; }),
+                  1);
+        EXPECT_EQ(std::count_if(client->blueExits.begin(), client->blueExits.end(),
+                                [&](const auto &exit) { return exit.object_id() == original &&
+                exit.destination() == ruled::v1::STACK_RESOLVE_DESTINATION_LIBRARY &&
+                exit.has_owner_player_id() && exit.owner_player_id() == p1.myId;
+                                }),
+                  1);
+    }
+}
+
 class TemporaryExileDriver : public OpeningDriver
 {
 public:

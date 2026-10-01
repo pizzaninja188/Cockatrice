@@ -320,8 +320,61 @@ pub(super) fn target_player_draws(
         return Ok(EffectOutcome::Continue);
     };
     if cx.engine.state.player_idx(player).is_some() {
+        let count = cx.engine.resolve_amount(
+            &count,
+            AmountContext::for_stack_item(cx.top, cx.controller)
+                .with_previous_effect_result(cx.previous_effect_result),
+        );
         draw_cards_for_player(cx.engine, cx.events, player, count, cx.spell_label)?;
     }
+    Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn shuffle_resolving_spell_into_owners_library(
+    cx: &mut EffectCx<'_>,
+) -> Result<EffectOutcome, EngineError> {
+    // Created spell copies have no physical card. Their early retirement event was already
+    // emitted; the printed instruction still shuffles their owner's library (CR 701.24c).
+    let owner = if cx.top.is_copy {
+        cx.top.controller
+    } else {
+        cx.engine
+            .state
+            .objects
+            .get(&cx.top.id)
+            .map_or(cx.top.controller, |object| object.owner)
+    };
+    if !cx.top.is_copy
+        && cx
+            .engine
+            .state
+            .objects
+            .get(&cx.top.id)
+            .is_some_and(|object| object.zone == Zone::Stack)
+    {
+        let exile = cx.top.cast_method.exiles_on_leave_stack();
+        move_object_to_zone(
+            &mut cx.engine.state,
+            cx.engine.registry,
+            cx.top.id,
+            if exile { Zone::Exile } else { Zone::Library },
+            None,
+        )?;
+        cx.events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
+                object_id: cx.top.id,
+                destination: if exile {
+                    rv1::StackResolveDestination::Exile
+                } else {
+                    rv1::StackResolveDestination::Library
+                } as i32,
+                owner_player_id: Some(owner),
+            })),
+        });
+    }
+    shuffle_player_library_for_current_command(&mut cx.engine.state, owner);
+    cx.events
+        .push(ev_log(format!("P{owner} shuffles their library.")));
     Ok(EffectOutcome::Continue)
 }
 

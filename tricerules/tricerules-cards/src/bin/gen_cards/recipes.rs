@@ -3232,7 +3232,7 @@ fn match_modal_target_player_draw_two_lose_two(
         modal_mode(
             vec![
                 SpellEffectKind::TargetPlayerDraws {
-                    count: 2,
+                    count: Amount::Fixed(2),
                     target: TargetFilter {
                         kind: TargetKind::AnyPlayer,
                         ..TargetFilter::default()
@@ -4322,7 +4322,7 @@ fn match_modal_target_player_draw_two(text: &str, _: &RecipeContext) -> Option<R
     (text == "Target player draws two cards.").then(|| {
         modal_mode(
             vec![SpellEffectKind::TargetPlayerDraws {
-                count: 2,
+                count: Amount::Fixed(2),
                 target: TargetFilter {
                     kind: TargetKind::AnyPlayer,
                     ..TargetFilter::default()
@@ -4339,7 +4339,7 @@ fn match_modal_target_player_draw_one(text: &str, _: &RecipeContext) -> Option<R
     (text == "Target player draws a card.").then(|| {
         modal_mode(
             vec![SpellEffectKind::TargetPlayerDraws {
-                count: 1,
+                count: Amount::Fixed(1),
                 target: TargetFilter {
                     kind: TargetKind::AnyPlayer,
                     ..TargetFilter::default()
@@ -51930,7 +51930,7 @@ mod tests {
         assert_eq!(
             emission.effects,
             [SpellEffectKind::TargetPlayerDraws {
-                count: 2,
+                count: Amount::Fixed(2),
                 target: TargetFilter {
                     kind: TargetKind::AnyPlayer,
                     ..TargetFilter::default()
@@ -51946,7 +51946,7 @@ mod tests {
         assert_eq!(
             emission.effects,
             [SpellEffectKind::TargetPlayerDraws {
-                count: 1,
+                count: Amount::Fixed(1),
                 target: TargetFilter {
                     kind: TargetKind::AnyPlayer,
                     ..TargetFilter::default()

@@ -135,6 +135,7 @@ fn validate_effect_cast_cost_conditions(
             ..
         }
         | SpellEffectKind::Draw { count: amount, .. }
+        | SpellEffectKind::TargetPlayerDraws { count: amount, .. }
         | SpellEffectKind::GainLife { amount }
         | SpellEffectKind::Mill { count: amount, .. }
         | SpellEffectKind::PutCounters { count: amount, .. }
@@ -214,6 +215,7 @@ fn validate_effect_payment_results(
         }
         | SpellEffectKind::DamagePlayer { amount, .. }
         | SpellEffectKind::Draw { count: amount, .. }
+        | SpellEffectKind::TargetPlayerDraws { count: amount, .. }
         | SpellEffectKind::GainLife { amount }
         | SpellEffectKind::Mill { count: amount, .. }
         | SpellEffectKind::PutCounters { count: amount, .. }

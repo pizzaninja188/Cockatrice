@@ -1,0 +1,43 @@
+{
+  "format_version": 1,
+  "oracle_id": "613a41b8-0b4f-4995-bf1e-ca41f96e6438",
+  "spans": [
+    {
+      "face_id": "blue_suns_zenith",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect",
+        "/faces/0/targeting"
+      ]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_blue_suns_zenith::blue_actual_twincast_copies_x_and_shuffles_only_its_copy_owner",
+      "covers": "Actual Twincast copies chosen X and target; wrong-actor choice is atomic; copy draws and shuffles its controller-owned library without moving original or inserting a physical copy."
+    },
+    {
+      "test": "scenario deck_coverage_blue_suns_zenith::blue_cast_method_exit_replacement_still_shuffles_physical_owner",
+      "covers": "Prepared actual-cast engine state with a primitive Flashback/Harmonize receipt fixture routes exact physical source to owner Exile, still shuffles owner library, emits one exit. No alternate Blue cast producer is claimed."
+    },
+    {
+      "test": "scenario deck_coverage_blue_suns_zenith::blue_failed_target_and_countered_spell_skip_draw_and_shuffle",
+      "covers": "Actual target concession and actual Counterspell prevent draw and shuffle; exact foreign-owned physical source retires into its owner graveyard."
+    },
+    {
+      "test": "scenario deck_coverage_blue_suns_zenith::blue_failed_draw_is_not_undone_by_returning_source_to_library",
+      "covers": "Actual cast with prepared empty-library fixture commits failed draw; self-shuffle completes but does not cancel ensuing loss."
+    },
+    {
+      "test": "scenario deck_coverage_blue_suns_zenith::blue_illegal_commands_are_atomic_and_accepted_draw_shuffle_replays",
+      "covers": "Wrong actor, unaffordable, invalid or missing target reject atomically; accepted actual casts and resolution commands replay exact ordered batches and normalized complete state."
+    },
+    {
+      "test": "scenario deck_coverage_blue_suns_zenith::blue_real_x_draws_then_shuffles_exact_source_to_foreign_owner",
+      "covers": "Actual casts at X zero and two, prepared foreign ownership transfer, exact target draw sequence before exact source library movement, one exit and owner rather than caster shuffle."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

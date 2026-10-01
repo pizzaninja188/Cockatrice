@@ -988,9 +988,12 @@ pub enum SpellEffectKind {
     /// CR 121.2: the chosen player draws `count` cards. Jace Beleren and Ancestral Recall share
     /// this targeted form; untargeted draws continue to use [`Self::Draw`].
     TargetPlayerDraws {
-        count: u32,
+        count: Amount,
         target: TargetFilter,
     },
+    /// Blue Sun's Zenith and Black Sun's Zenith: execute the resolving spell's self-shuffle
+    /// instruction in printed order, independently of its target or caster (CR 701.24c).
+    ShuffleResolvingSpellIntoOwnersLibrary,
     /// CR 701.9: each affected player discards a fixed quantity or their entire hand without targeting.
     /// Player-set recipients make their hidden choices in APNAP order before the complete discard
     /// action is applied. Cards: Fanatic of the Harrowing, Burglar Rat, and Macabre Waltz.
@@ -2815,6 +2818,7 @@ impl SpellEffectKind {
             | SpellEffectKind::CreateStaticEmblem { .. }
             | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. }
             | SpellEffectKind::Draw { .. }
+            | SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary
             | SpellEffectKind::Discard { .. }
             | SpellEffectKind::DrawDiscard { .. }
             | SpellEffectKind::Blight { .. }
@@ -2985,6 +2989,7 @@ impl SpellEffectKind {
             | Self::DamagePlayer { amount, .. }
             | Self::DamageAttackedPlayerOrPlaneswalker { amount }
             | Self::Draw { count: amount, .. }
+            | Self::TargetPlayerDraws { count: amount, .. }
             | Self::GainLife { amount }
             | Self::TargetPlayerGainsLife { amount, .. }
             | Self::Mill { count: amount, .. }
@@ -3263,6 +3268,7 @@ impl SpellEffectKind {
                 }
                 | SpellEffectKind::DamagePlayer { amount, .. }
                 | SpellEffectKind::Draw { count: amount, .. }
+                | SpellEffectKind::TargetPlayerDraws { count: amount, .. }
                 | SpellEffectKind::GainLife { amount }
                 | SpellEffectKind::TargetPlayerGainsLife { amount, .. }
                 | SpellEffectKind::Mill { count: amount, .. }
@@ -3452,6 +3458,11 @@ impl SpellEffectKind {
         }
         if context == EffectContext::Spell && self.requires_triggering_spell_context() {
             return Err("spells cannot reference triggering-spell context".into());
+        }
+        if matches!(self, Self::ShuffleResolvingSpellIntoOwnersLibrary)
+            && context != EffectContext::Spell
+        {
+            return Err("resolving-spell shuffle requires spell context".into());
         }
         if context == EffectContext::Spell && self.uses_trigger_event_count() {
             return Err("spells cannot reference a trigger event's count".into());
@@ -3801,6 +3812,7 @@ impl SpellEffectKind {
                 ..
             }
             | SpellEffectKind::Draw { count: amount, .. }
+            | SpellEffectKind::TargetPlayerDraws { count: amount, .. }
             | SpellEffectKind::GainLife { amount }
             | SpellEffectKind::TargetPlayerGainsLife { amount, .. }
             | SpellEffectKind::Mill { count: amount, .. }
@@ -5194,6 +5206,7 @@ impl SpellEffectKind {
             }
             | Self::DamageTargets { amount, .. }
             | Self::DamagePlayer { amount, .. }
+            | Self::TargetPlayerDraws { count: amount, .. }
             | Self::DamageAttackedPlayerOrPlaneswalker { amount }
             | Self::GainLife { amount }
             | Self::TargetPlayerGainsLife { amount, .. }
@@ -5311,6 +5324,7 @@ impl SpellEffectKind {
             | Self::DamagePlayer { amount, .. }
             | Self::DamageAttackedPlayerOrPlaneswalker { amount }
             | Self::Draw { count: amount, .. }
+            | Self::TargetPlayerDraws { count: amount, .. }
             | Self::GainLife { amount }
             | Self::TargetPlayerGainsLife { amount, .. }
             | Self::Mill { count: amount, .. }

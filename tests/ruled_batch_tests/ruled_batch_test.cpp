@@ -3550,6 +3550,54 @@ TEST_F(RuledBatchTest, ResolvedOmenMovesTheExactStackCardFaceDownAndReconcilesDu
     EXPECT_TRUE(sawBattlefieldCard);
 }
 
+TEST_F(RuledBatchTest, ForeignOwnedResolvingSpellUsesOwnerForEveryNonbattlefieldExit)
+{
+    seedCardCatalog({"Blue Sun's Zenith"});
+    const struct
+    {
+        ruled::v1::StackResolveDestination destination;
+        const char *zone;
+    } cases[] = {
+        {ruled::v1::STACK_RESOLVE_DESTINATION_LIBRARY, ZoneNames::DECK},
+        {ruled::v1::STACK_RESOLVE_DESTINATION_EXILE, ZoneNames::EXILE},
+        {ruled::v1::STACK_RESOLVE_DESTINATION_GRAVEYARD, ZoneNames::GRAVE},
+    };
+    quint32 oid = 750u;
+    for (const auto &testCase : cases) {
+        SCOPED_TRACE(testCase.zone);
+        Server_Card *source = addCardToHand(p1, QStringLiteral("Blue Sun's Zenith"));
+        Server_CardZone *hand = p1->getZones().value(ZoneNames::HAND);
+        Server_CardZone *stack = p2->getZones().value(ZoneNames::STACK);
+        Server_CardZone *ownerDestination = p1->getZones().value(testCase.zone);
+        Server_CardZone *casterDestination = p2->getZones().value(testCase.zone);
+        ASSERT_NE(stack, nullptr);
+        ASSERT_NE(ownerDestination, nullptr);
+        hand->removeCard(source);
+        stack->insertCard(source, -1, 0);
+        bindStackObject(oid, source, p2->getPlayerId(), QStringLiteral("Blue Sun's Zenith"));
+
+        ruled::v1::IpcResponse response;
+        response.set_ok(true);
+        auto *resolved = response.mutable_batch()->add_events()->mutable_stack_resolved();
+        resolved->set_object_id(oid);
+        resolved->set_destination(testCase.destination);
+        resolved->set_owner_player_id(p1->getPlayerId());
+        callBatchApply(response);
+
+        EXPECT_TRUE(stack->getCards().isEmpty());
+        EXPECT_TRUE(ownerDestination->getCards().contains(source));
+        EXPECT_FALSE(casterDestination->getCards().contains(source));
+        Server_Card *bound = testCase.destination == ruled::v1::STACK_RESOLVE_DESTINATION_LIBRARY
+                                 ? findCardByEngineOid(p1, oid)
+                             : testCase.destination == ruled::v1::STACK_RESOLVE_DESTINATION_EXILE
+                                 ? bindingFor(p1).findExileCardByEngineOid(p1, oid)
+                                 : bindingFor(p1).findGraveyardCardByEngineOid(p1, oid);
+        EXPECT_EQ(bound, source);
+        EXPECT_EQ(source->getFaceDown(), testCase.destination == ruled::v1::STACK_RESOLVE_DESTINATION_LIBRARY);
+        ++oid;
+    }
+}
+
 TEST_F(RuledBatchTest, StackObjectCounteredRetiresOnlyTheExactAbilityOrCopyBinding)
 {
     seedSyntheticStackBookkeeping(900u, 101u, true);

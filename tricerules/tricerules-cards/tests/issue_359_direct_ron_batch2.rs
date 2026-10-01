@@ -249,7 +249,7 @@ fn issue_359_direct_ron_batch2_maps_definitions() {
         draw_drain.effects,
         [
             SpellEffectKind::TargetPlayerDraws {
-                count: 3,
+                count: Amount::Fixed(3),
                 target: TargetFilter {
                     kind: TargetKind::AnyPlayer,
                     ..TargetFilter::default()

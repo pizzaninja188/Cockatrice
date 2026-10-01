@@ -614,7 +614,9 @@ impl<'de> Deserialize<'de> for Amount {
                 )
             }
             fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Amount, E> {
-                Ok(Amount::Fixed(v as u32))
+                u32::try_from(v)
+                    .map(Amount::Fixed)
+                    .map_err(|_| E::custom("amount must fit a non-negative u32"))
             }
             fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<Amount, E> {
                 u32::try_from(v)
