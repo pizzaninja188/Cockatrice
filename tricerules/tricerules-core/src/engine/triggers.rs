@@ -2104,36 +2104,13 @@ impl GameEngine {
         face_index: usize,
         ability_path: Vec<tricerules_cards::AbilityId>,
     ) -> AbilityDefinitionId {
-        let object = &self.state.objects[&source_id];
-        let values = object
-            .copiable_values
-            .as_ref()
-            .or(object.token_origin.as_ref());
-        let card_id = values
-            .filter(|v| !v.source_card_id.is_empty())
-            .map(|v| v.source_card_id.clone())
-            .unwrap_or_else(|| object.card_id.clone());
-        let face_id = values
-            .and_then(|values| {
-                values
-                    .room_faces
-                    .as_ref()
-                    .and_then(|faces| faces.get(face_index))
-                    .or_else(|| values.room_faces.is_none().then_some(&values.face))
-            })
-            .map(|face| face.face_id.clone())
-            .or_else(|| {
-                self.registry
-                    .get(&card_id)
-                    .and_then(|card| card.faces.get(face_index))
-                    .map(|face| face.face_id.clone())
-            })
-            .expect("validated ability provenance has a stable face id");
-        AbilityDefinitionId {
-            card_id,
-            face_id,
+        ability_definition_from(
+            &self.state,
+            self.registry,
+            source_id,
+            face_index,
             ability_path,
-        }
+        )
     }
 
     pub(super) fn effective_triggered_abilities(
@@ -2628,6 +2605,46 @@ impl TriggerSourceSnapshot {
             keywords: vec![],
             power: self.power_toughness.0.map(|p| p.max(0) as u32),
         }
+    }
+}
+
+/// Shared physical/copiable provenance for abilities materialized outside GameEngine methods.
+pub(super) fn ability_definition_from(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    source_id: ObjectId,
+    face_index: usize,
+    ability_path: Vec<tricerules_cards::AbilityId>,
+) -> AbilityDefinitionId {
+    let object = &state.objects[&source_id];
+    let values = object
+        .copiable_values
+        .as_ref()
+        .or(object.token_origin.as_ref());
+    let card_id = values
+        .filter(|v| !v.source_card_id.is_empty())
+        .map(|v| v.source_card_id.clone())
+        .unwrap_or_else(|| object.card_id.clone());
+    let face_id = values
+        .and_then(|values| {
+            values
+                .room_faces
+                .as_ref()
+                .and_then(|faces| faces.get(face_index))
+                .or_else(|| values.room_faces.is_none().then_some(&values.face))
+        })
+        .map(|face| face.face_id.clone())
+        .or_else(|| {
+            registry
+                .get(&card_id)
+                .and_then(|card| card.faces.get(face_index))
+                .map(|face| face.face_id.clone())
+        })
+        .expect("validated ability provenance has a stable face id");
+    AbilityDefinitionId {
+        card_id,
+        face_id,
+        ability_path,
     }
 }
 

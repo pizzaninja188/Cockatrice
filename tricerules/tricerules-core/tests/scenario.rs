@@ -973,3 +973,6 @@ mod deck_coverage_frantic_search;
 
 #[path = "scenario/deck_coverage_wash_out.rs"]
 mod deck_coverage_wash_out;
+
+#[path = "scenario/deck_coverage_anger.rs"]
+mod deck_coverage_anger;

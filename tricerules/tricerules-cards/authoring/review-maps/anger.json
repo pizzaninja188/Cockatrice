@@ -1,0 +1,87 @@
+{
+  "format_version": 1,
+  "oracle_id": "eaabd151-2160-4bff-82c0-3fa88659be98",
+  "spans": [
+    {
+      "face_id": "anger",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "anger",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Haste",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "StaticAbilityDef::GraveyardAnthemKeyword",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_anger::anger_inactive_graveyard_entry_timestamp_survives_later_mountain_and_reentry_is_new",
+      "covers": "inactive graveyard entry timestamp survives later mountain and reentry is new"
+    },
+    {
+      "test": "scenario deck_coverage_anger::anger_actual_cast_printed_haste_cost_and_graveyard_only_public_grant",
+      "covers": "actual cast printed haste cost and graveyard only public grant"
+    },
+    {
+      "test": "scenario deck_coverage_anger::anger_condition_uses_current_land_subtype_control_and_current_creatures",
+      "covers": "condition uses current land subtype control and current creatures"
+    },
+    {
+      "test": "scenario deck_coverage_anger::anger_stolen_death_grants_owners_creatures_and_not_former_controllers",
+      "covers": "stolen death grants owners creatures and not former controllers"
+    },
+    {
+      "test": "scenario deck_coverage_anger::anger_actual_mill_and_discard_create_the_graveyard_static",
+      "covers": "actual mill and discard create the graveyard static"
+    },
+    {
+      "test": "scenario deck_coverage_anger::anger_source_provenance_and_reentry_fail_closed",
+      "covers": "source provenance and reentry fail closed"
+    },
+    {
+      "test": "scenario deck_coverage_anger::anger_clone_loses_copied_static_but_physical_anger_recovers_its_own_after_death",
+      "covers": "clone loses copied static but physical anger recovers its own after death"
+    },
+    {
+      "test": "scenario deck_coverage_anger::anger_actual_token_copy_ceases_and_leaves_no_graveyard_grant",
+      "covers": "actual token copy ceases and leaves no graveyard grant"
+    },
+    {
+      "test": "scenario deck_coverage_anger::anger_two_sources_keep_distinct_timestamps_against_recipient_removal",
+      "covers": "two sources keep distinct timestamps against recipient removal"
+    },
+    {
+      "test": "scenario deck_coverage_anger::anger_haste_controls_summoning_sick_tap_legality_and_projects_loss",
+      "covers": "haste controls summoning sick tap legality and projects loss"
+    },
+    {
+      "test": "scenario deck_coverage_anger::anger_grant_and_loss_refresh_summoning_sick_attack_legality",
+      "covers": "grant and loss refresh summoning sick attack legality"
+    },
+    {
+      "test": "scenario deck_coverage_anger::anger_logged_zone_condition_changes_replay_deterministically",
+      "covers": "logged zone condition changes replay deterministically"
+    },
+    {
+      "test": "deck_coverage_anger::anger_exact_definition_and_zone_specific_schema_boundaries",
+      "covers": "Exact printed creature characteristics, haste, typed graveyard static and Oracle line mapping; bounded land enum, generic keyword composition and rejection of graveyard runtime lifetime in authored resolving effects"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

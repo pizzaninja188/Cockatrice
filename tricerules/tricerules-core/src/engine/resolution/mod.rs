@@ -3103,7 +3103,10 @@ fn commit_zone_move(
         let static_from_this = leaving_battlefield
             && e.source_id == Some(oid)
             && e.duration == EffectDuration::WhileSourceOnBattlefield;
-        !single_on_this && !static_from_this
+        let graveyard_static_from_this = old_zone == Some(Zone::Graveyard)
+            && e.source_id == Some(oid)
+            && e.duration == EffectDuration::WhileSourceInGraveyard;
+        !single_on_this && !static_from_this && !graveyard_static_from_this
     });
     if leaving_battlefield {
         if let Some(attached_object) = last_known_attached_object {
@@ -3239,6 +3242,9 @@ fn commit_zone_move(
         if z == Zone::Battlefield {
             o.summoning_sick = true;
         }
+    }
+    if z == Zone::Graveyard {
+        super::continuous::emit_graveyard_static_abilities(state, registry, oid);
     }
     Ok((old_zone != Some(Zone::Graveyard))
         .then(|| super::history::graveyard_entry_fact(state, registry, oid))

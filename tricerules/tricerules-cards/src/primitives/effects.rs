@@ -5508,6 +5508,9 @@ pub enum EffectDuration {
     /// (CR 611.2b). The engine drains it when that exact source leaves, not at cleanup. The source
     /// is identified by [`ContinuousEffect::source_id`].
     WhileSourceOnBattlefield,
+    /// A zone-specific static ability, bound to its exact graveyard incarnation.
+    /// This runtime lifetime cannot be authored as a resolving effect duration.
+    WhileSourceInGraveyard,
     /// CR 500.4: expires as the named player's next turn begins, before any turn-begin action or
     /// priority. The player id is captured from the resolving controller, never authored in RON.
     UntilTurnStart(i32),

@@ -399,6 +399,10 @@ impl GameEngine {
             .collect();
         for id in vanished {
             if self.state.objects.remove(&id).is_some() {
+                self.state.continuous_effects.retain(|effect| {
+                    effect.source_id != Some(id)
+                        || effect.duration != EffectDuration::WhileSourceInGraveyard
+                });
                 changed = true;
                 // Sweep every player, not just the owner: the battlefield list is keyed by
                 // controller, so a token that changed control would otherwise leave a dangling

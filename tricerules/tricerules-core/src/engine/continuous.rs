@@ -479,6 +479,7 @@ impl GameEngine {
                     });
                 }
                 StaticAbilityDef::Madness { .. }
+                | StaticAbilityDef::GraveyardAnthemKeyword { .. }
                 | StaticAbilityDef::DiscardToLibrary
                 | StaticAbilityDef::NoMaximumHandSize { .. }
                 | StaticAbilityDef::MaximumHandSizeTwenty
@@ -1435,6 +1436,68 @@ impl GameEngine {
     }
 }
 
+/// Materialize zone-specific statics only after the common zone funnel has cleared
+/// battlefield copy state and committed the new incarnation. The record exists even
+/// while its land condition is false, preserving the timestamp of graveyard entry.
+pub(super) fn emit_graveyard_static_abilities(
+    state: &mut GameState,
+    registry: &'static CardRegistry,
+    source_id: ObjectId,
+) {
+    let Some(source) = state.objects.get(&source_id) else {
+        return;
+    };
+    if source.zone != Zone::Graveyard {
+        return;
+    }
+    let owner = source.owner;
+    let source_zone_change = state
+        .zone_change_generation
+        .get(&source_id)
+        .copied()
+        .unwrap_or(0);
+    let Some(face) = effective_face_from(state, registry, source_id) else {
+        return;
+    };
+    let abilities = face.static_abilities.clone();
+    for ability in abilities {
+        let StaticAbilityDef::GraveyardAnthemKeyword { keyword, .. } = ability.definition else {
+            continue;
+        };
+        let definition = super::triggers::ability_definition_from(
+            state,
+            registry,
+            source_id,
+            state.objects[&source_id].face_up_index,
+            vec![ability.ability_id],
+        );
+        state.continuous_effects.push(ContinuousEffect {
+            source_id: Some(source_id),
+            trigger_grant_origin: Some(TriggerAbilityOrigin::StaticGrant {
+                source_id,
+                source_zone_change,
+                definition,
+            }),
+            affected: AffectedScope::PermanentsMatching {
+                reference_player: owner,
+                filter: Box::new(TargetFilter {
+                    kind: TargetKind::Creature,
+                    controller: TargetController::You,
+                    ..TargetFilter::default()
+                }),
+                exclude: None,
+            },
+            kind: ContinuousEffectKind::Layer6AddKeywordFromStatic {
+                keyword,
+                source_zone_change,
+            },
+            condition: None,
+            duration: EffectDuration::WhileSourceInGraveyard,
+            timestamp: state.command_index,
+        });
+    }
+}
+
 #[cfg(test)]
 mod issue_461_activation_prohibition_tests {
     use super::*;
@@ -2132,5 +2195,80 @@ mod issue_499_effect_counter_replacement_tests {
                 "origin {origin:?}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod graveyard_keyword_grant_tests {
+    use super::*;
+
+    #[test]
+    fn anger_same_graveyard_move_replaces_source_incarnation_and_token_origin_survives_commit() {
+        let mut engine = GameEngine::new(613_813, &[0, 1], 20, None, true).unwrap();
+        let source = *engine.state.objects.keys().next().unwrap();
+        engine.state.objects.get_mut(&source).unwrap().card_id = "anger".into();
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        let first = engine
+            .state
+            .continuous_effects
+            .iter()
+            .find(|effect| effect.source_id == Some(source))
+            .unwrap()
+            .clone();
+        let generation = engine.state.zone_change_generation[&source];
+        engine.state.command_index += 1;
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        assert_eq!(engine.state.zone_change_generation[&source], generation + 1);
+        let records: Vec<_> = engine
+            .state
+            .continuous_effects
+            .iter()
+            .filter(|effect| effect.source_id == Some(source))
+            .collect();
+        assert_eq!(records.len(), 1);
+        assert!(records[0].timestamp > first.timestamp);
+        assert_ne!(records[0].trigger_grant_origin, first.trigger_grant_origin);
+        // A copy token has no physical Anger definition; its retained origin supplies the static
+        // until the immediately following token-cessation SBA. Inspect the funnel boundary.
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        let values = engine.copiable_values_for(source).unwrap();
+        let object = engine.state.objects.get_mut(&source).unwrap();
+        object.card_id = "runtime_anger_copy".into();
+        object.token_origin = Some(values.clone());
+        object.copiable_values = Some(values);
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        assert!(engine.state.objects[&source].copiable_values.is_none());
+        assert!(engine.state.continuous_effects.iter().any(|effect| matches!(
+            &effect.trigger_grant_origin,
+            Some(TriggerAbilityOrigin::StaticGrant { definition, .. }) if definition.card_id == "anger"
+        )));
     }
 }

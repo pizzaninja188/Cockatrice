@@ -649,6 +649,9 @@ impl CharacteristicsEvaluator<'_> {
         let Some(object) = self.state.objects.get(&source) else {
             return false;
         };
+        if effect.duration == EffectDuration::WhileSourceInGraveyard {
+            return self.graveyard_keyword_grant_source_is_active(effect, source, keyword);
+        }
         if object.zone != Zone::Battlefield
             || object.face_down
             || self
@@ -677,6 +680,80 @@ impl CharacteristicsEvaluator<'_> {
             return false;
         }
         !self.source_has_active_ability_removal(source)
+    }
+
+    fn graveyard_keyword_grant_source_is_active(
+        &self,
+        effect: &ContinuousEffect,
+        source: ObjectId,
+        keyword: Keyword,
+    ) -> bool {
+        let Some(TriggerAbilityOrigin::StaticGrant {
+            source_id,
+            source_zone_change,
+            definition,
+        }) = &effect.trigger_grant_origin
+        else {
+            return false;
+        };
+        if *source_id != source
+            || !matches!(effect.kind, ContinuousEffectKind::Layer6AddKeywordFromStatic {
+                source_zone_change: generation, ..
+            } if generation == *source_zone_change)
+            || !static_source_identity_is_current(self.state, self.registry, effect)
+        {
+            return false;
+        }
+        let Some(face) = effective_face_from(self.state, self.registry, source) else {
+            return false;
+        };
+        let Some(ability) = face
+            .static_abilities
+            .iter()
+            .find(|ability| definition.ability_path == [ability.ability_id.clone()])
+        else {
+            return false;
+        };
+        let expected_definition = super::triggers::ability_definition_from(
+            self.state,
+            self.registry,
+            source,
+            self.state.objects[&source].face_up_index,
+            vec![ability.ability_id.clone()],
+        );
+        if *definition != expected_definition {
+            return false;
+        }
+        let StaticAbilityDef::GraveyardAnthemKeyword {
+            required_land_type,
+            keyword: current_keyword,
+        } = ability.definition
+        else {
+            return false;
+        };
+        let owner = self.state.objects[&source].owner;
+        let expected_filter = TargetFilter {
+            kind: TargetKind::Creature,
+            controller: TargetController::You,
+            ..TargetFilter::default()
+        };
+        if current_keyword != keyword
+            || !matches!(&effect.affected, AffectedScope::PermanentsMatching {
+                reference_player, filter, exclude: None,
+            } if *reference_player == owner && filter.as_ref() == &expected_filter)
+        {
+            return false;
+        }
+        self.state.objects.iter().any(|(&id, object)| {
+            object.zone == Zone::Battlefield
+                && self
+                    .characteristics_through_layer_5(id)
+                    .is_some_and(|land| {
+                        land.controller == owner
+                            && land.has_type("Land")
+                            && land.has_type(required_land_type.as_str())
+                    })
+        })
     }
 
     fn source_has_active_ability_removal(&self, source: ObjectId) -> bool {
@@ -1398,7 +1475,17 @@ fn static_source_identity_is_current(
         return true;
     };
     state.objects.get(source_id).is_some_and(|source| {
-        source.zone == Zone::Battlefield
+        source.zone
+            == if effect.duration == EffectDuration::WhileSourceInGraveyard
+                && matches!(
+                    effect.kind,
+                    ContinuousEffectKind::Layer6AddKeywordFromStatic { .. }
+                )
+            {
+                Zone::Graveyard
+            } else {
+                Zone::Battlefield
+            }
             && !source.face_down
             && state
                 .zone_change_generation

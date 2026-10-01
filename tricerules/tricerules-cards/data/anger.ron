@@ -1,0 +1,17 @@
+// Exact Oracle and graveyard-entry timestamp ruling checked 2026-10-01.
+// https://scryfall.com/card/soc/235/anger
+(
+  id: "anger",
+  name: "Anger",
+  face_id: "anger",
+  mana_cost: "{3}{R}",
+  types: ["Creature", "Incarnation"],
+  power: 2,
+  toughness: 2,
+  keywords: [Haste],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: GraveyardAnthemKeyword(required_land_type: Mountain, keyword: Haste),
+  )],
+)

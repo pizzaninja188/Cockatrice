@@ -2137,6 +2137,14 @@ pub enum StaticAbilityDef {
         filter: TargetFilter,
         keyword: Keyword,
     },
+    /// CR 113.6b / 611.3 / 613.1f: while this card is in its owner's graveyard,
+    /// their creatures gain the keyword if they control a land of the required subtype.
+    /// Anger (Mountain/haste), Brawn (Forest/trample), and Wonder (Island/flying)
+    /// share this zone-specific static ability and its graveyard-entry timestamp.
+    GraveyardAnthemKeyword {
+        required_land_type: BasicLandType,
+        keyword: Keyword,
+    },
     /// CR 113.10 / 613.1f: permanents matching `filter` have the listed triggered abilities
     /// while this static ability and its optional condition apply. Thorin Oakenshield grants
     /// ward to artifacts and creatures; Infernal Scarring supplies the attached-object version
