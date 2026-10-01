@@ -2344,6 +2344,7 @@ pub(super) fn return_triggered_card(
     let SpellEffectKind::ReturnTriggeredCard {
         reference,
         from,
+        destination,
         tapped,
         controller,
         entry_counters,
@@ -2398,6 +2399,32 @@ pub(super) fn return_triggered_card(
     }
 
     let owner = object.owner;
+    if destination == tricerules_cards::primitives::TriggeredCardDestination::Hand {
+        if object.is_token() {
+            return Ok(EffectOutcome::Continue);
+        }
+        let object_label = object_display_name(&cx.engine.state, cx.engine.registry, source_id);
+        let snapshot = cx.engine.snapshot_zone_event();
+        move_object_to_zone(
+            &mut cx.engine.state,
+            cx.engine.registry,
+            source_id,
+            Zone::Hand,
+            None,
+        )?;
+        cx.events.push(ev_log(format!(
+            "{} returns {object_label} to its owner's hand.",
+            cx.spell_label
+        )));
+        cx.events.push(permanent_moved_event(
+            &cx.engine.state,
+            source_id,
+            owner,
+            rv1::permanent_moved::Destination::Hand,
+        ));
+        cx.engine.fire_zone_triggers(snapshot, vec![]);
+        return Ok(EffectOutcome::Continue);
+    }
     let destination_controller = match controller {
         ReturnController::Owner => owner,
         ReturnController::AbilityController => cx.controller,

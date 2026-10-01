@@ -656,6 +656,8 @@ pub(super) fn earthbend(
                 effect: vec![SpellEffectKind::ReturnTriggeredCard {
                     reference: TriggeredCardReference::TriggerObject,
                     from: vec![EventZone::Graveyard, EventZone::Exile],
+                    destination:
+                        tricerules_cards::primitives::TriggeredCardDestination::Battlefield,
                     tapped: true,
                     controller: ReturnController::AbilityController,
                     entry_counters: vec![],

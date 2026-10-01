@@ -1,0 +1,32 @@
+// Exact Oracle and WotC ruling verified 2026-09-30. Event-bound owner-hand return.
+(
+  id: "spine_of_ish_sah",
+  name: "Spine of Ish Sah",
+  face_id: "spine_of_ish_sah",
+  mana_cost: "{7}",
+  types: ["Artifact"],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WhenSelfEntersBattlefield,
+      effect: [Destroy(subject: Chosen((kind: AnyPermanent)))],
+      targeting: Some((groups: [(
+        min: 1, max: 1,
+        prompt: "Choose target permanent",
+        effect_indices: [0],
+      )])),
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WheneverPermanentLeavesBattlefield(
+        controller: Controller,
+        filter: (source_only: true),
+        destination: OneOf([Graveyard]),
+        cardinality: EachObject,
+      ),
+      effect: [ReturnTriggeredCard(reference: TriggerObject, from: [Graveyard], destination: Hand)],
+    ),
+  ],
+)

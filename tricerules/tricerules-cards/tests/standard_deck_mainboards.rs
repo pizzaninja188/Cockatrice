@@ -266,6 +266,7 @@ fn enduring_curiosity_uses_generic_damage_and_type_setting_primitives() {
         [SpellEffectKind::ReturnTriggeredCard {
             reference: TriggeredCardReference::AbilitySource,
             from,
+            destination: tricerules_cards::primitives::TriggeredCardDestination::Battlefield,
             tapped: false,
             controller: ReturnController::Owner,
             entry_counters,

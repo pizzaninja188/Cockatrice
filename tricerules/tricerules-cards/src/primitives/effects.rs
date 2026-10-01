@@ -1340,6 +1340,11 @@ pub enum SpellEffectKind {
     ReturnTriggeredCard {
         reference: TriggeredCardReference,
         from: Vec<EventZone>,
+        #[serde(
+            default,
+            skip_serializing_if = "TriggeredCardDestination::is_battlefield"
+        )]
+        destination: TriggeredCardDestination,
         #[serde(default)]
         tapped: bool,
         #[serde(default)]
@@ -2614,7 +2619,8 @@ impl SpellEffectKind {
                 who: PlayerRecipient::TriggerObjectController,
                 ..
             } | SpellEffectKind::ReturnTriggeredCard {
-                reference: TriggeredCardReference::TriggerObject,
+                reference: TriggeredCardReference::TriggerObject
+                    | TriggeredCardReference::ExactTriggerObject,
                 ..
             }
         )
@@ -3834,6 +3840,9 @@ impl SpellEffectKind {
             }
             SpellEffectKind::ReturnTriggeredCard {
                 from,
+                destination,
+                tapped,
+                controller,
                 entry_counters,
                 set_types,
                 ..
@@ -3846,6 +3855,14 @@ impl SpellEffectKind {
                     return Err(
                         "ReturnTriggeredCard requires graveyard and/or exile source zones".into(),
                     );
+                }
+                if *destination == TriggeredCardDestination::Hand
+                    && (*tapped
+                        || *controller != ReturnController::Owner
+                        || !entry_counters.is_empty()
+                        || set_types.is_some())
+                {
+                    return Err("owner-hand return cannot specify battlefield-entry fields".into());
                 }
                 let mut kinds = std::collections::HashSet::new();
                 for placement in entry_counters {
@@ -5366,6 +5383,20 @@ pub enum ReturnController {
     #[default]
     Owner,
     AbilityController,
+}
+
+/// Event-bound returns used by Enduring Curiosity (battlefield), Spine of Ish Sah and Rancor (hand).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum TriggeredCardDestination {
+    #[default]
+    Battlefield,
+    Hand,
+}
+
+impl TriggeredCardDestination {
+    fn is_battlefield(&self) -> bool {
+        *self == Self::Battlefield
+    }
 }
 
 /// Which event-bound card a return trigger follows through its first zone change.

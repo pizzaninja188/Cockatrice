@@ -3214,6 +3214,87 @@ mod tests {
     }
 
     #[test]
+    fn triggered_card_return_destination_preserves_default_and_rejects_hand_entry_fields() {
+        fn card(fields: &str) -> String {
+            format!(
+                r#"(
+                id: "return_probe", name: "Return Probe", face_id: "return_probe",
+                mana_cost: "{{1}}", types: ["Artifact"],
+                triggered_abilities: [(
+                    ability_id: "triggered_01", presentation: Fallback,
+                    trigger: WheneverPermanentLeavesBattlefield(
+                        controller: Controller, filter: (source_only: true),
+                        destination: OneOf([Graveyard]), cardinality: EachObject,
+                    ),
+                    effect: [ReturnTriggeredCard(reference: TriggerObject, from: [Graveyard], {fields})],
+                )],
+            )"#
+            )
+        }
+        for (fields, hand) in [
+            ("", false),
+            ("destination: Battlefield,", false),
+            ("destination: Hand,", true),
+        ] {
+            let fixture = card(fields);
+            let registry =
+                CardRegistry::from_chunks(&[&fixture]).expect("valid return destination");
+            let effect = &registry
+                .get("return_probe")
+                .unwrap()
+                .primary_face()
+                .triggered_abilities[0]
+                .effect[0];
+            let serialized = ron::ser::to_string(effect).unwrap();
+            assert_eq!(
+                serialized.contains("destination:"),
+                hand,
+                "default battlefield destination must not churn generated definitions"
+            );
+        }
+        for field in [
+            "tapped: true,",
+            "controller: AbilityController,",
+            "entry_counters: [(counter: PlusOnePlusOne, count: 1)],",
+            "set_types: Some((card_types: [Enchantment])),",
+        ] {
+            let fixture = card(&format!("destination: Hand, {field}"));
+            let error =
+                CardRegistry::from_chunks(&[&fixture]).expect_err("hand entry fields must reject");
+            assert!(
+                matches!(&error, RegistryError::InvalidCard { reason, .. }
+                if reason.contains("owner-hand return cannot specify battlefield-entry fields")),
+                "{field}: {error}"
+            );
+        }
+        for from in ["[]", "[Battlefield]"] {
+            let fixture =
+                card("destination: Hand,").replace("from: [Graveyard]", &format!("from: {from}"));
+            let error = CardRegistry::from_chunks(&[&fixture])
+                .expect_err("invalid return origin must reject");
+            assert!(matches!(error, RegistryError::InvalidCard { reason, .. }
+                if reason.contains("graveyard and/or exile")));
+        }
+    }
+
+    #[test]
+    fn exact_trigger_card_return_requires_an_observed_object_context() {
+        let fixture = r#"(
+            id: "exact_return_probe", name: "Exact Return Probe", face_id: "exact_return_probe",
+            mana_cost: "{1}", types: ["Artifact"],
+            triggered_abilities: [(
+                ability_id: "triggered_01", presentation: Fallback,
+                trigger: WhenSelfEntersBattlefield,
+                effect: [ReturnTriggeredCard(reference: ExactTriggerObject, from: [Graveyard], destination: Hand)],
+            )],
+        )"#;
+        let error =
+            CardRegistry::from_chunks(&[fixture]).expect_err("ETB supplies no observed object");
+        assert!(matches!(error, RegistryError::InvalidCard { reason, .. }
+            if reason.contains("trigger that supplies an observed object")));
+    }
+
+    #[test]
     fn triggered_graveyard_return_rejects_invalid_entry_counter_lists() {
         for entry_counters in [
             "[(counter: PlusOnePlusOne, count: 0)]",
