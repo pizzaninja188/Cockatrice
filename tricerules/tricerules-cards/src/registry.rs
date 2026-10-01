@@ -1602,9 +1602,7 @@ impl CardRegistry {
                         reason,
                     })?;
                 for effect in &ability.effect {
-                    if let SpellEffectKind::CreateTokens { token, .. }
-                    | SpellEffectKind::CreateAttackingTokens { token, .. } = effect
-                    {
+                    for token in effect.referenced_token_ids() {
                         if !reg.tokens.contains_key(token) {
                             return Err(RegistryError::InvalidCard {
                                 id: id.clone(),
@@ -1705,9 +1703,7 @@ impl CardRegistry {
                             reason,
                         }
                     })?;
-                    if let SpellEffectKind::CreateTokens { token, .. }
-                    | SpellEffectKind::CreateAttackingTokens { token, .. } = effect
-                    {
+                    for token in effect.referenced_token_ids() {
                         if !reg.tokens.contains_key(token) {
                             return Err(RegistryError::InvalidCard {
                                 id: id.clone(),
@@ -2253,9 +2249,7 @@ impl CardRegistry {
                             });
                         }
                     }
-                    if let SpellEffectKind::CreateTokens { token, .. }
-                    | SpellEffectKind::CreateAttackingTokens { token, .. } = effect
-                    {
+                    for token in effect.referenced_token_ids() {
                         if !reg.tokens.contains_key(token) {
                             return Err(RegistryError::InvalidCard {
                                 id: card.id.clone(),
@@ -2264,11 +2258,13 @@ impl CardRegistry {
                         }
                     }
                 }
-                if let Some(modal) = &face.modal_spell {
+                for modal in face.modal_spell.iter().chain(
+                    face.triggered_abilities
+                        .iter()
+                        .filter_map(|ability| ability.modal.as_ref()),
+                ) {
                     for effect in modal.modes.iter().flat_map(|mode| &mode.effects) {
-                        if let SpellEffectKind::CreateTokens { token, .. }
-                        | SpellEffectKind::CreateAttackingTokens { token, .. } = effect
-                        {
+                        for token in effect.referenced_token_ids() {
                             if !reg.tokens.contains_key(token) {
                                 return Err(RegistryError::InvalidCard {
                                     id: card.id.clone(),
@@ -4276,6 +4272,77 @@ mod tests {
         )"#;
         let err = CardRegistry::from_chunks(&[bad]).unwrap_err();
         assert!(matches!(err, RegistryError::InvalidCard { ref id, .. } if id == "bad_maker"));
+    }
+
+    #[test]
+    fn heterogeneous_token_batch_rejects_bad_shapes_and_wrong_namespace() {
+        for tokens in [
+            "[]",
+            "[\"soldier_w_1_1\"]",
+            "[\"soldier_w_1_1\", \"soldier_w_1_1\"]",
+            "[\"soldier_w_1_1\", \" \"]",
+            "[\"soldier_w_1_1\", \"unknown_batch_token\"]",
+            "[\"soldier_w_1_1\", \"forest\"]",
+        ] {
+            let draft = format!(
+                r#"(id: "batch_maker", name: "Batch Maker", face_id: "batch_maker",
+                types: ["Sorcery"], spell_effect: [CreateTokenBatch(tokens: {tokens})])"#
+            );
+            assert!(
+                matches!(
+                    CardRegistry::from_chunks_and_tokens(&[&draft], EMBEDDED_TOKEN_CHUNKS),
+                    Err(RegistryError::InvalidCard { .. })
+                ),
+                "must reject {tokens}"
+            );
+        }
+        let nested = r#"(id: "batch_maker", name: "Batch Maker", face_id: "batch_maker", types: ["Sorcery"],
+            spell_effect: [ChooseResolutionBranch(optional: true, branches: [(branch_id: "create",
+                presentation: Fallback, cost: None,
+                effects: [CreateTokenBatch(tokens: ["soldier_w_1_1", "unknown_batch_token"])])])])"#;
+        let error =
+            CardRegistry::from_chunks_and_tokens(&[nested], EMBEDDED_TOKEN_CHUNKS).unwrap_err();
+        assert!(
+            matches!(&error, RegistryError::InvalidCard { reason, .. }
+            if reason.contains("unknown token 'unknown_batch_token'")),
+            "{error:?}"
+        );
+    }
+
+    #[test]
+    fn heterogeneous_token_batch_checks_triggered_modal_namespace() {
+        let modal_card = |second: &str| {
+            format!(
+                r#"(id: "modal_maker", name: "Modal Maker", face_id: "modal_maker",
+            types: ["Creature"], power: 1, toughness: 1,
+            triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+                trigger: WhenSelfEntersBattlefield, modal: Some((min_modes: 1, max_modes: 1,
+                    modes: [(mode_id: "mode_01", presentation: Fallback,
+                        effects: [CreateTokenBatch(tokens: ["soldier_w_1_1", "{second}"])])])))]
+            )"#
+            )
+        };
+        CardRegistry::from_chunks_and_tokens(
+            &[&modal_card("golem_c_3_3_flying")],
+            EMBEDDED_TOKEN_CHUNKS,
+        )
+        .expect("a complete modal-trigger batch may use two registered token identities");
+        let forest = r#"(id: "forest", name: "Forest", face_id: "forest", types: ["Land"])"#;
+        let mut wrongly_accepted = Vec::new();
+        for second in ["unknown_batch_token", "forest"] {
+            match CardRegistry::from_chunks_and_tokens(
+                &[&modal_card(second), forest],
+                EMBEDDED_TOKEN_CHUNKS,
+            ) {
+                Ok(_) => wrongly_accepted.push(second),
+                Err(error) => assert!(matches!(error, RegistryError::InvalidCard { reason, .. }
+                    if reason.contains(&format!("unknown token '{second}'")))),
+            }
+        }
+        assert!(
+            wrongly_accepted.is_empty(),
+            "accepted invalid modal token IDs: {wrongly_accepted:?}"
+        );
     }
 
     #[test]

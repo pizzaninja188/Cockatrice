@@ -1,0 +1,17 @@
+{
+  "format_version": 1,
+  "oracle_id": "56e05b17-aa1d-483d-857c-4cab4f12aa8a",
+  "spans": [
+    {"face_id": "triplicate_titan", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/keywords"]},
+    {"face_id": "triplicate_titan", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/triggered_abilities/0"]}
+  ],
+  "tokens": ["golem_c_3_3_flying", "golem_c_3_3_vigilance", "golem_c_3_3_trample"],
+  "semantic_fixtures": [
+    {"test": "scenario deck_coverage_titan::titan_actual_cast_has_exact_nine_nine_and_three_keywords", "covers": "Actual nine-mana cast resolves to a 9/9 artifact creature with flying, vigilance and trample, spending the exact cost."},
+    {"test": "scenario deck_coverage_titan::titan_real_death_creates_three_distinct_exact_tokens_for_death_controller", "covers": "Real destruction sends a controlled Titan to its different owner's graveyard. The mandatory captured death trigger creates exactly three physically distinct colorless 3/3 artifact creature Golem tokens for its death controller, each with its separate singleton flying, vigilance or trample keyword and full matching public identity."},
+    {"test": "scenario deck_coverage_titan::titan_bounce_exile_and_suppressed_death_do_not_create_tokens", "covers": "Actual bounce and exile do not satisfy dies; death while the source has no abilities creates no trigger or token."},
+    {"test": "scenario deck_coverage_titan::titan_heterogeneous_tokens_enter_as_one_simultaneous_cohort", "covers": "All three actual Titan token entrants with a granted Soul Warden observer see the other two entries and resolve six life-gain triggers, distinguishing one simultaneous cohort from three serial instructions."},
+    {"test": "scenario deck_coverage_titan::titan_replacements_park_the_complete_cohort_and_order_once", "covers": "Two admitted Orb of Dreams force three replacement choices while Titan is already gone. No token commits early; one exact-three timestamp choice carries complete distinct proposed identities. Wrong actor, duplicate, undersized, foreign, stale-generation and replayed picks reject atomically. Reverse ordering commits exactly three tapped public tokens matching their private proposals."}
+  ],
+  "complete_definition_review_confirmed": true
+}

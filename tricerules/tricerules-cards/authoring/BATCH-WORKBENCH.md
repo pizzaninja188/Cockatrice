@@ -61,7 +61,7 @@ Do not repeatedly investigate a fresh blocked/held identity to avoid an unresolv
 
 The new directory contains `review-map.json` and a hashed `typed-paths.json` catalogue. Recursive
 OracleLines mappings include nested granted abilities; unmapped clauses stay explicitly unresolved.
-Token references are collected with the final validator's CreateTokens/CreateAttackingTokens rule.
+Token references include CreateTokens/CreateAttackingTokens and every CreateTokenBatch member.
 Primitive references and independently asserted coverage descriptions still need manual review.
 The map always starts unconfirmed, including when every line has an explicit presentation pointer.
 Neither copying OracleLines nor a successful structural inspection proves mechanical equivalence.

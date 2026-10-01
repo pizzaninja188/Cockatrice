@@ -1637,6 +1637,12 @@ pub enum SpellEffectKind {
         #[serde(default)]
         sacrifice_timing: Option<DelayedTokenSacrificeTiming>,
     },
+    /// CR 111 / 603.6: create one of each named token simultaneously under the resolving
+    /// controller. Triplicate Titan and Bestial Menace need heterogeneous cohorts; separate
+    /// CreateTokens instructions retain their separate event boundaries.
+    CreateTokenBatch {
+        tokens: Vec<String>,
+    },
     /// CR 508.4 / 603.7: create a cohort under the resolving object's controller, tapped and
     /// attacking engine-chosen defending recipients. Each token's recipient is chosen separately;
     /// the complete cohort enters simultaneously and may create one delayed next-end-step
@@ -2843,6 +2849,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ReturnAllToOwnersHand { .. }
             | SpellEffectKind::DamageAll { .. }
             | SpellEffectKind::CreateTokens { .. }
+            | SpellEffectKind::CreateTokenBatch { .. }
             | SpellEffectKind::Amass { .. }
             | SpellEffectKind::Populate
             | SpellEffectKind::CreateAttackingTokens { .. }
@@ -3381,6 +3388,20 @@ impl SpellEffectKind {
     /// `context` distinguishes spells from abilities so source-bound subjects are
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
+        if let Self::CreateTokenBatch { tokens } = self {
+            if tokens.len() < 2
+                || tokens.iter().any(|token| token.trim().is_empty())
+                || tokens
+                    .iter()
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .len()
+                    != tokens.len()
+            {
+                return Err(
+                    "CreateTokenBatch requires at least two distinct nonblank token IDs".into(),
+                );
+            }
+        }
         if let Some((_, kind)) = self.targeted_mass_scope() {
             if mass_player_target(kind).is_none() {
                 return Err("targeted mass scope requires AnyPlayer or OpponentPlayer".into());
@@ -5177,6 +5198,52 @@ impl SpellEffectKind {
                 ..
             } => conditional.condition.requires_triggering_spell_context(),
             _ => false,
+        }
+    }
+
+    /// Registry dependencies, including token makers inside supported effect wrappers.
+    pub(crate) fn referenced_token_ids(&self) -> Vec<&str> {
+        match self {
+            Self::CreateTokens { token, .. } | Self::CreateAttackingTokens { token, .. } => {
+                vec![token.as_str()]
+            }
+            Self::CreateTokenBatch { tokens } => tokens.iter().map(String::as_str).collect(),
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.referenced_token_ids()
+            }
+            Self::MayBehold { if_beheld, .. } => if_beheld
+                .iter()
+                .flat_map(Self::referenced_token_ids)
+                .collect(),
+            Self::ChooseResolutionBranch {
+                branches,
+                otherwise,
+                ..
+            } => branches
+                .iter()
+                .flat_map(|branch| &branch.effects)
+                .chain(otherwise)
+                .flat_map(Self::referenced_token_ids)
+                .collect(),
+            Self::CreateReflexiveTrigger { ability, .. } => ability
+                .effect
+                .iter()
+                .flat_map(Self::referenced_token_ids)
+                .collect(),
+            Self::GrantTriggeredAbility { ability, .. }
+            | Self::CreateDelayedTrigger { ability, .. } => ability
+                .effect
+                .iter()
+                .chain(
+                    ability
+                        .modal
+                        .iter()
+                        .flat_map(|modal| &modal.modes)
+                        .flat_map(|mode| &mode.effects),
+                )
+                .flat_map(Self::referenced_token_ids)
+                .collect(),
+            _ => Vec::new(),
         }
     }
 

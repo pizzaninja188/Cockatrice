@@ -1537,6 +1537,11 @@ message ResolutionChoiceRequired {
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // PlayerId candidates for mixed-domain choices. Never encoded as ObjectIds.
   repeated int32 candidate_player_ids = 27 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Proposed tokens in a simultaneous-entry timestamp choice, before physical creation.
+  // Empty for ordinary card cohorts. Otherwise parallel to candidate_object_ids, with an
+  // empty message only for a non-token candidate. Full token characteristics remain private
+  // to the decider until the separate public TokenCreated event commits entry.
+  repeated TokenIdentity candidate_token_identities = 28 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // A token entered the battlefield (CR 111). Unlike a resolved permanent spell, a token has no

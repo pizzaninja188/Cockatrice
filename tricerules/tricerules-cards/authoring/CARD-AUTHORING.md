@@ -231,6 +231,14 @@ does not require its own presentation mapping.
 
 ### Token and state-marker display prerequisites
 
+`CreateTokenBatch(tokens: [...])` creates one of each distinct registered token simultaneously
+for the resolving controller (Triplicate Titan, Bestial Menace). It requires at least two IDs;
+declare every member in the review map's token dependencies. Separate `CreateTokens` instructions
+retain their separate event boundaries. Before entry commits, timestamp-order candidates carry
+complete recipient-private token characteristics; the image picker keeps readable variant labels
+when the external token artwork is unavailable. Public `TokenCreated` supplies physical identity
+only after replacement and ordering choices finish.
+
 Ruled-created token and state-marker artwork/details use the client's separately imported
 Magic-Token database, normally `tokens.xml`. Updating `cards.xml` (including its ruled face text) or
 engine RON does not refresh that database.

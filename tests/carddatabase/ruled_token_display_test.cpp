@@ -6,6 +6,40 @@
 #include <libcockatrice/interfaces/noop_card_preference_provider.h>
 #include <libcockatrice/interfaces/noop_card_set_priority_controller.h>
 #include <memory>
+#include <libcockatrice/protocol/pb/ruled_v1.pb.h>
+#include <libcockatrice/protocol/pb/serverinfo_card.pb.h>
+
+TEST(RuledTokenDisplayTest, SameNameGolemProposalsUseExactArtAndKeepCompleteMissingArtLabels)
+{
+    auto db = std::make_unique<CardDatabase>(nullptr, new NoopCardPreferenceProvider(),
+        new TestCardDatabasePathProvider(), new NoopCardSetPriorityController());
+    db->loadCardDatabases();
+    ASSERT_EQ(db->getLoadStatus(), Ok);
+    int index = 0;
+    for (const char *keyword : {"Flying", "Vigilance", "Trample"}) {
+        ruled::v1::TokenIdentity identity;
+        identity.set_name("Golem");
+        identity.set_pt("3/3");
+        identity.set_is_creature(true);
+        for (const char *type : {"Artifact", "Creature", "Golem"}) identity.add_types(type);
+        identity.add_keywords(keyword);
+        ServerInfo_Card popup;
+        popup.set_id(index);
+        RuledTokenDisplay::applyProposal(popup, identity, db->query());
+        EXPECT_EQ(popup.name(), std::string("Golem Token") + std::string(index, ' '));
+        EXPECT_EQ(popup.id(), index);
+        EXPECT_EQ(popup.pt(), "3/3");
+        EXPECT_NE(popup.annotation().find(keyword), std::string::npos);
+        ServerInfo_Card missingArt;
+        RuledTokenDisplay::applyProposal(missingArt, identity, nullptr);
+        EXPECT_EQ(missingArt.name(), "Golem");
+        EXPECT_EQ(missingArt.annotation(), popup.annotation());
+        EXPECT_NE(missingArt.annotation().find("3/3 | Colorless | Artifact Creature Golem"), std::string::npos);
+        ++index;
+    }
+    const auto missing = RuledTokenDisplay::resolve(db->query(), "Golem", "3/3", "", {"Lifelink"}, {});
+    EXPECT_TRUE(missing.name.isEmpty());
+}
 
 TEST(RuledTokenDisplayTest, ResolvesSparseProwessTokenDespitePrintedCardNameCollision)
 {

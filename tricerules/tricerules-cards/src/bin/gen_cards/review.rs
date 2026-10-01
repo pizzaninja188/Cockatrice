@@ -527,6 +527,11 @@ fn collect_token_references(value: &Value, tokens: &mut BTreeSet<String>) {
                         tokens.insert(token.to_string());
                     }
                 }
+                if key == "CreateTokenBatch" {
+                    if let Some(ids) = value.get("tokens").and_then(Value::as_array) {
+                        tokens.extend(ids.iter().filter_map(Value::as_str).map(str::to_string));
+                    }
+                }
                 collect_token_references(value, tokens);
             }
         }
@@ -952,6 +957,46 @@ fn run_with_confirmation(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn heterogeneous_token_batch_requires_every_review_dependency() {
+        let name = "Batch Insight";
+        let spans = json!([{"face_id":"batch_insight", "start_line":1, "end_line":1,
+            "typed_paths":["/faces/0/spell_effect/0"]}]);
+        let draft = "(id: \"batch_insight\", name: \"Batch Insight\", face_id: \"batch_insight\", mana_cost: \"{2}{U}\", types: [\"Sorcery\"], spell_effect: [CreateTokenBatch(tokens: [\"golem_c_3_3_flying\", \"golem_c_3_3_trample\"])])";
+        let mut review: Value = serde_json::from_str(&map(name, spans)).unwrap();
+        review["primitive_references"][0]["symbol"] = json!("SpellEffectKind::CreateTokenBatch");
+        for declared in [
+            json!([]),
+            json!(["golem_c_3_3_flying"]),
+            json!(["golem_c_3_3_flying", "golem_c_3_3_trample", "soldier_w_1_1"]),
+        ] {
+            review["tokens"] = declared;
+            let error = build_packet(
+                vec![source("oracle-batch", name, "Create two different tokens.")],
+                Path::new("draft.ron"),
+                draft,
+                &review.to_string(),
+                "fixture",
+                false,
+            )
+            .unwrap_err();
+            assert!(
+                error.contains("do not match typed token references"),
+                "{error}"
+            );
+        }
+        review["tokens"] = json!(["golem_c_3_3_flying", "golem_c_3_3_trample"]);
+        build_packet(
+            vec![source("oracle-batch", name, "Create two different tokens.")],
+            Path::new("draft.ron"),
+            draft,
+            &review.to_string(),
+            "fixture",
+            false,
+        )
+        .unwrap();
+    }
 
     #[test]
     fn batch_existing_review_validates_each_map_and_refuses_overwrite() {

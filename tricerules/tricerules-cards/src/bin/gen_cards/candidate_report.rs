@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use super::{
     evaluate, external_oracle_lines, normalize_name, parse_rules_text, parse_type_line, str_field,
-    strip_reminder, EvaluationError, Skip,
+    strip_reminder, EvaluationError, RulesSourceTypes, Skip,
 };
 
 #[derive(Debug)]
@@ -187,39 +187,12 @@ fn exact_recipe_matches_one_clause(
     source_name: &str,
     oracle_id: &str,
     clause: &str,
-    is_spell: bool,
-    source_is_permanent: bool,
-    source_is_artifact: bool,
-    source_is_spacecraft_or_planet: bool,
-    source_is_land: bool,
-    source_is_creature: bool,
-    source_is_vehicle: bool,
-    source_is_aura: bool,
-    source_is_equipment: bool,
-    source_is_enchantment: bool,
-    source_is_instant: bool,
-    source_is_sorcery: bool,
+    source_types: RulesSourceTypes,
 ) -> bool {
-    let Ok(parsed) = parse_rules_text(
-        source_name,
-        oracle_id,
-        clause,
-        is_spell,
-        source_is_permanent,
-        source_is_artifact,
-        source_is_spacecraft_or_planet,
-        source_is_land,
-        source_is_creature,
-        source_is_vehicle,
-        source_is_aura,
-        source_is_equipment,
-        source_is_enchantment,
-        source_is_instant,
-        source_is_sorcery,
-    ) else {
+    let Ok(parsed) = parse_rules_text(source_name, oracle_id, clause, source_types) else {
         return false;
     };
-    !is_spell
+    !source_types.is_spell
         || !parsed.spell_effect.is_empty()
         || !parsed.cost_modifiers.is_empty()
         || parsed.modal_spell.is_some()
@@ -281,10 +254,7 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
         let source_is_instant = card_types.iter().any(|card_type| card_type == "Instant");
         let source_is_sorcery = card_types.iter().any(|card_type| card_type == "Sorcery");
         let oracle_text = str_field(face.value, "oracle_text");
-        let face_matches = parse_rules_text(
-            face.name,
-            str_field(card, "oracle_id"),
-            oracle_text,
+        let source_types = RulesSourceTypes {
             is_spell,
             source_is_permanent,
             source_is_artifact,
@@ -297,6 +267,12 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
             source_is_enchantment,
             source_is_instant,
             source_is_sorcery,
+        };
+        let face_matches = parse_rules_text(
+            face.name,
+            str_field(card, "oracle_id"),
+            oracle_text,
+            source_types,
         )
         .is_ok_and(|parsed| {
             !is_spell
@@ -317,18 +293,7 @@ fn unsupported_occurrences(card: &Value, reason: Skip) -> Vec<(String, ClauseOcc
                     face.name,
                     str_field(card, "oracle_id"),
                     clause,
-                    is_spell,
-                    source_is_permanent,
-                    source_is_artifact,
-                    source_is_spacecraft_or_planet,
-                    source_is_land,
-                    source_is_creature,
-                    source_is_vehicle,
-                    source_is_aura,
-                    source_is_equipment,
-                    source_is_enchantment,
-                    source_is_instant,
-                    source_is_sorcery,
+                    source_types,
                 ))
                 .then_some((index, clause))
             })

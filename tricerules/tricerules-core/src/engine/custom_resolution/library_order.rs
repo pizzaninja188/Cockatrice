@@ -214,6 +214,7 @@ impl GameEngine {
         ev.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: controller,
                     source_object_id,
@@ -423,6 +424,7 @@ impl GameEngine {
         ev.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: controller,
                     source_object_id: pending.presentation.source_object_id,

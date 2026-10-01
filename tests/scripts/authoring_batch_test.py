@@ -52,6 +52,16 @@ class BatchTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             module.map_scaffold(typed, source, ["cargo test trial"])
 
+    def test_scaffold_collects_every_nested_heterogeneous_token_dependency(self):
+        typed = {"name": "Trial", "faces": [{"face_id": "trial", "name": "Trial",
+                 "spell_effect": [{"ChooseResolutionBranch": {"branches": [{"effects": [
+                     {"CreateTokenBatch": {"tokens": ["golem_c_3_3_flying", "golem_c_3_3_trample"]}},
+                     {"CreateTokens": {"token": "golem_c_3_3_flying"}}]}]}}]}]}
+        source = {"name": "Trial", "oracle_id": "oracle", "oracle_text": "Create tokens."}
+        mapping, _ = module.map_scaffold(typed, source, [])
+        self.assertEqual(mapping["tokens"], ["golem_c_3_3_flying", "golem_c_3_3_trample"])
+        self.assertFalse(mapping["complete_definition_review_confirmed"])
+
     def test_candidate_decisions_survive_unrelated_changes_but_reopen_changed_contracts(self):
         source = self.root / "source.json"
         contract = self.root / "contract.rs"

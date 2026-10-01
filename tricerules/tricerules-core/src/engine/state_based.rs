@@ -639,6 +639,7 @@ impl GameEngine {
             out.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
+                        candidate_token_identities: Vec::new(),
                         candidate_player_ids: Vec::new(),
                         deciding_player_id: controller,
                         source_object_id: first_id,

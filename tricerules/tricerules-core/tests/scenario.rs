@@ -16,6 +16,8 @@ mod deck_coverage_unwinding_clock;
 
 #[path = "scenario/deck_coverage_pentavus.rs"]
 mod deck_coverage_pentavus;
+#[path = "scenario/deck_coverage_titan.rs"]
+mod deck_coverage_titan;
 
 #[path = "scenario/deck_coverage_darksteel_forge.rs"]
 mod deck_coverage_darksteel_forge;

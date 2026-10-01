@@ -155,6 +155,7 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
         FIELD(showViewControls);
         FIELD(candidateNames);
         FIELD(candidateAnnotations);
+        FIELD(candidateTokenIdentities);
         FIELD(publicReveal);
         FIELD(genericManaCost);
         FIELD(waterbend);

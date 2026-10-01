@@ -110,6 +110,8 @@ def map_scaffold(typed, source, tests):
                 for key, child in value.items():
                     if key in ("CreateTokens", "CreateAttackingTokens") and isinstance(child, dict) and isinstance(child.get("token"), str):
                         tokens.add(child["token"])
+                    if key == "CreateTokenBatch" and isinstance(child, dict) and isinstance(child.get("tokens"), list):
+                        tokens.update(token for token in child["tokens"] if isinstance(token, str))
                     walk(child, pointer + "/" + key.replace("~", "~0").replace("/", "~1"))
             elif isinstance(value, list):
                 for n, child in enumerate(value):

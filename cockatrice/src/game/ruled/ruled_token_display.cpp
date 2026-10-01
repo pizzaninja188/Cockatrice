@@ -3,6 +3,8 @@
 #include <QChar>
 #include <algorithm>
 #include <libcockatrice/card/database/card_database_querier.h>
+#include <libcockatrice/protocol/pb/ruled_v1.pb.h>
+#include <libcockatrice/protocol/pb/serverinfo_card.pb.h>
 
 namespace
 {
@@ -48,6 +50,44 @@ bool isStableEngineAbilityFallback(const QString &text)
                                                text.contains(QStringLiteral(" — triggered ability (")));
 }
 } // namespace
+
+QString RuledTokenDisplay::describe(const ruled::v1::TokenIdentity &identity)
+{
+    if (identity.name().empty())
+        return {};
+    QStringList parts{QString::fromStdString(identity.name())};
+    if (!identity.pt().empty())
+        parts.append(QString::fromStdString(identity.pt()));
+    parts.append(identity.color().empty() ? QStringLiteral("Colorless") : QString::fromStdString(identity.color()));
+    QStringList types;
+    for (const auto &type : identity.types())
+        types.append(QString::fromStdString(type));
+    parts.append(types.join(QStringLiteral(" ")));
+    for (const auto &keyword : identity.keywords())
+        parts.append(QString::fromStdString(keyword));
+    for (const auto &text : identity.ability_texts())
+        parts.append(QString::fromStdString(text));
+    return parts.join(QStringLiteral(" | "));
+}
+
+void RuledTokenDisplay::applyProposal(ServerInfo_Card &card,
+                                    const ruled::v1::TokenIdentity &identity,
+                                    const CardDatabaseQuerier *db)
+{
+    if (identity.name().empty())
+        return; // A regular card in a mixed cohort keeps its ordinary display record.
+    QStringList keywords, abilityTexts;
+    for (const auto &keyword : identity.keywords())
+        keywords.append(QString::fromStdString(keyword));
+    for (const auto &text : identity.ability_texts())
+        abilityTexts.append(QString::fromStdString(text));
+    const CardRef art = resolve(db, QString::fromStdString(identity.name()), QString::fromStdString(identity.pt()),
+                                QString::fromStdString(identity.color()), keywords, abilityTexts);
+    card.set_name(art.name.isEmpty() ? identity.name() : art.name.toStdString());
+    card.set_pt(identity.pt());
+    card.set_color(identity.color());
+    card.set_annotation(describe(identity).toStdString());
+}
 
 CardRef RuledTokenDisplay::resolve(const CardDatabaseQuerier *db,
                                    const QString &tokenName,

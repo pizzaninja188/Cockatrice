@@ -1859,7 +1859,7 @@ TEST_F(RuledBatchTest, SimultaneousEntryOrderCandidatesStayPrivateUntilEntryComm
     const auto &owner = forP1.events(0).resolution_choice_required();
     EXPECT_EQ(owner.candidate_object_ids_size(), 2);
     EXPECT_EQ(owner.candidate_names_size(), 2);
-    EXPECT_EQ(owner.candidate_server_card_ids_size(), 0);
+    EXPECT_EQ(owner.candidate_server_card_ids_size(), 2);
     const auto forP2 = redactFor(batch, p2);
     const auto &observer = forP2.events(0).resolution_choice_required();
     EXPECT_EQ(observer.candidate_object_ids_size(), 0);
@@ -1867,6 +1867,74 @@ TEST_F(RuledBatchTest, SimultaneousEntryOrderCandidatesStayPrivateUntilEntryComm
     EXPECT_EQ(observer.candidate_names_size(), 0);
     EXPECT_EQ(observer.candidate_server_card_ids_size(), 0);
     EXPECT_EQ(observer.prompt_text(), "Opponent is making a resolution choice.");
+}
+
+TEST_F(RuledBatchTest, ProposedTokenIdentitiesArePrivateValidatedAndRestoredOnReconnect)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_SIMULTANEOUS_ENTRY_ORDER);
+    choice->set_min(3);
+    choice->set_max(3);
+    choice->set_ordered(true);
+    for (const char *keyword : {"Flying", "Vigilance", "Trample"}) {
+        choice->add_candidate_object_ids(701u + choice->candidate_object_ids_size());
+        choice->add_candidate_card_ids(std::string("golem_variant_") + keyword);
+        choice->add_candidate_names("Golem");
+        auto *identity = choice->add_candidate_token_identities();
+        identity->set_name("Golem");
+        identity->set_pt("3/3");
+        identity->set_is_creature(true);
+        for (const char *type : {"Artifact", "Creature", "Golem"}) identity->add_types(type);
+        identity->add_keywords(keyword);
+    }
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    const auto physicalBefore = p1->getZones().value(ZoneNames::TABLE)->getCards().size();
+    for (auto *participant : {p1, p2, spectator}) {
+        const auto filtered = redactFor(batch, participant);
+        const auto &routed = filtered.events(0).resolution_choice_required();
+        EXPECT_EQ(routed.candidate_token_identities_size(), participant == p1 ? 3 : 0);
+        EXPECT_EQ(routed.candidate_server_card_ids_size(), participant == p1 ? 3 : 0);
+        if (participant == p1) {
+            EXPECT_EQ(routed.candidate_server_card_ids(2), 2);
+            EXPECT_EQ(routed.candidate_token_identities(1).keywords(0), "Vigilance");
+        } else {
+            EXPECT_EQ(routed.candidate_object_ids_size(), 0);
+            EXPECT_EQ(filtered.SerializeAsString().find("Golem"), std::string::npos);
+            EXPECT_EQ(filtered.SerializeAsString().find("Vigilance"), std::string::npos);
+        }
+    }
+    EXPECT_EQ(p1->getZones().value(ZoneNames::TABLE)->getCards().size(), physicalBefore);
+    for (int defect = 0; defect < 3; ++defect) {
+        auto malformed = batch;
+        auto *bad = malformed.mutable_events(0)->mutable_resolution_choice_required();
+        if (defect == 0) bad->mutable_candidate_token_identities()->RemoveLast();
+        if (defect == 1) bad->mutable_candidate_token_identities(0)->clear_pt();
+        if (defect == 2) bad->set_candidate_object_ids(1, 701u);
+        const auto filtered = redactFor(malformed, p1);
+        const auto &invalid = filtered.events(0).resolution_choice_required();
+        EXPECT_EQ(invalid.candidate_token_identities_size(), 0);
+        EXPECT_EQ(invalid.candidate_object_ids_size(), 0);
+        EXPECT_GT(invalid.min(), invalid.max());
+    }
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    response.mutable_batch()->CopyFrom(batch);
+    updatePendingResolutionChoiceCache(response);
+    for (auto *participant : {p1, p2, spectator}) {
+        ResponseContainer reconnect(-1);
+        game->createGameJoinedEvent(participant, reconnect, true);
+        const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        const auto &routed = restored.events(0).resolution_choice_required();
+        EXPECT_EQ(routed.candidate_token_identities_size(), participant == p1 ? 3 : 0);
+        EXPECT_EQ(routed.candidate_server_card_ids_size(), participant == p1 ? 3 : 0);
+        if (participant == p1) EXPECT_EQ(routed.candidate_token_identities(2).keywords(0), "Trample");
+    }
 }
 
 TEST_F(RuledBatchTest, SpellCastTransactionKeepsHandCardUntilCommit)

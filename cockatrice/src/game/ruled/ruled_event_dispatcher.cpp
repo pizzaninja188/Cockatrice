@@ -2,10 +2,12 @@
 
 #include "ruled_client_host.h"
 #include "ruled_client_state.h"
+#include "ruled_token_display.h"
 
 #include <QDebug>
 #include <algorithm>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
+#include <libcockatrice/protocol/ruled_choice_metadata.h>
 #include <libcockatrice/utility/ruled_debug.h>
 
 namespace
@@ -1021,7 +1023,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
-    if (rcr.min() > rcr.max() || (rcr.selection_alternatives_size() > 0 &&
+    if (!ruledTokenChoiceMetadataValid(rcr) || rcr.min() > rcr.max() || (rcr.selection_alternatives_size() > 0 &&
                                   (rcr.choice_kind() != ruled::v1::CHOICE_KIND_HAND_CARDS ||
                                    rcr.candidate_object_ids_size() != rcr.candidate_server_card_ids_size()))) {
         qWarning() << "Rejecting ruled choice with invalid selection metadata";
@@ -1323,6 +1325,21 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
     const bool isPrivateCardOrder = isPrivateReplacement && rcr.ordered();
+    const bool isEntryOrder = rcr.choice_kind() == ruled::v1::CHOICE_KIND_SIMULTANEOUS_ENTRY_ORDER;
+    if (isEntryOrder) {
+        QSet<int> popupIds;
+        if (rcr.candidate_server_card_ids_size() != rcr.candidate_object_ids_size()) {
+            qWarning() << "Rejecting timestamp order without popup identities";
+            return;
+        }
+        for (const auto id : rcr.candidate_server_card_ids()) {
+            if (id < 0 || popupIds.contains(id)) {
+                qWarning() << "Rejecting ambiguous timestamp popup identities";
+                return;
+            }
+            popupIds.insert(id);
+        }
+    }
     if (isPrivateCardOrder && (rcr.candidate_names_size() < 2 ||
                               rcr.candidate_object_ids_size() != rcr.candidate_names_size() ||
                               rcr.candidate_server_card_ids_size() != rcr.candidate_names_size() ||
@@ -1371,7 +1388,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
 
     if (!isPublicReveal &&
         (isLibrarySearch || rcr.choice_kind() == ruled::v1::CHOICE_KIND_LIBRARY_TOP || isLibraryLook ||
-         isManifestDread || isZoneSearch || isGraveyardCards || isBehold || isPrivateCardOrder) &&
+         isManifestDread || isZoneSearch || isGraveyardCards || isBehold || isPrivateCardOrder || isEntryOrder) &&
         rcr.candidate_server_card_ids_size() == rcr.candidate_names_size() &&
         (rcr.candidate_names_size() > 0 || isEmptyLibrarySearch)) {
         // Image-based hidden or mixed-zone choices use a synthetic deck zone-view pick. They
@@ -1389,7 +1406,14 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         pick.uniqueNames = rcr.unique_names();
         pick.promptText = QString::fromStdString(rcr.prompt_text());
         pick.pickZone = PickZone::Deck;
-        if (isPrivateCardOrder) {
+        if (isEntryOrder) {
+            pick.viewTitle = tr("Order simultaneous entries");
+            pick.promptText = tr("Click every entry from earliest to latest timestamp.");
+            pick.reverseSelectionOrder = false;
+            pick.showViewControls = false;
+            for (const auto &identity : rcr.candidate_token_identities())
+                pick.candidateTokenIdentities.append(identity);
+        } else if (isPrivateCardOrder) {
             pick.viewTitle = tr("Order discarded cards");
             pick.promptText = tr("Click cards in order; the last card clicked will be on top.");
             pick.reverseSelectionOrder = true;
@@ -1427,7 +1451,9 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
                 }
             }
             pick.candidateNames.append(name);
-            if (isZoneSearch || isGraveyardCards || isBehold) {
+            if (isEntryOrder && !pick.candidateTokenIdentities.isEmpty()) {
+                pick.candidateAnnotations.append(RuledTokenDisplay::describe(pick.candidateTokenIdentities.at(i)));
+            } else if (isZoneSearch || isGraveyardCards || isBehold) {
                 switch (rcr.candidate_source_zones(i)) {
                     case ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND:
                         pick.candidateAnnotations.append(tr("Hand"));

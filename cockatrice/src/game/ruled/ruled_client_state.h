@@ -603,6 +603,8 @@ public:
         QStringList candidateNames;
         /// Source-zone labels parallel to candidateNames for unified private search cohorts.
         QStringList candidateAnnotations;
+        /// Complete proposed token characteristics, parallel to the private popup candidates.
+        QVector<ruled::v1::TokenIdentity> candidateTokenIdentities;
         // True when the popup is also owned by the separate table-visible public-reveal state.
         // Pending-choice teardown must not close that shared window optimistically on submit;
         // the next authoritative batch retires it for every participant together.
@@ -1771,6 +1773,11 @@ public:
     [[nodiscard]] QStringList resolutionHandPickCandidateAnnotations() const
     {
         return isResolutionHandPickActive() ? pendingChoice->candidateAnnotations : QStringList{};
+    }
+    [[nodiscard]] QVector<ruled::v1::TokenIdentity> resolutionHandPickCandidateTokenIdentities() const
+    {
+        return isResolutionHandPickActive() ? pendingChoice->candidateTokenIdentities
+                                            : QVector<ruled::v1::TokenIdentity>{};
     }
     /// Window title for the Deck / Revealed pick popup (empty for a hand pick, which has none).
     [[nodiscard]] QString resolutionHandPickViewTitle() const

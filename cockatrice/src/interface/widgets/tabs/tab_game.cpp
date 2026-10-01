@@ -24,6 +24,7 @@
 #include "../game/ruled/ruled_replacement_picker.h"
 #include "../game/ruled/ruled_resume_client.h"
 #include "../game/ruled/ruled_reveal_windows.h"
+#include "../game/ruled/ruled_token_display.h"
 #include "../game/zones/view_zone.h"
 #include "../game/zones/view_zone_widget.h"
 #include "../interface/card_picture_loader/card_picture_loader.h"
@@ -2593,6 +2594,10 @@ void TabGame::onRuledLibrarySearchPickStarted(QStringList candidateNames, QVecto
         const auto *ruledState = game->getGameEventHandler()->ruled();
         if (ruledState && i < ruledState->resolutionHandPickCandidateAnnotations().size()) {
             sic->set_annotation(ruledState->resolutionHandPickCandidateAnnotations().at(i).toStdString());
+        }
+        if (ruledState && i < ruledState->resolutionHandPickCandidateTokenIdentities().size()) {
+            RuledTokenDisplay::applyProposal(*sic, ruledState->resolutionHandPickCandidateTokenIdentities().at(i),
+                                             CardDatabaseManager::query());
         }
         librarySearchCards.append(sic);
         cardList.append(sic);

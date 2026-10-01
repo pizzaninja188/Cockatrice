@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <cockatrice_carddatabase version="4">
     <cards>
+        <card><name>Golem Token</name><text>Flying</text><token>1</token><tablerow>0</tablerow>
+            <prop><type>Token Artifact Creature — Golem</type><maintype>Creature</maintype><pt>3/3</pt></prop></card>
+        <card><name>Golem Token </name><text>Vigilance</text><token>1</token><tablerow>0</tablerow>
+            <prop><type>Token Artifact Creature — Golem</type><maintype>Creature</maintype><pt>3/3</pt></prop></card>
+        <card><name>Golem Token  </name><text>Trample</text><token>1</token><tablerow>0</tablerow>
+            <prop><type>Token Artifact Creature — Golem</type><maintype>Creature</maintype><pt>3/3</pt></prop></card>
         <card>
             <name>Goblin Wizard Token </name>
             <text>Prowess</text>

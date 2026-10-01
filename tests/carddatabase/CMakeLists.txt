@@ -28,6 +28,7 @@ target_include_directories(carddatabase_test PRIVATE ${CMAKE_SOURCE_DIR}/cockatr
 target_link_libraries(
   carddatabase_test
   PRIVATE libcockatrice_card
+  PRIVATE libcockatrice_protocol
   PRIVATE Threads::Threads
   PRIVATE ${GTEST_BOTH_LIBRARIES}
   PRIVATE ${TEST_QT_MODULES}

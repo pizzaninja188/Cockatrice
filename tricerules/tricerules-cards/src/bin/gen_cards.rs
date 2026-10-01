@@ -979,10 +979,8 @@ fn station_threshold_striation(line: &str) -> bool {
     !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()) && !rest.is_empty()
 }
 
-fn parse_rules_text(
-    source_name: &str,
-    oracle_id: &str,
-    oracle_text: &str,
+#[derive(Clone, Copy)]
+struct RulesSourceTypes {
     is_spell: bool,
     source_is_permanent: bool,
     source_is_artifact: bool,
@@ -995,7 +993,28 @@ fn parse_rules_text(
     source_is_enchantment: bool,
     source_is_instant: bool,
     source_is_sorcery: bool,
+}
+
+fn parse_rules_text(
+    source_name: &str,
+    oracle_id: &str,
+    oracle_text: &str,
+    source_types: RulesSourceTypes,
 ) -> Result<ParsedRules, RulesParseError> {
+    let RulesSourceTypes {
+        is_spell,
+        source_is_permanent,
+        source_is_artifact,
+        source_is_spacecraft_or_planet,
+        source_is_land,
+        source_is_creature,
+        source_is_vehicle,
+        source_is_aura,
+        source_is_equipment,
+        source_is_enchantment,
+        source_is_instant,
+        source_is_sorcery,
+    } = source_types;
     let mut parsed = ParsedRules::default();
     let external_lines = external_oracle_lines(oracle_text);
     let base_context = RecipeContext {
@@ -2309,20 +2328,22 @@ fn parse_multiface_face(
         &name,
         oracle_id,
         oracle_text,
-        is_spell,
-        source_is_permanent,
-        types.iter().any(|card_type| card_type == "Artifact"),
-        types
-            .iter()
-            .any(|card_type| matches!(card_type.as_str(), "Spacecraft" | "Planet")),
-        types.iter().any(|card_type| card_type == "Land"),
-        is_creature,
-        is_vehicle,
-        is_aura,
-        is_equipment,
-        is_enchantment,
-        types.iter().any(|card_type| card_type == "Instant"),
-        types.iter().any(|card_type| card_type == "Sorcery"),
+        RulesSourceTypes {
+            is_spell,
+            source_is_permanent,
+            source_is_artifact: types.iter().any(|card_type| card_type == "Artifact"),
+            source_is_spacecraft_or_planet: types
+                .iter()
+                .any(|card_type| matches!(card_type.as_str(), "Spacecraft" | "Planet")),
+            source_is_land: types.iter().any(|card_type| card_type == "Land"),
+            source_is_creature: is_creature,
+            source_is_vehicle: is_vehicle,
+            source_is_aura: is_aura,
+            source_is_equipment: is_equipment,
+            source_is_enchantment: is_enchantment,
+            source_is_instant: types.iter().any(|card_type| card_type == "Instant"),
+            source_is_sorcery: types.iter().any(|card_type| card_type == "Sorcery"),
+        },
     )
     .map_err(|error| EvaluationError::rules_text(error, Skip::FaceText))?;
     require_power_toughness_is_defined(
@@ -2553,20 +2574,22 @@ fn evaluate_normal(card: &Value) -> Result<GenCard, EvaluationError> {
         &name,
         str_field(card, "oracle_id"),
         oracle_text,
-        is_spell,
-        source_is_permanent,
-        card_types.iter().any(|card_type| card_type == "Artifact"),
-        subtypes
-            .iter()
-            .any(|subtype| matches!(subtype.as_str(), "Spacecraft" | "Planet")),
-        card_types.iter().any(|card_type| card_type == "Land"),
-        is_creature,
-        is_vehicle,
-        is_aura,
-        is_equipment,
-        is_enchantment,
-        card_types.iter().any(|card_type| card_type == "Instant"),
-        card_types.iter().any(|card_type| card_type == "Sorcery"),
+        RulesSourceTypes {
+            is_spell,
+            source_is_permanent,
+            source_is_artifact: card_types.iter().any(|card_type| card_type == "Artifact"),
+            source_is_spacecraft_or_planet: subtypes
+                .iter()
+                .any(|subtype| matches!(subtype.as_str(), "Spacecraft" | "Planet")),
+            source_is_land: card_types.iter().any(|card_type| card_type == "Land"),
+            source_is_creature: is_creature,
+            source_is_vehicle: is_vehicle,
+            source_is_aura: is_aura,
+            source_is_equipment: is_equipment,
+            source_is_enchantment: is_enchantment,
+            source_is_instant: card_types.iter().any(|card_type| card_type == "Instant"),
+            source_is_sorcery: card_types.iter().any(|card_type| card_type == "Sorcery"),
+        },
     )
     .map_err(|error| EvaluationError::rules_text(error, Skip::NonKeywordText))?;
     require_power_toughness_is_defined(
@@ -3398,6 +3421,8 @@ mod tests {
     use super::*;
     use tricerules_cards::primitives::DrawDiscardOrder;
 
+    type MutationCase = (&'static str, fn(&mut Value));
+
     #[test]
     fn presentation_refresh_rejects_combined_modes() {
         for extra in [
@@ -3968,18 +3993,17 @@ mod tests {
         let path = dir.join("unchanged.ron");
         fs::write(&path, "canonical\n").unwrap();
 
-        let mut permissions = fs::metadata(&path).unwrap().permissions();
+        let original_permissions = fs::metadata(&path).unwrap().permissions();
+        let mut permissions = original_permissions.clone();
         permissions.set_readonly(true);
         fs::set_permissions(&path, permissions).unwrap();
 
         let result = write_if_changed(&path, "canonical\n");
 
-        let mut permissions = fs::metadata(&path).unwrap().permissions();
-        permissions.set_readonly(false);
-        fs::set_permissions(&path, permissions).unwrap();
+        fs::set_permissions(&path, original_permissions).unwrap();
         fs::remove_dir_all(&dir).unwrap();
 
-        assert_eq!(result.unwrap(), false);
+        assert!(!result.unwrap());
     }
 
     #[test]
@@ -5985,9 +6009,7 @@ mod tests {
         );
         assert_uthros_rejected(
             "inability-above-eight threshold",
-            format!(
-                "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8 or more.)\n8+ | Flying"
-            ),
+            "Station (Tap another creature you control: Put charge counters equal to its power on this Spacecraft. Station only as a sorcery. It's an artifact creature at 8 or more.)\n8+ | Flying".to_string(),
         );
         let wrong_pt = normal_card_with_oracle_id(
             "7b4c37dc-8cb0-4870-929e-11c2a45952a2",
@@ -9976,7 +9998,7 @@ mod tests {
         assert!(ability.conditions.is_empty());
         assert!(ability.activation_limit.is_none());
 
-        let cases: &[(&str, fn(&mut Value))] = &[
+        let cases: &[MutationCase] = &[
             ("unreviewed identity", |card: &mut Value| {
                 card["oracle_id"] = json!("00000000-0000-0000-0000-000000000000");
             }),
@@ -10292,7 +10314,7 @@ mod tests {
         let raw = parse_generated(&generated.to_ron("fixture"));
         assert_eq!(raw.activated_abilities.len(), 1);
 
-        let cases: &[(&str, fn(&mut Value))] = &[
+        let cases: &[MutationCase] = &[
             ("unreviewed identity", |card: &mut Value| {
                 card["oracle_id"] = json!("00000000-0000-0000-0000-000000000000");
             }),
@@ -11278,7 +11300,7 @@ mod tests {
         let raw = parse_generated(&generated.to_ron("fixture"));
         assert_eq!(raw.triggered_abilities.len(), 1);
 
-        let cases: &[(&str, fn(&mut Value))] = &[
+        let cases: &[MutationCase] = &[
             ("unreviewed identity", |card: &mut Value| {
                 card["oracle_id"] = json!("00000000-0000-0000-0000-000000000000");
             }),
@@ -11482,7 +11504,7 @@ mod tests {
         };
         evaluate_fresh(&exact()).expect("the reviewed Scrounging Skyray surface qualifies");
 
-        let cases: &[(&str, fn(&mut Value))] = &[
+        let cases: &[MutationCase] = &[
             ("unreviewed identity", |card: &mut Value| {
                 card["oracle_id"] = json!("00000000-0000-0000-0000-000000000000");
             }),

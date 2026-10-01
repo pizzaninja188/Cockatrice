@@ -64,6 +64,7 @@ pub(super) fn counter_target_spell(
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
+                        candidate_token_identities: Vec::new(),
                         candidate_player_ids: Vec::new(),
                         deciding_player_id: deciding_player,
                         source_object_id: cx.top.id,
@@ -186,6 +187,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 unique_names: false,
             };
             let event = rv1::ResolutionChoiceRequired {
+                candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: deciding_player,
                 source_object_id: cx.top.id,
@@ -269,6 +271,7 @@ pub(super) fn counter_triggering_stack_object_unless_pays(
                 unique_names: false,
             };
             let event = rv1::ResolutionChoiceRequired {
+                candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: deciding_player,
                 source_object_id: cx.top.id,

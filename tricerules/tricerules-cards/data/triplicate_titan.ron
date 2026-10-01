@@ -1,0 +1,19 @@
+// Exact Oracle and associated token identities verified 2026-09-30.
+(
+  id: "triplicate_titan",
+  name: "Triplicate Titan",
+  face_id: "triplicate_titan",
+  mana_cost: "{9}",
+  types: ["Artifact", "Creature", "Golem"],
+  power: 9,
+  toughness: 9,
+  keywords: [Flying, Vigilance, Trample],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfDies,
+    effect: [
+      CreateTokenBatch(tokens: ["golem_c_3_3_flying", "golem_c_3_3_vigilance", "golem_c_3_3_trample"]),
+    ],
+  )],
+)

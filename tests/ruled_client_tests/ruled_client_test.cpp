@@ -7537,7 +7537,7 @@ TEST_F(RuledClientTest, CancellingResolutionCostObjectsRepaintsClearedSelectionI
     EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids_size(), 0);
 }
 
-TEST_F(RuledClientTest, SimultaneousEntryTimestampOrderUsesTheOrderedModalChoice)
+TEST_F(RuledClientTest, SimultaneousEntryTimestampOrderUsesImagesAndClickOrder)
 {
     ruled::v1::RuledEventBatch batch;
     auto *choice = batch.add_events()->mutable_resolution_choice_required();
@@ -7551,12 +7551,89 @@ TEST_F(RuledClientTest, SimultaneousEntryTimestampOrderUsesTheOrderedModalChoice
     choice->add_candidate_object_ids(78);
     choice->add_candidate_names("Folio of Fancies");
     choice->add_candidate_names("Twenty-Toed Toad");
+    choice->add_candidate_card_ids("folio_of_fancies");
+    choice->add_candidate_card_ids("twenty-toed_toad");
+    choice->add_candidate_server_card_ids(0);
+    choice->add_candidate_server_card_ids(1);
     apply(batch);
-    EXPECT_EQ(host.dialogRequests, 1);
-    EXPECT_TRUE(host.lastDialogOrdered);
-    EXPECT_EQ(host.lastDialogCandidateOids, QVector<quint32>({77, 78}));
-    EXPECT_EQ(host.lastDialogCandidateNames,
-              QStringList({QStringLiteral("Folio of Fancies"), QStringLiteral("Twenty-Toed Toad")}));
+    EXPECT_EQ(host.dialogRequests, 0);
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_EQ(state->resolutionHandPickZone(), RuledClientState::PickZone::Deck);
+    EXPECT_FALSE(state->resolutionHandPickShowViewControls());
+    state->toggleResolutionHandPickCard(1);
+    EXPECT_FALSE(state->resolutionHandPickConfirmable());
+    state->toggleResolutionHandPickCard(0);
+    ASSERT_TRUE(state->resolutionHandPickConfirmable());
+    state->submitResolutionHandPick();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &submitted = host.sentCommands[0].submit_resolution_choice();
+    ASSERT_EQ(submitted.chosen_object_ids_size(), 2);
+    EXPECT_EQ(submitted.chosen_object_ids(0), 78u);
+    EXPECT_EQ(submitted.chosen_object_ids(1), 77u);
+}
+
+TEST_F(RuledClientTest, ProposedSameNameTokensRemainDistinctAndMalformedIdentityFailsClosed)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_SIMULTANEOUS_ENTRY_ORDER);
+    choice->set_min(3);
+    choice->set_max(3);
+    choice->set_ordered(true);
+    int i = 0;
+    for (const char *keyword : {"Flying", "Vigilance", "Trample"}) {
+        choice->add_candidate_object_ids(77u + i);
+        choice->add_candidate_server_card_ids(i);
+        choice->add_candidate_card_ids(std::string("golem_variant_") + keyword);
+        choice->add_candidate_names("Golem");
+        auto *identity = choice->add_candidate_token_identities();
+        identity->set_name("Golem");
+        identity->set_pt("3/3");
+        identity->set_is_creature(true);
+        for (const char *type : {"Artifact", "Creature", "Golem"})
+            identity->add_types(type);
+        identity->add_keywords(keyword);
+        ++i;
+    }
+    apply(batch);
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_EQ(host.dialogRequests, 0);
+    EXPECT_EQ(state->resolutionHandPickCandidateNames(), QStringList({"Golem", "Golem", "Golem"}));
+    const auto identities = state->resolutionHandPickCandidateTokenIdentities();
+    ASSERT_EQ(identities.size(), 3);
+    const auto labels = state->resolutionHandPickCandidateAnnotations();
+    ASSERT_EQ(labels.size(), 3);
+    for (int index = 0; index < 3; ++index) {
+        EXPECT_TRUE(labels[index].contains("Golem"));
+        EXPECT_TRUE(labels[index].contains("3/3"));
+        EXPECT_TRUE(labels[index].contains("Colorless"));
+        EXPECT_TRUE(labels[index].contains("Artifact Creature Golem"));
+        EXPECT_TRUE(labels[index].contains(QString::fromStdString(identities[index].keywords(0))));
+    }
+    EXPECT_TRUE(state->resolutionHandPickPromptText().contains("earliest to latest"));
+    state->toggleResolutionHandPickCard(2);
+    state->toggleResolutionHandPickCard(0);
+    EXPECT_FALSE(state->resolutionHandPickConfirmable());
+    state->toggleResolutionHandPickCard(1);
+    ASSERT_TRUE(state->resolutionHandPickConfirmable());
+    state->submitResolutionHandPick();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids(0), 79u);
+    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids(1), 77u);
+    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids(2), 78u);
+    for (int defect = 0; defect < 5; ++defect) {
+        auto malformed = batch;
+        auto *bad = malformed.mutable_events(0)->mutable_resolution_choice_required();
+        if (defect == 0) bad->mutable_candidate_token_identities()->RemoveLast();
+        if (defect == 1) bad->mutable_candidate_token_identities(0)->clear_types();
+        if (defect == 2) bad->mutable_candidate_token_identities(0)->set_name("Wrong name");
+        if (defect == 3) bad->set_candidate_server_card_ids(1, 0);
+        if (defect == 4) bad->set_candidate_object_ids(1, 77u);
+        apply(malformed);
+        EXPECT_FALSE(state->isResolutionHandPickActive());
+        EXPECT_EQ(host.dialogRequests, 0);
+    }
 }
 
 TEST_F(RuledClientTest, ProliferateChoiceMixesPermanentAndPlayerIdsWithinOneBoundedSelection)

@@ -497,7 +497,7 @@ fn match_spell_draw_three_then_discard_one(
     text: &str,
     _: &RecipeContext,
 ) -> Option<RecipeEmission> {
-    (text == "Draw three cards, then discard a card.").then(|| {
+    (text == "Draw three cards, then discard a card.").then_some({
         RecipeEmission::SpellEffect(SpellEffectKind::DrawDiscard {
             who: PlayerRecipient::Controller,
             draw_count: 3,
@@ -859,7 +859,7 @@ fn match_spell_source_damage_each_opponent_three(
     text: &str,
     context: &RecipeContext,
 ) -> Option<RecipeEmission> {
-    (text == format!("{} deals 3 damage to each opponent.", context.source_name)).then(|| {
+    (text == format!("{} deals 3 damage to each opponent.", context.source_name)).then_some({
         RecipeEmission::SpellEffect(SpellEffectKind::DamagePlayer {
             amount: Amount::Fixed(3),
             who: PlayerRecipient::EachOpponent,
@@ -12468,7 +12468,7 @@ fn match_spell_counter_target_spell_draw_discard(
 /// printed order. Discard-then-draw order, another count on either side, a whole-hand or filtered
 /// discard, the drawn-out loot wording, and riders stay unsupported.
 fn match_spell_discard_then_draw_two(text: &str, _: &RecipeContext) -> Option<RecipeEmission> {
-    (text == ISSUE_344_DISCARD_THEN_DRAW_TWO_CLAUSE).then(|| {
+    (text == ISSUE_344_DISCARD_THEN_DRAW_TWO_CLAUSE).then_some({
         RecipeEmission::SpellEffect(SpellEffectKind::DrawDiscard {
             who: PlayerRecipient::Controller,
             draw_count: 2,
@@ -13206,7 +13206,7 @@ fn match_spell_cost_reduction_creature_died_three(
     text: &str,
     _: &RecipeContext,
 ) -> Option<RecipeEmission> {
-    (text == ISSUE_358_COST_REDUCTION_CREATURE_DIED_CLAUSE).then(|| {
+    (text == ISSUE_358_COST_REDUCTION_CREATURE_DIED_CLAUSE).then_some({
         RecipeEmission::SpellCostModifier(SpellCostModifier::ConditionalGenericReduction {
             amount: 3,
             condition: GameCondition::CreatureDeathsThisTurn {
@@ -14796,7 +14796,7 @@ fn match_static_descend4_self_pt_plus_2_2_trample(
 }
 
 /// 2. `static.descend8.self_pt_additional_and_max_one_blocker` — Akawalli's Descend 8 line authors
-/// two typed static abilities: the additional self pump and the gated blocker limit.
+///    two typed static abilities: the additional self pump and the gated blocker limit.
 fn match_static_descend8_self_pt_additional_max_one_blocker(
     text: &str,
     context: &RecipeContext,
@@ -14955,9 +14955,9 @@ fn match_static_threshold_self_pt_plus_2_1(
 }
 
 /// 8. `static.threshold.self_pt_plus_3_0` — Mind Drill Assailant. The issue's named peer
-/// Kamahl's Desire prints the Aura-scoped `Enchanted creature` form with the reversed order and
-/// Otarian Juggernaut appends `and attacks each combat if able`; the full pinned corpus has no
-/// second exact printing, so this is a documented singleton.
+///    Kamahl's Desire prints the Aura-scoped `Enchanted creature` form with the reversed order and
+///    Otarian Juggernaut appends `and attacks each combat if able`; the full pinned corpus has no
+///    second exact printing, so this is a documented singleton.
 fn match_static_threshold_self_pt_plus_3_0(
     text: &str,
     context: &RecipeContext,
@@ -15094,7 +15094,7 @@ fn match_static_threshold_opponents_minus_1_0(
 }
 
 /// 13. `static.graveyard_eight.self_base_pt_8_8` — Doc Ock, Sinister Scientist. Base P/T is
-/// layer 7b (CR 613.4b), not a modifier.
+///     layer 7b (CR 613.4b), not a modifier.
 fn match_static_graveyard_eight_self_base_pt_8_8(
     text: &str,
     context: &RecipeContext,
@@ -15253,7 +15253,7 @@ fn match_static_delirium_self_pt_trample(
 }
 
 /// 18. `static.delirium.self_cant_attack_or_block_unless` — Patchwork Beastie. The restriction
-/// applies while the printed condition is false, so the gate is the complementary `max: 3`.
+///     applies while the printed condition is false, so the gate is the complementary `max: 3`.
 fn match_static_delirium_self_cant_attack_or_block_unless(
     text: &str,
     context: &RecipeContext,
@@ -15279,7 +15279,7 @@ fn match_static_delirium_self_cant_attack_or_block_unless(
 }
 
 /// 19. `static.descend8.self_cant_attack_or_block_unless` — The Ancient One. Complementary
-/// `max: 7` gate.
+///     `max: 7` gate.
 fn match_static_descend8_self_cant_attack_or_block_unless(
     text: &str,
     context: &RecipeContext,
@@ -15305,7 +15305,7 @@ fn match_static_descend8_self_cant_attack_or_block_unless(
 }
 
 /// 20. `static.graveyard_lesson.self_cant_attack_or_block_unless` — The Lion-Turtle.
-/// Complementary `max: 2` gate.
+///     Complementary `max: 2` gate.
 fn match_static_graveyard_lesson_self_cant_attack_or_block_unless(
     text: &str,
     context: &RecipeContext,
@@ -15334,8 +15334,8 @@ fn match_static_graveyard_lesson_self_cant_attack_or_block_unless(
 }
 
 /// 21. `static.delirium.anthem_insects_spiders_pt_deathtouch` — The Swarmweaver. One printed
-/// line becomes four typed static abilities because `CreatureScopeFilter.subtype` is a single
-/// `Option<String>`.
+///     line becomes four typed static abilities because `CreatureScopeFilter.subtype` is a single
+///     `Option<String>`.
 fn match_static_delirium_anthem_insects_spiders(
     text: &str,
     context: &RecipeContext,
@@ -15736,7 +15736,7 @@ fn issue_371_create_tokens(token: &str, count: Amount, tapped: bool) -> SpellEff
 }
 
 /// 1. Aatchik's ETB creates one registered 1/1 green Insect token for each artifact and/or
-/// creature card in the controller's public graveyard (CR 404.2, 608.2h).
+///    creature card in the controller's public graveyard (CR 404.2, 608.2h).
 fn match_triggered_etb_create_insect_for_each_artifact_or_creature_graveyard_card(
     text: &str,
     context: &RecipeContext,
@@ -15793,9 +15793,9 @@ fn match_triggered_insect_dies_counter_and_each_opponent_drain(
 }
 
 /// 2. Arnim Zola's activation gate is the shipped inclusive two-plus creature-card graveyard
-/// condition (CR 602.5: a prohibited activation can't begin), and the Villain token is the
-/// registered #377 identity. Untapped, other thresholds, another mana/tap shape, and timing
-/// restrictions stay unsupported.
+///    condition (CR 602.5: a prohibited activation can't begin), and the Villain token is the
+///    registered #377 identity. Untapped, other thresholds, another mana/tap shape, and timing
+///    restrictions stay unsupported.
 fn match_activated_create_villain_menace_only_two_creature_cards_graveyard(
     text: &str,
     context: &RecipeContext,
@@ -15828,8 +15828,8 @@ fn match_activated_create_villain_menace_only_two_creature_cards_graveyard(
 }
 
 /// 3. HYDRA Troopers' mandatory ETB uses the shipped `FirstApplicable` branch shape: the gate is
-/// the same two-plus creature-card condition as recipe 2, and the otherwise clause mills two
-/// (CR 701.17). Optional branches, other thresholds, and other mill counts stay unsupported.
+///    the same two-plus creature-card condition as recipe 2, and the otherwise clause mills two
+///    (CR 701.17). Optional branches, other thresholds, and other mill counts stay unsupported.
 fn match_triggered_etb_create_villain_menace_or_mill_two(
     text: &str,
     context: &RecipeContext,
@@ -15882,8 +15882,8 @@ fn match_triggered_etb_create_villain_menace_or_mill_two(
 }
 
 /// 4. Lluwen's activation requires a land-card discard, expressed by the typed filtered-discard
-/// cost (the resolution-cost sibling already ships as Crypt Lurker's `DiscardCard`). The count
-/// reads the controller's public graveyard as the token instruction resolves.
+///    cost (the resolution-cost sibling already ships as Crypt Lurker's `DiscardCard`). The count
+///    reads the controller's public graveyard as the token instruction resolves.
 fn match_activated_create_worm_for_each_land_graveyard_card(
     text: &str,
     context: &RecipeContext,
@@ -15958,8 +15958,8 @@ fn match_triggered_etb_mill_four_then_may_choose_creature_or_land_to_top(
 }
 
 /// 5. Morcant's Eyes' sorcery-speed self-sacrifice creates X registered 2/2 black and green Elf
-/// tokens from the subtype-filtered public graveyard count. Other thresholds, a targeted Elf card,
-/// a different token, and a non-sacrifice cost stay unsupported.
+///    tokens from the subtype-filtered public graveyard count. Other thresholds, a targeted Elf card,
+///    a different token, and a non-sacrifice cost stay unsupported.
 fn match_activated_create_elf_for_each_elf_graveyard_card_sorcery(
     text: &str,
     context: &RecipeContext,
@@ -15988,8 +15988,8 @@ fn match_activated_create_elf_for_each_elf_graveyard_card_sorcery(
 }
 
 /// 6. Revenge of the Rats creates one registered tapped 1/1 black Rat token per creature card in
-/// its controller's graveyard. This is deliberately not the shipped `rat_b_1_1_cant_block`
-/// identity: the printed token has no combat restriction.
+///    its controller's graveyard. This is deliberately not the shipped `rat_b_1_1_cant_block`
+///    identity: the printed token has no combat restriction.
 fn match_spell_create_rat_tapped_for_each_creature_graveyard_card(
     text: &str,
     _: &RecipeContext,
@@ -16027,8 +16027,8 @@ fn match_triggered_etb_draw_two_then_discard_two(
 }
 
 /// 7. Kiora's Threshold attack trigger is the shipped optional-attack shape with the printed
-/// seven-card intervening-if gate, re-checked on resolution (CR 603.4). "Threshold" is an ability
-/// word, mapped through the ability's Oracle-line presentation rather than new vocabulary.
+///    seven-card intervening-if gate, re-checked on resolution (CR 603.4). "Threshold" is an ability
+///    word, mapped through the ability's Oracle-line presentation rather than new vocabulary.
 fn match_triggered_attack_create_octopus_may_threshold_seven(
     text: &str,
     context: &RecipeContext,
@@ -16063,11 +16063,11 @@ fn match_triggered_attack_create_octopus_may_threshold_seven(
 }
 
 /// 8. The Final Days establishes `CastOrigin(Graveyard)` as the face's cast condition and resolves
-/// the printed "instead" substitution through the shipped mandatory `FirstApplicable` branch: the
-/// cast-from-graveyard branch creates X tokens from the creature-card graveyard count, and the
-/// unconditional fallback creates exactly two. The issue's suggested nested
-/// `Amount::Conditional` shape cannot express a dynamic `when_true` (both branches are `u32`), so
-/// this exact shipped shape replaces it without widening any matcher or adding vocabulary.
+///    the printed "instead" substitution through the shipped mandatory `FirstApplicable` branch: the
+///    cast-from-graveyard branch creates X tokens from the creature-card graveyard count, and the
+///    unconditional fallback creates exactly two. The issue's suggested nested
+///    `Amount::Conditional` shape cannot express a dynamic `when_true` (both branches are `u32`), so
+///    this exact shipped shape replaces it without widening any matcher or adding vocabulary.
 fn match_spell_create_horror_tapped_cast_from_graveyard_scales(
     text: &str,
     _: &RecipeContext,

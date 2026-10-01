@@ -1,0 +1,9 @@
+(
+  id: "golem_c_3_3_trample",
+  name: "Golem",
+  face_id: "golem",
+  types: ["Artifact", "Creature", "Golem"],
+  power: 3,
+  toughness: 3,
+  keywords: [Trample],
+)

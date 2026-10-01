@@ -1,6 +1,7 @@
 // Fork-owned. See ruled_broadcast_router.h.
 
 #include "ruled_broadcast_router.h"
+#include <libcockatrice/protocol/ruled_choice_metadata.h>
 
 #include "ruled_batch_synchronizer.h"
 #include "ruled_game_driver.h"
@@ -465,6 +466,19 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
                 continue;
             }
             auto *rcr = filtered.mutable_events(ei)->mutable_resolution_choice_required();
+            if (!ruledTokenChoiceMetadataValid(*rcr)) {
+                rcr->clear_candidate_object_ids();
+                rcr->clear_candidate_card_ids();
+                rcr->clear_candidate_names();
+                rcr->clear_candidate_server_card_ids();
+                rcr->clear_candidate_token_identities();
+                rcr->clear_public_reveal();
+                rcr->set_min(1);
+                rcr->set_max(0);
+                rcr->set_prompt_text("Resolution choice metadata is unavailable.");
+            }
+            if (rcr->deciding_player_id() != participant->getPlayerId())
+                rcr->clear_candidate_token_identities();
             bool malformedAlternatives =
                 rcr->selection_alternatives_size() > 0 && rcr->choice_kind() != ruled::v1::CHOICE_KIND_HAND_CARDS;
             for (const auto &alternative : rcr->selection_alternatives()) {
@@ -570,6 +584,7 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
                            rcr->choice_kind() == ruled::v1::CHOICE_KIND_ZONE_SEARCH ||
                            rcr->choice_kind() == ruled::v1::CHOICE_KIND_GRAVEYARD_CARDS ||
                            rcr->choice_kind() == ruled::v1::CHOICE_KIND_BEHOLD ||
+                           rcr->choice_kind() == ruled::v1::CHOICE_KIND_SIMULTANEOUS_ENTRY_ORDER ||
                            (rcr->choice_kind() == ruled::v1::CHOICE_KIND_PRIVATE_REPLACEMENT && rcr->ordered())) {
                     // Image-based concealed/mixed-zone choices assign each candidate a sequential index as its
                     // server card ID.
@@ -581,6 +596,7 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
                     // the real Server_Card ids of cards in hand and on the battlefield. Any client
                     // lookup keyed on these must first confirm the card is in the pick's own zone
                     // (RuledActions::isResolutionPickZoneCard).
+                    rcr->clear_candidate_server_card_ids();
                     for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
                         rcr->add_candidate_server_card_ids(ci);
                     }
@@ -678,6 +694,7 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
         if (choiceIt.value().choice_kind() == ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT)
             choice->mutable_replacement_options()->CopyFrom(choiceIt.value().replacement_options());
         if (choiceIt.value().deciding_player_id() == participant->getPlayerId()) {
+            choice->mutable_candidate_token_identities()->CopyFrom(choiceIt.value().candidate_token_identities());
             choice->mutable_candidate_player_ids()->CopyFrom(choiceIt.value().candidate_player_ids());
             choice->set_waterbend(choiceIt.value().waterbend());
             choice->mutable_resolution_branches()->CopyFrom(choiceIt.value().resolution_branches());

@@ -81,7 +81,7 @@ impl GameEngine {
                 continue;
             }
             let prompt =
-                "Choose the relative timestamp order of your simultaneous battlefield entries."
+                "Choose your simultaneous battlefield entries from earliest to latest timestamp."
                     .to_string();
             let source_object_id = stack.as_ref().map_or(0, |stack| stack.item.id);
             let names = candidates
@@ -93,6 +93,25 @@ impl GameEngine {
                 .map(|oid| self.state.objects[oid].card_id.clone())
                 .collect::<Vec<_>>();
             let count = candidates.len() as u32;
+            let candidate_token_identities = if candidates
+                .iter()
+                .any(|oid| self.state.objects[oid].is_token())
+            {
+                candidates
+                    .iter()
+                    .map(|&oid| {
+                        if self.state.objects[&oid].is_token() {
+                            self.copiable_values_for(oid)
+                                .map(|values| resolution::token_identity(&values))
+                                .expect("proposed token retains its copiable identity")
+                        } else {
+                            rv1::TokenIdentity::default()
+                        }
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
@@ -103,6 +122,7 @@ impl GameEngine {
                         candidate_object_ids: candidates.clone(),
                         candidate_card_ids: card_ids,
                         candidate_names: names,
+                        candidate_token_identities,
                         min: count,
                         max: count,
                         ordered: true,

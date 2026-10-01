@@ -267,6 +267,49 @@ pub(super) fn create_tokens(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn create_token_batch(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::CreateTokenBatch { tokens } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let item = cx.top.clone();
+    let mut entries = Vec::new();
+    let mut logs = Vec::new();
+    // Prepare every variant before processing any entry replacement or committing any member.
+    for token in tokens {
+        let (members, messages) = cx.engine.prepare_token_entries(
+            TokenCreationRequest {
+                token_id: &token,
+                copy: None,
+                count: 1,
+                recipients: vec![cx.controller],
+                spell_label: cx.spell_label,
+                item: &item,
+            },
+            false,
+        )?;
+        entries.extend(members);
+        logs.extend(messages);
+    }
+    let minted_ids = entries
+        .iter()
+        .map(|entry| entry.event.object_id)
+        .collect::<Vec<_>>();
+    if cx.engine.begin_token_entry_batch(
+        item,
+        entries,
+        logs,
+        TokenEntryBatchOptions::default(),
+        cx.events,
+    )? {
+        return Ok(EffectOutcome::Suspended);
+    }
+    cx.effect_result.produced_objects = cx.engine.token_entry_object_refs(&minted_ids);
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn create_attacking_tokens(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -337,6 +380,7 @@ pub(super) fn create_attacking_tokens(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 waterbend: false,
                 selection_slots: Vec::new(),
