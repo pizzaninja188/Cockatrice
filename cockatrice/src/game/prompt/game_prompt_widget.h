@@ -8,6 +8,7 @@
 class QLabel;
 class QPushButton;
 class QHBoxLayout;
+class QVBoxLayout;
 class QCheckBox;
 
 class GamePromptWidget : public QWidget
@@ -270,7 +271,7 @@ private:
     QPushButton *openingBottomDoneButton = nullptr;
     QPushButton *resolutionHandPickConfirmButton = nullptr;
     QPushButton *resolutionPaymentDeclineButton = nullptr;
-    QHBoxLayout *choiceOptionsRow = nullptr;
+    QVBoxLayout *choiceOptionsRow = nullptr;
     QVector<QPushButton *> choiceOptionButtons;
     QHBoxLayout *zoneSelectionRow = nullptr;
     QCheckBox *zoneSelectionHandCheckBox = nullptr;

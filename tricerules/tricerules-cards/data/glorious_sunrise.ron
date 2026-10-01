@@ -1,0 +1,66 @@
+// Exact Oracle 844c1024-db80-4287-9770-3b10e53d0fc8 and current Wizards ruling checked 2026-10-01.
+// CR 603.3c/d, 608.2h, 611.2a/c, 605 and 514.2 govern modes, resolution-only condition,
+// fixed resolving cohort, granted controller mana ability and end-of-turn duration.
+(
+  id: "glorious_sunrise",
+  name: "Glorious Sunrise",
+  face_id: "glorious_sunrise",
+  mana_cost: "{3}{G}{G}",
+  types: ["Enchantment"],
+  triggered_abilities: [(
+    ability_id: "combat_modes",
+    presentation: OracleLines([1, 2, 3, 4, 5]),
+    trigger: AtBeginningOfCombat(player: Controller),
+    modal: Some((
+      min_modes: 1,
+      max_modes: 1,
+      modes: [
+        (
+          mode_id: "creatures_pump_trample",
+          presentation: OracleLines([2]),
+          effects: [
+            PumpAll(filter: (controller: YouControl), power: 1, toughness: 1),
+            GrantKeywordsAll(filter: (controller: YouControl), keywords: [Trample]),
+          ],
+        ),
+        (
+          mode_id: "land_three_green",
+          presentation: OracleLines([3]),
+          effects: [ApplyPermanentModifier(
+            subject: Chosen((kind: AnyPermanent, permanent_types: [Land])),
+            modifier: GrantActivatedAbility((
+              ability_id: "sunrise_three_green",
+              presentation: Fallback,
+              costs: [Tap],
+              effect: [ProduceMana(options: [(g: 3)])],
+            )),
+            duration: UntilEndOfTurn,
+          )],
+          targeting: Some((groups: [(
+            min: 1,
+            max: 1,
+            prompt: "Choose target land",
+            effect_indices: [0],
+          )])),
+        ),
+        (
+          mode_id: "qualified_draw",
+          presentation: OracleLines([4]),
+          effects: [Conditional(
+            condition: BattlefieldAggregate(
+              filter: (controllers: Controller, card_type: Some(Creature)),
+              aggregate: MaximumPower,
+              min: Some(3),
+            ),
+            effect: Draw(who: Controller, count: 1),
+          )],
+        ),
+        (
+          mode_id: "gain_life",
+          presentation: OracleLines([5]),
+          effects: [GainLife(amount: 3)],
+        ),
+      ],
+    )),
+  )],
+)

@@ -961,3 +961,6 @@ mod deck_coverage_copy_aura_cards;
 
 #[path = "scenario/deck_coverage_forgemaster.rs"]
 mod deck_coverage_forgemaster;
+
+#[path = "scenario/deck_coverage_glorious_sunrise.rs"]
+mod deck_coverage_glorious_sunrise;

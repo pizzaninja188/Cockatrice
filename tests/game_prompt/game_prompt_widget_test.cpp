@@ -455,6 +455,31 @@ TEST_F(GamePromptWidgetTest, ChoiceOptionsRenderAsOrdinaryLabeledButtons)
     EXPECT_EQ(declineSpy.count(), 1);
 }
 
+TEST_F(GamePromptWidgetTest, LongTriggerModeChoicesFitBesideTheBattlefield)
+{
+    GamePromptWidget::RuledPromptState state;
+    state.mode = PromptMode::ChoiceOptions;
+    state.text = "Choose one.";
+    state.choiceOptions = {
+        {0, "Creatures you control get +1/+1 and gain trample until end of turn.", true},
+        {1, "Target land gains 'Tap: Add three green mana' until end of turn.", true},
+        {2, "Draw a card if you control a creature with power 3 or greater.", true},
+        {3, "You gain 3 life.", true}};
+    widget->setRuledPromptState(state);
+    // A four-mode prompt must fit in a side dock without taking the board's width.
+    EXPECT_LT(widget->minimumSizeHint().width(), 650);
+    widget->resize(650, 400);
+    widget->show();
+    QApplication::processEvents();
+    for (int i = 0; i < 4; ++i) {
+        const auto name = QString("ruledChoiceOptionButton_%1").arg(i).toLatin1();
+        auto *button = btn(name.constData());
+        ASSERT_NE(button, nullptr);
+        EXPECT_FALSE(button->isHidden());
+        EXPECT_GE(button->width(), button->minimumSizeHint().width());
+    }
+}
+
 TEST_F(GamePromptWidgetTest, CastCostOptionsUseTheirOwnButtonRouteAndSuppressPriorityControls)
 {
     QSignalSpy optionSpy(widget.get(), &GamePromptWidget::ruledCastCostOptionRequested);

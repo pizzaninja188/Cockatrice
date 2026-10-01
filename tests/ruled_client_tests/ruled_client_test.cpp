@@ -5221,8 +5221,12 @@ TEST_F(RuledClientTest, TargetedTriggerModeCarriesItsModeIntoTheTargetCommand)
     mode->mutable_targets()->add_groups()->add_valid_permanent_ids(101);
     apply(batch);
 
+    QSignalSpy selectionChanged(state, &RuledClientState::triggerTargetSelectionChanged);
     state->submitPendingChoiceOption(3);
+    EXPECT_EQ(selectionChanged.count(), 1);
     ASSERT_TRUE(state->hasPendingTriggerTarget());
+    EXPECT_FALSE(state->hasPendingChoiceOptions());
+    EXPECT_TRUE(host.sentCommands.isEmpty());
     EXPECT_TRUE(state->abilityTargetData(100, 2).validPermanentIds.contains(101));
     ruled::v1::ChooseTriggerTarget command;
     state->appendPendingTriggerMode(&command);

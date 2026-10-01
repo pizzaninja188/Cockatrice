@@ -680,6 +680,7 @@ void RuledClientState::submitPendingChoiceOption(int optionIndex)
             validTargetsByAbility.insert(
                 abilityTargetKey(lastTriggerSourceOid, static_cast<int>(lastTriggerAbilityIndex)), it->targets);
             emit combatStateChanged();
+            emit triggerTargetSelectionChanged();
             return;
         }
         ruled::v1::RuledCommand command;

@@ -1,0 +1,82 @@
+{
+  "format_version": 1,
+  "oracle_id": "844c1024-db80-4287-9770-3b10e53d0fc8",
+  "spans": [
+    {
+      "face_id": "glorious_sunrise",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0/trigger"
+      ]
+    },
+    {
+      "face_id": "glorious_sunrise",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0/modal/modes/0"
+      ]
+    },
+    {
+      "face_id": "glorious_sunrise",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0/modal/modes/1"
+      ]
+    },
+    {
+      "face_id": "glorious_sunrise",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0/modal/modes/2"
+      ]
+    },
+    {
+      "face_id": "glorious_sunrise",
+      "start_line": 5,
+      "end_line": 5,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0/modal/modes/3"
+      ]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_glorious_sunrise::sunrise_complete_definition_and_actual_life_mode",
+      "covers": "Exact one-face cost/type/mandatory four-mode combat identity and actual paid cast/life resolution"
+    },
+    {
+      "test": "scenario deck_coverage_glorious_sunrise::sunrise_pump_snapshots_own_creatures_and_expires_at_cleanup",
+      "covers": "Current-controller resolving creature cohort gets +1/+1 and trample; opponents/later entrants excluded; cleanup expiry"
+    },
+    {
+      "test": "scenario deck_coverage_glorious_sunrise::sunrise_land_grant_follows_current_control_and_has_source_independent_lifetime",
+      "covers": "Any-player land keeps base mana ability; actual current-controller grant pays exactly GGG immediately, survives actual source bounce, expires cleanup"
+    },
+    {
+      "test": "scenario deck_coverage_glorious_sunrise::sunrise_land_grant_never_follows_a_new_incarnation",
+      "covers": "Actual land bounce and logged same-physical reentry before/after grant exclude old incarnation and stale target generation"
+    },
+    {
+      "test": "scenario deck_coverage_glorious_sunrise::sunrise_draw_qualification_is_checked_only_at_resolution",
+      "covers": "Mode selectable before qualification; actual Growth makes derived power qualify at resolution, actual bounce/control change removes qualification; opponent-only creature excluded; exact draws/history"
+    },
+    {
+      "test": "scenario deck_coverage_glorious_sunrise::sunrise_life_mode_uses_controller_combat_and_captured_controller",
+      "covers": "Actual source bounce and control fixture preserve captured trigger controller; opponent combat does not trigger"
+    },
+    {
+      "test": "scenario deck_coverage_glorious_sunrise::sunrise_multiple_sources_keep_independent_modal_trigger_identities",
+      "covers": "Two actually cast source IDs announce independent ordered modal trigger objects and resolve separate life gains"
+    },
+    {
+      "test": "scenario deck_coverage_glorious_sunrise::sunrise_modal_rejections_and_source_suppression_preserve_capture_contract",
+      "covers": "Wrong actor/empty/extra/duplicate/unknown/decline/top-level/nonland/missing/extra target reject atomically; suppression before capture blocks, after capture stored ability resolves"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

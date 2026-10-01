@@ -9,10 +9,28 @@
 #include <QPushButton>
 #include <QSet>
 #include <QSignalBlocker>
+#include <QTextLayout>
 #include <QVBoxLayout>
 #include <QtAlgorithms>
 
 namespace {
+QString wrappedChoiceText(const QString &text, const QFont &font)
+{
+    QTextLayout textLayout(text, font);
+    QStringList lines;
+    textLayout.beginLayout();
+    while (true) {
+        auto line = textLayout.createLine();
+        if (!line.isValid()) {
+            break;
+        }
+        line.setLineWidth(400);
+        lines.append(text.mid(line.textStart(), line.textLength()).trimmed());
+    }
+    textLayout.endLayout();
+    return lines.join(QLatin1Char('\n'));
+}
+
 QString extractPrimaryPrompt(const QString &ruledLog)
 {
     if (ruledLog.trimmed().isEmpty()) {
@@ -179,7 +197,7 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     resolutionPaymentRow->addWidget(resolutionPaymentDeclineButton);
     layout->addLayout(resolutionPaymentRow);
 
-    choiceOptionsRow = new QHBoxLayout;
+    choiceOptionsRow = new QVBoxLayout;
     choiceOptionsRow->setContentsMargins(0, 0, 0, 0);
     choiceOptionsRow->setSpacing(4);
     layout->addLayout(choiceOptionsRow);
@@ -373,7 +391,8 @@ void GamePromptWidget::setRuledPromptState(RuledPromptState newState)
         if (promptState.mode == PromptMode::ZoneSelection) {
             continue;
         }
-        auto *button = new QPushButton(option.label, this);
+        auto *button = new QPushButton(wrappedChoiceText(option.label, font()), this);
+        button->setAccessibleName(option.label);
         button->setObjectName(QStringLiteral("ruledChoiceOptionButton_%1").arg(option.index));
         button->setEnabled(option.enabled);
         connect(button, &QPushButton::clicked, this, [this, index = option.index] {
