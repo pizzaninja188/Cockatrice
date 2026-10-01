@@ -220,6 +220,11 @@ pub(super) fn spell_cast_matches(
         && filter
             .is_color
             .is_none_or(|color| fact.colors.contains(&color))
+        && (!filter.is_multicolored
+            || fact
+                .colors
+                .first()
+                .is_some_and(|first| fact.colors.iter().any(|color| color != first)))
         && filter
             .targeted_permanent_type
             .is_none_or(|kind| fact.targeted_permanent_types.contains(&kind))
@@ -1901,6 +1906,55 @@ impl GameEngine {
 mod tests {
     use super::*;
     use crate::state::SpellEntryFact;
+
+    #[test]
+    fn zenith_multicolor_filter_counts_distinct_colors_and_conjoins_predicates() {
+        let mut fact = crate::state::SpellCastFact {
+            cast_method: SpellCastMethod::Normal,
+            occurrence: StackObjectRef {
+                object_id: 99,
+                zone_change_generation: Some(1),
+            },
+            caster: 20,
+            origin: Zone::Hand,
+            face_index: 0,
+            types: vec!["Instant".into()],
+            colors: vec![],
+            all_creature_types: false,
+            mana_value: 2,
+            mana_spent: 2,
+            matched_card_types: vec![CardTypeFilter::Instant],
+            targeted_permanent_types: vec![],
+            ordinal: 1,
+        };
+        let mut filter = SpellCastFilter {
+            is_multicolored: true,
+            ..Default::default()
+        };
+        for (colors, expected) in [
+            (vec![], false),
+            (vec![Color::Red], false),
+            (vec![Color::Red, Color::Red], false),
+            (vec![Color::Red, Color::Blue, Color::Red], true),
+        ] {
+            fact.colors = colors;
+            assert_eq!(spell_cast_matches(&filter, &fact), expected);
+            assert!(spell_cast_matches(&SpellCastFilter::default(), &fact));
+        }
+        filter.is_color = Some(Color::Green);
+        assert!(!spell_cast_matches(&filter, &fact));
+        filter.is_color = Some(Color::Blue);
+        filter.card_type = Some(CardTypeFilter::Creature);
+        assert!(!spell_cast_matches(&filter, &fact));
+        filter.card_type = Some(CardTypeFilter::Instant);
+        filter.any_of = Some(vec![SpellCastFilter {
+            origin: Some(SpellCastOrigin::Exile),
+            ..Default::default()
+        }]);
+        assert!(!spell_cast_matches(&filter, &fact));
+        fact.origin = Zone::Exile;
+        assert!(spell_cast_matches(&filter, &fact));
+    }
 
     #[test]
     fn issue_189_controller_relative_departure_condition_is_available() {

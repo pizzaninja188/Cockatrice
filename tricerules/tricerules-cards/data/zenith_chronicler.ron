@@ -1,0 +1,23 @@
+// Oracle: https://scryfall.com/card/one/246/zenith-chronicler (verified 2026-10-01).
+// CR 105.2b, 601.2i, 603, 121.2c: event-time colors, per-caster first qualifying
+// cast each turn, then ordinary individual draws in active-player turn order.
+(
+  id: "zenith_chronicler",
+  name: "Zenith Chronicler",
+  face_id: "zenith_chronicler",
+  mana_cost: "{2}",
+  types: ["Artifact", "Creature", "Phyrexian", "Construct"],
+  power: 3,
+  toughness: 1,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerCastsSpell(
+      caster: AnyPlayer,
+      filter: (is_multicolored: true),
+      ordinal: Some(1),
+      ordinal_scope: MatchingFilter,
+    ),
+    effect: [Draw(count: 1, who: EachOtherPlayerThanAffectedPlayer)],
+  )],
+)

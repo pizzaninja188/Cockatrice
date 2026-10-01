@@ -8,6 +8,9 @@
 #[path = "scenario/authoring_actions.rs"]
 mod authoring_actions;
 
+#[path = "scenario/deck_coverage_zenith_chronicler.rs"]
+mod deck_coverage_zenith_chronicler;
+
 #[path = "scenario/deck_coverage_spine_of_ish_sah.rs"]
 mod deck_coverage_spine_of_ish_sah;
 

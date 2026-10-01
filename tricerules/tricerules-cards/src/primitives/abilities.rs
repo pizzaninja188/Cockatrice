@@ -361,9 +361,7 @@ impl ActivatedAbilityDef {
             .iter()
             .any(SpellEffectKind::requires_triggering_spell_context)
         {
-            return Err(
-                "activated abilities cannot reference triggering-spell mana spending".into(),
-            );
+            return Err("activated abilities cannot reference triggering-spell context".into());
         }
         if self
             .costs
@@ -1220,6 +1218,10 @@ pub struct SpellCastFilter {
     /// color they have; directly created spell copies are not casts and never enter this path.
     #[serde(default)]
     pub is_color: Option<Color>,
+    /// At least two distinct derived colors at the completed cast event. Zenith Chronicler
+    /// and Hero of Precinct One use this predicate, independent of color identity.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub is_multicolored: bool,
     /// CR 115.9b: at least one target is currently a battlefield permanent of this derived type
     /// when the spell becomes cast. Forum Necroscribe and Graduation Day use `Creature`.
     #[serde(default)]
@@ -1435,15 +1437,15 @@ impl TriggeredAbilityDef {
             self.trigger,
             TriggerCondition::WheneverPlayerCastsSpell { .. }
         );
-        let uses_spell_mana_context = matches!(
+        let uses_spell_context = matches!(
             self.intervening_if.as_ref(),
             Some(condition) if condition.requires_triggering_spell_context()
         ) || effects
             .iter()
             .copied()
             .any(SpellEffectKind::requires_triggering_spell_context);
-        if uses_spell_mana_context && !is_spell_cast_trigger {
-            return Err("triggering-spell mana spending requires WheneverPlayerCastsSpell".into());
+        if uses_spell_context && !is_spell_cast_trigger {
+            return Err("triggering-spell context requires WheneverPlayerCastsSpell".into());
         }
         if effects
             .iter()
@@ -1567,8 +1569,7 @@ impl ReflexiveTriggeredAbilityDef {
             .any(SpellEffectKind::requires_triggering_spell_context)
         {
             return Err(
-                "reflexive triggered abilities cannot reference triggering-spell mana spending"
-                    .into(),
+                "reflexive triggered abilities cannot reference triggering-spell context".into(),
             );
         }
         if self

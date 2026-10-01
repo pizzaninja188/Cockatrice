@@ -387,6 +387,7 @@ fn simple_player_recipients(
         PlayerRecipient::ControllerOfTargetGroup { .. }
         | PlayerRecipient::PreviousTargetedSpellController
         | PlayerRecipient::DefendingPlayer
+        | PlayerRecipient::EachOtherPlayerThanAffectedPlayer
         | PlayerRecipient::AttackingOpponentsOfDefendingPlayer => Vec::new(),
         PlayerRecipient::EachOpponent => {
             let mut players = state
@@ -449,6 +450,21 @@ mod player_recipient_order_tests {
 
 fn player_recipients(cx: &EffectCx<'_>, who: PlayerRecipient) -> Vec<PlayerId> {
     match who {
+        PlayerRecipient::EachOtherPlayerThanAffectedPlayer => {
+            let Some(caster) = cx.top.trigger_context.affected_player else {
+                return Vec::new();
+            };
+            let mut players = cx
+                .engine
+                .state
+                .players
+                .iter()
+                .filter(|player| !player.has_lost && player.id != caster)
+                .map(|player| player.id)
+                .collect::<Vec<_>>();
+            players.sort_by_key(|player| cx.engine.state.apnap_rank(*player));
+            players
+        }
         PlayerRecipient::PreviousTargetedSpellController => cx
             .previous_effect_result
             .targeted_spell_controller
@@ -3723,6 +3739,66 @@ mod attached_subject_tests {
         ability.effect = effects;
         item.triggered_ability = Some(ability);
         item
+    }
+
+    #[test]
+    fn zenith_draw_recipient_uses_optional_caster_anchor_and_current_apnap_players() {
+        for (caster, lost, expected) in [
+            (None, None, vec![]),
+            (Some(20), None, vec![30, 10]),
+            (Some(20), Some(20), vec![30, 10]),
+            (Some(20), Some(30), vec![10]),
+        ] {
+            let mut engine = GameEngine::new(503_004, &[10, 20, 30], 20, None, true).unwrap();
+            engine.state.active_player_idx = 2;
+            if let Some(lost) = lost {
+                let seat = engine.state.player_idx(lost).unwrap();
+                engine.state.players[seat].has_lost = true;
+            }
+            let source = add_battlefield_object(&mut engine, 10, "zenith_chronicler");
+            let mut item = quantity_item(
+                source,
+                vec![SpellEffectKind::Draw {
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
+                }],
+            );
+            // Ordinary effect wrappers retain the same captured context through their children.
+            item.triggered_ability.as_mut().unwrap().effect = vec![SpellEffectKind::Conditional {
+                condition: GameCondition::ActivePlayer {
+                    players: RelativePlayerSet::All,
+                },
+                effect: Box::new(item.triggered_ability.as_ref().unwrap().effect[0].clone()),
+            }];
+            item.controller = 10;
+            item.trigger_context.affected_player = caster;
+            let hands: Vec<_> = engine.state.players.iter().map(|p| p.hand.len()).collect();
+            let (effects, label) = engine.build_resolution_effects(&item);
+            let mut events = Vec::new();
+            engine
+                .run_effect_list(&item, &label, effects, 0, &mut events)
+                .unwrap();
+            let logs: Vec<_> = events
+                .iter()
+                .filter_map(|event| match &event.ev {
+                    Some(rv1::ruled_event::Ev::Log(log)) if log.text.contains("draws 1 card") => {
+                        Some(log.text.clone())
+                    }
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(logs.len(), expected.len());
+            for (log, player) in logs.iter().zip(&expected) {
+                assert!(log.starts_with(&format!("P{player} draws")));
+            }
+            for (seat, player) in engine.state.players.iter().enumerate() {
+                assert_eq!(
+                    player.hand.len(),
+                    hands[seat] + usize::from(expected.contains(&player.id))
+                );
+            }
+            assert!(engine.state.pending_resolution.is_none());
+        }
     }
 
     #[test]

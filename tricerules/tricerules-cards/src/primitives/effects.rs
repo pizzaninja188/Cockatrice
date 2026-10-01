@@ -2403,6 +2403,10 @@ pub enum PlayerRecipient {
     /// to the controller when the item names nobody. Sulfuric Vortex, Underworld Dreams, Ebony
     /// Owl Netsuke.
     AffectedPlayer,
+    /// All current nonlost players except the captured spell caster. Initially admitted only
+    /// for Draw in a spell-cast trigger. Zenith Chronicler uses this group; Heartwood
+    /// Storyteller demonstrates the same caster anchor with additional optionality.
+    EachOtherPlayerThanAffectedPlayer,
     /// The current controller of the permanent named by the trigger event, using its controller
     /// at the event as last known information if that object has since left the battlefield.
     TriggerObjectController,
@@ -3388,6 +3392,45 @@ impl SpellEffectKind {
     /// `context` distinguishes spells from abilities so source-bound subjects are
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
+        if matches!(
+            self,
+            Self::DamagePlayer {
+                who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
+                ..
+            } | Self::Discard {
+                who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
+                ..
+            } | Self::DrawDiscard {
+                who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
+                ..
+            } | Self::ChooseResolutionBranch {
+                chooser: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
+                ..
+            } | Self::ChoosePermanents {
+                chooser: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
+                ..
+            } | Self::LoseLife {
+                who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
+                ..
+            } | Self::ExileTopWithPlayPermission {
+                player: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
+                ..
+            } | Self::Mill {
+                who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
+                ..
+            } | Self::CreateTokens {
+                who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
+                ..
+            } | Self::MayBehold {
+                who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
+                ..
+            } | Self::SearchLibrary {
+                who: PlayerRecipient::EachOtherPlayerThanAffectedPlayer,
+                ..
+            }
+        ) {
+            return Err("EachOtherPlayerThanAffectedPlayer is supported only by Draw".into());
+        }
         if let Self::CreateTokenBatch { tokens } = self {
             if tokens.len() < 2
                 || tokens.iter().any(|token| token.trim().is_empty())
@@ -3408,7 +3451,7 @@ impl SpellEffectKind {
             }
         }
         if context == EffectContext::Spell && self.requires_triggering_spell_context() {
-            return Err("spells cannot reference triggering-spell mana spending".into());
+            return Err("spells cannot reference triggering-spell context".into());
         }
         if context == EffectContext::Spell && self.uses_trigger_event_count() {
             return Err("spells cannot reference a trigger event's count".into());
@@ -5152,7 +5195,6 @@ impl SpellEffectKind {
             | Self::DamageTargets { amount, .. }
             | Self::DamagePlayer { amount, .. }
             | Self::DamageAttackedPlayerOrPlaneswalker { amount }
-            | Self::Draw { count: amount, .. }
             | Self::GainLife { amount }
             | Self::TargetPlayerGainsLife { amount, .. }
             | Self::Mill { count: amount, .. }
@@ -5164,6 +5206,14 @@ impl SpellEffectKind {
             | Self::CreateAttackingTokens { count: amount, .. } => {
                 amount.requires_triggering_spell_context()
             }
+            Self::Draw { count, who } => {
+                count.requires_triggering_spell_context()
+                    || *who == PlayerRecipient::EachOtherPlayerThanAffectedPlayer
+            }
+            Self::ConditionalCastCost { effect, .. } => effect.requires_triggering_spell_context(),
+            Self::MayBehold { if_beheld, .. } => if_beheld
+                .iter()
+                .any(Self::requires_triggering_spell_context),
             Self::PumpTarget {
                 scale: Some(scale), ..
             } => scale.requires_triggering_spell_context(),

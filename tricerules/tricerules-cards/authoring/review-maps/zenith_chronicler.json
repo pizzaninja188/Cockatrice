@@ -1,0 +1,23 @@
+{
+  "format_version": 1,
+  "oracle_id": "9fed6494-3bdd-4bc6-901f-da5fb623b152",
+  "spans": [
+    {"face_id": "zenith_chronicler", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/triggered_abilities/0"]}
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "scenario deck_coverage_zenith_chronicler::zenith_chronicler_opponent_first_multicolor_draws_casters_complement", "covers": "Actual Zenith cast resolves as its exact artifact creature, then another player's actual first multicolor Helix captures that caster and draws the precise next library card for both other nonconsecutive seats, leaving the caster unchanged."},
+    {"test": "scenario deck_coverage_zenith_chronicler::zenith_event_colors_exclude_mono_colorless_and_survive_later_color_change", "covers": "Actual colorless Ornithopter and mono-red Bolt do not qualify. Actual multicolor Helix qualifies using its captured colors and the draw survives a later stack-color change."},
+    {"test": "scenario deck_coverage_zenith_chronicler::zenith_first_matching_cast_is_per_caster_and_resets_next_turn", "covers": "Mono casts do not consume the first qualifying cast; subsequent multicolor casts do not retrigger. Another caster has its own first cast and the next turn resets the ordinal."},
+    {"test": "scenario deck_coverage_zenith_chronicler::zenith_history_before_entry_and_countered_cast_still_count", "covers": "Pre-entry multicolor cast history prevents a later source from triggering on the second cast. Countering the qualifying spell does not remove its captured trigger or reset its history."},
+    {"test": "scenario deck_coverage_zenith_chronicler::zenith_twincast_created_stack_copy_is_not_another_cast", "covers": "Actual Twincast creates a multicolored stack copy with no cast occurrence and no additional cast fact or Zenith trigger. Wrong actor target selection rejects atomically."},
+    {"test": "scenario deck_coverage_zenith_chronicler::zenith_preparation_copy_actually_cast_records_exile_event_and_mono_filter", "covers": "An actual legally cast Preparation copy records an Exile cast fact and occurrence. This shipped mono-green inset does not qualify; no unsupported cross-zone color effect is claimed."},
+    {"test": "scenario deck_coverage_zenith_chronicler::zenith_real_clone_has_independent_trigger_and_order_replies_are_atomic", "covers": "Actual Clone copies Zenith's complete 3/1 characteristics and ability. Both sources capture independent triggers, reject wrong-actor and foreign ordering replies without mutation, then draw twice for each other player."},
+    {"test": "scenario deck_coverage_zenith_chronicler::zenith_suppression_before_capture_and_independence_after_capture", "covers": "Layer-6 ability removal before the cast suppresses capture, while removal after capture cannot change the independent stack trigger."},
+    {"test": "scenario deck_coverage_zenith_chronicler::zenith_source_departure_and_control_change_preserve_captured_caster", "covers": "Actual Unsummon removes the source, and a separate layer-2 control change changes its controller. Neither changes the original trigger controller or captured caster-relative draw group."},
+    {"test": "scenario deck_coverage_zenith_chronicler::zenith_caster_departure_retains_anchor_and_lost_other_player_does_not_draw", "covers": "Actual concessions preserve a departed caster as the exclusion anchor and remove departed other players from current recipients."},
+    {"test": "scenario deck_coverage_zenith_chronicler::zenith_group_draw_finishes_before_empty_library_loss_and_draw_triggers", "covers": "A real draw observer waits for the full APNAP 30-then-10 draw group. Exhausting the first recipient's library still allows the later recipient to draw before library loss and queued draw triggers."},
+    {"test": "scenario deck_coverage_zenith_chronicler::zenith_accepted_cast_and_draw_commands_replay_identically", "covers": "Wrong actor and illegal target casts reject atomically; accepted actual Helix, Zenith draw and priority commands replay to identical emitted batches and complete state from the same prepared seed."}
+  ],
+  "complete_definition_review_confirmed": true
+}
