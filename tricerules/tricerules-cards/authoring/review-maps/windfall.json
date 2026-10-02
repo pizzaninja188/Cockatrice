@@ -1,0 +1,59 @@
+{
+  "format_version": 1,
+  "oracle_id": "08becc07-28bc-4a2f-a6b0-28a2998d2f50",
+  "spans": [
+    {
+      "face_id": "windfall",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_windfall::windfall_paid_cast_uses_greatest_discard_cohort_not_sum_or_caster_hand",
+      "covers": "paid {2}{U} cast; completed 2/5/3 discard cohorts yield five draws each; excludes spell itself"
+    },
+    {
+      "test": "scenario deck_coverage_windfall::windfall_tied_maximum_and_empty_hands_finish_without_choices",
+      "covers": "tied maximum and all-zero hands complete without choices"
+    },
+    {
+      "test": "scenario deck_coverage_windfall::windfall_four_nonconsecutive_seats_draw_apnap_and_exclude_departed_players",
+      "covers": "four nonconsecutive seats, active seat rotation, APNAP draw logs and exclusion of departed hand from maximum"
+    },
+    {
+      "test": "scenario deck_coverage_windfall::windfall_leng_destinations_and_order_finish_before_every_draw",
+      "covers": "all hands retained until Leng destinations and private ordering finish; library destinations count, identity generation retained; wrong actor/value/duplicate ordering reject atomically"
+    },
+    {
+      "test": "scenario deck_coverage_windfall::windfall_madness_exile_counts_and_offer_waits_until_wheel_finishes",
+      "covers": "Madness discard exile contributes to maximum; triggered cast offer waits until wheel finishes; decline goes to graveyard"
+    },
+    {
+      "test": "scenario deck_coverage_windfall::windfall_early_deckout_waits_for_later_parked_draw_replacement",
+      "covers": "earlier pending deckout preserved while later player answers two draw-doubling replacements; all discards precede prompt; later draws retain frozen maximum"
+    },
+    {
+      "test": "scenario deck_coverage_windfall::windfall_all_remaining_players_deckout_ends_in_draw",
+      "covers": "canonical commands with auto-pass policies, explicit terminal draw, completed spell movement, no legal actions or stale prompts, subsequent commands reject atomically, initial response terminal"
+    },
+    {
+      "test": "scenario deck_coverage_windfall::windfall_terminal_draw_replays_exact_accepted_commands_and_batches",
+      "covers": "serialized accepted resolution commands reproduce exact event batches and complete terminal diagnostic state"
+    },
+    {
+      "test": "scenario deck_coverage_windfall::windfall_two_deckout_losses_leave_the_nonconsecutive_survivor_as_winner",
+      "covers": "two losses produce surviving ID 27 winner with completed draws"
+    },
+    {
+      "test": "scenario deck_coverage_windfall::windfall_exact_identity_face_and_complete_typed_effects",
+      "covers": "exact normal single blue Sorcery face, {2}{U}, no P/T and complete discard-then-grouped maximum draw definition"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

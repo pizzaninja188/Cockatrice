@@ -2373,7 +2373,7 @@ fn sulfuric_vortex_upkeep_damage_can_kill() {
         e.state.players[1].has_lost,
         "0 or less life loses (CR 704.5a)"
     );
-    assert_eq!(e.state.winner, Some(0));
+    assert_eq!(e.state.winner(), Some(0));
     assert!(
         terminal_batch.events.iter().any(
             |event| matches!(&event.ev, Some(Ev::Log(log)) if log.text == "Game over. Winner: 0")

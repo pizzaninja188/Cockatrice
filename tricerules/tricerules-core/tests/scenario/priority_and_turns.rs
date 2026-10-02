@@ -498,7 +498,7 @@ fn automatic_settlement_publishes_terminal_draw_loss() {
         )
         .expect("settle into terminal draw");
 
-    assert_eq!(e.state.winner, Some(1));
+    assert_eq!(e.state.winner(), Some(1));
     assert!(batch.events.iter().any(
         |event| matches!(&event.ev, Some(Ev::Log(log)) if log.text == "Game over: empty library on draw")
     ));
@@ -528,7 +528,7 @@ fn automatic_settlement_stops_at_the_safety_limit() {
         e.state.command_index, 1,
         "the transaction remains one replay command"
     );
-    assert_eq!(e.state.winner, None);
+    assert_eq!(e.state.winner(), None);
     assert!(
         e.state.turn > 1,
         "settlement crossed an active-player change"

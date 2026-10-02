@@ -1876,6 +1876,12 @@ impl GameEngine {
                         *characteristic,
                     )
                 }),
+            CountExpression::MaximumCardsMatchingResult { filter } => context
+                .previous_effect_result
+                .zip(context.stack_item)
+                .map_or(0, |(previous, top)| {
+                    super::resolution::card_result_maximum(self, top, previous, filter)
+                }) as i64,
         }
     }
 

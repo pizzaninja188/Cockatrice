@@ -83,6 +83,9 @@ pub enum CountExpression {
     /// Count cards in an engine-owned payment or immediately preceding effect cohort. Gerrard's
     /// Verdict and Gorging Vulture share this without re-examining an object's current zone.
     CardsMatchingResult { filter: CardResultFilter },
+    /// Windfall and Whispering Madness use the greatest completed cohort belonging to one
+    /// affected player. Group receipts, never current zones or current hand sizes.
+    MaximumCardsMatchingResult { filter: CardResultFilter },
     /// Sum one derived P/T characteristic across distinct, generation-bound objects in an
     /// engine-owned result cohort. Station on Wurmwall Sweeper and Tapestry Warden reads the
     /// tapped creature's power on resolution; the typed characteristic keeps the evaluator
@@ -186,6 +189,7 @@ impl CountExpression {
                             Self::Affine { .. }
                                 | Self::ManaColorsSpentToCast
                                 | Self::CardsMatchingResult { .. }
+                                | Self::MaximumCardsMatchingResult { .. }
                                 | Self::CardResultCharacteristicSum { .. }
                         )
                     {
@@ -203,6 +207,7 @@ impl CountExpression {
             | CountExpression::CreatureDeathsThisTurn
             | CountExpression::CardsDrawnThisTurn { .. }
             | CountExpression::CardsMatchingResult { .. }
+            | CountExpression::MaximumCardsMatchingResult { .. }
             | CountExpression::CardResultCharacteristicSum { .. } => Ok(()),
         }
     }
@@ -210,6 +215,7 @@ impl CountExpression {
     fn card_result_filter(&self) -> Option<&CardResultFilter> {
         match self {
             Self::CardsMatchingResult { filter }
+            | Self::MaximumCardsMatchingResult { filter }
             | Self::CardResultCharacteristicSum { filter, .. } => Some(filter),
             Self::Affine { terms, .. } => terms
                 .iter()

@@ -179,7 +179,7 @@ fn issue_287_empty_library_and_hand_discards_nothing_and_creates_no_soldier() {
     );
     assert!(engine.state.players[0].has_lost);
     assert!(!engine.state.players[0].pending_library_loss);
-    assert_eq!(engine.state.winner, Some(1));
+    assert_eq!(engine.state.winner(), Some(1));
 }
 
 #[test]

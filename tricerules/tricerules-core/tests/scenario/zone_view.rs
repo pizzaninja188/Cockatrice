@@ -380,7 +380,7 @@ fn a_contract_following_receiver_never_drifts_from_the_engine() {
     // the three things that actually move cards into and out of the concealed zones.
     let mut drew = false;
     for step in 0..60 {
-        if e.state.winner.is_some() {
+        if e.state.is_terminal() {
             break;
         }
         let command = match e.state.cleanup_discard_player {

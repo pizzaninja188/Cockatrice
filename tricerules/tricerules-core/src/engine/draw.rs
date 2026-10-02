@@ -211,7 +211,7 @@ impl GameEngine {
         mut work: PendingDrawTransaction,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<DrawProgress, EngineError> {
-        if self.state.winner.is_some() {
+        if self.state.is_terminal() {
             return Ok(DrawProgress::GameEnded);
         }
         while let Some(request) = work.requests.front_mut() {
@@ -341,8 +341,10 @@ impl GameEngine {
                 // CR 614.6: consume the draw before attempting the replacement's win. Even a
                 // future prohibited win cannot restore this node or create a failed draw.
                 self.state
-                    .winner
-                    .get_or_insert(work.requests.front().expect("drawer").player);
+                    .outcome
+                    .get_or_insert(crate::state::GameOutcome::Winner(
+                        work.requests.front().expect("drawer").player,
+                    ));
                 true
             }
         }
@@ -518,7 +520,7 @@ impl GameEngine {
         else {
             unreachable!()
         };
-        let Some(pending) = pending.filter(|_| self.state.winner.is_none()) else {
+        let Some(pending) = pending.filter(|_| !self.state.is_terminal()) else {
             return Ok(());
         };
         let ResolutionContinuation::DrawReplacement { stack } = pending.continuation else {

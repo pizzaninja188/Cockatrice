@@ -166,7 +166,7 @@ fn conceding_during_the_second_hidden_choice_commits_no_staged_discard() {
     engine
         .apply_command(1, &concede())
         .expect("concede at any time");
-    assert_eq!(engine.state.winner, Some(0));
+    assert_eq!(engine.state.winner(), Some(0));
     assert!(engine.state.pending_resolution.is_none());
     assert_eq!(engine.state.objects[&controller_card].zone, Zone::Hand);
     assert_eq!(engine.state.objects[&opponent_card].zone, Zone::Hand);

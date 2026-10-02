@@ -218,7 +218,8 @@ fn triskaidekaphile_checks_thirteen_at_upkeep_start_and_again_on_resolution() {
             inject_card_into_hand(&mut engine, 0, "island");
             resolve_entire_stack_two_player(&mut engine);
             assert_eq!(
-                engine.state.winner, None,
+                engine.state.winner(),
+                None,
                 "intervening if rechecks at resolution"
             );
         }
@@ -259,7 +260,7 @@ fn toad_two_attacker_trigger_adds_counter_and_draws_without_winning() {
         1
     );
     assert_eq!(engine.state.players[0].hand.len(), before + 1);
-    assert_eq!(engine.state.winner, None);
+    assert_eq!(engine.state.winner(), None);
 }
 
 #[test]
@@ -291,7 +292,7 @@ fn toad_self_attack_win_uses_all_counter_kinds_or_resolution_time_hand_count() {
             inject_card_into_hand(&mut engine, 0, "island");
         }
         resolve_entire_stack_two_player(&mut engine);
-        assert_eq!(engine.state.winner, Some(0));
+        assert_eq!(engine.state.winner(), Some(0));
     }
 }
 

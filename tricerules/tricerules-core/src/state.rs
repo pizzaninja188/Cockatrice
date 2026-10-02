@@ -19,6 +19,14 @@ use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 pub type PlayerId = i32;
 pub type ObjectId = u32;
 
+/// CR 104: a game ends either with a winner or in a draw. Windfall's simultaneous
+/// library losses and Risky Shortcut's simultaneous life losses share the draw outcome.
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GameOutcome {
+    Winner(PlayerId),
+    Draw,
+}
+
 /// One printed linked-ability pair on one exact CR 400.7 source incarnation.
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct LinkedExileKey {
@@ -2332,8 +2340,8 @@ pub struct GameState {
     pub(crate) deferred_graveyard_entry: Option<(StackObjectRef, PermanentHistoryFact)>,
     /// Active combat, if in declare/damage
     pub combat: Option<CombatState>,
-    /// If set, game is over; winning player
-    pub winner: Option<PlayerId>,
+    /// The authoritative terminal result, including a draw with no winning player.
+    pub outcome: Option<GameOutcome>,
     /// CR 514.1: active player who must discard during their cleanup step, if any.
     pub cleanup_discard_player: Option<PlayerId>,
     /// CR 514.3: a trigger occurred during cleanup, so players receive priority and another
@@ -2441,6 +2449,17 @@ pub struct PendingSpellCastState {
 }
 
 impl GameState {
+    pub fn is_terminal(&self) -> bool {
+        self.outcome.is_some()
+    }
+
+    pub fn winner(&self) -> Option<PlayerId> {
+        match self.outcome {
+            Some(GameOutcome::Winner(player)) => Some(player),
+            Some(GameOutcome::Draw) | None => None,
+        }
+    }
+
     /// Tokens and persistent preparation copies are objects, but never cards (CR 108.2).
     pub(crate) fn is_card_object(&self, oid: ObjectId) -> bool {
         self.objects

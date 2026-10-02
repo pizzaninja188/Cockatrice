@@ -503,7 +503,7 @@ fn drain_rejects_exhaustion_and_rejected_progression() {
     assert!(drain(&mut e, batch.clone(), 0)
         .unwrap_err()
         .contains("budget exhausted"));
-    e.state.winner = Some(0);
+    e.state.outcome = Some(tricerules_core::state::GameOutcome::Winner(0));
     assert!(drain(&mut e, batch, COMMAND_BUDGET).is_err());
 }
 #[test]

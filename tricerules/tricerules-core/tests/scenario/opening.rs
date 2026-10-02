@@ -220,7 +220,7 @@ fn concede_is_legal_during_opening_sequence() {
     let response = e.player_command_ipc(0, &concede().encode_to_vec());
     assert!(response.ok, "a player may concede during opening");
     assert_eq!(
-        e.state.winner,
+        e.state.winner(),
         Some(1),
         "the opponent wins once the other player concedes"
     );

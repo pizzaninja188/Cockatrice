@@ -18,7 +18,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             rv1::ActivePublicRevealSnapshot { reveals },
         )),
     });
-    if eng.state.winner.is_some() {
+    if eng.state.is_terminal() {
         batch.legal_by_player.clear();
         return;
     }

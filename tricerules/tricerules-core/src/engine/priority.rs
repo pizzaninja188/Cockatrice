@@ -136,7 +136,7 @@ impl GameEngine {
         &mut self,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
-        if self.state.winner.is_some() {
+        if self.state.is_terminal() {
             return Ok(());
         }
         let departed: Vec<_> = self
@@ -217,7 +217,7 @@ impl GameEngine {
     /// remains in the game during resolution so mandatory trailing instructions can finish;
     /// the next command boundary then performs the CR 704.5b state-based action (CR 704.4).
     pub(super) fn commit_pending_library_losses(&mut self) {
-        if self.state.winner.is_some() {
+        if self.state.is_terminal() {
             return;
         }
         for player in &mut self.state.players {
@@ -229,7 +229,7 @@ impl GameEngine {
     }
 
     pub(super) fn sweep_life(&mut self) {
-        if self.state.winner.is_some() {
+        if self.state.is_terminal() {
             return;
         }
         for p in &mut self.state.players {
@@ -244,9 +244,11 @@ impl GameEngine {
             .filter(|p| p.life > 0 && !p.has_lost)
             .map(|p| p.id)
             .collect();
-        if still_in.len() == 1 {
-            self.state.winner = Some(still_in[0]);
-        }
+        self.state.outcome = match still_in.as_slice() {
+            [] => Some(crate::state::GameOutcome::Draw),
+            [winner] => Some(crate::state::GameOutcome::Winner(*winner)),
+            _ => None,
+        };
     }
 
     pub(super) fn concede_batch(
@@ -298,20 +300,20 @@ impl GameEngine {
         // Apply the concession's already-ended control durations before it determines a winner.
         self.reindex_battlefield_control(&mut batch.events);
         self.sweep_life();
-        if self.state.winner.is_some() {
+        if self.state.is_terminal() {
             return Ok(self.finish_terminal_batch(batch));
         }
-        if self.state.winner.is_none() {
+        if !self.state.is_terminal() {
             self.reconcile_opening_departure(player, &mut batch.events)?;
         }
         self.reconcile_departed_players(&mut batch.events)?;
         self.reindex_battlefield_control(&mut batch.events);
         self.reconcile_draw_departure(&mut batch.events)?;
-        if self.state.winner.is_some() {
+        if self.state.is_terminal() {
             return Ok(self.finish_terminal_batch(batch));
         }
         self.apply_sbas(&mut batch.events)?;
-        if self.state.winner.is_some() {
+        if self.state.is_terminal() {
             return Ok(self.finish_terminal_batch(batch));
         }
         batch.events.push(self.ev_zone_view_sync_tracked());

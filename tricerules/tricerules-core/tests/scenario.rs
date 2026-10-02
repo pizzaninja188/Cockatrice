@@ -1013,3 +1013,6 @@ mod deck_coverage_draw_replacements;
 
 #[path = "scenario/deck_coverage_empty_draw_win.rs"]
 mod deck_coverage_empty_draw_win;
+
+#[path = "scenario/deck_coverage_windfall.rs"]
+mod deck_coverage_windfall;

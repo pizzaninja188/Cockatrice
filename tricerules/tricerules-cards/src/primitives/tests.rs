@@ -14,6 +14,50 @@ fn mana_amount_ron_omits_zero_fields_and_round_trips() {
 }
 
 #[test]
+fn windfall_maximum_card_result_roundtrip_and_context_boundaries() {
+    let source = "MaximumCardsMatchingResult(filter: (source: PreviousEffect, action: Discard, players: All, card_type: None))";
+    let expression: super::CountExpression = ron::from_str(source).unwrap();
+    assert!(expression.validate().is_ok());
+    let encoded = ron::ser::to_string(&expression).unwrap();
+    assert_eq!(
+        ron::from_str::<super::CountExpression>(&encoded).unwrap(),
+        expression
+    );
+    assert!(expression.validate_static_count().is_err());
+    assert!(super::Amount::Count(expression)
+        .validate_cost(true)
+        .is_err());
+    let affine: super::CountExpression = ron::from_str(&format!(
+        "Affine(terms: [(coefficient: 1, quantity: {source})])"
+    ))
+    .unwrap();
+    assert!(affine.validate().is_err());
+    for preceding in ["", "Draw(count: 1),"] {
+        let card = format!(
+            r#"(id: "bad_wheel", name: "Bad Wheel", face_id: "bad_wheel", types: ["Sorcery"], spell_effect: [{preceding} Draw(who: EachPlayer, count: Count({source}))])"#
+        );
+        let error = crate::CardRegistry::from_chunks_and_tokens(&[&card], &[]).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("immediately preceding compatible"),
+            "{error}"
+        );
+    }
+    let entry = format!(
+        r#"(id: "bad_entry", name: "Bad Entry", face_id: "bad_entry", types: ["Artifact"], static_abilities: [(ability_id: "entry", presentation: Fallback, definition: EntersWithCounters(counter: Charge, amount: Count({source})))])"#
+    );
+    let error = crate::CardRegistry::from_chunks_and_tokens(&[&entry], &[]).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("card result counts are valid only in a resolving effect list"),
+        "{error}"
+    );
+    assert!(crate::CardRegistry::global().get("windfall").is_some());
+}
+
+#[test]
 fn land_type_additions_and_replacements_validate_distinct_subtype_rules() {
     let forest: super::TypeLineAddition = ron::from_str("(land_types: [Forest])").unwrap();
     assert!(

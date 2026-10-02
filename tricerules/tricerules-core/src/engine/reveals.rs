@@ -110,7 +110,7 @@ pub(super) fn identify_reveals(batch: &mut RuledEventBatch, command_index: u64) 
 /// Reveals paid as costs and activations from hand remain public while their stack item exists.
 /// Receipts carry the original identity, even if a responding spell moves that physical card.
 pub(super) fn active_reveals(eng: &GameEngine) -> Vec<rv1::CardsRevealed> {
-    if eng.state.winner.is_some() {
+    if eng.state.is_terminal() {
         return Vec::new();
     }
     let mut reveals = Vec::new();

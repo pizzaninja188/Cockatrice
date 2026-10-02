@@ -165,7 +165,7 @@ fn three_player_opening_split_combat_elimination_and_final_victory() {
             },
         )
         .expect("P1 concedes");
-    assert!(engine.state.winner.is_none(), "two players remain");
+    assert!(engine.state.winner().is_none(), "two players remain");
     assert!(!departure.legal_by_player.contains_key(&1));
     assert!(
         !engine.state.objects.contains_key(&blocker_one),
@@ -187,7 +187,7 @@ fn three_player_opening_split_combat_elimination_and_final_victory() {
             },
         )
         .expect("P2 concedes");
-    assert_eq!(engine.state.winner, Some(0));
+    assert_eq!(engine.state.winner(), Some(0));
 }
 
 #[test]
@@ -291,18 +291,18 @@ fn four_player_opening_priority_split_combat_and_departure() {
     engine
         .apply_command(1, &concede())
         .expect("first defender departs");
-    assert!(engine.state.winner.is_none());
+    assert!(engine.state.winner().is_none());
     assert!(engine.apply_command(1, &pass()).is_err());
     advance_until(&mut engine, 2, TurnStep::Main1);
     advance_until(&mut engine, 3, TurnStep::Main1);
     engine
         .apply_command(2, &concede())
         .expect("second defender departs");
-    assert!(engine.state.winner.is_none());
+    assert!(engine.state.winner().is_none());
     engine
         .apply_command(3, &concede())
         .expect("third defender departs");
-    assert_eq!(engine.state.winner, Some(0));
+    assert_eq!(engine.state.winner(), Some(0));
 }
 
 #[test]
@@ -552,7 +552,7 @@ fn departing_spell_owner_clears_its_parked_resolution() {
     assert!(engine.state.pending_resolution.is_some());
     engine.apply_command(0, &concede()).unwrap();
     assert!(engine.state.pending_resolution.is_none());
-    assert!(engine.state.winner.is_none());
+    assert!(engine.state.winner().is_none());
     advance_until(&mut engine, 1, TurnStep::Main1);
 }
 

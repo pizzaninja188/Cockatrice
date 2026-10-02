@@ -588,7 +588,8 @@ fn issue_494_spell_payment_defers_state_based_actions_until_commit() {
     assert_eq!(engine.state.players[0].life, 0);
     assert!(engine.state.pending_spell_cast.is_some());
     assert_eq!(
-        engine.state.winner, None,
+        engine.state.winner(),
+        None,
         "SBA is deferred while payment is open"
     );
     assert!(!engine.state.players[0].has_lost);
@@ -605,7 +606,7 @@ fn issue_494_spell_payment_defers_state_based_actions_until_commit() {
     assert!(engine.state.pending_spell_cast.is_none());
     assert!(engine.state.players[0].has_lost);
     assert_eq!(
-        engine.state.winner,
+        engine.state.winner(),
         Some(1),
         "the deferred SBA runs after payment commits"
     );

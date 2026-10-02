@@ -133,7 +133,7 @@ fn conditional_upkeep_win_uses_the_trigger_controller() {
     assert_eq!(engine.state.turn_step, TurnStep::Upkeep);
     assert_eq!(engine.state.stack.len(), 1);
     resolve_entire_stack_two_player(&mut engine);
-    assert_eq!(engine.state.winner, Some(0));
+    assert_eq!(engine.state.winner(), Some(0));
 }
 
 #[test]
@@ -179,7 +179,7 @@ fn source_total_counter_condition_counts_mixed_kinds_at_resolution() {
         .expect("controller passes end step");
     assert_eq!(engine.state.stack.len(), 1);
     resolve_entire_stack_two_player(&mut engine);
-    assert_eq!(engine.state.winner, Some(0));
+    assert_eq!(engine.state.winner(), Some(0));
 }
 
 #[test]
@@ -264,7 +264,7 @@ fn source_total_counter_condition_uses_departed_generations_last_known_counters(
         "original trigger stays on stack"
     );
     resolve_entire_stack_two_player(&mut engine);
-    assert_eq!(engine.state.winner, Some(0));
+    assert_eq!(engine.state.winner(), Some(0));
 }
 
 #[test]

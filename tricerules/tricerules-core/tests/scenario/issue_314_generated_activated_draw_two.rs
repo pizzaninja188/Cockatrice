@@ -335,7 +335,7 @@ fn issue_314_short_library_draws_available_card_then_commits_sba_loss() {
     assert_eq!(engine.state.objects[&drawn].zone, Zone::Hand);
     assert_eq!(engine.state.players[0].hand.len(), hand_before + 1);
     assert!(engine.state.players[0].has_lost);
-    assert_eq!(engine.state.winner, Some(1));
+    assert_eq!(engine.state.winner(), Some(1));
 }
 
 #[test]

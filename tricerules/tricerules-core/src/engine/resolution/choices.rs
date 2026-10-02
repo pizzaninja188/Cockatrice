@@ -533,6 +533,38 @@ pub(in crate::engine) fn card_result_count(
     )
 }
 
+pub(in crate::engine) fn card_result_maximum(
+    engine: &crate::engine::GameEngine,
+    top: &StackItem,
+    previous_result: &crate::state::EffectResult,
+    filter: &tricerules_cards::primitives::CardResultFilter,
+) -> u32 {
+    card_result_maximum_from_cohorts(
+        &engine.state,
+        top.controller,
+        &top.payment_result,
+        previous_result,
+        filter,
+    )
+}
+
+fn card_result_maximum_from_cohorts(
+    state: &crate::state::GameState,
+    controller: i32,
+    payment_result: &crate::state::CardResultCohort,
+    previous_result: &crate::state::EffectResult,
+    filter: &tricerules_cards::primitives::CardResultFilter,
+) -> u32 {
+    let mut counts = std::collections::BTreeMap::<i32, u32>::new();
+    for entry in
+        matching_card_result_entries(state, controller, payment_result, previous_result, filter)
+    {
+        let count = counts.entry(entry.affected_player).or_default();
+        *count = count.saturating_add(1);
+    }
+    counts.into_values().max().unwrap_or(0)
+}
+
 pub(in crate::engine) fn card_result_characteristic_sum(
     engine: &crate::engine::GameEngine,
     top: &StackItem,
@@ -854,6 +886,76 @@ mod result_count_tests {
     use tricerules_cards::primitives::{
         CardResultAction, CardResultFilter, CardResultSource, CardTypeFilter, RelativePlayerSet,
     };
+
+    #[test]
+    fn windfall_grouped_maximum_filters_receipts_and_deduplicates_generations() {
+        let engine = crate::engine::GameEngine::new(505_060, &[4, 9, 27], 20, None, true).unwrap();
+        let entry = |player, oid, generation, action, kind| CardResultEntry {
+            affected_player: player,
+            object_id: oid,
+            zone_change_generation: generation,
+            action,
+            matched_card_types: vec![kind],
+        };
+        let land = CardTypeFilter::Land;
+        let discard = CardResultAction::Discard;
+        let first = entry(4, 100, 1, discard, land);
+        let previous: crate::state::EffectResult = CardResultCohort {
+            cards: vec![
+                first.clone(),
+                first,
+                entry(4, 100, 2, discard, land),
+                entry(9, 101, 1, discard, land),
+                entry(9, 102, 1, discard, land),
+                entry(9, 103, 1, discard, CardTypeFilter::Creature),
+                entry(27, 104, 1, CardResultAction::Mill, land),
+            ],
+        }
+        .into();
+        let payment = CardResultCohort {
+            cards: vec![entry(27, 105, 1, discard, land)],
+        };
+        let mut filter = CardResultFilter {
+            source: CardResultSource::PreviousEffect,
+            action: discard,
+            players: RelativePlayerSet::All,
+            card_type: None,
+        };
+        let maximum = |filter: &CardResultFilter| {
+            card_result_maximum_from_cohorts(&engine.state, 4, &payment, &previous, filter)
+        };
+        assert_eq!(maximum(&filter), 3);
+        assert_eq!(
+            card_result_count_from_cohorts(&engine.state, 4, &payment, &previous, &filter),
+            5,
+            "flat count is unchanged"
+        );
+        filter.card_type = Some(land);
+        assert_eq!(maximum(&filter), 2);
+        filter.players = RelativePlayerSet::Controller;
+        assert_eq!(
+            maximum(&filter),
+            2,
+            "new generations count separately; duplicates do not"
+        );
+        filter.players = RelativePlayerSet::Opponents;
+        filter.card_type = None;
+        assert_eq!(maximum(&filter), 3);
+        filter.source = CardResultSource::Payment;
+        assert_eq!(maximum(&filter), 1);
+        filter.action = CardResultAction::Mill;
+        assert_eq!(maximum(&filter), 0);
+        assert_eq!(
+            card_result_maximum_from_cohorts(
+                &engine.state,
+                4,
+                &CardResultCohort::default(),
+                &crate::state::EffectResult::default(),
+                &filter
+            ),
+            0
+        );
+    }
 
     #[test]
     fn opponent_filter_is_player_set_generic() {

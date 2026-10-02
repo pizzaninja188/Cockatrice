@@ -1675,7 +1675,7 @@ impl GameEngine {
             turn_history: TurnHistory::default(),
             deferred_graveyard_entry: None,
             combat: None,
-            winner: None,
+            outcome: None,
             cleanup_discard_player: None,
             cleanup_priority_active: false,
             opening,
@@ -1894,7 +1894,7 @@ impl GameEngine {
         player: PlayerId,
         cmd: &RuledCommand,
     ) -> Result<RuledEventBatch, EngineError> {
-        if self.state.winner.is_some() {
+        if self.state.is_terminal() {
             return Err(EngineError::Illegal("game over"));
         }
         let player_index = self
@@ -2333,7 +2333,7 @@ impl GameEngine {
     }
 
     fn can_automatically_pass_priority(&self, policies: &[rv1::AutoPassPolicy]) -> bool {
-        if self.state.winner.is_some()
+        if self.state.is_terminal()
             || self.state.opening.is_some()
             || self.state.blocking_choice().is_some()
             || self.state.pending_spell_cast.is_some()
@@ -2373,7 +2373,7 @@ impl GameEngine {
     ) -> Result<(), EngineError> {
         use rv1::ruled_event::Ev;
 
-        if self.state.winner.is_some() {
+        if self.state.is_terminal() {
             return Ok(());
         }
 
@@ -2391,14 +2391,14 @@ impl GameEngine {
         {
             let priority_player = self.state.priority_player_id();
             let mut next = self.pass_priority(priority_player)?;
-            if self.state.winner.is_some() {
+            if self.state.is_terminal() {
                 next = self.finish_terminal_batch(next);
                 batch.events.extend(next.events);
                 automatic_passes += 1;
                 break;
             }
             self.sweep_life();
-            if self.state.winner.is_some() {
+            if self.state.is_terminal() {
                 next = self.finish_terminal_batch(next);
                 batch.events.extend(next.events);
                 automatic_passes += 1;
@@ -2452,7 +2452,7 @@ impl GameEngine {
                 .events
                 .insert(0, events::ev_phase(self, self.current_phase_id()));
         }
-        if saw_priority && self.state.winner.is_none() && self.state.blocking_choice().is_none() {
+        if saw_priority && !self.state.is_terminal() && self.state.blocking_choice().is_none() {
             batch.events.push(events::ev_priority_changed(self));
         }
         (
@@ -2715,11 +2715,11 @@ impl GameEngine {
             }
         };
         let mut b = res?;
-        if self.state.winner.is_some() {
+        if self.state.is_terminal() {
             return Ok(self.finish_terminal_batch(b));
         }
         self.drain_immediate_observer_actions(None, &mut b.events)?;
-        if self.state.winner.is_some() {
+        if self.state.is_terminal() {
             return Ok(self.finish_terminal_batch(b));
         }
         // CR 704.4: SBAs are not checked while a tier-3 resolution is parked mid-resolution; they
@@ -2731,7 +2731,7 @@ impl GameEngine {
         if self.state.pending_resolution.is_none() && self.state.pending_spell_cast.is_none() {
             self.commit_pending_library_losses();
             self.sweep_life();
-            if self.state.winner.is_some() {
+            if self.state.is_terminal() {
                 return Ok(self.finish_terminal_batch(b));
             }
             self.reconcile_departed_players(&mut b.events)?;
@@ -2744,7 +2744,7 @@ impl GameEngine {
             self.flush_staged_triggers(&mut d);
             b.events.extend(d);
         }
-        if self.state.winner.is_some() {
+        if self.state.is_terminal() {
             return Ok(self.finish_terminal_batch(b));
         }
         b.events.push(self.ev_zone_view_sync_tracked());

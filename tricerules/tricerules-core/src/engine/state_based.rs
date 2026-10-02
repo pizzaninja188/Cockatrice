@@ -8,10 +8,10 @@ impl GameEngine {
     /// CR 704.4: state-based actions are checked and performed repeatedly until a check finds
     /// nothing left to do. Stops early if a legend-rule SBA pauses for player choice.
     pub(super) fn apply_sbas(&mut self, out: &mut Vec<rv1::RuledEvent>) -> Result<(), EngineError> {
-        if self.state.winner.is_some() {
+        if self.state.is_terminal() {
             return Ok(());
         }
-        while self.state.winner.is_none()
+        while !self.state.is_terminal()
             && self.state.pending_resolution.is_none()
             && self.apply_sbas_once(out)?
         {}
@@ -72,7 +72,7 @@ impl GameEngine {
         &mut self,
         out: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
-        if self.state.winner.is_some() {
+        if self.state.is_terminal() {
             return Ok(false);
         }
         let lost_players = self

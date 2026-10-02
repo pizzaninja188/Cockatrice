@@ -20,7 +20,9 @@ use tricerules_cards::{AbilityPresentation, ChoiceId};
 
 mod choices;
 pub(super) use choices::resolution_branch_is_live;
-pub(in crate::engine) use choices::{card_result_characteristic_sum, card_result_count};
+pub(in crate::engine) use choices::{
+    card_result_characteristic_sum, card_result_count, card_result_maximum,
+};
 mod amass;
 mod blight;
 #[cfg(test)]
@@ -1578,7 +1580,7 @@ impl GameEngine {
         mut previous_effect_result: EffectResult,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<ResolutionProgress, EngineError> {
-        if self.state.winner.is_some() {
+        if self.state.is_terminal() {
             return Ok(ResolutionProgress::GameEnded);
         }
         let controller = top.controller;
@@ -1625,14 +1627,15 @@ impl GameEngine {
                 };
                 match effect {
                     SpellEffectKind::WinGameIf { condition } => {
-                        if cx.engine.state.winner.is_none()
+                        if !cx.engine.state.is_terminal()
                             && cx.engine.condition_holds(
                                 &condition,
                                 ConditionContext::for_stack_item(cx.top)
                                     .with_previous_effect_result(cx.previous_effect_result),
                             )
                         {
-                            cx.engine.state.winner = Some(cx.controller);
+                            cx.engine.state.outcome =
+                                Some(crate::state::GameOutcome::Winner(cx.controller));
                             EffectOutcome::GameEnded
                         } else {
                             EffectOutcome::Continue
@@ -3826,7 +3829,7 @@ mod attached_subject_tests {
         engine
             .run_effect_list(&top, "winning tail fixture", effects, 0, &mut events)
             .unwrap();
-        assert_eq!(engine.state.winner, Some(0));
+        assert_eq!(engine.state.winner(), Some(0));
         assert_eq!(engine.state.players[0].hand, hand_before);
         assert_eq!(engine.state.players[0].library, library_before);
         assert_eq!(engine.state.players[0].life, 20);
@@ -3884,7 +3887,7 @@ mod attached_subject_tests {
                 },
             )
             .unwrap();
-        assert_eq!(engine.state.winner, Some(0));
+        assert_eq!(engine.state.winner(), Some(0));
         assert!(!engine.state.players[0].has_lost);
         assert!(engine.state.players[0].pending_library_loss);
         assert!(batch.legal_by_player.is_empty());
@@ -3919,11 +3922,26 @@ mod attached_subject_tests {
     #[test]
     fn terminal_life_sweep_does_not_overwrite_winner_or_eliminate_players() {
         let mut engine = GameEngine::new(507_003, &[0, 1], 20, None, true).unwrap();
-        engine.state.winner = Some(0);
+        engine.state.outcome = Some(crate::state::GameOutcome::Winner(0));
         engine.state.players[0].life = 0;
         engine.sweep_life();
-        assert_eq!(engine.state.winner, Some(0));
+        assert_eq!(engine.state.winner(), Some(0));
         assert!(!engine.state.players[0].has_lost);
+    }
+
+    #[test]
+    fn terminal_draw_preserves_committed_state_and_ignores_later_losses() {
+        let mut engine = GameEngine::new(505_054, &[4, 9, 27], 20, None, true).unwrap();
+        engine.state.outcome = Some(crate::state::GameOutcome::Draw);
+        engine.state.players[0].life = 0;
+        engine.state.players[1].pending_library_loss = true;
+        let before = engine.diagnostic_snapshot().unwrap();
+        engine.commit_pending_library_losses();
+        engine.sweep_life();
+        let mut events = Vec::new();
+        engine.apply_sbas(&mut events).unwrap();
+        assert!(events.is_empty());
+        assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     }
 
     #[test]
@@ -3931,7 +3949,7 @@ mod attached_subject_tests {
         let mut engine = GameEngine::new(507_005, &[0, 1], 20, None, true).unwrap();
         let creature = add_battlefield_object(&mut engine, 0, "grizzly_bears");
         engine.state.objects.get_mut(&creature).unwrap().damage = 2;
-        engine.state.winner = Some(0);
+        engine.state.outcome = Some(crate::state::GameOutcome::Winner(0));
         let mut events = Vec::new();
         engine.apply_sbas(&mut events).unwrap();
         assert_eq!(engine.state.objects[&creature].zone, Zone::Battlefield);

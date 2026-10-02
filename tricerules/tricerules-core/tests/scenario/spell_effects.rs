@@ -2160,7 +2160,7 @@ fn draw_spell_decking_out_loses_without_erroring() {
         e.state.players[0].has_lost,
         "P0 attempted to draw from an empty library and loses (CR 104.3c)"
     );
-    assert_eq!(e.state.winner, Some(1), "P1 wins once P0 decks out");
+    assert_eq!(e.state.winner(), Some(1), "P1 wins once P0 decks out");
     assert!(
         terminal_batch
             .events

@@ -1,0 +1,17 @@
+// Exact Oracle 08becc07-28bc-4a2f-a6b0-28a2998d2f50; source/rulings checked 2026-10-02.
+(
+  id: "windfall",
+  name: "Windfall",
+  face_id: "windfall",
+  mana_cost: "{2}{U}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Discard(who: EachPlayer, quantity: All),
+    Draw(who: EachPlayer, count: Count(MaximumCardsMatchingResult(filter: (
+      source: PreviousEffect,
+      action: Discard,
+      players: All,
+      card_type: None,
+    )))),
+  ],
+)

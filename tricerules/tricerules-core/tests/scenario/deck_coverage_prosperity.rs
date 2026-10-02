@@ -215,7 +215,12 @@ fn prosperity_can_make_all_remaining_players_lose_simultaneously() {
     let logs = resolve_two_player_stack_and_capture_logs(&mut engine);
 
     assert!(engine.state.players.iter().all(|player| player.has_lost));
-    assert!(engine.state.winner.is_none(), "the game is a draw");
+    assert_eq!(
+        engine.state.outcome,
+        Some(tricerules_core::state::GameOutcome::Draw)
+    );
+    assert!(engine.state.is_terminal());
+    assert!(logs.iter().any(|log| log == "Game over. Draw."));
     for player in 0..2 {
         assert!(logs.iter().any(|log| {
             log.starts_with(&format!("P{player} draws 1 card")) && log.contains("Prosperity")

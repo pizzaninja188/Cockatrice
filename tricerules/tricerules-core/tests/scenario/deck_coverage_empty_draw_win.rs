@@ -43,7 +43,8 @@ fn paid_spell(engine: &mut GameEngine, card: &str) -> u32 {
 fn resolve(engine: &mut GameEngine, oid: u32) -> Vec<rv1::RuledEvent> {
     let mut events = Vec::new();
     for _ in 0..16 {
-        if engine.state.winner.is_some() || !engine.state.stack.iter().any(|item| item.id == oid) {
+        if engine.state.winner().is_some() || !engine.state.stack.iter().any(|item| item.id == oid)
+        {
             return events;
         }
         let actor = engine.state.priority_player_id();
@@ -62,7 +63,7 @@ fn maniac_paid_cast_empty_draw_wins_without_actual_draw_or_spell_exit() {
     let spell = paid_spell(&mut engine, "divination");
     let hand = engine.state.players[0].hand.clone();
     let events = resolve(&mut engine, spell);
-    assert_eq!(engine.state.winner, Some(4));
+    assert_eq!(engine.state.winner(), Some(4));
     assert_eq!(engine.state.players[0].hand, hand);
     assert!(!engine.state.players[0].pending_library_loss);
     assert!(!engine.state.players[0].has_lost);
@@ -93,7 +94,7 @@ fn jace_paid_minus_eight_checks_empty_library_after_source_leaves_before_losses(
         let ability = engine.state.stack.last().unwrap().id;
         let events = resolve(&mut engine, ability);
         assert_eq!(engine.state.players[0].hand.len(), hand + remaining.min(7));
-        assert_eq!(engine.state.winner, (remaining <= 7).then_some(4));
+        assert_eq!(engine.state.winner(), (remaining <= 7).then_some(4));
         assert_eq!(
             engine.state.players[0].library.len(),
             remaining.saturating_sub(7)
@@ -195,7 +196,7 @@ fn empty_draw_win_both_replacement_orders_stop_children_and_reject_invalid_answe
             let batch = engine
                 .apply_command(4, &submit_resolution_choice(vec![selected]))
                 .unwrap();
-            assert_eq!(engine.state.winner, Some(4));
+            assert_eq!(engine.state.winner(), Some(4));
             assert!(find_resolution_choice(&batch).is_none());
             assert!(engine.state.pending_resolution.is_none());
             assert!(batch.legal_by_player.is_empty());
@@ -226,7 +227,7 @@ fn maniac_partial_draw_commits_one_card_but_abandons_brainstorm_and_frantic_tail
         let spell = paid_spell(&mut engine, card);
         let hand = engine.state.players[0].hand.len();
         let events = resolve(&mut engine, spell);
-        assert_eq!(engine.state.winner, Some(4));
+        assert_eq!(engine.state.winner(), Some(4));
         assert_eq!(engine.state.players[0].hand.len(), hand + 1);
         assert!(engine.state.players[0].hand.contains(&drawn));
         assert_eq!(engine.state.zone_change_generation[&drawn], generation + 1);
@@ -264,7 +265,7 @@ fn maniac_nonactive_apnap_winner_stops_later_players_and_staged_draw_triggers() 
         .map(|p| p.hand.len())
         .collect::<Vec<_>>();
     resolve(&mut engine, ability);
-    assert_eq!(engine.state.winner, Some(9));
+    assert_eq!(engine.state.winner(), Some(9));
     assert_eq!(engine.state.players[0].hand.len(), hands[0] + 1);
     assert_eq!(engine.state.players[1].hand.len(), hands[1]);
     assert_eq!(engine.state.players[2].hand.len(), hands[2]);
@@ -296,7 +297,7 @@ fn maniac_scheduled_empty_draw_wins_without_step_completion_priority_or_loss() {
         last = Some(engine.apply_command(actor, &pass()).unwrap());
     }
     let batch = last.unwrap();
-    assert_eq!(engine.state.winner, Some(4));
+    assert_eq!(engine.state.winner(), Some(4));
     assert!(batch.legal_by_player.is_empty());
     assert!(!batch
         .events
@@ -338,7 +339,7 @@ fn jace_plus_one_mills_chosen_player_before_controller_draw_and_illegal_target_c
                 engine.apply_command(9, &concede()).unwrap();
             }
             resolve(&mut engine, ability);
-            assert!(engine.state.winner.is_none());
+            assert!(engine.state.winner().is_none());
             if departed {
                 assert_eq!(engine.state.players[0].hand, hand);
             } else {
@@ -367,7 +368,7 @@ fn jace_insufficient_loyalty_is_atomic_and_self_mill_can_reach_empty_draw_win() 
     engine.apply_command(4, &command).unwrap();
     let ability = engine.state.stack.last().unwrap().id;
     resolve(&mut engine, ability);
-    assert_eq!(engine.state.winner, Some(4));
+    assert_eq!(engine.state.winner(), Some(4));
     assert_eq!(engine.state.players[0].hand, hand);
     assert!(!engine.state.players[0].pending_library_loss);
 }
@@ -423,7 +424,7 @@ fn serialized_terminal_draw_choices_use_fresh_handles_and_replay_exact_batches()
     assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     let command = submit_resolution_choice(vec![child.candidate_object_ids[0]]);
     let batch = engine.apply_command(4, &command).unwrap();
-    assert_eq!(engine.state.winner, Some(4));
+    assert_eq!(engine.state.winner(), Some(4));
     assert!(batch.legal_by_player.is_empty());
     recorded.push((4, command, batch));
     let mut replay = fresh();
@@ -501,10 +502,10 @@ fn winning_draw_static_uses_copied_face_and_current_control_or_suppression() {
         let spell = paid_spell(&mut engine, "divination");
         resolve(&mut engine, spell);
         if mode == 0 || mode == 4 {
-            assert_eq!(engine.state.winner, Some(4));
+            assert_eq!(engine.state.winner(), Some(4));
             assert!(!engine.state.players[0].has_lost);
         } else {
-            assert!(engine.state.winner.is_none());
+            assert!(engine.state.winner().is_none());
             assert!(engine.state.players[0].has_lost);
         }
     }
@@ -585,7 +586,7 @@ fn parked_empty_draw_win_revalidates_face_control_suppression_copy_and_library()
             let batch = engine
                 .apply_command(4, &submit_resolution_choice(vec![double]))
                 .unwrap();
-            assert_eq!(engine.state.winner, Some(4));
+            assert_eq!(engine.state.winner(), Some(4));
             assert_eq!(engine.state.players[0].hand.len(), hand.len() + 1);
             assert!(engine.state.players[0].hand.contains(&refill));
             assert_eq!(
@@ -628,7 +629,7 @@ fn discard_destination_commits_before_empty_draw_win_with_library_of_leng() {
         engine
             .apply_command(4, &submit_resolution_choice(vec![destination]))
             .unwrap();
-        assert_eq!(engine.state.winner, Some(4));
+        assert_eq!(engine.state.winner(), Some(4));
         assert_eq!(
             engine.state.objects[&discarded].zone,
             if destination == 0 {
@@ -655,7 +656,7 @@ fn discard_destination_commits_before_empty_draw_win_with_library_of_leng() {
 fn final_concession_publishes_one_terminal_result() {
     let mut engine = GameEngine::new(507_090, &[4, 9], 20, None, true).unwrap();
     let batch = engine.apply_command(9, &concede()).unwrap();
-    assert_eq!(engine.state.winner, Some(4));
+    assert_eq!(engine.state.winner(), Some(4));
     assert_eq!(
         batch
             .events
@@ -680,7 +681,7 @@ fn failed_draw_terminal_loss_does_not_flush_survivors_staged_triggers() {
     let spell = paid_spell(&mut engine, "divination");
     let before = engine.state.players[0].hand.len();
     let events = resolve(&mut engine, spell);
-    assert_eq!(engine.state.winner, Some(9));
+    assert_eq!(engine.state.winner(), Some(9));
     assert_eq!(engine.state.players[0].hand.len(), before + 1);
     assert!(engine.state.stack.is_empty());
     assert!(engine.state.staged_trigger_groups.is_empty());

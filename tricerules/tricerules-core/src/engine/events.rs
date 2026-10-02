@@ -5,7 +5,7 @@ impl GameEngine {
     /// CR 104.1: keep committed state, but abandon every unfinished rules transaction.
     /// Terminal publication is shared by command dispatch and internal automatic passes.
     pub(super) fn finish_terminal_batch(&mut self, mut batch: RuledEventBatch) -> RuledEventBatch {
-        let winner = self.state.winner.expect("terminal batch has a winner");
+        let outcome = self.state.outcome.expect("terminal batch has an outcome");
         self.state.pending_resolution = None;
         self.state.pending_replacement_event = None;
         self.state.pending_spell_cast = None;
@@ -28,8 +28,10 @@ impl GameEngine {
                 )
             )
         });
-        batch.events.push(ev_game_over(winner));
-        batch.events.push(self.ev_zone_view_sync_tracked());
+        batch.events.push(ev_game_over(outcome));
+        // Terminal publication also serves startup/reconnect responses, which must
+        // seed every physical zone even when an earlier batch populated the caches.
+        batch.events.push(self.ev_zone_view_sync());
         for player in 0..self.state.players.len() {
             batch.events.push(self.ev_mana_pool_updated(player));
         }
@@ -208,6 +210,9 @@ impl GameEngine {
         let mut batch = RuledEventBatch::default();
         // Catalog first: Servatrice resolves the zone-view card ids below through it.
         batch.events.push(self.ev_card_catalog());
+        if self.state.is_terminal() {
+            return self.finish_terminal_batch(batch);
+        }
         batch.events.push(self.ev_zone_view_sync());
         if let Some(op) = &self.state.opening {
             batch
@@ -815,8 +820,11 @@ impl GameEngine {
     }
 }
 
-pub(super) fn ev_game_over(winner: PlayerId) -> RuledEvent {
-    ev_log(format!("Game over. Winner: {winner}"))
+pub(super) fn ev_game_over(outcome: crate::state::GameOutcome) -> RuledEvent {
+    match outcome {
+        crate::state::GameOutcome::Winner(winner) => ev_log(format!("Game over. Winner: {winner}")),
+        crate::state::GameOutcome::Draw => ev_log("Game over. Draw.".into()),
+    }
 }
 
 /// Render a color set as Cockatrice's lowercase WUBRG color string (e.g. `[White, Blue]` → "wu",

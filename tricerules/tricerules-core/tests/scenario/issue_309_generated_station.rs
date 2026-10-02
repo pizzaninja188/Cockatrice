@@ -613,7 +613,7 @@ fn issue_309_uthros_short_library_draws_as_much_as_possible_before_discard() {
         "the draw-from-empty loss waits until Uthros's mandatory discard resolves"
     );
     assert!(
-        engine.state.winner.is_none(),
+        engine.state.winner().is_none(),
         "state-based loss cannot end the game mid-resolution"
     );
     engine
@@ -621,7 +621,7 @@ fn issue_309_uthros_short_library_draws_as_much_as_possible_before_discard() {
         .expect("the mandatory discard completes before the deferred deck loss");
     assert_eq!(engine.state.objects[&discard].zone, Zone::Graveyard);
     assert!(engine.state.players[0].has_lost);
-    assert_eq!(engine.state.winner, Some(1));
+    assert_eq!(engine.state.winner(), Some(1));
 }
 
 #[test]
@@ -924,7 +924,7 @@ fn issue_309_primitive_draw_loss_finishes_the_effect_tail_before_sweeping() {
     assert_eq!(engine.state.players[0].life, 18);
     assert!(engine.state.players[0].has_lost);
     assert!(!engine.state.players[0].pending_library_loss);
-    assert_eq!(engine.state.winner, Some(1));
+    assert_eq!(engine.state.winner(), Some(1));
     assert!(engine.state.pending_resolution.is_none());
 }
 
@@ -980,7 +980,7 @@ fn issue_309_brainstorm_can_resume_after_deferred_library_loss() {
     assert!(engine.state.pending_resolution.is_none());
     assert!(engine.state.players[0].has_lost);
     assert!(!engine.state.players[0].pending_library_loss);
-    assert_eq!(engine.state.winner, Some(1));
+    assert_eq!(engine.state.winner(), Some(1));
 }
 
 #[test]
@@ -1015,7 +1015,7 @@ fn issue_309_plain_draw_commits_empty_library_loss_before_priority() {
     assert!(engine.state.pending_resolution.is_none());
     assert!(engine.state.players[0].has_lost);
     assert!(!engine.state.players[0].pending_library_loss);
-    assert_eq!(engine.state.winner, Some(1));
+    assert_eq!(engine.state.winner(), Some(1));
     assert!(resolved.events.iter().any(|event| {
         matches!(
             event.ev.as_ref(),
@@ -1051,7 +1051,7 @@ fn issue_309_pending_library_losses_are_deterministic_for_both_players() {
                 engine.state.players[0].pending_library_loss,
                 engine.state.players[1].pending_library_loss,
             ],
-            engine.state.winner,
+            engine.state.winner(),
         )
     }
 
