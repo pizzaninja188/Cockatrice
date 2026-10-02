@@ -1935,6 +1935,7 @@ impl GameEngine {
                     effect @ SpellEffectKind::DestroyAll { .. } => {
                         mass::destroy_all(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::ExileAll { .. } => mass::exile_all(&mut cx, effect)?,
                     effect @ SpellEffectKind::DamageAll { .. } => {
                         mass::damage_all(&mut cx, effect)?
                     }

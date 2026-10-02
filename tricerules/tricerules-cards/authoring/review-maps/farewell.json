@@ -1,0 +1,108 @@
+{
+  "spans": [
+    {
+      "face_id": "farewell",
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/modal_spell"
+      ],
+      "start_line": 1
+    },
+    {
+      "face_id": "farewell",
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/0"
+      ],
+      "start_line": 2
+    },
+    {
+      "face_id": "farewell",
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/1"
+      ],
+      "start_line": 3
+    },
+    {
+      "face_id": "farewell",
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/2"
+      ],
+      "start_line": 4
+    },
+    {
+      "face_id": "farewell",
+      "end_line": 5,
+      "typed_paths": [
+        "/faces/0/modal_spell/modes/3"
+      ],
+      "start_line": 5
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_farewell::farewell_paid_artifact_mode_exiles_overlap_once_and_preserves_unselected_types",
+      "covers": "paid artifact mode exiles overlap once and preserves unselected types"
+    },
+    {
+      "test": "scenario deck_coverage_farewell::farewell_all_modes_in_reverse_submission_follow_printed_order_and_owner_identity",
+      "covers": "all modes in reverse submission follow printed order and owner identity"
+    },
+    {
+      "test": "scenario deck_coverage_farewell::farewell_freezes_current_type_cohort_anthem_lki_counters_and_attached_generation",
+      "covers": "freezes current type cohort anthem lki counters and attached generation"
+    },
+    {
+      "test": "scenario deck_coverage_farewell::farewell_creature_mode_reads_resolution_types_and_bypasses_all_targeting_and_destruction_defenses",
+      "covers": "creature mode reads resolution types and bypasses all targeting and destruction defenses"
+    },
+    {
+      "test": "scenario deck_coverage_farewell::farewell_one_instruction_departing_observers_each_collect_one_whole_cohort",
+      "covers": "one instruction departing observers each collect one whole cohort"
+    },
+    {
+      "test": "scenario deck_coverage_farewell::farewell_no_sbas_between_modes_orphan_aura_enters_graveyard_after_graveyard_exile",
+      "covers": "no sbas between modes orphan aura enters graveyard after graveyard exile"
+    },
+    {
+      "test": "scenario deck_coverage_farewell::farewell_token_leaves_and_is_observed_before_ceasing_at_postresolution_sba",
+      "covers": "token leaves and is observed before ceasing at postresolution sba"
+    },
+    {
+      "test": "scenario deck_coverage_farewell::farewell_illegal_modal_submissions_reject_atomically_before_payment_or_state_change",
+      "covers": "illegal modal submissions reject atomically before payment or state change"
+    },
+    {
+      "test": "scenario deck_coverage_farewell::farewell_serialized_paid_reverse_modal_command_replays_identically",
+      "covers": "serialized paid reverse modal command replays identically"
+    },
+    {
+      "test": "deck_coverage_farewell::farewell_exact_white_sorcery_identity_and_one_to_four_printed_order_modes",
+      "covers": "Exact white six mana sorcery, choose one to four distinct printed modes, and explicitly untargeted roles"
+    }
+  ],
+  "oracle_id": "4eb813fd-2d5a-4b02-8193-662681ef4e7d",
+  "complete_definition_review_confirmed": true,
+  "format_version": 1,
+  "tokens": [],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ExileAll",
+      "typed_path": "/faces/0/modal_spell/modes/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileAll",
+      "typed_path": "/faces/0/modal_spell/modes/1/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileAll",
+      "typed_path": "/faces/0/modal_spell/modes/2/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileGraveyards",
+      "typed_path": "/faces/0/modal_spell/modes/3/effects/0"
+    }
+  ]
+}

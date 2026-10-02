@@ -1,0 +1,33 @@
+(
+  id: "farewell",
+  name: "Farewell",
+  face_id: "farewell",
+  mana_cost: "{4}{W}{W}",
+  types: ["Sorcery"],
+  modal_spell: (
+    min_modes: 1,
+    max_modes: 4,
+    modes: [
+      (
+        mode_id: "artifacts",
+        presentation: OracleLines([2]),
+        effects: [ExileAll(kind: (kind: AnyPermanent, permanent_types: [Artifact]))],
+      ),
+      (
+        mode_id: "creatures",
+        presentation: OracleLines([3]),
+        effects: [ExileAll(kind: (kind: Creature))],
+      ),
+      (
+        mode_id: "enchantments",
+        presentation: OracleLines([4]),
+        effects: [ExileAll(kind: (kind: AnyPermanent, permanent_types: [Enchantment]))],
+      ),
+      (
+        mode_id: "graveyards",
+        presentation: OracleLines([5]),
+        effects: [ExileGraveyards(players: All)],
+      ),
+    ],
+  ),
+)

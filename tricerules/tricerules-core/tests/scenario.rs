@@ -985,3 +985,6 @@ mod deck_coverage_all_is_dust;
 
 #[path = "scenario/deck_coverage_deepglow_skate.rs"]
 mod deck_coverage_deepglow_skate;
+
+#[path = "scenario/deck_coverage_farewell.rs"]
+mod deck_coverage_farewell;

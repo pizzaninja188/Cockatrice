@@ -1447,6 +1447,7 @@ fn validate_effect_targets(
         | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
         | SpellEffectKind::CopyTargetSpell { .. }
         | SpellEffectKind::DestroyAll { .. }
+        | SpellEffectKind::ExileAll { .. }
         | SpellEffectKind::ReturnAllToOwnersHand { .. }
         | SpellEffectKind::DamageAll { .. }
         | SpellEffectKind::SacrificeAll { .. }

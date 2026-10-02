@@ -1586,6 +1586,11 @@ pub enum SpellEffectKind {
         #[serde(default)]
         prevent_regeneration: bool,
     },
+    /// CR 701.13a: exile the simultaneous current battlefield cohort, without targeting.
+    /// Farewell selects artifacts/creatures/enchantments; Final Judgment selects creatures.
+    ExileAll {
+        kind: TargetFilter,
+    },
     /// CR 701.21: each affected controller sacrifices the matching simultaneous cohort.
     /// All Is Dust selects colored permanents; Living Death selects every creature.
     SacrificeAll {
@@ -2876,6 +2881,7 @@ impl SpellEffectKind {
             | SpellEffectKind::MillEachOpponentByHandSize
             | SpellEffectKind::WinGameIf { .. }
             | SpellEffectKind::DestroyAll { .. }
+            | SpellEffectKind::ExileAll { .. }
             | SpellEffectKind::SacrificeAll { .. }
             | SpellEffectKind::ReturnAllToOwnersHand { .. }
             | SpellEffectKind::DamageAll { .. }
@@ -4611,6 +4617,7 @@ impl SpellEffectKind {
             // Mass effects select objects, not players, and never use AnyTarget (which includes
             // players). Only Creature / AnyPermanent are honored by the engine.
             SpellEffectKind::DestroyAll { kind, .. }
+            | SpellEffectKind::ExileAll { kind }
             | SpellEffectKind::SacrificeAll { filter: kind, .. }
             | SpellEffectKind::ReturnAllToOwnersHand { kind }
             | SpellEffectKind::DamageAll { kind, .. }

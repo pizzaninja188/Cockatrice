@@ -105,6 +105,56 @@ pub(super) fn destroy_attached(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn exile_all(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ExileAll { kind } = effect else {
+        return Err(EngineError::Illegal("mass exile dispatch mismatch"));
+    };
+    let engine = &mut *cx.engine;
+    let zone_snapshot = engine.snapshot_zone_event();
+    // Freeze every departure before committing any: a departing anthem/type source or
+    // attachment must not change another simultaneous victim's LKI (CR 400.7, 603.10).
+    let victims = battlefield_objects_matching(engine, &kind)
+        .into_iter()
+        .map(|oid| {
+            let movement =
+                prepare_zone_move(&engine.state, engine.registry, oid, Zone::Exile, None)?
+                    .ok_or(EngineError::Illegal("mass exile permanent missing"))?;
+            let object = &engine.state.objects[&oid];
+            Ok((
+                movement,
+                oid,
+                object.owner,
+                object.controller,
+                object_display_name(&engine.state, engine.registry, oid),
+                engine.battlefield_leave_event(oid),
+            ))
+        })
+        .collect::<Result<Vec<_>, EngineError>>()?;
+    let mut leave_events = Vec::with_capacity(victims.len());
+    for (movement, oid, owner, controller, name, leave_event) in victims {
+        commit_zone_move(&mut engine.state, engine.registry, movement)?;
+        cx.effect_result.produced_objects.push(TriggerObjectRef {
+            object_id: oid,
+            zone_change_generation: engine.state.zone_change_generation[&oid],
+            controller_at_event: controller,
+        });
+        cx.events
+            .push(ev_log(format!("{} exiles {name}", cx.spell_label)));
+        cx.events.push(permanent_moved_event(
+            &engine.state,
+            oid,
+            owner,
+            rv1::permanent_moved::Destination::Exile,
+        ));
+        leave_events.extend(leave_event);
+    }
+    engine.fire_zone_triggers(zone_snapshot, leave_events);
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn destroy_all(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
