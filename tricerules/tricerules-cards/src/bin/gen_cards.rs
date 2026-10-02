@@ -1478,6 +1478,7 @@ fn add_intrinsic_land_mana_ability(
     }
 
     rules.activated_abilities.push(ActivatedAbilityDef {
+        intrinsic_land_mana: true,
         ability_id: AbilityId::new("activated_01").map_err(|_| RulesParseError::Unsupported)?,
         presentation: AbilityPresentation::OracleLines(vec![1]),
         cost_modifiers: Vec::new(),
@@ -1891,9 +1892,14 @@ fn render_generated_activated_ability(ability: &ActivatedAbilityDef) -> String {
         && ability.activation_limit.is_none()
     {
         return format!(
-            "(ability_id: {:?}, presentation: {}, costs: [Tap], effect: [{}])",
+            "(ability_id: {:?}, presentation: {}{}, costs: [Tap], effect: [{}])",
             ability.ability_id.as_str(),
             render_presentation(&ability.presentation),
+            if ability.intrinsic_land_mana {
+                ", intrinsic_land_mana: true"
+            } else {
+                ""
+            },
             ability
                 .effect
                 .iter()
@@ -5268,6 +5274,7 @@ mod tests {
             [SpellEffectKind::AddTypes {
                 subject: EffectSubject::Source,
                 addition: TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Creature],
                     creature_types: Vec::new(),
                 },
@@ -5786,6 +5793,7 @@ mod tests {
                     },
                     set_types: None,
                     add_types: TypeLineAddition {
+                        land_types: Vec::new(),
                         card_types: vec![PermanentTypeFilter::Creature],
                         creature_types: Vec::new(),
                     },
@@ -6251,6 +6259,7 @@ mod tests {
                     },
                     set_types: None,
                     add_types: TypeLineAddition {
+                        land_types: Vec::new(),
                         card_types: vec![PermanentTypeFilter::Creature],
                         creature_types: Vec::new(),
                     },
@@ -8058,6 +8067,10 @@ mod tests {
         assert_eq!(
             generated.faces[0].recipe_labels,
             ["shockland entry payment"]
+        );
+        assert!(
+            raw.activated_abilities[0].intrinsic_land_mana,
+            "generated subtype mana must retain explicit provenance through RON rendering"
         );
         assert_eq!(raw.activated_abilities.len(), 1);
         assert_eq!(

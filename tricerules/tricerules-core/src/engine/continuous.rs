@@ -6,6 +6,13 @@
 use super::resolution::resolve_creature_scope;
 use super::*;
 
+mod early_static;
+mod land_mana;
+pub(super) use early_static::materialize_early_static_components;
+
+#[cfg(test)]
+mod land_mana_tests;
+
 /// The rules event that causes a counter placement. Only effect placements participate in the
 /// narrow CR 614.16 replacement implemented for #499; costs, turn-based actions, and entry
 /// counters stay on their own rules paths.
@@ -19,6 +26,27 @@ pub(super) enum CounterPlacementOrigin {
 }
 
 impl GameEngine {
+    /// CR 613.7n: entry-created continuous effects follow the entrant's own simultaneous statics.
+    pub(super) fn order_new_entry_statics_before_modifiers(
+        &mut self,
+        oid: ObjectId,
+        static_start: usize,
+    ) {
+        let boundary = self.state.continuous_effects[..static_start]
+            .iter()
+            .position(|effect| {
+                effect.timestamp == self.state.command_index
+                    && effect.trigger_grant_origin.is_none()
+                    && matches!(effect.affected, AffectedScope::Single(target) if target == oid)
+            });
+        if let Some(boundary) = boundary {
+            let statics = self.state.continuous_effects.split_off(static_start);
+            self.state
+                .continuous_effects
+                .splice(boundary..boundary, statics);
+        }
+    }
+
     /// CR 702.195: Storied is a static ability that establishes an irreversible player
     /// designation. This check runs at every state-stabilization seam that can precede trigger
     /// matching or state-based actions.
@@ -63,8 +91,11 @@ impl GameEngine {
         };
         if object.zone != Zone::Battlefield
             || object.face_down
-            || super::characteristics::latest_remove_all_abilities_timestamp(&self.state, oid)
-                .is_some()
+            || !super::characteristics::printed_static_source_is_available(
+                &self.state,
+                self.registry,
+                oid,
+            )
         {
             return Vec::new();
         }
@@ -141,8 +172,7 @@ impl GameEngine {
             return false;
         }
         !self.state.objects.iter().any(|(&source, object)| {
-            if object.zone != Zone::Battlefield || object.face_down
-                || super::characteristics::latest_remove_all_abilities_timestamp(&self.state, source).is_some()
+            if !super::characteristics::printed_static_source_is_available(&self.state, self.registry, source)
             {
                 return false;
             }
@@ -260,12 +290,12 @@ impl GameEngine {
         if self.state.player_idx(player).is_none() {
             return false;
         }
-        !self.state.objects.iter().any(|(&oid, object)| {
-            if object.zone != Zone::Battlefield
-                || object.face_down
-                || super::characteristics::latest_remove_all_abilities_timestamp(&self.state, oid)
-                    .is_some()
-            {
+        !self.state.objects.keys().any(|&oid| {
+            if !super::characteristics::printed_static_source_is_available(
+                &self.state,
+                self.registry,
+                oid,
+            ) {
                 return false;
             }
             let Some(face) = self.effective_face(oid) else {
@@ -394,11 +424,6 @@ impl GameEngine {
         if object.face_down {
             return;
         }
-        let source_abilities_removed =
-            super::characteristics::latest_remove_all_abilities_timestamp(&self.state, object_id)
-                .is_some();
-        let source_rules_text_removed =
-            super::characteristics::basic_land_type_setting(&self.state, object_id).is_some();
         // CR 604.2 / 611.2: a static ability's continuous effect is created by the permanent's
         // controller, and `CreatureScopeController::YouControl` scopes off this value. Reading the owner
         // here would make a reanimated Glorious Anthem pump its *former* controller's creatures.
@@ -443,23 +468,26 @@ impl GameEngine {
         let timestamp = self.state.command_index;
 
         for (definition, static_ability) in statics {
-            // Retain source-bound keyword records even during suppression. Copy/face refresh
-            // must not permanently erase a grant that should return when suppression expires.
-            if (source_rules_text_removed
-                && !matches!(
-                    static_ability.definition,
-                    StaticAbilityDef::GrantKeywordToPermanents { .. }
-                ))
-                || (source_abilities_removed
-                    && !matches!(
-                        static_ability.definition,
-                        StaticAbilityDef::GrantKeywordToPermanents { .. }
-                            | StaticAbilityDef::AttachedModifier { .. }
-                    ))
-            {
-                continue;
-            }
+            // Store every static component, even while its printed source is suppressed.
+            // Evaluation decides availability; refresh must preserve later restoration.
+            let static_start = self.state.continuous_effects.len();
+            let static_origin = TriggerAbilityOrigin::StaticGrant {
+                source_id: object_id,
+                source_zone_change,
+                definition: definition.clone(),
+            };
+            self.state
+                .continuous_effects
+                .extend(materialize_early_static_components(
+                    object_id,
+                    controller,
+                    source_zone_change,
+                    timestamp,
+                    &definition,
+                    &static_ability.definition,
+                ));
             match static_ability.definition {
+                StaticAbilityDef::AddTypesToPermanents { .. } => {}
                 StaticAbilityDef::GrantKeywordToPermanents { filter, keyword } => {
                     self.state.continuous_effects.push(ContinuousEffect {
                         trigger_grant_origin: None,
@@ -558,6 +586,7 @@ impl GameEngine {
                         .damage_prevention_effects
                         .push(ActiveDamagePrevention {
                             id,
+                            static_origin: Some(static_origin.clone()),
                             source_id: Some(object_id),
                             source_label,
                             source_presentation,
@@ -630,10 +659,10 @@ impl GameEngine {
                 }
                 StaticAbilityDef::AttachedModifier {
                     condition,
-                    add_types,
-                    set_types,
-                    set_name,
-                    set_colors,
+                    add_types: _,
+                    set_types: _,
+                    set_name: _,
+                    set_colors: _,
                     delta_power,
                     delta_toughness,
                     count,
@@ -656,50 +685,6 @@ impl GameEngine {
                         definition: definition.clone(),
                     };
                     let affected = AffectedScope::AttachedTo(object_id);
-                    if let Some(name) = set_name {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
-                            affected: affected.clone(),
-                            kind: ContinuousEffectKind::Layer3SetName(name),
-                            condition: condition.clone(),
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
-                    }
-                    if !add_types.is_empty() {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
-                            affected: affected.clone(),
-                            kind: ContinuousEffectKind::Layer4AddTypes(add_types),
-                            condition: condition.clone(),
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
-                    }
-                    if let Some(replacement) = set_types {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
-                            affected: affected.clone(),
-                            kind: ContinuousEffectKind::Layer4SetTypeLine(replacement),
-                            condition: condition.clone(),
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
-                    }
-                    if let Some(colors) = set_colors {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
-                            affected: affected.clone(),
-                            kind: ContinuousEffectKind::Layer5SetColors(colors),
-                            condition: condition.clone(),
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
-                    }
                     if delta_power != 0 || delta_toughness != 0 {
                         self.state.continuous_effects.push(ContinuousEffect {
                             trigger_grant_origin: None,
@@ -930,8 +915,8 @@ impl GameEngine {
                 }
                 StaticAbilityDef::ConditionalSelfModifier {
                     condition,
-                    set_types,
-                    add_types,
+                    set_types: _,
+                    add_types: _,
                     base_power,
                     base_toughness,
                     delta_power,
@@ -942,28 +927,6 @@ impl GameEngine {
                     can_attack_as_though_without_defender,
                 } => {
                     let affected = AffectedScope::Single(object_id);
-                    if let Some(set_types) = set_types {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
-                            affected: affected.clone(),
-                            kind: ContinuousEffectKind::Layer4SetTypeLine(set_types),
-                            condition: Some(condition.clone()),
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
-                    }
-                    if !add_types.is_empty() {
-                        self.state.continuous_effects.push(ContinuousEffect {
-                            trigger_grant_origin: None,
-                            source_id: Some(object_id),
-                            affected: affected.clone(),
-                            kind: ContinuousEffectKind::Layer4AddTypes(add_types),
-                            condition: Some(condition.clone()),
-                            duration: EffectDuration::WhileSourceOnBattlefield,
-                            timestamp,
-                        });
-                    }
                     if let (Some(power), Some(toughness)) = (base_power, base_toughness) {
                         self.state.continuous_effects.push(ContinuousEffect {
                             trigger_grant_origin: None,
@@ -1092,6 +1055,11 @@ impl GameEngine {
                     });
                 }
             }
+            for effect in &mut self.state.continuous_effects[static_start..] {
+                if effect.trigger_grant_origin.is_none() {
+                    effect.trigger_grant_origin = Some(static_origin.clone());
+                }
+            }
         }
     }
 
@@ -1106,28 +1074,48 @@ impl GameEngine {
         bool,
         Vec<tricerules_cards::AbilityId>,
     )> {
-        let face_down = self
+        let Some(object) = self
             .state
             .objects
             .get(&source_id)
-            .is_some_and(|object| object.face_down);
-        let removed_at =
-            super::characteristics::latest_remove_all_abilities_timestamp(&self.state, source_id);
-        let basic_land_setting =
-            super::characteristics::basic_land_type_setting(&self.state, source_id);
+            .filter(|object| object.zone == Zone::Battlefield)
+        else {
+            return Vec::new();
+        };
+        let face_down = object.face_down;
+        let face = (!face_down)
+            .then(|| self.effective_face(source_id))
+            .flatten();
+        let authored_span = face
+            .as_ref()
+            .map_or(0, |face| face.activated_abilities.len());
+        let removed_at = super::characteristics::latest_active_ability_removal(
+            &self.state,
+            self.registry,
+            source_id,
+        );
         let mut abilities: Vec<(
             usize,
             ActivatedAbilityDef,
             bool,
             Vec<tricerules_cards::AbilityId>,
-        )> = (!face_down && removed_at.is_none() && basic_land_setting.is_none())
-            .then(|| self.effective_face(source_id))
+        )> = (!face_down
+            && removed_at.is_none()
+            && super::characteristics::printed_rules_text_is_present(
+                &self.state,
+                self.registry,
+                source_id,
+            ))
+        .then(|| face.clone())
             .flatten()
             .map(|face| {
                 face.activated_abilities
                     .iter()
                     .enumerate()
-                    .filter(|(_, ability)| ability.source_zone == AbilitySourceZone::Battlefield)
+                .filter(|(_, ability)| {
+                    ability.source_zone == AbilitySourceZone::Battlefield
+                        && !ability.intrinsic_land_mana
+                })
                     .map(|(index, ability)| {
                         (
                             index,
@@ -1139,39 +1127,18 @@ impl GameEngine {
                     .collect()
             })
             .unwrap_or_default();
-        if !face_down {
-            if let Some((timestamp, _, land_type)) = basic_land_setting {
-                if removed_at.is_none_or(|removed| removed < timestamp) {
-                    abilities.push((
-                        0,
-                        ActivatedAbilityDef {
-                            ability_id: tricerules_cards::AbilityId::new("basic_land_mana")
-                                .expect("constant ability id is valid"),
-                            presentation: tricerules_cards::AbilityPresentation::Fallback,
-                            source_zone: AbilitySourceZone::Battlefield,
-                            costs: vec![AbilityCost::Tap],
-                            cost_modifiers: Vec::new(),
-                            effect: vec![SpellEffectKind::ProduceMana {
-                                options: vec![land_type.mana()],
-                                commander_color_identity: false,
-                                restriction: None,
-                                conditional: None,
-                            }],
-                            targeting: None,
-                            timing: Default::default(),
-                            conditions: Vec::new(),
-                            activation_limit: None,
-                        },
-                        false,
-                        vec![tricerules_cards::AbilityId::new("basic_land_mana")
-                            .expect("constant ability id is valid")],
-                    ));
-                }
-            }
-        }
         let Some(characteristics) = self.characteristics(source_id) else {
             return abilities;
         };
+        if removed_at.is_none() {
+            if let Some((index, ability)) =
+                land_mana::derived_intrinsic_land_mana(face.as_deref(), &characteristics)
+            {
+                let path = vec![ability.ability_id.clone()];
+                abilities.push((index, ability, false, path));
+            }
+        }
+        abilities.sort_by_key(|(index, ..)| *index);
         let mut granted: Vec<(
             u64,
             usize,
@@ -1186,7 +1153,9 @@ impl GameEngine {
                 let ContinuousEffectKind::GrantActivatedAbility(ability) = &effect.kind else {
                     return None;
                 };
-                if removed_at.is_some_and(|timestamp| effect.timestamp <= timestamp) {
+                if removed_at
+                    .is_some_and(|position| (effect.timestamp, insertion_index) <= position)
+                {
                     return None;
                 }
                 // CR 604.1 / 611.3: a granted activated ability exists only while the granting
@@ -1212,7 +1181,8 @@ impl GameEngine {
             })
             .collect();
         granted.sort_by_key(|(timestamp, insertion_index, _, _)| (*timestamp, *insertion_index));
-        let mut next_index = abilities.len();
+        // Reserve the derived intrinsic slot even when there are no basic land types today.
+        let mut next_index = authored_span + 1;
         abilities.extend(granted.into_iter().map(|(_, _, ability, path)| {
             let indexed = (next_index, ability, true, path);
             next_index += 1;
@@ -2091,7 +2061,12 @@ mod static_permanent_keyword_grant_tests {
             trigger_grant_origin: None,
             source_id: None,
             affected: AffectedScope::Single(source),
-            kind: ContinuousEffectKind::Layer4SetBasicLandType(BasicLandType::Forest),
+            // The artifact first becomes a land; CR 305.7 subtype-only setting requires Land.
+            kind: ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
+                card_types: vec![PermanentTypeFilter::Land],
+                creature_types: Vec::new(),
+                land_types: vec![BasicLandType::Forest],
+            }),
             condition: None,
             duration: EffectDuration::UntilEndOfTurn,
             timestamp: 1000,

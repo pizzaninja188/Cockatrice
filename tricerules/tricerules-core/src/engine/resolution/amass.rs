@@ -119,6 +119,7 @@ impl GameEngine {
                 source_id: Some(source_id),
                 affected: AffectedScope::Single(chosen),
                 kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: Vec::<PermanentTypeFilter>::new(),
                     creature_types: vec![amass.subtype.as_str().to_string()],
                 }),

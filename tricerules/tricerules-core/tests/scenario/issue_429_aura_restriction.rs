@@ -508,8 +508,8 @@ fn new_horizons_counters_and_grants_two_mana_of_one_color() {
     assert_eq!(engine.effective_power(bear), Some(3));
     assert_eq!(engine.effective_toughness(bear), Some(3));
 
-    // The printed Forest mana ability is index 0; the granted ability is index 1.
-    let command = activate_mana_option(&engine, land, 1, 0);
+    // The printed Forest mana ability is index 0; the granted ability is index 2.
+    let command = activate_mana_option(&engine, land, 2, 0);
     engine
         .apply_command(0, &command)
         .expect("activate the granted two-mana ability");
@@ -649,7 +649,7 @@ fn friendly_neighborhood_creates_three_citizens_and_pumps_per_creature() {
         assert_eq!(engine.effective_toughness(*token), Some(1));
     }
 
-    // The printed Forest mana ability is index 0; the granted pump is index 1. The count is
+    // The printed Forest mana ability is index 0; the granted pump is index 2. The count is
     // determined as the ability resolves (2025-09-19 ruling): at activation the Bear plus three
     // Citizens is four, and a second Bear joins before the ability resolves so the bonus is +5/+5.
     give_mana(
@@ -660,7 +660,7 @@ fn friendly_neighborhood_creates_three_citizens_and_pumps_per_creature() {
             ..Default::default()
         },
     );
-    apply_ability(&mut engine, 0, land, 1, target_object(bear))
+    apply_ability(&mut engine, 0, land, 2, target_object(bear))
         .expect("activate the granted pump ability");
     let reinforcement = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     resolve_entire_stack_two_player(&mut engine);

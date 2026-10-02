@@ -1918,26 +1918,38 @@ impl GameEngine {
             }
         }
 
-        let card_name = source_token_identity
+        let concealed = self
+            .state
+            .objects
+            .get(&permanent_id)
+            .is_some_and(|object| object.face_down);
+        let card_name = if concealed {
+            "Face-down permanent".to_string()
+        } else {
+            source_token_identity
             .as_ref()
             .map(|identity| identity.name.clone())
             .filter(|name| !name.is_empty())
             .or_else(|| self.registry.get(&card_id).map(|d| d.name.clone()))
-            .unwrap_or_else(|| card_id.clone());
+                .unwrap_or_else(|| card_id.clone())
+        };
         let ability_text = ability.fallback_text_with_path(&card_name, &ability_path);
         let ability_definition =
             self.ability_definition(permanent_id, face_up_index, ability_path.clone());
-        let primary_presentation = ability_presentation(
+        let primary_presentation = (!concealed).then(|| {
+            ability_presentation(
             self.registry,
             &ability_definition,
             &ability.presentation,
             ability_text.clone(),
-        );
+            )
+        });
 
         self.state.stack_presentations.insert(
             virtual_id,
             StackPresentation {
-                primary: Some(primary_presentation.clone()),
+                source_label: Some(card_name.clone()),
+                primary: primary_presentation.clone(),
                 ..Default::default()
             },
         );
@@ -1987,7 +1999,7 @@ impl GameEngine {
         batch.events.push(ev_log_ability(
             format!("P{player} activates {card_name}{paid_costs_line}: "),
             &ability_text,
-            Some(primary_presentation.clone()),
+            primary_presentation.clone(),
             tgt_line,
         ));
         if payment.life_paid > 0 {
@@ -2021,8 +2033,8 @@ impl GameEngine {
                 chosen_mode_indices: vec![],
                 chosen_mode_labels: vec![],
                 chosen_cast_cost_labels: vec![],
-                source_token_identity,
-                primary_presentation: Some(primary_presentation),
+                source_token_identity: (!concealed).then_some(source_token_identity).flatten(),
+                primary_presentation,
                 chosen_mode_presentations: vec![],
                 chosen_cast_cost_presentations: vec![],
             })),
@@ -2358,11 +2370,15 @@ impl GameEngine {
         if !targets.is_empty() {
             return Err(EngineError::Illegal("mana ability takes no targets"));
         }
-        let card_name = self
-            .registry
+        let concealed = self.state.objects[&permanent_id].face_down;
+        let card_name = if concealed {
+            "Face-down permanent".to_string()
+        } else {
+            self.registry
             .get(card_id)
             .map(|definition| definition.name.clone())
-            .unwrap_or_else(|| card_id.to_owned());
+                .unwrap_or_else(|| card_id.to_owned())
+        };
         let mana_damage = ability.mana_ability_damage_to_controller().map(|amount| {
             self.prepare_mana_ability_damage(permanent_id, player, card_name.clone(), amount)
         });
@@ -2398,18 +2414,23 @@ impl GameEngine {
         };
         let activation_uses = self.limited_activation_uses(permanent_id, ability_index, ability);
 
+        let primary_presentation = if concealed || ability.intrinsic_land_mana {
+            None
+        } else {
         let face_index = self.state.objects[&permanent_id].face_up_index;
-        let definition = self.ability_definition(permanent_id, face_index, ability_path.to_vec());
+            let definition =
+                self.ability_definition(permanent_id, face_index, ability_path.to_vec());
         let face_name = self
             .effective_face(permanent_id)
             .map(|face| face.name.clone())
             .unwrap_or_else(|| card_id.to_owned());
-        let primary_presentation = ability_presentation(
+            Some(ability_presentation(
             self.registry,
             &definition,
             &ability.presentation,
             ability.fallback_text_with_path(&face_name, ability_path),
-        );
+            ))
+        };
 
         let prepared = self.prepare_ability_costs(
             player,
@@ -2436,6 +2457,9 @@ impl GameEngine {
             {
                 (position + 1) as u32
             } else {
+                let restriction_presentation = if concealed {
+                    None
+            } else {
                 let face_index = self.state.objects[&permanent_id].face_up_index;
                 let definition =
                     self.ability_definition(permanent_id, face_index, ability_path.to_vec());
@@ -2449,16 +2473,17 @@ impl GameEngine {
                     &ability.presentation,
                     ability.fallback_text_with_path(&face_name, ability_path),
                 );
-                let restriction_presentation = child_presentation_ref(
+                    Some(child_presentation_ref(
                     &parent,
                     PresentationPath::ManaRestriction(&restriction.restriction_id),
                     &restriction.presentation,
                     restriction.fallback_label(),
-                );
+                    ))
+                };
                 self.state.mana_restrictions.push(restriction.clone());
                 self.state
                     .mana_restriction_presentations
-                    .push(Some(restriction_presentation));
+                    .push(restriction_presentation);
                 self.state.mana_restrictions.len() as u32
             }
         });
@@ -2502,7 +2527,7 @@ impl GameEngine {
         batch.events.push(ev_log_ability(
             format!("P{player} activates {card_name}{paid_costs_line}: "),
             &ability_text,
-            Some(primary_presentation),
+            primary_presentation,
             String::new(),
         ));
         for ev in payment.move_events {
@@ -2626,8 +2651,16 @@ impl GameEngine {
             .state
             .objects
             .get(&entry.source)
-            .and_then(|o| self.registry.get(&o.card_id))
+            .map(|o| {
+                if o.face_down {
+                    "Face-down permanent".to_string()
+                } else {
+                    self.registry
+                        .get(&o.card_id)
             .map(|d| d.name.clone())
+                        .unwrap_or_else(|| "permanent".to_string())
+                }
+            })
             .unwrap_or_else(|| "permanent".to_string());
         Ok(ev_log(format!(
             "P{player} undoes mana ability: {card_name}"
@@ -4165,6 +4198,7 @@ mod mana_payment_tests {
         e.state.objects.get_mut(&source).unwrap().zone = Zone::Battlefield;
 
         let ability = ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: tricerules_cards::AbilityId::new("activated_01").unwrap(),
             presentation: tricerules_cards::AbilityPresentation::Fallback,
             source_zone: AbilitySourceZone::Battlefield,

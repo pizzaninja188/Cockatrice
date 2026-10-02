@@ -54,7 +54,10 @@ if ($Side -in @('Rust', 'Both')) {
     $rust = Join-Path $repo 'tricerules'
     Add-VerificationStep 'Rust tests' 'cargo' @('test') $rust
     Add-VerificationStep 'Rust Clippy' 'cargo' @('clippy', '--all-targets', '--', '-D', 'warnings') $rust
-    Add-VerificationStep 'Rust formatting' 'cargo' @('fmt', '--check') $rust
+    . (Join-Path $PSScriptRoot 'rust-format-checks.ps1')
+    foreach ($format in @(Get-RustFormatChecks -Repository $repo)) {
+        Add-VerificationStep $format.Label 'cargo' $format.Args $rust
+    }
 }
 if ($Side -in @('Cpp', 'Both')) {
     Add-VerificationStep 'Windows Ninja build' $windowsPowerShell @(

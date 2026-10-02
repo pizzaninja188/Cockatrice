@@ -97,6 +97,7 @@ impl GameEngine {
             .into_iter()
             .map(|(_, delayed)| CollectedTrigger {
                 captured_spell: snapshot.clone().map(Box::new),
+                source_label: delayed.card_name.clone(),
                 source_id: delayed.source.object_id,
                 card_id: delayed.card_id,
                 face_index: delayed.source_face_index,

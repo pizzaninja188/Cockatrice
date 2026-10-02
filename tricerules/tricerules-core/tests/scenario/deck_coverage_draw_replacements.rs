@@ -861,7 +861,11 @@ fn face_down_basic_land_suppression_and_current_control_scope_draw_replacements(
             engine.state.objects.get_mut(&source).unwrap().face_down = true;
         } else {
             let kind = if mode == 1 {
-                ContinuousEffectKind::Layer4SetBasicLandType(BasicLandType::Island)
+                ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
+                    card_types: vec![tricerules_cards::PermanentTypeFilter::Land],
+                    creature_types: Vec::new(),
+                    land_types: vec![BasicLandType::Forest],
+                })
             } else {
                 ContinuousEffectKind::Layer2Control {
                     controller: ControllerReference::Fixed(9),

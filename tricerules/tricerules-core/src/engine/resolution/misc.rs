@@ -427,12 +427,7 @@ pub(super) fn create_delayed_trigger(
             controller_at_event: watched_object.controller,
         }
     };
-    let card_name = cx
-        .engine
-        .registry
-        .get(&cx.top.card_id)
-        .map(|definition| definition.name.clone())
-        .unwrap_or_else(|| cx.spell_label.to_string());
+    let card_name = cx.spell_label.to_owned();
     let matcher = match ability.trigger {
         TriggerCondition::AtBeginningOfNextEndStep => {
             EventObserverMatcher::AtBeginningOfNextEndStep

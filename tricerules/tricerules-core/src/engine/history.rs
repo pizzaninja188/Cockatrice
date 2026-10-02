@@ -2359,6 +2359,7 @@ mod tests {
             source_id: None,
             affected: AffectedScope::Single(land),
             kind: ContinuousEffectKind::Layer4AddTypes(tricerules_cards::TypeLineAddition {
+                land_types: Vec::new(),
                 card_types: vec![PermanentTypeFilter::Artifact, PermanentTypeFilter::Creature],
                 creature_types: vec![],
             }),

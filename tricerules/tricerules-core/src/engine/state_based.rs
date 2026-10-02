@@ -327,28 +327,34 @@ impl GameEngine {
             self.fire_zone_triggers(zone_snapshot, trigger_events);
         }
 
-        // CR 704.5n: Equipment attached to an illegal permanent becomes unattached but remains on
-        // the battlefield. Use derived characteristics so future type-changing effects feed the
-        // same SBA rather than teaching attachment state about those effects.
-        let equipment_to_unattach: Vec<ObjectId> = self
+        // CR 704.5n/p: illegal Equipment and permanents that are no longer an Aura, Equipment,
+        // or Fortification become unattached while remaining on the battlefield.
+        let attachments_to_unattach: Vec<ObjectId> = self
             .state
             .objects
             .iter()
             .filter(|(_, eq)| {
                 eq.zone == Zone::Battlefield
-                    && self
-                        .characteristics(eq.id)
-                        .is_some_and(|value| value.has_type("Equipment"))
-                    && eq.attached_to.is_some_and(|recipient| match recipient {
+                    && eq.attached_to.is_some_and(|recipient| {
+                        self.characteristics(eq.id).is_some_and(|value| {
+                            if value.has_type("Equipment") {
+                                match recipient {
                         AttachmentRecipient::Player(_) => true,
                         AttachmentRecipient::Object(target_id) => {
-                            !super::targeting::equipment_attachment_legal(self, eq.id, target_id)
+                                        !super::targeting::equipment_attachment_legal(
+                                            self, eq.id, target_id,
+                                        )
+                                    }
                         }
+                            } else {
+                                !value.is_aura() && !value.has_type("Fortification")
+                            }
+                        })
                     })
             })
             .map(|(id, _)| *id)
             .collect();
-        for eq_id in equipment_to_unattach {
+        for eq_id in attachments_to_unattach {
             if let Some(eq) = self.state.objects.get_mut(&eq_id) {
                 eq.attached_to = None;
                 changed = true;
@@ -750,6 +756,112 @@ mod sba_tests {
         let idx = e.state.player_idx(owner).unwrap();
         e.state.players[idx].battlefield.push(id);
         id
+    }
+
+    #[test]
+    fn basic_land_transformation_detaches_former_attachment_without_moving_it() {
+        for original_type in ["Aura", "Equipment", "Fortification"] {
+            let mut e = engine();
+            e.state.opening = None;
+            let recipient = add_creature(&mut e, 0, 2, 0);
+            let attachment = add_creature(&mut e, 0, 2, 0);
+            let base_card = if original_type == "Aura" {
+                "hermetic_study"
+            } else {
+                "bonesplitter"
+            };
+            let mut face = e.registry.get(base_card).unwrap().primary_face().clone();
+            face.types = vec![
+                if original_type == "Aura" {
+                    "Enchantment"
+                } else {
+                    "Artifact"
+                }
+                .into(),
+                original_type.into(),
+            ];
+            let object = e.state.objects.get_mut(&attachment).unwrap();
+            object.card_id = base_card.into();
+            object.copiable_values = Some(CopiableValues {
+                source_card_id: base_card.into(),
+                source_face_index: 0,
+                display_name: face.name.clone(),
+                face,
+                room_faces: None,
+            });
+            object.attached_to = Some(AttachmentRecipient::Object(recipient));
+            // An Aura enchanting any permanent remains attached to the transformed attachment.
+            let outer = add_creature(&mut e, 0, 2, 0);
+            let mut outer_face = e
+                .registry
+                .get("hermetic_study")
+                .unwrap()
+                .primary_face()
+                .clone();
+            outer_face.spell_effect = vec![SpellEffectKind::AuraAttach {
+                target: tricerules_cards::primitives::TargetFilter {
+                    kind: tricerules_cards::primitives::TargetKind::AnyPermanent,
+                    ..Default::default()
+                },
+            }];
+            let object = e.state.objects.get_mut(&outer).unwrap();
+            object.card_id = "hermetic_study".into();
+            object.copiable_values = Some(CopiableValues {
+                source_card_id: "hermetic_study".into(),
+                source_face_index: 0,
+                display_name: outer_face.name.clone(),
+                face: outer_face,
+                room_faces: None,
+            });
+            object.attached_to = Some(AttachmentRecipient::Object(attachment));
+            e.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(attachment),
+                kind: ContinuousEffectKind::Layer4SetTypeLine(
+                    tricerules_cards::TypeLineReplacement {
+                        card_types: vec![PermanentTypeFilter::Land],
+                        creature_types: Vec::new(),
+                        land_types: vec![BasicLandType::Forest],
+                    },
+                ),
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: 1,
+            });
+            e.apply_sbas(&mut Vec::new()).unwrap();
+            assert_eq!(e.state.objects[&attachment].zone, Zone::Battlefield);
+            assert_eq!(
+                e.state.objects[&attachment].attached_to, None,
+                "former {original_type} becomes unattached"
+            );
+            assert_eq!(e.state.objects[&outer].zone, Zone::Battlefield);
+            assert_eq!(
+                e.state.objects[&outer].attached_to,
+                Some(AttachmentRecipient::Object(attachment))
+            );
+            let Some(rv1::ruled_event::Ev::ZoneView(view)) = e.ev_zone_view_sync().ev else {
+                panic!("zone view");
+            };
+            let projected = view
+                .per_player
+                .iter()
+                .flat_map(|player| &player.battlefield_objects)
+                .find(|object| object.object_id == attachment)
+                .unwrap();
+            assert!(projected.attachment_recipient.is_none());
+            e.state.continuous_effects.clear();
+            e.apply_sbas(&mut Vec::new()).unwrap();
+            assert_eq!(e.state.objects[&attachment].attached_to, None);
+            assert_eq!(
+                e.state.objects[&attachment].zone,
+                if original_type == "Aura" {
+                    Zone::Graveyard
+                } else {
+                    Zone::Battlefield
+                }
+            );
+        }
     }
 
     #[test]

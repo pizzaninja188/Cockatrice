@@ -842,6 +842,7 @@ struct TriggerSourceSnapshot {
     object_id: ObjectId,
     card_id: String,
     face_name: String,
+    source_concealed: bool,
     controller: PlayerId,
     face_index: usize,
     zone_change_generation: u64,
@@ -2122,11 +2123,16 @@ impl GameEngine {
     fn refresh_source_static_abilities(&mut self, object_id: ObjectId) {
         self.state.continuous_effects.retain(|effect| {
             !(effect.source_id == Some(object_id)
-                && effect.duration == EffectDuration::WhileSourceOnBattlefield)
+                && effect.duration == EffectDuration::WhileSourceOnBattlefield
+                && matches!(
+                    effect.trigger_grant_origin,
+                    Some(TriggerAbilityOrigin::StaticGrant { .. })
+                ))
         });
         self.state.damage_prevention_effects.retain(|effect| {
             !(effect.source_id == Some(object_id)
-                && effect.duration == EffectDuration::WhileSourceOnBattlefield)
+                && effect.duration == EffectDuration::WhileSourceOnBattlefield
+                && effect.static_origin.is_some())
         });
         self.emit_static_abilities_on_enter(object_id);
     }

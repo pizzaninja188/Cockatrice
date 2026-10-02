@@ -7,5 +7,5 @@
   types: ["Creature", "Human", "Soldier"],
   power: 3,
   toughness: 4,
-  static_abilities: [(ability_id:"static_01",presentation:OracleLines([1]),definition:ConditionalSelfModifier(condition:BattlefieldAggregate(filter:(token:None,any_of:None,controllers:Controller,card_type:Some(Artifact),color:None,name:None,required_subtypes:[],exclude_source:false),aggregate:Count,min:Some(1),max:None),set_types:None,add_types:(card_types:[],creature_types:[]),base_power:None,base_toughness:None,delta_power:1,delta_toughness:0,keywords:[Deathtouch],activated_abilities:[],triggered_abilities:[],can_attack_as_though_without_defender:false))],
+  static_abilities: [(ability_id:"static_01",presentation:OracleLines([1]),definition:ConditionalSelfModifier(condition:BattlefieldAggregate(filter:(token:None,any_of:None,controllers:Controller,card_type:Some(Artifact),color:None,name:None,required_subtypes:[],exclude_source:false),aggregate:Count,min:Some(1),max:None),set_types:None,add_types:(card_types:[],creature_types:[],land_types:[]),base_power:None,base_toughness:None,delta_power:1,delta_toughness:0,keywords:[Deathtouch],activated_abilities:[],triggered_abilities:[],can_attack_as_though_without_defender:false))],
 )

@@ -159,6 +159,7 @@ fn any_and_named_counter_scopes_recompute_live_membership() {
         source_id: None,
         affected: AffectedScope::Single(late),
         kind: ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact],
             creature_types: Vec::new(),
         }),

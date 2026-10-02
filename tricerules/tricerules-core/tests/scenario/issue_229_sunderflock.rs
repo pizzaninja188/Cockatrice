@@ -225,7 +225,7 @@ fn issue_239_sunderflock_cost_stays_locked_while_activating_mana_abilities() {
     let transaction_id = pending.transaction_id;
 
     engine
-        .apply_command(0, &activate_ability(elemental, 0, vec![]))
+        .apply_command(0, &activate_ability(elemental, 1, vec![]))
         .expect("the Elemental's mana ability resolves during payment");
     assert_eq!(engine.state.objects[&elemental].zone, Zone::Graveyard);
     assert_eq!(engine.state.players[0].mana_pool.blue, 5);
@@ -288,7 +288,7 @@ fn issue_239_cancel_restores_exact_source_but_keeps_mana_ability_changes() {
     assert_eq!(engine.state.objects[&source].zone, Zone::Stack);
 
     engine
-        .apply_command(0, &activate_ability(elemental, 0, vec![]))
+        .apply_command(0, &activate_ability(elemental, 1, vec![]))
         .expect("mana ability during casting");
     let before_wrong_commit = format!("{:?}", engine.state);
     assert!(engine
@@ -370,7 +370,7 @@ fn issue_239_pending_cast_rejects_nonmana_activation_without_mutation() {
     let transaction_id = begin_cast_transaction(&mut engine, 0, cast_spell(slot, vec![]));
     let before = serde_json::to_value(&engine.state).unwrap();
     let error = engine
-        .apply_command(0, &activate_ability(elemental, 0, vec![]))
+        .apply_command(0, &activate_ability(elemental, 1, vec![]))
         .expect_err("a nonmana ability cannot be activated while paying for a spell");
     assert!(error.to_string().contains("only mana abilities"));
     assert_eq!(serde_json::to_value(&engine.state).unwrap(), before);
@@ -484,7 +484,7 @@ fn issue_239_serialized_begin_mana_cancel_retry_commit_replays_identically() {
         .as_ref()
         .unwrap()
         .transaction_id;
-    apply(&mut original, activate_ability(elemental, 0, vec![]));
+    apply(&mut original, activate_ability(elemental, 1, vec![]));
     apply(
         &mut original,
         RuledCommand {
@@ -564,7 +564,7 @@ fn issue_239_mana_ability_triggers_wait_until_cancel_then_stack_in_apnap_order()
     let transaction_id = begin_cast_transaction(&mut engine, 0, cast_spell(slot, vec![]));
 
     engine
-        .apply_command(0, &activate_ability(elemental, 0, vec![]))
+        .apply_command(0, &activate_ability(elemental, 1, vec![]))
         .expect("sacrifice mana ability during payment");
     assert!(engine.state.stack.is_empty());
     assert!(engine.state.pending_triggers.is_empty());
@@ -603,7 +603,7 @@ fn issue_239_state_based_actions_wait_until_cast_cancellation() {
     assert_eq!(engine.state.objects[&lethal].zone, Zone::Battlefield);
 
     engine
-        .apply_command(0, &activate_ability(elemental, 0, vec![]))
+        .apply_command(0, &activate_ability(elemental, 1, vec![]))
         .expect("mana ability cannot open an SBA window mid-cast");
     assert_eq!(engine.state.objects[&lethal].zone, Zone::Battlefield);
 

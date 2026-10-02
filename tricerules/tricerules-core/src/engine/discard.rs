@@ -125,13 +125,11 @@ impl GameEngine {
             .flat_map(|p| p.battlefield.iter().copied())
             .any(|oid| {
                 self.controller_of(oid).is_some_and(|controller| {
-                    !self.state.objects[&oid].face_down
-                        && super::characteristics::latest_remove_all_abilities_timestamp(
+                    super::characteristics::printed_static_source_is_available(
                             &self.state,
+                        self.registry,
                             oid,
-                        )
-                        .is_none()
-                        && self.effective_face(oid).is_some_and(|face| {
+                    ) && self.effective_face(oid).is_some_and(|face| {
                             face.static_abilities
                                 .iter()
                                 .any(|a| predicate(&a.definition, controller))
@@ -161,10 +159,11 @@ impl GameEngine {
             let Some(controller) = self.controller_of(oid) else {
                 continue;
             };
-            if self.state.objects[&oid].face_down
-                || super::characteristics::latest_remove_all_abilities_timestamp(&self.state, oid)
-                    .is_some()
-            {
+            if !super::characteristics::printed_static_source_is_available(
+                &self.state,
+                self.registry,
+                oid,
+            ) {
                 continue;
             }
             let Some(face) = self.effective_face(oid) else {
@@ -558,6 +557,7 @@ impl GameEngine {
         );
         let trigger = CollectedTrigger {
             captured_spell: None,
+            source_label: self.registry.get(&card_id).unwrap().name.clone(),
             source_id: oid,
             card_id,
             face_index: 0,

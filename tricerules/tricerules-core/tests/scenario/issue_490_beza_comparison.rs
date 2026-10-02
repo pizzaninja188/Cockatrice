@@ -158,6 +158,7 @@ fn animate_all_artifacts_as_creatures(engine: &mut GameEngine) {
             exclude: None,
         },
         kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Creature],
             creature_types: vec!["Construct".into()],
         }),

@@ -505,6 +505,13 @@ impl GameEngine {
         sources.sort_unstable();
 
         sources.into_iter().fold(0u32, |total, source_id| {
+            if !super::characteristics::printed_static_source_is_available(
+                &self.state,
+                self.registry,
+                source_id,
+            ) {
+                return total;
+            }
             let Some(source_controller) = self.controller_of(source_id) else {
                 return total;
             };
@@ -659,6 +666,13 @@ impl GameEngine {
         sources.sort_unstable();
         let mut applications = Vec::new();
         for source_id in sources {
+            if !super::characteristics::printed_static_source_is_available(
+                &self.state,
+                self.registry,
+                source_id,
+            ) {
+                continue;
+            }
             let Some(source_controller) = self.controller_of(source_id) else {
                 continue;
             };
@@ -1128,6 +1142,7 @@ mod spell_cost_filter_tests {
             source_id: None,
             affected: AffectedScope::Single(spell_oid),
             kind: ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+                land_types: Vec::new(),
                 card_types: vec![PermanentTypeFilter::Artifact],
                 creature_types: vec![],
             }),

@@ -51,7 +51,7 @@ fn exhaust_persists_across_turns_and_control_but_resets_for_a_new_object() {
     );
 
     engine
-        .apply_command(0, &activate_ability(source, 0, vec![]))
+        .apply_command(0, &activate_ability(source, 1, vec![]))
         .expect("the first Exhaust activation is legal");
     assert_eq!(zone_view_ability_flags(&mut engine, 0, source), [false]);
     assert_eq!(
@@ -130,7 +130,7 @@ fn separate_exhaust_abilities_on_one_object_have_independent_allowances() {
     );
 
     engine
-        .apply_command(0, &activate_ability(source, 0, vec![]))
+        .apply_command(0, &activate_ability(source, 1, vec![]))
         .expect("activate the first Exhaust ability");
     assert_eq!(
         zone_view_ability_flags(&mut engine, 0, source),
@@ -138,7 +138,7 @@ fn separate_exhaust_abilities_on_one_object_have_independent_allowances() {
     );
 
     engine
-        .apply_command(0, &activate_ability(source, 1, vec![]))
+        .apply_command(0, &activate_ability(source, 2, vec![]))
         .expect("the second Exhaust ability remains independent");
     assert_eq!(
         zone_view_ability_flags(&mut engine, 0, source),
@@ -151,7 +151,7 @@ fn failed_and_duplicate_commands_do_not_partially_change_exhaust_state() {
     let mut engine = anthem_engine(15_203, "mountain");
     let source = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
     grant_exhaust_ability(&mut engine, source, "exhaust_granted");
-    let command = activate_ability(source, 0, vec![]);
+    let command = activate_ability(source, 1, vec![]);
 
     engine
         .apply_command(0, &command)
@@ -170,7 +170,7 @@ fn failed_and_duplicate_commands_do_not_partially_change_exhaust_state() {
     let batch = engine
         .apply_command(0, &command)
         .expect("the funded activation succeeds");
-    let key = (u64::from(source)) << 32;
+    let key = ((u64::from(source)) << 32) | 1;
     assert!(
         !batch.legal_by_player[&0].cost_choices_by_ability[&key].non_mana_costs_payable,
         "the same authoritative legality check disables further cost collection"
@@ -218,7 +218,7 @@ fn a_countered_exhaust_ability_remains_spent() {
     });
 
     engine
-        .apply_command(0, &activate_ability(source, 1, target_object(warded)))
+        .apply_command(0, &activate_ability(source, 2, target_object(warded)))
         .expect("activate the granted Exhaust ability");
     assert_eq!(
         engine.state.stack.len(),
@@ -261,7 +261,7 @@ fn same_seed_and_commands_replay_the_same_exhaust_state() {
             },
         );
         engine
-            .apply_command(0, &activate_ability(source, 0, vec![]))
+            .apply_command(0, &activate_ability(source, 1, vec![]))
             .expect("accepted command");
         let (key, count) = engine
             .state

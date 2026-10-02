@@ -86,7 +86,7 @@ fn issue_282_mandatory_loot_draws_before_the_private_discard_choice() {
     let library_before = engine.state.players[0].library.len();
 
     engine
-        .apply_command(0, &activate_ability(source, 0, vec![]))
+        .apply_command(0, &activate_ability(source, 1, vec![]))
         .expect("activate the granted tap ability");
     assert!(engine.state.objects[&source].tapped);
     assert_eq!(engine.state.players[0].mana_pool.green, 1);
@@ -239,7 +239,7 @@ fn issue_282_optional_decline_does_not_draw() {
     let library_before = engine.state.players[0].library.len();
 
     engine
-        .apply_command(0, &activate_ability(source, 0, vec![]))
+        .apply_command(0, &activate_ability(source, 1, vec![]))
         .expect("activate the granted tap ability");
     engine
         .apply_command(0, &pass())
@@ -275,7 +275,7 @@ fn issue_282_optional_empty_hand_cannot_pay_and_does_not_draw() {
     let library_before = engine.state.players[0].library.len();
 
     engine
-        .apply_command(0, &activate_ability(source, 0, vec![]))
+        .apply_command(0, &activate_ability(source, 1, vec![]))
         .expect("activate the granted tap ability");
     engine
         .apply_command(0, &pass())

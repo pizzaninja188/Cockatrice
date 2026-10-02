@@ -506,7 +506,7 @@ fn issue_423_planet_threshold_activations_require_twelve_charge_counters() {
                 &activate_with_generation(
                     &engine,
                     world,
-                    2,
+                    3,
                     vec![permanent_cost_selection(2, sacrifice_land)],
                 ),
             )
@@ -522,7 +522,7 @@ fn issue_423_planet_threshold_activations_require_twelve_charge_counters() {
             &activate_with_generation(
                 &engine,
                 world,
-                2,
+                3,
                 vec![permanent_cost_selection(2, sacrifice_land)],
             ),
         )
@@ -576,7 +576,7 @@ fn issue_423_susur_secundi_draws_equal_to_the_sacrificed_creatures_power() {
     engine
         .apply_command(
             0,
-            &activate_with_generation(&engine, altar, 2, vec![permanent_cost_selection(3, victim)]),
+            &activate_with_generation(&engine, altar, 3, vec![permanent_cost_selection(3, victim)]),
         )
         .expect("activate Susur Secundi's 12+ ability");
     assert_eq!(engine.state.objects[&victim].zone, Zone::Graveyard);

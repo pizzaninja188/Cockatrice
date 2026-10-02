@@ -16,6 +16,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'focused-test-plan.ps1')
+. (Join-Path $PSScriptRoot 'rust-format-checks.ps1')
 $logs = Join-Path $repo ('build/verification-logs/prepare-card-batch-' + [guid]::NewGuid())
 $savedJobs = $env:CARGO_BUILD_JOBS
 $savedThreads = $env:RUST_TEST_THREADS
@@ -24,8 +25,7 @@ try {
         $env:CARGO_BUILD_JOBS = "$Workers"
         $env:RUST_TEST_THREADS = "$Workers"
     }
-    $checks = @(
-        @{ Label = 'Rust formatting'; Args = @('fmt', '--check'); Exact = $false },
+    $checks = @(Get-RustFormatChecks -Repository $repo) + @(
         @{ Label = 'Canonical card IDs'; Args = @('test', '--quiet', '-p', 'tricerules-cards', '--lib',
             'registry::tests::card_ids_follow_slug_convention', '--', '--exact'); Exact = $true },
         @{ Label = 'Card conformance'; Args = @('test', '--quiet', '-p', 'tricerules-core', '--test',

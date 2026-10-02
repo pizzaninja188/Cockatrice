@@ -193,6 +193,7 @@ fn animated_nontokens_and_tokens_use_derived_event_time_types() {
             source_id: None,
             affected: AffectedScope::Single(first),
             kind: ContinuousEffectKind::Layer4AddTypes(tricerules_cards::TypeLineAddition {
+                land_types: Vec::new(),
                 card_types: vec![PermanentTypeFilter::Creature],
                 creature_types: vec![],
             }),

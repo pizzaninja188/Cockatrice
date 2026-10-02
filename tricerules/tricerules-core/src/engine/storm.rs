@@ -105,6 +105,7 @@ impl GameEngine {
 
         vec![CollectedTrigger {
             captured_spell: Some(Box::new(spell.clone())),
+            source_label: face.name.clone(),
             source_id: spell.id,
             card_id: spell.card_id.clone(),
             face_index: spell.face_index,

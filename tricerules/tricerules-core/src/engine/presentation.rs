@@ -236,6 +236,7 @@ pub(super) fn spell_stack_presentation(
         })
         .collect();
     StackPresentation {
+        source_label: None,
         primary: None,
         chosen_modes,
         chosen_cast_costs,

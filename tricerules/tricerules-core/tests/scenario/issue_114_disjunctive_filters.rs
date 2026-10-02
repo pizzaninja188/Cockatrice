@@ -467,6 +467,7 @@ fn publish_fixture_trigger(engine: &mut GameEngine, ability: TriggeredAbilityDef
         ability: ability.clone(),
         ability_text: ability.fallback_text("Grizzly Bears"),
         presentation: None,
+        source_label: "Grizzly Bears".into(),
         card_id: "grizzly_bears".into(),
         controller: 0,
         may: ability.may,

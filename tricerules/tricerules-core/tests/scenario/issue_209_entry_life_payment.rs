@@ -207,6 +207,7 @@ fn an_entry_copy_rechecks_the_copied_watery_grave_ability() {
         source_id: None,
         affected: AffectedScope::Single(watery_grave),
         kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Creature],
             creature_types: vec!["Shapeshifter".into()],
         }),

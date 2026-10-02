@@ -235,6 +235,7 @@ fn issue_423_spacecraft_faces_have_exact_station_activation_and_thresholds() {
         assert_eq!(
             add_types,
             TypeLineAddition {
+                land_types: Vec::new(),
                 card_types: vec![tricerules_cards::primitives::PermanentTypeFilter::Creature],
                 creature_types: Vec::new(),
             },

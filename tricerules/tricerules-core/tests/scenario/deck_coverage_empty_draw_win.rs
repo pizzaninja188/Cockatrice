@@ -464,7 +464,11 @@ fn winning_draw_static_uses_copied_face_and_current_control_or_suppression() {
                 trigger_grant_origin: None,
                 affected: AffectedScope::Single(source),
                 kind: if mode == 2 {
-                    ContinuousEffectKind::Layer4SetBasicLandType(BasicLandType::Island)
+                    ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
+                        card_types: vec![tricerules_cards::PermanentTypeFilter::Land],
+                        creature_types: Vec::new(),
+                        land_types: vec![BasicLandType::Forest],
+                    })
                 } else {
                     ContinuousEffectKind::Layer2Control {
                         controller: ControllerReference::Fixed(9),

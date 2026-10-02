@@ -1296,6 +1296,7 @@ fn match_fixed_generic_equip(text: &str, context: &RecipeContext) -> Option<Reci
     }
     let mana_cost = exact_mana_cost(&format!("{{{generic}}}"))?;
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
         cost_modifiers: Vec::new(),
@@ -1341,6 +1342,7 @@ fn match_equipment_clue_sacrifice_self_draw(
 ) -> Option<RecipeEmission> {
     (context.source_is_equipment && text == ISSUE_415_CLUE_SACRIFICE_DRAW).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -1543,6 +1545,7 @@ fn match_equipment_vigilance_granted_tap_target_creature(
                 keywords: vec![Keyword::Vigilance],
                 triggered_abilities: Vec::new(),
                 activated_abilities: vec![ActivatedAbilityDef {
+                    intrinsic_land_mana: false,
                     ability_id: issue_415_nested_ability_id("activated_01"),
                     presentation: AbilityPresentation::Fallback,
                     cost_modifiers: Vec::new(),
@@ -1932,6 +1935,7 @@ fn match_aura_granted_two_mana_any_one_color(
                 false,
                 false,
                 vec![ActivatedAbilityDef {
+                    intrinsic_land_mana: false,
                     ability_id: context.activated_ability_id.clone(),
                     presentation: AbilityPresentation::Fallback,
                     cost_modifiers: Vec::new(),
@@ -1980,6 +1984,7 @@ fn match_aura_granted_pump_per_creature(
                 false,
                 false,
                 vec![ActivatedAbilityDef {
+                    intrinsic_land_mana: false,
                     ability_id: context.activated_ability_id.clone(),
                     presentation: AbilityPresentation::Fallback,
                     cost_modifiers: Vec::new(),
@@ -4009,6 +4014,7 @@ fn match_modal_becomes_artifact_indestructible(
                 SpellEffectKind::AddTypes {
                     subject: EffectSubject::Chosen(Box::new(target.clone())),
                     addition: TypeLineAddition {
+                        land_types: Vec::new(),
                         card_types: vec![PermanentTypeFilter::Artifact],
                         creature_types: Vec::new(),
                     },
@@ -6388,6 +6394,7 @@ fn match_graveyard_return_self_to_hand(
 ) -> Option<RecipeEmission> {
     let cost = exact_mana_cost(text.strip_suffix(ISSUE_317_GRAVEYARD_RETURN_SELF_SUFFIX)?)?;
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
         cost_modifiers: Vec::new(),
@@ -6976,6 +6983,7 @@ fn issue_313_station_assembly(text: &str, context: &RecipeContext) -> Option<Rec
     let threshold_line = station_line.checked_add(1)?;
     Some(RecipeEmission::StationAssembly(StationAssemblyEmission {
         activated_ability: ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             source_zone: AbilitySourceZone::Battlefield,
@@ -7018,6 +7026,7 @@ fn issue_313_station_assembly(text: &str, context: &RecipeContext) -> Option<Rec
                 },
                 set_types: None,
                 add_types: TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Creature],
                     creature_types: Vec::new(),
                 },
@@ -7148,6 +7157,7 @@ pub(super) fn match_station_6_7_flying_assembly(
     let threshold_line = station_line.checked_add(1)?;
     Some(RecipeEmission::StationAssembly(StationAssemblyEmission {
         activated_ability: ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             source_zone: AbilitySourceZone::Battlefield,
@@ -7190,6 +7200,7 @@ pub(super) fn match_station_6_7_flying_assembly(
                 },
                 set_types: None,
                 add_types: TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Creature],
                     creature_types: Vec::new(),
                 },
@@ -7310,6 +7321,7 @@ pub(super) fn match_station_3_or_9_keyword_assembly(
     let threshold_line = station_line.checked_add(1)?;
     Some(RecipeEmission::StationAssembly(StationAssemblyEmission {
         activated_ability: ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             source_zone: AbilitySourceZone::Battlefield,
@@ -7352,6 +7364,7 @@ pub(super) fn match_station_3_or_9_keyword_assembly(
                 },
                 set_types: None,
                 add_types: TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Creature],
                     creature_types: Vec::new(),
                 },
@@ -7424,6 +7437,7 @@ pub(super) fn match_station_8_flying_assembly(
     let threshold_line = station_line.checked_add(1)?;
     Some(RecipeEmission::StationAssembly(StationAssemblyEmission {
         activated_ability: ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             source_zone: AbilitySourceZone::Battlefield,
@@ -7466,6 +7480,7 @@ pub(super) fn match_station_8_flying_assembly(
                 },
                 set_types: None,
                 add_types: TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Creature],
                     creature_types: Vec::new(),
                 },
@@ -7714,6 +7729,7 @@ fn issue_423_station_line(context: &RecipeContext) -> Option<u16> {
 /// from the committed activation payment, so the count stays generation-bound.
 fn issue_423_station_charge_activation(context: &RecipeContext) -> ActivatedAbilityDef {
     ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
         source_zone: AbilitySourceZone::Battlefield,
@@ -7914,6 +7930,7 @@ pub(super) fn match_station_spacecraft_thresholds(
             threshold_line,
             variant.threshold,
             TypeLineAddition {
+                land_types: Vec::new(),
                 card_types: vec![PermanentTypeFilter::Creature],
                 creature_types: Vec::new(),
             },
@@ -7980,6 +7997,7 @@ fn issue_423_kavaron_inner_activation(context: &RecipeContext, line: u16) -> Act
         ..CreatureScopeFilter::default()
     };
     ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: AbilityPresentation::OracleLines(vec![line]),
         source_zone: AbilitySourceZone::Battlefield,
@@ -8027,6 +8045,7 @@ fn issue_423_susur_secundi_inner_activation(
     line: u16,
 ) -> ActivatedAbilityDef {
     ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: AbilityPresentation::OracleLines(vec![line]),
         source_zone: AbilitySourceZone::Battlefield,
@@ -8100,6 +8119,7 @@ pub(super) fn match_station_planets_12_activated(
             threshold_line,
             12,
             TypeLineAddition {
+                land_types: Vec::new(),
                 card_types: Vec::new(),
                 creature_types: Vec::new(),
             },
@@ -8355,6 +8375,7 @@ fn match_station_static_damage_100_attack(
                     },
                     set_types: None,
                     add_types: TypeLineAddition {
+                        land_types: Vec::new(),
                         card_types: Vec::new(),
                         creature_types: Vec::new(),
                     },
@@ -8399,6 +8420,7 @@ fn match_station_static_combat_animation(
                 },
                 effect: vec![
                     animate(ResolvingPermanentModifier::AddTypes(TypeLineAddition {
+                        land_types: Vec::new(),
                         card_types: vec![PermanentTypeFilter::Creature],
                         creature_types: Vec::new(),
                     })),
@@ -8431,6 +8453,7 @@ fn match_station_static_combat_animation(
                     },
                     set_types: None,
                     add_types: TypeLineAddition {
+                        land_types: Vec::new(),
                         card_types: Vec::new(),
                         creature_types: Vec::new(),
                     },
@@ -9332,6 +9355,7 @@ fn match_crew(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     }
 
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
         cost_modifiers: Vec::new(),
@@ -9351,6 +9375,7 @@ fn match_crew(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
         effect: vec![SpellEffectKind::AddTypes {
             subject: EffectSubject::Source,
             addition: TypeLineAddition {
+                land_types: Vec::new(),
                 card_types: vec![PermanentTypeFilter::Creature],
                 creature_types: Vec::new(),
             },
@@ -9537,6 +9562,7 @@ fn match_tap_for_one_mana(text: &str, context: &RecipeContext) -> Option<RecipeE
         return None;
     }
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
         cost_modifiers: Vec::new(),
@@ -9558,6 +9584,7 @@ fn match_tap_for_one_mana(text: &str, context: &RecipeContext) -> Option<RecipeE
 fn match_tap_for_any_color(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (text == "{T}: Add one mana of any color.").then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -9585,6 +9612,7 @@ fn match_tap_for_any_color(text: &str, context: &RecipeContext) -> Option<Recipe
 fn match_pay_one_tap_for_any_color(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (text == "{1}, {T}: Add one mana of any color.").then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -9642,6 +9670,7 @@ fn utility_activated_ability(
     targeting: Option<TargetingDef>,
 ) -> RecipeEmission {
     RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
         cost_modifiers: Vec::new(),
@@ -9848,6 +9877,7 @@ fn match_pay_one_for_any_color_once_per_turn(
         && text == "{1}: Add one mana of any color. Activate only once each turn.")
         .then(|| {
             RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+                intrinsic_land_mana: false,
                 ability_id: context.activated_ability_id.clone(),
                 presentation: context.presentation.clone(),
                 cost_modifiers: Vec::new(),
@@ -9878,6 +9908,7 @@ fn match_creature_self_pump_one_one(text: &str, context: &RecipeContext) -> Opti
     (context.source_is_creature && text == "{1}{B}: This creature gets +1/+1 until end of turn.")
         .then(|| {
             RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+                intrinsic_land_mana: false,
                 ability_id: context.activated_ability_id.clone(),
                 presentation: context.presentation.clone(),
                 cost_modifiers: Vec::new(),
@@ -9908,6 +9939,7 @@ fn match_creature_self_pump_two_two_once_per_turn(
             == "{2}{G}: This creature gets +2/+2 until end of turn. Activate only once each turn.")
         .then(|| {
             RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+                intrinsic_land_mana: false,
                 ability_id: context.activated_ability_id.clone(),
                 presentation: context.presentation.clone(),
                 cost_modifiers: Vec::new(),
@@ -9940,6 +9972,7 @@ fn match_creature_team_pump_one_one(text: &str, context: &RecipeContext) -> Opti
         _ => return None,
     };
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
         cost_modifiers: Vec::new(),
@@ -9990,6 +10023,7 @@ fn match_tap_for_multicolor_mana(text: &str, context: &RecipeContext) -> Option<
     }
 
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
         cost_modifiers: Vec::new(),
@@ -10039,6 +10073,7 @@ fn match_activated_tap_conditional_pair_mana(
     let (first, second) = (color(first)?, color(second)?);
     REVIEWED_PAIRS.contains(&(first, second)).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -10089,6 +10124,7 @@ fn match_activated_tap_conditional_pair_mana(
 fn match_sacrifice_to_naturalize(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (text == "{1}, Sacrifice this creature: Destroy target artifact or enchantment.").then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -10121,6 +10157,7 @@ fn match_land_tap_sacrifice_draw_one(
 ) -> Option<RecipeEmission> {
     (context.source_is_land && text == "{4}, {T}, Sacrifice this land: Draw a card.").then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -10151,6 +10188,7 @@ fn match_land_tap_sacrifice_search_basic_tapped(
             == "{T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.")
         .then(|| {
             RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+                intrinsic_land_mana: false,
                 ability_id: context.activated_ability_id.clone(),
                 presentation: context.presentation.clone(),
                 cost_modifiers: Vec::new(),
@@ -10187,6 +10225,7 @@ fn match_land_pay_four_tap_surveil_one(
 ) -> Option<RecipeEmission> {
     (context.source_is_land && text == "{4}, {T}: Surveil 1.").then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -10223,6 +10262,7 @@ fn hand_discard_ability(
     effect: SpellEffectKind,
 ) -> RecipeEmission {
     RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
         cost_modifiers: Vec::new(),
@@ -10770,6 +10810,7 @@ fn match_activated_creature_self_pump_plus_one_zero(
     let cost = text.strip_suffix(": This creature gets +1/+0 until end of turn.")?;
     let mana = issue_327_single_colored_symbol(cost)?;
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
         cost_modifiers: Vec::new(),
@@ -10863,6 +10904,7 @@ fn match_activated_tap_discard_draw_one(
 ) -> Option<RecipeEmission> {
     (text == ISSUE_327_TAP_DISCARD_DRAW_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -10976,6 +11018,7 @@ fn match_activated_sacrifice_self_destroy_enchantment(
 ) -> Option<RecipeEmission> {
     (text == ISSUE_328_SACRIFICE_SELF_DESTROY_ENCHANTMENT_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -11023,6 +11066,7 @@ fn match_triggered_upkeep_self_damage_controller_one(
 fn match_activated_tap_surveil_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (text == ISSUE_328_TAP_SURVEIL_ONE_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -11066,6 +11110,7 @@ fn match_activated_mana_tap_surveil_one(
     let cost = exact_mana_cost(prefix)?;
     REVIEWED_COSTS.contains(&prefix).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -11094,6 +11139,7 @@ fn match_activated_tap_target_creature_gains_haste(
 ) -> Option<RecipeEmission> {
     (text == ISSUE_328_TAP_TARGET_CREATURE_GAINS_HASTE_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -11350,6 +11396,7 @@ fn any_one_color_mana_options(per_color: u32) -> Vec<ManaAmount> {
 /// sacrifice or mana variants, restrictions, and other multipliers stay unsupported.
 fn tap_for_any_one_color_mana(context: &RecipeContext, per_color: u32) -> RecipeEmission {
     RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
         cost_modifiers: Vec::new(),
@@ -12191,6 +12238,7 @@ fn match_two_counter_self_activation(
             .strip_suffix(": Put two +1/+1 counters on this creature.")?,
     )?;
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
         cost_modifiers: keyword.cost_modifiers(),
@@ -13178,6 +13226,7 @@ fn match_activated_pay_life_pump_self_once_per_turn(
     (context.source_is_creature && text == ISSUE_358_PAY_LIFE_PUMP_ONCE_PER_TURN_CLAUSE).then(
         || {
             RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+                intrinsic_land_mana: false,
                 ability_id: context.activated_ability_id.clone(),
                 presentation: context.presentation.clone(),
                 cost_modifiers: Vec::new(),
@@ -13231,6 +13280,7 @@ fn match_activated_graveyard_exile_self_draw_one_lose_one(
 ) -> Option<RecipeEmission> {
     (text == ISSUE_358_GRAVEYARD_EXILE_SELF_DRAW_ONE_LOSE_ONE_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -13658,6 +13708,7 @@ fn match_sacrifice_another_creature_or_token_draw_sorcery(
 ) -> Option<RecipeEmission> {
     (context.source_is_creature && text == ISSUE_417_ICE_CREAM_KITTY_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -13708,6 +13759,7 @@ fn match_animate_noncreature_artifact_four_four(
     (text == ISSUE_417_TOUGH_COOKIE_ANIMATION_CLAUSE).then(|| {
         let target = issue_417_noncreature_artifact_you_control();
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -13722,6 +13774,7 @@ fn match_animate_noncreature_artifact_four_four(
                 SpellEffectKind::AddTypes {
                     subject: EffectSubject::Chosen(Box::new(target)),
                     addition: TypeLineAddition {
+                        land_types: Vec::new(),
                         card_types: vec![
                             PermanentTypeFilter::Artifact,
                             PermanentTypeFilter::Creature,
@@ -14086,6 +14139,7 @@ fn match_activated_pump_count_graveyard_permanent_cards(
             == "{8}: Until end of turn, this creature gets +1/+1 for each permanent card in your graveyard.")
     .then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -14251,6 +14305,7 @@ fn match_activated_graveyard_put_counters_count_graveyard_land_cards(
             == "Renew — {1}{G}, Exile this card from your graveyard: Put X +1/+1 counters on target creature, where X is the number of land cards in your graveyard. Activate only as a sorcery.")
     .then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -14363,6 +14418,7 @@ fn match_activated_put_counter_and_draw_graveyard_threshold_once(
             == "Threshold — {1}{U}: Put a +1/+1 counter on this creature and draw a card. Activate only if there are seven or more cards in your graveyard and only once.")
     .then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -15574,6 +15630,7 @@ fn match_enters_or_attacks_draw_discard(
 fn match_hybrid_mana_surveil_one(text: &str, context: &RecipeContext) -> Option<RecipeEmission> {
     (context.source_is_creature && text == ISSUE_377_HYBRID_MANA_SURVEIL_ONE_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -15806,6 +15863,7 @@ fn match_activated_create_villain_menace_only_two_creature_cards_graveyard(
 ) -> Option<RecipeEmission> {
     (context.source_is_creature && text == ISSUE_371_ARNIM_ACTIVATED_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -15894,6 +15952,7 @@ fn match_activated_create_worm_for_each_land_graveyard_card(
 ) -> Option<RecipeEmission> {
     (context.source_is_creature && text == ISSUE_371_LLUWEN_ACTIVATED_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -15970,6 +16029,7 @@ fn match_activated_create_elf_for_each_elf_graveyard_card_sorcery(
 ) -> Option<RecipeEmission> {
     (context.source_is_enchantment && text == ISSUE_371_MORCANT_ACTIVATED_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -16358,6 +16418,7 @@ fn match_activated_transform_graveyard_distinct_permanent_types_4(
         && text == ISSUE_375_MATZALANTLI_CLAUSE)
         .then(|| {
             RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+                intrinsic_land_mana: false,
                 ability_id: context.activated_ability_id.clone(),
                 presentation: context.presentation.clone(),
                 cost_modifiers: Vec::new(),
@@ -16463,6 +16524,7 @@ fn match_activated_tri_color_mana_once_each_turn(
         return None;
     }
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
         cost_modifiers: Vec::new(),
@@ -16760,6 +16822,7 @@ fn match_static_attached_count_scaled_graveyard_creature_cards_avatar_plus_one_p
             definition: StaticAbilityDef::AttachedModifier {
                 condition: None,
                 add_types: TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: Vec::new(),
                     creature_types: vec!["Avatar".to_string()],
                 },
@@ -17341,6 +17404,7 @@ fn match_activated_remove_counter_grant_indestructible(
 ) -> Option<RecipeEmission> {
     (context.source_is_creature && text == ISSUE_414_BURDENED_STONEBACK_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -17371,6 +17435,7 @@ fn match_activated_remove_counter_draw_one(
 ) -> Option<RecipeEmission> {
     (context.source_is_creature && text == ISSUE_414_MOONLIT_LAMENTER_CLAUSE).then(|| {
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -17409,6 +17474,7 @@ fn match_activated_remove_counter_pump_flying_another_creature(
             ..TargetFilter::default()
         };
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -17472,6 +17538,7 @@ fn match_activated_remove_counter_pump_minus_two(
         )];
         costs.extend(issue_414_remove_two_counters_from_source());
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -17507,6 +17574,7 @@ fn match_activated_remove_counter_return_small_creature_card(
         )];
         costs.extend(issue_414_remove_two_counters_from_source());
         RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: context.activated_ability_id.clone(),
             presentation: context.presentation.clone(),
             cost_modifiers: Vec::new(),
@@ -17942,6 +18010,7 @@ fn match_activated_each_opponent_damage(
         vec![AbilityCost::Mana(exact_mana_cost(cost)?)]
     };
     Some(RecipeEmission::ActivatedAbility(ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: context.activated_ability_id.clone(),
         presentation: context.presentation.clone(),
         cost_modifiers: Vec::new(),
@@ -30967,6 +31036,7 @@ mod tests {
             [SpellEffectKind::AddTypes {
                 subject: EffectSubject::Source,
                 addition: TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Creature],
                     creature_types: Vec::new(),
                 },
@@ -32505,6 +32575,7 @@ mod tests {
                 },
                 set_types: None,
                 add_types: TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Creature],
                     creature_types: Vec::new(),
                 },
@@ -32657,6 +32728,7 @@ mod tests {
                     },
                     set_types: None,
                     add_types: TypeLineAddition {
+                        land_types: Vec::new(),
                         card_types: vec![PermanentTypeFilter::Creature],
                         creature_types: Vec::new(),
                     },
@@ -33000,6 +33072,7 @@ mod tests {
                     },
                     set_types: None,
                     add_types: TypeLineAddition {
+                        land_types: Vec::new(),
                         card_types: vec![PermanentTypeFilter::Creature],
                         creature_types: Vec::new(),
                     },
@@ -33413,6 +33486,7 @@ mod tests {
                     },
                     set_types: None,
                     add_types: TypeLineAddition {
+                        land_types: Vec::new(),
                         card_types: vec![PermanentTypeFilter::Creature],
                         creature_types: Vec::new(),
                     },
@@ -45233,6 +45307,7 @@ mod tests {
             StaticAbilityDef::AttachedModifier {
                 condition: None,
                 add_types: TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: Vec::new(),
                     creature_types: vec!["Avatar".to_string()],
                 },
@@ -47621,6 +47696,7 @@ mod tests {
                 keywords: vec![Keyword::Vigilance],
                 triggered_abilities: Vec::new(),
                 activated_abilities: vec![ActivatedAbilityDef {
+                    intrinsic_land_mana: false,
                     ability_id: AbilityId::new("activated_01").expect("static nested ability id"),
                     presentation: AbilityPresentation::Fallback,
                     cost_modifiers: Vec::new(),
@@ -48204,6 +48280,7 @@ mod tests {
                 SpellEffectKind::AddTypes {
                     subject: EffectSubject::Chosen(Box::new(target)),
                     addition: TypeLineAddition {
+                        land_types: Vec::new(),
                         card_types: vec![
                             PermanentTypeFilter::Artifact,
                             PermanentTypeFilter::Creature,
@@ -48398,6 +48475,7 @@ mod tests {
                 },
                 set_types: None,
                 add_types: TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Creature],
                     creature_types: Vec::new(),
                 },
@@ -48433,6 +48511,7 @@ mod tests {
                 },
                 set_types: None,
                 add_types: TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Creature],
                     creature_types: Vec::new(),
                 },
@@ -49484,6 +49563,7 @@ mod tests {
                     SpellEffectKind::AddTypes {
                         subject: EffectSubject::Chosen(Box::new(artifact_target.clone())),
                         addition: TypeLineAddition {
+                            land_types: Vec::new(),
                             card_types: vec![PermanentTypeFilter::Artifact],
                             creature_types: Vec::new(),
                         },
@@ -53875,6 +53955,7 @@ mod tests {
                 false,
                 false,
                 vec![ActivatedAbilityDef {
+                    intrinsic_land_mana: false,
                     ability_id: AbilityId::new("activated_01").unwrap(),
                     presentation: AbilityPresentation::Fallback,
                     cost_modifiers: Vec::new(),
@@ -53905,6 +53986,7 @@ mod tests {
                 false,
                 false,
                 vec![ActivatedAbilityDef {
+                    intrinsic_land_mana: false,
                     ability_id: AbilityId::new("activated_01").unwrap(),
                     presentation: AbilityPresentation::Fallback,
                     cost_modifiers: Vec::new(),

@@ -43,15 +43,7 @@ impl GameEngine {
         // permanent, or answering the wrong trigger when two are queued) silently destroys the
         // trigger while the client is still showing its prompt — and Decline then fails too,
         // because the engine no longer believes anything is pending.
-        let card_name = self
-            .registry
-            .get(&pending.card_id)
-            .and_then(|definition| {
-                definition
-                    .face_display_name(pending.source_face_index)
-                    .map(str::to_owned)
-            })
-            .unwrap_or_else(|| pending.card_id.clone());
+        let card_name = pending.source_label.clone();
         let target_source =
             TargetSourceIdentity::captured(pending.source_permanent_id, pending.source_zone_change);
         let mut chosen_modes = Vec::new();
@@ -175,6 +167,7 @@ impl GameEngine {
         self.state.stack_presentations.insert(
             virtual_id,
             StackPresentation {
+                source_label: Some(card_name.clone()),
                 primary: primary_presentation.clone(),
                 chosen_modes: chosen_mode_presentations.clone(),
                 chosen_cast_costs: vec![],

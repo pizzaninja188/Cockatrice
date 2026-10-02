@@ -282,6 +282,7 @@ fn forge_scope_follows_types_source_control_and_recipient_control() {
         &mut engine,
         bear,
         ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact],
             creature_types: vec![],
         }),
@@ -292,6 +293,7 @@ fn forge_scope_follows_types_source_control_and_recipient_control() {
         &mut engine,
         ring,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Enchantment],
             creature_types: vec![],
         }),
@@ -302,6 +304,7 @@ fn forge_scope_follows_types_source_control_and_recipient_control() {
         &mut engine,
         source,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Enchantment],
             creature_types: vec![],
         }),
@@ -384,6 +387,7 @@ fn witness_protection_started_layer_four_component_keeps_removing_forge_ability_
         &mut engine,
         source,
         ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Creature],
             creature_types: vec![],
         }),

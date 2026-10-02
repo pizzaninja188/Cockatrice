@@ -6,13 +6,13 @@ try {
     $result = Invoke-WorkflowFixture $fixture 'prepare-card-batch.ps1' $arguments (Join-Path $fixture 'nested directory')
     Assert-Workflow ($result.ExitCode -eq 0) "Preparation failed: $($result.Output)"
     $trace = @(Read-WorkflowTrace $fixture)
-    Assert-Workflow ($trace.Count -eq 6) 'Expected format, identity, conformance, authoring lint, fingerprint and checklist steps.'
+    Assert-Workflow ($trace.Count -eq 9) 'Expected four package format checks, identity, conformance, authoring lint, fingerprint and checklist steps.'
     Assert-Workflow ($trace[0].Arguments -contains 'fmt') 'Formatting must reject before expensive preparation.'
-    Assert-Workflow ($trace[1].Arguments -contains 'registry::tests::card_ids_follow_slug_convention') 'Identity check must precede conformance.'
-    Assert-Workflow ($trace[2].Arguments -contains 'registry_execution_matches_reviewed_baseline') 'Conformance must precede refresh.'
+    Assert-Workflow ($trace[4].Arguments -contains 'registry::tests::card_ids_follow_slug_convention') 'Identity check must precede conformance.'
+    Assert-Workflow ($trace[5].Arguments -contains 'registry_execution_matches_reviewed_baseline') 'Conformance must precede refresh.'
     Assert-Workflow ($trace[0].Cwd -eq (Join-Path $fixture 'tricerules')) 'Wrong Cargo working directory.'
-    Assert-Workflow ($trace[3].Arguments -contains 'tricerules-cards/authoring') 'Authoring-only code must be linted before review.'
-    Assert-Workflow ($trace[4].Arguments -contains '--refresh-presentation') 'Preparation must use metadata-only refresh.'
+    Assert-Workflow ($trace[6].Arguments -contains 'tricerules-cards/authoring') 'Authoring-only code must be linted before review.'
+    Assert-Workflow ($trace[7].Arguments -contains '--refresh-presentation') 'Preparation must use metadata-only refresh.'
     foreach ($pattern in @('cargo fmt', 'card_ids_follow_slug_convention', 'registry_execution_matches_reviewed_baseline', 'cargo clippy')) {
         $before = @(Read-WorkflowTrace $fixture).Count
         [IO.File]::WriteAllText((Join-Path $fixture 'fail-pattern'), $pattern)
@@ -40,7 +40,7 @@ try {
     Set-Content -LiteralPath $mapPath -Value '{}'
     $result = Invoke-WorkflowFixture $fixture 'prepare-card-batch.ps1' ($arguments + @('-ReviewMapPath', $mapPath))
     Assert-Workflow ($result.ExitCode -eq 0) "Map-selected preparation failed: $($result.Output)"
-    $selectedMaps = Get-Content -LiteralPath (Join-Path $fixture 'selected-map-list.json') -Raw | ConvertFrom-Json
+    $selectedMaps = @(Get-Content -LiteralPath (Join-Path $fixture 'selected-map-list.json') -Raw | ConvertFrom-Json)
     Assert-Workflow (@($selectedMaps).Count -eq 1 -and [string]$selectedMaps[0] -eq $mapPath) 'Map selection was not passed intact through file-backed selection.'
     Set-Content -LiteralPath (Join-Path $fixture 'zero-tests') -Value 'fixture'
     $result = Invoke-WorkflowFixture $fixture 'prepare-card-batch.ps1' $arguments

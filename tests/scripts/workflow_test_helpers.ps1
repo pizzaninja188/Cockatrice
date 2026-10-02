@@ -12,9 +12,15 @@ function New-WorkflowFixture {
     foreach ($directory in @('scripts', 'tricerules', 'bin', 'nested directory', 'Cockatrice\Cockatrice')) {
         New-Item -ItemType Directory -Path (Join-Path $root $directory) -Force | Out-Null
     }
-    foreach ($name in @('run-quiet-command.ps1', 'gen-cards.ps1', 'gen-card-checklist.ps1', 'verify.ps1', 'update-card-data.ps1', 'prepare-card-batch.ps1', 'focused-test-plan.ps1')) {
+    foreach ($name in @('run-quiet-command.ps1', 'gen-cards.ps1', 'gen-card-checklist.ps1', 'verify.ps1', 'update-card-data.ps1', 'prepare-card-batch.ps1', 'focused-test-plan.ps1', 'rust-format-checks.ps1')) {
         $source = Join-Path $sourceRepo "scripts\$name"
         if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination (Join-Path $root "scripts\$name") }
+    }
+    Copy-Item -LiteralPath (Join-Path $sourceRepo 'tricerules/Cargo.toml') -Destination (Join-Path $root 'tricerules/Cargo.toml')
+    foreach ($package in @('tricerules-proto', 'tricerules-core', 'tricerules-cards', 'tricerules-server')) {
+        $packageRoot = Join-Path $root "tricerules/$package"
+        New-Item -ItemType Directory -Path $packageRoot | Out-Null
+        Copy-Item -LiteralPath (Join-Path $sourceRepo "tricerules/$package/Cargo.toml") -Destination (Join-Path $packageRoot 'Cargo.toml')
     }
     Set-Content -LiteralPath (Join-Path $root 'scripts/check-card-evidence.ps1') -Value @'
 param([string] $OracleBulk, [switch] $Preparation, [string] $MapListJson, [string] $MapListFile)

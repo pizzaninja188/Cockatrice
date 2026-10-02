@@ -616,6 +616,7 @@ pub(super) fn earthbend(
     );
     for kind in [
         ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            land_types: Vec::new(),
             card_types: vec![
                 tricerules_cards::primitives::PermanentTypeFilter::Land,
                 tricerules_cards::primitives::PermanentTypeFilter::Creature,
@@ -709,6 +710,7 @@ pub(super) fn animate_self(
     };
 
     let mut kinds = vec![ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+        land_types: Vec::new(),
         card_types: vec![PermanentTypeFilter::Creature],
         creature_types: Vec::new(),
     })];
@@ -1269,6 +1271,7 @@ mod issue_236_tests {
     fn wrenn_shaped_modifiers_compile_to_existing_layer_kinds() {
         let modifiers = vec![
             ResolvingPermanentModifier::AddTypes(TypeLineAddition {
+                land_types: Vec::new(),
                 card_types: vec![PermanentTypeFilter::Creature],
                 creature_types: vec!["Treefolk".into()],
             }),

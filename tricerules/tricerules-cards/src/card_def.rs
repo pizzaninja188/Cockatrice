@@ -1647,6 +1647,7 @@ mod tests {
             },
         }];
         front.activated_abilities = vec![ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: AbilityId::new("black_mana_cost").unwrap(),
             presentation: AbilityPresentation::Fallback,
             source_zone: AbilitySourceZone::Battlefield,
@@ -1713,6 +1714,7 @@ mod tests {
         let mut face = face(&["Enchantment"]);
         face.mana_cost = ManaCost::parse("{3}").unwrap();
         let nested_ability = ActivatedAbilityDef {
+            intrinsic_land_mana: false,
             ability_id: AbilityId::new("nested_ability").unwrap(),
             presentation: AbilityPresentation::Fallback,
             source_zone: AbilitySourceZone::Battlefield,

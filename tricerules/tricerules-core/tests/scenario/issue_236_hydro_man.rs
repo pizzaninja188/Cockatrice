@@ -215,6 +215,7 @@ fn issue_236_blue_spell_pump_rechecks_that_hydro_man_is_a_creature() {
         source_id: None,
         affected: AffectedScope::Single(hydro),
         kind: ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Land],
             creature_types: vec![],
         }),
@@ -272,7 +273,7 @@ fn issue_236_end_step_form_is_public_activatable_and_expires_before_next_untap()
     );
     resolve_stack(&mut engine);
 
-    let activate = activate_ability_for(&engine, hydro, 0, vec![]);
+    let activate = activate_ability_for(&engine, hydro, 1, vec![]);
     engine
         .apply_command(0, &activate)
         .expect("a summoning-sick noncreature land may activate its tap ability");
@@ -313,7 +314,7 @@ fn issue_236_expiry_controller_is_fixed_while_activation_follows_current_control
         engine.characteristics(hydro).unwrap().has_type("Land"),
         "the form does not expire on the new controller's turn"
     );
-    let activate = activate_ability_for(&engine, hydro, 0, vec![]);
+    let activate = activate_ability_for(&engine, hydro, 1, vec![]);
     engine
         .apply_command(1, &activate)
         .expect("the current controller activates the granted mana ability");

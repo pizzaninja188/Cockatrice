@@ -5507,6 +5507,11 @@ impl ResolvingPermanentModifier {
                 Ok(())
             }
             Self::GrantActivatedAbility(ability) => {
+                if ability.intrinsic_land_mana {
+                    return Err(
+                        "intrinsic land mana cannot be an independently granted ability".into(),
+                    );
+                }
                 if ability.source_zone != AbilitySourceZone::Battlefield {
                     return Err(
                         "a resolving permanent modifier can grant only a battlefield ability"

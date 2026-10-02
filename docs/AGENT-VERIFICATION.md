@@ -76,7 +76,9 @@ directory is also supported. Rust runs in `tricerules`; Ninja runs in a child Wi
 CTest uses `build/windows-ninja-all`, rejects an empty suite, and requires ruled E2E prerequisites
 with `RULED_E2E_REQUIRE=1`. The caller's E2E environment is restored after CTest.
 
-Rust selects full tests, all-target Clippy with warnings denied, and format checking. Cpp selects
+Rust selects full tests, all-target Clippy with warnings denied, and a separate format check for
+every package declared in the workspace. Separate rustfmt invocations avoid Windows command-line
+length limits as the test inventory grows. Package discovery is read-only during Preview. Cpp selects
 the full Ninja build and CTest. `-CardData` adds the read-only card check and requires Rust or Both.
 Every selection ends with `git diff --check`. Preview prints argument arrays and working
 directories without running commands or creating artifacts.
@@ -234,7 +236,10 @@ ctest --test-dir build/windows-ninja-all --output-on-failure
 cd tricerules
 cargo test
 cargo clippy --all-targets -- -D warnings
-cargo fmt --check
+cargo fmt --check -p tricerules-proto
+cargo fmt --check -p tricerules-core
+cargo fmt --check -p tricerules-cards
+cargo fmt --check -p tricerules-server
 ```
 
 Use the single-config Ninja tree without `-C` and without manually rewriting `PATH`. The vendored Qt kit is `6.6.3/msvc2019_64`. MSBuild presets remain for CI parity and Visual Studio use, but Ninja is the normal development loop.

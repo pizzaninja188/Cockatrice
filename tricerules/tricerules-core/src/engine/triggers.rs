@@ -18,6 +18,7 @@ pub(super) struct CollectedTrigger {
     pub captured_spell: Option<Box<StackItem>>,
     pub source_id: ObjectId,
     pub card_id: String,
+    pub source_label: String,
     pub face_index: usize,
     pub source_zone_change: u64,
     pub source_face_change: u64,
@@ -50,6 +51,83 @@ fn trigger_ability_path(
 }
 
 impl GameEngine {
+    fn trigger_public_presentation(
+        &self,
+        source_id: ObjectId,
+        face_index: usize,
+        origin: Option<&TriggerAbilityOrigin>,
+        ability: &TriggeredAbilityDef,
+        public_name: &str,
+        concealed: bool,
+    ) -> Option<rv1::PresentationRef> {
+        if concealed {
+            return None;
+        }
+        let definition = origin
+            .and_then(|origin| match origin {
+                TriggerAbilityOrigin::Printed(definition)
+                | TriggerAbilityOrigin::StaticGrant { definition, .. } => Some(definition.clone()),
+                TriggerAbilityOrigin::ResolvingGrant(_) => None,
+            })
+            .unwrap_or_else(|| {
+                self.ability_definition(source_id, face_index, vec![ability.ability_id.clone()])
+            });
+        let path = origin
+            .map(|origin| trigger_ability_path(origin, ability))
+            .unwrap_or_else(|| vec![ability.ability_id.clone()]);
+        Some(ability_presentation(
+            self.registry,
+            &definition,
+            &ability.presentation,
+            ability.fallback_text_with_path(public_name, &path),
+        ))
+    }
+
+    fn trigger_source_public_label(
+        &self,
+        source_id: ObjectId,
+        card_id: &str,
+        face_index: usize,
+    ) -> String {
+        if self
+            .state
+            .objects
+            .get(&source_id)
+            .is_some_and(|object| object.face_down)
+        {
+            "Face-down permanent".to_owned()
+        } else {
+            self.registry
+                .get(card_id)
+                .and_then(|definition| definition.face_display_name(face_index))
+                .unwrap_or(card_id)
+                .to_owned()
+        }
+    }
+
+    fn trigger_source_face_label(
+        &self,
+        source_id: ObjectId,
+        card_id: &str,
+        face_index: usize,
+    ) -> String {
+        if self
+            .state
+            .objects
+            .get(&source_id)
+            .is_some_and(|object| object.face_down)
+        {
+            "Face-down permanent".to_owned()
+        } else {
+            self.registry
+                .get(card_id)
+                .and_then(|definition| definition.face(face_index))
+                .map(|face| face.name.as_str())
+                .unwrap_or(card_id)
+                .to_owned()
+        }
+    }
+
     pub(super) fn event_object_fact(&self, object_id: ObjectId) -> Option<TurnObjectFact> {
         let object = self.state.objects.get(&object_id)?;
         let c = self.characteristics(object_id)?;
@@ -198,6 +276,7 @@ impl GameEngine {
             .unwrap_or(0);
         let mut trigger = CollectedTrigger {
             captured_spell: None,
+            source_label: self.trigger_source_public_label(source_id, &card_id, face_index),
             source_id,
             card_id: card_id.clone(),
             face_index,
@@ -208,15 +287,17 @@ impl GameEngine {
             controller,
             ability_index: usize::MAX,
             ability_origin: None,
-            presentation: None,
-            ability: ability.clone(),
-            ability_text: ability.fallback_text(
-                self.registry
-                    .get(&card_id)
-                    .and_then(|definition| definition.faces.get(face_index))
-                    .map(|face| face.name.as_str())
-                    .unwrap_or(&card_id),
+            presentation: self.trigger_public_presentation(
+                source_id,
+                face_index,
+                None,
+                &ability,
+                &self.trigger_source_face_label(source_id, &card_id, face_index),
+                object.face_down,
             ),
+            ability: ability.clone(),
+            ability_text: ability
+                .fallback_text(&self.trigger_source_face_label(source_id, &card_id, face_index)),
             trigger_context: TriggerContext::default(),
         };
         trigger.additional_instances = self.additional_trigger_instances(&trigger);
@@ -236,7 +317,9 @@ impl GameEngine {
         for event in events {
             if let GameEvent::EntersBattlefield { object_id, .. } = event {
                 if !self.state.room_states.contains_key(object_id) {
+                    let static_start = self.state.continuous_effects.len();
                     self.emit_static_abilities_on_enter(*object_id);
+                    self.order_new_entry_statics_before_modifiers(*object_id, static_start);
                 }
             }
         }
@@ -309,6 +392,7 @@ impl GameEngine {
             let ability_text = delayed.ability.fallback_text(&delayed.card_name);
             CollectedTrigger {
                 captured_spell: None,
+                source_label: delayed.card_name.clone(),
                 source_id: delayed.source.object_id,
                 card_id: delayed.card_id,
                 face_index: delayed.source_face_index,
@@ -551,37 +635,9 @@ impl GameEngine {
                         .captured_spell_copies
                         .insert(object_id, *snapshot);
                 }
-                let def = self.registry.get(&trigger.card_id);
-                let card_name = def
-                    .and_then(|definition| definition.face_display_name(trigger.face_index))
-                    .map(str::to_owned)
-                    .unwrap_or_default();
+                let card_name = trigger.source_label;
                 let may = trigger.ability.may;
-                let presentation = trigger.presentation.or_else(|| {
-                    let ability_definition = trigger
-                        .ability_origin
-                        .as_ref()
-                        .and_then(|origin| match origin {
-                            TriggerAbilityOrigin::Printed(definition)
-                            | TriggerAbilityOrigin::StaticGrant { definition, .. } => {
-                                Some(definition.clone())
-                            }
-                            TriggerAbilityOrigin::ResolvingGrant(_) => None,
-                        })
-                        .unwrap_or_else(|| {
-                            self.ability_definition(
-                                trigger.source_id,
-                                trigger.face_index,
-                                vec![trigger.ability.ability_id.clone()],
-                            )
-                        });
-                    Some(ability_presentation(
-                        self.registry,
-                        &ability_definition,
-                        &trigger.ability.presentation,
-                        trigger.ability_text.clone(),
-                    ))
-                });
+                let presentation = trigger.presentation;
                 StagedTrigger {
                     object_id,
                     source_permanent_id: trigger.source_id,
@@ -1039,6 +1095,17 @@ impl GameEngine {
                                 })
                                 .map(|(ability_index, ability)| CollectedTrigger {
                                     captured_spell: None,
+                                    source_label: if source.source_concealed {
+                                        "Face-down permanent".to_owned()
+                                    } else {
+                                        self.registry
+                                            .get(&source.card_id)
+                                            .and_then(|definition| {
+                                                definition.face_display_name(*face_index)
+                                            })
+                                            .unwrap_or(&source.card_id)
+                                            .to_owned()
+                                    },
                                     source_id: source.object_id,
                                     card_id: source.card_id.clone(),
                                     face_index: *face_index,
@@ -1055,9 +1122,32 @@ impl GameEngine {
                                             vec![ability.ability_id.clone()],
                                         ),
                                     )),
-                                    presentation: None,
+                                    presentation: self.trigger_public_presentation(
+                                        source.object_id,
+                                        *face_index,
+                                        Some(&TriggerAbilityOrigin::Printed(
+                                            self.ability_definition(
+                                                source.object_id,
+                                                *face_index,
+                                                vec![ability.ability_id.clone()],
+                                            ),
+                                        )),
+                                        ability,
+                                        if source.source_concealed {
+                                            "Face-down permanent"
+                                        } else {
+                                            &face.name
+                                        },
+                                        source.source_concealed,
+                                    ),
                                     ability: ability.clone(),
-                                    ability_text: ability.fallback_text(&face.name),
+                                    ability_text: ability.fallback_text(
+                                        if source.source_concealed {
+                                            "Face-down permanent"
+                                        } else {
+                                            &face.name
+                                        },
+                                    ),
                                     trigger_context: TriggerContext::default(),
                                 }),
                         );
@@ -1972,6 +2062,7 @@ impl GameEngine {
             })
             .map(|(idx, ta, origin)| CollectedTrigger {
                 captured_spell: None,
+                source_label: self.trigger_source_public_label(source_id, card_id, face_index),
                 source_id,
                 card_id: card_id.to_string(),
                 face_index,
@@ -2004,14 +2095,20 @@ impl GameEngine {
                 controller,
                 ability_index: idx,
                 ability_origin: Some(origin.clone()),
-                presentation: None,
+                presentation: self.trigger_public_presentation(
+                    source_id,
+                    face_index,
+                    Some(&origin),
+                    &ta,
+                    &self.trigger_source_face_label(source_id, card_id, face_index),
+                    self.state
+                        .objects
+                        .get(&source_id)
+                        .is_some_and(|object| object.face_down),
+                ),
                 ability: ta.clone(),
                 ability_text: ta.fallback_text_with_path(
-                    self.registry
-                        .get(card_id)
-                        .and_then(|definition| definition.faces.get(face_index))
-                        .map(|face| face.name.as_str())
-                        .unwrap_or(card_id),
+                    &self.trigger_source_face_label(source_id, card_id, face_index),
                     &trigger_ability_path(&origin, &ta),
                 ),
                 trigger_context: TriggerContext::default(),
@@ -2073,11 +2170,15 @@ impl GameEngine {
             object_id: source_id,
             triggered_abilities: self
                 .effective_triggered_abilities(source_id, &card_id, face_index),
-            card_id,
-            face_name: self
-                .effective_face(source_id)
+            face_name: if object.face_down {
+                "Face-down permanent".to_owned()
+            } else {
+                self.effective_face(source_id)
                 .map(|face| face.name.clone())
-                .unwrap_or_else(|| object.card_id.clone()),
+                    .unwrap_or_else(|| object.card_id.clone())
+            },
+            card_id,
+            source_concealed: object.face_down,
             controller,
             face_index,
             zone_change_generation: self
@@ -2124,12 +2225,20 @@ impl GameEngine {
             .objects
             .get(&source_id)
             .is_some_and(|object| object.face_down);
-        let removed_at =
-            super::characteristics::latest_remove_all_abilities_timestamp(&self.state, source_id);
-        let basic_land_setting =
-            super::characteristics::basic_land_type_setting(&self.state, source_id);
+        let removed_at = super::characteristics::latest_active_ability_removal(
+            &self.state,
+            self.registry,
+            source_id,
+        );
         let mut printed = Vec::new();
-        if !face_down && removed_at.is_none() && basic_land_setting.is_none() {
+        if !face_down
+            && removed_at.is_none()
+            && super::characteristics::printed_rules_text_is_present(
+                &self.state,
+                self.registry,
+                source_id,
+            )
+        {
             if let Some(faces) = self.room_faces(source_id) {
                 for door in self
                     .state
@@ -2174,11 +2283,11 @@ impl GameEngine {
         let Some(characteristics) = self.characteristics(source_id) else {
             return abilities;
         };
-        for effect in &self.state.continuous_effects {
+        for (insertion_index, effect) in self.state.continuous_effects.iter().enumerate() {
             let ContinuousEffectKind::GrantTriggeredAbility(ability) = &effect.kind else {
                 continue;
             };
-            if removed_at.is_some_and(|timestamp| effect.timestamp <= timestamp) {
+            if removed_at.is_some_and(|position| (effect.timestamp, insertion_index) <= position) {
                 continue;
             }
             if super::characteristics::effect_affects(
@@ -2228,6 +2337,15 @@ impl GameEngine {
             })
             .map(|(ability_index, ability, origin)| CollectedTrigger {
                 captured_spell: None,
+                source_label: if source.source_concealed {
+                    "Face-down permanent".to_owned()
+                } else {
+                    self.registry
+                        .get(&source.card_id)
+                        .and_then(|definition| definition.face_display_name(source.face_index))
+                        .unwrap_or(&source.card_id)
+                        .to_owned()
+                },
                 source_id: source.object_id,
                 card_id: source.card_id.clone(),
                 face_index: source.face_index,
@@ -2238,7 +2356,14 @@ impl GameEngine {
                 controller: source.controller,
                 ability_index: *ability_index,
                 ability_origin: Some(origin.clone()),
-                presentation: None,
+                presentation: self.trigger_public_presentation(
+                    source.object_id,
+                    source.face_index,
+                    Some(origin),
+                    ability,
+                    &source.face_name,
+                    source.source_concealed,
+                ),
                 ability: ability.clone(),
                 ability_text: ability.fallback_text_with_path(
                     &source.face_name,
@@ -2480,6 +2605,7 @@ impl GameEngine {
                 ability_text: ability_text.clone(),
                 presentation: presentation.clone(),
                 card_id,
+                source_label: card_name.clone(),
                 controller,
                 trigger_context,
                 may,
@@ -2515,6 +2641,7 @@ impl GameEngine {
             self.state.stack_presentations.insert(
                 virtual_id,
                 StackPresentation {
+                    source_label: Some(card_name.clone()),
                     primary: presentation.clone(),
                     ..Default::default()
                 },
@@ -3363,6 +3490,7 @@ mod tests {
             .triggered_abilities[0]
             .clone();
         let source = TriggerSourceSnapshot {
+            source_concealed: false,
             copy_snapshot: None,
             counters: BTreeMap::new(),
             owner: 0,
@@ -3455,6 +3583,7 @@ mod tests {
             .triggered_abilities[0]
             .clone();
         let watcher = TriggerSourceSnapshot {
+            source_concealed: false,
             copy_snapshot: None,
             counters: BTreeMap::new(),
             owner: 1,
@@ -3946,6 +4075,7 @@ mod tests {
     fn attached_player_attack_trigger_fires_once_for_the_declaration_group() {
         let engine = GameEngine::new(6303, &[0, 1], 20, None, true).expect("engine");
         let source = TriggerSourceSnapshot {
+            source_concealed: false,
             copy_snapshot: None,
             counters: BTreeMap::new(),
             owner: 0,

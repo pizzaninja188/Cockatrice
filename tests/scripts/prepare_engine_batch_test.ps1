@@ -12,14 +12,14 @@ try {
     $result = Invoke-WorkflowFixture $fixture 'prepare-engine-batch.ps1' $arguments
     Assert-Workflow ($result.ExitCode -eq 0) "Engine preparation failed: $($result.Output)"
     $trace = @(Read-WorkflowTrace $fixture)
-    Assert-Workflow ($trace.Count -eq 4) 'Expected format, two exact regressions and focused lint.'
+    Assert-Workflow ($trace.Count -eq 7) 'Expected four package format checks, two exact regressions and focused lint.'
     Assert-Workflow ($trace[0].Arguments -contains 'fmt') 'Format must precede compilation.'
-    Assert-Workflow ($trace[1].Arguments -contains '--exact') 'Scenario must use exact selection.'
-    Assert-Workflow ($trace[2].Arguments -contains '--lib') 'Library regressions must use the lib target.'
-    Assert-Workflow ($trace[3].Arguments -contains 'clippy') 'Focused lint missing.'
+    Assert-Workflow ($trace[4].Arguments -contains '--exact') 'Scenario must use exact selection.'
+    Assert-Workflow ($trace[5].Arguments -contains '--lib') 'Library regressions must use the lib target.'
+    Assert-Workflow ($trace[6].Arguments -contains 'clippy') 'Focused lint missing.'
     Assert-Workflow (@($trace | Where-Object { $_.Arguments -contains '--refresh-presentation' }).Count -eq 0) 'Engine preparation must not mutate card metadata.'
     $summary = Get-Content -LiteralPath (Join-Path $fixture 'review preparation/summary.json') -Raw | ConvertFrom-Json
-    Assert-Workflow (-not $summary.semantic_approval -and $summary.final_gate -eq 'pending' -and $summary.steps.Count -eq 4) 'Preparation incorrectly granted final approval.'
+    Assert-Workflow (-not $summary.semantic_approval -and $summary.final_gate -eq 'pending' -and $summary.steps.Count -eq 7) 'Preparation incorrectly granted final approval.'
     Set-Content -LiteralPath (Join-Path $fixture 'zero-tests') -Value 'fixture'
     $result = Invoke-WorkflowFixture $fixture 'prepare-engine-batch.ps1' @('-FocusedTests', $plan, '-OutDirectory', 'empty selection')
     Assert-Workflow ($result.ExitCode -ne 0 -and $result.Output -match 'Expected one executed') 'Zero-match test was accepted.'
@@ -38,8 +38,8 @@ try {
     $result = Invoke-WorkflowFixture $fixture 'prepare-engine-batch.ps1' @('-FocusedTests', $plan, '-OutDirectory', 'feature coverage', '-Workers', '3')
     Assert-Workflow ($result.ExitCode -eq 0) "Feature preparation failed: $($result.Output)"
     $featureTrace = @(Read-WorkflowTrace $fixture | Select-Object -Skip $before)
-    Assert-Workflow ($featureTrace.Count -eq 4 -and $featureTrace[1].Arguments -contains '--features' -and $featureTrace[3].Arguments -contains '--features') 'Feature code was not both tested and linted.'
-    Assert-Workflow ($featureTrace[1].BuildJobs -eq '3' -and $featureTrace[1].TestThreads -eq '3') 'Explicit worker settings were lost.'
+    Assert-Workflow ($featureTrace.Count -eq 7 -and $featureTrace[4].Arguments -contains '--features' -and $featureTrace[6].Arguments -contains '--features') 'Feature code was not both tested and linted.'
+    Assert-Workflow ($featureTrace[4].BuildJobs -eq '3' -and $featureTrace[4].TestThreads -eq '3') 'Explicit worker settings were lost.'
     foreach ($invalid in @('[{"package":"tricerules-core","target":"scenario","test":"copy::test","ignored":true}]', '[{"package":"tricerules-core","target":"scenario","test":"copy::test"},{"package":"tricerules-core","target":"scenario","test":"copy::test"}]')) {
         Set-Content -LiteralPath $plan -Value $invalid
         $before = @(Read-WorkflowTrace $fixture).Count

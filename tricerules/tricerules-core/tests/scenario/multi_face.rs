@@ -1111,7 +1111,7 @@ fn transform_preserves_battlefield_identity_and_does_not_fire_etb() {
     let _warden = inject_permanent_on_battlefield(&mut e, 0, "soul_warden");
     resolve_entire_stack_two_player(&mut e);
     let waif = inject_permanent_on_battlefield(&mut e, 0, "reckless_waif_merciless_predator");
-    let attachment = inject_permanent_on_battlefield(&mut e, 0, "forest");
+    let attachment = inject_permanent_on_battlefield(&mut e, 0, "swiftfoot_boots");
     let life_before = e.state.players[0].life;
 
     advance_to_next_upkeep_trigger(&mut e);

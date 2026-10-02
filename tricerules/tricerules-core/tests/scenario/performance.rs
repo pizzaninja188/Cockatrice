@@ -2,7 +2,8 @@
 
 use crate::helpers::{
     advance_to_main1_from_game_start, declare_attackers, declare_blockers,
-    inject_creature_on_battlefield, pass_both_players, primitive_yield, BlockPair, GameEngine,
+    inject_creature_on_battlefield, inject_permanent_on_battlefield, pass_both_players,
+    primitive_yield, BlockPair, GameEngine,
 };
 use std::time::{Duration, Instant};
 use tricerules_cards::primitives::{ContinuousEffectKind, EffectDuration, Keyword};
@@ -100,6 +101,117 @@ fn big_board_characteristics_full_turn_stays_bounded() {
         assert!(
             elapsed < Duration::from_secs(2),
             "big-board full turn took {elapsed:?}, expected < 2s in release"
+        );
+    }
+}
+
+#[test]
+fn early_layer_board_characteristics_stays_bounded() {
+    use tricerules_cards::primitives::{
+        BasicLandType, PermanentTypeFilter, TargetFilter, TargetKind, TypeLineAddition,
+        TypeLineReplacement,
+    };
+    let mut engine = GameEngine::new(0x305_6138, &[0, 1], 20, None, true).unwrap();
+    let creatures = (0..24)
+        .map(|index| inject_creature_on_battlefield(&mut engine, index % 2, "grizzly_bears"))
+        .collect::<Vec<_>>();
+    let forests = (0..12)
+        .map(|index| inject_permanent_on_battlefield(&mut engine, index % 2, "forest"))
+        .collect::<Vec<_>>();
+    let islands = (0..12)
+        .map(|index| inject_permanent_on_battlefield(&mut engine, index % 2, "island"))
+        .collect::<Vec<_>>();
+    let mut add_effect = |affected, kind, timestamp| {
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected,
+            kind,
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp,
+        })
+    };
+    add_effect(
+        AffectedScope::PermanentsMatching {
+            reference_player: 0,
+            filter: Box::new(TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                permanent_types: vec![PermanentTypeFilter::Land],
+                ..Default::default()
+            }),
+            exclude: None,
+        },
+        ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            land_types: vec![BasicLandType::Forest],
+            ..Default::default()
+        }),
+        1,
+    );
+    for (index, &oid) in creatures[..3].iter().enumerate() {
+        add_effect(
+            AffectedScope::Single(oid),
+            ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+                card_types: vec![PermanentTypeFilter::Land],
+                creature_types: Vec::new(),
+                land_types: Vec::new(),
+            }),
+            2 + index as u64,
+        );
+    }
+    for &oid in &islands[..2] {
+        add_effect(
+            AffectedScope::Single(oid),
+            ContinuousEffectKind::Layer4SetBasicLandType(BasicLandType::Forest),
+            5,
+        );
+    }
+    let objects = creatures
+        .iter()
+        .chain(&forests)
+        .chain(&islands)
+        .copied()
+        .collect::<Vec<_>>();
+    let started = Instant::now();
+    for reverse in [false, true, false] {
+        for index in 0..objects.len() {
+            let oid = objects[if reverse {
+                objects.len() - 1 - index
+            } else {
+                index
+            }];
+            let result = engine.characteristics(oid).unwrap();
+            if creatures[..3].contains(&oid) {
+                assert!(
+                    result.has_type("Land") && result.has_type("Forest") && !result.is_creature()
+                );
+            } else if creatures[3..].contains(&oid) {
+                assert!(result.is_creature() && !result.has_type("Forest"));
+            } else {
+                assert!(result.has_type("Land") && result.has_type("Forest"));
+                if islands[..2].contains(&oid) {
+                    assert!(!result.has_type("Island"));
+                }
+                if islands[2..].contains(&oid) {
+                    assert!(result.has_type("Island"));
+                }
+            }
+            assert!(
+                result
+                    .types
+                    .iter()
+                    .filter(|kind| kind.as_str() == "Forest")
+                    .count()
+                    <= 1
+            );
+        }
+    }
+    let elapsed = started.elapsed();
+    println!("48-object early-layer dependency queries: {elapsed:?}");
+    if !cfg!(debug_assertions) {
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "early-layer board queries took {elapsed:?}, expected < 2s in release"
         );
     }
 }

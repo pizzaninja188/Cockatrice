@@ -222,6 +222,7 @@ fn anger_condition_uses_current_land_subtype_control_and_current_creatures() {
         &mut engine,
         artifact,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact, PermanentTypeFilter::Creature],
             creature_types: vec![],
         }),
@@ -247,6 +248,7 @@ fn anger_condition_uses_current_land_subtype_control_and_current_creatures() {
         &mut engine,
         land,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact],
             creature_types: vec![],
         }),

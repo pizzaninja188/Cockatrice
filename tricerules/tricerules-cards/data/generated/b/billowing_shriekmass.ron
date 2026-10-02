@@ -9,5 +9,5 @@
   toughness: 3,
   keywords: [Flying],
   triggered_abilities: [(ability_id: "triggered_01", presentation: OracleLines([2]), trigger: WhenSelfEntersBattlefield, effect: [Mill(count:3,who:Controller)])],
-  static_abilities: [(ability_id:"static_01",presentation:OracleLines([3]),definition:ConditionalSelfModifier(condition:GraveyardAggregate(owners:Controller,aggregate:CardCount,filter:None,min:Some(7),max:None),set_types:None,add_types:(card_types:[],creature_types:[]),base_power:None,base_toughness:None,delta_power:2,delta_toughness:1,keywords:[],activated_abilities:[],triggered_abilities:[],can_attack_as_though_without_defender:false))],
+  static_abilities: [(ability_id:"static_01",presentation:OracleLines([3]),definition:ConditionalSelfModifier(condition:GraveyardAggregate(owners:Controller,aggregate:CardCount,filter:None,min:Some(7),max:None),set_types:None,add_types:(card_types:[],creature_types:[],land_types:[]),base_power:None,base_toughness:None,delta_power:2,delta_toughness:1,keywords:[],activated_abilities:[],triggered_abilities:[],can_attack_as_though_without_defender:false))],
 )

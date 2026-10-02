@@ -288,6 +288,7 @@ fn undefined_creature_stats_are_zero_and_counters_apply_while_noncreatures_have_
     let original = engine.characteristics(land).unwrap();
     assert_eq!((original.power, original.toughness), (None, None));
     let animation = ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+        land_types: Vec::new(),
         card_types: vec![PermanentTypeFilter::Creature],
         creature_types: vec![],
     });

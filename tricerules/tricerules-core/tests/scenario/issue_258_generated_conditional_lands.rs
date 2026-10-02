@@ -36,6 +36,7 @@ fn add_land_type(engine: &mut GameEngine, object_id: u32) {
         source_id: None,
         affected: AffectedScope::Single(object_id),
         kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Land],
             creature_types: Vec::new(),
         }),
@@ -179,6 +180,7 @@ fn a_copy_of_a_generated_fast_land_rechecks_its_intrinsic_entry_condition() {
         source_id: None,
         affected: AffectedScope::Single(source),
         kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Creature],
             creature_types: vec!["Shapeshifter".into()],
         }),

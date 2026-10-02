@@ -397,10 +397,18 @@ pub(crate) fn counter_stack_object(
     };
     let target = &engine.state.stack[pos];
     let target_name = engine
+        .state
+        .stack_presentations
+        .get(&target_id)
+        .and_then(|presentation| presentation.source_label.clone())
+        .unwrap_or_else(|| {
+            engine
         .registry
         .get(&target.card_id)
         .map(|definition| definition.name.as_str())
-        .unwrap_or("spell");
+                .unwrap_or("spell")
+                .to_owned()
+        });
     let cannot_be_countered = target.ability_text.is_none()
         && engine
             .registry

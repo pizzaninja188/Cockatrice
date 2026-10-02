@@ -84,7 +84,7 @@ fn gift_grants_its_land_controller_an_annotated_undoable_mana_ability() {
     engine.apply_command(0, &pass()).expect("pass priority");
     let priority_before = engine.state.priority_player_id();
     let batch = engine
-        .apply_command(1, &activate_mana_option(opponent_land, 1, 1))
+        .apply_command(1, &activate_mana_option(opponent_land, 2, 1))
         .expect("land controller activates the granted blue option");
     assert_eq!(engine.state.players[1].mana_pool.blue, 2);
     assert!(engine.state.objects[&opponent_land].tapped);
@@ -111,7 +111,7 @@ fn gift_grants_its_land_controller_an_annotated_undoable_mana_ability() {
     );
     assert!(
         engine
-            .apply_command(1, &activate_mana_option(opponent_land, 1, 0))
+            .apply_command(1, &activate_mana_option(opponent_land, 2, 0))
             .is_err(),
         "the former granted index is no longer legal"
     );
@@ -152,7 +152,7 @@ fn hermetic_study_ability_survives_removal_of_the_granting_aura() {
         vec!["{T}: Deal 1 damage to any target."]
     );
     engine
-        .apply_command(0, &activate_ability(creature, 0, target_player(1)))
+        .apply_command(0, &activate_ability(creature, 1, target_player(1)))
         .expect("activate granted damage ability");
     assert_eq!(
         engine

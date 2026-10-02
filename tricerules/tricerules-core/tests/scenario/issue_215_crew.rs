@@ -169,6 +169,7 @@ fn worldwagon_cda_is_live_and_follows_layer_7_order() {
         &mut engine,
         wagon,
         ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Creature],
             creature_types: vec![],
         }),
@@ -404,6 +405,7 @@ fn a_copy_keeps_worldwagons_cda_but_not_its_resolved_crew_effect() {
         &mut engine,
         token,
         ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Creature],
             creature_types: vec![],
         }),

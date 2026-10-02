@@ -387,6 +387,7 @@ fn issue_429_new_horizons_counters_and_grants_two_mana_of_one_color() {
             keywords: Vec::new(),
             triggered_abilities: Vec::new(),
             activated_abilities: vec![ActivatedAbilityDef {
+                intrinsic_land_mana: false,
                 ability_id: tricerules_cards::AbilityId::new("activated_01").unwrap(),
                 presentation: AbilityPresentation::Fallback,
                 cost_modifiers: Vec::new(),
@@ -456,6 +457,7 @@ fn issue_429_friendly_neighborhood_creates_citizens_and_pumps_per_creature() {
             keywords: Vec::new(),
             triggered_abilities: Vec::new(),
             activated_abilities: vec![ActivatedAbilityDef {
+                intrinsic_land_mana: false,
                 ability_id: tricerules_cards::AbilityId::new("activated_01").unwrap(),
                 presentation: AbilityPresentation::Fallback,
                 cost_modifiers: Vec::new(),

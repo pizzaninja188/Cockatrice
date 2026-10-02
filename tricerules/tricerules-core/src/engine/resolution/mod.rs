@@ -1303,8 +1303,12 @@ impl GameEngine {
         let (effects, spell_label): (Vec<SpellEffectKind>, String) = if is_ability {
             let ability_index = top.ability_index.unwrap_or(0);
             let def = self.registry.get(card_id);
-            let name = def
-                .map(|d| d.name.clone())
+            let name = self
+                .state
+                .stack_presentations
+                .get(&top.id)
+                .and_then(|presentation| presentation.source_label.clone())
+                .or_else(|| def.map(|d| d.name.clone()))
                 .unwrap_or_else(|| "Ability".into());
             // Ability indices are relative to the face recorded on the stack item, which is `0`
             // for abilities (see `StackItem::face_index`) — the same face `activate_ability`
@@ -4981,6 +4985,7 @@ mod attached_subject_tests {
             source_id: Some(first),
             affected: AffectedScope::Single(second),
             kind: ContinuousEffectKind::Layer4AddTypes(tricerules_cards::TypeLineAddition {
+                land_types: Vec::new(),
                 card_types: vec![PermanentTypeFilter::Artifact],
                 creature_types: vec![],
             }),

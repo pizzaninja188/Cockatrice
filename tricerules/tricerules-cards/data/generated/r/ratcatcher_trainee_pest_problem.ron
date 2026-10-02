@@ -11,7 +11,7 @@
       types: ["Creature", "Human", "Peasant"],
       power: 2,
       toughness: 1,
-      static_abilities: [(ability_id:"static_01",presentation:OracleLines([1]),definition:ConditionalSelfModifier(condition:ActivePlayer(players:Controller),set_types:None,add_types:(card_types:[],creature_types:[]),base_power:None,base_toughness:None,delta_power:0,delta_toughness:0,keywords:[FirstStrike],activated_abilities:[],triggered_abilities:[],can_attack_as_though_without_defender:false))],
+      static_abilities: [(ability_id:"static_01",presentation:OracleLines([1]),definition:ConditionalSelfModifier(condition:ActivePlayer(players:Controller),set_types:None,add_types:(card_types:[],creature_types:[],land_types:[]),base_power:None,base_toughness:None,delta_power:0,delta_toughness:0,keywords:[FirstStrike],activated_abilities:[],triggered_abilities:[],can_attack_as_though_without_defender:false))],
     ),
     (
       name: "Pest Problem",

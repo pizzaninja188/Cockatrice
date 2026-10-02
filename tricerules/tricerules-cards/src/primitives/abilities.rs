@@ -54,6 +54,10 @@ pub enum ZoneEventCardinality {
 pub struct ActivatedAbilityDef {
     pub ability_id: AbilityId,
     pub presentation: AbilityPresentation,
+    /// CR 305.6 provenance for an authored bundle of subtype-derived mana abilities.
+    /// This is distinct from a printed or independently granted ProduceMana ability.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub intrinsic_land_mana: bool,
     /// Zone in which this printed activated ability functions.
     #[serde(default)]
     pub source_zone: AbilitySourceZone,
@@ -1123,16 +1127,18 @@ pub struct TypeLineAddition {
     pub card_types: Vec<PermanentTypeFilter>,
     #[serde(default)]
     pub creature_types: Vec<String>,
+    #[serde(default)]
+    pub land_types: Vec<BasicLandType>,
 }
 
 impl TypeLineAddition {
     pub fn is_empty(&self) -> bool {
-        self.card_types.is_empty() && self.creature_types.is_empty()
+        self.card_types.is_empty() && self.creature_types.is_empty() && self.land_types.is_empty()
     }
 
     pub(crate) fn validate(&self) -> Result<(), String> {
         if self.is_empty() {
-            return Err("type-line addition must add a card type or creature type".into());
+            return Err("type-line addition must add a card type or subtype".into());
         }
         let unique_card_types: std::collections::HashSet<_> =
             self.card_types.iter().copied().collect();
@@ -1151,6 +1157,14 @@ impl TypeLineAddition {
         if unique_creature_types.len() != self.creature_types.len() {
             return Err("type-line addition repeats a creature type".into());
         }
+        if self
+            .land_types
+            .iter()
+            .enumerate()
+            .any(|(index, value)| self.land_types[..index].contains(value))
+        {
+            return Err("type-line addition repeats a land type".into());
+        }
         Ok(())
     }
 }
@@ -1163,6 +1177,8 @@ pub struct TypeLineReplacement {
     pub card_types: Vec<PermanentTypeFilter>,
     #[serde(default)]
     pub creature_types: Vec<String>,
+    #[serde(default)]
+    pub land_types: Vec<BasicLandType>,
 }
 
 impl TypeLineReplacement {
@@ -1173,6 +1189,7 @@ impl TypeLineReplacement {
         TypeLineAddition {
             card_types: self.card_types.clone(),
             creature_types: self.creature_types.clone(),
+            land_types: self.land_types.clone(),
         }
         .validate()?;
         if !self.creature_types.is_empty()
@@ -1181,6 +1198,9 @@ impl TypeLineReplacement {
             return Err(
                 "type-line replacement creature types require the Creature card type".into(),
             );
+        }
+        if !self.land_types.is_empty() && !self.card_types.contains(&PermanentTypeFilter::Land) {
+            return Err("type-line replacement land types require the Land card type".into());
         }
         Ok(())
     }
@@ -2041,7 +2061,7 @@ pub enum StaticAbilityDef {
         add_types: TypeLineAddition,
         /// CR 205.1a: replace all card types and subtypes while preserving supertypes.
         #[serde(default)]
-        set_types: Option<TypeLineReplacement>,
+        set_types: Option<Box<TypeLineReplacement>>,
         /// CR 612.8: replace every name the attached object has.
         #[serde(default)]
         set_name: Option<String>,
@@ -2147,6 +2167,12 @@ pub enum StaticAbilityDef {
     GrantKeywordToPermanents {
         filter: TargetFilter,
         keyword: Keyword,
+    },
+    /// CR 305.6 / 613.1d: Yavimaya adds Forest to all lands; Urborg adds Swamp.
+    /// The evolving permanent scope includes the source unless explicitly excluded by filter.
+    AddTypesToPermanents {
+        filter: TargetFilter,
+        addition: TypeLineAddition,
     },
     /// CR 113.6b / 611.3 / 613.1f: while this card is in its owner's graveyard,
     /// their creatures gain the keyword if they control a land of the required subtype.

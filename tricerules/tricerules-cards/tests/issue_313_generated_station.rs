@@ -181,6 +181,7 @@ fn issue_313_cards_preserve_exact_faces_abilities_and_presentation_fingerprints(
                 },
                 set_types: None,
                 add_types: TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: vec![tricerules_cards::primitives::PermanentTypeFilter::Creature],
                     creature_types: Vec::new(),
                 },

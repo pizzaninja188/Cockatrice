@@ -76,7 +76,7 @@ fn earthbend_return_uses_stack_and_only_the_immediate_destination_generation() {
     ] {
         for stale in [false, true] {
             let (mut e, source, land) = earthbend_fixture();
-            e.apply_command(0, &activate_ability(source, 0, target_object(land)))
+            e.apply_command(0, &activate_ability(source, 1, target_object(land)))
                 .unwrap();
             resolve_entire_stack_two_player(&mut e);
             let generation = e
@@ -119,7 +119,7 @@ fn earthbend_return_uses_stack_and_only_the_immediate_destination_generation() {
 fn earthbend_source_departure_does_not_cancel_animation_or_return() {
     use tricerules_proto::ruled::v1::DevZone;
     let (mut e, source, land) = earthbend_fixture();
-    e.apply_command(0, &activate_ability(source, 0, target_object(land)))
+    e.apply_command(0, &activate_ability(source, 1, target_object(land)))
         .unwrap();
     earthbend_move(&mut e, "Grizzly Bears", DevZone::Graveyard);
     resolve_entire_stack_two_player(&mut e);
@@ -137,7 +137,7 @@ fn earthbend_source_departure_does_not_cancel_animation_or_return() {
 fn earthbend_target_leaving_and_returning_before_resolution_is_not_animated() {
     use tricerules_proto::ruled::v1::DevZone;
     let (mut e, source, land) = earthbend_fixture();
-    e.apply_command(0, &activate_ability(source, 0, target_object(land)))
+    e.apply_command(0, &activate_ability(source, 1, target_object(land)))
         .unwrap();
     earthbend_move(&mut e, "Forest", DevZone::Exile);
     earthbend_move(&mut e, "Forest", DevZone::Battlefield);
@@ -153,12 +153,12 @@ fn earthbend_animates_only_your_land_and_survives_cleanup() {
     for illegal in [source, opposing_land] {
         let command_index = engine.state.command_index;
         assert!(engine
-            .apply_command(0, &activate_ability(source, 0, target_object(illegal)))
+            .apply_command(0, &activate_ability(source, 1, target_object(illegal)))
             .is_err());
         assert_eq!(engine.state.command_index, command_index);
     }
     engine
-        .apply_command(0, &activate_ability(source, 0, target_object(land)))
+        .apply_command(0, &activate_ability(source, 1, target_object(land)))
         .unwrap();
     resolve_entire_stack_two_player(&mut engine);
     let characteristics = engine.characteristics(land).unwrap();
@@ -186,7 +186,7 @@ fn earthbend_animates_only_your_land_and_survives_cleanup() {
 #[test]
 fn earthbend_zero_creates_its_watcher_before_the_sba_death() {
     let (mut e, source, land) = earthbend_fixture_count(0);
-    e.apply_command(0, &activate_ability(source, 0, target_object(land)))
+    e.apply_command(0, &activate_ability(source, 1, target_object(land)))
         .unwrap();
     pass_both_players(&mut e);
     assert_eq!(e.state.objects[&land].zone, Zone::Graveyard);
@@ -217,7 +217,7 @@ fn earthbend_preserves_mana_and_haste_but_cannot_return_a_token() {
             room_faces: None,
         });
     e.state.objects.get_mut(&land).unwrap().summoning_sick = true;
-    e.apply_command(0, &activate_ability(source, 0, target_object(land)))
+    e.apply_command(0, &activate_ability(source, 1, target_object(land)))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     let mana_before = e.state.players[0].mana_pool.green;
@@ -376,7 +376,7 @@ fn earthbend_dai_li_both_modes_and_discard_eligibility() {
 fn earthbend_repeated_animation_and_replaced_death_return_only_once() {
     let (mut e, source, land) = earthbend_fixture();
     for _ in 0..2 {
-        e.apply_command(0, &activate_ability(source, 0, target_object(land)))
+        e.apply_command(0, &activate_ability(source, 1, target_object(land)))
             .unwrap();
         resolve_entire_stack_two_player(&mut e);
     }
@@ -418,7 +418,7 @@ fn earthbend_return_keeps_its_controller_after_control_and_ability_changes() {
     let (mut e, source, land) = earthbend_fixture();
     // A foreign-owned land currently controlled by the earthbending player.
     e.state.objects.get_mut(&land).unwrap().owner = 1;
-    e.apply_command(0, &activate_ability(source, 0, target_object(land)))
+    e.apply_command(0, &activate_ability(source, 1, target_object(land)))
         .unwrap();
     resolve_entire_stack_two_player(&mut e);
     for kind in [
@@ -455,7 +455,7 @@ fn earthbend_no_longer_creature_only_returns_from_exile() {
     use tricerules_proto::ruled::v1::DevZone;
     for destination in [DevZone::Graveyard, DevZone::Exile] {
         let (mut e, source, land) = earthbend_fixture();
-        e.apply_command(0, &activate_ability(source, 0, target_object(land)))
+        e.apply_command(0, &activate_ability(source, 1, target_object(land)))
             .unwrap();
         resolve_entire_stack_two_player(&mut e);
         e.state

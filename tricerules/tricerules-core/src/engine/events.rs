@@ -54,7 +54,8 @@ impl GameEngine {
         }) {
             labels.push("Unprepared".into());
         }
-        if super::characteristics::latest_remove_all_abilities_timestamp(&self.state, oid).is_some()
+        if super::characteristics::latest_active_ability_removal(&self.state, self.registry, oid)
+            .is_some()
         {
             labels.push("Loses all abilities".to_string());
         }
@@ -65,6 +66,26 @@ impl GameEngine {
             super::characteristics::basic_land_type_setting(&self.state, oid)
         {
             labels.push(format!("Chosen basic land type: {}", land_type.as_str()));
+        }
+        if let Some(current) = characteristics.filter(|current| current.has_type("Land")) {
+            let basic_types = BasicLandType::ALL
+                .into_iter()
+                .filter(|land_type| current.has_type(land_type.as_str()))
+                .map(BasicLandType::as_str)
+                .collect::<Vec<_>>();
+            let original_types = BasicLandType::ALL
+                .into_iter()
+                .filter(|land_type| {
+                    !object.face_down
+                        && face.is_some_and(|face| {
+                            face.types.iter().any(|kind| kind == land_type.as_str())
+                        })
+                })
+                .map(BasicLandType::as_str)
+                .collect::<Vec<_>>();
+            if !basic_types.is_empty() && basic_types != original_types {
+                labels.push(format!("Basic land types: {}", basic_types.join(", ")));
+            }
         }
         labels.extend(
             characteristics
@@ -115,10 +136,13 @@ impl GameEngine {
             labels.push("Doesn't untap during its controller's untap step".to_string());
         }
 
-        let face_name = self
-            .effective_face(oid)
+        let face_name = if object.face_down {
+            "Face-down permanent".to_string()
+        } else {
+            self.effective_face(oid)
             .map(|face| face.name.clone())
-            .unwrap_or_else(|| object.card_id.clone());
+                .unwrap_or_else(|| object.card_id.clone())
+        };
         for (_, ability, granted, path) in self.effective_activated_abilities(oid) {
             let fallback = ability.fallback_text_with_path(&face_name, &path);
             if granted && !labels.contains(&fallback) {

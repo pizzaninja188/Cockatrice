@@ -1,0 +1,96 @@
+{
+  "format_version": 1,
+  "oracle_id": "7c3944fa-7c86-4979-85a9-86196aa94594",
+  "spans": [
+    {
+      "face_id": "song_of_the_dryads",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    },
+    {
+      "face_id": "song_of_the_dryads",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::AuraAttach",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AttachedModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_land_type_pair::song_suppresses_printed_targeting_tax_in_offers_and_paid_execution_then_restores_it",
+      "covers": "song suppresses printed targeting tax in offers and paid execution then restores it"
+    },
+    {
+      "test": "scenario deck_coverage_land_type_pair::yavimaya_paid_land_play_adds_forest_to_every_players_lands_and_preserves_other_abilities",
+      "covers": "yavimaya paid land play adds forest to every players lands and preserves other abilities"
+    },
+    {
+      "test": "scenario deck_coverage_land_type_pair::song_paid_cast_sets_colorless_forest_preserves_identity_and_restores_when_destroyed",
+      "covers": "song paid cast sets colorless forest preserves identity and restores when destroyed"
+    },
+    {
+      "test": "scenario deck_coverage_land_type_pair::song_on_yavimaya_suppresses_its_global_static_and_restores_it_after_departure",
+      "covers": "song on yavimaya suppresses its global static and restores it after departure"
+    },
+    {
+      "test": "scenario deck_coverage_land_type_pair::song_detaches_a_former_equipment_and_does_not_move_it_or_detach_song",
+      "covers": "song detaches a former equipment and does not move it or detach song"
+    },
+    {
+      "test": "scenario deck_coverage_land_type_pair::song_rejects_unaffordable_and_player_targets_without_mutating_state",
+      "covers": "song rejects unaffordable and player targets without mutating state"
+    },
+    {
+      "test": "scenario deck_coverage_land_type_pair::song_public_projection_exposes_current_forest_type_and_retains_no_printed_flying",
+      "covers": "song public projection exposes current forest type and retains no printed flying"
+    },
+    {
+      "test": "scenario deck_coverage_land_type_pair::song_fizzles_on_a_new_target_incarnation_and_rejects_its_stale_mana_action",
+      "covers": "song fizzles on a new target incarnation and rejects its stale mana action"
+    },
+    {
+      "test": "scenario deck_coverage_land_type_pair::song_paid_response_destroying_its_only_target_fizzles_without_a_phantom_land",
+      "covers": "song paid response destroying its only target fizzles without a phantom land"
+    },
+    {
+      "test": "scenario deck_coverage_land_type_pair::song_retains_independent_mana_grants_in_either_order_and_restores_original_mana",
+      "covers": "song retains independent mana grants in either order and restores original mana"
+    },
+    {
+      "test": "scenario deck_coverage_land_type_pair::land_pair_serialized_paid_commands_replay_exact_public_batches_and_current_indices",
+      "covers": "land pair serialized paid commands replay exact public batches and current indices"
+    },
+    {
+      "test": "scenario deck_coverage_land_type_pair::song_targeting_a_face_down_permanent_preserves_granted_trigger_without_revealing_identity",
+      "covers": "song targeting a face down permanent preserves granted trigger without revealing identity"
+    },
+    {
+      "test": "scenario deck_coverage_land_type_pair::yavimaya_preserves_printed_utility_abilities_and_song_keeps_an_independent_grant",
+      "covers": "yavimaya preserves printed utility abilities and song keeps an independent grant"
+    },
+    {
+      "test": "scenario deck_coverage_land_type_pair::copied_song_uses_its_current_aura_recipient_and_detaches_a_transformed_aura",
+      "covers": "copied song uses its current aura recipient and detaches a transformed aura"
+    },
+    {
+      "test": "deck_coverage_land_type_pair::song_exact_identity_enchants_any_permanent_and_sets_colorless_forest",
+      "covers": "Exact identity, complete typed clauses, face ID, costs, type line, supertype and Oracle presentation mapping."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

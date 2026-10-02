@@ -373,7 +373,7 @@ fn issue_415_wrench_grants_vigilance_and_a_tap_ability() {
             ..Default::default()
         },
     );
-    apply_ability(&mut engine, 0, attacker, 0, target_object(target))
+    apply_ability(&mut engine, 0, attacker, 1, target_object(target))
         .expect("activate the granted tap ability");
     assert_eq!(engine.state.players[0].mana_pool.colorless, 0);
     assert!(
@@ -387,7 +387,7 @@ fn issue_415_wrench_grants_vigilance_and_a_tap_ability() {
     let wrench = battlefield_object_for_card(&engine, 0, "wrench");
     engine.state.objects.get_mut(&wrench).expect("wrench").zone = Zone::Graveyard;
     assert!(
-        apply_ability(&mut engine, 0, attacker, 0, target_object(target)).is_err(),
+        apply_ability(&mut engine, 0, attacker, 1, target_object(target)).is_err(),
         "the granted ability no longer exists without its Equipment"
     );
 }

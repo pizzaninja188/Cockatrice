@@ -1373,6 +1373,7 @@ fn issue_477_first_gain_allows_additional_trigger_instances() {
         source_id: None,
         affected: AffectedScope::Single(cat),
         kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            land_types: Vec::new(),
             card_types: Vec::new(),
             creature_types: vec!["Dwarf".into()],
         }),

@@ -416,6 +416,7 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
             SpellEffectKind::AddTypes {
                 subject: EffectSubject::Chosen(Box::new(stone_target.clone())),
                 addition: TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Artifact],
                     creature_types: Vec::new(),
                 },

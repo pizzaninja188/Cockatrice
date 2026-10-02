@@ -8,5 +8,5 @@
   power: 1,
   toughness: 2,
   keywords: [Flying],
-  static_abilities: [(ability_id:"static_01",presentation:OracleLines([2]),definition:ConditionalSelfModifier(condition:GraveyardAggregate(owners:Controller,aggregate:CardCount,filter:Some((any_of:None,exact_name:None,card_type:None,excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:["Lesson"],excluded_subtypes:[],has_adventure:None,printed_power:None)),min:Some(1),max:None),set_types:None,add_types:(card_types:[],creature_types:[]),base_power:None,base_toughness:None,delta_power:1,delta_toughness:1,keywords:[],activated_abilities:[],triggered_abilities:[],can_attack_as_though_without_defender:false))],
+  static_abilities: [(ability_id:"static_01",presentation:OracleLines([2]),definition:ConditionalSelfModifier(condition:GraveyardAggregate(owners:Controller,aggregate:CardCount,filter:Some((any_of:None,exact_name:None,card_type:None,excluded_card_types:[],min_mana_value:None,max_mana_value:None,required_subtypes:["Lesson"],excluded_subtypes:[],has_adventure:None,printed_power:None)),min:Some(1),max:None),set_types:None,add_types:(card_types:[],creature_types:[],land_types:[]),base_power:None,base_toughness:None,delta_power:1,delta_toughness:1,keywords:[],activated_abilities:[],triggered_abilities:[],can_attack_as_though_without_defender:false))],
 )

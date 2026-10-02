@@ -1,0 +1,16 @@
+(
+  id: "song_of_the_dryads",
+  name: "Song of the Dryads",
+  face_id: "song_of_the_dryads",
+  mana_cost: "{2}{G}",
+  types: ["Enchantment", "Aura"],
+  spell_effect: [AuraAttach(target: (kind: AnyPermanent))],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: AttachedModifier(
+      set_types: Some((card_types: [Land], land_types: [Forest])),
+      set_colors: Some([]),
+    ),
+  )],
+)

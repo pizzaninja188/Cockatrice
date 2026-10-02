@@ -204,6 +204,7 @@ fn sculpting_steel_can_copy_an_aura_that_is_an_artifact() {
             },
             kind: tricerules_cards::primitives::ContinuousEffectKind::Layer4AddTypes(
                 tricerules_cards::primitives::TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: vec![artifact_type],
                     creature_types: Vec::new(),
                 },

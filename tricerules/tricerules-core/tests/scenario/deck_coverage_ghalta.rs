@@ -187,6 +187,7 @@ fn ghalta_reads_current_control_types_pumps_and_counters_before_announcement() {
         &mut engine,
         stolen,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact],
             creature_types: vec![],
         }),
@@ -290,7 +291,7 @@ fn ghalta_locked_sacrifice_mana_payment_paid_cast_and_serialized_replay() {
     let pending = engine.state.pending_spell_cast.as_ref().unwrap();
     assert_eq!(pending.locked_total_cost, "{4}{G}{G}");
     let transaction_id = pending.transaction_id;
-    apply(&mut engine, 0, activate_ability(contributor, 0, vec![]));
+    apply(&mut engine, 0, activate_ability(contributor, 1, vec![]));
     assert_eq!(engine.state.objects[&contributor].zone, Zone::Graveyard);
     assert_eq!(engine.state.players[0].mana_pool.green, 6);
     assert_eq!(

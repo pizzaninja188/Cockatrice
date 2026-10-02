@@ -140,6 +140,7 @@ fn clock_uses_nonconsecutive_multiplayer_controllers_and_current_types() {
         &mut engine,
         clock,
         ContinuousEffectKind::Layer4SetTypeLine(TypeLineReplacement {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Enchantment],
             creature_types: vec![],
         }),
@@ -157,6 +158,7 @@ fn clock_uses_nonconsecutive_multiplayer_controllers_and_current_types() {
         &mut engine,
         gained_artifact,
         ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact],
             creature_types: vec![],
         }),
@@ -192,6 +194,7 @@ fn clock_reads_scope_after_turn_start_expiry() {
         &mut engine,
         bear,
         ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Artifact],
             creature_types: vec![],
         }),
@@ -299,9 +302,11 @@ fn clock_face_down_basic_land_and_ability_suppression_disable_only_current_sourc
             1 => resolved_effect(
                 &mut engine,
                 clock,
-                ContinuousEffectKind::Layer4SetBasicLandType(
-                    tricerules_cards::primitives::BasicLandType::Forest,
-                ),
+                ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
+                    card_types: vec![tricerules_cards::PermanentTypeFilter::Land],
+                    creature_types: Vec::new(),
+                    land_types: vec![tricerules_cards::BasicLandType::Forest],
+                }),
                 EffectDuration::Indefinite,
             ),
             _ => resolved_effect(

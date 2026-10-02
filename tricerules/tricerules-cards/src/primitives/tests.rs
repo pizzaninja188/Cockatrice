@@ -14,6 +14,31 @@ fn mana_amount_ron_omits_zero_fields_and_round_trips() {
 }
 
 #[test]
+fn land_type_additions_and_replacements_validate_distinct_subtype_rules() {
+    let forest: super::TypeLineAddition = ron::from_str("(land_types: [Forest])").unwrap();
+    assert!(
+        !forest.is_empty(),
+        "a land subtype is a real type-line addition"
+    );
+    assert!(forest.validate().is_ok());
+    let duplicate: super::TypeLineAddition =
+        ron::from_str("(land_types: [Forest, Forest])").unwrap();
+    assert!(
+        duplicate.validate().is_err(),
+        "duplicate land subtypes are rejected"
+    );
+    let replacement: super::TypeLineReplacement =
+        ron::from_str("(card_types: [Land], land_types: [Forest])").unwrap();
+    assert!(replacement.validate().is_ok());
+    let malformed: super::TypeLineReplacement =
+        ron::from_str("(card_types: [Creature], land_types: [Forest])").unwrap();
+    assert!(
+        malformed.validate().is_err(),
+        "a replacement land subtype requires Land"
+    );
+}
+
+#[test]
 fn storm_is_a_spell_keyword_and_static_emblems_require_typed_effects() {
     let face: crate::CardFace = ron::from_str(
         r#"(
@@ -636,7 +661,7 @@ fn issue_234_linked_exile_schema_is_paired_and_fail_closed() {
             ]"#,
         ),
         (
-            "type-line addition must add a card type or creature type",
+            "type-line addition must add a card type or subtype",
             r#"activated_abilities: [
                 (ability_id: "first", presentation: Fallback, costs: [], effect: [MoveGraveyardCards(filter: (owner: AnyPlayer), destination: Exile, linked_exile_id: Some("exiled_cards"))]),
                 (ability_id: "second", presentation: Fallback, costs: [], effect: [ReturnLinkedExiledCards(linked_exile_id: "exiled_cards", filter: (card_type: Some(Creature)), entry_modifiers: [AddTypes(())])]),
@@ -1762,6 +1787,7 @@ fn spell_cost_conditions_require_valid_counts_and_nonzero_reductions() {
 #[test]
 fn explicit_and_intrinsic_sorcery_speed_share_one_query() {
     let explicit = ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: crate::AbilityId::new("activated_01").unwrap(),
         presentation: crate::AbilityPresentation::Fallback,
         source_zone: AbilitySourceZone::Battlefield,
@@ -1776,6 +1802,7 @@ fn explicit_and_intrinsic_sorcery_speed_share_one_query() {
     assert!(explicit.requires_sorcery_speed());
 
     let equip = ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: crate::AbilityId::new("activated_01").unwrap(),
         presentation: crate::AbilityPresentation::Fallback,
         source_zone: AbilitySourceZone::Battlefield,
@@ -1800,6 +1827,7 @@ fn activation_limit_rejects_zero_maximum_for_every_scope() {
         ActivationLimit::PerObject { max_activations: 1 }
     );
     let ability_with = |activation_limit| ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: crate::AbilityId::new("activated_01").unwrap(),
         presentation: crate::AbilityPresentation::Fallback,
         source_zone: AbilitySourceZone::Battlefield,
@@ -1834,6 +1862,7 @@ fn activation_limit_rejects_zero_maximum_for_every_scope() {
 #[test]
 fn commander_color_identity_mana_is_a_bounded_zero_or_more_choice_ability() {
     let ability = ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: crate::AbilityId::new("activated_01").unwrap(),
         presentation: crate::AbilityPresentation::Fallback,
         source_zone: AbilitySourceZone::Battlefield,
@@ -1872,6 +1901,7 @@ fn commander_color_identity_mana_is_a_bounded_zero_or_more_choice_ability() {
 
 fn storage_counter_split_ability(mana_cost: &str) -> ActivatedAbilityDef {
     ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: AbilityId::new("activated_03").unwrap(),
         presentation: AbilityPresentation::Fallback,
         source_zone: AbilitySourceZone::Battlefield,
@@ -1928,6 +1958,7 @@ fn storage_counter_kind_has_a_distinct_typed_label() {
 
 fn mana_then_controller_damage_ability() -> super::ActivatedAbilityDef {
     super::ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: crate::AbilityId::new("activated_01").unwrap(),
         presentation: crate::AbilityPresentation::Fallback,
         source_zone: super::AbilitySourceZone::Battlefield,
@@ -2055,6 +2086,7 @@ fn source_counter_scaled_mana_branch(effect: SpellEffectKind) -> SpellEffectKind
 #[test]
 fn source_counter_scaled_mana_accepts_the_supported_activated_ability_shape() {
     let ability = ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: crate::AbilityId::new("activated_01").unwrap(),
         presentation: crate::AbilityPresentation::Fallback,
         source_zone: AbilitySourceZone::Battlefield,
@@ -2077,6 +2109,7 @@ fn source_counter_scaled_mana_accepts_the_supported_activated_ability_shape() {
 #[test]
 fn source_counter_scaled_mana_rejects_mixed_activated_effects() {
     let ability = ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: crate::AbilityId::new("activated_01").unwrap(),
         presentation: crate::AbilityPresentation::Fallback,
         source_zone: AbilitySourceZone::Battlefield,
@@ -2103,6 +2136,7 @@ fn source_counter_scaled_mana_rejects_mixed_activated_effects() {
 #[test]
 fn source_counter_scaled_mana_rejects_nested_activated_effects() {
     let ability = ActivatedAbilityDef {
+        intrinsic_land_mana: false,
         ability_id: crate::AbilityId::new("activated_01").unwrap(),
         presentation: crate::AbilityPresentation::Fallback,
         source_zone: AbilitySourceZone::Battlefield,

@@ -392,7 +392,17 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     reason,
                 })?;
         }
-        if let StaticAbilityDef::GrantKeywordToPermanents { filter, .. } = ability {
+        if let StaticAbilityDef::AddTypesToPermanents { addition, .. } = ability {
+            addition
+                .validate()
+                .map_err(|reason| RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason,
+                })?;
+        }
+        if let StaticAbilityDef::GrantKeywordToPermanents { filter, .. }
+        | StaticAbilityDef::AddTypesToPermanents { filter, .. } = ability
+        {
             filter
                 .validate_characteristic_constraints()
                 .map_err(|reason| RegistryError::InvalidCard {
@@ -413,7 +423,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             }) {
                 return Err(RegistryError::InvalidCard {
                     id: card.id.clone(),
-                    reason: "GrantKeywordToPermanents requires a supported earlier-layer permanent scope without tapped, keyword, P/T, defending-player or attached-object constraints".into(),
+                    reason: "live static permanent effects require a supported earlier-layer scope without tapped, keyword, P/T, defending-player or attached-object constraints".into(),
                 });
             }
         }
@@ -1385,10 +1395,42 @@ fn validate_source_mana_cost_reduction(
 
 fn validate_face_identity(face: &CardFace) -> Result<(), String> {
     face.face_id.validate()?;
+    if face
+        .activated_abilities
+        .iter()
+        .filter(|ability| ability.intrinsic_land_mana)
+        .count()
+        > 1
+    {
+        return Err("a face may have only one intrinsic land mana bundle".into());
+    }
     let mut siblings = HashSet::new();
     for ability in &face.activated_abilities {
         insert_ability_id(&mut siblings, &ability.ability_id)?;
         ability.validate_shape()?;
+        if ability.intrinsic_land_mana {
+            let expected = crate::BasicLandType::ALL
+                .into_iter()
+                .filter(|land_type| face.types.iter().any(|value| value == land_type.as_str()))
+                .map(crate::BasicLandType::mana)
+                .collect::<Vec<_>>();
+            let matching_output = matches!(ability.effect.as_slice(),
+                [SpellEffectKind::ProduceMana { options, commander_color_identity: false, restriction: None, conditional: None }]
+                if options.len() == expected.len() && expected.iter().all(|mana| options.contains(mana)));
+            if !face.types.iter().any(|value| value == "Land")
+                || expected.is_empty()
+                || !matching_output
+                || ability.source_zone != crate::AbilitySourceZone::Battlefield
+                || ability.costs.as_slice() != [AbilityCost::Tap]
+                || !ability.cost_modifiers.is_empty()
+                || ability.targeting.is_some()
+                || ability.timing != crate::ActivationTiming::Normal
+                || !ability.conditions.is_empty()
+                || ability.activation_limit.is_some()
+            {
+                return Err("intrinsic land mana must be the unrestricted tap-only bundle of the face's basic land subtypes".into());
+            }
+        }
         validate_source_mana_cost_reduction(face, ability)?;
         validate_effect_list_metadata(&ability.effect)?;
     }
@@ -1409,6 +1451,11 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
             } => {
                 for nested_ability in activated_abilities {
                     insert_ability_id(&mut nested, &nested_ability.ability_id)?;
+                    if nested_ability.intrinsic_land_mana {
+                        return Err(
+                            "intrinsic land mana cannot be an independently granted ability".into(),
+                        );
+                    }
                     nested_ability.validate_shape()?;
                     validate_effect_list_metadata(&nested_ability.effect)?;
                 }
@@ -1425,6 +1472,11 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
             } => {
                 for nested_ability in activated_abilities {
                     insert_ability_id(&mut nested, &nested_ability.ability_id)?;
+                    if nested_ability.intrinsic_land_mana {
+                        return Err(
+                            "intrinsic land mana cannot be an independently granted ability".into(),
+                        );
+                    }
                     nested_ability.validate_shape()?;
                     validate_effect_list_metadata(&nested_ability.effect)?;
                 }
@@ -2368,6 +2420,127 @@ include!(concat!(env!("OUT_DIR"), "/embedded_cards.rs"));
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn land_intrinsic_mana_provenance_rejects_resolving_grants_in_every_supported_container() {
+        for marked in [false, true] {
+            let grant = format!(
+                r#"ApplyPermanentModifier(
+                subject: Chosen((kind: AnyPermanent, permanent_types: [Land])),
+                modifier: GrantActivatedAbility((ability_id: "granted_mana", presentation: Fallback,
+                    intrinsic_land_mana: {marked}, costs: [Tap], effect: [ProduceMana(options: [(g: 1)])])),
+                duration: UntilEndOfTurn)"#
+            );
+            let modes = format!(
+                r#"(min_modes: 1, max_modes: 1, modes: [
+                (mode_id: "grant", presentation: Fallback, effects: [{grant}]),
+                (mode_id: "life", presentation: Fallback, effects: [GainLife(amount: 1)])])"#
+            );
+            let source_grant = grant.replace(
+                "Chosen((kind: AnyPermanent, permanent_types: [Land]))",
+                "Source",
+            );
+            for (types, body) in [
+                ("Instant", format!("spell_effect: [{grant}]")),
+                (
+                    "Artifact",
+                    format!(
+                        r#"triggered_abilities: [(ability_id: "entry", presentation: Fallback,
+                    trigger: WhenSelfEntersBattlefield, effect: [ChooseResolutionBranch(optional: true, branches: [
+                    (branch_id: "grant", presentation: Fallback, cost: None, effects: [{source_grant}])])])]"#
+                    ),
+                ),
+                ("Instant", format!("modal_spell: {modes}")),
+                (
+                    "Artifact",
+                    format!(
+                        r#"triggered_abilities: [(ability_id: "entry", presentation: Fallback,
+                    trigger: WhenSelfEntersBattlefield, modal: Some({modes}))]"#
+                    ),
+                ),
+            ] {
+                let card = format!(
+                    r#"(id: "provenance_grant_fixture", name: "Provenance Grant Fixture",
+                    face_id: "provenance_grant_fixture", types: ["{types}"], {body})"#
+                );
+                let result = CardRegistry::from_chunks(&[&card]);
+                if marked {
+                    let error = result
+                        .expect_err("an independent resolving grant cannot be intrinsic land mana");
+                    assert!(
+                        error.to_string().contains("intrinsic land mana"),
+                        "{body}: {error}"
+                    );
+                } else {
+                    result.unwrap_or_else(|error| {
+                        panic!("otherwise valid unmarked grant: {body}: {error}")
+                    });
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn land_intrinsic_mana_provenance_accepts_exact_typed_land_bundle() {
+        let card = r#"(
+            id: "intrinsic_land_fixture", name: "Intrinsic Land Fixture", face_id: "intrinsic_land_fixture",
+            mana_cost: "", types: ["Land", "Island", "Forest"],
+            activated_abilities: [(
+                ability_id: "mana", presentation: Fallback, intrinsic_land_mana: true,
+                costs: [Tap], effect: [ProduceMana(options: [(u: 1), (g: 1)])],
+            )],
+        )"#;
+        CardRegistry::from_chunks(&[card])
+            .expect("explicit intrinsic bundle matches both basic subtypes");
+    }
+
+    #[test]
+    fn land_intrinsic_mana_provenance_rejects_multiple_anchors_on_one_face() {
+        let card = r#"(id: "intrinsic_land_fixture", name: "Intrinsic Land Fixture", face_id: "intrinsic_land_fixture",
+            types: ["Land", "Forest"], activated_abilities: [
+                (ability_id: "first", presentation: Fallback, intrinsic_land_mana: true, costs: [Tap], effect: [ProduceMana(options: [(g: 1)])]),
+                (ability_id: "second", presentation: Fallback, intrinsic_land_mana: true, costs: [Tap], effect: [ProduceMana(options: [(g: 1)])])])"#;
+        let error = CardRegistry::from_chunks(&[card])
+            .expect_err("one face has one intrinsic index anchor");
+        assert!(
+            error.to_string().contains("one intrinsic land mana"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn land_intrinsic_mana_provenance_rejects_nonintrinsic_shapes() {
+        let card = r#"(
+            id: "intrinsic_land_fixture", name: "Intrinsic Land Fixture", face_id: "intrinsic_land_fixture",
+            mana_cost: "", types: ["Land", "Forest"],
+            activated_abilities: [(
+                ability_id: "mana", presentation: Fallback, intrinsic_land_mana: true,
+                costs: [Tap], effect: [ProduceMana(options: [(g: 1)])],
+            )],
+        )"#;
+        for (malformed, expected_error) in [
+            (
+                card.replace("[\"Land\", \"Forest\"]", "[\"Creature\", \"Forest\"]"),
+                "intrinsic land mana",
+            ),
+            (card.replace("(g: 1)", "(u: 1)"), "intrinsic land mana"),
+            (card.replace("(g: 1)", "(g: 2)"), "intrinsic land mana"),
+            (
+                card.replace("costs: [Tap]", "costs: [PayLife(amount: 1)]"),
+                "intrinsic land mana",
+            ),
+            (
+                card.replace(
+                    "intrinsic_land_mana: true",
+                    "intrinsic_land_mana: true, source_zone: Graveyard",
+                ),
+                "battlefield source",
+            ),
+        ] {
+            let error = CardRegistry::from_chunks(&[&malformed])
+                .expect_err("intrinsic provenance is not a rules-text mana tag");
+            assert!(error.to_string().contains(expected_error), "{error}");
+        }
+    }
     use super::*;
 
     #[test]
@@ -2409,6 +2582,54 @@ mod tests {
                     "must reject unsupported static scope: {filter}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn static_permanent_type_addition_accepts_basic_subtypes_and_rejects_unsafe_scopes() {
+        let definition = |filter: &str, addition: &str| {
+            format!(
+                r#"(
+            id: "type_addition_probe", name: "Type Addition Probe", face_id: "type_addition_probe", types: ["Land"],
+            static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                definition: AddTypesToPermanents(filter: ({filter}), addition: ({addition})))])"#
+            )
+        };
+        for (filter, addition) in [
+            (
+                "kind: AnyPermanent, permanent_types: [Land]",
+                "land_types: [Forest]",
+            ),
+            (
+                "kind: AnyPermanent, permanent_types: [Land]",
+                "land_types: [Swamp]",
+            ),
+            ("kind: AnyPermanent", "card_types: [Artifact]"),
+        ] {
+            CardRegistry::from_chunks(&[&definition(filter, addition)])
+                .expect("live additive type/subtype effects use supported permanent scopes");
+        }
+        for (filter, addition) in [
+            ("kind: AnyPermanent", "land_types: [Forest, Forest]"),
+            ("kind: AnyPermanent", ""),
+            ("kind: AnyPlayer", "land_types: [Forest]"),
+            (
+                "kind: AnyPermanent, tapped: Some(false)",
+                "land_types: [Forest]",
+            ),
+            (
+                "kind: AnyPermanent, required_keywords: [Flying]",
+                "card_types: [Artifact]",
+            ),
+            (
+                "any_of: Some([(kind: AnyPermanent), (kind: Creature, power: Some(AtLeast(1)))])",
+                "land_types: [Forest]",
+            ),
+        ] {
+            assert!(
+                CardRegistry::from_chunks(&[&definition(filter, addition)]).is_err(),
+                "unsupported or empty additions fail closed: {filter}, {addition}"
+            );
         }
     }
     use crate::primitives::{

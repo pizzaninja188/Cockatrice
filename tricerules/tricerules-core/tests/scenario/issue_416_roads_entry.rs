@@ -83,6 +83,7 @@ fn inject_mount(engine: &mut GameEngine, player: usize) -> u32 {
         source_id: None,
         affected: AffectedScope::Single(mount),
         kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            land_types: Vec::new(),
             card_types: Vec::new(),
             creature_types: vec!["Mount".into()],
         }),

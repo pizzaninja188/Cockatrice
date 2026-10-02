@@ -501,22 +501,24 @@ pub(super) fn activated_ability_info(
         })
         .collect::<Vec<_>>()
         .join(", ");
-    let fallback = ability.fallback_text_with_path(
-        &eng.effective_face(source_id)
+    let concealed = eng
+        .state
+        .objects
+        .get(&source_id)
+        .is_some_and(|object| object.zone == Zone::Battlefield && object.face_down);
+    let public_name = if concealed {
+        "Face-down permanent".into()
+    } else {
+        eng.effective_face(source_id)
             .map(|face| face.name.clone())
-            .unwrap_or_else(|| "Unknown card".into()),
-        ability_path,
-    );
+            .unwrap_or_else(|| "Unknown card".into())
+    };
+    let fallback = ability.fallback_text_with_path(&public_name, ability_path);
+    let presentation = if concealed || ability.intrinsic_land_mana {
+        None
+    } else {
     let definition = eng.ability_definition(source_id, face_index, ability_path.to_vec());
-    rv1::AbilityInfo {
-        text: fallback.clone(),
-        mana_cost,
-        mana_produced,
-        cost_label,
-        mana_option_labels,
-        activatable: eng.ability_activatable(source_id, ability_index, ability),
-        has_only_tap_cost: matches!(ability.costs.as_slice(), [AbilityCost::Tap]),
-        presentation: Some(presentation_ref(
+        Some(presentation_ref(
             eng.registry,
             &definition.card_id,
             &definition.face_id,
@@ -525,8 +527,18 @@ pub(super) fn activated_ability_info(
                 .iter()
                 .map(PresentationPath::Ability),
             &ability.presentation,
-            fallback,
-        )),
+            fallback.clone(),
+        ))
+    };
+    rv1::AbilityInfo {
+        text: fallback.clone(),
+        mana_cost,
+        mana_produced,
+        cost_label,
+        mana_option_labels,
+        activatable: eng.ability_activatable(source_id, ability_index, ability),
+        has_only_tap_cost: matches!(ability.costs.as_slice(), [AbilityCost::Tap]),
+        presentation,
         ability_index: ability_index as u32,
         x_counter_mana_choice,
         is_mana_ability: ability.is_mana_ability(),

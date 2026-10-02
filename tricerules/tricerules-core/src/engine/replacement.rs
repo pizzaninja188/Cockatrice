@@ -1,9 +1,6 @@
 //! Shared CR 614/616 replacement ordering and battlefield-entry preprocessing.
 
-use super::characteristics::{
-    apply_face_down_values, apply_type_line_addition, apply_type_line_replacement,
-    creature_matches_scope,
-};
+use super::characteristics::creature_matches_scope;
 use super::events::{ev_log, ev_priority_changed, finish_with_events};
 use super::history::player_life_aggregate_value;
 use super::presentation::{
@@ -14,7 +11,50 @@ use super::resolution::{
 };
 use super::targeting::{battlefield_objects_matching, object_matches_mass_filter};
 use super::*;
+
+#[cfg(test)]
+mod entry_layers_tests;
 use crate::state::{PendingAuraEntryRecipient, ReplacementSourcePresentation};
+
+fn materialize_entry_modifiers(
+    event: &BattlefieldEntryEvent,
+    timestamp: u64,
+) -> Vec<ContinuousEffect> {
+    let mut effects = Vec::new();
+    if let Some(land_type) = event.chosen_basic_land_type {
+        effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: Some(event.object_id),
+            affected: AffectedScope::Single(event.object_id),
+            kind: ContinuousEffectKind::Layer4SetBasicLandType(land_type),
+            condition: None,
+            duration: EffectDuration::WhileSourceOnBattlefield,
+            timestamp,
+        });
+    }
+    let kinds = event
+        .set_types
+        .iter()
+        .cloned()
+        .map(ContinuousEffectKind::Layer4SetTypeLine)
+        .chain(
+            event
+                .entry_modifiers
+                .iter()
+                .cloned()
+                .flat_map(super::resolution::materialize_resolving_modifier),
+        );
+    effects.extend(kinds.map(|kind| ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(event.object_id),
+        kind,
+        condition: None,
+        duration: EffectDuration::Indefinite,
+        timestamp,
+    }));
+    effects
+}
 
 impl ReplacementSourcePresentation {
     pub(super) fn option(
@@ -189,38 +229,61 @@ impl GameEngine {
         &self,
         event: &BattlefieldEntryEvent,
     ) -> Option<Characteristics> {
-        let mut characteristics = self.characteristics_through_layer_5(event.object_id)?;
-        if self
-            .state
-            .objects
-            .get(&event.object_id)
-            .is_some_and(|object| object.face_down)
-        {
-            apply_face_down_values(&mut characteristics);
-        }
-        if let Some(replacement) = &event.set_types {
-            apply_type_line_replacement(&mut characteristics, replacement);
-        }
-        if let Some(land_type) = event.chosen_basic_land_type {
-            super::characteristics::apply_basic_land_type(&mut characteristics, land_type);
-        }
-        // CR 611.2e: a resolving effect that moves an object and then modifies its
-        // characteristics already applies while replacement effects inspect that entry.
-        for modifier in &event.entry_modifiers {
-            match modifier {
-                ResolvingPermanentModifier::SetTypeLine(replacement) => {
-                    apply_type_line_replacement(&mut characteristics, replacement);
+        self.battlefield_entry_early_characteristics(event)
+            .map(|(characteristics, _)| characteristics)
                 }
-                ResolvingPermanentModifier::AddTypes(addition) => {
-                    apply_type_line_addition(&mut characteristics, addition);
-                }
-                ResolvingPermanentModifier::SetBasePowerToughness { .. }
-                | ResolvingPermanentModifier::GrantKeywords(_)
-                | ResolvingPermanentModifier::GrantActivatedAbility(_) => {}
-            }
-        }
-        characteristics.controller = event.destination_controller;
-        Some(characteristics)
+
+    fn battlefield_entry_early_characteristics(
+        &self,
+        event: &BattlefieldEntryEvent,
+    ) -> Option<(Characteristics, bool)> {
+        let object = self.state.objects.get(&event.object_id)?;
+        let copied = object
+            .copiable_values
+            .as_ref()
+            .or(object.token_origin.as_ref());
+        let selected = self.battlefield_entry_face(event)?;
+        let room_faces = self.room_faces(event.object_id);
+        let unlocked = if copied.is_none() {
+            event.unlock_room_door.into_iter().collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        let room_face = room_faces
+            .and_then(|faces| CardDefinition::synthesize_room_permanent_face(faces, &unlocked));
+        let face = room_face.as_ref().unwrap_or(&selected);
+        let raw_faces = if let Some(faces) = room_faces {
+            unlocked
+                .iter()
+                .filter_map(|&index| faces.get(index).map(|face| (index, face)))
+                .collect::<Vec<_>>()
+        } else {
+            vec![(event.face_index, selected.as_ref())]
+        };
+        let statics = raw_faces
+            .into_iter()
+            .flat_map(|(index, face)| {
+                face.static_abilities.iter().map(move |ability| {
+                    (
+                        self.ability_definition(
+                            event.object_id,
+                            index,
+                            vec![ability.ability_id.clone()],
+                        ),
+                        &ability.definition,
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        let effects = materialize_entry_modifiers(event, self.state.command_index);
+        super::characteristics::entry_characteristics_through_layer_5(
+            &self.state,
+            self.registry,
+            event,
+            face,
+            &statics,
+            &effects,
+        )
     }
 
     fn battlefield_entry_is_battle(&self, event: &BattlefieldEntryEvent) -> bool {
@@ -325,7 +388,11 @@ impl GameEngine {
             return Vec::new();
         };
         let mut candidates = Vec::new();
-        if !entering.face_down {
+        if !entering.face_down
+            && self
+                .battlefield_entry_early_characteristics(event)
+                .is_some_and(|(_, printed)| printed)
+        {
             if let Some(face) = self.battlefield_entry_face(event) {
                 for (ability_index, ability) in face.static_abilities.iter().enumerate() {
                     let (priority, label) = match &ability.definition {
@@ -409,7 +476,11 @@ impl GameEngine {
             .collect();
         battlefield_sources.sort_by_key(|object| object.id);
         for source in battlefield_sources {
-            if source.face_down {
+            if !super::characteristics::printed_static_source_is_available(
+                &self.state,
+                self.registry,
+                source.id,
+            ) {
                 continue;
             }
             let Some(face) = self.effective_face(source.id) else {
@@ -1893,41 +1964,12 @@ impl GameEngine {
                 },
             );
         }
-        if let Some(land_type) = event.chosen_basic_land_type {
-            self.state.continuous_effects.push(ContinuousEffect {
-                trigger_grant_origin: None,
-                source_id: Some(event.object_id),
-                affected: AffectedScope::Single(event.object_id),
-                kind: ContinuousEffectKind::Layer4SetBasicLandType(land_type),
-                condition: None,
-                duration: EffectDuration::WhileSourceOnBattlefield,
-                timestamp: self.state.command_index,
-            });
-        }
-        if let Some(replacement) = event.set_types.clone() {
-            self.state.continuous_effects.push(ContinuousEffect {
-                trigger_grant_origin: None,
-                source_id: None,
-                affected: AffectedScope::Single(event.object_id),
-                kind: ContinuousEffectKind::Layer4SetTypeLine(replacement),
-                condition: None,
-                duration: EffectDuration::Indefinite,
-                timestamp: self.state.command_index,
-            });
-        }
-        for modifier in event.entry_modifiers.clone() {
-            for kind in super::resolution::materialize_resolving_modifier(modifier) {
-                self.state.continuous_effects.push(ContinuousEffect {
-                    trigger_grant_origin: None,
-                    source_id: None,
-                    affected: AffectedScope::Single(event.object_id),
-                    kind,
-                    condition: None,
-                    duration: EffectDuration::Indefinite,
-                    timestamp: self.state.command_index,
-                });
-            }
-        }
+        self.state
+            .continuous_effects
+            .extend(materialize_entry_modifiers(
+                &event,
+                self.state.command_index,
+            ));
         if let Some(object) = self.state.objects.get_mut(&event.object_id) {
             object.face_up_index = event.face_index;
             object.tapped = event.tapped;
@@ -1963,7 +2005,9 @@ impl GameEngine {
             .room_states
             .insert(event.object_id, RoomState::default());
         if let Some(face_index) = event.unlock_room_door.filter(|_| !enters_as_copy) {
+            let static_start = self.state.continuous_effects.len();
             trigger_events.push(self.transition_room_door(event.object_id, face_index)?);
+            self.order_new_entry_statics_before_modifiers(event.object_id, static_start);
         }
         Ok(trigger_events)
     }
@@ -3678,6 +3722,7 @@ mod tests {
             entry_counters: BTreeMap::new(),
             entry_modifiers: vec![ResolvingPermanentModifier::AddTypes(
                 tricerules_cards::TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: Vec::new(),
                     creature_types: vec!["Dragon".into()],
                 },
@@ -3688,6 +3733,23 @@ mod tests {
             applied_effects: Vec::new(),
         };
 
+        assert_eq!(engine.battlefield_entry_candidates(&event).len(), 1);
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(globe),
+            kind: ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
+                card_types: vec![PermanentTypeFilter::Land],
+                creature_types: Vec::new(),
+                land_types: vec![BasicLandType::Forest],
+            }),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 5,
+        });
+        assert!(engine.battlefield_entry_candidates(&event).is_empty(),
+            "a printed battlefield entry replacement loses its source under type-setting suppression");
+        engine.state.continuous_effects.clear();
         assert_eq!(engine.battlefield_entry_candidates(&event).len(), 1);
     }
 }

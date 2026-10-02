@@ -608,6 +608,7 @@ fn issue_417_registry_identities_types_keywords_and_payloads() {
                 ..TargetFilter::default()
             })),
             addition: TypeLineAddition {
+                land_types: Vec::new(),
                 card_types: vec![PermanentTypeFilter::Artifact, PermanentTypeFilter::Creature],
                 creature_types: Vec::new(),
             },

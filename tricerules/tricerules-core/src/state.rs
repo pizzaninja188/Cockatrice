@@ -548,6 +548,7 @@ pub struct ReplacementSourcePresentation {
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct ActiveDamagePrevention {
     pub id: u32,
+    pub static_origin: Option<TriggerAbilityOrigin>,
     pub source_id: Option<ObjectId>,
     pub source_label: String,
     pub source_presentation: ReplacementSourcePresentation,
@@ -808,6 +809,8 @@ pub struct PendingTrigger {
     pub ability_text: String,
     pub presentation: Option<tricerules_proto::ruled::v1::PresentationRef>,
     pub card_id: String,
+    /// Safe public name captured when this triggered ability fired.
+    pub source_label: String,
     pub controller: PlayerId,
     /// CR 603.5: an optional triggered ability may be declined before it is put on the stack.
     pub may: bool,
@@ -1784,6 +1787,9 @@ pub struct StackItem {
 /// stack representation and its copy/resolve semantics remain unchanged.
 #[derive(serde::Serialize, Debug, Clone, Default)]
 pub struct StackPresentation {
+    /// Public source label captured when an ability is activated; never reconstruct a concealed
+    /// source's identity after it changes zones or turns face up while the ability is on the stack.
+    pub source_label: Option<String>,
     pub primary: Option<tricerules_proto::ruled::v1::PresentationRef>,
     pub chosen_modes: Vec<tricerules_proto::ruled::v1::PresentationRef>,
     pub chosen_cast_costs: Vec<tricerules_proto::ruled::v1::PresentationRef>,
@@ -2430,6 +2436,7 @@ impl GameState {
         self.next_damage_prevention_effect_id = id.saturating_add(1);
         self.damage_prevention_effects.push(ActiveDamagePrevention {
             id,
+            static_origin: None,
             source_id: None,
             source_label: "Prevention shield".to_string(),
             source_presentation: ReplacementSourcePresentation::default(),

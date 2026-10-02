@@ -1,0 +1,15 @@
+(
+  id: "yavimaya,_cradle_of_growth",
+  name: "Yavimaya, Cradle of Growth",
+  face_id: "yavimaya_cradle_of_growth",
+  types: ["Land"],
+  supertypes: ["Legendary"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: AddTypesToPermanents(
+      filter: (kind: AnyPermanent, permanent_types: [Land]),
+      addition: (land_types: [Forest]),
+    ),
+  )],
+)

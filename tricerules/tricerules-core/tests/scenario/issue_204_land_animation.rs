@@ -65,6 +65,7 @@ fn add_external_creature_form(engine: &mut GameEngine, oid: u32) {
         engine,
         oid,
         ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Creature],
             creature_types: vec!["Shark".into()],
         }),
@@ -426,6 +427,7 @@ fn reanimation_uses_layer_timestamps_and_temporary_forms_restore_prior_effects()
         &mut temporary,
         reef,
         ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            land_types: Vec::new(),
             card_types: vec![PermanentTypeFilter::Creature],
             creature_types: vec!["Frog".into()],
         }),

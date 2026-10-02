@@ -10,6 +10,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'focused-test-plan.ps1')
+. (Join-Path $PSScriptRoot 'rust-format-checks.ps1')
 $savedJobs = $env:CARGO_BUILD_JOBS
 $savedThreads = $env:RUST_TEST_THREADS
 $summary = $null
@@ -21,7 +22,7 @@ try {
     foreach ($item in $Evidence) {
         if (-not (Test-Path -LiteralPath $item -PathType Leaf)) { throw "Missing evidence: $item" }
     }
-    $checks = @(@{ Label = 'Rust formatting'; Args = @('fmt','--check'); Exact = $false }) + $tests
+    $checks = @(Get-RustFormatChecks -Repository $repo) + $tests
     $packages = @($tests.Package | Sort-Object -Unique)
     $lint = @('clippy', '--quiet')
     foreach ($package in $packages) { $lint += @('-p', $package) }

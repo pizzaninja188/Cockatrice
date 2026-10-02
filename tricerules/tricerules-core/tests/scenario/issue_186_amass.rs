@@ -210,6 +210,7 @@ fn counter_prohibition_does_not_prevent_the_subtype_addition() {
         source_id: None,
         affected: AffectedScope::Single(tatterkite),
         kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+            land_types: Vec::new(),
             card_types: Vec::<PermanentTypeFilter>::new(),
             creature_types: vec!["Army".to_string()],
         }),

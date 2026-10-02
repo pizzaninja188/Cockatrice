@@ -13,8 +13,8 @@
 //! 7. power/toughness CDAs, setters, modifiers, counters, then switches.
 //!
 //! Unused layer subparts remain explicit identity stages.
-//! CR 613.8 dependency ordering is intentionally deferred until the first effect that needs it;
-//! the `ordered_effects` boundary is the insertion point. Replacement/prevention choice ordering
+//! CR 613.8 dependency ordering is modeled for layer-4 type-changing effects using a pure
+//! evolving battlefield snapshot. Replacement/prevention choice ordering
 //! (CR 616) is the separate shared pipeline in `engine/replacement.rs`.
 //!
 //! The calculation is side-effect-free and depends only on `GameState`, the registry, and the
@@ -101,6 +101,12 @@ pub(super) fn apply_type_line_replacement(
     characteristics
         .types
         .extend(replacement.creature_types.iter().cloned());
+    characteristics.types.extend(
+        replacement
+            .land_types
+            .iter()
+            .map(|land_type| land_type.as_str().to_string()),
+    );
 }
 
 pub(super) fn apply_type_line_addition(
@@ -124,7 +130,17 @@ pub(super) fn apply_type_line_addition(
             }
         }
     }
+    if characteristics.has_type("Land") {
+        for land_type in &addition.land_types {
+            if !characteristics.has_type(land_type.as_str()) {
+                characteristics.types.push(land_type.as_str().to_string());
+            }
+        }
+    }
 }
+
+mod early_layers;
+use early_layers::EarlyLayerView;
 
 struct CharacteristicsEvaluator<'a> {
     state: &'a GameState,
@@ -137,6 +153,18 @@ pub(super) fn characteristics_from(
     oid: ObjectId,
 ) -> Option<Characteristics> {
     CharacteristicsEvaluator { state, registry }.characteristics(oid)
+}
+
+pub(super) fn entry_characteristics_through_layer_5(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    event: &BattlefieldEntryEvent,
+    face: &CardFace,
+    statics: &[(AbilityDefinitionId, &StaticAbilityDef)],
+    effects: &[ContinuousEffect],
+) -> Option<(Characteristics, bool)> {
+    CharacteristicsEvaluator { state, registry }
+        .evaluate_entry_layers(event, face, statics, effects)
 }
 
 /// CR 601.2f: characteristics of a proposed spell while its cost is determined. Legal-action
@@ -324,11 +352,36 @@ impl CharacteristicsEvaluator<'_> {
         &self,
         oid: ObjectId,
     ) -> Option<(Characteristics, Vec<TriggerAbilityOrigin>)> {
+        let mut view = self.evaluate_early_layers(oid, false)?;
+        let result = view.objects.remove(&oid)?.characteristics;
+        Some((result, view.started.remove(&oid).unwrap_or_default()))
+    }
+
+    fn base_characteristics_through_layer_2(&self, oid: ObjectId) -> Option<Characteristics> {
+        let object = self.state.objects.get(&oid)?;
+        let face = effective_face_from(self.state, self.registry, oid)?;
+        let mut result = self.base_characteristics_from_face(
+            oid,
+            &face,
+            object.face_up_index,
+            object.base_controller,
+            object.face_down && object.zone == Zone::Battlefield,
+        )?;
+        self.apply_layer_2_control(oid, &mut result);
+        Some(result)
+    }
+
+    fn base_characteristics_from_face(
+        &self,
+        oid: ObjectId,
+        face: &CardFace,
+        face_index: usize,
+        controller: PlayerId,
+        face_down: bool,
+    ) -> Option<Characteristics> {
         let object = self.state.objects.get(&oid)?;
         let definition = self.registry.get(&object.card_id);
         let copied = object.copiable_values.as_ref();
-        let face = effective_face_from(self.state, self.registry, oid)?;
-
         let mut result = Characteristics {
             // CR 202.3b/710.2: original transformed/flip cards retain front mana value.
             // A copy of a transforming back face has that face's (normally absent) mana cost.
@@ -363,7 +416,7 @@ impl CharacteristicsEvaluator<'_> {
             signed_toughness: None,
             // CR 110.2 base value set by the instruction that put the object onto the battlefield.
             // Layer 2 below applies control-changing continuous effects on top.
-            controller: object.base_controller,
+            controller,
             names: (!face.name.is_empty())
                 .then(|| face.name.clone())
                 .into_iter()
@@ -381,7 +434,7 @@ impl CharacteristicsEvaluator<'_> {
             supertypes: face.supertypes.to_vec(),
             colors: if copied.is_none()
                 && definition.is_some_and(|definition| definition.layout == Layout::Flip)
-                && object.face_up_index > 0
+                && face_index > 0
             {
                 definition
                     .expect("checked flip definition")
@@ -407,16 +460,9 @@ impl CharacteristicsEvaluator<'_> {
             },
         };
 
-        let mut started = Vec::new();
         self.apply_layer_1_copy(&mut result);
-        self.apply_layer_1b_face_down(object, &mut result);
-        self.apply_layer_2_control(oid, &mut result);
-        self.apply_layer_3_text(oid, &mut result, &mut started);
-        self.apply_layer_4_type(oid, &mut result, &mut started);
-        self.apply_layer_5_color(oid, &mut result, &mut started);
-        result.signed_power = result.power.map(i64::from);
-        result.signed_toughness = result.toughness.map(i64::from);
-        Some((result, started))
+        self.apply_layer_1b_face_down(face_down, &mut result);
+        Some(result)
     }
 
     // These identity stages are intentionally separate: adding the first effect in a layer must
@@ -429,8 +475,8 @@ impl CharacteristicsEvaluator<'_> {
     /// CR 613.2b / 708.2: face-down values are applied after copy effects and before every later
     /// characteristic-changing layer. Later effects therefore modify the public 2/2 instead of
     /// exposing or replacing the underlying printed face.
-    fn apply_layer_1b_face_down(&self, object: &GameObject, result: &mut Characteristics) {
-        if !object.face_down || object.zone != Zone::Battlefield {
+    fn apply_layer_1b_face_down(&self, face_down: bool, result: &mut Characteristics) {
+        if !face_down {
             return;
         }
         apply_face_down_values(result);
@@ -496,39 +542,6 @@ impl CharacteristicsEvaluator<'_> {
         }
         visiting.pop();
         controller
-    }
-
-    fn apply_layer_3_text(
-        &self,
-        oid: ObjectId,
-        result: &mut Characteristics,
-        started: &mut Vec<TriggerAbilityOrigin>,
-    ) {
-        let mut effects: Vec<(usize, &ContinuousEffect)> = self
-            .state
-            .continuous_effects
-            .iter()
-            .enumerate()
-            .filter(|(_, effect)| matches!(effect.kind, ContinuousEffectKind::Layer3SetName(_)))
-            .filter(|(_, effect)| effect_affects(self.state, self.registry, effect, oid, result))
-            .filter(|(_, effect)| {
-                component_group(self.state, self.registry, effect)
-                    .is_some_and(|origin| started.contains(&origin))
-                    || self.characteristic_effect_condition_holds(effect, oid, result)
-            })
-            .collect();
-        effects.sort_by_key(|(index, effect)| (effect.timestamp, *index));
-        for (_, effect) in effects {
-            if let Some(origin) = component_group(self.state, self.registry, effect) {
-                if !started.contains(&origin) {
-                    started.push(origin);
-                }
-            }
-            let ContinuousEffectKind::Layer3SetName(name) = &effect.kind else {
-                unreachable!("filtered to layer-3 name effects");
-            };
-            result.names = vec![name.clone()];
-        }
     }
 
     /// CR 205.1b / 613.1d: additive type-changing effects retain every printed and previously
@@ -661,7 +674,7 @@ impl CharacteristicsEvaluator<'_> {
                 .copied()
                 .unwrap_or(0)
                 != source_zone_change
-            || basic_land_type_setting(self.state, source).is_some()
+            || !printed_rules_text_is_present(self.state, self.registry, source)
         {
             return false;
         }
@@ -877,26 +890,48 @@ impl CharacteristicsEvaluator<'_> {
         queried_oid: ObjectId,
         queried_pre_layer_6: &Characteristics,
     ) -> bool {
+        let view = self.evaluate_early_layers(queried_oid, true);
+        self.characteristic_condition_holds_in_view(
+            condition,
+            source_oid,
+            controller,
+            queried_oid,
+            queried_pre_layer_6,
+            view.as_ref(),
+        )
+    }
+
+    fn characteristic_condition_holds_in_view(
+        &self,
+        condition: &GameCondition,
+        source_oid: ObjectId,
+        controller: PlayerId,
+        queried_oid: ObjectId,
+        queried_pre_layer_6: &Characteristics,
+        view: Option<&EarlyLayerView>,
+    ) -> bool {
         match condition {
             GameCondition::ControllerLibraryEmpty => {
                 super::draw::controller_library_empty(self.state, controller)
             }
             GameCondition::AllOf(branches) => branches.iter().all(|branch| {
-                self.characteristic_condition_holds(
+                self.characteristic_condition_holds_in_view(
                     branch,
                     source_oid,
                     controller,
                     queried_oid,
                     queried_pre_layer_6,
+                    view,
                 )
             }),
             GameCondition::AnyOf(branches) => branches.iter().any(|branch| {
-                self.characteristic_condition_holds(
+                self.characteristic_condition_holds_in_view(
                     branch,
                     source_oid,
                     controller,
                     queried_oid,
                     queried_pre_layer_6,
+                    view,
                 )
             }),
             GameCondition::HasEnduringStory { players } => {
@@ -1204,11 +1239,14 @@ impl CharacteristicsEvaluator<'_> {
                     .players
                     .iter()
                     .flat_map(|player| player.battlefield.iter().copied())
+                    .filter(|candidate| {
+                        view.is_none_or(|view| view.projected_entrant != Some(*candidate))
+                    })
                     .filter_map(|candidate_oid| {
                         let characteristics = if candidate_oid == queried_oid {
                             queried_pre_layer_6.clone()
                         } else {
-                            self.characteristics_through_layer_5(candidate_oid)?
+                            view?.objects.get(&candidate_oid)?.characteristics.clone()
                         };
                         Some((candidate_oid, characteristics))
                     })
@@ -1326,11 +1364,28 @@ pub(super) fn printed_static_source_is_available(
     state.objects.get(&source).is_some_and(|object| {
         object.zone == Zone::Battlefield
             && !object.face_down
-            && basic_land_type_setting(state, source).is_none()
+            && printed_rules_text_is_present(state, registry, source)
             && effective_face_from(state, registry, source).is_some()
             && !(CharacteristicsEvaluator { state, registry })
                 .source_has_active_ability_removal(source)
     })
+}
+
+/// Layer-4 basic-land setting removes printed/copied rules text, independently of layer-6
+/// removal. Consumers must preserve independently granted abilities and started effect groups.
+pub(super) fn printed_rules_text_is_present(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    source: ObjectId,
+) -> bool {
+    (CharacteristicsEvaluator { state, registry })
+        .evaluate_early_layers(source, false)
+        .and_then(|view| {
+            view.objects
+                .get(&source)
+                .map(|object| object.printed_rules_text_present)
+        })
+        .unwrap_or(false)
 }
 
 /// Whether an effect applies, evaluated from the relevant characteristic snapshot and direct
@@ -1365,6 +1420,14 @@ pub(super) fn effect_affects(
             ContinuousEffectKind::Layer6AddKeywordFromStatic { .. }
         )
         || static_component_started_for(state, registry, effect, oid);
+    if !independent_at_this_layer
+        && component_group(state, registry, effect).is_some()
+        && effect
+            .source_id
+            .is_some_and(|source| !printed_rules_text_is_present(state, registry, source))
+    {
+        return false;
+    }
     if effect.duration == EffectDuration::WhileSourceOnBattlefield
         && !independent_at_this_layer
         && effect.source_id.is_some_and(|source_id| {
@@ -1398,6 +1461,17 @@ fn effect_scope_affects(
     oid: ObjectId,
     characteristics: &Characteristics,
 ) -> bool {
+    effect_scope_affects_with_reference(state, registry, effect, oid, characteristics, None)
+}
+
+fn effect_scope_affects_with_reference(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    effect: &ContinuousEffect,
+    oid: ObjectId,
+    characteristics: &Characteristics,
+    reference_override: Option<PlayerId>,
+) -> bool {
     match &effect.affected {
         AffectedScope::Single(id) => *id == oid,
         AffectedScope::AllCreatures => characteristics.is_creature(),
@@ -1415,11 +1489,12 @@ fn effect_scope_affects(
             let current_reference = if filter.controller.is_some()
                 && effect.duration == EffectDuration::WhileSourceOnBattlefield
             {
-                effect
-                    .source_id
-                    .map(|source| {
+                reference_override
+                    .or_else(|| {
+                        effect.source_id.map(|source| {
                         CharacteristicsEvaluator { state, registry }
                             .layer_2_controller(source, &mut Vec::new())
+                    })
                     })
                     .unwrap_or(*reference_player)
             } else {
@@ -1441,11 +1516,12 @@ fn effect_scope_affects(
             exclude,
         } => {
             let current_reference = if effect.duration == EffectDuration::WhileSourceOnBattlefield {
-                effect
-                    .source_id
-                    .map(|source| {
+                reference_override
+                    .or_else(|| {
+                        effect.source_id.map(|source| {
                         CharacteristicsEvaluator { state, registry }
                             .layer_2_controller(source, &mut Vec::new())
+                    })
                     })
                     .unwrap_or(*reference_player)
             } else {
@@ -1496,8 +1572,7 @@ fn static_source_identity_is_current(
                 .copied()
                 .unwrap_or(0)
                 == *source_zone_change
-    }) && (!matches!(effect.affected, AffectedScope::AttachedTo(_))
-        || component_group(state, registry, effect).is_some())
+    }) && component_group(state, registry, effect).is_some()
 }
 
 fn is_earlier_characteristic_component(kind: &ContinuousEffectKind) -> bool {
@@ -1528,28 +1603,51 @@ fn is_characteristic_component(kind: &ContinuousEffectKind) -> bool {
         )
 }
 
-/// Resolve the containing AttachedModifier before normalizing a nested grant's path. An
-/// unrelated static ability on the same permanent never becomes part of this logical effect.
+/// Validate raw source identity and normalize a nested grant to its containing static ability.
+/// An unrelated ability on the same permanent remains a separate logical effect.
 fn component_group(
     state: &GameState,
     registry: &'static CardRegistry,
     effect: &ContinuousEffect,
 ) -> Option<TriggerAbilityOrigin> {
+    let origin = effect.trigger_grant_origin.as_ref()?;
+    let TriggerAbilityOrigin::StaticGrant { source_id, .. } = origin else {
+        return None;
+    };
+    if effect.source_id != Some(*source_id)
+        || !matches!(
+            effect.duration,
+            EffectDuration::WhileSourceOnBattlefield | EffectDuration::WhileSourceInGraveyard
+        )
+    {
+        return None;
+    }
+    normalized_static_origin(state, registry, origin)
+}
+
+pub(super) fn normalized_static_origin(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    origin: &TriggerAbilityOrigin,
+) -> Option<TriggerAbilityOrigin> {
     let TriggerAbilityOrigin::StaticGrant {
         source_id,
         source_zone_change,
         definition,
-    } = effect.trigger_grant_origin.as_ref()?
+    } = origin
     else {
         return None;
     };
-    if effect.source_id != Some(*source_id)
-        || effect.duration != EffectDuration::WhileSourceOnBattlefield
+    let object = state.objects.get(source_id)?;
+    if state
+        .zone_change_generation
+        .get(source_id)
+        .copied()
+        .unwrap_or(0)
+        != *source_zone_change
     {
         return None;
     }
-    let object = state.objects.get(source_id)?;
-    let face = effective_face_from(state, registry, *source_id)?;
     let card_id = object
         .copiable_values
         .as_ref()
@@ -1557,17 +1655,46 @@ fn component_group(
         .filter(|values| !values.source_card_id.is_empty())
         .map(|values| values.source_card_id.as_str())
         .unwrap_or(&object.card_id);
+    let room_faces = object
+        .copiable_values
+        .as_ref()
+        .or(object.token_origin.as_ref())
+        .map(|values| values.room_faces.as_deref())
+        .unwrap_or_else(|| {
+            registry
+                .get(&object.card_id)
+                .and_then(|card| (card.layout == Layout::Room).then_some(card.faces.as_slice()))
+        });
+    let face = if object.zone == Zone::Battlefield {
+        if let Some(faces) = room_faces {
+            let door = faces
+                .iter()
+                .position(|face| face.face_id == definition.face_id)?;
+            if !state
+                .room_states
+                .get(source_id)
+                .copied()
+                .unwrap_or_default()
+                .unlocked_indices()
+                .any(|index| index == door)
+            {
+                return None;
+            }
+            Cow::Borrowed(&faces[door])
+        } else {
+            effective_face_from(state, registry, *source_id)?
+        }
+    } else {
+        effective_face_from(state, registry, *source_id)?
+    };
     if card_id != definition.card_id || face.face_id != definition.face_id {
         return None;
     }
     let outer = definition.ability_path.first()?;
-    let ability = face.static_abilities.iter().find(|ability| {
-        &ability.ability_id == outer
-            && matches!(
-                ability.definition,
-                StaticAbilityDef::AttachedModifier { .. }
-            )
-    })?;
+    let ability = face
+        .static_abilities
+        .iter()
+        .find(|ability| &ability.ability_id == outer)?;
     let mut outer_definition = definition.clone();
     outer_definition.ability_path = vec![ability.ability_id.clone()];
     Some(TriggerAbilityOrigin::StaticGrant {
@@ -1620,6 +1747,44 @@ pub(super) fn latest_remove_all_abilities_timestamp(
             _ => false,
         })
         .map(|effect| effect.timestamp)
+        .max()
+}
+
+pub(super) fn latest_active_ability_removal(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    oid: ObjectId,
+) -> Option<(u64, usize)> {
+    if !state
+        .continuous_effects
+        .iter()
+        .any(|effect| matches!(effect.kind, ContinuousEffectKind::Layer6RemoveAllAbilities))
+    {
+        return None;
+    }
+    let evaluator = CharacteristicsEvaluator { state, registry };
+    let snapshot = evaluator.characteristics_through_layer_5(oid)?;
+    state
+        .continuous_effects
+        .iter()
+        .enumerate()
+        .filter(|(_, effect)| matches!(effect.kind, ContinuousEffectKind::Layer6RemoveAllAbilities))
+        .filter(|(_, effect)| match (&effect.duration, effect.source_id) {
+            (EffectDuration::WhileSourceOnBattlefield, Some(source)) => state
+                .objects
+                .get(&source)
+                .is_some_and(|object| object.zone == Zone::Battlefield),
+            (EffectDuration::WhileSourceInGraveyard, Some(source)) => state
+                .objects
+                .get(&source)
+                .is_some_and(|object| object.zone == Zone::Graveyard),
+            _ => true,
+        })
+        .filter(|(_, effect)| {
+            effect_affects(state, registry, effect, oid, &snapshot)
+                && evaluator.characteristic_effect_condition_holds(effect, oid, &snapshot)
+        })
+        .map(|(index, effect)| (effect.timestamp, index))
         .max()
 }
 
@@ -1936,7 +2101,7 @@ impl CharacteristicsEvaluator<'_> {
         result: &mut Characteristics,
         effects: &[&ContinuousEffect],
     ) {
-        if basic_land_type_setting(self.state, object.id).is_some() {
+        if !printed_rules_text_is_present(self.state, self.registry, object.id) {
             result.keywords.clear();
             result.protections.clear();
             result.evasions.clear();
@@ -1995,7 +2160,10 @@ impl CharacteristicsEvaluator<'_> {
         let creature_default = result.is_creature().then_some(0);
         let mut power = result.power.or(creature_default).map(i64::from);
         let mut toughness = result.toughness.or(creature_default).map(i64::from);
-        if !object.face_down && !abilities_removed {
+        if !object.face_down
+            && !abilities_removed
+            && printed_rules_text_is_present(self.state, self.registry, oid)
+        {
             if let Some(face) = effective_face_from(self.state, self.registry, oid) {
                 for ability in &face.characteristic_defining_abilities {
                     let CharacteristicDefiningAbility::CountScaledPowerToughness {
@@ -2120,6 +2288,7 @@ impl GameEngine {
 
     /// Project an object through the copy, control, text, type, and color layers used by
     /// battlefield-entry replacement predicates (CR 614.12).
+    #[cfg(test)]
     pub(super) fn characteristics_through_layer_5(&self, oid: ObjectId) -> Option<Characteristics> {
         CharacteristicsEvaluator {
             state: &self.state,
@@ -2160,6 +2329,679 @@ impl GameEngine {
 mod tests {
     use super::*;
     use tricerules_cards::{CharacteristicDefiningAbility, TypeLineAddition};
+
+    fn early_layer_type_effect(
+        affected: AffectedScope,
+        kind: ContinuousEffectKind,
+        timestamp: u64,
+    ) -> ContinuousEffect {
+        ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected,
+            kind,
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp,
+        }
+    }
+
+    fn early_layer_type_scope(kind: PermanentTypeFilter) -> AffectedScope {
+        AffectedScope::PermanentsMatching {
+            reference_player: 0,
+            filter: Box::new(TargetFilter {
+                kind: TargetKind::AnyPermanent,
+                permanent_types: vec![kind],
+                ..TargetFilter::default()
+            }),
+            exclude: None,
+        }
+    }
+
+    #[test]
+    fn early_layer_scope_observes_later_land_creation() {
+        for (addition_time, setting_time) in [(1, 2), (2, 1)] {
+            let mut engine = GameEngine::new_with_default_decks(305_001, &[0, 1], 20).unwrap();
+            let oid = insert_fixture(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+            engine.state.continuous_effects.extend([
+                early_layer_type_effect(
+                    early_layer_type_scope(PermanentTypeFilter::Land),
+                    ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+                        card_types: vec![PermanentTypeFilter::Artifact],
+                        ..Default::default()
+                    }),
+                    addition_time,
+                ),
+                early_layer_type_effect(
+                    AffectedScope::Single(oid),
+                    ContinuousEffectKind::Layer4SetTypeLine(
+                        tricerules_cards::TypeLineReplacement {
+                            card_types: vec![PermanentTypeFilter::Land],
+                            creature_types: Vec::new(),
+                            land_types: Vec::new(),
+                        },
+                    ),
+                    setting_time,
+                ),
+            ]);
+            let result = engine.characteristics(oid).unwrap();
+            assert!(
+                result.has_type("Land") && result.has_type("Artifact"),
+                "land creation precedes its dependent land scope in either timestamp order: {:?}",
+                result.types
+            );
+            assert!(!result.has_type("Creature"));
+        }
+    }
+
+    #[test]
+    fn early_layer_type_scope_loop_uses_timestamp_order() {
+        for (artifact_to_land, land_to_artifact, expected) in
+            [(1, 2, "Artifact"), (2, 1, "Land"), (1, 1, "Artifact")]
+        {
+            let mut engine = GameEngine::new_with_default_decks(305_002, &[0, 1], 20).unwrap();
+            let artifact = insert_fixture(&mut engine, 0, "sol_ring", Zone::Battlefield);
+            let land = insert_fixture(&mut engine, 1, "forest", Zone::Battlefield);
+            engine.state.continuous_effects.extend([
+                early_layer_type_effect(
+                    early_layer_type_scope(PermanentTypeFilter::Artifact),
+                    ContinuousEffectKind::Layer4SetTypeLine(
+                        tricerules_cards::TypeLineReplacement {
+                            card_types: vec![PermanentTypeFilter::Land],
+                            creature_types: Vec::new(),
+                            land_types: Vec::new(),
+                        },
+                    ),
+                    artifact_to_land,
+                ),
+                early_layer_type_effect(
+                    early_layer_type_scope(PermanentTypeFilter::Land),
+                    ContinuousEffectKind::Layer4SetTypeLine(
+                        tricerules_cards::TypeLineReplacement {
+                            card_types: vec![PermanentTypeFilter::Artifact],
+                            creature_types: Vec::new(),
+                            land_types: Vec::new(),
+                        },
+                    ),
+                    land_to_artifact,
+                ),
+            ]);
+            for oid in [artifact, land] {
+                assert_eq!(
+                    engine.characteristics(oid).unwrap().types,
+                    vec![expected.to_string()],
+                    "dependency-loop members use timestamp then insertion order"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn early_layer_basic_subtype_addition_requires_evolving_land_type() {
+        let mut engine = GameEngine::new_with_default_decks(305_003, &[0, 1], 20).unwrap();
+        let land = insert_fixture(&mut engine, 0, "island", Zone::Battlefield);
+        let creature = insert_fixture(&mut engine, 1, "grizzly_bears", Zone::Battlefield);
+        for oid in [land, creature] {
+            engine
+                .state
+                .continuous_effects
+                .push(early_layer_type_effect(
+                    AffectedScope::Single(oid),
+                    ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+                        land_types: vec![BasicLandType::Forest],
+                        ..Default::default()
+                    }),
+                    1,
+                ));
+        }
+        let result = engine.characteristics(land).unwrap();
+        assert!(result.has_type("Island") && result.has_type("Forest"));
+        assert!(!engine.characteristics(creature).unwrap().has_type("Forest"));
+    }
+
+    fn early_layer_static_land_fixture(timestamp: u64) -> (GameEngine, ObjectId) {
+        let card = r#"(
+            id: "early_static_land", name: "Early Static Land", face_id: "early_static_land",
+            types: ["Land"],
+            static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                definition: ConditionalSelfModifier(condition: ActivePlayer(players: Controller),
+                    add_types: (card_types: [Artifact])))],
+        )"#;
+        let registry = CardRegistry::from_chunks_and_tokens(&[card], &[]).unwrap();
+        let mut engine = GameEngine::new(305_004, &[0, 1], 20, None, true).unwrap();
+        engine.registry = Box::leak(Box::new(registry));
+        let source = insert_fixture(&mut engine, 0, "early_static_land", Zone::Battlefield);
+        engine.state.command_index = timestamp;
+        engine.emit_static_abilities_on_enter(source);
+        assert!(engine.characteristics(source).unwrap().has_type("Artifact"));
+        (engine, source)
+    }
+
+    #[test]
+    fn early_layer_source_text_suppression_precedes_static_type_effect() {
+        for (static_time, setting_time) in [(1, 2), (2, 1)] {
+            let (mut engine, source) = early_layer_static_land_fixture(static_time);
+            engine
+                .state
+                .continuous_effects
+                .push(early_layer_type_effect(
+                    AffectedScope::Single(source),
+                    ContinuousEffectKind::Layer4SetBasicLandType(BasicLandType::Forest),
+                    setting_time,
+                ));
+            let result = engine.characteristics(source).unwrap();
+            assert!(result.has_type("Land") && result.has_type("Forest"));
+            assert!(!result.has_type("Artifact"), "setting a basic land type removes the generating printed ability before its type effect");
+            engine.state.continuous_effects.retain(|effect| {
+                !matches!(effect.kind, ContinuousEffectKind::Layer4SetBasicLandType(_))
+            });
+            assert!(
+                engine.characteristics(source).unwrap().has_type("Artifact"),
+                "retained static records restore after suppression expires"
+            );
+        }
+    }
+
+    #[test]
+    fn early_layer_resolved_basic_land_setting_survives_static_refresh() {
+        let (mut engine, source) = early_layer_static_land_fixture(1);
+        let mut setter = early_layer_type_effect(
+            AffectedScope::Single(source),
+            ContinuousEffectKind::Layer4SetBasicLandType(BasicLandType::Forest),
+            2,
+        );
+        setter.source_id = Some(source);
+        setter.duration = EffectDuration::WhileSourceOnBattlefield;
+        engine.state.continuous_effects.push(setter);
+        engine.refresh_source_static_abilities(source);
+        assert!(
+            engine
+                .state
+                .continuous_effects
+                .iter()
+                .any(|effect| effect.source_id == Some(source)
+                    && effect.trigger_grant_origin.is_none()
+                    && matches!(
+                        effect.kind,
+                        ContinuousEffectKind::Layer4SetBasicLandType(BasicLandType::Forest)
+                    )),
+            "an entry-created resolved setter is independent of printed static abilities"
+        );
+        let result = engine.characteristics(source).unwrap();
+        assert!(result.has_type("Forest") && !result.has_type("Artifact"));
+        engine.state.continuous_effects.retain(|effect| {
+            !matches!(effect.kind, ContinuousEffectKind::Layer4SetBasicLandType(_))
+        });
+        assert!(
+            engine.characteristics(source).unwrap().has_type("Artifact"),
+            "refresh during temporary suppression retains the static record for restoration"
+        );
+    }
+
+    #[test]
+    fn early_layer_basic_setting_preserves_nonland_creature_subtypes() {
+        for changeling in [true, false] {
+            let mut engine = GameEngine::new_with_default_decks(305_005, &[0, 1], 20).unwrap();
+            let source = insert_fixture(&mut engine, 0, "dryad_arbor", Zone::Battlefield);
+            if changeling {
+                let mut values = engine.copiable_values_for(source).unwrap();
+                values.face.characteristic_defining_abilities.push(
+                    tricerules_cards::IdentifiedAbility::fallback(
+                        "changeling",
+                        CharacteristicDefiningAbility::Changeling,
+                    )
+                    .unwrap(),
+                );
+                engine
+                    .state
+                    .objects
+                    .get_mut(&source)
+                    .unwrap()
+                    .copiable_values = Some(values);
+            } else {
+                engine
+                    .state
+                    .continuous_effects
+                    .push(early_layer_type_effect(
+                        AffectedScope::Single(source),
+                        ContinuousEffectKind::Layer4SetAllCreatureTypes,
+                        1,
+                    ));
+            }
+            engine
+                .state
+                .continuous_effects
+                .push(early_layer_type_effect(
+                    AffectedScope::Single(source),
+                    ContinuousEffectKind::Layer4SetBasicLandType(BasicLandType::Island),
+                    2,
+                ));
+            let result = engine.characteristics(source).unwrap();
+            assert!(
+                result.is_creature() && result.has_type("Island") && !result.has_type("Forest")
+            );
+            assert!(result.all_creature_types,
+                "a subtype-only basic-land setting preserves creature types already established in layer 4");
+            engine
+                .state
+                .continuous_effects
+                .push(early_layer_type_effect(
+                    AffectedScope::Single(source),
+                    ContinuousEffectKind::Layer4SetTypeLine(
+                        tricerules_cards::TypeLineReplacement {
+                            card_types: vec![PermanentTypeFilter::Land],
+                            creature_types: Vec::new(),
+                            land_types: vec![BasicLandType::Forest],
+                        },
+                    ),
+                    3,
+                ));
+            let result = engine.characteristics(source).unwrap();
+            assert!(
+                result.has_type("Forest") && !result.is_creature() && !result.all_creature_types,
+                "a full type-line replacement removes creature types with their card type"
+            );
+        }
+    }
+
+    #[test]
+    fn early_layer_loop_before_independent_addition_retains_later_type() {
+        let mut engine = GameEngine::new_with_default_decks(305_006, &[0, 1], 20).unwrap();
+        insert_fixture(&mut engine, 0, "forest", Zone::Battlefield);
+        insert_fixture(&mut engine, 1, "sol_ring", Zone::Battlefield);
+        let hybrid = insert_fixture(&mut engine, 0, "darksteel_citadel", Zone::Battlefield);
+        engine.state.continuous_effects.extend([
+            early_layer_type_effect(
+                early_layer_type_scope(PermanentTypeFilter::Land),
+                ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
+                    card_types: vec![PermanentTypeFilter::Artifact],
+                    creature_types: Vec::new(),
+                    land_types: Vec::new(),
+                }),
+                1,
+            ),
+            early_layer_type_effect(
+                early_layer_type_scope(PermanentTypeFilter::Artifact),
+                ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
+                    card_types: vec![PermanentTypeFilter::Land],
+                    creature_types: Vec::new(),
+                    land_types: Vec::new(),
+                }),
+                2,
+            ),
+            early_layer_type_effect(
+                AffectedScope::Single(hybrid),
+                ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+                    card_types: vec![PermanentTypeFilter::Enchantment],
+                    ..Default::default()
+                }),
+                3,
+            ),
+        ]);
+        assert_eq!(
+            engine.characteristics(hybrid).unwrap().types,
+            ["Land", "Enchantment"],
+            "an available earlier loop precedes an independent later type addition"
+        );
+    }
+
+    #[test]
+    fn early_layer_unstarted_static_keyword_is_suppressed_and_restored() {
+        let card = r#"(
+            id: "early_static_land", name: "Early Static Land", face_id: "early_static_land",
+            types: ["Land"],
+            static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                definition: ConditionalSelfModifier(condition: ActivePlayer(players: Controller),
+                    keywords: [Flying]))],
+        )"#;
+        let registry = CardRegistry::from_chunks_and_tokens(&[card], &[]).unwrap();
+        let mut engine = GameEngine::new(305_007, &[0, 1], 20, None, true).unwrap();
+        engine.registry = Box::leak(Box::new(registry));
+        let source = insert_fixture(&mut engine, 0, "early_static_land", Zone::Battlefield);
+        engine.emit_static_abilities_on_enter(source);
+        assert!(engine
+            .characteristics(source)
+            .unwrap()
+            .has_keyword(Keyword::Flying));
+        engine
+            .state
+            .continuous_effects
+            .push(early_layer_type_effect(
+                AffectedScope::Single(source),
+                ContinuousEffectKind::Layer4SetBasicLandType(BasicLandType::Forest),
+                2,
+            ));
+        engine.refresh_source_static_abilities(source);
+        assert!(
+            !engine
+                .characteristics(source)
+                .unwrap()
+                .has_keyword(Keyword::Flying),
+            "an unstarted layer-6 static component loses its generating printed ability in layer 4"
+        );
+        engine.state.continuous_effects.retain(|effect| {
+            !matches!(effect.kind, ContinuousEffectKind::Layer4SetBasicLandType(_))
+        });
+        assert!(engine
+            .characteristics(source)
+            .unwrap()
+            .has_keyword(Keyword::Flying));
+    }
+
+    #[test]
+    fn early_layer_world_count_reads_evolving_nonrecursive_snapshot() {
+        let first = r#"(
+            id: "early_artifact", name: "Early Artifact", face_id: "early_artifact",
+            types: ["Creature"], power: 1, toughness: 1,
+            static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                definition: ConditionalSelfModifier(
+                    condition: BattlefieldAggregate(filter: (controllers: All, card_type: Some(Land)),
+                        aggregate: Count, min: Some(1)), add_types: (card_types: [Artifact])))],
+        )"#;
+        let second = first
+            .replace("early_artifact", "early_enchantment")
+            .replace("Early Artifact", "Early Enchantment")
+            .replace("[Artifact]", "[Enchantment]");
+        let third = r#"(id: "early_creature", name: "Early Creature", face_id: "early_creature",
+            types: ["Creature"], power: 1, toughness: 1)"#;
+        let registry = CardRegistry::from_chunks_and_tokens(&[first, &second, third], &[]).unwrap();
+        let mut engine = GameEngine::new(305_008, &[0, 1], 20, None, true).unwrap();
+        engine.registry = Box::leak(Box::new(registry));
+        let a = insert_fixture(&mut engine, 0, "early_artifact", Zone::Battlefield);
+        let b = insert_fixture(&mut engine, 1, "early_enchantment", Zone::Battlefield);
+        let c = insert_fixture(&mut engine, 0, "early_creature", Zone::Battlefield);
+        engine.emit_static_abilities_on_enter(a);
+        engine.emit_static_abilities_on_enter(b);
+        assert!(!engine.characteristics(a).unwrap().has_type("Artifact"));
+        assert!(!engine.characteristics(b).unwrap().has_type("Enchantment"));
+        engine
+            .state
+            .continuous_effects
+            .push(early_layer_type_effect(
+                AffectedScope::Single(c),
+                ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
+                    card_types: vec![PermanentTypeFilter::Land],
+                    creature_types: Vec::new(),
+                    land_types: Vec::new(),
+                }),
+                10,
+            ));
+        for order in [[a, b], [b, a]] {
+            for oid in order {
+                assert!(engine.characteristics(oid).unwrap().has_type(if oid == a {
+                    "Artifact"
+                } else {
+                    "Enchantment"
+                }));
+            }
+        }
+        engine.state.players[0].battlefield.retain(|&oid| oid != c);
+        engine.state.objects.get_mut(&c).unwrap().zone = Zone::Hand;
+        assert!(
+            engine.characteristics(c).unwrap().has_type("Land"),
+            "a queried hand object still has its single-object effect"
+        );
+        assert!(
+            !engine.characteristics(a).unwrap().has_type("Artifact"),
+            "query-only hand objects never enter battlefield counts"
+        );
+        assert!(!engine.characteristics(b).unwrap().has_type("Enchantment"));
+        engine
+            .state
+            .continuous_effects
+            .retain(|effect| !matches!(effect.kind, ContinuousEffectKind::Layer4SetTypeLine(_)));
+        engine.state.objects.get_mut(&c).unwrap().zone = Zone::Battlefield;
+        engine.state.players[0].battlefield.push(c);
+        assert!(!engine.characteristics(a).unwrap().has_type("Artifact"));
+        assert!(!engine.characteristics(b).unwrap().has_type("Enchantment"));
+    }
+
+    #[test]
+    fn early_layer_printed_ability_readers_share_type_setting_suppression() {
+        let mut engine = GameEngine::new_with_default_decks(305_009, &[0, 1], 20).unwrap();
+        let mana = insert_fixture(&mut engine, 0, "sol_ring", Zone::Battlefield);
+        let trigger = insert_fixture(&mut engine, 0, "psychosis_crawler", Zone::Battlefield);
+        let counter_lock = insert_fixture(&mut engine, 0, "tatterkite", Zone::Battlefield);
+        let forge = insert_fixture(&mut engine, 0, "darksteel_forge", Zone::Battlefield);
+        let recipient = insert_fixture(&mut engine, 1, "sol_ring", Zone::Battlefield);
+        // The forge grants only to its controller; keep a separate unsuppressed artifact there.
+        engine
+            .state
+            .objects
+            .get_mut(&recipient)
+            .unwrap()
+            .base_controller = 0;
+        engine.state.objects.get_mut(&recipient).unwrap().controller = 0;
+        engine.emit_static_abilities_on_enter(forge);
+        assert!(!engine.effective_activated_abilities(mana).is_empty());
+        assert!(!engine
+            .effective_triggered_abilities(trigger, "psychosis_crawler", 0)
+            .is_empty());
+        assert!(!engine.can_receive_counters(counter_lock));
+        assert!(engine
+            .characteristics(recipient)
+            .unwrap()
+            .has_keyword(Keyword::Indestructible));
+        assert!(engine.effective_power(trigger).unwrap() > 0);
+        for oid in [mana, trigger, counter_lock, forge] {
+            engine
+                .state
+                .continuous_effects
+                .push(early_layer_type_effect(
+                    AffectedScope::Single(oid),
+                    ContinuousEffectKind::Layer4SetTypeLine(
+                        tricerules_cards::TypeLineReplacement {
+                            card_types: vec![PermanentTypeFilter::Land],
+                            creature_types: Vec::new(),
+                            land_types: vec![BasicLandType::Forest],
+                        },
+                    ),
+                    5,
+                ));
+        }
+        let mana_abilities = engine.effective_activated_abilities(mana);
+        assert_eq!(mana_abilities.len(), 1);
+        assert!(
+            mana_abilities[0].1.intrinsic_land_mana,
+            "the printed ability disappears; the resulting Forest derives its own mana ability"
+        );
+        assert_eq!(
+            mana_abilities[0].1.mana_options(),
+            Some(&vec![BasicLandType::Forest.mana()])
+        );
+        assert!(
+            engine
+                .effective_triggered_abilities(trigger, "psychosis_crawler", 0)
+                .is_empty(),
+            "printed damage trigger disappears"
+        );
+        assert!(
+            engine.can_receive_counters(counter_lock),
+            "printed static prohibition disappears"
+        );
+        assert!(engine.active_static_ability_definitions(forge).is_empty());
+        assert!(
+            !engine
+                .characteristics(recipient)
+                .unwrap()
+                .has_keyword(Keyword::Indestructible),
+            "one-layer global grant loses its printed source"
+        );
+        assert_eq!(
+            engine.effective_power(trigger),
+            None,
+            "a noncreature no longer applies its printed power CDA"
+        );
+        engine
+            .state
+            .continuous_effects
+            .retain(|effect| !matches!(effect.kind, ContinuousEffectKind::Layer4SetTypeLine(_)));
+        assert!(!engine.effective_activated_abilities(mana).is_empty());
+        assert!(!engine
+            .effective_triggered_abilities(trigger, "psychosis_crawler", 0)
+            .is_empty());
+        assert!(!engine.can_receive_counters(counter_lock));
+        assert!(engine
+            .characteristics(recipient)
+            .unwrap()
+            .has_keyword(Keyword::Indestructible));
+        assert!(engine.effective_power(trigger).unwrap() > 0);
+    }
+
+    #[test]
+    fn early_layer_life_prohibition_tracks_printed_text_restoration() {
+        let mut engine = GameEngine::new_with_default_decks(305_011, &[0, 1], 20).unwrap();
+        let source = insert_fixture(&mut engine, 0, "giant_cindermaw", Zone::Battlefield);
+        assert!(!engine.can_player_gain_life(1));
+        engine
+            .state
+            .continuous_effects
+            .push(early_layer_type_effect(
+                AffectedScope::Single(source),
+                ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
+                    card_types: vec![PermanentTypeFilter::Land],
+                    creature_types: Vec::new(),
+                    land_types: vec![BasicLandType::Forest],
+                }),
+                5,
+            ));
+        assert!(
+            engine.can_player_gain_life(1),
+            "printed life-gain prohibition disappears"
+        );
+        engine.state.continuous_effects.clear();
+        assert!(!engine.can_player_gain_life(1));
+    }
+
+    #[test]
+    fn early_layer_hand_rules_track_printed_text_restoration() {
+        let mut engine = GameEngine::new_with_default_decks(305_012, &[0, 1], 20).unwrap();
+        let vessel = insert_fixture(&mut engine, 0, "thought_vessel", Zone::Battlefield);
+        let library = insert_fixture(&mut engine, 0, "library_of_leng", Zone::Battlefield);
+        assert_eq!(engine.maximum_hand_size(0), usize::MAX);
+        assert!(engine.has_discard_library_replacement(0));
+        for oid in [vessel, library] {
+            engine
+                .state
+                .continuous_effects
+                .push(early_layer_type_effect(
+                    AffectedScope::Single(oid),
+                    ContinuousEffectKind::Layer4SetTypeLine(
+                        tricerules_cards::TypeLineReplacement {
+                            card_types: vec![PermanentTypeFilter::Land],
+                            creature_types: Vec::new(),
+                            land_types: vec![BasicLandType::Forest],
+                        },
+                    ),
+                    5,
+                ));
+        }
+        assert_eq!(engine.maximum_hand_size(0), 7);
+        assert!(!engine.has_discard_library_replacement(0));
+        engine.state.continuous_effects.clear();
+        assert_eq!(engine.maximum_hand_size(0), usize::MAX);
+        assert!(engine.has_discard_library_replacement(0));
+    }
+
+    #[test]
+    fn early_layer_live_land_subtype_static_tracks_scope_source_and_incarnation() {
+        let source_card = r#"(id: "type_addition_source", name: "Type Addition Source", face_id: "type_addition_source",
+            supertypes: ["Legendary"], types: ["Land"],
+            static_abilities: [(ability_id: "static_01", presentation: Fallback,
+                definition: AddTypesToPermanents(filter: (kind: AnyPermanent, permanent_types: [Land]),
+                    addition: (land_types: [Forest])))])"#;
+        let island_card = r#"(id: "type_addition_island", name: "Type Addition Island", face_id: "type_addition_island", types: ["Land", "Island"])"#;
+        let creature_card = r#"(id: "type_addition_creature", name: "Type Addition Creature", face_id: "type_addition_creature", types: ["Creature"], power: 2, toughness: 2)"#;
+        for setting_time in [0, 5] {
+            let registry = CardRegistry::from_chunks_and_tokens(
+                &[source_card, island_card, creature_card],
+                &[],
+            )
+            .unwrap();
+            let mut engine = GameEngine::new(305_013, &[0, 1], 20, None, true).unwrap();
+            engine.registry = Box::leak(Box::new(registry));
+            let source = insert_fixture(&mut engine, 0, "type_addition_source", Zone::Battlefield);
+            let opponent_land =
+                insert_fixture(&mut engine, 1, "type_addition_island", Zone::Battlefield);
+            let creature =
+                insert_fixture(&mut engine, 1, "type_addition_creature", Zone::Battlefield);
+            let hand = insert_fixture(&mut engine, 0, "type_addition_island", Zone::Hand);
+            let graveyard = insert_fixture(&mut engine, 1, "type_addition_island", Zone::Graveyard);
+            engine.state.command_index = 1;
+            engine.emit_static_abilities_on_enter(source);
+            assert!(engine.characteristics(source).unwrap().has_type("Forest"));
+            let result = engine.characteristics(opponent_land).unwrap();
+            assert!(result.has_type("Island") && result.has_type("Forest"));
+            for oid in [creature, hand, graveyard] {
+                assert!(!engine.characteristics(oid).unwrap().has_type("Forest"));
+            }
+            engine
+                .state
+                .continuous_effects
+                .push(early_layer_type_effect(
+                    AffectedScope::Single(creature),
+                    ContinuousEffectKind::Layer4SetTypeLine(
+                        tricerules_cards::TypeLineReplacement {
+                            card_types: vec![PermanentTypeFilter::Land],
+                            creature_types: Vec::new(),
+                            land_types: Vec::new(),
+                        },
+                    ),
+                    3,
+                ));
+            assert!(
+                engine.characteristics(creature).unwrap().has_type("Forest"),
+                "an older global scope observes new lands"
+            );
+            engine
+                .state
+                .continuous_effects
+                .push(early_layer_type_effect(
+                    AffectedScope::Single(source),
+                    ContinuousEffectKind::Layer4SetTypeLine(
+                        tricerules_cards::TypeLineReplacement {
+                            card_types: vec![PermanentTypeFilter::Land],
+                            creature_types: Vec::new(),
+                            land_types: vec![BasicLandType::Swamp],
+                        },
+                    ),
+                    setting_time,
+                ));
+            assert!(
+                !engine
+                    .characteristics(opponent_land)
+                    .unwrap()
+                    .has_type("Forest"),
+                "printed-source suppression precedes its global effect in either timestamp order"
+            );
+            assert!(!engine.characteristics(creature).unwrap().has_type("Forest"));
+            engine.state.continuous_effects.retain(|effect| {
+                !(effect.affected == AffectedScope::Single(source)
+                    && matches!(effect.kind, ContinuousEffectKind::Layer4SetTypeLine(_)))
+            });
+            assert!(engine
+                .characteristics(opponent_land)
+                .unwrap()
+                .has_type("Forest"));
+            *engine
+                .state
+                .zone_change_generation
+                .entry(source)
+                .or_default() += 1;
+            assert!(
+                !engine
+                    .characteristics(opponent_land)
+                    .unwrap()
+                    .has_type("Forest"),
+                "a static effect cannot bind to a later source incarnation"
+            );
+            engine.refresh_source_static_abilities(source);
+            assert!(engine
+                .characteristics(opponent_land)
+                .unwrap()
+                .has_type("Forest"));
+        }
+    }
 
     #[test]
     fn static_opponent_comparisons_support_live_life_and_hand_values() {
@@ -2461,6 +3303,7 @@ mod tests {
                 source_id: None,
                 affected: AffectedScope::Single(oid),
                 kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Artifact],
                     creature_types: vec!["Knight".to_string()],
                 }),
@@ -2473,6 +3316,7 @@ mod tests {
                 source_id: None,
                 affected: AffectedScope::Single(oid),
                 kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Enchantment],
                     creature_types: vec!["Knight".to_string()],
                 }),
@@ -2485,6 +3329,7 @@ mod tests {
                 source_id: None,
                 affected: AffectedScope::Single(oid),
                 kind: ContinuousEffectKind::Layer4AddTypes(TypeLineAddition {
+                    land_types: Vec::new(),
                     card_types: vec![PermanentTypeFilter::Artifact],
                     creature_types: vec!["Knight".to_string()],
                 }),

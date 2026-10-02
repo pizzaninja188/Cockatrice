@@ -252,6 +252,21 @@ impl GameEngine {
         effect: &ActiveDamagePrevention,
         event: &DamageEvent,
     ) -> bool {
+        if let Some(origin) = &effect.static_origin {
+            let Some(source) = effect.source_id else {
+                return false;
+            };
+            if super::characteristics::normalized_static_origin(&self.state, self.registry, origin)
+                .is_none()
+                || !super::characteristics::printed_static_source_is_available(
+                    &self.state,
+                    self.registry,
+                    source,
+                )
+            {
+                return false;
+            }
+        }
         let key = event.recipient.prevention_key();
         match effect.scope {
             DamagePreventionScope::Recipient(recipient) => recipient == key,
@@ -1376,6 +1391,7 @@ impl GameEngine {
             .damage_prevention_effects
             .push(ActiveDamagePrevention {
                 id,
+                static_origin: None,
                 source_id: source.map(|item| item.id),
                 source_label: source_label.into(),
                 source_presentation,
@@ -1430,6 +1446,60 @@ mod tests {
         engine.state.players[0].battlefield.push(object_id);
         engine.state.objects.get_mut(&object_id).unwrap().zone = Zone::Battlefield;
         object_id
+    }
+
+    #[test]
+    fn early_layer_static_prevention_suppression_preserves_resolved_shields() {
+        let decks = Some(vec![
+            vec!["anti-venom,_horrifying_healer".into(); 7],
+            vec!["island".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(305_010, &[0, 1], 20, decks, true).unwrap();
+        let source = move_bear_to_battlefield(&mut engine);
+        engine.emit_static_abilities_on_enter(source);
+        let shield = engine.add_damage_prevention(
+            None,
+            "independent shield",
+            DamagePreventionScope::Recipient(source),
+            DamagePreventionAmount::All,
+        );
+        let event =
+            DamageEvent::noncombat(source, 0, "test", DamageRecipient::Permanent(source), 1);
+        assert_eq!(engine.prevention_applications(&event).len(), 2);
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
+                card_types: vec![PermanentTypeFilter::Land],
+                creature_types: Vec::new(),
+                land_types: vec![BasicLandType::Forest],
+            }),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 5,
+        });
+        engine.refresh_source_static_abilities(source);
+        assert_eq!(
+            engine.prevention_applications(&event),
+            vec![DamagePreventionApplication::Effect(shield)],
+            "printed prevention is suppressed; independent resolving prevention remains"
+        );
+        engine
+            .state
+            .continuous_effects
+            .retain(|effect| !matches!(effect.kind, ContinuousEffectKind::Layer4SetTypeLine(_)));
+        assert_eq!(engine.prevention_applications(&event).len(), 2);
+        *engine
+            .state
+            .zone_change_generation
+            .entry(source)
+            .or_default() += 1;
+        assert_eq!(
+            engine.prevention_applications(&event),
+            vec![DamagePreventionApplication::Effect(shield)],
+            "a retained static record cannot bind to a later incarnation"
+        );
     }
 
     #[test]
