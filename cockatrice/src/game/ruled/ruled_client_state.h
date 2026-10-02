@@ -824,9 +824,10 @@ public:
     QHash<quint32, quint32> committedBlocks;
     // Opponent's in-progress pairs from BlockersPreview (Servatrice); cleared on declare / phase reset.
     QHash<quint32, quint32> remoteBlockPreviewPairs;
-    // CR 508.1d: engine-reported creatures the local active player MUST declare as attackers this
-    // combat (LegalActions.required_attacker_ids). Confirm-attackers is disabled until all are staged.
-    QSet<quint32> requiredAttackerOids;
+    // Engine-authored requirement pool, achievable minimum and declaration caps (CR 508.1c-d).
+    QSet<quint32> attackRequirementOids;
+    quint32 minimumAttackRequirementCount = 0;
+    QVector<ruled::v1::AttackDeclarationLimit> attackDeclarationLimits;
     // CR 509.1c: engine-reported creatures the local defending player MUST declare as blockers this
     // combat (LegalActions.required_blocker_ids). Confirm-blockers is disabled until all are staged.
     QSet<quint32> requiredBlockerOids;
@@ -1476,6 +1477,7 @@ public:
     /// state so the UI cannot submit an illegal declaration and softlock. Vacuously true when there
     /// are no requirements (the common case).
     [[nodiscard]] bool combatDeclarationSatisfied() const;
+    [[nodiscard]] QString attackDeclarationExplanation(const std::function<QString(int)> &playerName = {}) const;
     [[nodiscard]] bool hasAttackersSubmittedThisStep() const
     {
         return attackersSubmittedThisStep;

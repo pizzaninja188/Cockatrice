@@ -557,13 +557,15 @@ void GamePromptWidget::setLocalPlayerHasPriority(bool hasPriority)
 }
 
 void GamePromptWidget::setCombatMode(CombatMode mode, bool localPlayerHasButtons, bool declarationSatisfied,
-                                     bool choosingDefender)
+                                     bool choosingDefender, const QString &attackExplanation)
 {
     if (mode == currentCombatMode && localPlayerHasButtons == localPlayerHasCombatButtons &&
-        declarationSatisfied == combatDeclarationSatisfied && choosingDefender == choosingAttackDefender) {
+        declarationSatisfied == combatDeclarationSatisfied && choosingDefender == choosingAttackDefender &&
+        attackExplanation == attackDeclarationExplanation) {
         return;
     }
     combatDeclarationSatisfied = declarationSatisfied;
+    attackDeclarationExplanation = attackExplanation;
     choosingAttackDefender = choosingDefender;
     // Clear the sticky rejection label whenever we leave the "defender has buttons" state:
     // either the phase advanced past declare-blockers, or legal blocks were accepted and the
@@ -866,7 +868,9 @@ void GamePromptWidget::updateCombatButtonsVisibility()
                 ? QString()
                 : choosingAttackDefender
                       ? tr("Choose what this creature attacks before confirming.")
-                      : tr("You must attack with all creatures that are required to attack."));
+                      : attackDeclarationExplanation.isEmpty()
+                            ? tr("Satisfy the attack requirements before confirming.")
+                            : attackDeclarationExplanation);
     }
     if (showBlockers) {
         confirmBlockersButton->setToolTip(
@@ -951,8 +955,10 @@ void GamePromptWidget::refreshPromptLabel()
                         .arg(activePlayerName));
             } else if (!combatDeclarationSatisfied) {
                 promptLabel->setText(
-                    tr("%1's Declare Attackers step. Some creatures must attack — declare them to continue.")
-                        .arg(activePlayerName));
+                    tr("%1's Declare Attackers step. %2").arg(activePlayerName,
+                        attackDeclarationExplanation.isEmpty()
+                            ? tr("Satisfy the attack requirements before confirming.")
+                            : attackDeclarationExplanation));
             } else {
                 promptLabel->setText(tr("%1's Declare Attackers step. Choose attackers.").arg(activePlayerName));
             }

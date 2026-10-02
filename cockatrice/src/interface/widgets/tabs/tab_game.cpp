@@ -528,7 +528,11 @@ void TabGame::connectToGameEventHandler()
                     // attacker/blocker is still unstaged, so an illegal declaration can't be sent.
                     const bool declarationSatisfied = handler->combatDeclarationSatisfied();
                     gamePromptWidget->setCombatMode(mode, localHasButtons, declarationSatisfied,
-                                                    handler->isChoosingAttackDefender());
+                                                    handler->isChoosingAttackDefender(),
+                                                    handler->attackDeclarationExplanation([this](int playerId) {
+                                                        const auto *player = game->getPlayerManager()->getPlayer(playerId);
+                                                        return player ? player->getPlayerInfo()->getName() : tr("that player");
+                                                    }));
                     if (!RuledActions::isRuledGame(game)) {
                         return;
                     }

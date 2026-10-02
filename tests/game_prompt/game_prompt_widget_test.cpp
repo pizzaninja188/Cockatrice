@@ -109,6 +109,21 @@ TEST_F(GamePromptWidgetTest, DeclareAttackersDisablesConfirmWhenRequirementUnmet
     EXPECT_TRUE(btn("confirmAttackersButton")->isEnabled());
 }
 
+TEST_F(GamePromptWidgetTest, AttackDeclarationLimitExplanationUpdatesWhileConfirmRemainsDisabled)
+{
+    widget->setActivePlayerName(QStringLiteral("p1"));
+    widget->setLocalPlayerHasPriority(true);
+    const auto explanation = QStringLiteral("At most 2 creatures may attack player 1.");
+    widget->setCombatMode(GamePromptWidget::CombatMode::DeclareAttackers, true, false, false, explanation);
+    EXPECT_FALSE(btn("confirmAttackersButton")->isEnabled());
+    EXPECT_EQ(btn("confirmAttackersButton")->toolTip(), explanation);
+    EXPECT_TRUE(label("promptLabel")->text().contains(explanation));
+    const auto updated = QStringLiteral("Attack with at least 2 creatures required to attack.");
+    widget->setCombatMode(GamePromptWidget::CombatMode::DeclareAttackers, true, false, false, updated);
+    EXPECT_EQ(btn("confirmAttackersButton")->toolTip(), updated);
+    EXPECT_TRUE(label("promptLabel")->text().contains(updated));
+}
+
 TEST_F(GamePromptWidgetTest, AwaitingAttackDefenderHasItsOwnPrompt)
 {
     widget->setActivePlayerName(QStringLiteral("p1"));

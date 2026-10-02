@@ -775,6 +775,12 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
 
     auto &p1Legal = (*batch.mutable_legal_by_player())[1];
     p1Legal.add_labels("P1 legal");
+    p1Legal.add_attack_requirement_ids(101);
+    p1Legal.set_minimum_attack_requirement_count(1);
+    auto *playerCap = p1Legal.add_attack_declaration_limits();
+    playerCap->set_attacked_player_id(0);
+    playerCap->set_maximum_attackers(2);
+    p1Legal.add_attack_declaration_limits()->set_maximum_attackers(4);
     auto *opening = p1Legal.mutable_opening();
     opening->set_stage(ruled::v1::OPENING_STAGE_BOTTOM);
     opening->set_deciding_player_id(1);
@@ -886,6 +892,15 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     const auto forP1 = redactFor(batch, p1);
     ASSERT_EQ(forP1.legal_by_player_size(), 1);
     EXPECT_TRUE(forP1.legal_by_player().contains(1));
+    const auto &combatLegal = forP1.legal_by_player().at(1);
+    ASSERT_EQ(combatLegal.attack_requirement_ids_size(), 1);
+    EXPECT_EQ(combatLegal.minimum_attack_requirement_count(), 1u);
+    ASSERT_EQ(combatLegal.attack_declaration_limits_size(), 2);
+    EXPECT_TRUE(combatLegal.attack_declaration_limits(0).has_attacked_player_id());
+    EXPECT_EQ(combatLegal.attack_declaration_limits(0).attacked_player_id(), 0);
+    EXPECT_EQ(combatLegal.attack_declaration_limits(0).maximum_attackers(), 2u);
+    EXPECT_FALSE(combatLegal.attack_declaration_limits(1).has_attacked_player_id());
+    EXPECT_EQ(combatLegal.attack_declaration_limits(1).maximum_attackers(), 4u);
     EXPECT_EQ(forP1.legal_by_player().at(1).opening().SerializeAsString(), opening->SerializeAsString());
     ASSERT_EQ(forP1.legal_by_player().at(1).permanent_actions_size(), 1);
     const auto &privateAction = forP1.legal_by_player().at(1).permanent_actions(0);
@@ -933,6 +948,9 @@ TEST_F(RuledBatchTest, RedactionKeepsOnlyRecipientAuthorizedPrivateData)
     const auto forP2 = redactFor(batch, p2);
     ASSERT_EQ(forP2.legal_by_player_size(), 1);
     EXPECT_TRUE(forP2.legal_by_player().contains(2));
+    EXPECT_EQ(forP2.legal_by_player().at(2).attack_requirement_ids_size(), 0);
+    EXPECT_EQ(forP2.legal_by_player().at(2).minimum_attack_requirement_count(), 0u);
+    EXPECT_EQ(forP2.legal_by_player().at(2).attack_declaration_limits_size(), 0);
     EXPECT_EQ(forP2.legal_by_player().at(2).opening().bottom_cards_remaining(), 0u);
     EXPECT_FALSE(forP2.legal_by_player().at(2).opening().can_keep());
     EXPECT_TRUE(forP2.legal_by_player().at(2).cost_choices_by_ability().empty());

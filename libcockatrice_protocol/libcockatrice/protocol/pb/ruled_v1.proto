@@ -1025,6 +1025,13 @@ message OpeningActions {
   uint32 bottom_cards_remaining = 7 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
+// Whole declaration caps. Absence means a global cap; presence, including player zero,
+// counts only direct attacks on that player, never their planeswalkers or protected Battles.
+message AttackDeclarationLimit {
+  optional int32 attacked_player_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 maximum_attackers = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
 message LegalActions {
   // Display-only prompt feed. Gameplay consumes structured actions, never these strings.
   repeated string labels = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
@@ -1041,12 +1048,10 @@ message LegalActions {
   // float courtesy). Non-zero only while strictly inconsequential; clients show an Undo affordance
   // when > 0. Drops to 0 the moment mana is spent, a spell/ability is cast, or priority passes.
   uint32 undoable_mana_abilities = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
-  // CR 508.1d: battlefield creatures this player MUST declare as attackers this combat ("attacks
-  // if able" — untapped, not summoning-sick unless Haste, non-Defender, with a defending player).
-  // Populated only for the active player during declare-attackers, before attackers are locked in.
-  // The engine rejects a declaration that omits any of these, so clients disable the confirm-
-  // attackers control until every id is among the staged attackers (mirrors set_attackers).
-  repeated uint32 required_attacker_ids = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // CR 508.1d: eligible creatures with a must-attack requirement. The declaration must include
+  // at least minimum_attack_requirement_count distinct members of this pool while respecting
+  // all attack_declaration_limits and exact legal defender edges. Active open declaration only.
+  repeated uint32 attack_requirement_ids = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // CR 509.1c: battlefield creatures this player MUST declare as blockers this combat ("blocks if
   // able" — untapped and able to legally block at least one declared attacker). Populated only for
   // the defending player after attackers are declared and before blocks are locked in. Clients
@@ -1088,6 +1093,8 @@ message LegalActions {
   // Present only for the caster while CR 601.2g is in progress. The nested payment preview is
   // refreshed from the current mana pool and object candidates without redetermining total cost.
   PendingSpellCast pending_spell_cast = 24 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 minimum_attack_requirement_count = 25 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated AttackDeclarationLimit attack_declaration_limits = 26 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message PendingSpellCast {

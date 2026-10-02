@@ -271,12 +271,39 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         // are declared and before blocks are locked in.
         let combat = eng.state.combat.as_ref();
         let attackers_open = eng.state.turn_step == TurnStep::DeclareAttackers
+            && eng.state.blocking_choice().is_none()
             && !combat.map(|c| c.attackers_declared).unwrap_or(false);
-        let mut required_attacker_ids = if attackers_open && p.id == eng.state.active_player_id() {
-            eng.required_attacker_ids()
+        let mut attack_requirement_ids = if attackers_open && p.id == eng.state.active_player_id() {
+            eng.attack_requirement_ids()
         } else {
             Vec::new()
         };
+        let mut minimum_attack_requirement_count =
+            if attackers_open && p.id == eng.state.active_player_id() {
+                eng.minimum_attack_requirement_count() as u32
+            } else {
+                0
+            };
+        let mut attack_declaration_limits =
+            if attackers_open && p.id == eng.state.active_player_id() {
+                let limits = eng.attack_limits();
+                limits
+                    .global
+                    .into_iter()
+                    .map(|maximum| rv1::AttackDeclarationLimit {
+                        attacked_player_id: None,
+                        maximum_attackers: maximum as u32,
+                    })
+                    .chain(limits.players.into_iter().map(|(player, maximum)| {
+                        rv1::AttackDeclarationLimit {
+                            attacked_player_id: Some(player),
+                            maximum_attackers: maximum as u32,
+                        }
+                    }))
+                    .collect()
+            } else {
+                Vec::new()
+            };
         let mut selectable_attacker_ids = if attackers_open && p.id == eng.state.active_player_id()
         {
             eng.eligible_attacker_ids(p.id)
@@ -308,7 +335,9 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             exile_play_permission_groups.clear();
             permanent_actions.clear();
             zone_ability_actions.clear();
-            required_attacker_ids.clear();
+            attack_requirement_ids.clear();
+            minimum_attack_requirement_count = 0;
+            attack_declaration_limits.clear();
             selectable_attacker_ids.clear();
             legal_attack_assignments.clear();
             legal_block_pairs.clear();
@@ -381,7 +410,9 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 valid_targets_by_hand_slot,
                 valid_targets_by_ability,
                 undoable_mana_abilities,
-                required_attacker_ids,
+                attack_requirement_ids,
+                minimum_attack_requirement_count,
+                attack_declaration_limits,
                 required_blocker_ids,
                 hand_actions,
                 selectable_attacker_ids,

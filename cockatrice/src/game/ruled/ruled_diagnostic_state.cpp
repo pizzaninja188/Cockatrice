@@ -52,7 +52,9 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
     FIELD(pendingBlocks);
     FIELD(committedBlocks);
     FIELD(remoteBlockPreviewPairs);
-    FIELD(requiredAttackerOids);
+    FIELD(attackRequirementOids);
+    FIELD(minimumAttackRequirementCount);
+    FIELD(attackDeclarationLimits);
     FIELD(requiredBlockerOids);
     FIELD(selectableAttackerOids);
     FIELD(legalBlockAttackerOidsByBlocker);

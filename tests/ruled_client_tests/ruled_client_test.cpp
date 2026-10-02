@@ -2535,13 +2535,14 @@ TEST_F(RuledClientTest, RequirementSetsSurviveABatchWithoutLegalActions)
     ruled::v1::RuledEventBatch withActions;
     auto &actions = (*withActions.mutable_legal_by_player())[kLocalPlayer];
     addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 0, "Grizzly Bears");
-    actions.add_required_attacker_ids(100); // CR 508.1d
+    actions.add_attack_requirement_ids(100); // CR 508.1d
+    actions.set_minimum_attack_requirement_count(1);
     actions.add_required_blocker_ids(200);  // CR 509.1c
     actions.add_selectable_attacker_ids(100);
     addLegalPlayerAttack(actions, 100);
     addLegalBlockPair(actions, 200, 300);
     apply(withActions);
-    ASSERT_EQ(state->requiredAttackerOids.size(), 1);
+    ASSERT_EQ(state->attackRequirementOids.size(), 1);
 
     // A Servatrice-synthesized preview echo has no legal_by_player entry: legal actions clear,
     // but the engine-authoritative must-attack / must-block sets must survive.
@@ -2552,11 +2553,135 @@ TEST_F(RuledClientTest, RequirementSetsSurviveABatchWithoutLegalActions)
     apply(preview);
 
     EXPECT_FALSE(state->isHandActionLegal(ruled::v1::HAND_ACTION_CAST_SPELL, 0));
-    EXPECT_TRUE(state->requiredAttackerOids.contains(100));
+    EXPECT_TRUE(state->attackRequirementOids.contains(100));
     EXPECT_TRUE(state->requiredBlockerOids.contains(200));
     EXPECT_TRUE(state->isSelectableAttacker(100));
     EXPECT_TRUE(state->isSelectableBlocker(200));
     EXPECT_TRUE(state->remoteAttackerPreviewOids.contains(100));
+}
+
+TEST_F(RuledClientTest, AuthoritativeOmittedCombatCapabilitiesClear)
+{
+    auto batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer);
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    actions.add_attack_requirement_ids(100);
+    actions.set_minimum_attack_requirement_count(1);
+    auto *limit = actions.add_attack_declaration_limits();
+    limit->set_attacked_player_id(kOpponent);
+    limit->set_maximum_attackers(2);
+    actions.add_selectable_attacker_ids(100);
+    addLegalPlayerAttack(actions, 100);
+    apply(batch);
+    ASSERT_TRUE(state->attackRequirementOids.contains(100));
+    // An engine phase snapshot with no recipient LegalActions retracts combat authority.
+    apply(phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer));
+    EXPECT_TRUE(state->attackRequirementOids.isEmpty());
+    EXPECT_EQ(state->minimumAttackRequirementCount, 0u);
+    EXPECT_TRUE(state->attackDeclarationLimits.isEmpty());
+    EXPECT_TRUE(state->selectableAttackerOids.isEmpty());
+    EXPECT_TRUE(state->legalAttackAssignmentsByAttacker.isEmpty());
+}
+
+TEST_F(RuledClientTest, AttackCapsAndAchievableRequirementsSurviveRelayCourtesyShapes)
+{
+    for (const bool blockersPreview : {false, true}) {
+        for (const int staged : {1, 2, 3}) {
+            state->clearSessionState();
+            auto batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer);
+            auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+            for (const quint32 oid : {100u, 101u, 102u}) {
+                actions.add_attack_requirement_ids(oid);
+                actions.add_selectable_attacker_ids(oid);
+                addLegalPlayerAttack(actions, oid);
+            }
+            actions.set_minimum_attack_requirement_count(2);
+            auto *limit = actions.add_attack_declaration_limits();
+            limit->set_attacked_player_id(kOpponent);
+            limit->set_maximum_attackers(2);
+            apply(batch);
+            for (int index = 0; index < staged; ++index)
+                state->togglePendingAttacker(100 + index);
+            EXPECT_EQ(state->combatDeclarationSatisfied(), staged == 2);
+            ruled::v1::RuledEventBatch courtesy;
+            if (blockersPreview)
+                courtesy.add_events()->mutable_blockers_preview()->set_declaring_player_id(kOpponent);
+            else
+                courtesy.add_events()->mutable_attackers_preview()->set_declaring_player_id(kLocalPlayer);
+            courtesy.add_events()->mutable_log()->set_text("courtesy");
+            courtesy.add_events()->mutable_battlefield_object_map();
+            courtesy.add_events()->mutable_face_down_object_map();
+            courtesy.add_events()->mutable_hand_slot_map();
+            courtesy.add_events()->mutable_graveyard_object_map();
+            courtesy.add_events()->mutable_exile_object_map();
+            apply(courtesy);
+            EXPECT_EQ(state->attackRequirementOids.size(), 3);
+            EXPECT_EQ(state->minimumAttackRequirementCount, 2u);
+            ASSERT_EQ(state->attackDeclarationLimits.size(), 1);
+            EXPECT_EQ(state->combatDeclarationSatisfied(), staged == 2);
+            EXPECT_TRUE(state->attackDeclarationExplanation().contains("At most 2"));
+            EXPECT_TRUE(state->attackDeclarationExplanation([](int) { return QStringLiteral("Opponent"); })
+                            .contains("At most 2 creatures may attack Opponent."));
+        }
+    }
+}
+
+TEST_F(RuledClientTest, AttackCapsEmptyMixedAuthoritativeAndResetRetractCapabilities)
+{
+    for (int mode = 0; mode < 4; ++mode) {
+        auto batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer);
+        auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+        actions.add_attack_requirement_ids(100);
+        actions.set_minimum_attack_requirement_count(1);
+        actions.add_attack_declaration_limits()->set_maximum_attackers(2);
+        actions.add_selectable_attacker_ids(100);
+        addLegalPlayerAttack(actions, 100);
+        apply(batch);
+        if (mode == 3) {
+            state->clearSessionState();
+        } else {
+            ruled::v1::RuledEventBatch replacement;
+            replacement.add_events()->mutable_attackers_preview()->set_declaring_player_id(kOpponent);
+            if (mode == 0)
+                (*replacement.mutable_legal_by_player())[kLocalPlayer];
+            else if (mode == 1)
+                (*replacement.mutable_legal_by_player())[kOpponent];
+            else
+                replacement.add_events()->mutable_log(); // followed by an authoritative phase
+            if (mode == 2)
+                *replacement.add_events() = phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer).events(0);
+            apply(replacement);
+        }
+        EXPECT_TRUE(state->attackRequirementOids.isEmpty());
+        EXPECT_EQ(state->minimumAttackRequirementCount, 0u);
+        EXPECT_TRUE(state->attackDeclarationLimits.isEmpty());
+        EXPECT_TRUE(state->selectableAttackerOids.isEmpty());
+        EXPECT_TRUE(state->legalAttackAssignmentsByAttacker.isEmpty());
+    }
+}
+
+TEST_F(RuledClientTest, PlayerAttackCapsExcludePermanentDefendersAndGlobalCapsCountThem)
+{
+    for (const bool global : {false, true}) {
+        state->clearSessionState();
+        auto batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer);
+        auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+        for (const quint32 oid : {100u, 101u, 102u}) {
+            actions.add_selectable_attacker_ids(oid);
+            addLegalPlayerAttack(actions, oid);
+            *actions.add_legal_attack_assignments() = permanentAttackAssignment(oid, 500, 9);
+        }
+        auto *limit = actions.add_attack_declaration_limits();
+        if (!global) limit->set_attacked_player_id(kOpponent);
+        limit->set_maximum_attackers(2);
+        apply(batch);
+        for (const quint32 oid : {100u, 101u, 102u}) {
+            state->togglePendingAttacker(oid);
+            ASSERT_TRUE(state->chooseAttackPermanentDefender(500));
+        }
+        EXPECT_EQ(state->combatDeclarationSatisfied(), !global);
+        state->togglePendingAttacker(102);
+        EXPECT_TRUE(state->combatDeclarationSatisfied());
+    }
 }
 
 TEST_F(RuledClientTest, LegalActionsBatchEmitsUndoableManaCount)
@@ -3667,7 +3792,8 @@ TEST_F(RuledClientTest, ConfirmAttackersIsGatedOnMustAttackRequirements)
 {
     ruled::v1::RuledEventBatch batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer);
     auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
-    actions.add_required_attacker_ids(100); // CR 508.1d "attacks if able"
+    actions.add_attack_requirement_ids(100); // CR 508.1d "attacks if able"
+    actions.set_minimum_attack_requirement_count(1);
     actions.add_selectable_attacker_ids(100);
     addLegalPlayerAttack(actions, 100);
     apply(batch);

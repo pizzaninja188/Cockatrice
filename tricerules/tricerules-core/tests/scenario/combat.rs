@@ -2010,13 +2010,13 @@ fn legal_actions_surface_required_attacker_to_active_player() {
     );
     let legal = batch.legal_by_player.get(&0).expect("legal for P0");
     assert!(
-        legal.required_attacker_ids.contains(&goblin),
+        legal.attack_requirement_ids.contains(&goblin),
         "active player's LegalActions must list the must-attack Crazed Goblin"
     );
     // The non-active player is never asked to declare attackers.
     let legal_nap = batch.legal_by_player.get(&1).expect("legal for P1");
     assert!(
-        legal_nap.required_attacker_ids.is_empty(),
+        legal_nap.attack_requirement_ids.is_empty(),
         "defender has no required attackers"
     );
 }

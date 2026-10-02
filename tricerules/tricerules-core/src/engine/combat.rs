@@ -1,3 +1,4 @@
+mod attacking;
 mod blocking;
 use blocking::BlockGraph;
 
@@ -330,6 +331,14 @@ impl GameEngine {
     }
 
     pub(super) fn eligible_attacker_ids(&self, player: PlayerId) -> Vec<ObjectId> {
+        let limits = self.attack_limits();
+        if !self
+            .attack_defenders()
+            .iter()
+            .any(|(defender, _)| limits.allows_defender(*defender))
+        {
+            return Vec::new();
+        }
         let Some(player_idx) = self.state.player_idx(player) else {
             return Vec::new();
         };
@@ -547,7 +556,14 @@ impl GameEngine {
     /// accepted by declaration, so neither Battle protection nor planeswalker control is inferred
     /// outside the engine.
     pub(super) fn legal_attack_assignments(&self, player: PlayerId) -> Vec<rv1::AttackAssignment> {
-        let defenders = self.attack_defenders();
+        // Every eligible creature shares these exact defender edges. The requirement solver
+        // relies on this complete relation; extend both authorities for recipient-specific rules.
+        let limits = self.attack_limits();
+        let defenders: Vec<_> = self
+            .attack_defenders()
+            .into_iter()
+            .filter(|(defender, _)| limits.allows_defender(*defender))
+            .collect();
         self.eligible_attacker_ids(player)
             .into_iter()
             .flat_map(|attacker| {
@@ -827,11 +843,12 @@ impl GameEngine {
         None
     }
 
-    /// CR 508.1d: the active player's creatures that MUST be declared as attackers this combat —
+    /// CR 508.1d: the active player's eligible must-attack requirement pool this combat —
     /// untapped, not summoning-sick (unless Haste), non-Defender creatures with `must_attack_if_able`,
     /// when a defending player exists to attack. Single source of truth shared by `set_attackers`
-    /// enforcement and the client-facing `LegalActions` gate (Juggernaut, Goblin Brigand, Crazed Goblin).
-    pub(super) fn required_attacker_ids(&self) -> Vec<ObjectId> {
+    /// enforcement and the client-facing `LegalActions` gate. Restrictions may prevent the whole
+    /// pool from attacking; minimum_attack_requirement_count gives the achievable maximum.
+    pub(super) fn attack_requirement_ids(&self) -> Vec<ObjectId> {
         // "when a defending player exists to attack" — the count does not matter here, only that
         // there is someone (CR 508.1a).
         if self.state.defending_player_ids().is_empty() {
@@ -839,6 +856,7 @@ impl GameEngine {
         }
         let ap = self.state.active_player_id();
         let mut out = Vec::new();
+        let eligible = self.eligible_attacker_ids(ap);
         let Some(ap_idx) = self.state.player_idx(ap) else {
             return out;
         };
@@ -849,7 +867,7 @@ impl GameEngine {
             if !obj.must_attack_if_able {
                 continue;
             }
-            if self.attacker_illegality(oid, ap).is_some() {
+            if !eligible.contains(&oid) {
                 continue;
             }
             out.push(oid);
@@ -867,18 +885,33 @@ impl GameEngine {
         }
         let ap = self.state.active_player_id();
 
-        // CR 508.1d: must-attack enforcement. A creature that must attack if able must be declared
-        // as an attacker whenever it is a legal attacker. Same set the client is given via
-        // LegalActions.required_attacker_ids, so the UI can gate its confirm control identically.
-        for oid in self.required_attacker_ids() {
-            if !assignments
-                .iter()
-                .any(|assignment| assignment.attacker_object_id == oid)
-            {
-                return Err(EngineError::Illegal(
-                    "must-attack creature not declared as attacker",
-                ));
+        let mut list = Vec::new();
+        let mut parsed_assignments = HashMap::new();
+        let mut seen_attackers = HashSet::new();
+        for assignment in assignments {
+            let oid = assignment.attacker_object_id;
+            if !seen_attackers.insert(oid) {
+                return Err(EngineError::Illegal("duplicate attacker"));
             }
+            if let Some(reason) = self.attacker_illegality(oid, ap) {
+                return Err(EngineError::Illegal(reason));
+            }
+            let parsed = self.parse_attack_assignment(assignment, ap)?;
+            parsed_assignments.insert(oid, parsed);
+            list.push(oid);
+        }
+        if !self
+            .attack_limits()
+            .declaration_allowed(parsed_assignments.values())
+        {
+            return Err(EngineError::Illegal("attack declaration exceeds maximum"));
+        }
+        let requirements = self.attack_requirement_ids();
+        let satisfied = list.iter().filter(|oid| requirements.contains(oid)).count();
+        if satisfied < self.minimum_attack_requirement_count() {
+            return Err(EngineError::Illegal(
+                "attack declaration satisfies too few requirements",
+            ));
         }
 
         if assignments.is_empty() {
@@ -896,21 +929,6 @@ impl GameEngine {
             b2.events.push(ev_priority_changed(self));
             fill_legal(&mut b2, self);
             return Ok(b2);
-        }
-        let mut list = Vec::new();
-        let mut parsed_assignments = HashMap::new();
-        let mut seen_attackers = HashSet::new();
-        for assignment in assignments {
-            let oid = assignment.attacker_object_id;
-            if !seen_attackers.insert(oid) {
-                return Err(EngineError::Illegal("duplicate attacker"));
-            }
-            if let Some(reason) = self.attacker_illegality(oid, ap) {
-                return Err(EngineError::Illegal(reason));
-            }
-            let parsed = self.parse_attack_assignment(assignment, ap)?;
-            parsed_assignments.insert(oid, parsed);
-            list.push(oid);
         }
         let mut tapping_attackers = Vec::new();
         for &oid in &list {

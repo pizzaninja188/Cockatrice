@@ -8,6 +8,8 @@
 #[path = "scenario/authoring_actions.rs"]
 mod authoring_actions;
 
+#[path = "scenario/deck_coverage_crawlspace.rs"]
+mod deck_coverage_crawlspace;
 #[path = "scenario/deck_coverage_phyrexian_metamorph.rs"]
 mod deck_coverage_phyrexian_metamorph;
 #[path = "scenario/deck_coverage_threefold_thunderhulk.rs"]

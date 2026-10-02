@@ -1293,15 +1293,36 @@ bool RuledClientState::localPlayerIsDefender() const
 
 bool RuledClientState::combatDeclarationSatisfied() const
 {
-    // CR 508.1d: every must-attack creature must be among the staged attackers.
+    // Count the engine-authored requirement pool and caps over exact staged defender edges.
     if (currentCombatPhase == RuledCombatPhase::DeclareAttackers) {
-        for (const quint32 oid : requiredAttackerOids) {
-            if (!pendingAttackerOids.contains(oid)) {
+        quint32 satisfied = 0;
+        for (const quint32 oid : pendingAttackerOids) {
+            if (!selectableAttackerOids.contains(oid) || !pendingAttackAssignments.contains(oid)) {
                 return false;
             }
+            const auto &assignment = pendingAttackAssignments[oid];
+            const auto candidates = legalAttackAssignmentsByAttacker.value(oid);
+            if (std::none_of(candidates.cbegin(), candidates.cend(), [&assignment](const auto &candidate) {
+                    return candidate.SerializeAsString() == assignment.SerializeAsString();
+                })) {
+                return false;
+            }
+            satisfied += attackRequirementOids.contains(oid) ? 1 : 0;
         }
-        for (const quint32 oid : pendingAttackerOids) {
-            if (!pendingAttackAssignments.contains(oid)) {
+        if (satisfied < minimumAttackRequirementCount) {
+            return false;
+        }
+        for (const auto &limit : attackDeclarationLimits) {
+            quint32 count = 0;
+            for (const quint32 oid : pendingAttackerOids) {
+                const auto &assignment = pendingAttackAssignments[oid];
+                if (!limit.has_attacked_player_id() ||
+                    (assignment.defender().kind() == ruled::v1::TARGET_REF_KIND_PLAYER &&
+                     static_cast<int>(assignment.defender().object_id()) == limit.attacked_player_id())) {
+                    ++count;
+                }
+            }
+            if (count > limit.maximum_attackers()) {
                 return false;
             }
         }
@@ -1318,6 +1339,21 @@ bool RuledClientState::combatDeclarationSatisfied() const
         return true;
     }
     return true;
+}
+
+QString RuledClientState::attackDeclarationExplanation(const std::function<QString(int)> &playerName) const
+{
+    QStringList explanations;
+    if (minimumAttackRequirementCount) {
+        explanations.append(tr("Attack with at least %1 creatures required to attack.").arg(minimumAttackRequirementCount));
+    }
+    for (const auto &limit : attackDeclarationLimits) {
+        explanations.append(limit.has_attacked_player_id()
+            ? tr("At most %1 creatures may attack %2.").arg(limit.maximum_attackers()).arg(
+                playerName ? playerName(limit.attacked_player_id()) : tr("that player"))
+            : tr("At most %1 creatures may attack.").arg(limit.maximum_attackers()));
+    }
+    return explanations.join(QLatin1Char(' '));
 }
 
 // ---------------------------------------------------------------------------------------
@@ -1586,6 +1622,9 @@ void RuledClientState::syncBlockersPreviewToServer()
 
 void RuledClientState::confirmAttackers()
 {
+    if (currentCombatPhase == RuledCombatPhase::DeclareAttackers && !combatDeclarationSatisfied()) {
+        return;
+    }
     ruled::v1::RuledCommand ruledCommand;
     auto *declare = ruledCommand.mutable_declare_attackers();
     for (const auto &assignment : std::as_const(pendingAttackAssignments)) {
@@ -1601,6 +1640,9 @@ void RuledClientState::confirmAttackers()
 
 void RuledClientState::skipAttackers()
 {
+    if (currentCombatPhase == RuledCombatPhase::DeclareAttackers && minimumAttackRequirementCount != 0) {
+        return;
+    }
     ruled::v1::RuledCommand ruledCommand;
     ruledCommand.mutable_declare_attackers();
     host->sendRuledCommand(ruledCommand);
@@ -2064,7 +2106,9 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     pendingBlocks.clear();
     committedBlocks.clear();
     remoteBlockPreviewPairs.clear();
-    requiredAttackerOids.clear();
+    attackRequirementOids.clear();
+    minimumAttackRequirementCount = 0;
+    attackDeclarationLimits.clear();
     requiredBlockerOids.clear();
     selectableAttackerOids.clear();
     legalBlockAttackerOidsByBlocker.clear();

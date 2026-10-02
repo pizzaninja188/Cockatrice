@@ -1,0 +1,15 @@
+// Oracle 2296370c-fe34-4df6-92a5-260f1634bede; source/rulings checked 2026-10-02.
+// https://api.scryfall.com/cards/5b8e092a-610d-4cea-bb92-65e01954b5c4/rulings
+// CR 508.1c-d / 802.3a: declaration restriction; planeswalkers/Battles are not "you".
+(
+  id: "crawlspace",
+  name: "Crawlspace",
+  face_id: "crawlspace",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: LimitAttackers(maximum: 2, affected: AttackingController),
+  )],
+)

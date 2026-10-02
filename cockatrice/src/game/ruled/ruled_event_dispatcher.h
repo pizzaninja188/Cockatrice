@@ -128,7 +128,7 @@ private:
     void applyLegalActions(const ruled::v1::LegalActions &actions, BatchContext &ctx);
     /// No `legal_by_player` entry for us this batch (e.g. a Servatrice-synthesized combat
     /// preview echo). Deliberately does NOT clear the requirement sets — see the body.
-    void applyNoLegalActions();
+    void applyNoLegalActions(bool preserveCombatCapabilities);
 
     /// Emits everything the batch accumulated, in the legacy order.
     void finishBatch(BatchContext &ctx);

@@ -521,6 +521,16 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
 {
     BatchContext ctx;
     bool authoritativeSnapshot = false;
+    bool hasCombatPreview = false;
+    bool onlyCourtesyEvents = true;
+    for (const auto &event : batch.events()) {
+        hasCombatPreview |= event.has_attackers_preview() || event.has_blockers_preview();
+        onlyCourtesyEvents &= event.has_attackers_preview() || event.has_blockers_preview() ||
+                              event.has_log() || event.has_battlefield_object_map() ||
+                              event.has_face_down_object_map() || event.has_hand_slot_map() ||
+                              event.has_graveyard_object_map() || event.has_exile_object_map();
+    }
+    const bool preserveCombatCapabilities = batch.legal_by_player().empty() && hasCombatPreview && onlyCourtesyEvents;
 
     for (const auto &event : batch.events()) {
         if (event.has_active_public_reveal_snapshot())
@@ -632,7 +642,7 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
     if (lit != batch.legal_by_player().end()) {
         applyLegalActions(lit->second, ctx);
     } else {
-        applyNoLegalActions();
+        applyNoLegalActions(preserveCombatCapabilities);
         if (authoritativeSnapshot && ctx.reconcilePublicReveal) {
             state->revokeLocalActionAuthority();
             // Legal entries are recipient-filtered. Retire only stale local priority; a
@@ -2183,9 +2193,14 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
     emit state->undoableManaAbilitiesChanged(static_cast<int>(actions.undoable_mana_abilities()));
     // CR 508.1d / 509.1c: engine-reported must-attack / must-block sets that gate the combat
     // confirm controls (see RuledClientState::combatDeclarationSatisfied).
-    state->requiredAttackerOids.clear();
-    for (const quint32 oid : actions.required_attacker_ids()) {
-        state->requiredAttackerOids.insert(oid);
+    state->attackRequirementOids.clear();
+    for (const quint32 oid : actions.attack_requirement_ids()) {
+        state->attackRequirementOids.insert(oid);
+    }
+    state->minimumAttackRequirementCount = actions.minimum_attack_requirement_count();
+    state->attackDeclarationLimits.clear();
+    for (const auto &limit : actions.attack_declaration_limits()) {
+        state->attackDeclarationLimits.append(limit);
     }
     state->requiredBlockerOids.clear();
     for (const quint32 oid : actions.required_blocker_ids()) {
@@ -2205,7 +2220,7 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
     }
 }
 
-void RuledEventDispatcher::applyNoLegalActions()
+void RuledEventDispatcher::applyNoLegalActions(bool preserveCombatCapabilities)
 {
     state->clearHandActions();
     state->openingBottomSelectedIndices.clear();
@@ -2216,12 +2231,17 @@ void RuledEventDispatcher::applyNoLegalActions()
     state->openingCanKeep = false;
     state->openingCanRedraw = false;
     state->permanentActionsByOid.clear();
-    // NB: do NOT clear the required or selectable combat sets here. Servatrice-synthesized
-    // combat preview batches (AttackersPreview / BlockersPreview, emitted while the local player
-    // stages attackers/blocks) carry no legal_by_player entry and land in this branch. The
-    // combat sets are engine-authoritative and only change when a real engine batch (with
-    // legal_by_player) arrives, so they must survive preview echoes — otherwise deselecting a
-    // staged required creature couldn't re-disable OK and legal creatures would become inert.
+    // Only the explicit relay courtesy shape preserves the current engine snapshot. An
+    // authoritative omission retracts every combat capability, just like empty LegalActions.
+    if (!preserveCombatCapabilities) {
+        state->attackRequirementOids.clear();
+        state->minimumAttackRequirementCount = 0;
+        state->attackDeclarationLimits.clear();
+        state->requiredBlockerOids.clear();
+        state->selectableAttackerOids.clear();
+        state->legalAttackAssignmentsByAttacker.clear();
+        state->legalBlockAttackerOidsByBlocker.clear();
+    }
     emit state->undoableManaAbilitiesChanged(0);
 }
 

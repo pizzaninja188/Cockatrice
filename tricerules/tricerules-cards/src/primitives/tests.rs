@@ -942,6 +942,44 @@ fn issue_169_grouped_taps_cannot_pretend_to_supply_one_observed_object() {
 }
 
 use super::*;
+
+#[test]
+fn attack_declaration_limit_authoring_preserves_zero_and_scope_and_rejects_ambiguous_input() {
+    for (text, maximum, affected) in [
+        (
+            "LimitAttackers(maximum: 2, affected: AttackingController)",
+            2,
+            AttackLimitAffected::AttackingController,
+        ),
+        (
+            "LimitAttackers(maximum: 0, affected: All)",
+            0,
+            AttackLimitAffected::All,
+        ),
+    ] {
+        let ability: StaticAbilityDef = ron::from_str(text).unwrap();
+        assert_eq!(
+            ability,
+            StaticAbilityDef::LimitAttackers { maximum, affected }
+        );
+        let encoded = ron::to_string(&ability).unwrap();
+        assert_eq!(
+            ron::from_str::<StaticAbilityDef>(&encoded).unwrap(),
+            ability
+        );
+    }
+    for invalid in [
+        "LimitAttackers(maximum: -1, affected: All)",
+        "LimitAttackers(maximum: 4294967296, affected: All)",
+        "LimitAttackers(maximum: 2)",
+        "LimitAttackers(maximum: 2, affected: DefendingPlayer)",
+    ] {
+        assert!(
+            ron::from_str::<StaticAbilityDef>(invalid).is_err(),
+            "{invalid}"
+        );
+    }
+}
 use crate::{AbilityId, AbilityPresentation, ManaCost};
 
 #[test]

@@ -1,0 +1,74 @@
+{
+  "format_version": 1,
+  "oracle_id": "2296370c-fe34-4df6-92a5-260f1634bede",
+  "spans": [
+    {
+      "face_id": "crawlspace",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_crawlspace::crawlspace_rejects_three_player_attackers_and_accepts_two_without_partial_mutation",
+      "covers": "actual three-mana cast; rejects three direct attackers atomically and accepts two without tapping an omitted creature"
+    },
+    {
+      "test": "scenario deck_coverage_crawlspace::crawlspace_maximizes_must_attack_requirements_under_a_cap",
+      "covers": "three eligible required attackers publish minimum two; any two satisfy, fewer or optional displacement reject atomically; recipient-only and closed snapshots"
+    },
+    {
+      "test": "scenario deck_coverage_crawlspace::crawlspace_does_not_limit_planeswalkers_battles_or_mixed_declarations",
+      "covers": "three attackers on planeswalker or protected Battle and two direct plus one permanent defender are legal"
+    },
+    {
+      "test": "scenario deck_coverage_crawlspace::crawlspace_four_seats_counts_only_the_protected_player_and_follows_controller",
+      "covers": "IDs 7/20/42/91; protected subset cap and fixture controller transfer, five total permitted across recipients"
+    },
+    {
+      "test": "scenario deck_coverage_crawlspace::crawlspace_unbounded_defender_keeps_every_must_attack_requirement",
+      "covers": "uncapped player recipient means all three required creatures must attack"
+    },
+    {
+      "test": "scenario deck_coverage_crawlspace::attack_limit_global_fixture_and_duplicate_minimum_compose_with_requirements",
+      "covers": "copiable-face global caps one and four combine by minimum; optional creature cannot displace required one; no Silent Arbiter admission"
+    },
+    {
+      "test": "scenario deck_coverage_crawlspace::crawlspace_inactive_face_down_or_removed_source_has_no_limit",
+      "covers": "fixture source outside battlefield or face down contributes no active restriction"
+    },
+    {
+      "test": "scenario deck_coverage_crawlspace::crawlspace_exact_identity_and_presentation_cover_the_complete_card",
+      "covers": "exact normal single face Artifact, colorless, three mana, no P/T, one complete typed static clause and Oracle line"
+    },
+    {
+      "test": "scenario deck_coverage_crawlspace::attack_limit_zero_filters_edges_and_requirements_without_creating_a_deadlock",
+      "covers": "zero per-player fixture removes all edges and requirements; empty declaration legally ends combat"
+    },
+    {
+      "test": "scenario deck_coverage_crawlspace::attack_limit_capped_defender_capacities_add",
+      "covers": "three independently capped player recipients sum to maximum three satisfiable requirements"
+    },
+    {
+      "test": "scenario deck_coverage_crawlspace::crawlspace_layer_six_ability_loss_removes_the_limit",
+      "covers": "explicit layer-six suppression fixture removes current static cap"
+    },
+    {
+      "test": "scenario deck_coverage_crawlspace::crawlspace_limit_is_independent_in_each_combat",
+      "covers": "ordinary turn progression, cleanup discard and untap permit a fresh two-attacker declaration in the next combat"
+    },
+    {
+      "test": "scenario deck_coverage_crawlspace::attack_limit_does_not_restrict_mobilize_creatures_added_attacking",
+      "covers": "actual Shock Brigade attack and Mobilize resolution add a Warrior attacking beyond a structural global-one declaration cap"
+    },
+    {
+      "test": "scenario deck_coverage_crawlspace::crawlspace_rejects_duplicate_stale_and_wrong_actor_declarations_atomically",
+      "covers": "duplicate, stale generation and wrong actor reject with canonical state unchanged; accepted declaration closes pool/minimum/caps"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

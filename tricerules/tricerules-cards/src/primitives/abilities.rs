@@ -1892,6 +1892,14 @@ pub enum CounterPlacementAffected {
     AttachedPermanent,
 }
 
+/// CR 508.1c / 802.3a: count the complete declaration, or only creatures attacking
+/// the source's controller as a player. Planeswalker and Battle attacks are distinct.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AttackLimitAffected {
+    All,
+    AttackingController,
+}
+
 /// The two mandatory draw-doubling applicability rules (CR 121, 614.11).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DrawReplacementCondition {
@@ -2135,6 +2143,12 @@ pub enum StaticAbilityDef {
         filter: CreatureScopeFilter,
         #[serde(default)]
         restriction: super::CombatRestriction,
+    },
+    /// Crawlspace caps attacks on its controller; Silent Arbiter's attacker clause
+    /// caps the complete declaration. Duplicate restrictions combine by minimum.
+    LimitAttackers {
+        maximum: u32,
+        affected: AttackLimitAffected,
     },
     /// CR 502.3: this permanent untaps during every other player's untap step, at the same
     /// turn-based boundary as that player's permanents. Bender's Waterskin supplies the printed
