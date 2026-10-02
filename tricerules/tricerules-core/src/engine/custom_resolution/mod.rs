@@ -472,6 +472,7 @@ impl GameEngine {
 
         let label = object_display_name(&self.state, self.registry, exiled.object_id);
         let entry = BattlefieldEntryEvent {
+            mana_colors_spent_to_cast: Default::default(),
             prepared: false,
             object_id: exiled.object_id,
             deciding_player: owner,

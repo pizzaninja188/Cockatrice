@@ -2647,6 +2647,7 @@ impl GameEngine {
                 },
             );
             self.state.stack.push(StackItem {
+                mana_colors_spent_to_cast: Default::default(),
                 id: virtual_id,
                 controller,
                 card_id,
@@ -3839,6 +3840,7 @@ mod tests {
         is_copy: bool,
     ) -> StackItem {
         StackItem {
+            mana_colors_spent_to_cast: Default::default(),
             id,
             controller,
             card_id: "grizzly_bears".into(),

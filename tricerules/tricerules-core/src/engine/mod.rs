@@ -95,6 +95,8 @@ fn attachment_recipient_proto(recipient: AttachmentRecipient) -> rv1::Attachment
 
 #[derive(Clone, Copy)]
 struct AmountContext<'a> {
+    /// Supplied only by the entering object's intrinsic replacement evaluator.
+    entry_mana_colors_spent: crate::state::ManaColorsSpent,
     stack_item: Option<&'a StackItem>,
     controller: PlayerId,
     source_object_id: ObjectId,
@@ -110,6 +112,7 @@ struct AmountContext<'a> {
 impl<'a> AmountContext<'a> {
     fn from_condition(context: ConditionContext<'a>) -> Self {
         Self {
+            entry_mana_colors_spent: Default::default(),
             stack_item: context.stack_item,
             controller: context.controller,
             source_object_id: context.source_object_id,
@@ -121,6 +124,7 @@ impl<'a> AmountContext<'a> {
     }
     fn for_stack_item(item: &'a StackItem, controller: PlayerId) -> Self {
         Self {
+            entry_mana_colors_spent: Default::default(),
             stack_item: Some(item),
             controller,
             source_object_id: item.source_permanent_id.unwrap_or(item.id),

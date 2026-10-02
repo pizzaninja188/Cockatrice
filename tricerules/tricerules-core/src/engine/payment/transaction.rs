@@ -123,6 +123,7 @@ pub(in crate::engine) struct CostPaymentReceipt {
     pub(in crate::engine) paid_card_costs: Vec<PaidCardCost>,
     pub(in crate::engine) life_paid: u32,
     pub(in crate::engine) mana_spent: u64,
+    pub(in crate::engine) mana_colors_spent: crate::state::ManaColorsSpent,
     pub(in crate::engine) expend_triggers: Vec<crate::engine::triggers::CollectedTrigger>,
     pub(in crate::engine) restricted_mana_spent: Vec<(u32, ManaAmount)>,
     pub(in crate::engine) cast_cost_receipts: Vec<CastCostReceipt>,
@@ -1691,6 +1692,7 @@ impl GameEngine {
             paid_card_costs: vec![],
             life_paid: 0,
             mana_spent: 0,
+            mana_colors_spent: Default::default(),
             expend_triggers: vec![],
             restricted_mana_spent: vec![],
             cast_cost_receipts: plan.cast_cost_receipts,
@@ -1794,6 +1796,7 @@ impl GameEngine {
                 CostDebit::Mana(mana) => {
                     let spent = mana.mana_spent();
                     payment.mana_spent += spent;
+                    payment.mana_colors_spent.union(mana.colors_spent());
                     payment.life_paid += mana.life_cost;
                     payment
                         .restricted_mana_spent
@@ -2532,6 +2535,91 @@ impl GameEngine {
 #[cfg(test)]
 mod convoke_transaction_tests {
     use super::*;
+
+    #[test]
+    fn pentad_prism_combined_additional_payment_colors_life_exclusion_and_stale_atomicity() {
+        let mut engine = GameEngine::new(202_610_241, &[0, 1], 20, None, true).unwrap();
+        engine.state.players[0].mana_pool.white = 1;
+        engine.state.players[0].mana_pool.blue = 1;
+        let prepared = PreparedPaymentCosts {
+            waterbend_limit: None,
+            transaction: CostTransactionPlan {
+                purpose: CostPurpose::Spell,
+                player: 0,
+                player_idx: 0,
+                debits: vec![],
+                cast_cost_receipts: vec![],
+            },
+            mana: ManaCost::parse("{1}").unwrap(),
+            x_value: 0,
+            extra_generic: 1,
+            generic_reduction: 0,
+            flex_payments: vec![],
+            restricted_mana: vec![],
+            eligible_restricted_mana: vec![],
+        };
+        let plan = prepared.finish(&engine.state).unwrap();
+        assert_eq!(
+            plan.debits.len(),
+            1,
+            "base and additional mana use the one combined plan"
+        );
+        engine.state.players[0].mana_pool.white = 0;
+        let before = format!("{:?}", engine.state);
+        assert!(engine.commit_cost_transaction(plan.clone()).is_err());
+        assert_eq!(format!("{:?}", engine.state), before);
+        engine.state.players[0].mana_pool.white = 1;
+        let receipt = engine.commit_cost_transaction(plan).unwrap();
+        assert_eq!(receipt.mana_spent, 2);
+        assert_eq!(receipt.mana_colors_spent.count(), 2);
+        assert_eq!(
+            (
+                engine.state.players[0].mana_pool.white,
+                engine.state.players[0].mana_pool.blue
+            ),
+            (0, 0)
+        );
+        engine.state.players[0].mana_pool.green = 1;
+        let mana = super::super::mana::plan_mana_payment(
+            &engine.state,
+            0,
+            &ManaCost::parse("{G/P}").unwrap(),
+            0,
+            0,
+            &[rv1::FlexPipPayment {
+                pip_index: 0,
+                pay_life: true,
+            }],
+        )
+        .unwrap();
+        let receipt = engine
+            .commit_cost_transaction(CostTransactionPlan {
+                purpose: CostPurpose::Spell,
+                player: 0,
+                player_idx: 0,
+                debits: vec![CostDebit::Mana(mana)],
+                cast_cost_receipts: vec![],
+            })
+            .unwrap();
+        assert_eq!(receipt.life_paid, 2);
+        assert_eq!(receipt.mana_colors_spent.count(), 0);
+        assert_eq!(
+            engine.state.players[0].mana_pool.green, 1,
+            "unspent colored mana is excluded"
+        );
+        let mut union = receipt.mana_colors_spent;
+        union.union(crate::state::ManaColorsSpent::from_presence([
+            true, false, true, false, false,
+        ]));
+        union.union(crate::state::ManaColorsSpent::from_presence([
+            true, true, false, false, false,
+        ]));
+        assert_eq!(
+            union.count(),
+            3,
+            "pure color union, not fabricated multiple mana plans"
+        );
+    }
 
     #[test]
     fn counted_sacrifice_preserves_pre_group_lki_and_replacement_receipts() {

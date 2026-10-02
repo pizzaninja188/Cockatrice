@@ -115,6 +115,7 @@ fn resolve(
         targets = vec![recipient];
     }
     let top = StackItem {
+        mana_colors_spent_to_cast: Default::default(),
         id: u32::MAX,
         controller: 3,
         card_id: "murder".into(),

@@ -6,11 +6,15 @@ use serde::ser::SerializeStructVariant;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// A public game-state count usable by any [`Amount`] consumer. Keeping the counted quantity
+/// A typed count; public game-state leaves are shared by [`Amount`] consumers, while
+/// cast-payment colors are restricted to intrinsic entry evaluation. Keeping the counted quantity
 /// separate from the effect lets entry replacements, life gain, damage, P/T modifiers, and token
 /// creation share one authoritative evaluator.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CountExpression {
+    /// Pentad Prism and Clearwater Goblet: actual cast-payment colors, available only
+    /// to this object's intrinsic entry replacement, including entry-copy reevaluation.
+    ManaColorsSpentToCast,
     /// Count selected players who lost any life during the current turn. This counts players,
     /// not life points, and remains true after later life gain or after a player loses the game.
     /// Kaito, Strefan, and Gev share this turn-history query.
@@ -165,7 +169,9 @@ impl CountExpression {
             Self::GraveyardCards { filter, .. } => {
                 filter.as_ref().map_or(Ok(()), ZoneCardFilter::validate)
             }
-            Self::PlayersWhoLostLifeThisTurn { .. } | Self::SourcePower => Ok(()),
+            Self::PlayersWhoLostLifeThisTurn { .. }
+            | Self::SourcePower
+            | Self::ManaColorsSpentToCast => Ok(()),
             Self::CardsInHand { players } if players.identifies_one_player() => Ok(()),
             Self::CardsInHand { .. } => Err("CardsInHand requires a single player selector".into()),
             Self::DeclaredAttackers { filter, .. } => filter.validate(),
@@ -178,6 +184,7 @@ impl CountExpression {
                         || matches!(
                             term.quantity,
                             Self::Affine { .. }
+                                | Self::ManaColorsSpentToCast
                                 | Self::CardsMatchingResult { .. }
                                 | Self::CardResultCharacteristicSum { .. }
                         )
@@ -251,6 +258,29 @@ pub enum Amount {
 }
 
 impl Amount {
+    pub(crate) fn uses_entry_cast_colors(&self) -> bool {
+        match self {
+            Self::Count(CountExpression::ManaColorsSpentToCast) => true,
+            Self::Count(CountExpression::Affine { terms, .. }) => terms
+                .iter()
+                .any(|term| matches!(term.quantity, CountExpression::ManaColorsSpentToCast)),
+            Self::DivideRoundedDown { amount, .. } => amount.uses_entry_cast_colors(),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn validate_entry(&self, intrinsic: bool) -> Result<(), String> {
+        if self.uses_entry_cast_colors() {
+            if !intrinsic {
+                return Err(
+                    "cast-payment colors require an intrinsic self entry replacement".into(),
+                );
+            }
+            self.validate()
+        } else {
+            self.validate_live()
+        }
+    }
     pub(crate) fn requires_triggering_spell_context(&self) -> bool {
         match self {
             Self::Conditional { condition, .. } => condition.requires_triggering_spell_context(),
@@ -297,6 +327,9 @@ impl Amount {
 
     pub(super) fn validate_effect(&self, context: EffectContext) -> Result<(), String> {
         self.validate()?;
+        if self.uses_entry_cast_colors() {
+            return Err("cast-payment colors require an intrinsic entry replacement".into());
+        }
         if context == EffectContext::Ability && self.contains_cast_cost() {
             return Err("cast-cost amount requires a spell's cast receipt".into());
         }
@@ -322,6 +355,9 @@ impl Amount {
     }
 
     pub(crate) fn validate_live(&self) -> Result<(), String> {
+        if self.uses_entry_cast_colors() {
+            return Err("cast-payment colors require an intrinsic entry replacement".into());
+        }
         if self.contains_cast_cost() {
             return Err("cast-cost amount requires a resolving stack item".into());
         }

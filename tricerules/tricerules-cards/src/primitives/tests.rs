@@ -792,6 +792,40 @@ fn issue_165_quantities_reject_unsupported_shapes_and_source_contexts() {
 }
 
 #[test]
+fn pentad_prism_cast_colors_are_intrinsic_entry_only_and_cannot_escape_through_wrappers() {
+    for source in [
+        "Count(ManaColorsSpentToCast)",
+        "DivideRoundedDown(amount: Count(ManaColorsSpentToCast), divisor: 2)",
+    ] {
+        let amount: super::Amount = ron::from_str(source).unwrap();
+        assert!(amount.validate_entry(true).is_ok());
+        assert!(amount.validate_entry(false).is_err());
+        assert!(amount.validate_live().is_err());
+        assert!(amount.validate_cost(false).is_err());
+        for context in [super::EffectContext::Spell, super::EffectContext::Ability] {
+            assert!(super::SpellEffectKind::GainLife {
+                amount: amount.clone()
+            }
+            .validate(context)
+            .is_err());
+        }
+    }
+    let count = super::CountExpression::ManaColorsSpentToCast;
+    assert!(count.validate_static_count().is_err());
+    let affine: super::CountExpression =
+        ron::from_str("Affine(terms: [(coefficient: 1, quantity: ManaColorsSpentToCast)])")
+            .unwrap();
+    assert!(affine.validate().is_err());
+    for affected in ["Self_", "Creatures((who: Controller))"] {
+        let card = format!(
+            r#"(id: "test", name: "Test", face_id: "test", types: ["Artifact"], static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: EntersWithCounters(affected: {affected}, counter: Charge, amount: Count(ManaColorsSpentToCast)))])"#
+        );
+        let parsed = crate::CardRegistry::from_chunks_and_tokens(&[&card], &[]);
+        assert_eq!(parsed.is_ok(), affected == "Self_", "{parsed:?}");
+    }
+}
+
+#[test]
 fn issue_165_dynamic_consumers_accept_quantities() {
     for effect in [
         "Scry(count: Count(SourcePower))",

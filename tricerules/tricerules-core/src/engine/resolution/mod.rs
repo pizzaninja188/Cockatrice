@@ -1006,6 +1006,7 @@ impl GameEngine {
                 match self.begin_battlefield_entry(
                     top.clone(),
                     BattlefieldEntryEvent {
+                        mana_colors_spent_to_cast: top.mana_colors_spent_to_cast,
                         prepared: false,
                         object_id: top.id,
                         deciding_player: top.controller,
@@ -2313,6 +2314,7 @@ impl GameEngine {
                 return Ok(true);
             }
             let entry = BattlefieldEntryEvent {
+                mana_colors_spent_to_cast: Default::default(),
                 prepared: false,
                 object_id: exiled.object_id,
                 deciding_player: owner,
@@ -2447,6 +2449,7 @@ impl GameEngine {
             .map(|object| object.card_id.clone())
             .unwrap_or_default();
         StackItem {
+            mana_colors_spent_to_cast: Default::default(),
             id: object_id,
             controller,
             card_id,
@@ -2625,6 +2628,7 @@ impl GameEngine {
                 };
                 entries.push(TokenBattlefieldEntry {
                     event: BattlefieldEntryEvent {
+                        mana_colors_spent_to_cast: Default::default(),
                         prepared: false,
                         object_id: oid,
                         deciding_player: pid,
@@ -3748,6 +3752,7 @@ mod attached_subject_tests {
 
     fn triggered_item(source: ObjectId, generation: u64) -> StackItem {
         StackItem {
+            mana_colors_spent_to_cast: Default::default(),
             id: source + 10_000,
             controller: 0,
             card_id: "capture_sphere".to_string(),
@@ -6620,6 +6625,7 @@ mod source_keyword_tests {
 
     fn ability_item(source: ObjectId, generation: u64) -> StackItem {
         StackItem {
+            mana_colors_spent_to_cast: Default::default(),
             id: source + 1,
             controller: 0,
             card_id: "prodigal_sorcerer".to_string(),
@@ -6653,6 +6659,7 @@ mod source_keyword_tests {
 
     fn deathtouch_spell_item(chosen_x: u32) -> StackItem {
         StackItem {
+            mana_colors_spent_to_cast: Default::default(),
             id: u32::MAX,
             controller: 0,
             card_id: "pharikas_chosen".to_string(),

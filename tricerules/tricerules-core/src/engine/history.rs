@@ -1755,6 +1755,9 @@ impl GameEngine {
             previous_effect_result: context.previous_effect_result,
         };
         match expression {
+            CountExpression::ManaColorsSpentToCast => {
+                i64::from(context.entry_mana_colors_spent.count())
+            }
             CountExpression::PlayersWhoLostLifeThisTurn { players } => self
                 .state
                 .players
@@ -2469,6 +2472,7 @@ mod tests {
 
     fn quantity_context(source: ObjectId) -> AmountContext<'static> {
         AmountContext {
+            entry_mana_colors_spent: Default::default(),
             stack_item: None,
             controller: 0,
             source_object_id: source,
@@ -3184,6 +3188,7 @@ mod tests {
         e.state.objects.get_mut(&grave).unwrap().controller = 0;
         let virtual_id = e.state.next_object_id;
         e.state.stack.push(StackItem {
+            mana_colors_spent_to_cast: Default::default(),
             id: virtual_id,
             controller: 2,
             card_id: "prodigal_pyromancer".into(),

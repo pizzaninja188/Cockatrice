@@ -37,6 +37,7 @@ fn object(engine: &mut GameEngine, card: &str, zone: Zone, controller: PlayerId)
 
 fn event(engine: &GameEngine, oid: ObjectId) -> BattlefieldEntryEvent {
     BattlefieldEntryEvent {
+        mana_colors_spent_to_cast: Default::default(),
         prepared: false,
         object_id: oid,
         deciding_player: 0,

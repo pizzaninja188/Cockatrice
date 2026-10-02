@@ -1,0 +1,18 @@
+(
+  id: "pentad_prism",
+  name: "Pentad Prism",
+  face_id: "pentad_prism",
+  mana_cost: "{2}",
+  types: ["Artifact"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: EntersWithCounters(affected: Self_, counter: Charge, amount: Count(ManaColorsSpentToCast)),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [RemoveCounters(counter: Some(Charge), count: 1)],
+    effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+  )],
+)

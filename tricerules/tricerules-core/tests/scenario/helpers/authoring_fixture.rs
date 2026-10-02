@@ -134,6 +134,14 @@ pub(crate) fn ability_source(
             if ability == 1 { 8 } else { 4 },
         );
     }
+    if card == "pentad_prism" {
+        // Direct relocation skips casting/entry. Dedicated paid scenarios prove Sunburst.
+        e.state
+            .objects
+            .get_mut(&oid)
+            .unwrap()
+            .set_counter(tricerules_cards::CounterKind::Charge, 2);
+    }
     if card == "pentavus" {
         // Direct relocation skips entry. Actual-card scenarios independently prove entry.
         e.state

@@ -173,6 +173,7 @@ impl GameEngine {
             return match self.begin_battlefield_entry(
                 item,
                 BattlefieldEntryEvent {
+                    mana_colors_spent_to_cast: Default::default(),
                     prepared: false,
                     object_id: oid,
                     deciding_player: target,
@@ -469,6 +470,7 @@ fn zone_label(z: Zone) -> &'static str {
 
 fn dev_entry_item(controller: PlayerId, object_id: ObjectId, card_id: &str) -> StackItem {
     StackItem {
+        mana_colors_spent_to_cast: Default::default(),
         id: object_id,
         controller,
         card_id: card_id.to_string(),

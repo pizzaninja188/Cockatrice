@@ -2296,6 +2296,7 @@ mod tests {
         chosen_x: u32,
     ) -> StackItem {
         StackItem {
+            mana_colors_spent_to_cast: Default::default(),
             id,
             controller: 1,
             card_id: card_id.into(),

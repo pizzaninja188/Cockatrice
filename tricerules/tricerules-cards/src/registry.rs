@@ -847,7 +847,10 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 });
             }
             amount
-                .validate_live()
+                .validate_entry(matches!(
+                    affected,
+                    crate::primitives::EntersWithCountersAffected::Self_
+                ))
                 .and_then(|()| amount.validate_source_context(false))
                 .map_err(|reason| RegistryError::InvalidCard {
                     id: card.id.clone(),

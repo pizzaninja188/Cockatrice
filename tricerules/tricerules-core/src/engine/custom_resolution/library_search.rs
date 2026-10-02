@@ -56,6 +56,7 @@ impl GameEngine {
             match self.begin_battlefield_entry(
                 stack.item.clone(),
                 BattlefieldEntryEvent {
+                    mana_colors_spent_to_cast: Default::default(),
                     prepared: false,
                     object_id: oid,
                     deciding_player: controller,
@@ -459,6 +460,7 @@ impl GameEngine {
                 match self.begin_battlefield_entry(
                     stack.item.clone(),
                     BattlefieldEntryEvent {
+                        mana_colors_spent_to_cast: Default::default(),
                         prepared: false,
                         object_id: oid,
                         deciding_player: controller,
@@ -820,6 +822,7 @@ mod tests {
 
     fn test_stack_item() -> StackItem {
         StackItem {
+            mana_colors_spent_to_cast: Default::default(),
             id: 90_001,
             controller: 0,
             card_id: "cultivate".into(),

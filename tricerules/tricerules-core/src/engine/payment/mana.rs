@@ -165,6 +165,22 @@ pub(in crate::engine) struct ManaPaymentPlan {
 }
 
 impl ManaPaymentPlan {
+    pub(in crate::engine) fn colors_spent(&self) -> crate::state::ManaColorsSpent {
+        let mut colors = [false; 5];
+        for (i, present) in colors.iter_mut().enumerate() {
+            *present = self.expected_pool[i] > self.remaining[i];
+        }
+        for (_, amount) in &self.restricted_spent {
+            for (present, spent) in colors
+                .iter_mut()
+                .zip([amount.w, amount.u, amount.b, amount.r, amount.g])
+            {
+                *present |= spent > 0;
+            }
+        }
+        crate::state::ManaColorsSpent::from_presence(colors)
+    }
+
     /// Actual debits for Expend (Bark-Knuckle Boxer, Teapot Slinger), not the printed cost.
     /// Retained combat mana is a subset of the ordinary pool; life is not mana.
     pub(in crate::engine) fn mana_spent(&self) -> u64 {

@@ -2305,6 +2305,7 @@ pub(super) fn move_graveyard_cards(
         let entries = targets
             .into_iter()
             .map(|oid| BattlefieldEntryEvent {
+                mana_colors_spent_to_cast: Default::default(),
                 prepared: false,
                 object_id: oid,
                 deciding_player: cx.engine.state.objects[&oid].owner,
@@ -2441,6 +2442,7 @@ pub(super) fn return_linked_exiled_cards(
         .map(|linked| {
             let object = &cx.engine.state.objects[&linked.object_id];
             BattlefieldEntryEvent {
+                mana_colors_spent_to_cast: Default::default(),
                 prepared: false,
                 object_id: linked.object_id,
                 deciding_player: object.owner,
@@ -2579,6 +2581,7 @@ pub(super) fn return_triggered_card(
     match cx.engine.begin_battlefield_entry(
         cx.top.clone(),
         BattlefieldEntryEvent {
+            mana_colors_spent_to_cast: Default::default(),
             prepared: false,
             object_id: source_id,
             deciding_player: destination_controller,
@@ -2666,6 +2669,7 @@ pub(super) fn put_ability_source_onto_battlefield_tapped_and_attacking(
     match cx.engine.begin_battlefield_entry(
         cx.top.clone(),
         BattlefieldEntryEvent {
+            mana_colors_spent_to_cast: Default::default(),
             prepared: false,
             object_id: source_id,
             deciding_player: cx.controller,
@@ -2808,6 +2812,7 @@ pub(super) fn exile_source_then_return_transformed(
     match cx.engine.begin_battlefield_entry(
         cx.top.clone(),
         BattlefieldEntryEvent {
+            mana_colors_spent_to_cast: Default::default(),
             prepared: false,
             object_id: source_id,
             deciding_player: destination_controller,
@@ -3372,6 +3377,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
         match engine.begin_battlefield_entry(
             cx.top.clone(),
             BattlefieldEntryEvent {
+                mana_colors_spent_to_cast: Default::default(),
                 prepared: false,
                 object_id,
                 deciding_player: controller,

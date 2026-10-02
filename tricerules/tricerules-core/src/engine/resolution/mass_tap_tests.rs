@@ -78,6 +78,7 @@ fn resolve_with_source_and_target(
     source: Option<ObjectId>,
 ) {
     let top = StackItem {
+        mana_colors_spent_to_cast: Default::default(),
         id: u32::MAX,
         controller: 3,
         card_id: "cryptic_command".into(),

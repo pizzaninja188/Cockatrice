@@ -425,6 +425,21 @@ fn boseiju_battlefield_mana_and_hand_channel_have_complete_fixtures() {
 }
 
 #[test]
+fn pentad_prism_counter_mana_ability_has_a_complete_fixture() {
+    let case = Case {
+        card: "pentad_prism".into(),
+        face: 0,
+        ability: Some(0),
+    };
+    assert_eq!(
+        evaluate(&case).unwrap(),
+        Outcome::Exercised,
+        "{}",
+        case.key()
+    );
+}
+
+#[test]
 fn pentavus_activated_abilities_have_complete_fixtures() {
     for ability in 0..2 {
         let case = Case {

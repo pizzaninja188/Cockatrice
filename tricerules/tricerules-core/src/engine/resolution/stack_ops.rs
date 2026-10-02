@@ -574,6 +574,7 @@ pub(super) fn copy_target_spell(
                 .stack_presentations
                 .insert(copy_id, copy_presentation.clone());
             let copy_template = StackItem {
+                mana_colors_spent_to_cast: Default::default(),
                 id: copy_id,
                 controller,
                 card_id: src.card_id.clone(),
@@ -679,4 +680,106 @@ pub(super) fn copy_target_spell(
     }
 
     Ok(EffectOutcome::Continue)
+}
+
+#[cfg(test)]
+mod cast_color_tests {
+    use super::*;
+
+    /// Internal executor coverage: no registered card currently copies permanent spells.
+    #[test]
+    fn pentad_prism_uncast_copy_factory_clears_actual_paid_colors_before_token_entry() {
+        let mut engine = GameEngine::new(
+            202_610_240,
+            &[0, 1],
+            20,
+            Some(vec![
+                vec!["pentad_prism".into(); 20],
+                vec!["island".into(); 20],
+            ]),
+            true,
+        )
+        .unwrap();
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.priority_idx = 0;
+        engine.state.players[0].mana_pool.white = 1;
+        engine.state.players[0].mana_pool.blue = 1;
+        engine
+            .apply_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
+                        cast_method: rv1::CastMethod::Normal as i32,
+                        source: Some(rv1::CastSource {
+                            location: Some(rv1::cast_source::Location::HandIndex(0)),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    })),
+                },
+            )
+            .unwrap();
+        let original = engine.state.stack.last().unwrap().clone();
+        assert_eq!(original.mana_colors_spent_to_cast.count(), 2);
+        assert!(original.cast_occurrence.is_some());
+        let mut events = Vec::new();
+        let mut result = EffectResult::default();
+        let prior = EffectResult::default();
+        let targets = [original.id];
+        let mut cx = EffectCx {
+            engine: &mut engine,
+            events: &mut events,
+            targets: &targets,
+            targets_by_role: &[],
+            target_damage: &[],
+            target_group_indices: &[],
+            top: &original,
+            controller: 0,
+            affected_player: 0,
+            spell_label: "internal copy fixture",
+            previous_effect_result: &prior,
+            effect_result: &mut result,
+            effect_index: 0,
+        };
+        copy_target_spell(
+            &mut cx,
+            SpellEffectKind::CopyTargetSpell {
+                count: 1,
+                spell_filter: Default::default(),
+            },
+        )
+        .unwrap();
+        let copy = engine.state.stack.last().unwrap();
+        let copy_id = copy.id;
+        assert_ne!(copy_id, original.id);
+        assert!(copy.is_copy);
+        assert!(copy.cast_occurrence.is_none());
+        assert_eq!(copy.mana_colors_spent_to_cast.count(), 0);
+        assert!(!engine.state.objects.contains_key(&copy_id));
+        assert_eq!(engine.state.stack[0].mana_colors_spent_to_cast.count(), 2);
+        for expected in [copy_id, original.id] {
+            for _ in 0..2 {
+                let actor = engine.state.priority_player_id();
+                engine
+                    .apply_command(
+                        actor,
+                        &rv1::RuledCommand {
+                            cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                        },
+                    )
+                    .unwrap();
+            }
+            assert_eq!(engine.state.objects[&expected].zone, Zone::Battlefield);
+            assert_eq!(
+                engine.state.objects[&expected].counter_count(CounterKind::Charge),
+                if expected == copy_id { 0 } else { 2 }
+            );
+            if expected == copy_id {
+                assert!(engine.state.objects[&expected].is_token());
+                assert_eq!(engine.state.objects[&original.id].zone, Zone::Stack);
+            }
+        }
+        assert!(engine.state.stack.is_empty());
+    }
 }

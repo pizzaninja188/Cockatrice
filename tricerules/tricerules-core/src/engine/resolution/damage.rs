@@ -444,6 +444,7 @@ mod damage_source_tests {
 
     fn item(id: ObjectId, source_permanent_id: Option<ObjectId>) -> StackItem {
         StackItem {
+            mana_colors_spent_to_cast: Default::default(),
             id,
             controller: 0,
             card_id: "test".into(),

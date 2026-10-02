@@ -1402,8 +1402,30 @@ pub enum EntryReplacementEffectId {
     },
 }
 
+/// Actual WUBRG mana debited for one cast. Colorless mana, life and nonmana payments
+/// do not contribute. The receipt lives on the cast and its proposed entry, never a permanent.
+#[derive(serde::Serialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ManaColorsSpent([bool; 5]);
+
+impl ManaColorsSpent {
+    pub(crate) fn from_presence(colors: [bool; 5]) -> Self {
+        Self(colors)
+    }
+
+    pub(crate) fn union(&mut self, other: Self) {
+        for (present, spent) in self.0.iter_mut().zip(other.0) {
+            *present |= spent;
+        }
+    }
+
+    pub fn count(self) -> u32 {
+        self.0.into_iter().filter(|present| *present).count() as u32
+    }
+}
+
 #[derive(serde::Serialize, Debug, Clone)]
 pub struct BattlefieldEntryEvent {
+    pub mana_colors_spent_to_cast: ManaColorsSpent,
     pub object_id: ObjectId,
     /// CR 616.1 decider: current controller, or owner when the object has no controller.
     pub deciding_player: PlayerId,
@@ -1707,6 +1729,8 @@ impl SpellCastMethod {
 
 #[derive(serde::Serialize, Debug, Clone)]
 pub struct StackItem {
+    /// Own committed cast payment; uncast spell copies explicitly carry an empty receipt.
+    pub mana_colors_spent_to_cast: ManaColorsSpent,
     pub id: ObjectId,
     pub controller: PlayerId,
     pub card_id: String,

@@ -909,6 +909,7 @@ impl GameEngine {
             .map(|object| object.card_id.clone())
             .unwrap_or_default();
         let item = StackItem {
+            mana_colors_spent_to_cast: Default::default(),
             id: source_id,
             controller,
             card_id,
@@ -1090,6 +1091,7 @@ impl GameEngine {
             .first()
             .ok_or(EngineError::Illegal("empty ordered combat-damage batch"))?;
         let item = StackItem {
+            mana_colors_spent_to_cast: Default::default(),
             id: first.event.source.object_id,
             controller: first.event.source.controller,
             card_id: self
@@ -1410,6 +1412,7 @@ mod tests {
 
     fn source_item(source: ObjectId, generation: u64) -> StackItem {
         StackItem {
+            mana_colors_spent_to_cast: Default::default(),
             id: source,
             controller: 0,
             card_id: "grizzly_bears".into(),

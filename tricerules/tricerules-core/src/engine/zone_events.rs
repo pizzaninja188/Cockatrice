@@ -402,6 +402,7 @@ mod timestamp_order_tests {
         controller: PlayerId,
     ) -> BattlefieldEntryEvent {
         BattlefieldEntryEvent {
+            mana_colors_spent_to_cast: Default::default(),
             prepared: false,
             object_id,
             deciding_player: controller,

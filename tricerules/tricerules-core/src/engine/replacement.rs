@@ -1496,6 +1496,7 @@ impl GameEngine {
                         let count = self.resolve_amount(
                             amount,
                             AmountContext {
+                                entry_mana_colors_spent: event.mana_colors_spent_to_cast,
                                 stack_item: None,
                                 controller: event.destination_controller,
                                 source_object_id: event.object_id,
@@ -1555,6 +1556,7 @@ impl GameEngine {
                         let count = self.resolve_amount(
                             amount,
                             AmountContext {
+                                entry_mana_colors_spent: Default::default(),
                                 stack_item: None,
                                 controller,
                                 source_object_id: *source_id,
@@ -3526,6 +3528,7 @@ mod tests {
         let object_id = engine.state.players[0].hand[0];
         engine.state.objects.get_mut(&object_id).unwrap().card_id = "tatterkite".into();
         let event = BattlefieldEntryEvent {
+            mana_colors_spent_to_cast: Default::default(),
             prepared: false,
             object_id,
             deciding_player: 0,
@@ -3572,6 +3575,7 @@ mod tests {
         let snapshot = engine.player_life_snapshot();
         engine.state.players[1].life = 1;
         let event = BattlefieldEntryEvent {
+            mana_colors_spent_to_cast: Default::default(),
             prepared: false,
             object_id: 999,
             deciding_player: 0,
@@ -3646,6 +3650,7 @@ mod tests {
         engine.state.objects.get_mut(&globe).unwrap().zone = Zone::Stack;
         engine.state.objects.get_mut(&dragon).unwrap().zone = Zone::Stack;
         let event = BattlefieldEntryEvent {
+            mana_colors_spent_to_cast: Default::default(),
             prepared: false,
             object_id: dragon,
             deciding_player: 0,
@@ -3705,6 +3710,7 @@ mod tests {
         engine.state.objects.get_mut(&globe).unwrap().zone = Zone::Battlefield;
         engine.state.objects.get_mut(&giant).unwrap().zone = Zone::Stack;
         let event = BattlefieldEntryEvent {
+            mana_colors_spent_to_cast: Default::default(),
             prepared: false,
             object_id: giant,
             deciding_player: 0,

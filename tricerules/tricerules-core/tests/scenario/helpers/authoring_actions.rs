@@ -23,10 +23,14 @@ pub(crate) fn activation(
         .cost_choices_by_ability
         .get(&key)
         .ok_or("ability not offered by generic battlefield fixture")?;
-    let costs = if e.state.objects[&object].card_id == "pentavus" && index == 0 {
-        // Bounded Pentavus fixture: select its single engine-authored fixed-kind source cost.
+    let costs = if matches!(
+        e.state.objects[&object].card_id.as_str(),
+        "pentavus" | "pentad_prism"
+    ) && index == 0
+    {
+        // These bounded fixtures select their single engine-authored fixed-kind source cost.
         if !choices.non_mana_costs_payable || choices.choices.len() != 1 {
-            return Err("Pentavus counter fixture is not payable".into());
+            return Err("counter fixture is not payable".into());
         }
         let choice = &choices.choices[0];
         let removal = choice

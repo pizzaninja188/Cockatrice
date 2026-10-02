@@ -1294,6 +1294,7 @@ impl GameEngine {
             });
         }
         self.state.stack.push(StackItem {
+            mana_colors_spent_to_cast: payment.mana_colors_spent,
             id: oid,
             controller: player,
             card_id: card_id.clone(),
@@ -1954,6 +1955,7 @@ impl GameEngine {
             },
         );
         self.state.stack.push(StackItem {
+            mana_colors_spent_to_cast: Default::default(),
             id: virtual_id,
             controller: player,
             card_id: card_id.clone(),
@@ -2787,6 +2789,7 @@ impl GameEngine {
         self.state.lands_played_this_turn += 1;
         let mut batch = RuledEventBatch::default();
         let item = StackItem {
+            mana_colors_spent_to_cast: Default::default(),
             id: oid,
             controller: player,
             card_id,
@@ -2824,6 +2827,7 @@ impl GameEngine {
         match self.begin_battlefield_entry(
             item,
             BattlefieldEntryEvent {
+                mana_colors_spent_to_cast: Default::default(),
                 prepared: false,
                 object_id: oid,
                 deciding_player: player,

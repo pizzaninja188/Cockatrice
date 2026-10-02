@@ -35,6 +35,7 @@ fn receipt(engine: &GameEngine, object_id: ObjectId) -> TriggerObjectRef {
 
 fn consume(engine: &mut GameEngine, chosen: Vec<TriggerObjectRef>) {
     let top = StackItem {
+        mana_colors_spent_to_cast: Default::default(),
         id: u32::MAX,
         controller: 0,
         card_id: "frantic_search".into(),

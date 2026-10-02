@@ -1,0 +1,74 @@
+{
+  "format_version": 1,
+  "oracle_id": "72e8d67a-41e6-4074-bcbd-b54ead995237",
+  "spans": [
+    {
+      "face_id": "pentad_prism",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "pentad_prism",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_pentad_prism::pentad_prism_complete_registry_identity_exists",
+      "covers": "complete registry identity exists"
+    },
+    {
+      "test": "scenario deck_coverage_pentad_prism::pentad_prism_counts_actual_distinct_colors_and_excludes_unused_pool",
+      "covers": "counts actual distinct colors and excludes unused pool"
+    },
+    {
+      "test": "scenario deck_coverage_pentad_prism::pentad_prism_each_color_is_immediate_and_zero_charge_is_unusable",
+      "covers": "each color is immediate and zero charge is unusable"
+    },
+    {
+      "test": "scenario deck_coverage_pentad_prism::pentad_prism_paid_entry_copies_use_their_own_colors_through_parked_choices",
+      "covers": "paid entry copies use their own colors through parked choices"
+    },
+    {
+      "test": "scenario deck_coverage_pentad_prism::pentad_prism_restricted_blue_and_ordinary_white_both_count",
+      "covers": "restricted blue and ordinary white both count"
+    },
+    {
+      "test": "scenario deck_coverage_pentad_prism::pentad_prism_reductions_count_only_actual_payment_and_free_cast_counts_zero",
+      "covers": "reductions count only actual payment and free cast counts zero"
+    },
+    {
+      "test": "scenario deck_coverage_pentad_prism::pentad_prism_noncast_reanimation_does_not_inherit_resolving_spells_three_colors",
+      "covers": "noncast reanimation does not inherit resolving spells three colors"
+    },
+    {
+      "test": "scenario deck_coverage_pentad_prism::pentad_prism_palette_preparation_is_paid_but_its_observer_does_not_match_artifacts",
+      "covers": "palette preparation is paid but its observer does not match artifacts"
+    },
+    {
+      "test": "scenario deck_coverage_pentad_prism::pentad_prism_airbend_alternative_recast_resets_identity_and_uses_actual_two_colors",
+      "covers": "airbend alternative recast resets identity and uses actual two colors"
+    },
+    {
+      "test": "scenario deck_coverage_pentad_prism::pentad_prism_dev_entry_is_zero_and_convoke_taps_are_not_mana_colors",
+      "covers": "dev entry is zero and convoke taps are not mana colors"
+    },
+    {
+      "test": "scenario deck_coverage_pentad_prism::pentad_prism_clone_excludes_unanimated_artifact_and_animation_retains_charge_kind",
+      "covers": "clone excludes unanimated artifact and animation retains charge kind"
+    },
+    {
+      "test": "scenario deck_coverage_pentad_prism::pentad_prism_serialized_paid_cast_and_parked_copy_choice_replay_exactly",
+      "covers": "serialized paid cast and parked copy choice replay exactly"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
