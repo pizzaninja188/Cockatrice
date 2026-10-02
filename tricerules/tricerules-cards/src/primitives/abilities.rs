@@ -1963,6 +1963,10 @@ pub enum StaticAbilityDef {
     EntersAsCopy {
         #[serde(default = "TargetFilter::default_creature")]
         filter: TargetFilter,
+        /// CR 707.9b: Phyrexian Metamorph's additional Artifact type is part of its
+        /// copiable values, rather than an independent layer-4 type-changing effect.
+        #[serde(default)]
+        artifact_in_addition: bool,
     },
     /// CR 614.12 / 305.6-305.7: choose one basic land type as this land enters, then offer the
     /// linked optional cost. The type choice and cost are one replacement-effect application;

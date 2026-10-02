@@ -801,7 +801,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 });
             }
         }
-        if let StaticAbilityDef::EntersAsCopy { filter } = ability {
+        if let StaticAbilityDef::EntersAsCopy { filter, .. } = ability {
             filter
                 .validate_characteristic_constraints()
                 .map_err(|reason| RegistryError::InvalidCard {

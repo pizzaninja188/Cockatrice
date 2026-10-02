@@ -9,6 +9,88 @@ fn engine() -> GameEngine {
     engine
 }
 
+// Internal incarnation regression: normal commands cannot move an entrant during its prompt.
+#[test]
+fn metamorph_internal_entry_copy_rejects_actual_entrant_leave_return() {
+    for (stale_entrant, decline) in [(true, false), (true, true), (false, false)] {
+        let mut engine = engine();
+        let source = object(&mut engine, "grizzly_bears", Zone::Battlefield, 1);
+        let entrant = object(&mut engine, "phyrexian_metamorph", Zone::Hand, 0);
+        engine.state.players[0].hand.push(entrant);
+        engine.state.players[0].mana_pool.blue = 1;
+        engine.state.players[0].mana_pool.colorless = 3;
+        let slot = engine.state.players[0].hand.len() - 1;
+        engine
+            .apply_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
+                        cast_method: rv1::CastMethod::Normal as i32,
+                        source: Some(rv1::CastSource {
+                            location: Some(rv1::cast_source::Location::HandIndex(slot as u32)),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    })),
+                },
+            )
+            .unwrap();
+        for actor in [0, 1] {
+            engine
+                .apply_command(
+                    actor,
+                    &rv1::RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                    },
+                )
+                .unwrap();
+        }
+        assert_eq!(engine.state.objects[&entrant].zone, Zone::Stack);
+        assert!(engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .candidates
+            .contains(&source));
+        let stale = if stale_entrant { entrant } else { source };
+        let original_zone = if stale_entrant {
+            Zone::Stack
+        } else {
+            Zone::Battlefield
+        };
+        for zone in [Zone::Graveyard, original_zone] {
+            super::super::resolution::move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                stale,
+                zone,
+                None,
+            )
+            .unwrap();
+        }
+        let before = format!("{:?}", engine.state);
+        let answer = rv1::RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    chosen_object_ids: if decline { vec![] } else { vec![source] },
+                    ..Default::default()
+                },
+            )),
+        };
+        assert!(
+            engine.apply_command(0, &answer).is_err(),
+            "the old prompt cannot bind a new entrant incarnation"
+        );
+        assert_eq!(format!("{:?}", engine.state), before);
+        assert!(engine.state.pending_resolution.is_some());
+        assert!(engine.state.pending_replacement_event.is_some());
+        assert!(engine.state.objects[&entrant].copiable_values.is_none());
+        assert_eq!(engine.state.objects[&entrant].copy_revision, 0);
+    }
+}
+
 fn object(engine: &mut GameEngine, card: &str, zone: Zone, controller: PlayerId) -> ObjectId {
     let oid = engine.state.next_object_id;
     engine.state.next_object_id += 1;

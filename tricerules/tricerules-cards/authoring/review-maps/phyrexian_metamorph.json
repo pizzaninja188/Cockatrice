@@ -1,0 +1,82 @@
+{
+  "format_version": 1,
+  "oracle_id": "340bbe8b-e987-4c3e-ab4e-9dee63e57d4f",
+  "spans": [
+    {
+      "face_id": "phyrexian_metamorph",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/mana_cost"
+      ]
+    },
+    {
+      "face_id": "phyrexian_metamorph",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_phyrexian_metamorph::phyrexian_metamorph_complete_registry_identity_exists",
+      "covers": "complete registry identity exists"
+    },
+    {
+      "test": "scenario deck_coverage_phyrexian_metamorph::phyrexian_metamorph_artifact_exception_is_copiable",
+      "covers": "artifact exception is copiable"
+    },
+    {
+      "test": "scenario deck_coverage_phyrexian_metamorph::phyrexian_metamorph_face_down_candidate_conceals_registry_identity",
+      "covers": "face down candidate conceals registry identity"
+    },
+    {
+      "test": "scenario deck_coverage_phyrexian_metamorph::phyrexian_metamorph_blue_or_life_payment_and_unaffordable_rejection",
+      "covers": "blue or life payment and unaffordable rejection"
+    },
+    {
+      "test": "scenario deck_coverage_phyrexian_metamorph::phyrexian_metamorph_source_filter_is_optional_untargeted_artifact_or_creature",
+      "covers": "source filter is optional untargeted artifact or creature"
+    },
+    {
+      "test": "scenario deck_coverage_phyrexian_metamorph::phyrexian_metamorph_noncreature_artifact_and_decline_preserve_exact_types",
+      "covers": "noncreature artifact and decline preserve exact types"
+    },
+    {
+      "test": "scenario deck_coverage_phyrexian_metamorph::phyrexian_metamorph_copies_tokens_without_becoming_token_and_excludes_counters",
+      "covers": "copies tokens without becoming token and excludes counters"
+    },
+    {
+      "test": "scenario deck_coverage_phyrexian_metamorph::phyrexian_metamorph_later_clone_replacement_replaces_the_artifact_exception",
+      "covers": "later clone replacement replaces the artifact exception"
+    },
+    {
+      "test": "scenario deck_coverage_phyrexian_metamorph::phyrexian_metamorph_copied_entry_replacements_and_draw_trigger_apply",
+      "covers": "copied entry replacements and draw trigger apply"
+    },
+    {
+      "test": "scenario deck_coverage_phyrexian_metamorph::phyrexian_metamorph_copied_sunburst_uses_its_own_committed_colors",
+      "covers": "copied sunburst uses its own committed colors"
+    },
+    {
+      "test": "scenario deck_coverage_phyrexian_metamorph::phyrexian_metamorph_structural_animated_room_preserves_exception_on_owned_doors",
+      "covers": "structural animated room preserves exception on owned doors"
+    },
+    {
+      "test": "scenario deck_coverage_phyrexian_metamorph::phyrexian_metamorph_bounce_clears_copy_and_recast_uses_a_new_source",
+      "covers": "bounce clears copy and recast uses a new source"
+    },
+    {
+      "test": "scenario deck_coverage_phyrexian_metamorph::phyrexian_metamorph_serialized_accepted_commands_replay_identically",
+      "covers": "serialized accepted commands replay identically"
+    },
+    {
+      "test": "scenario deck_coverage_phyrexian_metamorph::phyrexian_metamorph_four_nonconsecutive_seats_keep_copy_choice_with_its_controller",
+      "covers": "four nonconsecutive seats keep copy choice with its controller"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -545,6 +545,15 @@ impl GameEngine {
         event: &BattlefieldEntryEvent,
         effect_id: &EntryReplacementEffectId,
     ) -> Option<TargetFilter> {
+        self.entry_copy_definition(event, effect_id)
+            .map(|(filter, _)| filter)
+    }
+
+    fn entry_copy_definition(
+        &self,
+        event: &BattlefieldEntryEvent,
+        effect_id: &EntryReplacementEffectId,
+    ) -> Option<(TargetFilter, bool)> {
         let EntryReplacementEffectId::Intrinsic {
             object_id,
             copy_revision,
@@ -566,7 +575,10 @@ impl GameEngine {
             .get(*ability_index)?
             .definition
         {
-            StaticAbilityDef::EntersAsCopy { filter } => Some(filter.clone()),
+            StaticAbilityDef::EntersAsCopy {
+                filter,
+                artifact_in_addition,
+            } => Some((filter.clone(), *artifact_in_addition)),
             _ => None,
         }
     }
@@ -1498,6 +1510,14 @@ impl GameEngine {
         let candidate_card_ids = candidates
             .iter()
             .map(|oid| {
+                if self
+                    .state
+                    .objects
+                    .get(oid)
+                    .is_some_and(|object| object.zone == Zone::Battlefield && object.face_down)
+                {
+                    return String::new();
+                }
                 self.effective_card_identity(*oid)
                     .map(|(card_id, _)| card_id.to_string())
                     .unwrap_or_default()
@@ -1541,6 +1561,13 @@ impl GameEngine {
         });
         events.push(ev_log(prompt.clone()));
         let deciding_player = event.deciding_player;
+        let entering_zone = self.state.objects[&event.object_id].zone;
+        let entering_generation = self
+            .state
+            .zone_change_generation
+            .get(&event.object_id)
+            .copied()
+            .unwrap_or(0);
         self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
             Box::new(PendingBattlefieldEntry {
                 event,
@@ -1576,6 +1603,8 @@ impl GameEngine {
             },
             continuation: ResolutionContinuation::EntryCopySource {
                 stack: ParkedStackResolution::new(item),
+                entering_zone,
+                entering_generation,
             },
         });
     }
@@ -2962,8 +2991,12 @@ impl GameEngine {
         pending: PendingResolution,
         chosen: &[ObjectId],
     ) -> Result<RuledEventBatch, EngineError> {
-        let stack = match &pending.continuation {
-            ResolutionContinuation::EntryCopySource { stack } => stack.clone(),
+        let (stack, entering_zone, entering_generation) = match &pending.continuation {
+            ResolutionContinuation::EntryCopySource {
+                stack,
+                entering_zone,
+                entering_generation,
+            } => (stack.clone(), *entering_zone, *entering_generation),
             _ => return Err(EngineError::Illegal("copy-source continuation missing")),
         };
         let Some(pending_event) = self.state.pending_replacement_event.take() else {
@@ -2978,13 +3011,33 @@ impl GameEngine {
                 return Err(EngineError::Illegal("copy source choice is stale"));
             }
         };
+        if !self
+            .state
+            .objects
+            .get(&entry.event.object_id)
+            .is_some_and(|object| object.zone == entering_zone)
+            || self
+                .state
+                .zone_change_generation
+                .get(&entry.event.object_id)
+                .copied()
+                .unwrap_or(0)
+                != entering_generation
+        {
+            self.state.pending_replacement_event =
+                Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("entering copy object is stale"));
+        }
         let Some(effect_id) = entry.copy_source_effect.take() else {
             self.state.pending_replacement_event =
                 Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal("copy source choice is stale"));
         };
-        let Some(filter) = self.entry_copy_filter(&entry.event, &effect_id) else {
+        let Some((filter, artifact_in_addition)) =
+            self.entry_copy_definition(&entry.event, &effect_id)
+        else {
             entry.copy_source_effect = Some(effect_id);
             self.state.pending_replacement_event =
                 Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
@@ -3024,13 +3077,27 @@ impl GameEngine {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal("copy source is stale"));
             }
-            let Some(values) = self.copiable_values_for(source_id) else {
+            let Some(mut values) = self.copiable_values_for(source_id) else {
                 entry.copy_source_effect = Some(effect_id);
                 self.state.pending_replacement_event =
                     Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal("copy source is stale"));
             };
+            if artifact_in_addition {
+                fn add_artifact(face: &mut CardFace) {
+                    if !face.types.iter().any(|kind| kind == "Artifact") {
+                        face.types.push("Artifact".into());
+                    }
+                    face.is_artifact = true;
+                }
+                add_artifact(&mut values.face);
+                if let Some(faces) = &mut values.room_faces {
+                    for face in faces {
+                        add_artifact(face);
+                    }
+                }
+            }
             let Some(entering) = self.state.objects.get(&entry.event.object_id) else {
                 entry.copy_source_effect = Some(effect_id);
                 self.state.pending_replacement_event =

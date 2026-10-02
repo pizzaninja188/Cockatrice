@@ -1,0 +1,11 @@
+(
+  id: "phyrexian_metamorph",
+  name: "Phyrexian Metamorph",
+  face_id: "phyrexian_metamorph",
+  mana_cost: "{3}{U/P}",
+  types: ["Artifact", "Creature", "Phyrexian", "Shapeshifter"],
+  power: 0,
+  toughness: 0,
+  static_abilities: [(ability_id: "static_01", presentation: OracleLines([2]),
+    definition: EntersAsCopy(filter: (kind: AnyPermanent, permanent_types: [Artifact, Creature]), artifact_in_addition: true))],
+)

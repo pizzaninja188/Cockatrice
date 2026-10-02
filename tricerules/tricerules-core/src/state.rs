@@ -1119,6 +1119,8 @@ pub enum ResolutionContinuation {
     },
     EntryCopySource {
         stack: ParkedStackResolution,
+        entering_zone: Zone,
+        entering_generation: u64,
     },
     /// CR 303.4f: select a legal recipient after an entry-copy choice reveals an Aura.
     EntryAuraRecipient {
@@ -1222,7 +1224,7 @@ impl ResolutionContinuation {
             | Self::LibraryLook { stack, .. }
             | Self::Explore { stack, .. }
             | Self::ManifestDread { stack, .. }
-            | Self::EntryCopySource { stack }
+            | Self::EntryCopySource { stack, .. }
             | Self::EntryAuraRecipient { stack }
             | Self::Populate { stack, .. }
             | Self::Blight { stack, .. }
@@ -1268,7 +1270,7 @@ impl ResolutionContinuation {
             | Self::LibraryLook { stack, .. }
             | Self::Explore { stack, .. }
             | Self::ManifestDread { stack, .. }
-            | Self::EntryCopySource { stack }
+            | Self::EntryCopySource { stack, .. }
             | Self::EntryAuraRecipient { stack }
             | Self::Populate { stack, .. }
             | Self::Blight { stack, .. }
