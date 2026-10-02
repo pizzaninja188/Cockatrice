@@ -101,6 +101,35 @@ fn resolve(engine: &mut GameEngine, oid: u32) {
 }
 
 #[test]
+fn brainstorm_stays_physically_on_stack_until_put_back_completes() {
+    let mut engine = setup(507_004);
+    let spell = paid_spell(&mut engine, "brainstorm");
+    let generation = engine.state.zone_change_generation[&spell];
+    let choice = resolve_until_choice(&mut engine);
+    assert_eq!(choice.choice_kind(), rv1::ChoiceKind::HandCards);
+    assert_eq!(engine.state.objects[&spell].zone, Zone::Stack);
+    assert_eq!(engine.state.zone_change_generation[&spell], generation);
+    let batch = engine
+        .apply_command(
+            4,
+            &submit_resolution_choice(choice.candidate_object_ids[..2].to_vec()),
+        )
+        .unwrap();
+    assert_eq!(engine.state.objects[&spell].zone, Zone::Graveyard);
+    assert_eq!(engine.state.zone_change_generation[&spell], generation + 1);
+    assert_eq!(
+        batch
+            .events
+            .iter()
+            .filter(|event| matches!(&event.ev,
+                Some(rv1::ruled_event::Ev::StackResolved(exit)) if exit.object_id == spell
+            ))
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn reflection_actual_paid_cast_doubles_each_divination_draw_through_zone_funnel() {
     let mut engine = setup(506_001);
     let reflection = paid_spell(&mut engine, "thought_reflection");

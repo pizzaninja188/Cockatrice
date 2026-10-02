@@ -425,6 +425,23 @@ fn pentavus_activated_abilities_have_complete_fixtures() {
 }
 
 #[test]
+fn jace_wielder_loyalty_abilities_have_complete_fixtures() {
+    for ability in 0..2 {
+        let case = Case {
+            card: "jace,_wielder_of_mysteries".into(),
+            face: 0,
+            ability: Some(ability),
+        };
+        assert_eq!(
+            evaluate(&case).expect("Jace loyalty fixture"),
+            Outcome::Exercised,
+            "{}",
+            case.key()
+        );
+    }
+}
+
+#[test]
 fn trading_post_activated_abilities_have_complete_fixtures() {
     for ability in 0..4 {
         let case = Case {

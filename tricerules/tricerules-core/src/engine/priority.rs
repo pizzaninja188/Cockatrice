@@ -1,4 +1,4 @@
-use super::events::{ev_game_over, ev_log, ev_phase, ev_priority_changed, finish_with_events};
+use super::events::{ev_log, ev_phase, ev_priority_changed, finish_with_events};
 use super::legal_actions::fill_legal;
 use super::resolution::move_object_to_zone;
 use super::*;
@@ -217,6 +217,9 @@ impl GameEngine {
     /// remains in the game during resolution so mandatory trailing instructions can finish;
     /// the next command boundary then performs the CR 704.5b state-based action (CR 704.4).
     pub(super) fn commit_pending_library_losses(&mut self) {
+        if self.state.winner.is_some() {
+            return;
+        }
         for player in &mut self.state.players {
             if player.pending_library_loss {
                 player.pending_library_loss = false;
@@ -226,6 +229,9 @@ impl GameEngine {
     }
 
     pub(super) fn sweep_life(&mut self) {
+        if self.state.winner.is_some() {
+            return;
+        }
         for p in &mut self.state.players {
             if p.life <= 0 {
                 p.has_lost = true;
@@ -289,9 +295,11 @@ impl GameEngine {
             )
         });
         batch.events.push(ev_log(format!("P{player} conceded")));
+        // Apply the concession's already-ended control durations before it determines a winner.
+        self.reindex_battlefield_control(&mut batch.events);
         self.sweep_life();
         if self.state.winner.is_some() {
-            self.state.pending_resolution = None;
+            return Ok(self.finish_terminal_batch(batch));
         }
         if self.state.winner.is_none() {
             self.reconcile_opening_departure(player, &mut batch.events)?;
@@ -299,9 +307,12 @@ impl GameEngine {
         self.reconcile_departed_players(&mut batch.events)?;
         self.reindex_battlefield_control(&mut batch.events);
         self.reconcile_draw_departure(&mut batch.events)?;
+        if self.state.winner.is_some() {
+            return Ok(self.finish_terminal_batch(batch));
+        }
         self.apply_sbas(&mut batch.events)?;
-        if let Some(winner) = self.state.winner {
-            batch.events.push(ev_game_over(winner));
+        if self.state.winner.is_some() {
+            return Ok(self.finish_terminal_batch(batch));
         }
         batch.events.push(self.ev_zone_view_sync_tracked());
         fill_legal(&mut batch, self);
@@ -398,7 +409,10 @@ impl GameEngine {
         if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
             self.state.priority_idx = i;
         }
-        self.resolve_top_of_stack(&mut ev)?;
+        let progress = self.resolve_top_of_stack(&mut ev)?;
+        if progress == super::resolution::ResolutionProgress::GameEnded {
+            return Ok(finish_with_events(self, ev));
+        }
         // A tier-3 custom resolution may have parked mid-resolution awaiting a player choice
         // (CR 608): no player holds priority then — the ResolutionChoiceRequired event already
         // drives the deciding player — so don't advance priority or run SBAs until it completes.
@@ -463,6 +477,9 @@ impl GameEngine {
                             return Ok(finish_with_events(self, std::mem::take(ev)))
                         }
                         super::draw::DrawProgress::Complete(_) => {}
+                        super::draw::DrawProgress::GameEnded => {
+                            return Ok(finish_with_events(self, std::mem::take(ev)));
+                        }
                     }
                 }
                 self.finish_draw_step_action(ap, occurrence, ev)?;

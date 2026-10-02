@@ -318,6 +318,7 @@ pub(super) fn draw(
             Ok(EffectOutcome::Continue)
         }
         super::super::draw::DrawProgress::Parked => Ok(EffectOutcome::Suspended),
+        super::super::draw::DrawProgress::GameEnded => Ok(EffectOutcome::GameEnded),
     }
 }
 
@@ -351,6 +352,7 @@ pub(super) fn target_player_draws(
                 cx.effect_result.produced_objects.extend(done.receipts)
             }
             super::super::draw::DrawProgress::Parked => return Ok(EffectOutcome::Suspended),
+            super::super::draw::DrawProgress::GameEnded => return Ok(EffectOutcome::GameEnded),
         }
     }
     Ok(EffectOutcome::Continue)
@@ -359,8 +361,8 @@ pub(super) fn target_player_draws(
 pub(super) fn shuffle_resolving_spell_into_owners_library(
     cx: &mut EffectCx<'_>,
 ) -> Result<EffectOutcome, EngineError> {
-    // Created spell copies have no physical card. Their early retirement event was already
-    // emitted; the printed instruction still shuffles their owner's library (CR 701.24c).
+    // Created spell copies have no physical card; their ordinary completion retires the copy.
+    // The printed instruction still shuffles their owner's library (CR 701.24c).
     let owner = if cx.top.is_copy {
         cx.top.controller
     } else {
@@ -1357,6 +1359,7 @@ pub(super) fn draw_discard(
                     cx.effect_result.produced_objects.extend(done.receipts)
                 }
                 super::super::draw::DrawProgress::Parked => return Ok(EffectOutcome::Suspended),
+                super::super::draw::DrawProgress::GameEnded => return Ok(EffectOutcome::GameEnded),
             }
             choose_hand_cards_for_player(
                 cx,
@@ -1580,6 +1583,7 @@ fn choose_hand_cards_for_player(
                     cx.effect_result.produced_objects.extend(done.receipts)
                 }
                 super::super::draw::DrawProgress::Parked => return Ok(EffectOutcome::Suspended),
+                super::super::draw::DrawProgress::GameEnded => return Ok(EffectOutcome::GameEnded),
             }
         }
         return Ok(EffectOutcome::Continue);

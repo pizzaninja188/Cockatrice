@@ -18,9 +18,9 @@
 #include "game/ruled/ruled_mana_pool_tracker.h"
 #include "game/ruled/ruled_pending_cast.h"
 #include "game/ruled/ruled_presentation_resolver.h"
+#include "game/ruled/ruled_public_zone_order_plan.h"
 #include "game/ruled/ruled_restricted_mana_model.h"
 #include "game/ruled/ruled_zone_snapshot_policy.h"
-#include "game/ruled/ruled_public_zone_order_plan.h"
 
 #include <QBuffer>
 #include <QJsonArray>
@@ -782,7 +782,7 @@ TEST_F(RuledClientTest, ZeroCostWaterbendCompletesWithoutAnImpossibleContributio
     EXPECT_FALSE(payment.beginSubmission());
 }
 
-TEST_F(RuledClientTest, WaterbendResolutionRefreshAndRejectedSubmissionPreserveStaging)
+TEST_F(RuledClientTest, WaterbendRefreshAndImmediateRejectionPreserveStagingButNewPromptSupersedesAck)
 {
     ruled::v1::RuledEventBatch batch;
     auto *choice = batch.add_events()->mutable_resolution_choice_required();
@@ -815,9 +815,17 @@ TEST_F(RuledClientTest, WaterbendResolutionRefreshAndRejectedSubmissionPreserveS
     payment.pending = false;
     state->payResolutionMana();
     apply(batch); // A same-source refresh can arrive before the rejection acknowledgement.
+    const auto freshRevision = state->pendingChoiceRevision;
+    const auto freshTransaction = payment.transaction();
+    QSignalSpy finished(state, &RuledClientState::resolutionPaymentSubmissionFinished);
     host.answerPendingAck(false);
     EXPECT_FALSE(payment.submitting);
-    EXPECT_EQ(payment.selection.waterbend_size(), 1);
+    // The source object is not a choice-occurrence identity. A freshly published prompt must
+    // not be overwritten by the previous submission's ACK, even when the source is unchanged.
+    EXPECT_EQ(payment.selection.waterbend_size(), 0);
+    EXPECT_EQ(state->pendingChoiceRevision, freshRevision);
+    EXPECT_EQ(payment.transaction(), freshTransaction);
+    EXPECT_EQ(finished.count(), 0);
     state->declineResolutionMana();
     EXPECT_FALSE(host.sentCommands.last().submit_resolution_choice().has_payment());
     host.answerPendingAck(true);
@@ -1074,8 +1082,8 @@ TEST(RuledPendingTargetTest, SpellPromptUsesFaceAndActiveModeContext)
     group.minTargets = 1;
     group.maxTargets = 1;
     targets.groups.append(group);
-    spell.selectedModes.append({7, QStringLiteral("Counter target spell unless its controller pays {3}"), true,
-                                targets, {}, {}});
+    spell.selectedModes.append(
+        {7, QStringLiteral("Counter target spell unless its controller pays {3}"), true, targets, {}, {}});
     state.handActions[ruled::v1::HAND_ACTION_CAST_SPELL]
         .modalOptionsByCastKey[RuledClientState::handCastActionKey(3, 0, ruled::v1::CAST_METHOD_NORMAL)] = {
         {7, QStringLiteral("Counter target spell unless its controller pays {3}"), true, true, targets}};
@@ -1539,16 +1547,14 @@ TEST(RuledPendingTargetTest, BoundedCastCostGroupStaysOpenUntilItsSelectionCount
     EXPECT_EQ(ruledCastCostGroupSelectionCount(spell, 4), 0);
     EXPECT_FALSE(ruledCastCostGroupCanConfirm(spell, group));
 
-    spell.castCostSelections.append(
-        {4, 10, RuledPendingCastCostSelection::ObjectKind::None, 0, 0, 0});
+    spell.castCostSelections.append({4, 10, RuledPendingCastCostSelection::ObjectKind::None, 0, 0, 0});
     EXPECT_EQ(ruledCastCostGroupSelectionCount(spell, 4), 1);
     EXPECT_TRUE(ruledCastCostOptionAlreadySelected(spell, 4, 10));
     EXPECT_TRUE(ruledCastCostGroupCanConfirm(spell, group));
     EXPECT_FALSE(ruledCastCostGroupSelectionCompletesImmediately(spell, group));
     EXPECT_FALSE(ruledCastCostGroupsComplete(spell));
 
-    spell.castCostSelections.append(
-        {4, 11, RuledPendingCastCostSelection::ObjectKind::None, 0, 0, 0});
+    spell.castCostSelections.append({4, 11, RuledPendingCastCostSelection::ObjectKind::None, 0, 0, 0});
     EXPECT_EQ(ruledCastCostGroupSelectionCount(spell, 4), 2);
     EXPECT_TRUE(ruledCastCostGroupCanConfirm(spell, group));
     EXPECT_FALSE(ruledCastCostGroupSelectionCompletesImmediately(spell, group));
@@ -1566,8 +1572,7 @@ TEST(RuledPendingTargetTest, SingleCastCostChoiceCompletesImmediately)
     group.groupIndex = 7;
     group.min = 1;
     group.max = 1;
-    spell.castCostSelections.append(
-        {7, 1, RuledPendingCastCostSelection::ObjectKind::None, 0, 0, 0});
+    spell.castCostSelections.append({7, 1, RuledPendingCastCostSelection::ObjectKind::None, 0, 0, 0});
 
     EXPECT_TRUE(ruledCastCostGroupSelectionCompletesImmediately(spell, group));
 }
@@ -2401,8 +2406,7 @@ TEST_F(RuledClientTest, AggregateObjectPaymentUsesAuthoritativeContributionsAndG
     choice->set_kind(ruled::v1::COST_CHOICE_KIND_EXILE);
     choice->set_max(2);
     choice->mutable_aggregate_minimum()->set_minimum(3);
-    choice->mutable_aggregate_minimum()->set_contribution_kind(
-        ruled::v1::OBJECT_CONTRIBUTION_KIND_MANA_VALUE);
+    choice->mutable_aggregate_minimum()->set_contribution_kind(ruled::v1::OBJECT_CONTRIBUTION_KIND_MANA_VALUE);
     for (const auto &[objectId, generation, contribution] :
          std::array<std::tuple<quint32, quint64, qint64>, 2>{{{501, 7, 1}, {502, 9, 2}}}) {
         choice->add_candidate_ids(objectId);
@@ -3690,7 +3694,8 @@ TEST_F(RuledClientTest, BlockerStagingPairsToAnAttackerAndSyncsAPreview)
     auto *ad = declared.add_events()->mutable_attackers_declared();
     *ad->add_assignments() = playerAttackAssignment(100, kLocalPlayer);
     *ad->add_assignments() = playerAttackAssignment(101, kLocalPlayer); // Only blocker 200 can block this attacker.
-    *ad->add_assignments() = playerAttackAssignment(102, kLocalPlayer); // Unblockable: no legal pair targets this attacker.
+    *ad->add_assignments() =
+        playerAttackAssignment(102, kLocalPlayer); // Unblockable: no legal pair targets this attacker.
     apply(declared);
     // The opponent is the active player during our declare-blockers step.
     auto batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent);
@@ -3746,8 +3751,7 @@ TEST_F(RuledClientTest, BlockerStagingPairsToAnAttackerAndSyncsAPreview)
 TEST_F(RuledClientTest, RejectedBlockDeclarationRollsBackTheLocalGuard)
 {
     ruled::v1::RuledEventBatch declared;
-    *declared.add_events()->mutable_attackers_declared()->add_assignments() =
-        playerAttackAssignment(100, kLocalPlayer);
+    *declared.add_events()->mutable_attackers_declared()->add_assignments() = playerAttackAssignment(100, kLocalPlayer);
     apply(declared);
     auto batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent);
     batch.add_events()->mutable_priority_changed()->set_player_id(kLocalPlayer);
@@ -3824,8 +3828,7 @@ TEST_F(RuledClientTest, CombatStagingIgnoresCreaturesOutsideEngineSelectableSets
     EXPECT_TRUE(state->isPendingAttacker(100));
 
     ruled::v1::RuledEventBatch declared;
-    *declared.add_events()->mutable_attackers_declared()->add_assignments() =
-        playerAttackAssignment(300, kLocalPlayer);
+    *declared.add_events()->mutable_attackers_declared()->add_assignments() = playerAttackAssignment(300, kLocalPlayer);
     apply(declared);
     auto blockers = phaseBatch(ruled::v1::PHASE_ID_DECLARE_BLOCKERS, kOpponent);
     blockers.add_events()->mutable_priority_changed()->set_player_id(kLocalPlayer);
@@ -4072,10 +4075,8 @@ TEST_F(RuledClientTest, BattlefieldAbilityIndicesPreserveAuthoredZoneGaps)
     view->set_player_id(kLocalPlayer);
     auto *object = view->add_battlefield_objects();
     object->set_object_id(203);
-    for (const auto &[abilityIndex, label] :
-         std::initializer_list<std::pair<quint32, const char *>>{{1, "+1: Create an emblem."},
-                                                                {2, "0: Surveil 2."},
-                                                                {3, "-2: Tap target creature."}}) {
+    for (const auto &[abilityIndex, label] : std::initializer_list<std::pair<quint32, const char *>>{
+             {1, "+1: Create an emblem."}, {2, "0: Surveil 2."}, {3, "-2: Tap target creature."}}) {
         auto *ability = object->add_activated_abilities();
         ability->set_ability_index(abilityIndex);
         ability->set_text(label);
@@ -4684,8 +4685,7 @@ TEST_F(RuledClientTest, ManaPaymentChoiceCreatesRefreshesAndSerializesDecisions)
 
     state->payment.begin(true);
     ruled::v1::RuledCommand paymentCommand;
-    paymentCommand.mutable_submit_resolution_choice()->set_decision(
-        ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+    paymentCommand.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
     const auto previewRequest = state->payment.requestAction(paymentCommand);
     ruled::v1::RuledEventBatch previewBatch;
     auto *preview = previewBatch.mutable_payment_preview();
@@ -4728,6 +4728,253 @@ TEST_F(RuledClientTest, RejectedManaPaymentRestoresThePrompt)
     host.answerPendingAck(false);
     EXPECT_TRUE(state->isResolutionPaymentActive());
     EXPECT_TRUE(state->resolutionPaymentCurrentlyLegal());
+}
+
+enum class ChoiceAckVariant
+{
+    Payment,
+    BranchDecline,
+    SpecialCast,
+    Replacement,
+    BranchSelect,
+    Defender
+};
+
+ruled::v1::RuledEventBatch authoritySnapshot(bool localAuthority = false)
+{
+    ruled::v1::RuledEventBatch batch;
+    batch.add_events()->mutable_active_public_reveal_snapshot();
+    auto *view = batch.add_events()->mutable_zone_view();
+    view->set_battlefields_unchanged(true);
+    view->add_per_player()->set_player_id(kLocalPlayer);
+    if (localAuthority)
+        (*batch.mutable_legal_by_player())[kLocalPlayer];
+    return batch;
+}
+
+RuledClientState::RuledPendingChoice authorityChoice(ChoiceAckVariant variant)
+{
+    using Kind = RuledClientState::ChoiceKind;
+    RuledClientState::RuledPendingChoice choice;
+    choice.promptText = QStringLiteral("Original choice");
+    RuledChoiceOption option;
+    option.enabled = true;
+    option.label = QStringLiteral("Published option");
+    option.index = 4;
+    switch (variant) {
+        case ChoiceAckVariant::Payment:
+            choice.kind = Kind::ResolutionPayment;
+            choice.paymentSourceOid = 900;
+            choice.genericManaCost = 4;
+            choice.paymentCurrentlyLegal = true;
+            break;
+        case ChoiceAckVariant::BranchDecline:
+        case ChoiceAckVariant::BranchSelect:
+            choice.kind = Kind::ResolutionBranch;
+            choice.mayDecline = true;
+            break;
+        case ChoiceAckVariant::SpecialCast:
+            choice.kind = Kind::SpecialCast;
+            choice.candidateOids = {700};
+            option.index = 0;
+            break;
+        case ChoiceAckVariant::Replacement:
+            choice.kind = Kind::ReplacementOption;
+            option.index = 7001;
+            break;
+        case ChoiceAckVariant::Defender: {
+            choice.kind = Kind::AttackingTokenDefender;
+            ruled::v1::CombatDefenderOption defender;
+            defender.mutable_defender()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+            defender.mutable_defender()->set_object_id(500);
+            defender.set_defender_zone_change_generation(9);
+            defender.set_defending_player_id(kOpponent);
+            choice.combatDefenderOptions.append(defender);
+            break;
+        }
+    }
+    choice.choiceOptions.append(option);
+    return choice;
+}
+
+void submitAuthorityChoice(RuledClientState *state, ChoiceAckVariant variant)
+{
+    switch (variant) {
+        case ChoiceAckVariant::Payment:
+            state->declineResolutionMana();
+            break;
+        case ChoiceAckVariant::BranchDecline:
+            state->declinePendingClickChoice();
+            break;
+        case ChoiceAckVariant::SpecialCast:
+            state->submitPendingChoiceOption(0);
+            break;
+        case ChoiceAckVariant::Replacement:
+            state->submitPendingChoiceOption(7001);
+            break;
+        case ChoiceAckVariant::BranchSelect:
+            state->submitPendingChoiceOption(4);
+            break;
+        case ChoiceAckVariant::Defender:
+            EXPECT_TRUE(state->chooseAttackPermanentDefender(500));
+            break;
+    }
+}
+
+TEST_F(RuledClientTest, AuthoritativeRevocationClearsLocalActionsAndPreservesPhysicalStack)
+{
+    auto choice = authorityChoice(ChoiceAckVariant::Payment);
+    choice.kind = RuledClientState::ChoiceKind::ResolutionPick;
+    choice.pickZone = RuledClientState::PickZone::Hand;
+    state->setPendingChoice(choice);
+    state->pendingSpellCast.emplace();
+    state->pendingSpellCast->set_transaction_id(23);
+    state->stackOidOrder = {900};
+    state->engineOidToCardId.insert(900, 42);
+    state->payment.begin();
+    ASSERT_TRUE(state->payment.stageMana(QChar('U'), 0, 51));
+    state->payment.clear();
+    state->payment.begin();
+    ASSERT_TRUE(state->payment.stageMana(QChar('U'), 0, 52));
+    const auto revision = state->pendingChoiceRevision;
+    QSignalSpy picker(state, &RuledClientState::resolutionHandPickUiChanged);
+    apply(authoritySnapshot());
+    EXPECT_FALSE(state->pendingChoice.has_value());
+    EXPECT_FALSE(state->pendingSpellCast.has_value());
+    EXPECT_FALSE(state->payment.active);
+    EXPECT_NE(state->pendingChoiceRevision, revision);
+    EXPECT_TRUE(state->payment.takeAllOptimisticManaCounterIds().isEmpty());
+    EXPECT_EQ(state->stackOidOrder, QVector<quint32>({900}));
+    EXPECT_EQ(state->engineOidToCardId.value(900), 42);
+    EXPECT_TRUE(host.removedSyntheticCards.isEmpty());
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    ASSERT_FALSE(picker.isEmpty());
+    EXPECT_EQ(picker.last().at(0).toInt(), -1);
+}
+
+TEST_F(RuledClientTest, EmptyAuthoritySnapshotRetiresPriorityOnBothRecipients)
+{
+    for (int recipient : {kLocalPlayer, kOpponent}) {
+        host.local = recipient;
+        state->currentPriorityPlayerId = recipient;
+        host.priorityPlayer = recipient;
+        apply(authoritySnapshot());
+        EXPECT_EQ(state->currentPriorityPlayerId, -1);
+        EXPECT_EQ(host.priorityPlayer, -1);
+    }
+}
+
+TEST_F(RuledClientTest, EmptyLocalAuthorityPreservesRetainedAndFreshRemotePriority)
+{
+    for (bool freshPriority : {false, true}) {
+        host.local = kOpponent;
+        state->currentPriorityPlayerId = kLocalPlayer;
+        host.priorityPlayer = kLocalPlayer;
+        auto batch = authoritySnapshot();
+        if (freshPriority)
+            batch.add_events()->mutable_priority_changed()->set_player_id(kLocalPlayer);
+        apply(batch);
+        EXPECT_EQ(state->currentPriorityPlayerId, kLocalPlayer);
+        EXPECT_EQ(host.priorityPlayer, kLocalPlayer);
+    }
+}
+
+TEST_F(RuledClientTest, AuthorityMarkerPreservesLivePlayersAndBothCombatPreviews)
+{
+    for (int variant : {0, 1, 2}) {
+        state->setPendingChoice(authorityChoice(ChoiceAckVariant::Payment));
+        state->payment.begin();
+        const auto revision = state->pendingChoiceRevision;
+        const auto transaction = state->payment.transaction();
+        auto batch = authoritySnapshot(variant == 0);
+        if (variant == 1)
+            batch.add_events()->mutable_attackers_preview()->set_declaring_player_id(kLocalPlayer);
+        if (variant == 2)
+            batch.add_events()->mutable_blockers_preview()->set_declaring_player_id(kLocalPlayer);
+        apply(batch);
+        EXPECT_TRUE(state->isResolutionPaymentActive());
+        EXPECT_TRUE(state->payment.active);
+        EXPECT_EQ(state->pendingChoiceRevision, revision);
+        EXPECT_EQ(state->payment.transaction(), transaction);
+    }
+}
+
+TEST_F(RuledClientTest, AuthorityRevocationPreservesFreshOpponentWaiting)
+{
+    state->setPendingChoice(authorityChoice(ChoiceAckVariant::Payment));
+    state->payment.begin();
+    auto batch = authoritySnapshot();
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kOpponent);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_MANA_PAYMENT);
+    choice->set_generic_mana_cost(2);
+    apply(batch);
+    EXPECT_FALSE(state->pendingChoice.has_value());
+    EXPECT_FALSE(state->payment.active);
+    EXPECT_TRUE(state->isWaitingForChoice());
+    EXPECT_EQ(state->choiceWaitingPlayer(), kOpponent);
+}
+
+TEST_F(RuledClientTest, AuthorityRevocationSupersedesAllSixLateChoiceAcknowledgements)
+{
+    for (const auto variant :
+         {ChoiceAckVariant::Payment, ChoiceAckVariant::BranchDecline, ChoiceAckVariant::SpecialCast,
+          ChoiceAckVariant::Replacement, ChoiceAckVariant::BranchSelect, ChoiceAckVariant::Defender}) {
+        for (const bool revoked : {false, true}) {
+            for (const bool accepted : {false, true}) {
+                SCOPED_TRACE(::testing::Message()
+                             << static_cast<int>(variant) << ", revoked=" << revoked << ", accepted=" << accepted);
+                host.sentCommands.clear();
+                const auto original = authorityChoice(variant);
+                state->setPendingChoice(original);
+                state->payment.begin();
+                submitAuthorityChoice(state, variant);
+                ASSERT_EQ(host.sentCommands.size(), 1);
+                ASSERT_FALSE(state->pendingChoice.has_value());
+                if (revoked)
+                    apply(authoritySnapshot());
+                const auto revision = state->pendingChoiceRevision;
+                const auto transaction = state->payment.transaction();
+                QSignalSpy finished(state, &RuledClientState::resolutionPaymentSubmissionFinished);
+                host.answerPendingAck(accepted);
+                EXPECT_EQ(state->pendingChoice.has_value(), !revoked && !accepted);
+                if (revoked) {
+                    EXPECT_FALSE(state->payment.active);
+                    EXPECT_EQ(state->pendingChoiceRevision, revision);
+                    EXPECT_EQ(state->payment.transaction(), transaction);
+                    EXPECT_EQ(finished.count(), 0);
+                } else if (!accepted) {
+                    EXPECT_EQ(state->pendingChoice->kind, original.kind);
+                    EXPECT_EQ(state->pendingChoice->promptText, original.promptText);
+                }
+            }
+        }
+    }
+}
+
+TEST_F(RuledClientTest, AuthorityChoiceRevisionProtectsNewPaymentFromSameSource)
+{
+    state->setPendingChoice(authorityChoice(ChoiceAckVariant::Payment));
+    state->payment.begin();
+    state->declineResolutionMana();
+    auto next = authoritySnapshot(true);
+    auto *choice = next.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_MANA_PAYMENT);
+    choice->set_source_object_id(900);
+    choice->set_generic_mana_cost(7);
+    choice->set_payment_currently_legal(true);
+    choice->set_prompt_text("New payment");
+    apply(next);
+    state->payment.begin();
+    const auto transaction = state->payment.transaction();
+    QSignalSpy finished(state, &RuledClientState::resolutionPaymentSubmissionFinished);
+    host.answerPendingAck(false);
+    ASSERT_TRUE(state->isResolutionPaymentActive());
+    EXPECT_EQ(state->resolutionPaymentGenericCost(), 7);
+    EXPECT_EQ(state->pendingChoice->promptText, QStringLiteral("New payment"));
+    EXPECT_EQ(state->payment.transaction(), transaction);
+    EXPECT_EQ(finished.count(), 0);
 }
 
 TEST_F(RuledClientTest, ManaPaymentPromptsOnlyTheDecidingPlayer)
@@ -4974,8 +5221,8 @@ TEST_F(RuledClientTest, NestedPaymentMenuOffersOnlyEnginePublishedManaAbilities)
     green.manaAbility = true;
     RuledAbilityEntry blueOrGreen{"{T}: Add {U} or {G}.", {}, "U/G", {}, false};
     blueOrGreen.manaAbility = true;
-    state->activatedAbilitiesByOid[203] = {
-        RuledAbilityEntry{"Waterbend {5}: Put a counter.", {}, {}, {}, true}, green, blueOrGreen};
+    state->activatedAbilitiesByOid[203] = {RuledAbilityEntry{"Waterbend {5}: Put a counter.", {}, {}, {}, true}, green,
+                                           blueOrGreen};
     const auto options = RuledPendingCast::cardActionMenuOptions({face}, *state, 203, true);
     ASSERT_EQ(options.size(), 3);
     EXPECT_EQ(options.at(0).kind, RuledCardActionMenuOption::Kind::ActivateAbility);
@@ -5054,8 +5301,8 @@ TEST(RuledPendingCastTest, ActivatedVariableManaCostScalesEveryXPipAndPreservesC
 
     // Storage-counter X is chosen by its bounded split prompt, not by the mana-cost prompt.
     EXPECT_EQ(ruledActivatedManaXPipCount("{X}", true), 0);
-    const auto split = ruledPromptXCounterManaSplit(
-        4, [](RuledXCounterManaPromptStep step, quint32) -> std::optional<quint32> {
+    const auto split =
+        ruledPromptXCounterManaSplit(4, [](RuledXCounterManaPromptStep step, quint32) -> std::optional<quint32> {
             return step == RuledXCounterManaPromptStep::ChooseX ? 3u : 2u;
         });
     ASSERT_TRUE(split);
@@ -5458,7 +5705,8 @@ TEST_F(RuledClientTest, SpecialCastKeepsOfferWhileStagingAndOnlyDeclinesExplicit
     ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast));
     ASSERT_EQ(state->pendingChoiceOptions().size(), 2);
     quint32 requested = 0;
-    QObject::connect(state, &RuledClientState::specialCastRequested, state, [&requested](quint32 oid) { requested = oid; });
+    QObject::connect(state, &RuledClientState::specialCastRequested, state,
+                     [&requested](quint32 oid) { requested = oid; });
     host.sentCommands.clear();
     state->submitPendingChoiceOption(1);
     EXPECT_EQ(requested, 700u);
@@ -5699,7 +5947,7 @@ TEST_F(RuledClientTest, NormalWarpAndSneakHandOffersKeepDistinctMethodsAndCostCh
         action->set_hand_index(3);
         action->set_card_name("Knight Luminary");
         action->set_cast_method(method);
-        action->set_cost(method == ruled::v1::CAST_METHOD_WARP   ? "{1}{W}"
+        action->set_cost(method == ruled::v1::CAST_METHOD_WARP    ? "{1}{W}"
                          : method == ruled::v1::CAST_METHOD_SNEAK ? "{2}{W}"
                                                                   : "{3}{W}");
         action->add_eligible_restricted_mana_group_ids(static_cast<quint32>(method));
@@ -6251,16 +6499,14 @@ TEST_F(RuledClientTest, ParsesTeamworkCohortsTargetRequirementsAndAllModesCost)
     teamwork->set_selectable(true);
     teamwork->set_object_min(1);
     teamwork->set_object_max(2);
-    teamwork->mutable_aggregate_minimum()->set_contribution_kind(
-        ruled::v1::OBJECT_CONTRIBUTION_KIND_CURRENT_POWER);
+    teamwork->mutable_aggregate_minimum()->set_contribution_kind(ruled::v1::OBJECT_CONTRIBUTION_KIND_CURRENT_POWER);
     teamwork->mutable_aggregate_minimum()->set_minimum(4);
     auto *candidate = teamwork->add_candidate_objects();
     candidate->mutable_object()->set_object_id(900);
     candidate->mutable_object()->set_zone_change_generation(12);
     candidate->set_contribution(4);
 
-    auto *targets = &(*(*batch.mutable_legal_by_player())[kLocalPlayer]
-                          .mutable_valid_targets_by_hand_slot())[4u << 8];
+    auto *targets = &(*(*batch.mutable_legal_by_player())[kLocalPlayer].mutable_valid_targets_by_hand_slot())[4u << 8];
     auto *requirement = targets->add_cast_cost_requirements();
     requirement->set_group_index(0);
     requirement->mutable_required_cost()->set_group_index(3);
@@ -6722,8 +6968,8 @@ TEST_F(RuledClientTest, OrderedLibrarySearchSubmitsCardsInClickOrder)
     auto *rcr = batch.add_events()->mutable_resolution_choice_required();
     rcr->set_deciding_player_id(kLocalPlayer);
     rcr->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_SEARCH);
-    rcr->set_prompt_text(
-        "Search your library for up to two basic lands. Choose them in order: the first enters the battlefield tapped, and any remaining chosen card goes into your hand.");
+    rcr->set_prompt_text("Search your library for up to two basic lands. Choose them in order: the first enters the "
+                         "battlefield tapped, and any remaining chosen card goes into your hand.");
     rcr->set_min(0);
     rcr->set_max(2);
     rcr->set_ordered(true);
@@ -7745,11 +7991,16 @@ TEST_F(RuledClientTest, ProposedSameNameTokensRemainDistinctAndMalformedIdentity
     for (int defect = 0; defect < 5; ++defect) {
         auto malformed = batch;
         auto *bad = malformed.mutable_events(0)->mutable_resolution_choice_required();
-        if (defect == 0) bad->mutable_candidate_token_identities()->RemoveLast();
-        if (defect == 1) bad->mutable_candidate_token_identities(0)->clear_types();
-        if (defect == 2) bad->mutable_candidate_token_identities(0)->set_name("Wrong name");
-        if (defect == 3) bad->set_candidate_server_card_ids(1, 0);
-        if (defect == 4) bad->set_candidate_object_ids(1, 77u);
+        if (defect == 0)
+            bad->mutable_candidate_token_identities()->RemoveLast();
+        if (defect == 1)
+            bad->mutable_candidate_token_identities(0)->clear_types();
+        if (defect == 2)
+            bad->mutable_candidate_token_identities(0)->set_name("Wrong name");
+        if (defect == 3)
+            bad->set_candidate_server_card_ids(1, 0);
+        if (defect == 4)
+            bad->set_candidate_object_ids(1, 77u);
         apply(malformed);
         EXPECT_FALSE(state->isResolutionHandPickActive());
         EXPECT_EQ(host.dialogRequests, 0);
@@ -8432,8 +8683,9 @@ When Spyglass Siren enters, create a Map token.</text></face>
     QSignalSpy timeline(state, &RuledClientState::engineTimeline);
     apply(batch);
     ASSERT_EQ(timeline.count(), 1);
-    EXPECT_EQ(timeline.last().at(0).toString(), QStringLiteral(
-        "Triggered: Spyglass Siren - When Spyglass Siren enters, create a Map token. [target retained]\n"));
+    EXPECT_EQ(timeline.last().at(0).toString(),
+              QStringLiteral(
+                  "Triggered: Spyglass Siren - When Spyglass Siren enters, create a Map token. [target retained]\n"));
     host.presentationCards.clear();
     apply(batch);
     EXPECT_EQ(timeline.last().at(0).toString(),

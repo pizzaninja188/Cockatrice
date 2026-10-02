@@ -110,6 +110,7 @@ impl GameEngine {
                 &mut events,
             )? {
                 super::super::draw::DrawProgress::Parked => Ok(finish_with_events(self, events)),
+                super::super::draw::DrawProgress::GameEnded => Ok(finish_with_events(self, events)),
                 super::super::draw::DrawProgress::Complete(done) => {
                     self.complete_draw_transaction(done, events)
                 }

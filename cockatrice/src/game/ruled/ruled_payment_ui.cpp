@@ -48,6 +48,21 @@ RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
         actions->ruledPendingCast->clearSpell();
         clear();
     });
+    QObject::connect(state, &RuledClientState::localActionAuthorityRevoked, actions, [this] {
+        if (!actions->player->getPlayerInfo()->getLocal())
+            return;
+        suspendedPayments.clear();
+        actions->manaPaymentCounterIds.clear();
+        actions->midCastLandTapStack.clear();
+        clearRestrictedManaPaymentSelections();
+        actions->ruledPendingCast->clearAbility();
+        clearPendingRuledSpellCast();
+        emit actions->ruledActivatedAbilityTargetPendingChanged(false, {});
+        emit actions->ruledAbilityActivationPendingChanged(false);
+        emit actions->ruledAbilityCostPromptChanged();
+        emit actions->ruledGraveyardCostSelectionChanged(false, 0, 0);
+        emit actions->landTapUndoAvailableChanged(actions->landTapUndoCurrentlyAvailable());
+    });
 }
 
 void RuledPaymentUi::reconcileEnginePendingSpellCast()
@@ -55,10 +70,9 @@ void RuledPaymentUi::reconcileEnginePendingSpellCast()
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     auto &local = actions->pendingRuledSpellCast;
     if (!state->pendingSpellCast.has_value()) {
-        if (local.valid &&
-            (local.stage == PendingRuledSpellCast::Stage::Paying ||
-             local.stage == PendingRuledSpellCast::Stage::CommitPending ||
-             local.stage == PendingRuledSpellCast::Stage::CancelPending)) {
+        if (local.valid && (local.stage == PendingRuledSpellCast::Stage::Paying ||
+                            local.stage == PendingRuledSpellCast::Stage::CommitPending ||
+                            local.stage == PendingRuledSpellCast::Stage::CancelPending)) {
             clearPendingRuledSpellCast();
         }
         return;
@@ -97,12 +111,10 @@ void RuledPaymentUi::reconcileEnginePendingSpellCast()
         rebuilt.faceIndex = static_cast<int>(announcement.face_index());
         rebuilt.xValue = static_cast<int>(announcement.x_value());
         rebuilt.castMethod = announcement.cast_method();
-        rebuilt.castingPermissionId = announcement.has_casting_permission_id()
-                                            ? announcement.casting_permission_id()
-                                            : 0;
-        rebuilt.sourceZoneChangeGeneration = announcement.has_source()
-                                                   ? announcement.source().expected_zone_change_generation()
-                                                   : 0;
+        rebuilt.castingPermissionId =
+            announcement.has_casting_permission_id() ? announcement.casting_permission_id() : 0;
+        rebuilt.sourceZoneChangeGeneration =
+            announcement.has_source() ? announcement.source().expected_zone_change_generation() : 0;
         if (announcement.has_source()) {
             switch (announcement.source().location_case()) {
                 case ruled::v1::CastSource::kHandIndex:
@@ -133,8 +145,8 @@ void RuledPaymentUi::reconcileEnginePendingSpellCast()
         for (const auto &flex : announcement.flex_payments())
             if (flex.pay_life())
                 rebuilt.lifePipIndices.append(static_cast<quint32>(flex.pip_index()));
-        rebuilt.remainingCost = RuledPendingCast::parseSimpleManaCost(
-            QString::fromStdString(engine.locked_total_cost()));
+        rebuilt.remainingCost =
+            RuledPendingCast::parseSimpleManaCost(QString::fromStdString(engine.locked_total_cost()));
         if (CardItem *card = RuledActions::findStackCardItemByEngineOid(
                 actions->player->getGame(), static_cast<quint32>(engine.reserved_object_id()))) {
             rebuilt.cardName = card->getName();
@@ -470,9 +482,8 @@ bool RuledPaymentUi::click(CardItem *card, bool leftClick)
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     const auto oid = state->engineOidForCardId(card->getOwner()->getPlayerInfo()->getId(), card->getId());
     const auto abilities = state->activatedAbilitiesForOid(oid);
-    const bool hasManaAbility = std::any_of(abilities.cbegin(), abilities.cend(), [](const auto &ability) {
-        return ability && ability->isManaAbility();
-    });
+    const bool hasManaAbility = std::any_of(abilities.cbegin(), abilities.cend(),
+                                            [](const auto &ability) { return ability && ability->isManaAbility(); });
     // A candidate with a mana ability needs one combined menu on either mouse button. Candidates
     // without that ambiguity retain the fast left-click contribution toggle.
     if (!leftClick || hasManaAbility)
@@ -692,8 +703,7 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildCommand(PlayerAction
     auto *player = actions->player;
     ruled::v1::RuledCommand ruledCommand;
     if (pendingRuledSpellCast.engineTransactionId != 0) {
-        ruledCommand.mutable_commit_spell_cast()->set_transaction_id(
-            pendingRuledSpellCast.engineTransactionId);
+        ruledCommand.mutable_commit_spell_cast()->set_transaction_id(pendingRuledSpellCast.engineTransactionId);
         return ruledCommand;
     }
     auto *cast = ruledCommand.mutable_begin_spell_cast()->mutable_announcement();

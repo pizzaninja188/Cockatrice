@@ -270,9 +270,10 @@ TEST_F(RuledE2ESmokeTest, FranticSearchPrivateDiscardThenPublicOpposingLandCohor
             const int scid = discard.candidate_server_card_ids(index);
             ASSERT_GE(scid, 0);
             EXPECT_TRUE(std::any_of(p1.handServerCardBySlot.begin(), p1.handServerCardBySlot.end(),
-                                   [&](const auto &slot) { return slot.second == scid; }));
+                                    [&](const auto &slot) { return slot.second == scid; }));
             discarded.emplace_back(discard.candidate_object_ids(index), scid);
-            discardAnswer.mutable_submit_resolution_choice()->add_chosen_object_ids(discard.candidate_object_ids(index));
+            discardAnswer.mutable_submit_resolution_choice()->add_chosen_object_ids(
+                discard.candidate_object_ids(index));
         }
         EXPECT_NE(discarded[0].second, discarded[1].second);
         p1.pendingChoice.reset();
@@ -291,7 +292,8 @@ TEST_F(RuledE2ESmokeTest, FranticSearchPrivateDiscardThenPublicOpposingLandCohor
         EXPECT_EQ(landChoice.candidate_object_ids_size(), 5);
         ASSERT_TRUE(p2.lastResolutionChoice.has_value());
         EXPECT_EQ(p2.lastResolutionChoice->choice_kind(), ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS);
-        std::set<quint32> candidates(landChoice.candidate_object_ids().begin(), landChoice.candidate_object_ids().end());
+        std::set<quint32> candidates(landChoice.candidate_object_ids().begin(),
+                                     landChoice.candidate_object_ids().end());
         const auto &publicIds = p2.lastResolutionChoice->candidate_object_ids();
         EXPECT_EQ(candidates, std::set<quint32>(publicIds.begin(), publicIds.end()));
         EXPECT_EQ(candidates, std::set<quint32>(allLands.begin(), allLands.end()));
@@ -482,6 +484,171 @@ TEST_F(RuledE2ESmokeTest, DrawReplacementPartialHandsRemainPrivateAndBrainstormB
             EXPECT_TRUE(priorHandBindings.count(scid));
             EXPECT_FALSE(returned.count(scid));
         }
+    }
+}
+TEST_F(RuledE2ESmokeTest, EmptyDrawWinRetiresBothRecipientsAndPreservesPaidBrainstormPhysicalStack)
+{
+    const auto started = startServers();
+    ASSERT_TRUE(started) << started.message();
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0)
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    class TerminalDriver : public OpeningDriver
+    {
+    public:
+        using OpeningDriver::OpeningDriver;
+        ruled::v1::RuledEventBatch latestBatch;
+        void onBatchEventsComplete(const ruled::v1::RuledEventBatch &batch) override
+        {
+            OpeningDriver::onBatchEventsComplete(batch);
+            latestBatch = batch;
+        }
+    };
+    int caseIndex = 0;
+    for (const char *winCard : {"Laboratory Maniac", "Jace, Wielder of Mysteries"}) {
+        TerminalDriver p1(true, QStringLiteral("emptywinp1%1").arg(caseIndex), &transcript);
+        TerminalDriver p2(false, QStringLiteral("emptywinp2%1").arg(caseIndex++), &transcript);
+        ASSERT_TRUE(p1.loginAndJoinRoom());
+        ASSERT_TRUE(p2.loginAndJoinRoom());
+        ASSERT_TRUE(p1.createRuledGame());
+        ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+        ASSERT_TRUE(p1.selectDeck(deckXml({{60, QStringLiteral("Island")}})));
+        ASSERT_TRUE(p2.selectDeck(deckXml({{60, QStringLiteral("Forest")}})));
+        p1.sendReady();
+        p2.sendReady();
+        ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "empty win start"));
+        ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "empty win start"));
+        ASSERT_TRUE(p1.publishMain1Stops());
+        ASSERT_TRUE(p2.publishMain1Stops());
+        QElapsedTimer opening;
+        opening.start();
+        while (opening.elapsed() < 30000) {
+            p1.pump(25);
+            p2.pump(25);
+            if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+                p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId)
+                break;
+            p1.act();
+            p2.act();
+        }
+        ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+        auto send = [&](OpeningDriver &sender, const ruled::v1::RuledCommand &command) {
+            const auto before1 = p1.stateVersion;
+            const auto before2 = p2.stateVersion;
+            sender.sendRuled(command, QStringLiteral("empty draw terminal physical privacy"));
+            QElapsedTimer wait;
+            wait.start();
+            while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+                p1.pump(25);
+                p2.pump(25);
+            }
+            return p1.stateVersion > before1 && p2.stateVersion > before2;
+        };
+        ruled::v1::RuledCommand pass;
+        pass.mutable_pass_priority();
+        for (const char *name : {winCard, "Thought Reflection"}) {
+            ruled::v1::RuledCommand put;
+            auto *dev = put.mutable_dev_command();
+            dev->set_target_player_id(p1.myId);
+            dev->mutable_put_card_in_zone()->set_card_name(name);
+            dev->mutable_put_card_in_zone()->set_zone(ruled::v1::DEV_ZONE_HAND);
+            ASSERT_TRUE(send(p1, put));
+            const int blue = std::string(name) == "Laboratory Maniac" ? 1 : 3;
+            const int generic = std::string(name) == "Laboratory Maniac"    ? 2
+                                : std::string(name) == "Thought Reflection" ? 4
+                                                                            : 1;
+            ruled::v1::RuledCommand mana;
+            auto *add = mana.mutable_dev_command();
+            add->set_target_player_id(p1.myId);
+            add->mutable_add_mana()->set_u(blue);
+            add->mutable_add_mana()->set_c(generic);
+            ASSERT_TRUE(send(p1, mana));
+            const auto *action = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QString::fromUtf8(name));
+            ASSERT_NE(action, nullptr);
+            ruled::v1::RuledCommand cast;
+            auto *spell = cast.mutable_cast_spell();
+            spell->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+            spell->mutable_source()->set_hand_index(action->hand_index());
+            spell->mutable_payment()->mutable_mana()->set_u(blue);
+            spell->mutable_payment()->mutable_mana()->set_c(generic);
+            ASSERT_TRUE(send(p1, cast));
+            ASSERT_EQ(p1.myPool.total(), 0);
+            ASSERT_TRUE(send(p1, pass));
+            ASSERT_TRUE(send(p2, pass));
+            ASSERT_EQ(p1.stackDepth, 0);
+        }
+        // Logged commands relocate the exact sixty starting cards; no hidden library IDs.
+        for (int index = 0; index < 60; ++index) {
+            ruled::v1::RuledCommand move;
+            auto *dev = move.mutable_dev_command();
+            dev->set_target_player_id(p1.myId);
+            dev->mutable_move_card()->set_card_name("Island");
+            dev->mutable_move_card()->set_zone(ruled::v1::DEV_ZONE_EXILE);
+            ASSERT_TRUE(send(p1, move));
+        }
+        const auto opponentSlots = p2.handServerCardBySlot;
+        const int opponentHand = p2.handSizeByPlayer[p2.myId];
+        ruled::v1::RuledCommand put;
+        auto *dev = put.mutable_dev_command();
+        dev->set_target_player_id(p1.myId);
+        dev->mutable_put_card_in_zone()->set_card_name("Brainstorm");
+        dev->mutable_put_card_in_zone()->set_zone(ruled::v1::DEV_ZONE_HAND);
+        ASSERT_TRUE(send(p1, put));
+        ruled::v1::RuledCommand mana;
+        mana.mutable_dev_command()->set_target_player_id(p1.myId);
+        mana.mutable_dev_command()->mutable_add_mana()->set_u(1);
+        ASSERT_TRUE(send(p1, mana));
+        const auto *action = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QStringLiteral("Brainstorm"));
+        ASSERT_NE(action, nullptr);
+        ruled::v1::RuledCommand cast;
+        cast.mutable_cast_spell()->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+        cast.mutable_cast_spell()->mutable_source()->set_hand_index(action->hand_index());
+        cast.mutable_cast_spell()->mutable_payment()->mutable_mana()->set_u(1);
+        ASSERT_TRUE(send(p1, cast));
+        ASSERT_TRUE(send(p1, pass));
+        ASSERT_TRUE(send(p2, pass));
+        ASSERT_TRUE(p1.pendingChoice.has_value());
+        const auto choice = *p1.pendingChoice;
+        ASSERT_EQ(choice.choice_kind(), ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT);
+        ASSERT_EQ(choice.replacement_options_size(), 2);
+        quint32 selected = 0;
+        for (const auto &option : choice.replacement_options()) {
+            EXPECT_EQ(p1.serverCardByEngineOid.at(option.source_object_id()),
+                      p2.serverCardByEngineOid.at(option.source_object_id()));
+            if (option.source_card_name() == winCard)
+                selected = option.application_id();
+        }
+        ASSERT_NE(selected, 0u);
+        const auto publicBindings = p1.serverCardByEngineOid;
+        ruled::v1::RuledCommand answer;
+        answer.mutable_submit_resolution_choice()->add_chosen_object_ids(selected);
+        p1.pendingChoice.reset();
+        ASSERT_TRUE(send(p1, answer));
+        EXPECT_EQ(p1.stackDepth, 1);
+        EXPECT_EQ(p2.stackDepth, 1);
+        EXPECT_EQ(p1.serverCardByEngineOid, publicBindings);
+        EXPECT_TRUE(p1.handServerCardBySlot.empty());
+        EXPECT_EQ(p1.physicalHandCountByPlayer[p1.myId], 0);
+        EXPECT_EQ(p2.physicalHandCountByPlayer[p1.myId], 0);
+        EXPECT_EQ(p2.handServerCardBySlot, opponentSlots);
+        EXPECT_EQ(p2.handSizeByPlayer[p2.myId], opponentHand);
+        for (const auto *recipient : {&p1, &p2}) {
+            EXPECT_TRUE(recipient->latestBatch.legal_by_player().empty());
+            EXPECT_FALSE(recipient->latestBatch.has_payment_preview());
+            bool sawWinner = false;
+            for (const auto &event : recipient->latestBatch.events()) {
+                EXPECT_FALSE(event.has_resolution_choice_required());
+                EXPECT_FALSE(event.has_stack_resolved());
+                EXPECT_FALSE(event.has_priority_changed());
+                sawWinner |= event.has_log() && event.log().text() == "Game over. Winner: " + std::to_string(p1.myId);
+            }
+            EXPECT_TRUE(sawWinner);
+        }
+        const auto commandId = p1.nextCmdId;
+        const auto version = p1.stateVersion;
+        p1.sendRuled(pass, QStringLiteral("reject command after terminal win"));
+        ASSERT_TRUE(p1.pumpUntil([&] { return p1.responses.count(commandId); }, 10000, "post-win rejection"));
+        EXPECT_NE(p1.responses.at(commandId).response_code(), Response::RespOk);
+        EXPECT_EQ(p1.stateVersion, version);
     }
 }
 } // namespace ruled_e2e

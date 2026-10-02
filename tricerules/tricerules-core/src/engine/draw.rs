@@ -17,7 +17,14 @@ struct DrawReplacementIdentity {
 struct DrawApplication {
     handle: u32,
     identity: DrawReplacementIdentity,
+    action: DrawReplacementAction,
     presentation: crate::state::ReplacementSourcePresentation,
+}
+
+#[derive(serde::Serialize, Debug, Clone, Copy)]
+enum DrawReplacementAction {
+    Double,
+    WinInstead,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -94,10 +101,21 @@ pub(super) struct CompletedDraw {
 pub(super) enum DrawProgress {
     Complete(Box<CompletedDraw>),
     Parked,
+    GameEnded,
+}
+
+pub(super) fn controller_library_empty(state: &GameState, controller: PlayerId) -> bool {
+    state.player_idx(controller).is_some_and(|index| {
+        !state.players[index].has_lost && state.players[index].library.is_empty()
+    })
 }
 
 impl GameEngine {
-    fn draw_candidates(&self, drawer: PlayerId, node: &DrawNode) -> Vec<DrawReplacementIdentity> {
+    fn draw_candidates(
+        &self,
+        drawer: PlayerId,
+        node: &DrawNode,
+    ) -> Vec<(DrawReplacementIdentity, DrawReplacementAction)> {
         let first_own_step = self.state.turn_step == TurnStep::Draw
             && self.state.active_player_id() == drawer
             && self
@@ -119,15 +137,23 @@ impl GameEngine {
                 continue;
             };
             for ability in &face.static_abilities {
-                let StaticAbilityDef::DoubleControllerDraws { condition } = ability.definition
-                else {
-                    continue;
+                let action = match ability.definition {
+                    StaticAbilityDef::DoubleControllerDraws { condition } => {
+                        if condition
+                            == DrawReplacementCondition::ExceptFirstSuccessfulDrawInOwnDrawStep
+                            && first_own_step
+                        {
+                            continue;
+                        }
+                        DrawReplacementAction::Double
+                    }
+                    StaticAbilityDef::WinControllerInsteadOfEmptyLibraryDraw
+                        if controller_library_empty(&self.state, drawer) =>
+                    {
+                        DrawReplacementAction::WinInstead
+                    }
+                    _ => continue,
                 };
-                if condition == DrawReplacementCondition::ExceptFirstSuccessfulDrawInOwnDrawStep
-                    && first_own_step
-                {
-                    continue;
-                }
                 let identity = DrawReplacementIdentity {
                     source,
                     generation: self
@@ -145,7 +171,7 @@ impl GameEngine {
                     ),
                 };
                 if !node.applied.contains(&identity) {
-                    result.push(identity);
+                    result.push((identity, action));
                 }
             }
         }
@@ -185,6 +211,9 @@ impl GameEngine {
         mut work: PendingDrawTransaction,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<DrawProgress, EngineError> {
+        if self.state.winner.is_some() {
+            return Ok(DrawProgress::GameEnded);
+        }
         while let Some(request) = work.requests.front_mut() {
             let Some(index) = self
                 .state
@@ -219,7 +248,7 @@ impl GameEngine {
             let candidates = self.draw_candidates(request.player, node);
             if candidates.len() > 1 {
                 work.applications.clear();
-                for identity in candidates {
+                for (identity, action) in candidates {
                     let handle = self.state.next_replacement_application_id;
                     self.state.next_replacement_application_id = handle.checked_add(1).ok_or(
                         EngineError::Illegal("replacement application ids exhausted"),
@@ -228,6 +257,7 @@ impl GameEngine {
                         handle,
                         presentation: self.replacement_source_presentation(identity.source),
                         identity,
+                        action,
                     });
                 }
                 let player = request.player;
@@ -256,14 +286,13 @@ impl GameEngine {
                 );
                 return Ok(DrawProgress::Parked);
             }
-            let mut node = work.nodes.pop().expect("current draw node");
-            if let Some(identity) = candidates.into_iter().next() {
-                node.applied.push(identity);
-                // Each child inherits only its ancestors, never the subsequently modified sibling.
-                work.nodes.push(node.clone());
-                work.nodes.push(node);
+            if let Some((identity, action)) = candidates.into_iter().next() {
+                if self.apply_draw_replacement(&mut work, identity, action) {
+                    return Ok(DrawProgress::GameEnded);
+                }
                 continue;
             }
+            work.nodes.pop().expect("current draw node");
             if let Some(oid) = self.state.players[index].library.front().copied() {
                 resolution::draw_card(&mut self.state, self.registry, request.player)?;
                 if self.state.turn_step == TurnStep::Draw
@@ -293,6 +322,32 @@ impl GameEngine {
         })))
     }
 
+    fn apply_draw_replacement(
+        &mut self,
+        work: &mut PendingDrawTransaction,
+        identity: DrawReplacementIdentity,
+        action: DrawReplacementAction,
+    ) -> bool {
+        let mut node = work.nodes.pop().expect("current draw node");
+        node.applied.push(identity);
+        match action {
+            DrawReplacementAction::Double => {
+                // Children inherit ancestors; a subsequently modified sibling never changes them.
+                work.nodes.push(node.clone());
+                work.nodes.push(node);
+                false
+            }
+            DrawReplacementAction::WinInstead => {
+                // CR 614.6: consume the draw before attempting the replacement's win. Even a
+                // future prohibited win cannot restore this node or create a failed draw.
+                self.state
+                    .winner
+                    .get_or_insert(work.requests.front().expect("drawer").player);
+                true
+            }
+        }
+    }
+
     pub(super) fn draw_replacement_choice_event(&self) -> Option<rv1::RuledEvent> {
         let pending = self.state.pending_resolution.as_ref()?;
         let Some(PendingReplacementEvent::Draw(work)) = &self.state.pending_replacement_event
@@ -314,9 +369,14 @@ impl GameEngine {
                         .applications
                         .iter()
                         .map(|value| {
-                            value
-                                .presentation
-                                .option(value.handle, "Draw two cards instead.".to_string())
+                            value.presentation.option(
+                                value.handle,
+                                match value.action {
+                                    DrawReplacementAction::Double => "Draw two cards instead.",
+                                    DrawReplacementAction::WinInstead => "Win the game instead.",
+                                }
+                                .to_string(),
+                            )
                         })
                         .collect(),
                     ..Default::default()
@@ -363,13 +423,15 @@ impl GameEngine {
                 .zip(work.nodes.last())
                 .is_some_and(|(request, node)| {
                     self.draw_candidates(request.player, node)
-                        .contains(&selected.identity)
+                        .iter()
+                        .any(|(identity, _)| identity == &selected.identity)
                 });
         if !current {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal("draw replacement source is stale"));
         }
         let identity = selected.identity.clone();
+        let action = selected.action;
         let Some(PendingReplacementEvent::Draw(work)) = self.state.pending_replacement_event.take()
         else {
             unreachable!()
@@ -379,12 +441,12 @@ impl GameEngine {
             unreachable!()
         };
         work.completion.transfer_stack(stack);
-        let mut node = work.nodes.pop().expect("published draw node");
-        node.applied.push(identity);
-        work.nodes.push(node.clone());
-        work.nodes.push(node);
         let mut events = Vec::new();
+        if self.apply_draw_replacement(&mut work, identity, action) {
+            return Ok(finish_with_events(self, events));
+        }
         match self.advance_draw_transaction(work, &mut events)? {
+            DrawProgress::GameEnded => Ok(finish_with_events(self, events)),
             DrawProgress::Parked => Ok(finish_with_events(self, events)),
             DrawProgress::Complete(completed) => self.complete_draw_transaction(completed, events),
         }
@@ -466,6 +528,7 @@ impl GameEngine {
         work.completion.transfer_stack(stack);
         work.applications.clear();
         match self.advance_draw_transaction(work, events)? {
+            DrawProgress::GameEnded => {}
             DrawProgress::Parked => {}
             DrawProgress::Complete(done) => {
                 let batch = self.complete_draw_transaction(done, std::mem::take(events))?;

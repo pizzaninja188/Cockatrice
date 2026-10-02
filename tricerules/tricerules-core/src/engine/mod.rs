@@ -2363,6 +2363,10 @@ impl GameEngine {
     ) -> Result<(), EngineError> {
         use rv1::ruled_event::Ev;
 
+        if self.state.winner.is_some() {
+            return Ok(());
+        }
+
         // The pass that resolves a stack object closes that priority round. Keep the fresh
         // active-player window visible instead of applying their phase auto-pass policy a second
         // time to the same canonical command.
@@ -2377,11 +2381,20 @@ impl GameEngine {
         {
             let priority_player = self.state.priority_player_id();
             let mut next = self.pass_priority(priority_player)?;
-            self.sweep_life();
-            self.reconcile_departed_players(&mut next.events)?;
-            if let Some(winner) = self.state.winner {
-                next.events.push(events::ev_game_over(winner));
+            if self.state.winner.is_some() {
+                next = self.finish_terminal_batch(next);
+                batch.events.extend(next.events);
+                automatic_passes += 1;
+                break;
             }
+            self.sweep_life();
+            if self.state.winner.is_some() {
+                next = self.finish_terminal_batch(next);
+                batch.events.extend(next.events);
+                automatic_passes += 1;
+                break;
+            }
+            self.reconcile_departed_players(&mut next.events)?;
             // Internal passes bypass dispatch_command's normal post-command trigger flush. A
             // beginning-of-step trigger must reach the stack (or its ordering/target prompt)
             // before the settlement policy decides whether another priority pass is harmless.
@@ -2692,7 +2705,13 @@ impl GameEngine {
             }
         };
         let mut b = res?;
+        if self.state.winner.is_some() {
+            return Ok(self.finish_terminal_batch(b));
+        }
         self.drain_immediate_observer_actions(None, &mut b.events)?;
+        if self.state.winner.is_some() {
+            return Ok(self.finish_terminal_batch(b));
+        }
         // CR 704.4: SBAs are not checked while a tier-3 resolution is parked mid-resolution; they
         // run when it completes, including the CR 121.4/704.5b library-loss action. Zone view +
         // legal actions still refresh so the deciding player's client sees the drawn/revealed
@@ -2702,6 +2721,9 @@ impl GameEngine {
         if self.state.pending_resolution.is_none() && self.state.pending_spell_cast.is_none() {
             self.commit_pending_library_losses();
             self.sweep_life();
+            if self.state.winner.is_some() {
+                return Ok(self.finish_terminal_batch(b));
+            }
             self.reconcile_departed_players(&mut b.events)?;
             let mut d = vec![];
             self.apply_sbas(&mut d)?;
@@ -2712,8 +2734,8 @@ impl GameEngine {
             self.flush_staged_triggers(&mut d);
             b.events.extend(d);
         }
-        if let Some(winner) = self.state.winner {
-            b.events.push(events::ev_game_over(winner));
+        if self.state.winner.is_some() {
+            return Ok(self.finish_terminal_batch(b));
         }
         b.events.push(self.ev_zone_view_sync_tracked());
         // CR 106: emit each player's authoritative mana pool so the relay/clients mirror it onto

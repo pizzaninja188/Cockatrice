@@ -1,0 +1,8 @@
+(
+  id: "laboratory_maniac", name: "Laboratory Maniac", face_id: "laboratory_maniac",
+  mana_cost: "{2}{U}", types: ["Creature", "Human", "Wizard"], power: 2, toughness: 2,
+  static_abilities: [(
+    ability_id: "static_01", presentation: OracleLines([1]),
+    definition: WinControllerInsteadOfEmptyLibraryDraw,
+  )],
+)

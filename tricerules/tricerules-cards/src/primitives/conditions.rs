@@ -11,6 +11,8 @@ use serde::{Deserialize, Serialize};
 /// the identities of the cards that moved through a graveyard.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GameCondition {
+    /// Laboratory Maniac's replacement and Jace's resolving ultimate read only this count.
+    ControllerLibraryEmpty,
     /// Boolean conjunction across otherwise independent public game-state predicates. Every
     /// branch is evaluated against the same consumer context; Kaito, Bane of Nightmares and
     /// Gideon Blackblade combine turn ownership and loyalty checks through this reusable shape.
@@ -415,6 +417,7 @@ impl GameCondition {
                 Ok(())
             }
             GameCondition::HasEnduringStory { .. }
+            | GameCondition::ControllerLibraryEmpty
             | GameCondition::Void
             | GameCondition::PermanentLeftBattlefieldThisTurn { .. }
             | GameCondition::CastSnapshot { .. }
@@ -495,6 +498,7 @@ impl GameCondition {
     pub fn matches_value(&self, value: u32) -> bool {
         match self {
             GameCondition::AllOf(_)
+            | GameCondition::ControllerLibraryEmpty
             | GameCondition::AnyOf(_)
             | GameCondition::HasEnduringStory { .. }
             | GameCondition::Void

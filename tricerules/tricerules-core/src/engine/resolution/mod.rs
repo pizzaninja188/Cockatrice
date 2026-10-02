@@ -362,15 +362,24 @@ pub(super) fn token_identity(values: &CopiableValues) -> rv1::TokenIdentity {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum EffectOutcome {
     Continue,
+    GameEnded,
     Blighted(crate::state::BlightReceipt),
     Suspended,
     RestartResolutionBranch(Option<usize>),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum DeferredStackExit {
+pub(super) enum DeferredStackExit {
     Resolved,
     DidNotResolve,
+}
+
+/// Resolution completion differs from parking and from CR 104.1 terminal victory.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ResolutionProgress {
+    Completed,
+    Parked,
+    GameEnded,
 }
 
 fn simple_player_recipients(
@@ -866,7 +875,7 @@ impl GameEngine {
     pub(super) fn resolve_top_of_stack(
         &mut self,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<(), EngineError> {
+    ) -> Result<ResolutionProgress, EngineError> {
         let mut top = self
             .state
             .stack
@@ -893,10 +902,6 @@ impl GameEngine {
         let is_ability = top.ability_text.is_some();
         let permanent_copy = self.materialize_permanent_spell_copy(&top);
         let leaves_no_object = is_ability || (top.is_copy && !permanent_copy);
-        let is_omen_spell = self
-            .registry
-            .get(&card_id)
-            .is_some_and(|definition| definition.layout == Layout::Omen && top.face_index == 1);
         let custom_key = (!is_ability && !top.is_copy)
             .then(|| {
                 self.registry
@@ -917,17 +922,9 @@ impl GameEngine {
                 } | SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. }
             )
         });
-        if leaves_no_object && !defer_soft_counter_exit && !is_omen_spell {
-            events.push(rv1::RuledEvent {
-                ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
-                    object_id: top.id,
-                    // Abilities cease to exist on resolution; graveyard tells the C++ server
-                    // not to expect a permanent to land.
-                    destination: rv1::StackResolveDestination::Graveyard as i32,
-                    owner_player_id: None,
-                })),
-            });
-        } else if !leaves_no_object {
+        // Abilities and nonpermanent spell copies also retire only after their instructions.
+        // A draw replacement can end the game while either is resolving (CR 104.1).
+        if !leaves_no_object {
             // CR 709/712/715: permanence is the *cast face's* (Ice resolves to graveyard; an MDFC
             // permanent face resolves to the battlefield as that face).
             let resolving_face = self
@@ -957,9 +954,10 @@ impl GameEngine {
             // physical card on the stack until the whole effect list completes; immediate
             // resolutions still publish the same final batch, while parked resolutions now keep
             // the visible stack faithful to the resolution boundary. This includes Adventure;
-            // tier-3 custom spells retain their specialized exit ownership below.
-            let defer_authored_nonpermanent_exit =
-                !resolves_to_battlefield_raw && custom_key.is_none();
+            // Brainstorm shares this boundary because its resumable draw can end the game.
+            // Other tier-3 custom spells retain their specialized exit ownership below.
+            let defer_authored_nonpermanent_exit = !resolves_to_battlefield_raw
+                && (custom_key.is_none() || custom_key.as_deref() == Some("brainstorm"));
             // CR 303.4f: an aura whose enchant target is no longer on the battlefield at resolution
             // is countered (goes to owner's graveyard) rather than entering the battlefield orphaned.
             let is_aura =
@@ -1034,7 +1032,9 @@ impl GameEngine {
                     BattlefieldEntryCompletion::PermanentSpell { attached_to },
                     events,
                 ) {
-                    super::replacement::BattlefieldEntryProgress::Parked => return Ok(()),
+                    super::replacement::BattlefieldEntryProgress::Parked => {
+                        return Ok(ResolutionProgress::Parked);
+                    }
                     super::replacement::BattlefieldEntryProgress::Ready(entry) => {
                         let entry = *entry;
                         events.push(rv1::RuledEvent {
@@ -1104,12 +1104,12 @@ impl GameEngine {
                 events.push(ev_log(format!(
                     "{aura_name} fizzles (enchant target left the battlefield)."
                 )));
-                return Ok(());
+                return Ok(ResolutionProgress::Completed);
             }
         }
 
         // Tier-3 (CR 608): a custom effect owns this spell's resolution. The spell card has
-        // already moved to its zone (graveyard/battlefield above); hand off the algorithm to the
+        // already moved to its zone above, except Brainstorm's deferred exit; hand off to the
         // registered `CardEffect`, which either completes now or parks awaiting a player choice.
         // A copy is excluded: the resumable custom machinery (`begin_custom_resolution`) expects the
         // spell's backing `GameObject`, which a copy lacks. Copying a tier-3 spell is a documented
@@ -1159,7 +1159,7 @@ impl GameEngine {
                     "{spell_label} does nothing (its \"if\" condition is no longer true, CR 603.4)."
                 )));
                 self.finish_deferred_stack_exit(&top, DeferredStackExit::DidNotResolve, events)?;
-                return Ok(());
+                return Ok(ResolutionProgress::Completed);
             }
         }
 
@@ -1176,7 +1176,7 @@ impl GameEngine {
         if fizzle {
             events.push(ev_log(format!("{spell_label} fizzles (no legal targets).")));
             self.finish_deferred_stack_exit(&top, DeferredStackExit::DidNotResolve, events)?;
-            return Ok(());
+            return Ok(ResolutionProgress::Completed);
         }
 
         self.run_effect_list(&top, &spell_label, resolution_effects, 0, events)
@@ -1186,7 +1186,7 @@ impl GameEngine {
     /// instant or sorcery visible on the physical stack throughout any resolution-time choice.
     /// Permanent and tier-3 custom spells retain their specialized exit paths and
     /// make this a no-op after they have already moved.
-    fn finish_deferred_stack_exit(
+    pub(super) fn finish_deferred_stack_exit(
         &mut self,
         top: &StackItem,
         exit: DeferredStackExit,
@@ -1205,9 +1205,11 @@ impl GameEngine {
         // A spell copy has neither a backing object nor a second stack entry after
         // `resolve_top_of_stack` pops it. Omen copies still need the typed Library resolution
         // event and their controller's deterministic shuffle, so they are the sole no-object
-        // deferred exit that reaches the completion path.
-        let has_deferred_exit =
-            has_stack_item || has_stack_object || (top.is_copy && is_omen_spell);
+        // deferred exit with a Library destination. Ordinary abilities/copies retire here too.
+        let has_deferred_exit = has_stack_item
+            || has_stack_object
+            || top.ability_text.is_some()
+            || (top.is_copy && !self.state.objects.contains_key(&top.id));
         if !has_deferred_exit {
             return Ok(());
         }
@@ -1550,7 +1552,7 @@ impl GameEngine {
         resolution_effects: Vec<ResolutionEffect>,
         start: usize,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<(), EngineError> {
+    ) -> Result<ResolutionProgress, EngineError> {
         self.run_effect_list_with_previous(
             top,
             spell_label,
@@ -1569,7 +1571,10 @@ impl GameEngine {
         start: usize,
         mut previous_effect_result: EffectResult,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<(), EngineError> {
+    ) -> Result<ResolutionProgress, EngineError> {
+        if self.state.winner.is_some() {
+            return Ok(ResolutionProgress::GameEnded);
+        }
         let controller = top.controller;
         for (index, entry) in resolution_effects.into_iter().enumerate().skip(start) {
             let ResolutionEffect {
@@ -1622,8 +1627,10 @@ impl GameEngine {
                             )
                         {
                             cx.engine.state.winner = Some(cx.controller);
+                            EffectOutcome::GameEnded
+                        } else {
+                            EffectOutcome::Continue
                         }
-                        EffectOutcome::Continue
                     }
                     SpellEffectKind::MillEachOpponentByHandSize => {
                         zones::mill_each_opponent_by_hand_size(&mut cx)?
@@ -2038,6 +2045,9 @@ impl GameEngine {
                     }
                 }
             };
+            if outcome == EffectOutcome::GameEnded {
+                return Ok(ResolutionProgress::GameEnded);
+            }
             let mut completed_item = top.clone();
             if let EffectOutcome::Blighted(receipt) = outcome {
                 completed_item.blight_receipts.push(receipt);
@@ -2047,7 +2057,7 @@ impl GameEngine {
             observer_stack.resume_effect_index = Some(index as u32 + 1);
             observer_stack.previous_result = effect_result.clone();
             if self.drain_immediate_observer_actions(Some(observer_stack), events)? {
-                return Ok(());
+                return Ok(ResolutionProgress::Parked);
             }
             match outcome {
                 EffectOutcome::Blighted(_) => {
@@ -2076,7 +2086,7 @@ impl GameEngine {
                             stack.previous_result = effect_result;
                         }
                     }
-                    return Ok(());
+                    return Ok(ResolutionProgress::Parked);
                 }
                 EffectOutcome::RestartResolutionBranch(branch_index) => {
                     let mut item = top.clone();
@@ -2093,6 +2103,7 @@ impl GameEngine {
                     );
                 }
                 EffectOutcome::Continue => {}
+                EffectOutcome::GameEnded => unreachable!("terminal resolution returned above"),
             }
             previous_effect_result = effect_result;
         }
@@ -2101,7 +2112,7 @@ impl GameEngine {
         // CR 608.2m: the spell lands in its owner's graveyard *after* its effects, so it sits
         // beneath anything those effects put there (e.g. a self-targeted Tome Scour's five cards).
         seat_resolved_spell_last_in_graveyard(&mut self.state, top.id);
-        Ok(())
+        Ok(ResolutionProgress::Completed)
     }
 
     /// Complete CR 610.3 paired one-shot work discovered by a committed zone transition. This is
@@ -3764,6 +3775,157 @@ mod attached_subject_tests {
         }
     }
 
+    #[test]
+    fn winning_effect_stops_remaining_draw_and_life_tail_immediately() {
+        let mut engine = GameEngine::new(507_001, &[0, 1], 20, None, true).unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let top = triggered_item(source, 0);
+        let hand_before = engine.state.players[0].hand.clone();
+        let library_before = engine.state.players[0].library.clone();
+        let count = hand_before.len() as u32;
+        let effects = vec![
+            SpellEffectKind::WinGameIf {
+                condition: tricerules_cards::GameCondition::CardsInHand {
+                    players: tricerules_cards::primitives::ConditionPlayerSet::Relative(
+                        tricerules_cards::primitives::RelativePlayerSet::Controller,
+                    ),
+                    min: Some(count),
+                    max: Some(count),
+                },
+            },
+            SpellEffectKind::Draw {
+                who: tricerules_cards::primitives::PlayerRecipient::Controller,
+                count: Amount::Fixed(2),
+            },
+            SpellEffectKind::GainLife {
+                amount: Amount::Fixed(3),
+            },
+        ]
+        .into_iter()
+        .map(|effect| ResolutionEffect {
+            effect,
+            targets: vec![],
+            target_damage: vec![],
+            target_group_indices: vec![],
+            role_group_indices: vec![],
+        })
+        .collect();
+        let mut events = Vec::new();
+        engine
+            .run_effect_list(&top, "winning tail fixture", effects, 0, &mut events)
+            .unwrap();
+        assert_eq!(engine.state.winner, Some(0));
+        assert_eq!(engine.state.players[0].hand, hand_before);
+        assert_eq!(engine.state.players[0].library, library_before);
+        assert_eq!(engine.state.players[0].life, 20);
+        assert!(!events.iter().any(|event| matches!(
+            event.ev,
+            Some(rv1::ruled_event::Ev::LifeChanged(_))
+                | Some(rv1::ruled_event::Ev::StackResolved(_))
+        )));
+    }
+
+    #[test]
+    fn terminal_command_preserves_winner_before_pending_loss_and_sba() {
+        let mut engine = GameEngine::new(507_002, &[0, 1], 20, None, true).unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let returning = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            returning,
+            Zone::Exile,
+            None,
+        )
+        .unwrap();
+        engine.state.pending_immediate_observer_actions.push(
+            ImmediateObserverAction::ReturnExiledObject {
+                exiled: TriggerObjectRef {
+                    object_id: returning,
+                    zone_change_generation: engine.state.zone_change_generation[&returning],
+                    controller_at_event: 0,
+                },
+            },
+        );
+        let item = quantity_item(
+            source,
+            vec![SpellEffectKind::WinGameIf {
+                condition: tricerules_cards::GameCondition::CardsInHand {
+                    players: tricerules_cards::primitives::ConditionPlayerSet::Relative(
+                        tricerules_cards::primitives::RelativePlayerSet::Controller,
+                    ),
+                    min: None,
+                    max: None,
+                },
+            }],
+        );
+        engine.state.stack.push(item);
+        engine.state.passes_since_stack_change = 1;
+        engine.state.players[0].pending_library_loss = true;
+        engine.state.players[0].life = 0;
+        let player = engine.state.priority_player_id();
+        let batch = engine
+            .apply_command(
+                player,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                },
+            )
+            .unwrap();
+        assert_eq!(engine.state.winner, Some(0));
+        assert!(!engine.state.players[0].has_lost);
+        assert!(engine.state.players[0].pending_library_loss);
+        assert!(batch.legal_by_player.is_empty());
+        assert_eq!(engine.state.objects[&returning].zone, Zone::Exile);
+        assert!(engine.state.pending_immediate_observer_actions.is_empty());
+        assert!(!batch
+            .events
+            .iter()
+            .any(|event| matches!(event.ev, Some(rv1::ruled_event::Ev::StackResolved(_)))));
+        assert_eq!(
+            batch
+                .events
+                .iter()
+                .filter(|event| matches!(&event.ev,
+                    Some(rv1::ruled_event::Ev::Log(log)) if log.text == "Game over. Winner: 0"
+                ))
+                .count(),
+            1
+        );
+        let index = engine.state.command_index;
+        assert!(engine
+            .apply_command(
+                player,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                }
+            )
+            .is_err());
+        assert_eq!(engine.state.command_index, index);
+    }
+
+    #[test]
+    fn terminal_life_sweep_does_not_overwrite_winner_or_eliminate_players() {
+        let mut engine = GameEngine::new(507_003, &[0, 1], 20, None, true).unwrap();
+        engine.state.winner = Some(0);
+        engine.state.players[0].life = 0;
+        engine.sweep_life();
+        assert_eq!(engine.state.winner, Some(0));
+        assert!(!engine.state.players[0].has_lost);
+    }
+
+    #[test]
+    fn terminal_sbas_preserve_lethal_permanent() {
+        let mut engine = GameEngine::new(507_005, &[0, 1], 20, None, true).unwrap();
+        let creature = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        engine.state.objects.get_mut(&creature).unwrap().damage = 2;
+        engine.state.winner = Some(0);
+        let mut events = Vec::new();
+        engine.apply_sbas(&mut events).unwrap();
+        assert_eq!(engine.state.objects[&creature].zone, Zone::Battlefield);
+        assert!(events.is_empty());
+    }
+
     fn quantity_item(source: ObjectId, effects: Vec<SpellEffectKind>) -> StackItem {
         let mut item = triggered_item(source, 0);
         let mut ability = tricerules_cards::CardRegistry::global()
@@ -4628,8 +4790,8 @@ mod attached_subject_tests {
             assert!(engine.state.pending_resolution.is_some());
             assert_eq!(
                 engine.state.objects[&oid].zone,
-                Zone::Graveyard,
-                "physical bookkeeping is unchanged"
+                Zone::Stack,
+                "Brainstorm's physical exit waits for its private put-back choice"
             );
             assert!(
                 engine
@@ -4638,10 +4800,10 @@ mod attached_subject_tests {
                     .current
                     .permanent_cards_entered_graveyard
                     .is_empty(),
-                "bookkeeping is not a committed rules event"
+                "an unfinished resolution has no graveyard entry"
             );
             if moved_again {
-                // The pending receipt must not attach to a new incarnation of the physical card.
+                // Completion must not move an off-stack incarnation a second time.
                 move_object_to_zone(&mut engine.state, engine.registry, oid, Zone::Hand, None)
                     .unwrap();
                 move_object_to_zone(

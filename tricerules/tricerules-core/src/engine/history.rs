@@ -985,6 +985,9 @@ impl GameEngine {
         trigger_context: Option<&TriggerContext>,
     ) -> bool {
         match condition {
+            GameCondition::ControllerLibraryEmpty => {
+                super::draw::controller_library_empty(&self.state, context.controller)
+            }
             GameCondition::AllOf(branches) => branches.iter().all(|branch| {
                 self.condition_holds_with_trigger_context(branch, context, trigger_context)
             }),

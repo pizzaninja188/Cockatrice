@@ -6,8 +6,8 @@
 #include <QPointer>
 #include <QTimer>
 #include <algorithm>
-#include <limits>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
+#include <limits>
 
 QString formatRuledTargetPrompt(const QString &sourceContext,
                                 const RuledTargetGroupData &group,
@@ -28,14 +28,11 @@ QString formatRuledTargetPrompt(const QString &sourceContext,
         !source.endsWith(QLatin1Char('!'))) {
         sourceLine += QLatin1Char('.');
     }
-    const bool genericSingleTarget =
-        guidance.compare(QStringLiteral("Choose a target"), Qt::CaseInsensitive) == 0;
+    const bool genericSingleTarget = guidance.compare(QStringLiteral("Choose a target"), Qt::CaseInsensitive) == 0;
 
     if (totalGroups > 1) {
         const QString groupGuidance =
-            guidance.isEmpty()
-                ? QCoreApplication::translate("RuledTargetPrompt", "Choose a target.")
-                : guidance;
+            guidance.isEmpty() ? QCoreApplication::translate("RuledTargetPrompt", "Choose a target.") : guidance;
         return QCoreApplication::translate("RuledTargetPrompt", "%1\nTarget %2 of %3: %4")
             .arg(sourceLine)
             .arg(std::clamp(groupPosition, 0, totalGroups - 1) + 1)
@@ -51,8 +48,8 @@ QString formatRuledTargetPrompt(const QString &sourceContext,
 QString formatRuledPermanentChoicePrompt(const QString &enginePrompt)
 {
     const QString prompt = enginePrompt.trimmed();
-    const QString guidance = QCoreApplication::translate(
-        "RuledPermanentChoicePrompt", "Click a highlighted permanent on the battlefield.");
+    const QString guidance =
+        QCoreApplication::translate("RuledPermanentChoicePrompt", "Click a highlighted permanent on the battlefield.");
     return prompt.isEmpty() ? guidance : prompt + QLatin1Char('\n') + guidance;
 }
 
@@ -429,6 +426,25 @@ void RuledClientState::clearPendingChoice()
     teardownPendingChoice();
 }
 
+void RuledClientState::revokeLocalActionAuthority()
+{
+    clearPendingChoice();
+    // Submitting a choice already empties the holder. Its outstanding ACK must still expire.
+    ++pendingChoiceRevision;
+    pendingSpellCast.reset();
+    payment.takeAllOptimisticManaCounterIds();
+    payment.clear();
+    emit localActionAuthorityRevoked();
+    emit resolutionHandPickUiChanged(-1, -1);
+    emit resolutionPaymentUiChanged(false);
+    emit triggerOrderUiChanged(false, {});
+    emit replacementEffectUiChanged();
+    emit resolutionCostSelectionChanged();
+    emit triggerTargetSelectionChanged();
+    emit spellTargetSelectionChanged();
+    emit combatStateChanged();
+}
+
 void RuledClientState::clearPendingChoiceOfKind(ChoiceKind kind)
 {
     if (hasPendingChoiceOfKind(kind)) {
@@ -516,21 +532,25 @@ void RuledClientState::submitResolutionPayment(ruled::v1::ResolutionChoiceDecisi
     emit resolutionPaymentUiChanged(false);
     emit combatStateChanged();
 
-    host->sendRuledCommandExpectingAck(command, [this, restore, restorePayment](bool accepted) {
-        emit resolutionPaymentSubmissionFinished(accepted);
-        if (!accepted) {
-            if (!pendingChoice.has_value())
-                setPendingChoice(restore);
-            if (isResolutionPaymentActive() &&
-                pendingChoice->paymentSourceOid == restore.paymentSourceOid) {
-                payment = restorePayment;
-                payment.submitting = false;
-                payment.invalidate();
+    const auto submittedRevision = pendingChoiceRevision;
+    host->sendRuledCommandExpectingAck(
+        command, [self = QPointer<RuledClientState>(this), restore, restorePayment, submittedRevision](bool accepted) {
+            if (!self || self->pendingChoiceRevision != submittedRevision)
+                return;
+            emit self->resolutionPaymentSubmissionFinished(accepted);
+            if (!accepted) {
+                if (!self->pendingChoice.has_value())
+                    self->setPendingChoice(restore);
+                if (self->isResolutionPaymentActive() &&
+                    self->pendingChoice->paymentSourceOid == restore.paymentSourceOid) {
+                    self->payment = restorePayment;
+                    self->payment.submitting = false;
+                    self->payment.invalidate();
+                }
+                emit self->resolutionPaymentUiChanged(true);
+                emit self->combatStateChanged();
             }
-            emit resolutionPaymentUiChanged(true);
-            emit combatStateChanged();
-        }
-    });
+        });
 }
 
 void RuledClientState::submitPendingChoiceObject(quint32 oid)
@@ -690,12 +710,15 @@ void RuledClientState::declinePendingClickChoice()
         clearPendingChoiceOfKind(kind);
         ruled::v1::RuledCommand command;
         command.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
-        host->sendRuledCommandExpectingAck(command, [this, restore](bool accepted) {
-            if (!accepted && !pendingChoice.has_value()) {
-                setPendingChoice(restore);
-                emit combatStateChanged();
-            }
-        });
+        const auto submittedRevision = pendingChoiceRevision;
+        host->sendRuledCommandExpectingAck(
+            command, [self = QPointer<RuledClientState>(this), restore, submittedRevision](bool accepted) {
+                if (self && !accepted && self->pendingChoiceRevision == submittedRevision &&
+                    !self->pendingChoice.has_value()) {
+                    self->setPendingChoice(restore);
+                    emit self->combatStateChanged();
+                }
+            });
         return;
     }
     if (kind != ChoiceKind::TriggerTarget && kind != ChoiceKind::TriggerMode) {
@@ -751,12 +774,15 @@ void RuledClientState::submitPendingChoiceOption(int optionIndex)
         clearPendingChoiceOfKind(ChoiceKind::SpecialCast);
         ruled::v1::RuledCommand command;
         command.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
-        host->sendRuledCommandExpectingAck(command, [this, restore](bool accepted) {
-            if (!accepted && !pendingChoice.has_value()) {
-                setPendingChoice(restore);
-                emit combatStateChanged();
-            }
-        });
+        const auto submittedRevision = pendingChoiceRevision;
+        host->sendRuledCommandExpectingAck(
+            command, [self = QPointer<RuledClientState>(this), restore, submittedRevision](bool accepted) {
+                if (self && !accepted && self->pendingChoiceRevision == submittedRevision &&
+                    !self->pendingChoice.has_value()) {
+                    self->setPendingChoice(restore);
+                    emit self->combatStateChanged();
+                }
+            });
         return;
     }
 
@@ -765,12 +791,14 @@ void RuledClientState::submitPendingChoiceOption(int optionIndex)
         clearPendingChoiceOfKind(ChoiceKind::ReplacementOption);
         ruled::v1::RuledCommand command;
         command.mutable_submit_resolution_choice()->add_chosen_object_ids(static_cast<quint32>(optionIndex));
-        host->sendRuledCommandExpectingAck(command, [this, restore](bool accepted) {
-            if (!accepted && !pendingChoice) {
-                setPendingChoice(restore);
-                emit combatStateChanged();
-            }
-        });
+        const auto submittedRevision = pendingChoiceRevision;
+        host->sendRuledCommandExpectingAck(
+            command, [self = QPointer<RuledClientState>(this), restore, submittedRevision](bool accepted) {
+                if (self && !accepted && self->pendingChoiceRevision == submittedRevision && !self->pendingChoice) {
+                    self->setPendingChoice(restore);
+                    emit self->combatStateChanged();
+                }
+            });
         return;
     }
 
@@ -780,10 +808,12 @@ void RuledClientState::submitPendingChoiceOption(int optionIndex)
     auto *submission = command.mutable_submit_resolution_choice();
     submission->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_SELECT_BRANCH);
     submission->set_selected_branch_index(static_cast<quint32>(optionIndex));
-    host->sendRuledCommandExpectingAck(command, [this, restore](bool accepted) {
-        if (!accepted && !pendingChoice.has_value()) {
-            setPendingChoice(restore);
-            emit combatStateChanged();
+    const auto submittedRevision = pendingChoiceRevision;
+    host->sendRuledCommandExpectingAck(command, [self = QPointer<RuledClientState>(this), restore,
+                                                 submittedRevision](bool accepted) {
+        if (self && !accepted && self->pendingChoiceRevision == submittedRevision && !self->pendingChoice.has_value()) {
+            self->setPendingChoice(restore);
+            emit self->combatStateChanged();
         }
     });
 }
@@ -1003,8 +1033,8 @@ QString RuledClientState::pendingTriggerTargetPrompt() const
             groupCount = published->groups.size();
         }
     }
-    return formatRuledTargetPrompt(pendingTriggerText(), *group,
-                                   pendingChoice->activeTriggerTargetGroupPosition, groupCount);
+    return formatRuledTargetPrompt(pendingTriggerText(), *group, pendingChoice->activeTriggerTargetGroupPosition,
+                                   groupCount);
 }
 
 QString RuledClientState::pendingTriggerTargetDisplayText() const
@@ -1242,9 +1272,8 @@ bool RuledClientState::localPlayerIsDefender() const
         localId != currentPriorityPlayerId || blockersSubmittedThisStep) {
         return false;
     }
-    return std::any_of(currentAttackAssignments.cbegin(), currentAttackAssignments.cend(), [localId](const auto &a) {
-        return static_cast<int>(a.defending_player_id()) == localId;
-    });
+    return std::any_of(currentAttackAssignments.cbegin(), currentAttackAssignments.cend(),
+                       [localId](const auto &a) { return static_cast<int>(a.defending_player_id()) == localId; });
 }
 
 bool RuledClientState::combatDeclarationSatisfied() const
@@ -1423,10 +1452,12 @@ void RuledClientState::submitAttackingTokenDefender(const ruled::v1::CombatDefen
     emit combatStateChanged();
     ruled::v1::RuledCommand command;
     *command.mutable_submit_resolution_choice()->mutable_chosen_combat_defender() = option;
-    host->sendRuledCommandExpectingAck(command, [this, restore](bool accepted) {
-        if (!accepted && !pendingChoice.has_value()) {
-            setPendingChoice(restore);
-            emit combatStateChanged();
+    const auto submittedRevision = pendingChoiceRevision;
+    host->sendRuledCommandExpectingAck(command, [self = QPointer<RuledClientState>(this), restore,
+                                                 submittedRevision](bool accepted) {
+        if (self && !accepted && self->pendingChoiceRevision == submittedRevision && !self->pendingChoice.has_value()) {
+            self->setPendingChoice(restore);
+            emit self->combatStateChanged();
         }
     });
 }

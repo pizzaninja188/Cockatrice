@@ -1,0 +1,84 @@
+{
+  "format_version": 1,
+  "oracle_id": "aa286dd5-aa19-446d-9003-684d81eb57ca",
+  "complete_definition_review_confirmed": true,
+  "spans": [
+    {
+      "face_id": "laboratory_maniac",
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ],
+      "start_line": 1
+    }
+  ],
+  "primitive_references": [
+    {
+      "typed_path": "/faces/0/static_abilities/0/definition",
+      "symbol": "StaticAbilityDef::WinControllerInsteadOfEmptyLibraryDraw"
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "covers": "maniac paid cast empty draw wins without actual draw or spell exit",
+      "test": "scenario deck_coverage_empty_draw_win::maniac_paid_cast_empty_draw_wins_without_actual_draw_or_spell_exit"
+    },
+    {
+      "covers": "jace paid minus eight checks empty library after source leaves before losses",
+      "test": "scenario deck_coverage_empty_draw_win::jace_paid_minus_eight_checks_empty_library_after_source_leaves_before_losses"
+    },
+    {
+      "covers": "empty draw win both replacement orders stop children and reject invalid answers",
+      "test": "scenario deck_coverage_empty_draw_win::empty_draw_win_both_replacement_orders_stop_children_and_reject_invalid_answers"
+    },
+    {
+      "covers": "maniac partial draw commits one card but abandons brainstorm and frantic tails",
+      "test": "scenario deck_coverage_empty_draw_win::maniac_partial_draw_commits_one_card_but_abandons_brainstorm_and_frantic_tails"
+    },
+    {
+      "covers": "maniac nonactive apnap winner stops later players and staged draw triggers",
+      "test": "scenario deck_coverage_empty_draw_win::maniac_nonactive_apnap_winner_stops_later_players_and_staged_draw_triggers"
+    },
+    {
+      "covers": "maniac scheduled empty draw wins without step completion priority or loss",
+      "test": "scenario deck_coverage_empty_draw_win::maniac_scheduled_empty_draw_wins_without_step_completion_priority_or_loss"
+    },
+    {
+      "covers": "jace plus one mills chosen player before controller draw and illegal target cancels all",
+      "test": "scenario deck_coverage_empty_draw_win::jace_plus_one_mills_chosen_player_before_controller_draw_and_illegal_target_cancels_all"
+    },
+    {
+      "covers": "jace insufficient loyalty is atomic and self mill can reach empty draw win",
+      "test": "scenario deck_coverage_empty_draw_win::jace_insufficient_loyalty_is_atomic_and_self_mill_can_reach_empty_draw_win"
+    },
+    {
+      "covers": "serialized terminal draw choices use fresh handles and replay exact batches",
+      "test": "scenario deck_coverage_empty_draw_win::serialized_terminal_draw_choices_use_fresh_handles_and_replay_exact_batches"
+    },
+    {
+      "covers": "winning draw static uses copied face and current control or suppression",
+      "test": "scenario deck_coverage_empty_draw_win::winning_draw_static_uses_copied_face_and_current_control_or_suppression"
+    },
+    {
+      "covers": "parked empty draw win revalidates face control suppression copy and library",
+      "test": "scenario deck_coverage_empty_draw_win::parked_empty_draw_win_revalidates_face_control_suppression_copy_and_library"
+    },
+    {
+      "covers": "discard destination commits before empty draw win with library of leng",
+      "test": "scenario deck_coverage_empty_draw_win::discard_destination_commits_before_empty_draw_win_with_library_of_leng"
+    },
+    {
+      "covers": "final concession publishes one terminal result",
+      "test": "scenario deck_coverage_empty_draw_win::final_concession_publishes_one_terminal_result"
+    },
+    {
+      "covers": "failed draw terminal loss does not flush survivors staged triggers",
+      "test": "scenario deck_coverage_empty_draw_win::failed_draw_terminal_loss_does_not_flush_survivors_staged_triggers"
+    },
+    {
+      "covers": "Exact printed identity, complete authored clauses, cost, type, loyalty or power/toughness, and Oracle presentation.",
+      "test": "deck_coverage_draw_replacements::laboratory_maniac_exact_identity_and_empty_library_replacement"
+    }
+  ],
+  "tokens": []
+}

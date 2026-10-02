@@ -40,7 +40,7 @@ impl GameEngine {
         item: StackItem,
         custom_key: String,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<(), EngineError> {
+    ) -> Result<super::resolution::ResolutionProgress, EngineError> {
         let effect = custom::lookup(&custom_key)
             .ok_or_else(|| EngineError::MissingCard(custom_key.clone()))?;
         let controller = item.controller;
@@ -64,8 +64,7 @@ impl GameEngine {
                 library_owner,
             }]);
         }
-        self.park_or_finish(item, custom_key, 0, scratch, step, events)?;
-        Ok(())
+        self.park_or_finish(item, custom_key, 0, scratch, step, events)
     }
 
     /// Apply a deciding player's answer to the outstanding [`PendingResolution`] (CR 608).
@@ -937,7 +936,7 @@ impl GameEngine {
     ) -> Result<RuledEventBatch, EngineError> {
         if let Some(start) = resume_effect_index {
             let (effects, spell_label) = self.build_resolution_effects(&item);
-            self.run_effect_list_with_previous(
+            let progress = self.run_effect_list_with_previous(
                 &item,
                 &spell_label,
                 effects,
@@ -945,6 +944,9 @@ impl GameEngine {
                 previous_result,
                 &mut ev,
             )?;
+            if progress == super::resolution::ResolutionProgress::GameEnded {
+                return Ok(finish_with_events(self, ev));
+            }
         }
         if self.state.pending_resolution.is_none() {
             // The original pass-priority call deliberately skipped SBAs while this primitive was
@@ -968,16 +970,23 @@ impl GameEngine {
         scratch: Vec<ObjectId>,
         step: ResolutionStep,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<(), EngineError> {
+    ) -> Result<super::resolution::ResolutionProgress, EngineError> {
         let interrupt = match step {
             // CR 608.2n: this is the single point where a tier-3 resolution completes, whether it
             // ran straight through in `begin` or came back here from a later `resume`, so it is
             // where the spell takes its place beneath whatever its resolution put in the
             // graveyard — e.g. Gifts Ungiven under the two cards it puts there.
             ResolutionStep::Done => {
+                if custom_key == "brainstorm" {
+                    self.finish_deferred_stack_exit(
+                        &item,
+                        super::resolution::DeferredStackExit::Resolved,
+                        events,
+                    )?;
+                }
                 super::resolution::finish_deferred_graveyard_entry(&mut self.state, &item);
                 seat_resolved_spell_last_in_graveyard(&mut self.state, item.id);
-                return Ok(());
+                return Ok(super::resolution::ResolutionProgress::Completed);
             }
             ResolutionStep::NeedsChoice(it) => it,
             ResolutionStep::Draw {
@@ -996,7 +1005,12 @@ impl GameEngine {
                     "Brainstorm",
                     events,
                 )? {
-                    super::draw::DrawProgress::Parked => {}
+                    super::draw::DrawProgress::GameEnded => {
+                        return Ok(super::resolution::ResolutionProgress::GameEnded);
+                    }
+                    super::draw::DrawProgress::Parked => {
+                        return Ok(super::resolution::ResolutionProgress::Parked);
+                    }
                     super::draw::DrawProgress::Complete(done) => {
                         let super::draw::DrawCompletion::BrainstormPutBack {
                             stack,
@@ -1006,10 +1020,9 @@ impl GameEngine {
                         else {
                             unreachable!()
                         };
-                        self.finish_brainstorm_draw(stack.item, step, scratch, events)?;
+                        return self.finish_brainstorm_draw(stack.item, step, scratch, events);
                     }
                 }
-                return Ok(());
             }
         };
         let candidate_card_ids: Vec<String> = interrupt
@@ -1095,7 +1108,7 @@ impl GameEngine {
                 scratch,
             },
         });
-        Ok(())
+        Ok(super::resolution::ResolutionProgress::Parked)
     }
 
     pub(super) fn finish_brainstorm_draw(
@@ -1104,7 +1117,7 @@ impl GameEngine {
         step: u32,
         scratch: Vec<ObjectId>,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<(), EngineError> {
+    ) -> Result<super::resolution::ResolutionProgress, EngineError> {
         let controller = item.controller;
         let next = {
             let ctx = ResolutionCtx::new(

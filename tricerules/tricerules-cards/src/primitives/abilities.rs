@@ -1885,6 +1885,8 @@ pub enum DrawReplacementCondition {
 pub enum StaticAbilityDef {
     /// Thought Reflection and Teferi's Ageless Insight replace individual draw events.
     DoubleControllerDraws { condition: DrawReplacementCondition },
+    /// Laboratory Maniac and Jace, Wielder of Mysteries replace an empty-library draw.
+    WinControllerInsteadOfEmptyLibraryDraw,
     /// CR 722.3: Infirmary Healer and Elite Interceptor enter with a prepared designation.
     EntersPrepared,
     /// Hand-active replacement and exile trigger, used by Fiery Temper and Arrogant Wurm.

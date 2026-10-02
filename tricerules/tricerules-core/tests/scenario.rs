@@ -991,3 +991,6 @@ mod deck_coverage_farewell;
 
 #[path = "scenario/deck_coverage_draw_replacements.rs"]
 mod deck_coverage_draw_replacements;
+
+#[path = "scenario/deck_coverage_empty_draw_win.rs"]
+mod deck_coverage_empty_draw_win;

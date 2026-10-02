@@ -878,6 +878,9 @@ impl CharacteristicsEvaluator<'_> {
         queried_pre_layer_6: &Characteristics,
     ) -> bool {
         match condition {
+            GameCondition::ControllerLibraryEmpty => {
+                super::draw::controller_library_empty(self.state, controller)
+            }
             GameCondition::AllOf(branches) => branches.iter().all(|branch| {
                 self.characteristic_condition_holds(
                     branch,

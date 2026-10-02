@@ -482,6 +482,7 @@ impl GameEngine {
                 | StaticAbilityDef::GraveyardAnthemKeyword { .. }
                 | StaticAbilityDef::DiscardToLibrary
                 | StaticAbilityDef::DoubleControllerDraws { .. }
+                | StaticAbilityDef::WinControllerInsteadOfEmptyLibraryDraw
                 | StaticAbilityDef::NoMaximumHandSize { .. }
                 | StaticAbilityDef::MaximumHandSizeTwenty
                 | StaticAbilityDef::SpellCannotBeCountered

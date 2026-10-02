@@ -698,9 +698,11 @@ public:
         const quint32 copy = preparationCastCopyBySourceOid.value(sourceOid);
         return copy != 0 && preparedCopyBySourceOid.value(sourceOid) == copy &&
                        battlefieldGenerationByOid.contains(sourceOid) &&
-                       battlefieldGenerationByOid.value(sourceOid) == preparationCastGenerationBySourceOid.value(sourceOid) &&
+                       battlefieldGenerationByOid.value(sourceOid) ==
+                           preparationCastGenerationBySourceOid.value(sourceOid) &&
                        isZoneActionLegal(copy, RuledCastSource::Exile)
-                   ? copy : 0;
+                   ? copy
+                   : 0;
     }
     QHash<int, RuledCastSource> zoneCastSourceByOid;
     QMap<RuledCastActionKey, QString> zoneCastCostsByCastKey;
@@ -954,17 +956,15 @@ public:
     {
         return (static_cast<quint64>(objectId) << 8) | static_cast<quint64>(faceIndex & 0xff);
     }
-    [[nodiscard]] static RuledCastActionKey handCastActionKey(int slot,
-                                                               int faceIndex,
-                                                               ruled::v1::CastMethod method)
+    [[nodiscard]] static RuledCastActionKey handCastActionKey(int slot, int faceIndex, ruled::v1::CastMethod method)
     {
         return {slot, faceIndex, RuledCastSource::Hand, method, 0};
     }
     [[nodiscard]] static RuledCastActionKey zoneCastActionKey(int objectId,
-                                                               int faceIndex,
-                                                               RuledCastSource source,
-                                                               ruled::v1::CastMethod method,
-                                                               quint64 castingPermissionId = 0)
+                                                              int faceIndex,
+                                                              RuledCastSource source,
+                                                              ruled::v1::CastMethod method,
+                                                              quint64 castingPermissionId = 0)
     {
         return {objectId, faceIndex, source, method, castingPermissionId};
     }
@@ -1158,9 +1158,9 @@ public:
     {
         const auto &set =
             source == RuledCastSource::Hand ? handActionSet(ruled::v1::HAND_ACTION_CAST_SPELL) : zoneCastActions;
-        const auto key = source == RuledCastSource::Hand ? handCastActionKey(sourceId, faceIndex, method)
-                                                         : zoneCastActionKey(sourceId, faceIndex, source, method,
-                                                                             castingPermissionId);
+        const auto key = source == RuledCastSource::Hand
+                             ? handCastActionKey(sourceId, faceIndex, method)
+                             : zoneCastActionKey(sourceId, faceIndex, source, method, castingPermissionId);
         return set.costDataByCastKey.value(key);
     }
     [[nodiscard]] bool isZoneCastActionLegal(quint32 objectId,
@@ -1189,9 +1189,9 @@ public:
     {
         const auto &set =
             source == RuledCastSource::Hand ? handActionSet(ruled::v1::HAND_ACTION_CAST_SPELL) : zoneCastActions;
-        const auto key = source == RuledCastSource::Hand ? handCastActionKey(sourceId, faceIndex, method)
-                                                         : zoneCastActionKey(sourceId, faceIndex, source, method,
-                                                                             castingPermissionId);
+        const auto key = source == RuledCastSource::Hand
+                             ? handCastActionKey(sourceId, faceIndex, method)
+                             : zoneCastActionKey(sourceId, faceIndex, source, method, castingPermissionId);
         return set.eligibleRestrictedManaByCastKey.value(key);
     }
     [[nodiscard]] QSet<quint32> eligibleRestrictedManaForAbility(quint32 oid, int abilityIndex) const
@@ -1222,9 +1222,9 @@ public:
                          ruled::v1::CastMethod method = ruled::v1::CAST_METHOD_NORMAL,
                          quint64 castingPermissionId = 0) const
     {
-        const auto key = source == RuledCastSource::Hand ? handCastActionKey(slot, faceIndex, method)
-                                                         : zoneCastActionKey(slot, faceIndex, source, method,
-                                                                             castingPermissionId);
+        const auto key = source == RuledCastSource::Hand
+                             ? handCastActionKey(slot, faceIndex, method)
+                             : zoneCastActionKey(slot, faceIndex, source, method, castingPermissionId);
         const RuledHandActionSet *set = nullptr;
         if (source == RuledCastSource::Hand) {
             const auto it = handActions.constFind(ruled::v1::HAND_ACTION_CAST_SPELL);
@@ -1570,6 +1570,8 @@ public:
     void setPendingChoice(RuledPendingChoice choice);
     /// Drop the parked choice unconditionally.
     void clearPendingChoice();
+    /// Authoritative withdrawal of this seat's local action authority, including submitted choices.
+    void revokeLocalActionAuthority();
     /// Drop the parked choice only if it is of `kind` — used where the engine's follow-up event
     /// answers one specific kind (an ability hitting the stack, a copy being pushed).
     void clearPendingChoiceOfKind(ChoiceKind kind);
@@ -1655,8 +1657,8 @@ public:
     [[nodiscard]] bool hasPendingChoiceOptions() const
     {
         return hasPendingChoiceOfKind(ChoiceKind::TriggerMode) ||
-               hasPendingChoiceOfKind(ChoiceKind::ResolutionBranch) || hasPendingChoiceOfKind(ChoiceKind::SpecialCast) ||
-               hasPendingChoiceOfKind(ChoiceKind::ReplacementOption);
+               hasPendingChoiceOfKind(ChoiceKind::ResolutionBranch) ||
+               hasPendingChoiceOfKind(ChoiceKind::SpecialCast) || hasPendingChoiceOfKind(ChoiceKind::ReplacementOption);
     }
     [[nodiscard]] QVector<RuledPermanentAction> permanentActionsForOid(quint32 oid) const
     {
@@ -1806,8 +1808,7 @@ public:
 
     [[nodiscard]] bool isResolutionManaWindow() const
     {
-        return isResolutionPaymentActive() || hasPendingChoiceOfKind(ChoiceKind::SpecialCast) ||
-               hasPendingSpellCast();
+        return isResolutionPaymentActive() || hasPendingChoiceOfKind(ChoiceKind::SpecialCast) || hasPendingSpellCast();
     }
 
     [[nodiscard]] bool isResolutionPaymentActive() const
@@ -1900,8 +1901,14 @@ public:
     {
         return openingMulliganCount;
     }
-    [[nodiscard]] bool canKeepOpeningHand() const { return openingCanKeep; }
-    [[nodiscard]] bool canRedrawOpeningHand() const { return openingCanRedraw; }
+    [[nodiscard]] bool canKeepOpeningHand() const
+    {
+        return openingCanKeep;
+    }
+    [[nodiscard]] bool canRedrawOpeningHand() const
+    {
+        return openingCanRedraw;
+    }
     [[nodiscard]] int openingBottomRequiredCount() const;
     [[nodiscard]] int openingBottomSelectedCount() const;
     [[nodiscard]] bool isOpeningBottomHandIndexSelected(int handIndex) const;
@@ -1959,6 +1966,7 @@ signals:
     /// Emitted when ruled game-session state is cleared (game stopped or new game started).
     /// Listeners should reset any UI state derived from the previous game's engine events.
     void sessionReset();
+    void localActionAuthorityRevoked();
     /// Immediate on begin/finish and again when the 150 ms waiting label becomes visible.
     void engineCommandPendingUiChanged();
     /// Authoritative ruled-game timeline (lands, spells, combat, life) for the message log.

@@ -123,6 +123,14 @@ pub(crate) fn ability_source(
             .unwrap()
             .set_counter(tricerules_cards::CounterKind::Loyalty, 5);
     }
+    if card == "jace,_wielder_of_mysteries" {
+        // Direct relocation skips intrinsic entry; the ultimate needs eight loyalty.
+        // Paid-card scenarios separately prove entry at four and rejection below eight.
+        e.state.objects.get_mut(&oid).unwrap().set_counter(
+            tricerules_cards::CounterKind::Loyalty,
+            if ability == 1 { 8 } else { 4 },
+        );
+    }
     if card == "pentavus" {
         // Direct relocation skips entry. Actual-card scenarios independently prove entry.
         e.state

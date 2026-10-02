@@ -2,6 +2,41 @@ use super::legal_actions::fill_legal;
 use super::*;
 
 impl GameEngine {
+    /// CR 104.1: keep committed state, but abandon every unfinished rules transaction.
+    /// Terminal publication is shared by command dispatch and internal automatic passes.
+    pub(super) fn finish_terminal_batch(&mut self, mut batch: RuledEventBatch) -> RuledEventBatch {
+        let winner = self.state.winner.expect("terminal batch has a winner");
+        self.state.pending_resolution = None;
+        self.state.pending_replacement_event = None;
+        self.state.pending_spell_cast = None;
+        self.state.pending_trigger_order = None;
+        self.state.pending_triggers.clear();
+        self.state.staged_trigger_groups.clear();
+        self.state.pending_immediate_observer_actions.clear();
+        self.state.pending_observer_return_batch = None;
+        self.state.cleanup_discard_player = None;
+        self.state.opening = None;
+        self.state.undoable_mana_abilities.clear();
+        batch.payment_preview = None;
+        batch.events.retain(|event| {
+            !matches!(
+                event.ev.as_ref(),
+                Some(
+                    rv1::ruled_event::Ev::ResolutionChoiceRequired(_)
+                        | rv1::ruled_event::Ev::TriggerOrderRequired(_)
+                        | rv1::ruled_event::Ev::PriorityChanged(_)
+                )
+            )
+        });
+        batch.events.push(ev_game_over(winner));
+        batch.events.push(self.ev_zone_view_sync_tracked());
+        for player in 0..self.state.players.len() {
+            batch.events.push(self.ev_mana_pool_updated(player));
+        }
+        legal_actions::fill_legal(&mut batch, self);
+        batch
+    }
+
     fn rules_annotation_labels(
         &self,
         oid: ObjectId,

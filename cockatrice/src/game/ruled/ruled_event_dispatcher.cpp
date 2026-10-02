@@ -6,10 +6,10 @@
 
 #include <QDebug>
 #include <algorithm>
-#include <limits>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/protocol/ruled_choice_metadata.h>
 #include <libcockatrice/utility/ruled_debug.h>
+#include <limits>
 
 namespace
 {
@@ -78,8 +78,7 @@ bool isCombatPhase(RuledCombatPhase phase)
            phase == RuledCombatPhase::CombatDamage;
 }
 
-QString resolvedStackAnnotation(const ruled::v1::StackPushed &event,
-                                const RuledPresentationResolver &resolver)
+QString resolvedStackAnnotation(const ruled::v1::StackPushed &event, const RuledPresentationResolver &resolver)
 {
     QStringList parts;
     // Physical spells already render their card face. Their primary presentation describes that
@@ -105,8 +104,7 @@ QString resolvedStackAnnotation(const ruled::v1::StackPushed &event,
     if (parts.isEmpty()) {
         return legacy;
     }
-    if ((legacy.contains(QStringLiteral("X =")) || legacy == QStringLiteral("(copy)")) &&
-        !parts.contains(legacy)) {
+    if ((legacy.contains(QStringLiteral("X =")) || legacy == QStringLiteral("(copy)")) && !parts.contains(legacy)) {
         parts.append(legacy);
     }
     return parts.join(QLatin1Char('\n'));
@@ -278,8 +276,8 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src, const RuledP
     for (const auto &group : src.cast_cost_groups()) {
         RuledCastCostGroup parsedGroup;
         parsedGroup.groupIndex = static_cast<int>(group.group_index());
-        parsedGroup.prompt = group.has_presentation() ? resolver.resolve(group.presentation())
-                                                        : QString::fromStdString(group.prompt());
+        parsedGroup.prompt =
+            group.has_presentation() ? resolver.resolve(group.presentation()) : QString::fromStdString(group.prompt());
         parsedGroup.min = static_cast<int>(group.min());
         parsedGroup.max = static_cast<int>(group.max());
         parsedGroup.skipLabel = QString::fromStdString(group.skip_label());
@@ -287,7 +285,7 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src, const RuledP
             RuledCastCostOption parsedOption;
             parsedOption.optionIndex = static_cast<int>(option.option_index());
             parsedOption.label = option.has_presentation() ? resolver.resolve(option.presentation())
-                                                            : QString::fromStdString(option.label());
+                                                           : QString::fromStdString(option.label());
             switch (option.kind()) {
                 case ruled::v1::CAST_COST_OPTION_KIND_BEHOLD:
                     parsedOption.kind = RuledCastCostOptionKind::Behold;
@@ -400,14 +398,19 @@ RuledAbilityEntry parseAbilityInfo(const ruled::v1::AbilityInfo &ability, const 
     }
     return {ability.has_presentation() ? resolver.resolve(ability.presentation())
                                        : QString::fromStdString(ability.text()),
-            QString::fromStdString(ability.mana_cost()), QString::fromStdString(ability.mana_produced()),
-            QString::fromStdString(ability.cost_label()), ability.activatable(), ability.has_only_tap_cost(),
-            manaOptionLabels, xCounterManaChoice, ability.is_mana_ability()};
+            QString::fromStdString(ability.mana_cost()),
+            QString::fromStdString(ability.mana_produced()),
+            QString::fromStdString(ability.cost_label()),
+            ability.activatable(),
+            ability.has_only_tap_cost(),
+            manaOptionLabels,
+            xCounterManaChoice,
+            ability.is_mana_ability()};
 }
 
 /// Copies the engine's structured hand-action contract into the generic client-side indexes.
 QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::LegalActions &actions,
-                                                              const RuledPresentationResolver &resolver)
+                                                               const RuledPresentationResolver &resolver)
 {
     QHash<RuledHandActionKind, RuledHandActionSet> parsed;
     for (const auto &action : actions.hand_actions()) {
@@ -423,10 +426,9 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
         set.handIndices.insert(handIndex);
         const QString cardName = QString::fromStdString(action.card_name());
         set.indicesByCardName.insert(cardName, handIndex);
-        set.faceOptionsByIndex[handIndex].append(
-            {faceIndex, cardName, QString::fromStdString(action.cost()),
-             static_cast<int>(action.generic_cost_reduction()), method, action.has_convoke(), 0,
-             0, QString{}});
+        set.faceOptionsByIndex[handIndex].append({faceIndex, cardName, QString::fromStdString(action.cost()),
+                                                  static_cast<int>(action.generic_cost_reduction()), method,
+                                                  action.has_convoke(), 0, 0, QString{}});
         if (action.has_cost_choices()) {
             set.costDataByCastKey.insert(castKey, parseCostData(action.cost_choices(), resolver));
         }
@@ -443,10 +445,9 @@ QHash<RuledHandActionKind, RuledHandActionSet> copyHandActions(const ruled::v1::
             set.modalMaxModesByCastKey.insert(castKey, static_cast<int>(action.max_modes()));
             set.modalOptionsByCastKey.insert(castKey, parseSpellModes(action.modes(), resolver));
             if (action.has_all_modes_cast_cost()) {
-                set.allModesCastCostByCastKey.insert(
-                    castKey,
-                    {static_cast<int>(action.all_modes_cast_cost().group_index()),
-                     static_cast<int>(action.all_modes_cast_cost().option_index())});
+                set.allModesCastCostByCastKey.insert(castKey,
+                                                     {static_cast<int>(action.all_modes_cast_cost().group_index()),
+                                                      static_cast<int>(action.all_modes_cast_cost().option_index())});
             }
         }
     }
@@ -519,8 +520,11 @@ void RuledEventDispatcher::resetPerBatchLegalActions()
 void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
 {
     BatchContext ctx;
+    bool authoritativeSnapshot = false;
 
     for (const auto &event : batch.events()) {
+        if (event.has_active_public_reveal_snapshot())
+            authoritativeSnapshot = true;
         if (event.has_attackers_preview() || event.has_blockers_preview()) {
             // Servatrice synthesizes preview payloads locally and appends ordinary identity maps.
             // They are not an authoritative engine snapshot and must not retire a parked reveal.
@@ -629,6 +633,15 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
         applyLegalActions(lit->second, ctx);
     } else {
         applyNoLegalActions();
+        if (authoritativeSnapshot && ctx.reconcilePublicReveal) {
+            state->revokeLocalActionAuthority();
+            // Legal entries are recipient-filtered. Retire only stale local priority; a
+            // departed recipient must still see another seat's current public priority.
+            if (state->currentPriorityPlayerId == host->localPlayerId()) {
+                state->currentPriorityPlayerId = -1;
+                host->setPriorityPlayerId(-1);
+            }
+        }
     }
     if (state->hasPendingTriggerTarget() && state->pendingChoice.has_value() &&
         !state->pendingChoice->triggerTargets.groups.isEmpty()) {
@@ -936,9 +949,8 @@ void RuledEventDispatcher::applyTriggerOrderRequired(const ruled::v1::TriggerOrd
         candidate.oid = c.trigger_object_id();
         candidate.sourceOid = c.source_permanent_id();
         candidate.cardName = QString::fromStdString(c.source_card_name());
-        candidate.abilityText = c.has_ability_presentation()
-                                    ? presentationResolver.resolve(c.ability_presentation())
-                                    : QString::fromStdString(c.ability_text());
+        candidate.abilityText = c.has_ability_presentation() ? presentationResolver.resolve(c.ability_presentation())
+                                                             : QString::fromStdString(c.ability_text());
         candidates.append(candidate);
     }
     state->triggerOrderCandidateOids.clear();
@@ -1031,9 +1043,10 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         return;
     }
 
-    if (!ruledTokenChoiceMetadataValid(rcr) || rcr.min() > rcr.max() || (rcr.selection_alternatives_size() > 0 &&
-                                  (rcr.choice_kind() != ruled::v1::CHOICE_KIND_HAND_CARDS ||
-                                   rcr.candidate_object_ids_size() != rcr.candidate_server_card_ids_size()))) {
+    if (!ruledTokenChoiceMetadataValid(rcr) || rcr.min() > rcr.max() ||
+        (rcr.selection_alternatives_size() > 0 &&
+         (rcr.choice_kind() != ruled::v1::CHOICE_KIND_HAND_CARDS ||
+          rcr.candidate_object_ids_size() != rcr.candidate_server_card_ids_size()))) {
         qWarning() << "Rejecting ruled choice with invalid selection metadata";
         return;
     }
@@ -1328,8 +1341,8 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         choice.kind = ChoiceKind::ReplacementOption;
         choice.promptText = QString::fromStdString(rcr.prompt_text());
         for (int i = 0; i < rcr.candidate_names_size(); ++i)
-            choice.choiceOptions.append({static_cast<int>(rcr.candidate_object_ids(i)),
-                                         QString::fromStdString(rcr.candidate_names(i)), true});
+            choice.choiceOptions.append(
+                {static_cast<int>(rcr.candidate_object_ids(i)), QString::fromStdString(rcr.candidate_names(i)), true});
         state->setPendingChoice(std::move(choice));
         emit state->combatStateChanged();
         return;
@@ -1350,10 +1363,10 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
             popupIds.insert(id);
         }
     }
-    if (isPrivateCardOrder && (rcr.candidate_names_size() < 2 ||
-                              rcr.candidate_object_ids_size() != rcr.candidate_names_size() ||
-                              rcr.candidate_server_card_ids_size() != rcr.candidate_names_size() ||
-                              rcr.min() != rcr.candidate_names_size() || rcr.max() != rcr.min())) {
+    if (isPrivateCardOrder &&
+        (rcr.candidate_names_size() < 2 || rcr.candidate_object_ids_size() != rcr.candidate_names_size() ||
+         rcr.candidate_server_card_ids_size() != rcr.candidate_names_size() ||
+         rcr.min() != rcr.candidate_names_size() || rcr.max() != rcr.min())) {
         qWarning() << "Rejecting malformed private card order";
         return;
     }
@@ -1747,7 +1760,8 @@ void RuledEventDispatcher::applyZoneView(const ruled::v1::ZoneViewSync &view, Ba
             const auto position = std::find(p.exile_object_ids().begin(), p.exile_object_ids().end(), copy.object_id());
             if (copy.object_id() != 0 && !copy.display_name().empty() && position != p.exile_object_ids().end()) {
                 ctx.preparationCopies.append({copy.object_id(), p.player_id(), -1,
-                    static_cast<int>(position - p.exile_object_ids().begin()), QString::fromStdString(copy.display_name())});
+                                              static_cast<int>(position - p.exile_object_ids().begin()),
+                                              QString::fromStdString(copy.display_name())});
             }
         }
         if (p.first_strike_step_pending()) {
@@ -2006,7 +2020,8 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
         if (source == RuledCastSource::Exile && action.has_preparation_source()) {
             const auto &preparedSource = action.preparation_source();
             state->preparationCastCopyBySourceOid.insert(preparedSource.object_id(), action.object_id());
-            state->preparationCastGenerationBySourceOid.insert(preparedSource.object_id(), preparedSource.zone_change_generation());
+            state->preparationCastGenerationBySourceOid.insert(preparedSource.object_id(),
+                                                               preparedSource.zone_change_generation());
         }
         if (action.needs_target()) {
             state->zoneCastActions.needsTargetIndices.insert(objectId);
@@ -2028,9 +2043,8 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
                                                                 parseSpellModes(action.modes(), presentationResolver));
             if (action.has_all_modes_cast_cost()) {
                 state->zoneCastActions.allModesCastCostByCastKey.insert(
-                    castKey,
-                    {static_cast<int>(action.all_modes_cast_cost().group_index()),
-                     static_cast<int>(action.all_modes_cast_cost().option_index())});
+                    castKey, {static_cast<int>(action.all_modes_cast_cost().group_index()),
+                              static_cast<int>(action.all_modes_cast_cost().option_index())});
             }
         }
     }
@@ -2042,13 +2056,8 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
                                            : RuledCastSource::Exile;
         state->zoneLandSourceByOid.insert(objectId, source);
         state->zoneLandFacesByOid[objectId].append(
-            {static_cast<int>(action.face_index()),
-             QString::fromStdString(action.card_name()),
-             QString(),
-             0,
-             ruled::v1::CAST_METHOD_NORMAL,
-             false,
-             static_cast<quint64>(action.zone_change_generation())});
+            {static_cast<int>(action.face_index()), QString::fromStdString(action.card_name()), QString(), 0,
+             ruled::v1::CAST_METHOD_NORMAL, false, static_cast<quint64>(action.zone_change_generation())});
     }
 
     state->validTargetsByHandSlot.clear();
