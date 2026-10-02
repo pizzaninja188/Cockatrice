@@ -1,0 +1,40 @@
+// Oracle b8020a8b-557b-465d-865d-b59fecd7abc1; source/rulings checked 2026-10-02.
+// https://scryfall.com/card/eoc/145/threefold-thunderhulk
+// https://api.scryfall.com/cards/699d1222-f150-46aa-9004-87b45f07eb42/rulings
+// CR 122.6, 603.6a, 508.1m, 608.2h, 602.2b: entry counters, triggers, LKI and costs.
+(
+  id: "threefold_thunderhulk",
+  name: "Threefold Thunderhulk",
+  face_id: "threefold_thunderhulk",
+  mana_cost: "{7}",
+  types: ["Artifact", "Creature", "Gnome"],
+  power: 0,
+  toughness: 0,
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: EntersWithCounters(counter: PlusOnePlusOne, amount: 3),
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "gnome_c_1_1", count: Count(SourcePower))],
+  ), (
+    ability_id: "triggered_02",
+    presentation: OracleLines([2]),
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [CreateTokens(token: "gnome_c_1_1", count: Count(SourcePower))],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    costs: [Mana("{2}"), SacrificePermanent(filter: (
+      kind: AnyPermanent,
+      controller: You,
+      permanent_types: [Artifact],
+      excluded_objects: [Source],
+    ))],
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

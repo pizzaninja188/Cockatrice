@@ -10,6 +10,8 @@ mod authoring_actions;
 
 #[path = "scenario/deck_coverage_phyrexian_metamorph.rs"]
 mod deck_coverage_phyrexian_metamorph;
+#[path = "scenario/deck_coverage_threefold_thunderhulk.rs"]
+mod deck_coverage_threefold_thunderhulk;
 
 #[path = "scenario/deck_coverage_entry_reveal.rs"]
 mod deck_coverage_entry_reveal;

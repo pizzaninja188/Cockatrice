@@ -1,0 +1,73 @@
+{
+  "format_version": 1,
+  "oracle_id": "b8020a8b-557b-465d-865d-b59fecd7abc1",
+  "spans": [
+    {
+      "face_id": "threefold_thunderhulk",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "threefold_thunderhulk",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/1"
+      ]
+    },
+    {
+      "face_id": "threefold_thunderhulk",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "tokens": [
+    "gnome_c_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_threefold_thunderhulk::threefold_thunderhulk_registers_exact_identity_and_all_clauses",
+      "covers": "exact one-face colorless {7} Artifact Creature Gnome 0/0, entry counters, both source-power triggers, another-artifact costs, counter subject and three Oracle lines"
+    },
+    {
+      "test": "scenario deck_coverage_threefold_thunderhulk::threefold_thunderhulk_paid_cast_enters_with_counters_then_creates_exact_gnomes",
+      "covers": "actual seven-mana cast enters as 3/3 with three counters before resolving its separate ETB trigger into exactly three distinct owned 1/1 colorless Gnome artifact creature tokens"
+    },
+    {
+      "test": "scenario deck_coverage_threefold_thunderhulk::threefold_thunderhulk_sacrifices_another_artifact_before_counter_resolution",
+      "covers": "noncreature artifact and Gnome token payments spend two mana and sacrifice before stack resolution; no tap cost; exactly one counter on resolution"
+    },
+    {
+      "test": "scenario deck_coverage_threefold_thunderhulk::threefold_thunderhulk_rejects_invalid_costs_wrong_actor_and_insufficient_mana_atomically",
+      "covers": "self, nonartifact, opponent artifact, wrong actor and insufficient mana all reject with canonical state unchanged"
+    },
+    {
+      "test": "scenario deck_coverage_threefold_thunderhulk::threefold_thunderhulk_attack_uses_power_after_a_resolved_activation",
+      "covers": "actual declared attack trigger remains pending while an activation grows power from three to four, then creates four additional Gnomes"
+    },
+    {
+      "test": "scenario deck_coverage_threefold_thunderhulk::threefold_thunderhulk_departed_trigger_uses_old_generation_power_after_return",
+      "covers": "actual Unsummon departure plus logged dev reentry fixture with same ObjectId; old ETB uses last-known five and new ETB uses current nine"
+    },
+    {
+      "test": "scenario deck_coverage_threefold_thunderhulk::threefold_thunderhulk_zero_and_negative_power_create_no_tokens",
+      "covers": "structural layer fixture with signed power zero or negative two and positive toughness produces no Gnomes"
+    },
+    {
+      "test": "scenario deck_coverage_threefold_thunderhulk::threefold_thunderhulk_resolved_counter_does_not_follow_source_reentry",
+      "covers": "pending activation plus actual Unsummon and logged dev reentry fixture does not put its counter on the source's new incarnation"
+    },
+    {
+      "test": "scenario deck_coverage_threefold_thunderhulk::threefold_thunderhulk_four_player_tokens_and_costs_use_actual_controller_ids",
+      "covers": "four nonconsecutive seat IDs bind token owner/controller to seven and reject opponent forty-two's artifact while accepting seven's own token"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
