@@ -1809,6 +1809,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::PutCounters { .. } => {
                         pump_counters::put_counters(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::DoubleCounters { .. } => {
+                        pump_counters::double_counters(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::PutCountersAll { .. } => {
                         pump_counters::put_counters_all(&mut cx, effect)?
                     }

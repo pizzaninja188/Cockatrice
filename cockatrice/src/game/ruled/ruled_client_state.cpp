@@ -6,6 +6,7 @@
 #include <QPointer>
 #include <QTimer>
 #include <algorithm>
+#include <limits>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 
 QString formatRuledTargetPrompt(const QString &sourceContext,
@@ -1013,6 +1014,11 @@ QString RuledClientState::pendingTriggerTargetDisplayText() const
     const int maximum = pendingTriggerMaxTargets();
     if (minimum == 1 && maximum == 1) {
         return prompt;
+    }
+    if (maximum == std::numeric_limits<int>::max()) {
+        return QCoreApplication::translate("RuledTargetPrompt", "%1\nSelected: %2.")
+            .arg(prompt)
+            .arg(pendingTriggerSelectedCount());
     }
     return QCoreApplication::translate("RuledTargetPrompt", "%1\nSelected: %2 (%3–%4).")
         .arg(prompt)

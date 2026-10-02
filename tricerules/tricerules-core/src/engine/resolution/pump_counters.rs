@@ -885,6 +885,71 @@ pub(super) fn grant_keywords_all_permanents(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn double_counters(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::DoubleCounters { target } = effect else {
+        return Err(EngineError::Illegal("counter doubling dispatch mismatch"));
+    };
+    // Read every legal recipient's current bag once before the first placement (CR 608.2h).
+    let cohorts = cx
+        .resolve_battlefield_subjects(&EffectSubject::Chosen(Box::new(target)))
+        .into_iter()
+        .filter_map(|oid| {
+            cx.engine.state.objects.get(&oid).map(|object| {
+                let counters = object
+                    .counters
+                    .iter()
+                    .filter_map(|(&kind, &count)| (count > 0).then_some((kind, count)))
+                    .collect::<Vec<_>>();
+                (oid, counters)
+            })
+        })
+        .collect::<Vec<_>>();
+    let mut counter_events = Vec::new();
+    for (oid, counters) in cohorts {
+        for (kind, count) in counters {
+            let Some(event) = cx.engine.place_counters_with_event(
+                oid,
+                kind,
+                count,
+                false,
+                super::super::continuous::CounterPlacementOrigin::Effect,
+            ) else {
+                continue;
+            };
+            let GameEvent::CountersPlaced {
+                object,
+                kind,
+                before,
+                after,
+                ..
+            } = &event
+            else {
+                unreachable!("counter placement funnel returned a different event");
+            };
+            let placed = after.saturating_sub(*before);
+            cx.effect_result
+                .counter_placements
+                .push(crate::state::CounterPlacementReceipt {
+                    object: *object,
+                    counter: *kind,
+                    count: placed,
+                });
+            cx.events.push(ev_log(format!(
+                "{} puts {placed} {} counter(s) on {}",
+                cx.spell_label,
+                kind.label(),
+                object_display_name(&cx.engine.state, cx.engine.registry, oid),
+            )));
+            counter_events.push(event);
+        }
+    }
+    cx.engine.fire_triggers(&counter_events);
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn put_counters(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

@@ -1,0 +1,60 @@
+{
+  "format_version": 1,
+  "oracle_id": "debce64a-18bd-42f5-9e85-158c2242e9e9",
+  "spans": [
+    {
+      "face_id": "deepglow_skate",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::DoubleCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_deepglow_skate::deepglow_skate_paid_cast_doubles_each_current_kind_on_own_and_opposing_targets",
+      "covers": "paid cast doubles each current kind on own and opposing targets"
+    },
+    {
+      "test": "scenario deck_coverage_deepglow_skate::deepglow_skate_can_choose_zero_targets_and_finishes_without_placing_counters",
+      "covers": "can choose zero targets and finishes without placing counters"
+    },
+    {
+      "test": "scenario deck_coverage_deepglow_skate::deepglow_skate_rejects_wrong_actor_duplicate_foreign_and_player_targets_atomically",
+      "covers": "rejects wrong actor duplicate foreign and player targets atomically"
+    },
+    {
+      "test": "scenario deck_coverage_deepglow_skate::deepglow_skate_partial_illegal_target_and_departed_source_leave_other_target_valid",
+      "covers": "partial illegal target and departed source leave other target valid"
+    },
+    {
+      "test": "scenario deck_coverage_deepglow_skate::deepglow_skate_all_illegal_blinked_target_does_not_receive_counters_as_new_incarnation",
+      "covers": "all illegal blinked target does not receive counters as new incarnation"
+    },
+    {
+      "test": "scenario deck_coverage_deepglow_skate::deepglow_skate_uses_effect_placement_replacement_and_prohibition_for_each_kind",
+      "covers": "uses effect placement replacement and prohibition for each kind"
+    },
+    {
+      "test": "scenario deck_coverage_deepglow_skate::deepglow_skate_paid_cast_and_target_command_replay_identically",
+      "covers": "paid cast and target command replay identically"
+    },
+    {
+      "test": "scenario deck_coverage_deepglow_skate::deepglow_skate_three_nonconsecutive_players_use_published_permanent_ids",
+      "covers": "three nonconsecutive players use published permanent ids"
+    },
+    {
+      "test": "deck_coverage_deepglow_skate::deepglow_skate_exact_printed_identity_and_optional_permanent_target_group",
+      "covers": "Exact printed blue five mana 3/3 Fish identity, one ETB instruction and zero to unsigned maximum permanent targets"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

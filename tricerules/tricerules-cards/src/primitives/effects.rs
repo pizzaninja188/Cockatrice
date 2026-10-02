@@ -1716,6 +1716,11 @@ pub enum SpellEffectKind {
     /// each kind already on each chosen recipient. Atraxa, Evolution Sage, Inexorable Tide,
     /// Tezzeret's Gambit, Flux Channeler, and Karn's Bastion share this action.
     Proliferate,
+    /// CR 701.10e: add the current amount of every counter kind on each legal target.
+    /// Deepglow Skate and Vorel of the Hull Clade share ordinary effect-origin placement.
+    DoubleCounters {
+        target: TargetFilter,
+    },
     /// Heirloom Auntie and Reluctant Dounguard remove counters without paying a cost.
     RemoveCounters {
         counter: CounterKind,
@@ -2790,6 +2795,7 @@ impl SpellEffectKind {
                 ..
             } => vec![TargetRole::Filtered(target)],
             SpellEffectKind::DamageTarget { target, .. }
+            | SpellEffectKind::DoubleCounters { target }
             | SpellEffectKind::ExileIfWouldDieThisTurn { target }
             | SpellEffectKind::DamageTargets { target, .. }
             | SpellEffectKind::DestroyAttached { target, .. }
@@ -4537,6 +4543,13 @@ impl SpellEffectKind {
                         "permanent effect cannot target players, got {:?}",
                         target.kind
                     ))
+                } else {
+                    Ok(())
+                }
+            }
+            SpellEffectKind::DoubleCounters { target } => {
+                if !target.is_permanent_only() {
+                    Err("DoubleCounters requires permanent-only targets".into())
                 } else {
                     Ok(())
                 }

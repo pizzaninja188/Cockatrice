@@ -6,6 +6,7 @@
 
 #include <QDebug>
 #include <algorithm>
+#include <limits>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/protocol/ruled_choice_metadata.h>
 #include <libcockatrice/utility/ruled_debug.h>
@@ -128,8 +129,15 @@ RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTarget
         }
         parsed.canTargetSelf = group.can_target_self();
         parsed.canTargetOpponent = group.can_target_opponent();
-        parsed.minTargets = static_cast<int>(group.min());
-        parsed.maxTargets = static_cast<int>(group.max());
+        const auto representable = static_cast<quint32>(std::numeric_limits<int>::max());
+        if (group.min() > representable) {
+            // An unrepresentable minimum stays unreachable; never relax engine requirements.
+            parsed.minTargets = 1;
+            parsed.maxTargets = 0;
+        } else {
+            parsed.minTargets = static_cast<int>(group.min());
+            parsed.maxTargets = static_cast<int>(std::min(group.max(), representable));
+        }
         parsed.promptText = QString::fromStdString(group.prompt_text());
         parsed.sameGraveyard = group.same_graveyard();
         for (const quint32 other : group.distinct_from_group_indices()) {

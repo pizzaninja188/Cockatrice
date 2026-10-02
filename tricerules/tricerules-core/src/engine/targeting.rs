@@ -1218,6 +1218,18 @@ fn validate_effect_targets(
                 }
             }
         }
+        SpellEffectKind::DoubleCounters { target: filter } => {
+            let mut seen = std::collections::HashSet::new();
+            for target in targets {
+                if !seen.insert(target.object_id)
+                    || !target_filter_legal_with_context(
+                        engine, filter, target.object_id, caster, source, trigger_context,
+                    )
+                {
+                    return Err(EngineError::Illegal("illegal counter doubling target"));
+                }
+            }
+        }
         SpellEffectKind::PumpTarget { subject, .. }
         | SpellEffectKind::Explore { subject }
         | SpellEffectKind::PutCounters { subject, .. } | SpellEffectKind::RemoveCounters { subject, .. } | SpellEffectKind::PutCounterSnapshot { subject, .. }
@@ -1832,6 +1844,7 @@ fn spell_target_legality_error_with_context(
             ..
         }
         | SpellEffectKind::DamageTarget { target: _, .. }
+        | SpellEffectKind::DoubleCounters { target: _ }
         | SpellEffectKind::ExileIfWouldDieThisTurn { target: _ }
         | SpellEffectKind::DamageTargets { target: _, .. }
         | SpellEffectKind::TapOrUntap { target: _ }

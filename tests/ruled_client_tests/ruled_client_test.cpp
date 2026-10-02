@@ -5526,6 +5526,66 @@ TEST_F(RuledClientTest, VariableTriggerTargetsStageOneGraveyardCohortAndRestoreO
     EXPECT_EQ(state->pendingTriggerSelectedCount(), 2);
 }
 
+TEST_F(RuledClientTest, AnyNumberTriggerTargetsAcceptMultipleDeselectAndExplicitConfirmation)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *trigger = batch.add_events()->mutable_trigger_needs_target();
+    trigger->set_source_permanent_id(100);
+    trigger->set_controller_player_id(kLocalPlayer);
+    auto *group = trigger->mutable_targets()->add_groups();
+    group->set_min(0);
+    group->set_max(4294967295u);
+    group->add_valid_permanent_ids(701);
+    group->add_valid_permanent_ids(702);
+    apply(batch);
+    EXPECT_FALSE(state->pendingTriggerTargetDisplayText().contains(QStringLiteral("2147483647")));
+    EXPECT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 701, kLocalPlayer));
+    EXPECT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 702, kOpponent));
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    EXPECT_EQ(state->pendingTriggerSelectedCount(), 2);
+    EXPECT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 701, kLocalPlayer));
+    EXPECT_EQ(state->pendingTriggerSelectedCount(), 1);
+    EXPECT_FALSE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PLAYER, 0, kOpponent));
+    EXPECT_FALSE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 999, kLocalPlayer));
+    state->confirmPendingTriggerTargets();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    ASSERT_EQ(host.sentCommands[0].choose_trigger_target().targets_size(), 1);
+    EXPECT_EQ(host.sentCommands[0].choose_trigger_target().targets(0).object_id(), 702u);
+}
+
+TEST_F(RuledClientTest, AnyNumberTriggerTargetsCanExplicitlyConfirmZero)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *trigger = batch.add_events()->mutable_trigger_needs_target();
+    trigger->set_source_permanent_id(100);
+    trigger->set_controller_player_id(kLocalPlayer);
+    auto *group = trigger->mutable_targets()->add_groups();
+    group->set_min(0);
+    group->set_max(4294967295u);
+    group->add_valid_permanent_ids(701);
+    apply(batch);
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+    state->confirmPendingTriggerTargets();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands[0].choose_trigger_target().targets_size(), 0);
+}
+
+TEST_F(RuledClientTest, UnrepresentableTargetMinimumRemainsUnreachable)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *trigger = batch.add_events()->mutable_trigger_needs_target();
+    trigger->set_source_permanent_id(100);
+    trigger->set_controller_player_id(kLocalPlayer);
+    auto *group = trigger->mutable_targets()->add_groups();
+    group->set_min(4294967295u);
+    group->set_max(4294967295u);
+    group->add_valid_permanent_ids(701);
+    apply(batch);
+    EXPECT_FALSE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 701, kLocalPlayer));
+    state->confirmPendingTriggerTargets();
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+}
+
 TEST_F(RuledClientTest, ExactOneTriggerTargetSubmitsImmediately)
 {
     ruled::v1::RuledEventBatch batch;

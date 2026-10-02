@@ -1,0 +1,21 @@
+(
+  id: "deepglow_skate",
+  name: "Deepglow Skate",
+  face_id: "deepglow_skate",
+  mana_cost: "{4}{U}",
+  types: ["Creature", "Fish"],
+  power: 3,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [DoubleCounters(target: (kind: AnyPermanent))],
+    targeting: Some((groups: [(
+      min: 0,
+      max: 4294967295,
+      prompt: "Choose any number of target permanents",
+      effect_indices: [0],
+    )])),
+  )],
+)
