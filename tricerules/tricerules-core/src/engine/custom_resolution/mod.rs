@@ -44,7 +44,7 @@ impl GameEngine {
         let effect = custom::lookup(&custom_key)
             .ok_or_else(|| EngineError::MissingCard(custom_key.clone()))?;
         let controller = item.controller;
-        let (step, scratch, drawn_players, library_searches) = {
+        let (step, scratch, library_searches) = {
             let mut ctx = ResolutionCtx::new(
                 &mut self.state,
                 self.registry,
@@ -55,20 +55,16 @@ impl GameEngine {
                 Vec::new(),
             );
             let r = effect.begin(&mut ctx);
-            let drawn_players = ctx.take_drawn_players();
             let library_searches = ctx.take_library_searches();
-            (r, ctx.scratch, drawn_players, library_searches)
+            (r, ctx.scratch, library_searches)
         };
-        for drawer in drawn_players {
-            self.fire_card_drawn(drawer);
-        }
         for (searcher, library_owner) in library_searches {
             self.fire_triggers(&[GameEvent::LibrarySearched {
                 searcher,
                 library_owner,
             }]);
         }
-        self.park_or_finish(item, custom_key, 0, scratch, step, events);
+        self.park_or_finish(item, custom_key, 0, scratch, step, events)?;
         Ok(())
     }
 
@@ -103,6 +99,12 @@ impl GameEngine {
                 return Err(EngineError::Illegal("unknown resolution choice decision"));
             }
         };
+        if matches!(
+            pending.continuation,
+            ResolutionContinuation::DrawReplacement { .. }
+        ) {
+            return self.finish_draw_replacement_choice(pending, answer, decision);
+        }
         if matches!(
             pending.continuation,
             ResolutionContinuation::EntryCost { .. }
@@ -352,6 +354,9 @@ impl GameEngine {
             ResolutionContinuation::AttackingTokenDefenders { .. } => {
                 unreachable!("attacking-token branch handled before object-choice validation")
             }
+            ResolutionContinuation::DrawReplacement { .. } => {
+                unreachable!("draw replacement handled above")
+            }
             ResolutionContinuation::Custom { .. } => {}
             ResolutionContinuation::ManaPayment { .. } => unreachable!("handled above"),
         }
@@ -383,7 +388,7 @@ impl GameEngine {
         };
 
         let mut ev = vec![];
-        let (step, scratch, drawn_players, library_searches) = {
+        let (step, scratch, library_searches) = {
             let mut ctx = ResolutionCtx::new(
                 &mut self.state,
                 self.registry,
@@ -394,20 +399,16 @@ impl GameEngine {
                 scratch,
             );
             let r = effect.resume(&mut ctx, &choice);
-            let drawn_players = ctx.take_drawn_players();
             let library_searches = ctx.take_library_searches();
-            (r, ctx.scratch, drawn_players, library_searches)
+            (r, ctx.scratch, library_searches)
         };
-        for drawer in drawn_players {
-            self.fire_card_drawn(drawer);
-        }
         for (searcher, library_owner) in library_searches {
             self.fire_triggers(&[GameEvent::LibrarySearched {
                 searcher,
                 library_owner,
             }]);
         }
-        self.park_or_finish(item, key, step_no, scratch, step, &mut ev);
+        self.park_or_finish(item, key, step_no, scratch, step, &mut ev)?;
 
         if self.state.pending_resolution.is_none() {
             if let Some(i) = self.state.player_idx(self.state.active_player_id()) {
@@ -967,7 +968,7 @@ impl GameEngine {
         scratch: Vec<ObjectId>,
         step: ResolutionStep,
         events: &mut Vec<rv1::RuledEvent>,
-    ) {
+    ) -> Result<(), EngineError> {
         let interrupt = match step {
             // CR 608.2n: this is the single point where a tier-3 resolution completes, whether it
             // ran straight through in `begin` or came back here from a later `resume`, so it is
@@ -976,9 +977,40 @@ impl GameEngine {
             ResolutionStep::Done => {
                 super::resolution::finish_deferred_graveyard_entry(&mut self.state, &item);
                 seat_resolved_spell_last_in_graveyard(&mut self.state, item.id);
-                return;
+                return Ok(());
             }
             ResolutionStep::NeedsChoice(it) => it,
+            ResolutionStep::Draw {
+                player,
+                count,
+                after: custom::PostDrawPhase::BrainstormPutBack,
+            } => {
+                let completion = super::draw::DrawCompletion::BrainstormPutBack {
+                    stack: ParkedStackResolution::new(item),
+                    step: step_no,
+                    scratch,
+                };
+                match self.start_draw_transaction(
+                    vec![(player, count)],
+                    completion,
+                    "Brainstorm",
+                    events,
+                )? {
+                    super::draw::DrawProgress::Parked => {}
+                    super::draw::DrawProgress::Complete(done) => {
+                        let super::draw::DrawCompletion::BrainstormPutBack {
+                            stack,
+                            step,
+                            scratch,
+                        } = done.completion
+                        else {
+                            unreachable!()
+                        };
+                        self.finish_brainstorm_draw(stack.item, step, scratch, events)?;
+                    }
+                }
+                return Ok(());
+            }
         };
         let candidate_card_ids: Vec<String> = interrupt
             .candidates
@@ -1063,5 +1095,29 @@ impl GameEngine {
                 scratch,
             },
         });
+        Ok(())
+    }
+
+    pub(super) fn finish_brainstorm_draw(
+        &mut self,
+        item: StackItem,
+        step: u32,
+        scratch: Vec<ObjectId>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let controller = item.controller;
+        let next = {
+            let ctx = ResolutionCtx::new(
+                &mut self.state,
+                self.registry,
+                events,
+                controller,
+                item.id,
+                step,
+                scratch.clone(),
+            );
+            custom::custom_effect_brainstorm::after_draw(&ctx)
+        };
+        self.park_or_finish(item, "brainstorm".to_string(), step, scratch, next, events)
     }
 }

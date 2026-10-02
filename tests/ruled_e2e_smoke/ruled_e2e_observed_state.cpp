@@ -10,6 +10,14 @@ void ObservedState::observePhysicalEvent(const GameEvent &ev)
         }
         for (const auto &player : gsc.player_list()) {
             for (const auto &zone : player.zone_list()) {
+                if (zone.name() == ZoneNames::HAND) {
+                    const int playerId = player.properties().player_id();
+                    physicalHandCountByPlayer[playerId] = zone.card_count();
+                    auto &names = physicalHandNamesByPlayer[playerId];
+                    names.clear();
+                    for (const auto &card : zone.card_list())
+                        names.push_back(card.name());
+                }
                 if (zone.name() != ZoneNames::TABLE) {
                     continue;
                 }
@@ -43,6 +51,10 @@ void ObservedState::observePhysicalEvent(const GameEvent &ev)
         const QString from = QString::fromStdString(mc.start_zone());
         const QString to = QString::fromStdString(mc.target_zone());
         const QString name = QString::fromStdString(mc.card_name());
+        if (from == QLatin1String(ZoneNames::HAND))
+            --physicalHandCountByPlayer[mc.start_player_id()];
+        if (to == QLatin1String(ZoneNames::HAND))
+            ++physicalHandCountByPlayer[mc.target_player_id()];
         // ZoneNames, not literals: Cockatrice's exile zone is spelled "rfg".
 
         const QLatin1String exile(ZoneNames::EXILE);

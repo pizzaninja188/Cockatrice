@@ -429,13 +429,21 @@ impl GameEngine {
             }
         }
         if let Some((player, count)) = batch.draw_after {
-            resolution::zones::draw_cards_for_player(
-                self,
-                &mut events,
-                player,
-                count,
+            let completion = super::draw::DrawCompletion::ResumeEffects {
+                stack,
+                result: result.into(),
+            };
+            return match self.start_draw_transaction(
+                vec![(player, count)],
+                completion,
                 "discard continuation",
-            )?;
+                &mut events,
+            )? {
+                super::draw::DrawProgress::Parked => Ok(finish_with_events(self, events)),
+                super::draw::DrawProgress::Complete(done) => {
+                    self.complete_draw_transaction(done, events)
+                }
+            };
         }
         self.complete_parked_resolution_with_previous(
             stack.item,

@@ -323,4 +323,165 @@ TEST_F(RuledE2ESmokeTest, FranticSearchPrivateDiscardThenPublicOpposingLandCohor
         }
     }
 }
+TEST_F(RuledE2ESmokeTest, DrawReplacementPartialHandsRemainPrivateAndBrainstormBindingsStayStable)
+{
+    const auto started = startServers();
+    ASSERT_TRUE(started) << started.message();
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0)
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    OpeningDriver p1(true, QStringLiteral("drawreplacep1"), &transcript);
+    OpeningDriver p2(false, QStringLiteral("drawreplacep2"), &transcript);
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{60, QStringLiteral("Island")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{60, QStringLiteral("Forest")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "draw replacement start"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "draw replacement start"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId)
+            break;
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    auto send = [&](OpeningDriver &sender, const ruled::v1::RuledCommand &command) {
+        const auto before1 = p1.stateVersion;
+        const auto before2 = p2.stateVersion;
+        sender.sendRuled(command, QStringLiteral("draw replacement physical privacy"));
+        QElapsedTimer wait;
+        wait.start();
+        while ((p1.stateVersion <= before1 || p2.stateVersion <= before2) && wait.elapsed() < 10000) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    ruled::v1::RuledCommand pass;
+    pass.mutable_pass_priority();
+    for (const char *name : {"Thought Reflection", "Teferi's Ageless Insight", "Brainstorm"}) {
+        ruled::v1::RuledCommand put;
+        auto *dev = put.mutable_dev_command();
+        dev->set_target_player_id(p1.myId);
+        dev->mutable_put_card_in_zone()->set_card_name(name);
+        dev->mutable_put_card_in_zone()->set_zone(ruled::v1::DEV_ZONE_HAND);
+        ASSERT_TRUE(send(p1, put));
+        const int blue = std::string(name) == "Thought Reflection" ? 3 : std::string(name) == "Brainstorm" ? 1 : 2;
+        const int colorless = std::string(name) == "Thought Reflection" ? 4 : std::string(name) == "Brainstorm" ? 0 : 2;
+        ruled::v1::RuledCommand mana;
+        auto *add = mana.mutable_dev_command();
+        add->set_target_player_id(p1.myId);
+        add->mutable_add_mana()->set_u(blue);
+        add->mutable_add_mana()->set_c(colorless);
+        ASSERT_TRUE(send(p1, mana));
+        const auto *action = p1.handAction(ruled::v1::HAND_ACTION_CAST_SPELL, QString::fromUtf8(name));
+        ASSERT_NE(action, nullptr);
+        ruled::v1::RuledCommand cast;
+        auto *spell = cast.mutable_cast_spell();
+        spell->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+        spell->mutable_source()->set_hand_index(action->hand_index());
+        spell->mutable_payment()->mutable_mana()->set_u(blue);
+        spell->mutable_payment()->mutable_mana()->set_c(colorless);
+        ASSERT_TRUE(send(p1, cast));
+        ASSERT_EQ(p1.myPool.total(), 0);
+        ASSERT_EQ(p1.stackDepth, 1);
+        const int handBefore = p1.handSizeByPlayer[p1.myId];
+        const int opponentHand = p2.handSizeByPlayer[p2.myId];
+        const auto opponentSlots = p2.handServerCardBySlot;
+        ASSERT_TRUE(send(p1, pass));
+        ASSERT_TRUE(send(p2, pass));
+        if (std::string(name) != "Brainstorm") {
+            EXPECT_EQ(p1.stackDepth, 0);
+            EXPECT_EQ(p2.stackDepth, 0);
+            continue;
+        }
+        std::set<quint32> oldHandles;
+        std::set<int> priorHandBindings;
+        for (const auto &[slot, scid] : p1.handServerCardBySlot)
+            priorHandBindings.insert(scid);
+        for (int original = 0; original < 3; ++original) {
+            ASSERT_TRUE(p1.pendingChoice.has_value());
+            const auto choice = *p1.pendingChoice;
+            ASSERT_EQ(choice.choice_kind(), ruled::v1::CHOICE_KIND_REPLACEMENT_EFFECT);
+            ASSERT_EQ(choice.replacement_options_size(), 2);
+            EXPECT_EQ(choice.deciding_player_id(), p1.myId);
+            EXPECT_EQ(choice.min(), 1u);
+            EXPECT_EQ(choice.max(), 1u);
+            EXPECT_EQ(p1.handSizeByPlayer[p1.myId], handBefore + original * 4);
+            EXPECT_EQ(p2.physicalHandCountByPlayer[p1.myId], handBefore + original * 4);
+            for (const auto &name : p2.physicalHandNamesByPlayer[p1.myId])
+                EXPECT_TRUE(name.empty());
+            EXPECT_EQ(p2.handServerCardBySlot, opponentSlots);
+            EXPECT_EQ(p2.handSizeByPlayer[p2.myId], opponentHand);
+            ASSERT_TRUE(p2.lastResolutionChoice.has_value());
+            EXPECT_FALSE(p2.pendingChoice.has_value());
+            EXPECT_EQ(p2.lastResolutionChoice->candidate_names_size(), 0);
+            EXPECT_EQ(p2.lastResolutionChoice->candidate_card_ids_size(), 0);
+            EXPECT_EQ(p2.lastResolutionChoice->candidate_server_card_ids_size(), 0);
+            quint32 selected = 0;
+            for (const auto &option : choice.replacement_options()) {
+                EXPECT_FALSE(oldHandles.count(option.application_id()));
+                oldHandles.insert(option.application_id());
+                EXPECT_TRUE(p1.serverCardByEngineOid.count(option.source_object_id()));
+                EXPECT_EQ(p1.serverCardByEngineOid.at(option.source_object_id()),
+                          p2.serverCardByEngineOid.at(option.source_object_id()));
+                if (option.source_card_name() == "Teferi's Ageless Insight")
+                    selected = option.application_id();
+            }
+            ASSERT_NE(selected, 0u);
+            ruled::v1::RuledCommand answer;
+            answer.mutable_submit_resolution_choice()->add_chosen_object_ids(selected);
+            p1.pendingChoice.reset();
+            ASSERT_TRUE(send(p1, answer));
+            std::set<int> current;
+            for (const auto &[slot, scid] : p1.handServerCardBySlot)
+                current.insert(scid);
+            EXPECT_EQ(current.size(), static_cast<size_t>(handBefore + (original + 1) * 4));
+            for (int scid : priorHandBindings)
+                EXPECT_TRUE(current.count(scid));
+            priorHandBindings = current;
+        }
+        ASSERT_TRUE(p1.pendingChoice.has_value());
+        const auto hand = *p1.pendingChoice;
+        ASSERT_EQ(hand.choice_kind(), ruled::v1::CHOICE_KIND_HAND_CARDS);
+        EXPECT_TRUE(hand.ordered());
+        ASSERT_EQ(hand.candidate_object_ids_size(), handBefore + 12);
+        ASSERT_EQ(hand.candidate_server_card_ids_size(), hand.candidate_object_ids_size());
+        ASSERT_TRUE(p2.lastResolutionChoice.has_value());
+        EXPECT_EQ(p2.lastResolutionChoice->candidate_object_ids_size(), 0);
+        EXPECT_EQ(p2.lastResolutionChoice->candidate_names_size(), 0);
+        EXPECT_EQ(p2.lastResolutionChoice->candidate_server_card_ids_size(), 0);
+        std::set<int> returned;
+        ruled::v1::RuledCommand putBack;
+        for (int index = 0; index < 2; ++index) {
+            const int scid = hand.candidate_server_card_ids(index);
+            EXPECT_TRUE(priorHandBindings.count(scid));
+            returned.insert(scid);
+            putBack.mutable_submit_resolution_choice()->add_chosen_object_ids(hand.candidate_object_ids(index));
+        }
+        p1.pendingChoice.reset();
+        ASSERT_TRUE(send(p1, putBack));
+        EXPECT_EQ(p1.stackDepth, 0);
+        EXPECT_EQ(p2.stackDepth, 0);
+        EXPECT_EQ(p1.handSizeByPlayer[p1.myId], handBefore + 10);
+        EXPECT_EQ(p2.physicalHandCountByPlayer[p1.myId], handBefore + 10);
+        for (const auto &name : p2.physicalHandNamesByPlayer[p1.myId])
+            EXPECT_TRUE(name.empty());
+        EXPECT_EQ(p2.handServerCardBySlot, opponentSlots);
+        for (const auto &[slot, scid] : p1.handServerCardBySlot) {
+            EXPECT_TRUE(priorHandBindings.count(scid));
+            EXPECT_FALSE(returned.count(scid));
+        }
+    }
+}
 } // namespace ruled_e2e

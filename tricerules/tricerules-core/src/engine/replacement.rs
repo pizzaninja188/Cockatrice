@@ -73,6 +73,7 @@ fn saga_chapter_label(mut chapter: u32) -> String {
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) enum PendingReplacementEvent {
     Discard(Box<crate::state::PendingDiscardBatch>),
+    Draw(Box<super::draw::PendingDrawTransaction>),
     Damage(super::damage::PendingDamageBatch),
     BattlefieldEntry(Box<PendingBattlefieldEntry>),
 }

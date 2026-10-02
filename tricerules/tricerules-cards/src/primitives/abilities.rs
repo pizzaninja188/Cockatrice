@@ -1870,12 +1870,21 @@ pub enum CounterPlacementAffected {
     AttachedPermanent,
 }
 
+/// The two mandatory draw-doubling applicability rules (CR 121, 614.11).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DrawReplacementCondition {
+    Always,
+    ExceptFirstSuccessfulDrawInOwnDrawStep,
+}
+
 /// One static ability on a permanent (CR 604). Most entries generate a continuous effect while
 /// its source is on the battlefield. An ability that modifies how its own object enters is the
 /// CR 113.6h/614.12 exception and is inspected during the proposed entry event. Static abilities
 /// do not use the stack, unlike triggered and activated abilities.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StaticAbilityDef {
+    /// Thought Reflection and Teferi's Ageless Insight replace individual draw events.
+    DoubleControllerDraws { condition: DrawReplacementCondition },
     /// CR 722.3: Infirmary Healer and Elite Interceptor enter with a prepared designation.
     EntersPrepared,
     /// Hand-active replacement and exile trigger, used by Fiery Temper and Arrogant Wurm.

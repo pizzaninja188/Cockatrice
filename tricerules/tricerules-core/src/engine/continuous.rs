@@ -481,6 +481,7 @@ impl GameEngine {
                 StaticAbilityDef::Madness { .. }
                 | StaticAbilityDef::GraveyardAnthemKeyword { .. }
                 | StaticAbilityDef::DiscardToLibrary
+                | StaticAbilityDef::DoubleControllerDraws { .. }
                 | StaticAbilityDef::NoMaximumHandSize { .. }
                 | StaticAbilityDef::MaximumHandSizeTwenty
                 | StaticAbilityDef::SpellCannotBeCountered

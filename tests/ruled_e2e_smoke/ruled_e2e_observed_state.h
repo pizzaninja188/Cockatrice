@@ -59,6 +59,8 @@ struct ObservedState
     std::set<quint32> counteredStackObjectIds;
     QStringList labels;
     std::map<int, int> handSizeByPlayer;
+    std::map<int, int> physicalHandCountByPlayer;
+    std::map<int, std::vector<std::string>> physicalHandNamesByPlayer;
     std::map<int, int> lifeByPlayer;
     std::map<int, std::map<std::string, int>> playerCountersByPlayer;
     std::map<int, std::vector<Permanent>> battlefieldByPlayer;

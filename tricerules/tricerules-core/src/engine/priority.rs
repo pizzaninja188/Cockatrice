@@ -1,6 +1,6 @@
 use super::events::{ev_game_over, ev_log, ev_phase, ev_priority_changed, finish_with_events};
 use super::legal_actions::fill_legal;
-use super::resolution::{draw_card, move_object_to_zone};
+use super::resolution::move_object_to_zone;
 use super::*;
 
 /// Sorcery-speed window: your main phase, stack empty, you are the active player (CR 307.5,
@@ -298,6 +298,7 @@ impl GameEngine {
         }
         self.reconcile_departed_players(&mut batch.events)?;
         self.reindex_battlefield_control(&mut batch.events);
+        self.reconcile_draw_departure(&mut batch.events)?;
         self.apply_sbas(&mut batch.events)?;
         if let Some(winner) = self.state.winner {
             batch.events.push(ev_game_over(winner));
@@ -437,6 +438,11 @@ impl GameEngine {
             Upkeep => {
                 self.clear_all_mana_pools();
                 self.state.turn_step = Draw;
+                let occurrence = self
+                    .state
+                    .draw_step_progress
+                    .map_or(1, |(_, previous, _)| previous + 1);
+                self.state.draw_step_progress = Some((ap, occurrence, 0));
                 if let Some(i) = self.state.player_idx(ap) {
                     self.state.priority_idx = i;
                 }
@@ -447,32 +453,19 @@ impl GameEngine {
                 let skip_opening_draw = self.state.players.len() == 2
                     && self.state.turn == 1
                     && self.state.active_player_idx == self.state.starting_player_idx;
-                if skip_opening_draw {
-                    // skip draw
-                } else if let Some(idx) = self.state.player_idx(ap) {
-                    if self.state.players[idx].library.is_empty() {
-                        self.state.players[idx].has_lost = true;
-                        ev.push(ev_log(if self.state.players.len() == 2 {
-                            "Game over: empty library on draw".into()
-                        } else {
-                            format!("P{ap} loses: empty library on draw")
-                        }));
-                        return Ok(finish_with_events(self, std::mem::take(ev)));
+                if !skip_opening_draw {
+                    let completion = super::draw::DrawCompletion::FinishDrawStep {
+                        active_player: ap,
+                        occurrence,
+                    };
+                    match self.start_draw_transaction(vec![(ap, 1)], completion, "draw step", ev)? {
+                        super::draw::DrawProgress::Parked => {
+                            return Ok(finish_with_events(self, std::mem::take(ev)))
+                        }
+                        super::draw::DrawProgress::Complete(_) => {}
                     }
-                    draw_card(&mut self.state, self.registry, ap)?;
-                    self.fire_card_drawn(ap);
                 }
-                self.state.passes_since_stack_change = 0;
-                // CR 504.2: draw-step triggers go on the stack only after the turn-based draw
-                // above. Unreachable when the active player just decked out — that path returns.
-                self.fire_triggers(&[GameEvent::PhaseBegan {
-                    phase: rv1::PhaseId::Draw,
-                    active_player: ap,
-                }]);
-                self.flush_staged_triggers(ev);
-                if self.state.blocking_choice().is_none() {
-                    ev.push(ev_priority_changed(self));
-                }
+                self.finish_draw_step_action(ap, occurrence, ev)?;
             }
             Draw => {
                 self.clear_all_mana_pools();

@@ -61,6 +61,16 @@ pub trait CardEffect: Send + Sync {
 pub enum ResolutionStep {
     Done,
     NeedsChoice(ResolutionInterrupt),
+    Draw {
+        player: PlayerId,
+        count: u32,
+        after: PostDrawPhase,
+    },
+}
+
+/// Brainstorm's existing live-hand choice must begin only after its resumable draw finishes.
+pub enum PostDrawPhase {
+    BrainstormPutBack,
 }
 
 /// A request for one player to choose among `candidates` (object ids). Generic across every
@@ -114,7 +124,6 @@ pub struct ResolutionCtx<'a> {
     pub scratch: Vec<ObjectId>,
     /// Successful library-to-hand draw edges, kept in occurrence order for the engine to turn
     /// into ordinary draw events after the custom-effect borrow ends.
-    drawn_players: Vec<PlayerId>,
     /// Completed searches, retained until the custom-effect borrow ends so the engine can collect
     /// ordinary battlefield triggers without exposing mutable game state to card-specific code.
     library_searches: Vec<(PlayerId, PlayerId)>,
@@ -138,13 +147,8 @@ impl<'a> ResolutionCtx<'a> {
             controller,
             step,
             scratch,
-            drawn_players: Vec::new(),
             library_searches: Vec::new(),
         }
-    }
-
-    pub(crate) fn take_drawn_players(&mut self) -> Vec<PlayerId> {
-        std::mem::take(&mut self.drawn_players)
     }
 
     pub(crate) fn take_library_searches(&mut self) -> Vec<(PlayerId, PlayerId)> {
@@ -154,41 +158,6 @@ impl<'a> ResolutionCtx<'a> {
     /// Record one completed search without exposing any searched card identity.
     pub fn record_library_search(&mut self, searcher: PlayerId, library_owner: PlayerId) {
         self.library_searches.push((searcher, library_owner));
-    }
-
-    /// Draw `n` cards for `player` (CR 121). Returns the drawn object ids (fewer than `n` if the
-    /// library empties). CR 121.4/704.5b: attempting to draw more cards than remain makes the
-    /// player lose the next time state-based actions are checked. CR 704.4 means that, if the
-    /// library runs out during a resolution, record the pending loss and let the enclosing
-    /// resolution finish before the engine applies that state-based action. Silently stopping
-    /// would let a player Brainstorm into an empty library without decking out, while applying
-    /// `has_lost` immediately would incorrectly interrupt a mandatory trailing instruction in the
-    /// same resolution.
-    pub fn draw(&mut self, player: PlayerId, n: u32) -> Vec<ObjectId> {
-        let Some(idx) = self.state.player_idx(player) else {
-            return Vec::new();
-        };
-        let mut drawn = Vec::new();
-        let mut decked_out = false;
-        for _ in 0..n {
-            let Some(oid) = self.state.players[idx].library.pop_front() else {
-                decked_out = true;
-                break;
-            };
-            self.state.players[idx].hand.push(oid);
-            if let Some(o) = self.state.objects.get_mut(&oid) {
-                o.zone = Zone::Hand;
-            }
-            drawn.push(oid);
-            self.drawn_players.push(player);
-        }
-        if decked_out {
-            self.state.players[idx].pending_library_loss = true;
-            self.log(format!(
-                "P{player} attempted to draw more cards than remained in the library; loss pending until the next state-based-action check (CR 121.4/704.5b; CR 704.4)."
-            ));
-        }
-        drawn
     }
 
     /// The object ids in `player`'s hand, in hand order.
@@ -225,20 +194,14 @@ impl<'a> ResolutionCtx<'a> {
             let Some(idx) = self.state.player_idx(owner) else {
                 continue;
             };
-            // Not `move_object_to_zone`: that appends to the *bottom* of the library, and the
-            // whole point here is the top. Removal still has to sweep every player — `battlefield`
-            // is keyed by controller, so an owner-only retain would strand a ghost oid there.
-            for p in &mut self.state.players {
-                p.hand.retain(|&x| x != oid);
-                p.library.retain(|&x| x != oid);
-                p.battlefield.retain(|&x| x != oid);
-                p.graveyard.retain(|&x| x != oid);
-                p.exile.retain(|&x| x != oid);
-            }
+            // Commit the ordinary CR 400.7 move/reset first, then reposition its physical card.
+            // No public movement event names a hidden hand/library card.
+            crate::engine::move_object_to_zone(self.state, self.registry, oid, Zone::Library, None)
+                .expect("validated custom library placement");
+            self.state.players[idx]
+                .library
+                .retain(|other| *other != oid);
             self.state.players[idx].library.push_front(oid);
-            if let Some(o) = self.state.objects.get_mut(&oid) {
-                o.zone = Zone::Library;
-            }
         }
     }
 

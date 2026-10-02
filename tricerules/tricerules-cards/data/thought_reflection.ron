@@ -1,0 +1,8 @@
+(
+  id: "thought_reflection", name: "Thought Reflection", face_id: "thought_reflection",
+  mana_cost: "{4}{U}{U}{U}", types: ["Enchantment"],
+  static_abilities: [(
+    ability_id: "static_01", presentation: OracleLines([1]),
+    definition: DoubleControllerDraws(condition: Always),
+  )],
+)

@@ -988,3 +988,6 @@ mod deck_coverage_deepglow_skate;
 
 #[path = "scenario/deck_coverage_farewell.rs"]
 mod deck_coverage_farewell;
+
+#[path = "scenario/deck_coverage_draw_replacements.rs"]
+mod deck_coverage_draw_replacements;

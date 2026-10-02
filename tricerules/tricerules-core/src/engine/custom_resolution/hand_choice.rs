@@ -99,13 +99,21 @@ impl GameEngine {
         }
         if hand_choice.draw_after > 0 && (!hand_choice.draw_only_if_discarded || !chosen.is_empty())
         {
-            resolution::zones::draw_cards_for_player(
-                self,
-                &mut events,
-                hand_choice.affected_player,
-                hand_choice.draw_after,
+            let completion = super::super::draw::DrawCompletion::ResumeEffects {
+                stack,
+                result: result.into(),
+            };
+            return match self.start_draw_transaction(
+                vec![(hand_choice.affected_player, hand_choice.draw_after)],
+                completion,
                 &card_name,
-            )?;
+                &mut events,
+            )? {
+                super::super::draw::DrawProgress::Parked => Ok(finish_with_events(self, events)),
+                super::super::draw::DrawProgress::Complete(done) => {
+                    self.complete_draw_transaction(done, events)
+                }
+            };
         }
         self.complete_parked_resolution_with_previous(
             stack.item,

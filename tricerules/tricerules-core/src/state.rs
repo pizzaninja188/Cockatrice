@@ -970,6 +970,9 @@ pub enum PendingLibraryLookStage {
 /// handler consumes; engine-owned string sentinels and unrelated optional fields are forbidden.
 #[derive(serde::Serialize, Debug, Clone)]
 pub enum ResolutionContinuation {
+    DrawReplacement {
+        stack: Option<ParkedStackResolution>,
+    },
     SimultaneousEntryOrder {
         stack: Option<ParkedStackResolution>,
         order: Box<PendingEntryTimestampOrder>,
@@ -1185,6 +1188,7 @@ pub enum ResolutionContinuation {
 impl ResolutionContinuation {
     pub fn stack(&self) -> Option<&ParkedStackResolution> {
         match self {
+            Self::DrawReplacement { stack } => stack.as_ref(),
             Self::DiscardReplacement { stack }
             | Self::Custom { stack, .. }
             | Self::ManaPayment { stack, .. }
@@ -1229,6 +1233,7 @@ impl ResolutionContinuation {
 
     pub fn stack_mut(&mut self) -> Option<&mut ParkedStackResolution> {
         match self {
+            Self::DrawReplacement { stack } => stack.as_mut(),
             Self::DiscardReplacement { stack }
             | Self::Custom { stack, .. }
             | Self::ManaPayment { stack, .. }
@@ -2331,6 +2336,8 @@ pub struct GameState {
     /// parallel `pending_resolution` owns the generic prompt/continuation metadata.
     pub(crate) pending_replacement_event:
         Option<crate::engine::replacement::PendingReplacementEvent>,
+    /// (active drawer, draw-step occurrence, successful draws in this occurrence).
+    pub(crate) draw_step_progress: Option<(PlayerId, u64, u32)>,
     /// Active continuous effects (CR 611/613). Effects are pushed here at resolution and drained
     /// at cleanup or when their source leaves the battlefield. P/T and other characteristics are
     /// recomputed from base + this list on demand — `GameObject.power/toughness` always hold the

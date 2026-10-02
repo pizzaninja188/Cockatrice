@@ -23,28 +23,11 @@ pub(crate) static EFFECT: &dyn CardEffect = &Brainstorm;
 impl CardEffect for Brainstorm {
     fn begin(&self, ctx: &mut ResolutionCtx) -> ResolutionStep {
         let controller = ctx.controller;
-        ctx.draw(controller, 3);
-        ctx.log(format!("P{controller} draws 3 cards (Brainstorm)."));
-
-        let hand = ctx.hand(controller);
-        let count = hand.len().min(2) as u32;
-        if count == 0 {
-            return ResolutionStep::Done;
+        ResolutionStep::Draw {
+            player: controller,
+            count: 3,
+            after: super::PostDrawPhase::BrainstormPutBack,
         }
-        ResolutionStep::NeedsChoice(ResolutionInterrupt {
-            public_reveal: false,
-            deciding_player: controller,
-            prompt: format!(
-                "Brainstorm: choose {count} card{} to put back on top of your library (last chosen = top).",
-                if count == 1 { "" } else { "s" }
-            ),
-            choice_kind: ChoiceKind::HandCards,
-            candidates: hand,
-            min: count,
-            max: count,
-            ordered: true,
-            unique_names: false,
-        })
     }
 
     fn resume(&self, ctx: &mut ResolutionCtx, choice: &ResolutionChoice) -> ResolutionStep {
@@ -63,4 +46,19 @@ impl CardEffect for Brainstorm {
         ));
         ResolutionStep::Done
     }
+}
+
+pub(crate) fn after_draw(ctx: &ResolutionCtx) -> ResolutionStep {
+    let hand = ctx.hand(ctx.controller);
+    let count = hand.len().min(2) as u32;
+    if count == 0 {
+        return ResolutionStep::Done;
+    }
+    ResolutionStep::NeedsChoice(ResolutionInterrupt {
+        public_reveal: false,
+        deciding_player: ctx.controller,
+        prompt: format!("Brainstorm: choose {count} card{} to put back on top of your library (last chosen = top).", if count == 1 { "" } else { "s" }),
+        choice_kind: ChoiceKind::HandCards, candidates: hand,
+        min: count, max: count, ordered: true, unique_names: false,
+    })
 }

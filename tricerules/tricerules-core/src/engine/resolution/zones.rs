@@ -1,4 +1,5 @@
 use super::super::events::ev_log_private;
+use super::super::events::finish_with_events;
 use super::super::presentation::{
     stack_child_presentation_ref, PresentationPath, StackPresentationSource,
 };
@@ -302,11 +303,22 @@ pub(super) fn draw(
         AmountContext::for_stack_item(top, cx.controller)
             .with_previous_effect_result(cx.previous_effect_result),
     );
-    for drawer in drawers {
-        draw_cards_for_player(engine, events, drawer, count, spell_label)?;
+    let completion = super::super::draw::DrawCompletion::ResumeEffects {
+        stack: ParkedStackResolution::new(top.clone()),
+        result: cx.effect_result.clone(),
+    };
+    match engine.start_draw_transaction(
+        drawers.into_iter().map(|drawer| (drawer, count)).collect(),
+        completion,
+        spell_label,
+        events,
+    )? {
+        super::super::draw::DrawProgress::Complete(done) => {
+            cx.effect_result.produced_objects.extend(done.receipts);
+            Ok(EffectOutcome::Continue)
+        }
+        super::super::draw::DrawProgress::Parked => Ok(EffectOutcome::Suspended),
     }
-
-    Ok(EffectOutcome::Continue)
 }
 
 pub(super) fn target_player_draws(
@@ -325,7 +337,21 @@ pub(super) fn target_player_draws(
             AmountContext::for_stack_item(cx.top, cx.controller)
                 .with_previous_effect_result(cx.previous_effect_result),
         );
-        draw_cards_for_player(cx.engine, cx.events, player, count, cx.spell_label)?;
+        let completion = super::super::draw::DrawCompletion::ResumeEffects {
+            stack: ParkedStackResolution::new(cx.top.clone()),
+            result: cx.effect_result.clone(),
+        };
+        match cx.engine.start_draw_transaction(
+            vec![(player, count)],
+            completion,
+            cx.spell_label,
+            cx.events,
+        )? {
+            super::super::draw::DrawProgress::Complete(done) => {
+                cx.effect_result.produced_objects.extend(done.receipts)
+            }
+            super::super::draw::DrawProgress::Parked => return Ok(EffectOutcome::Suspended),
+        }
     }
     Ok(EffectOutcome::Continue)
 }
@@ -679,47 +705,6 @@ pub(super) fn exile_top_with_play_permission(
         )));
     }
     Ok(EffectOutcome::Continue)
-}
-
-pub(in crate::engine) fn draw_cards_for_player(
-    engine: &mut GameEngine,
-    events: &mut Vec<rv1::RuledEvent>,
-    drawer: PlayerId,
-    count: u32,
-    spell_label: &str,
-) -> Result<(), EngineError> {
-    let idx = engine
-        .state
-        .player_idx(drawer)
-        .ok_or(EngineError::Illegal("draw recipient not found"))?;
-    // CR 121.4/704.5b: attempting to draw more cards than remain does NOT fail the spell — draw as
-    // many as possible, then the player loses when state-based actions are checked after the
-    // current resolution (CR 704.4). Aborting resolution here would corrupt state (cards already
-    // drawn, stack already popped), and applying `has_lost` before the resolution's later effects
-    // would incorrectly interrupt mandatory trailing instructions.
-    let mut drawn = 0u32;
-    let mut decked_out = false;
-    for _ in 0..count {
-        if engine.state.players[idx].library.is_empty() {
-            decked_out = true;
-            break;
-        }
-        draw_card(&mut engine.state, engine.registry, drawer)?;
-        engine.fire_card_drawn(drawer);
-        drawn += 1;
-    }
-    let noun = if drawn == 1 { "card" } else { "cards" };
-    events.push(ev_log(format!(
-        "P{drawer} draws {drawn} {noun} ({spell_label})."
-    )));
-    if decked_out {
-        engine.state.players[idx].pending_library_loss = true;
-        events.push(ev_log(format!(
-            "P{drawer} attempted to draw more cards than remained in the library; loss pending until the next state-based-action check (CR 121.4/704.5b; CR 704.4)."
-        )));
-    }
-
-    Ok(())
 }
 
 pub(super) fn exile(
@@ -1356,7 +1341,23 @@ pub(super) fn draw_discard(
 
     match order {
         DrawDiscardOrder::DrawThenDiscard => {
-            draw_cards_for_player(cx.engine, cx.events, player, draw_count, cx.spell_label)?;
+            let completion = super::super::draw::DrawCompletion::BeginDiscard {
+                stack: ParkedStackResolution::new(cx.top.clone()),
+                player,
+                count: discard_count,
+                result: cx.effect_result.clone(),
+            };
+            match cx.engine.start_draw_transaction(
+                vec![(player, draw_count)],
+                completion,
+                cx.spell_label,
+                cx.events,
+            )? {
+                super::super::draw::DrawProgress::Complete(done) => {
+                    cx.effect_result.produced_objects.extend(done.receipts)
+                }
+                super::super::draw::DrawProgress::Parked => return Ok(EffectOutcome::Suspended),
+            }
             choose_hand_cards_for_player(
                 cx,
                 player,
@@ -1395,6 +1396,70 @@ struct HandCardChoiceSpec<'a> {
     visibility: HandChoiceVisibility,
     draw_after: u32,
     action: HandCardAction,
+}
+
+pub(in crate::engine) fn resume_draw_then_discard(
+    engine: &mut GameEngine,
+    stack: ParkedStackResolution,
+    player: PlayerId,
+    count: u32,
+    mut result: EffectResult,
+    mut events: Vec<rv1::RuledEvent>,
+) -> Result<RuledEventBatch, EngineError> {
+    let top = &stack.item;
+    let label = engine
+        .registry
+        .get(&top.card_id)
+        .and_then(|card| card.face(top.face_index))
+        .map(|face| face.name.clone())
+        .unwrap_or_else(|| top.card_id.clone());
+    let previous = stack.previous_result.clone();
+    let mut cx = EffectCx {
+        engine,
+        events: &mut events,
+        top,
+        controller: top.controller,
+        affected_player: player,
+        targets: &[],
+        targets_by_role: &[],
+        target_damage: &[],
+        target_group_indices: &[],
+        spell_label: &label,
+        previous_effect_result: &previous,
+        effect_result: &mut result,
+        effect_index: stack.resume_effect_index.unwrap_or(1).saturating_sub(1),
+    };
+    let outcome = choose_hand_cards_for_player(
+        &mut cx,
+        player,
+        HandCardChoiceSpec {
+            count,
+            chooser: HandCardChooser::AffectedPlayer,
+            card_filter: None,
+            optional: false,
+            visibility: HandChoiceVisibility::PrivateLook,
+            draw_after: 0,
+            action: HandCardAction::Discard,
+        },
+    )?;
+    if matches!(outcome, EffectOutcome::Suspended) {
+        if let Some(next) = engine
+            .state
+            .pending_resolution
+            .as_mut()
+            .and_then(|pending| pending.continuation.stack_mut())
+        {
+            next.resume_effect_index = stack.resume_effect_index;
+            next.previous_result = result;
+        }
+        return Ok(finish_with_events(engine, events));
+    }
+    engine.complete_parked_resolution_with_previous(
+        stack.item,
+        stack.resume_effect_index,
+        result,
+        events,
+    )
 }
 
 fn choose_hand_cards_for_player(
@@ -1501,7 +1566,21 @@ fn choose_hand_cards_for_player(
             hand_action_verb(action)
         )));
         if action == HandCardAction::Discard && draw_after > 0 && !optional {
-            draw_cards_for_player(engine, events, affected_player, draw_after, spell_label)?;
+            let completion = super::super::draw::DrawCompletion::ResumeEffects {
+                stack: ParkedStackResolution::new(top.clone()),
+                result: cx.effect_result.clone(),
+            };
+            match engine.start_draw_transaction(
+                vec![(affected_player, draw_after)],
+                completion,
+                spell_label,
+                events,
+            )? {
+                super::super::draw::DrawProgress::Complete(done) => {
+                    cx.effect_result.produced_objects.extend(done.receipts)
+                }
+                super::super::draw::DrawProgress::Parked => return Ok(EffectOutcome::Suspended),
+            }
         }
         return Ok(EffectOutcome::Continue);
     }

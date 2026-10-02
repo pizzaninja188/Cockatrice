@@ -1,0 +1,106 @@
+{
+    "primitive_references":  [
+                                 {
+                                     "typed_path":  "/faces/0/static_abilities/0/definition",
+                                     "symbol":  "StaticAbilityDef::DoubleControllerDraws"
+                                 }
+                             ],
+    "oracle_id":  "692a6833-3014-42f6-b1ad-333bb3292c65",
+    "semantic_fixtures":  [
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::reflection_actual_paid_cast_doubles_each_divination_draw_through_zone_funnel",
+                                  "covers":  "reflection actual paid cast doubles each divination draw through zone funnel"
+                              },
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::two_reflections_child_sets_are_isolated_and_reset_for_each_original_draw",
+                                  "covers":  "two reflections child sets are isolated and reset for each original draw"
+                              },
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::insight_actual_paid_cast_upkeep_does_not_consume_first_own_draw_step_exception",
+                                  "covers":  "insight actual paid cast upkeep does not consume first own draw step exception"
+                              },
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::reflection_insight_first_own_step_is_three_in_both_initial_source_orders",
+                                  "covers":  "reflection insight first own step is three in both initial source orders"
+                              },
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::draw_order_choices_reject_foreign_duplicate_unknown_and_prior_prompt_handles_atomically",
+                                  "covers":  "draw order choices reject foreign duplicate unknown and prior prompt handles atomically"
+                              },
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::concession_of_foreign_replacement_source_rebuilds_parked_draw_and_finishes_once",
+                                  "covers":  "concession of foreign replacement source rebuilds parked draw and finishes once"
+                              },
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::brainstorm_expanded_draw_and_private_ordered_putback_each_change_generation_once",
+                                  "covers":  "brainstorm expanded draw and private ordered putback each change generation once"
+                              },
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::copied_replacement_uses_live_conditional_ability_availability_and_foreign_draw_step",
+                                  "covers":  "copied replacement uses live conditional ability availability and foreign draw step"
+                              },
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::apnap_fanout_parks_at_nonconsecutive_drawer_after_prior_partial_draws_and_triggers",
+                                  "covers":  "apnap fanout parks at nonconsecutive drawer after prior partial draws and triggers"
+                              },
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::mandatory_draw_replacement_rejects_decline_and_unrelated_answer_fields_atomically",
+                                  "covers":  "mandatory draw replacement rejects decline and unrelated answer fields atomically"
+                              },
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::serialized_draw_order_and_brainstorm_completion_replay_partial_hands_identically",
+                                  "covers":  "serialized draw order and brainstorm completion replay partial hands identically"
+                              },
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::departed_draw_step_decider_and_departed_spell_caster_never_strand_replacement_work",
+                                  "covers":  "departed draw step decider and departed spell caster never strand replacement work"
+                              },
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::discard_then_draw_preserves_mandatory_empty_hand_and_optional_accept_decline_contracts",
+                                  "covers":  "discard then draw preserves mandatory empty hand and optional accept decline contracts"
+                              },
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::failed_replacement_leaves_count_only_success_and_finish_discard_and_authored_tail_before_loss",
+                                  "covers":  "failed replacement leaves count only success and finish discard and authored tail before loss"
+                              },
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::caster_departure_cancels_foreign_drawer_fanout_without_replaying_prior_draws",
+                                  "covers":  "caster departure cancels foreign drawer fanout without replaying prior draws"
+                              },
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::stale_source_incarnation_rejects_then_new_incarnation_can_apply_to_child_event",
+                                  "covers":  "stale source incarnation rejects then new incarnation can apply to child event"
+                              },
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::face_down_basic_land_suppression_and_current_control_scope_draw_replacements",
+                                  "covers":  "face down basic land suppression and current control scope draw replacements"
+                              },
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::whole_hand_discard_library_top_order_completes_before_expanded_draw_and_adventure_exit",
+                                  "covers":  "whole hand discard library top order completes before expanded draw and adventure exit"
+                              },
+                              {
+                                  "test":  "scenario deck_coverage_draw_replacements::foreign_source_departure_finishes_scheduled_draw_without_repeating_step_action",
+                                  "covers":  "foreign source departure finishes scheduled draw without repeating step action"
+                              },
+                              {
+                                  "test":  "deck_coverage_draw_replacements::thought_reflection_exact_printed_identity_and_mandatory_controller_draw_replacement",
+                                  "covers":  "Exact printed identity, cost, type, legendary status, controller replacement condition and Oracle presentation."
+                              }
+                          ],
+    "format_version":  1,
+    "complete_definition_review_confirmed":  true,
+    "spans":  [
+                  {
+                      "typed_paths":  [
+                                          "/faces/0/static_abilities/0"
+                                      ],
+                      "end_line":  1,
+                      "face_id":  "thought_reflection",
+                      "start_line":  1
+                  }
+              ],
+    "tokens":  [
+
+               ]
+}

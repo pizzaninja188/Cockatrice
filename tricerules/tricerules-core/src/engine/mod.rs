@@ -181,6 +181,7 @@ mod delayed_copy;
 mod dev;
 mod diagnostics;
 mod discard;
+pub(crate) mod draw;
 mod entry_order;
 mod events;
 mod history;
@@ -1685,6 +1686,7 @@ impl GameEngine {
             pending_trigger_order: None,
             pending_resolution: None,
             pending_replacement_event: None,
+            draw_step_progress: None,
             continuous_effects: Vec::new(),
             spell_effects_carry_to_permanent: HashSet::new(),
             static_emblems: Vec::new(),
