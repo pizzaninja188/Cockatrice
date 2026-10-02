@@ -37,6 +37,7 @@ fn object(engine: &mut GameEngine, card: &str, zone: Zone, controller: PlayerId)
 
 fn event(engine: &GameEngine, oid: ObjectId) -> BattlefieldEntryEvent {
     BattlefieldEntryEvent {
+        entry_reveal_receipts: Vec::new(),
         mana_colors_spent_to_cast: Default::default(),
         prepared: false,
         object_id: oid,
@@ -58,6 +59,363 @@ fn event(engine: &GameEngine, oid: ObjectId) -> BattlefieldEntryEvent {
         pending_copy_candidate: None,
         pending_aura_recipient: None,
         applied_effects: Vec::new(),
+    }
+}
+
+// No registered simultaneous hand-entry producer exists. This invokes the production batch
+// pipeline with registered cards and labels its synthetic instruction honestly.
+#[test]
+fn entry_reveal_pair_internal_hand_cohort_retains_paid_reveals_through_timestamp_order() {
+    for forest_first in [false, true] {
+        for stale_cohort in [false, true] {
+            let mut engine = engine();
+            let forest = object(&mut engine, "forest", Zone::Hand, 0);
+            let first = object(&mut engine, "game_trail", Zone::Hand, 0);
+            let second = object(&mut engine, "game_trail", Zone::Hand, 0);
+            engine.state.players[0].hand.extend([forest, first, second]);
+            let outside = object(&mut engine, "forest", Zone::Hand, 0);
+            engine.state.players[0].hand.push(outside);
+            let hand_index = engine.state.players[0]
+                .hand
+                .iter()
+                .position(|oid| *oid == first)
+                .unwrap();
+            engine
+                .apply_command(
+                    0,
+                    &rv1::RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                            source: Some(rv1::LandSource {
+                                location: Some(rv1::land_source::Location::HandIndex(
+                                    hand_index as u32,
+                                )),
+                                ..Default::default()
+                            }),
+                            face_index: 0,
+                        })),
+                    },
+                )
+                .unwrap();
+            let item = engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .continuation
+                .stack()
+                .unwrap()
+                .item
+                .clone();
+            engine.state.pending_resolution = None;
+            engine.state.pending_replacement_event = None;
+            let ids = if forest_first {
+                [forest, first, second]
+            } else {
+                [first, second, forest]
+            };
+            let entries = ids.iter().map(|oid| event(&engine, *oid)).collect();
+            let mut events = Vec::new();
+            assert!(engine
+                .begin_zone_entry_batch(
+                    item,
+                    entries,
+                    Zone::Hand,
+                    "internal simultaneous hand instruction",
+                    &mut events
+                )
+                .unwrap());
+            let choose = |ids| rv1::RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                    rv1::SubmitResolutionChoice {
+                        chosen_object_ids: ids,
+                        ..Default::default()
+                    },
+                )),
+            };
+            let first_batch = engine.apply_command(0, &choose(vec![forest])).unwrap();
+            assert_eq!(engine.state.objects[&first].zone, Zone::Hand);
+            assert_eq!(
+                engine.state.objects[&forest].zone,
+                Zone::Hand,
+                "even an already-ready matching land remains revealable"
+            );
+            let active = super::super::reveals::active_reveals(&engine);
+            assert_eq!(
+                active.len(),
+                1,
+                "the first accepted reveal remains public while the second entry parks"
+            );
+            assert_eq!(active[0].cards[0].object_id, forest);
+            assert_eq!(active[0].source_object_id, first);
+            assert_eq!(
+                first_batch
+                    .events
+                    .iter()
+                    .filter(|event| matches!(
+                        event.ev,
+                        Some(rv1::ruled_event::Ev::CardsRevealed(_))
+                    ))
+                    .count(),
+                1
+            );
+            let first_id = active[0].reveal_id.clone();
+            if stale_cohort {
+                // Forest is already ready or still remaining, while current entrant and
+                // the independently selected outside card both retain their incarnations.
+                super::super::resolution::move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    forest,
+                    Zone::Graveyard,
+                    None,
+                )
+                .unwrap();
+                super::super::resolution::move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    forest,
+                    Zone::Hand,
+                    None,
+                )
+                .unwrap();
+                let before = format!("{:?}", engine.state);
+                assert!(engine.apply_command(0, &choose(vec![outside])).is_err());
+                assert_eq!(format!("{:?}", engine.state), before);
+                let paid = super::super::reveals::active_reveals(&engine);
+                assert_eq!(paid.len(), 1);
+                assert_eq!(
+                    paid[0], active[0],
+                    "accepted receipt remains the frozen original incarnation"
+                );
+                for oid in ids {
+                    assert_eq!(engine.state.objects[&oid].zone, Zone::Hand);
+                }
+                continue;
+            }
+            let second_batch = engine.apply_command(0, &choose(vec![forest])).unwrap();
+            let active = super::super::reveals::active_reveals(&engine);
+            assert_eq!(
+                active.len(),
+                2,
+                "both paid snapshots survive the timestamp-order choice"
+            );
+            assert!(active.iter().any(|reveal| reveal.reveal_id == first_id));
+            assert_ne!(active[0].reveal_id, active[1].reveal_id);
+            assert_eq!(
+                second_batch
+                    .events
+                    .iter()
+                    .filter(|event| matches!(
+                        event.ev,
+                        Some(rv1::ruled_event::Ev::CardsRevealed(_))
+                    ))
+                    .count(),
+                1
+            );
+            for oid in ids {
+                assert_eq!(engine.state.objects[&oid].zone, Zone::Hand);
+            }
+            let pending = engine.state.pending_resolution.as_ref().unwrap();
+            assert!(matches!(
+                pending.continuation,
+                ResolutionContinuation::SimultaneousEntryOrder { .. }
+            ));
+            let order = pending.presentation.candidates.clone();
+            engine.apply_command(0, &choose(order)).unwrap();
+            for oid in ids {
+                assert_eq!(engine.state.objects[&oid].zone, Zone::Battlefield);
+                assert!(!engine.state.objects[&oid].tapped);
+            }
+            assert!(super::super::reveals::active_reveals(&engine).is_empty());
+        }
+    }
+}
+
+// Structural continuation fixture: no registered mixed aura/land-token producer is claimed.
+#[test]
+fn entry_reveal_pair_internal_token_attachment_retains_ready_and_remaining_receipts() {
+    let mut engine = engine();
+    let first = object(&mut engine, "game_trail", Zone::Stack, 0);
+    let second = object(&mut engine, "murmuring_bosk", Zone::Stack, 0);
+    let third = object(&mut engine, "game_trail", Zone::Stack, 0);
+    let receipt = |oid| rv1::CardsRevealed {
+        reveal_id: format!("entry:{oid}:0:fixture"),
+        source_object_id: oid,
+        source_zone: rv1::ChoiceCandidateSourceZone::Hand as i32,
+        source_description: "structural entry fixture".into(),
+        cards: vec![rv1::RevealedCard {
+            object_id: 999,
+            zone_change_generation: 7,
+            card_id: "forest".into(),
+            card_name: "Forest".into(),
+        }],
+        ..Default::default()
+    };
+    let mut first_event = event(&engine, first);
+    first_event.entry_reveal_receipts.push(receipt(first));
+    let mut second_event = event(&engine, second);
+    second_event.entry_reveal_receipts.push(receipt(second));
+    let mut third_event = event(&engine, third);
+    third_event.entry_reveal_receipts.push(receipt(third));
+    engine.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
+        Box::new(PendingBattlefieldEntry {
+            event: first_event,
+            applications: vec![],
+            copy_source_effect: None,
+            copy_source_candidates: vec![],
+            completion: BattlefieldEntryCompletion::TokenBatch(Box::new(
+                crate::state::PendingTokenEntryBatch {
+                    current_created: Default::default(),
+                    result_object_ids: vec![first, second, third],
+                    ready: vec![crate::state::TokenBattlefieldEntry {
+                        event: second_event.clone(),
+                        created: Default::default(),
+                    }],
+                    remaining: vec![
+                        crate::state::TokenBattlefieldEntry {
+                            event: third_event,
+                            created: Default::default(),
+                        },
+                        crate::state::TokenBattlefieldEntry {
+                            event: second_event,
+                            created: Default::default(),
+                        },
+                    ],
+                    logs: vec![],
+                    options: Default::default(),
+                },
+            )),
+        }),
+    ));
+    let active = super::super::reveals::active_reveals(&engine);
+    assert_eq!(
+        active,
+        vec![receipt(first), receipt(second), receipt(third)]
+    );
+    let mut batch = RuledEventBatch::default();
+    batch.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ActivePublicRevealSnapshot(
+            rv1::ActivePublicRevealSnapshot {
+                reveals: active.clone(),
+            },
+        )),
+    });
+    super::super::legal_actions::fill_legal(&mut batch, &engine);
+    assert!(
+        !batch
+            .events
+            .iter()
+            .any(|event| matches!(event.ev, Some(rv1::ruled_event::Ev::CardsRevealed(_)))),
+        "an unchanged active receipt must not become a second occurrence"
+    );
+
+    // The same frozen receipts must survive the observer-return staging and timestamp owners.
+    engine.state.pending_replacement_event = None;
+    let mut observer_event = event(&engine, first);
+    observer_event.entry_reveal_receipts.push(receipt(first));
+    let observer = crate::state::PendingObserverReturnBatch {
+        ready: vec![crate::state::ObserverReturnEntry {
+            event: observer_event,
+            owner: 0,
+            label: "structural observer fixture".into(),
+            attached_to: None,
+        }],
+        remaining: Default::default(),
+        resume_stack: None,
+    };
+    engine.state.pending_observer_return_batch = Some(observer.clone());
+    assert_eq!(
+        super::super::reveals::active_reveals(&engine),
+        vec![receipt(first)]
+    );
+    engine.state.pending_observer_return_batch = None;
+    engine.state.pending_resolution = Some(PendingResolution {
+        deciding_player: 0,
+        presentation: PendingResolutionPresentation {
+            source_object_id: first,
+            candidates: vec![first],
+            min: 1,
+            max: 1,
+            ordered: true,
+            prompt: "structural timestamp fixture".into(),
+            choice_kind: rv1::ChoiceKind::ReplacementEffect,
+            unique_names: false,
+        },
+        continuation: ResolutionContinuation::SimultaneousEntryOrder {
+            stack: None,
+            order: Box::new(crate::state::PendingEntryTimestampOrder {
+                batch: crate::state::SimultaneousEntryBatch::Observer(Box::new(observer)),
+                original_generations: vec![],
+                remaining_groups: Default::default(),
+                chosen_order: vec![],
+            }),
+        },
+    });
+    assert_eq!(
+        super::super::reveals::active_reveals(&engine),
+        vec![receipt(first)]
+    );
+}
+
+#[test]
+fn entry_reveal_pair_internal_actual_leave_return_rejects_candidate_and_entrant_incarnations() {
+    for stale_entrant in [false, true] {
+        let mut engine = engine();
+        let forest = object(&mut engine, "forest", Zone::Hand, 0);
+        let source = object(&mut engine, "game_trail", Zone::Hand, 0);
+        engine.state.players[0].hand.extend([forest, source]);
+        let slot = engine.state.players[0]
+            .hand
+            .iter()
+            .position(|oid| *oid == source)
+            .unwrap();
+        engine
+            .apply_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::PlayLand(rv1::PlayLand {
+                        source: Some(rv1::LandSource {
+                            location: Some(rv1::land_source::Location::HandIndex(slot as u32)),
+                            ..Default::default()
+                        }),
+                        face_index: 0,
+                    })),
+                },
+            )
+            .unwrap();
+        let stale = if stale_entrant { source } else { forest };
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            stale,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        super::super::resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            stale,
+            Zone::Hand,
+            None,
+        )
+        .unwrap();
+        let before = format!("{:?}", engine.state);
+        let answer = rv1::RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![forest],
+                    ..Default::default()
+                },
+            )),
+        };
+        assert!(engine.apply_command(0, &answer).is_err());
+        assert_eq!(format!("{:?}", engine.state), before);
+        assert!(
+            engine.state.pending_resolution.is_some()
+                && engine.state.pending_replacement_event.is_some()
+        );
+        assert!(super::super::reveals::active_reveals(&engine).is_empty());
     }
 }
 

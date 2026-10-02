@@ -1,0 +1,70 @@
+{
+  "format_version": 1,
+  "oracle_id": "00de57d2-7cb6-4337-9bc6-f6711e4dfabf",
+  "spans": [
+    {
+      "face_id": "game_trail",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "game_trail",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_entry_reveal::entry_reveal_pair_game_trail_and_bosk_complete_definitions_are_registered",
+      "covers": "game trail and bosk complete definitions are registered"
+    },
+    {
+      "test": "scenario deck_coverage_entry_reveal::entry_reveal_pair_printed_subtype_filters_accept_nonbasic_or_and_noncreature_changeling",
+      "covers": "printed subtype filters accept nonbasic or and noncreature changeling"
+    },
+    {
+      "test": "scenario deck_coverage_entry_reveal::entry_reveal_pair_decline_and_empty_hand_match_enter_tapped_without_revealing",
+      "covers": "decline and empty hand match enter tapped without revealing"
+    },
+    {
+      "test": "scenario deck_coverage_entry_reveal::entry_reveal_pair_wrong_actor_identity_and_extra_payloads_reject_atomically_then_retry",
+      "covers": "wrong actor identity and extra payloads reject atomically then retry"
+    },
+    {
+      "test": "scenario deck_coverage_entry_reveal::entry_reveal_pair_stale_generations_and_copy_revision_reject_without_clearing_choice",
+      "covers": "stale generations and copy revision reject without clearing choice"
+    },
+    {
+      "test": "scenario deck_coverage_entry_reveal::entry_reveal_pair_stale_life_branch_cannot_answer_a_reveal_cost",
+      "covers": "stale life branch cannot answer a reveal cost"
+    },
+    {
+      "test": "scenario deck_coverage_entry_reveal::entry_reveal_pair_forced_tapping_is_never_cleared_in_either_replacement_order",
+      "covers": "forced tapping is never cleared in either replacement order"
+    },
+    {
+      "test": "scenario deck_coverage_entry_reveal::entry_reveal_pair_bosk_and_trail_mana_options_are_immediate_and_damage_only_bosk_white_black",
+      "covers": "bosk and trail mana options are immediate and damage only bosk white black"
+    },
+    {
+      "test": "scenario deck_coverage_entry_reveal::entry_reveal_pair_game_trail_reveals_a_forest_without_moving_it",
+      "covers": "game trail reveals a forest without moving it"
+    },
+    {
+      "test": "scenario deck_coverage_entry_reveal::entry_reveal_pair_actual_clone_rechecks_copied_entry_and_does_not_copy_animation",
+      "covers": "actual clone rechecks copied entry and does not copy animation"
+    },
+    {
+      "test": "scenario deck_coverage_entry_reveal::entry_reveal_pair_serialized_accepted_commands_and_batches_replay_exactly",
+      "covers": "serialized accepted commands and batches replay exactly"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

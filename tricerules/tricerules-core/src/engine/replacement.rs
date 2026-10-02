@@ -231,7 +231,7 @@ impl GameEngine {
     ) -> Option<Characteristics> {
         self.battlefield_entry_early_characteristics(event)
             .map(|(characteristics, _)| characteristics)
-                }
+    }
 
     fn battlefield_entry_early_characteristics(
         &self,
@@ -752,6 +752,130 @@ impl GameEngine {
         });
     }
 
+    fn entry_reveal_candidates(
+        &self,
+        event: &BattlefieldEntryEvent,
+        filter: &ZoneCardFilter,
+    ) -> Vec<(ObjectId, u64)> {
+        self.state
+            .player_idx(event.destination_controller)
+            .map_or_else(Vec::new, |index| {
+                self.state.players[index]
+                    .hand
+                    .iter()
+                    .copied()
+                    .filter(|oid| {
+                        *oid != event.object_id
+                            && self.state.objects.get(oid).is_some_and(|object| {
+                                object.owner == event.destination_controller
+                                    && object.zone == Zone::Hand
+                                    && zone_card_matches_filter(
+                                        &self.state,
+                                        self.registry,
+                                        *oid,
+                                        Some(filter),
+                                    )
+                            })
+                    })
+                    .map(|oid| {
+                        (
+                            oid,
+                            self.state
+                                .zone_change_generation
+                                .get(&oid)
+                                .copied()
+                                .unwrap_or(0),
+                        )
+                    })
+                    .collect()
+            })
+    }
+
+    fn park_entry_reveal_choice(
+        &mut self,
+        item: StackItem,
+        event: BattlefieldEntryEvent,
+        completion: BattlefieldEntryCompletion,
+        effect_id: EntryReplacementEffectId,
+        filter: ZoneCardFilter,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let candidate_generations = self.entry_reveal_candidates(&event, &filter);
+        let candidates: Vec<_> = candidate_generations.iter().map(|(oid, _)| *oid).collect();
+        let candidate_card_ids = candidates
+            .iter()
+            .map(|oid| self.state.objects[oid].card_id.clone())
+            .collect();
+        let candidate_names = candidates
+            .iter()
+            .map(|oid| {
+                self.registry
+                    .get(&self.state.objects[oid].card_id)
+                    .map_or_else(
+                        || self.state.objects[oid].card_id.clone(),
+                        |card| card.name.clone(),
+                    )
+            })
+            .collect();
+        let name = self
+            .battlefield_entry_face(&event)
+            .map_or_else(|| "this permanent".to_owned(), |face| face.name.clone());
+        let prompt = format!("As {name} enters, you may reveal one qualifying card from your hand. Choose none to enter tapped.");
+        events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                rv1::ResolutionChoiceRequired {
+                    deciding_player_id: event.destination_controller,
+                    source_object_id: event.object_id,
+                    prompt_text: prompt.clone(),
+                    choice_kind: rv1::ChoiceKind::HandCards as i32,
+                    candidate_object_ids: candidates.clone(),
+                    candidate_card_ids,
+                    candidate_names,
+                    candidate_selectable: vec![true; candidates.len()],
+                    min: 0,
+                    max: 1,
+                    ..Default::default()
+                },
+            )),
+        });
+        let entering_zone = self.state.objects[&event.object_id].zone;
+        let entering_generation = self
+            .state
+            .zone_change_generation
+            .get(&event.object_id)
+            .copied()
+            .unwrap_or(0);
+        self.state.pending_resolution = Some(PendingResolution {
+            deciding_player: event.destination_controller,
+            presentation: PendingResolutionPresentation {
+                source_object_id: event.object_id,
+                candidates,
+                min: 0,
+                max: 1,
+                ordered: false,
+                prompt,
+                choice_kind: rv1::ChoiceKind::HandCards,
+                unique_names: false,
+            },
+            continuation: ResolutionContinuation::EntryReveal {
+                stack: ParkedStackResolution::new(item),
+                effect_id,
+                entering_zone,
+                entering_generation,
+                candidate_generations,
+            },
+        });
+        self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
+            Box::new(PendingBattlefieldEntry {
+                event,
+                applications: Vec::new(),
+                copy_source_effect: None,
+                copy_source_candidates: Vec::new(),
+                completion,
+            }),
+        ));
+    }
+
     fn park_entry_cost_choice(
         &mut self,
         item: StackItem,
@@ -762,6 +886,10 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) {
         let (label, cost_text, selectable) = match cost {
+            EntryCost::RevealFromHand { filter } => {
+                self.park_entry_reveal_choice(item, event, completion, effect_id, filter, events);
+                return;
+            }
             EntryCost::PayLife { amount } => {
                 let can_pay = self
                     .state
@@ -3336,6 +3464,166 @@ impl GameEngine {
         Ok(finish_with_events(self, events))
     }
 
+    pub(super) fn finish_entry_reveal_choice(
+        &mut self,
+        pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, effect_id, entering_zone, entering_generation, candidates) =
+            match &pending.continuation {
+                ResolutionContinuation::EntryReveal {
+                    stack,
+                    effect_id,
+                    entering_zone,
+                    entering_generation,
+                    candidate_generations,
+                } => (
+                    stack.clone(),
+                    effect_id.clone(),
+                    *entering_zone,
+                    *entering_generation,
+                    candidate_generations.clone(),
+                ),
+                _ => return Err(EngineError::Illegal("entry reveal continuation missing")),
+            };
+        let Some(pending_event) = self.state.pending_replacement_event.take() else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("entry reveal is stale"));
+        };
+        let mut entry = match pending_event {
+            PendingReplacementEvent::BattlefieldEntry(entry) => *entry,
+            other => {
+                self.state.pending_replacement_event = Some(other);
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("entry reveal is stale"));
+            }
+        };
+        let restore = |engine: &mut Self,
+                       pending: PendingResolution,
+                       entry: PendingBattlefieldEntry,
+                       message| {
+            engine.state.pending_replacement_event =
+                Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
+            engine.state.pending_resolution = Some(pending);
+            Err(EngineError::Illegal(message))
+        };
+        if decision != rv1::ResolutionChoiceDecision::Unspecified
+            || answer.chosen_object_ids.len() > 1
+            || answer.selected_branch_index != 0
+            || answer.payment.is_some()
+            || !answer.restricted_mana.is_empty()
+            || answer.cast_spell.is_some()
+            || answer.spell_cast_announcement.is_some()
+            || answer.chosen_combat_defender.is_some()
+            || !answer.chosen_player_ids.is_empty()
+        {
+            return restore(
+                self,
+                pending,
+                entry,
+                "entry reveal requires zero or one hand card only",
+            );
+        }
+        let payer = entry.event.destination_controller;
+        let source_current = self
+            .state
+            .objects
+            .get(&entry.event.object_id)
+            .is_some_and(|object| object.zone == entering_zone)
+            && self
+                .state
+                .zone_change_generation
+                .get(&entry.event.object_id)
+                .copied()
+                .unwrap_or(0)
+                == entering_generation;
+        let Some(EntryCost::RevealFromHand { filter }) =
+            self.entry_unless_cost(&entry.event, &effect_id)
+        else {
+            return restore(self, pending, entry, "entry reveal effect is stale");
+        };
+        if !source_current
+            || pending.deciding_player != payer
+            || entry.event.applied_effects.contains(&effect_id)
+        {
+            return restore(
+                self,
+                pending,
+                entry,
+                "entry reveal source or chooser is stale",
+            );
+        }
+        let mut events = Vec::new();
+        if let Some(&chosen) = answer.chosen_object_ids.first() {
+            let legal = self
+                .state
+                .player_idx(payer)
+                .is_some_and(|index| self.state.players[index].hand.contains(&chosen))
+                && self
+                    .state
+                    .objects
+                    .get(&chosen)
+                    .is_some_and(|object| object.owner == payer && object.zone == Zone::Hand)
+                && candidates.iter().any(|(oid, generation)| {
+                    *oid == chosen
+                        && self
+                            .state
+                            .zone_change_generation
+                            .get(oid)
+                            .copied()
+                            .unwrap_or(0)
+                            == *generation
+                })
+                && chosen != entry.event.object_id
+                && zone_card_matches_filter(&self.state, self.registry, chosen, Some(&filter));
+            if !legal {
+                return restore(
+                    self,
+                    pending,
+                    entry,
+                    "revealed hand card is stale or illegal",
+                );
+            }
+            let name = self
+                .battlefield_entry_face(&entry.event)
+                .map_or_else(|| "entry".to_owned(), |face| face.name.clone());
+            let reveal_id = format!(
+                "entry:{}:{entering_generation}:{effect_id:?}",
+                entry.event.object_id
+            );
+            for mut event in super::reveals::reveal_cards(
+                &self.state,
+                self.registry,
+                &[chosen],
+                entry.event.object_id,
+                &name,
+            ) {
+                if let Some(rv1::ruled_event::Ev::CardsRevealed(reveal)) = &mut event.ev {
+                    reveal.reveal_id = reveal_id.clone();
+                    entry.event.entry_reveal_receipts.push(reveal.clone());
+                }
+                events.push(event);
+            }
+            entry.event.applied_effects.push(effect_id);
+        } else {
+            self.apply_entry_replacement(&mut entry.event, effect_id);
+        }
+        let event = match self.advance_or_park_battlefield_entry(
+            stack.item.clone(),
+            entry.event,
+            entry.completion.clone(),
+            &mut events,
+        ) {
+            BattlefieldEntryProgress::Parked => {
+                self.transfer_entry_choice_resume(&stack);
+                return Ok(finish_with_events(self, events));
+            }
+            BattlefieldEntryProgress::Ready(event) => *event,
+        };
+        self.complete_pending_battlefield_entry(pending, event, entry.completion, events)
+    }
+
     pub(super) fn finish_entry_cost_choice(
         &mut self,
         pending: PendingResolution,
@@ -3389,7 +3677,9 @@ impl GameEngine {
                 "entry cost requires its payment branch or decline",
             );
         }
-        let Some(cost) = self.entry_unless_cost(&entry.event, &effect_id) else {
+        let Some(cost @ EntryCost::PayLife { .. }) =
+            self.entry_unless_cost(&entry.event, &effect_id)
+        else {
             return restore(self, pending, entry, "entry cost choice is stale");
         };
         let payer = entry.event.destination_controller;
@@ -3528,6 +3818,7 @@ mod tests {
         let object_id = engine.state.players[0].hand[0];
         engine.state.objects.get_mut(&object_id).unwrap().card_id = "tatterkite".into();
         let event = BattlefieldEntryEvent {
+            entry_reveal_receipts: Vec::new(),
             mana_colors_spent_to_cast: Default::default(),
             prepared: false,
             object_id,
@@ -3575,6 +3866,7 @@ mod tests {
         let snapshot = engine.player_life_snapshot();
         engine.state.players[1].life = 1;
         let event = BattlefieldEntryEvent {
+            entry_reveal_receipts: Vec::new(),
             mana_colors_spent_to_cast: Default::default(),
             prepared: false,
             object_id: 999,
@@ -3650,6 +3942,7 @@ mod tests {
         engine.state.objects.get_mut(&globe).unwrap().zone = Zone::Stack;
         engine.state.objects.get_mut(&dragon).unwrap().zone = Zone::Stack;
         let event = BattlefieldEntryEvent {
+            entry_reveal_receipts: Vec::new(),
             mana_colors_spent_to_cast: Default::default(),
             prepared: false,
             object_id: dragon,
@@ -3710,6 +4003,7 @@ mod tests {
         engine.state.objects.get_mut(&globe).unwrap().zone = Zone::Battlefield;
         engine.state.objects.get_mut(&giant).unwrap().zone = Zone::Stack;
         let event = BattlefieldEntryEvent {
+            entry_reveal_receipts: Vec::new(),
             mana_colors_spent_to_cast: Default::default(),
             prepared: false,
             object_id: giant,

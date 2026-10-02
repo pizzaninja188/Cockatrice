@@ -1140,6 +1140,13 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         effect_id: EntryReplacementEffectId,
     },
+    EntryReveal {
+        stack: ParkedStackResolution,
+        effect_id: EntryReplacementEffectId,
+        entering_zone: Zone,
+        entering_generation: u64,
+        candidate_generations: Vec<(ObjectId, u64)>,
+    },
     EntryBasicLandType {
         stack: ParkedStackResolution,
         effect_id: EntryReplacementEffectId,
@@ -1221,6 +1228,7 @@ impl ResolutionContinuation {
             | Self::Blight { stack, .. }
             | Self::EntryReplacement { stack }
             | Self::EntryCost { stack, .. }
+            | Self::EntryReveal { stack, .. }
             | Self::EntryBasicLandType { stack, .. }
             | Self::SagaReadAhead { stack, .. }
             | Self::DamageReplacement { stack, .. }
@@ -1266,6 +1274,7 @@ impl ResolutionContinuation {
             | Self::Blight { stack, .. }
             | Self::EntryReplacement { stack }
             | Self::EntryCost { stack, .. }
+            | Self::EntryReveal { stack, .. }
             | Self::EntryBasicLandType { stack, .. }
             | Self::SagaReadAhead { stack, .. }
             | Self::DamageReplacement { stack, .. }
@@ -1425,6 +1434,8 @@ impl ManaColorsSpent {
 
 #[derive(serde::Serialize, Debug, Clone)]
 pub struct BattlefieldEntryEvent {
+    /// Public accepted snapshots retained only while this entry instruction is pending.
+    pub entry_reveal_receipts: Vec<tricerules_proto::ruled::v1::CardsRevealed>,
     pub mana_colors_spent_to_cast: ManaColorsSpent,
     pub object_id: ObjectId,
     /// CR 616.1 decider: current controller, or owner when the object has no controller.

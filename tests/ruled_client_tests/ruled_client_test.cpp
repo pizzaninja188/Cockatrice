@@ -6986,6 +6986,117 @@ TEST_F(RuledClientTest, HandCardsChoiceStartsAClickToPickAndSubmitsInClickOrder)
     EXPECT_FALSE(state->isResolutionHandPickActive());
 }
 
+TEST_F(RuledClientTest, EntryRevealHandPickRejectedAckRestoresSelectionAndDecline)
+{
+    for (const bool selectCard : {false, true}) {
+        ruled::v1::RuledEventBatch batch;
+        (*batch.mutable_legal_by_player())[kLocalPlayer];
+        batch.add_events()->mutable_active_public_reveal_snapshot();
+        auto *choice = batch.add_events()->mutable_resolution_choice_required();
+        choice->set_deciding_player_id(kLocalPlayer);
+        choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+        choice->set_prompt_text("As Game Trail enters, reveal a qualifying card or choose none.");
+        choice->set_min(0);
+        choice->set_max(1);
+        choice->add_candidate_object_ids(501u);
+        choice->add_candidate_server_card_ids(41);
+        choice->add_candidate_names("Forest");
+        apply(batch);
+        ASSERT_TRUE(state->isResolutionHandPickActive());
+        if (selectCard) state->toggleResolutionHandPickCard(41);
+        state->submitResolutionHandPick();
+        EXPECT_FALSE(state->isResolutionHandPickActive());
+        const auto &answer = host.sentCommands.last().submit_resolution_choice();
+        EXPECT_EQ(answer.chosen_object_ids_size(), selectCard ? 1 : 0);
+        host.answerPendingAck(false);
+        ASSERT_TRUE(state->isResolutionHandPickActive());
+        EXPECT_EQ(state->resolutionHandPickSelected(), selectCard ? 1 : 0);
+        EXPECT_TRUE(state->resolutionHandPickConfirmable());
+        state->submitResolutionHandPick();
+        host.answerPendingAck(true);
+        EXPECT_FALSE(state->isResolutionHandPickActive());
+    }
+}
+
+TEST_F(RuledClientTest, EntryRevealEmptyOptionalHandPickCanDeclineAndRestoreRejectedAck)
+{
+    ruled::v1::RuledEventBatch batch;
+    (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+    choice->set_prompt_text("As Game Trail enters, reveal a qualifying card or choose none.");
+    choice->set_min(0);
+    choice->set_max(1);
+    apply(batch);
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_TRUE(state->resolutionHandPickConfirmable());
+    state->declinePendingClickChoice();
+    ASSERT_FALSE(host.sentCommands.isEmpty());
+    EXPECT_EQ(host.sentCommands.last().submit_resolution_choice().chosen_object_ids_size(), 0);
+    host.answerPendingAck(false);
+    EXPECT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_TRUE(state->resolutionHandPickConfirmable());
+    state->submitResolutionHandPick();
+    host.answerPendingAck(true);
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+}
+
+TEST_F(RuledClientTest, EntryRevealMalformedEmptyHandPickIsRejected)
+{
+    for (int variant = 0; variant < 7; ++variant) {
+        ruled::v1::RuledEventBatch batch;
+        (*batch.mutable_legal_by_player())[kLocalPlayer];
+        auto *choice = batch.add_events()->mutable_resolution_choice_required();
+        choice->set_deciding_player_id(kLocalPlayer);
+        choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+        choice->set_min(0);
+        choice->set_max(1);
+        switch (variant) {
+            case 0: choice->set_min(1); break;
+            case 1: choice->set_max(0); break;
+            case 2: choice->set_ordered(true); break;
+            case 3: choice->add_candidate_names("Forest"); break;
+            case 4: choice->add_candidate_server_card_ids(41); break;
+            case 5: choice->add_candidate_selectable(true); break;
+            case 6: choice->mutable_public_reveal(); break;
+        }
+        apply(batch);
+        EXPECT_FALSE(state->isResolutionHandPickActive()) << variant;
+    }
+}
+
+TEST_F(RuledClientTest, EntryRevealHandPickLateRejectedAckCannotRestoreSupersededAuthority)
+{
+    for (const int interruption : {0, 1, 2}) {
+        ruled::v1::RuledEventBatch batch;
+        (*batch.mutable_legal_by_player())[kLocalPlayer];
+        auto *choice = batch.add_events()->mutable_resolution_choice_required();
+        choice->set_deciding_player_id(kLocalPlayer);
+        choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+        choice->set_prompt_text("First entry reveal");
+        choice->set_min(0);
+        choice->set_max(1);
+        choice->add_candidate_object_ids(501u);
+        choice->add_candidate_server_card_ids(41);
+        apply(batch);
+        state->submitResolutionHandPick();
+        if (interruption == 0) {
+            choice->set_prompt_text("New entry reveal");
+            apply(batch);
+        } else if (interruption == 1) {
+            ruled::v1::RuledEventBatch revoked;
+            revoked.add_events()->mutable_active_public_reveal_snapshot();
+            apply(revoked);
+        } else state->clearSessionState();
+        const auto revision = state->pendingChoiceRevision;
+        host.answerPendingAck(false);
+        EXPECT_EQ(state->pendingChoiceRevision, revision);
+        EXPECT_EQ(state->isResolutionHandPickActive(), interruption == 0);
+        if (interruption == 0) EXPECT_EQ(state->resolutionHandPickPromptText(), "New entry reveal");
+    }
+}
+
 TEST_F(RuledClientTest, SubmitIsRefusedBelowTheMinimum)
 {
     ruled::v1::RuledEventBatch batch;

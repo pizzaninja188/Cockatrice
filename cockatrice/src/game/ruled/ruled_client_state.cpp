@@ -1215,11 +1215,26 @@ void RuledClientState::submitResolutionHandPick()
     if (pendingChoice->reverseSelectionOrder) {
         std::reverse(chosen.begin(), chosen.end());
     }
+    const RuledPendingChoice restore = *pendingChoice;
     clearPendingChoice();
     emit resolutionHandPickUiChanged(-1, -1);
     emit resolutionPaymentUiChanged(false);
     emit combatStateChanged();
-    sendResolutionChoice(chosen);
+    ruled::v1::RuledCommand command;
+    for (const quint32 oid : chosen)
+        command.mutable_submit_resolution_choice()->add_chosen_object_ids(oid);
+    // An empty selection is a valid decline for optional engine-authored card cohorts.
+    command.mutable_submit_resolution_choice();
+    const auto submittedRevision = pendingChoiceRevision;
+    host->sendRuledCommandExpectingAck(command, [self = QPointer<RuledClientState>(this), restore,
+                                                 submittedRevision](bool accepted) {
+        if (!self || accepted || self->pendingChoiceRevision != submittedRevision || self->pendingChoice.has_value())
+            return;
+        self->setPendingChoice(restore);
+        emit self->resolutionHandPickUiChanged(restore.min, restore.selectedServerCardIds.size());
+        emit self->resolutionPaymentUiChanged(false);
+        emit self->combatStateChanged();
+    });
 }
 
 // ---------------------------------------------------------------------------------------
@@ -1994,6 +2009,8 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
     finishEngineCommand();
     // Pending choice + the trigger stack bookkeeping that outlives it.
     clearPendingChoice();
+    // A submitted choice has already emptied the holder; its ACK must still expire.
+    ++pendingChoiceRevision;
     reveals.clear();
     lastTriggerSourceOid = 0;
     lastTriggerAbilityIndex = 0;

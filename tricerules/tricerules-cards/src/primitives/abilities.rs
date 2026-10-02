@@ -1753,6 +1753,8 @@ pub enum EntersTappedAffected {
 pub enum EntryCost {
     /// Watery Grave and Steam Vents use the same optional life-payment operation.
     PayLife { amount: u32 },
+    /// Game Trail and Murmuring Bosk reveal a qualifying printed card without moving it.
+    RevealFromHand { filter: super::ZoneCardFilter },
 }
 
 /// The five basic land types in color-wheel order. This is a closed rules vocabulary rather

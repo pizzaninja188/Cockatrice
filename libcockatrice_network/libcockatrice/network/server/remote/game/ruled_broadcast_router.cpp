@@ -32,6 +32,7 @@ void RuledBroadcastRouter::resetForNewGame()
     pendingResolutionState.Clear();
     pendingSpellCastState.Clear();
     currentPublicZoneView.reset();
+    activePublicRevealSnapshot.reset();
     pendingOpeningState.Clear();
 }
 
@@ -85,6 +86,9 @@ void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::I
         }
     }
     for (const auto &event : response.batch().events()) {
+        if (event.has_active_public_reveal_snapshot()) {
+            activePublicRevealSnapshot = event.active_public_reveal_snapshot();
+        }
         if (event.has_zone_view()) {
             auto view = event.zone_view();
             if (view.battlefields_unchanged() && currentPublicZoneView) {
@@ -111,8 +115,9 @@ void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::I
         pendingResolutionChoice.emplace();
         pendingResolutionChoice->CopyFrom(choice);
     }
-    if (pendingResolutionChoice && pendingResolutionChoice->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST) {
+    if (pendingResolutionChoice)
         *pendingResolutionState.mutable_legal_by_player() = response.batch().legal_by_player();
+    if (pendingResolutionChoice && pendingResolutionChoice->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST) {
         if (currentPublicZoneView)
             pendingResolutionState.add_events()->mutable_zone_view()->CopyFrom(*currentPublicZoneView);
         for (const auto &event : response.batch().events()) {
@@ -161,6 +166,8 @@ void RuledBroadcastRouter::enqueuePendingResolutionChoiceForParticipant(Server_A
         for (const auto &event : pendingResolutionState.events())
             batch->add_events()->CopyFrom(event);
     }
+    if (activePublicRevealSnapshot)
+        batch->add_events()->mutable_active_public_reveal_snapshot()->CopyFrom(*activePublicRevealSnapshot);
     if (opening || casting ||
         (pendingResolutionChoice && pendingResolutionChoice->choice_kind() == ruled::v1::CHOICE_KIND_SPECIAL_CAST)) {
         appendServerObjectMaps(snapshot);

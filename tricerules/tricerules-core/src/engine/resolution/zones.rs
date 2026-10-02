@@ -2305,6 +2305,7 @@ pub(super) fn move_graveyard_cards(
         let entries = targets
             .into_iter()
             .map(|oid| BattlefieldEntryEvent {
+                entry_reveal_receipts: Vec::new(),
                 mana_colors_spent_to_cast: Default::default(),
                 prepared: false,
                 object_id: oid,
@@ -2442,6 +2443,7 @@ pub(super) fn return_linked_exiled_cards(
         .map(|linked| {
             let object = &cx.engine.state.objects[&linked.object_id];
             BattlefieldEntryEvent {
+                entry_reveal_receipts: Vec::new(),
                 mana_colors_spent_to_cast: Default::default(),
                 prepared: false,
                 object_id: linked.object_id,
@@ -2581,6 +2583,7 @@ pub(super) fn return_triggered_card(
     match cx.engine.begin_battlefield_entry(
         cx.top.clone(),
         BattlefieldEntryEvent {
+            entry_reveal_receipts: Vec::new(),
             mana_colors_spent_to_cast: Default::default(),
             prepared: false,
             object_id: source_id,
@@ -2669,6 +2672,7 @@ pub(super) fn put_ability_source_onto_battlefield_tapped_and_attacking(
     match cx.engine.begin_battlefield_entry(
         cx.top.clone(),
         BattlefieldEntryEvent {
+            entry_reveal_receipts: Vec::new(),
             mana_colors_spent_to_cast: Default::default(),
             prepared: false,
             object_id: source_id,
@@ -2812,6 +2816,7 @@ pub(super) fn exile_source_then_return_transformed(
     match cx.engine.begin_battlefield_entry(
         cx.top.clone(),
         BattlefieldEntryEvent {
+            entry_reveal_receipts: Vec::new(),
             mana_colors_spent_to_cast: Default::default(),
             prepared: false,
             object_id: source_id,
@@ -3377,6 +3382,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
         match engine.begin_battlefield_entry(
             cx.top.clone(),
             BattlefieldEntryEvent {
+                entry_reveal_receipts: Vec::new(),
                 mana_colors_spent_to_cast: Default::default(),
                 prepared: false,
                 object_id,

@@ -114,6 +114,52 @@ pub(super) fn active_reveals(eng: &GameEngine) -> Vec<rv1::CardsRevealed> {
         return Vec::new();
     }
     let mut reveals = Vec::new();
+    if let Some(super::replacement::PendingReplacementEvent::BattlefieldEntry(entry)) =
+        &eng.state.pending_replacement_event
+    {
+        reveals.extend(entry.event.entry_reveal_receipts.iter().cloned());
+        match &entry.completion {
+            BattlefieldEntryCompletion::ZoneEntryBatch(batch) => {
+                for event in &batch.ready {
+                    reveals.extend(event.entry_reveal_receipts.iter().cloned());
+                }
+            }
+            BattlefieldEntryCompletion::TokenBatch(batch) => {
+                for entry in batch.ready.iter().chain(&batch.remaining) {
+                    reveals.extend(entry.event.entry_reveal_receipts.iter().cloned());
+                }
+            }
+            _ => {}
+        }
+    }
+    if let Some(batch) = &eng.state.pending_observer_return_batch {
+        for entry in &batch.ready {
+            reveals.extend(entry.event.entry_reveal_receipts.iter().cloned());
+        }
+    }
+    if let Some(PendingResolution {
+        continuation: ResolutionContinuation::SimultaneousEntryOrder { order, .. },
+        ..
+    }) = &eng.state.pending_resolution
+    {
+        match &order.batch {
+            SimultaneousEntryBatch::Zone(batch) => {
+                for event in &batch.ready {
+                    reveals.extend(event.entry_reveal_receipts.iter().cloned());
+                }
+            }
+            SimultaneousEntryBatch::Token(batch) => {
+                for entry in &batch.ready {
+                    reveals.extend(entry.event.entry_reveal_receipts.iter().cloned());
+                }
+            }
+            SimultaneousEntryBatch::Observer(batch) => {
+                for entry in &batch.ready {
+                    reveals.extend(entry.event.entry_reveal_receipts.iter().cloned());
+                }
+            }
+        }
+    }
     for item in eng.state.stack.iter().filter(|item| !item.is_copy) {
         let source_description =
             super::events::object_display_name(&eng.state, eng.registry, item.id);
@@ -176,12 +222,21 @@ pub(super) fn active_reveals(eng: &GameEngine) -> Vec<rv1::CardsRevealed> {
             });
         }
     }
+    let mut seen = HashSet::new();
+    reveals.retain(|reveal| seen.insert(reveal.reveal_id.clone()));
     reveals
 }
 
 /// A later legal-actions snapshot replaces the active set, but must not erase occurrences
 /// earlier in the same command (including automatic priority passes).
-pub(super) fn preserve_active_occurrences(batch: &mut RuledEventBatch) {
+pub(super) fn preserve_active_occurrences(
+    batch: &mut RuledEventBatch,
+    current: &[rv1::CardsRevealed],
+) {
+    let still_active: HashSet<_> = current
+        .iter()
+        .map(|reveal| reveal.reveal_id.as_str())
+        .collect();
     let mut seen: HashSet<String> = batch
         .events
         .iter()
@@ -199,7 +254,10 @@ pub(super) fn preserve_active_occurrences(batch: &mut RuledEventBatch) {
                 snapshot
                     .reveals
                     .iter()
-                    .filter(|reveal| seen.insert(reveal.reveal_id.clone()))
+                    .filter(|reveal| {
+                        !still_active.contains(reveal.reveal_id.as_str())
+                            && seen.insert(reveal.reveal_id.clone())
+                    })
                     .map(|reveal| rv1::RuledEvent {
                         ev: Some(rv1::ruled_event::Ev::CardsRevealed(reveal.clone())),
                     })

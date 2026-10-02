@@ -112,6 +112,12 @@ impl GameEngine {
         }
         if matches!(
             pending.continuation,
+            ResolutionContinuation::EntryReveal { .. }
+        ) {
+            return self.finish_entry_reveal_choice(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
             ResolutionContinuation::EntryBasicLandType { .. }
         ) {
             return self.finish_basic_land_type_choice(pending, answer, decision);
@@ -326,7 +332,8 @@ impl GameEngine {
             ResolutionContinuation::EntryReplacement { .. } => {
                 return self.finish_battlefield_entry_replacement_choice(pending, chosen[0]);
             }
-            ResolutionContinuation::EntryCost { .. } => {
+            ResolutionContinuation::EntryCost { .. }
+            | ResolutionContinuation::EntryReveal { .. } => {
                 unreachable!("entry-cost branch handled before object-choice validation")
             }
             ResolutionContinuation::EntryBasicLandType { .. } => {
@@ -472,6 +479,7 @@ impl GameEngine {
 
         let label = object_display_name(&self.state, self.registry, exiled.object_id);
         let entry = BattlefieldEntryEvent {
+            entry_reveal_receipts: Vec::new(),
             mana_colors_spent_to_cast: Default::default(),
             prepared: false,
             object_id: exiled.object_id,

@@ -56,6 +56,7 @@ impl GameEngine {
             match self.begin_battlefield_entry(
                 stack.item.clone(),
                 BattlefieldEntryEvent {
+                    entry_reveal_receipts: Vec::new(),
                     mana_colors_spent_to_cast: Default::default(),
                     prepared: false,
                     object_id: oid,
@@ -460,6 +461,7 @@ impl GameEngine {
                 match self.begin_battlefield_entry(
                     stack.item.clone(),
                     BattlefieldEntryEvent {
+                        entry_reveal_receipts: Vec::new(),
                         mana_colors_spent_to_cast: Default::default(),
                         prepared: false,
                         object_id: oid,

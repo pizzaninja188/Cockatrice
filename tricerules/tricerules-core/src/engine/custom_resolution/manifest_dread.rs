@@ -47,6 +47,7 @@ impl GameEngine {
 
         let mut events = Vec::new();
         let entry = BattlefieldEntryEvent {
+            entry_reveal_receipts: Vec::new(),
             mana_colors_spent_to_cast: Default::default(),
             prepared: false,
             object_id: chosen,

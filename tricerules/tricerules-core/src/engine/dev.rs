@@ -173,6 +173,7 @@ impl GameEngine {
             return match self.begin_battlefield_entry(
                 item,
                 BattlefieldEntryEvent {
+                    entry_reveal_receipts: Vec::new(),
                     mana_colors_spent_to_cast: Default::default(),
                     prepared: false,
                     object_id: oid,

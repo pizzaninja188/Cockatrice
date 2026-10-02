@@ -11,8 +11,8 @@ use super::targeting::{
 use super::*;
 
 pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
-    super::reveals::preserve_active_occurrences(batch);
     let reveals = super::reveals::active_reveals(eng);
+    super::reveals::preserve_active_occurrences(batch, &reveals);
     batch.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ActivePublicRevealSnapshot(
             rv1::ActivePublicRevealSnapshot { reveals },

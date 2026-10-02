@@ -493,25 +493,41 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                         reason,
                     })?;
             }
-            if let Some(crate::primitives::EntryCost::PayLife { amount }) = unless_cost {
+            if let Some(cost) = unless_cost {
                 if affected != &crate::primitives::EntersTappedAffected::Self_ {
                     return Err(RegistryError::InvalidCard {
                         id: card.id.clone(),
                         reason: "entry costs require an intrinsic EntersTapped ability".into(),
                     });
                 }
-                if *amount == 0 || *amount > i32::MAX as u32 {
-                    return Err(RegistryError::InvalidCard {
-                        id: card.id.clone(),
-                        reason: "entry life payment requires a positive i32 amount".into(),
-                    });
+                match cost {
+                    crate::primitives::EntryCost::PayLife { amount }
+                        if *amount == 0 || *amount > i32::MAX as u32 =>
+                    {
+                        return Err(RegistryError::InvalidCard {
+                            id: card.id.clone(),
+                            reason: "entry life payment requires a positive i32 amount".into(),
+                        });
+                    }
+                    crate::primitives::EntryCost::RevealFromHand { filter } => {
+                        filter
+                            .validate()
+                            .map_err(|reason| RegistryError::InvalidCard {
+                                id: card.id.clone(),
+                                reason,
+                            })?;
+                    }
+                    _ => {}
                 }
             }
         }
-        if let StaticAbilityDef::EntersWithChosenBasicLandType {
-            untapped_cost: crate::primitives::EntryCost::PayLife { amount },
-        } = ability
-        {
+        if let StaticAbilityDef::EntersWithChosenBasicLandType { untapped_cost } = ability {
+            let crate::primitives::EntryCost::PayLife { amount } = untapped_cost else {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "chosen basic land type entry requires life payment".into(),
+                });
+            };
             if *amount == 0 || *amount > i32::MAX as u32 {
                 return Err(RegistryError::InvalidCard {
                     id: card.id.clone(),
@@ -5139,6 +5155,22 @@ mod tests {
             Err(RegistryError::InvalidCard { ref reason, .. })
                 if reason.contains("positive i32 amount")
         ));
+    }
+
+    #[test]
+    fn entry_reveal_pair_schema_rejects_unbounded_malformed_and_nonintrinsic_costs() {
+        let source = include_str!("../data/game_trail.ron");
+        let filter = "any_of: Some([(required_subtypes: [\"Mountain\"]), (required_subtypes: [\"Forest\"])]),";
+        assert!(CardRegistry::from_chunks(&[source]).is_ok());
+        for invalid in [
+            source.replace(filter, ""),
+            source.replace(filter, "any_of: Some([]),"),
+            source.replace(filter, "any_of: Some([(required_subtypes: [\"Forest\"]), (min_mana_value: Some(3), max_mana_value: Some(2))]),"),
+            source.replace("affected: Self_", "affected: Permanents"),
+            source.replace("EntersTapped(affected: Self_, unless_cost: Some(RevealFromHand(filter: (", "EntersWithChosenBasicLandType(untapped_cost: RevealFromHand(filter: (").replace(")))),", "))),"),
+        ] {
+            assert!(matches!(CardRegistry::from_chunks(&[&invalid]), Err(RegistryError::InvalidCard { .. })), "{invalid}");
+        }
     }
 
     #[test]

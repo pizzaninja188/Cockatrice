@@ -38,8 +38,9 @@ private:
     bool hasLastBroadcastHandSlotMap = false;
     QSet<int> lastBroadcastHandSlotParticipants;
     std::optional<ruled::v1::ResolutionChoiceRequired> pendingResolutionChoice;
-    // State accompanying a parked cast: replayable views and legality, never one-shot actions.
+    // State accompanying a parked choice: replayable views and legality, never one-shot actions.
     ruled::v1::RuledEventBatch pendingResolutionState;
+    std::optional<ruled::v1::ActivePublicRevealSnapshot> activePublicRevealSnapshot;
     // Caster-private engine transaction plus the public views required to rebuild payment after
     // reconnect. The fail-closed redactor removes the transaction for every other participant.
     ruled::v1::RuledEventBatch pendingSpellCastState;

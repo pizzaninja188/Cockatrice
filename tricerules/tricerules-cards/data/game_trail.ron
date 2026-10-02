@@ -1,0 +1,14 @@
+(
+    id: "game_trail", name: "Game Trail", face_id: "game_trail", mana_cost: "",
+    types: ["Land"],
+    static_abilities: [(
+        ability_id: "static_01", presentation: OracleLines([1]),
+        definition: EntersTapped(affected: Self_, unless_cost: Some(RevealFromHand(filter: (
+            any_of: Some([(required_subtypes: ["Mountain"]), (required_subtypes: ["Forest"])]),
+        )))),
+    )],
+    activated_abilities: [(
+        ability_id: "activated_01", presentation: OracleLines([2]),
+        costs: [Tap], effect: [ProduceMana(options: [(r: 1), (g: 1)])],
+    )],
+)

@@ -3344,6 +3344,154 @@ TEST_F(RuledBatchTest, PendingPrivateWardDiscardIsRestoredForPayerAndRedactedFor
     EXPECT_EQ(opponentChoice.prompt_text(), "Opponent is making a resolution choice.");
 }
 
+TEST_F(RuledBatchTest, EntryRevealReconnectRestoresCoherentPrivateChoiceAndOnlyAcceptedPublicReceipt)
+{
+    seedCardCatalog({"Forest", "Mountain", "Game Trail"});
+    Server_Card *forest = addCardToHand(p1, QStringLiteral("Forest"));
+    ruled::v1::RuledPerPlayerView view;
+    view.set_player_id(p1->getPlayerId());
+    auto *hand = view.add_hand_cards();
+    hand->set_object_id(501u);
+    hand->set_card_id("forest");
+    applyZoneView(p1, view, nullptr);
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *batch = response.mutable_batch();
+    (*batch->mutable_legal_by_player())[p1->getPlayerId()];
+    (*batch->mutable_legal_by_player())[p2->getPlayerId()];
+    auto *choice = batch->add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+    choice->set_prompt_text("As Game Trail enters, reveal one qualifying card or choose none.");
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(501u);
+    choice->add_candidate_card_ids("forest");
+    choice->add_candidate_names("Forest");
+    auto *active = batch->add_events()->mutable_active_public_reveal_snapshot();
+    auto *reveal = active->add_reveals();
+    reveal->set_reveal_id("entry:700:0:static_01");
+    reveal->set_source_object_id(700u);
+    reveal->set_source_description("Game Trail");
+    reveal->set_zone_owner_player_id(p1->getPlayerId());
+    reveal->set_source_zone(ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND);
+    auto *revealed = reveal->add_cards();
+    revealed->set_object_id(502u);
+    revealed->set_zone_change_generation(9u);
+    revealed->set_card_id("mountain");
+    revealed->set_card_name("Mountain");
+    updatePendingResolutionChoiceCache(response);
+    ruled::v1::IpcResponse preview;
+    preview.set_ok(true);
+    preview.mutable_batch()->add_events()->mutable_active_public_reveal_snapshot();
+    game->ruled()->broadcastRuledResponse(preview, false);
+    for (Server_Player *recipient : {p1, p2}) {
+        ResponseContainer reconnect(-1);
+        game->ruled()->enqueuePendingResolutionChoiceForParticipant(recipient, reconnect);
+        ASSERT_EQ(reconnect.getPostResponseQueue().size(), 1);
+        const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        EXPECT_TRUE(restored.legal_by_player().contains(recipient->getPlayerId()));
+        EXPECT_FALSE(restored.legal_by_player().contains(recipient == p1 ? p2->getPlayerId() : p1->getPlayerId()));
+        const auto &restoredChoice = restored.events(0).resolution_choice_required();
+        EXPECT_FALSE(restoredChoice.has_public_reveal());
+        EXPECT_EQ(restoredChoice.candidate_object_ids_size(), recipient == p1 ? 1 : 0);
+        EXPECT_EQ(restoredChoice.candidate_names_size(), recipient == p1 ? 1 : 0);
+        EXPECT_EQ(restoredChoice.candidate_server_card_ids_size(), recipient == p1 ? 1 : 0);
+        if (recipient == p1) EXPECT_EQ(restoredChoice.candidate_server_card_ids(0), forest->getId());
+        const auto snapshot = std::find_if(restored.events().begin(), restored.events().end(), [](const auto &event) { return event.has_active_public_reveal_snapshot(); });
+        ASSERT_NE(snapshot, restored.events().end());
+        ASSERT_EQ(snapshot->active_public_reveal_snapshot().reveals_size(), 1);
+        EXPECT_EQ(snapshot->active_public_reveal_snapshot().reveals(0).SerializeAsString(), reveal->SerializeAsString());
+        EXPECT_FALSE(std::any_of(restored.events().begin(), restored.events().end(), [](const auto &event) { return event.has_cards_revealed() || event.has_permanent_moved(); }));
+    }
+    active->clear_reveals();
+    updatePendingResolutionChoiceCache(response);
+    ResponseContainer cleared(-1);
+    game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, cleared);
+    const auto *container = dynamic_cast<const GameEventContainer *>(cleared.getPostResponseQueue().last().second);
+    ASSERT_NE(container, nullptr);
+    ruled::v1::RuledEventBatch restored;
+    ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+    const auto snapshot = std::find_if(restored.events().begin(), restored.events().end(), [](const auto &event) { return event.has_active_public_reveal_snapshot(); });
+    ASSERT_NE(snapshot, restored.events().end());
+    EXPECT_EQ(snapshot->active_public_reveal_snapshot().reveals_size(), 0);
+    game->ruled()->resetForNewGame();
+    ResponseContainer reset(-1);
+    game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, reset);
+    EXPECT_TRUE(reset.getPostResponseQueue().isEmpty());
+}
+
+TEST_F(RuledBatchTest, EntryRevealEmptyAndMatchingHandsHaveIdenticalOpponentAndSpectatorWaitingViews)
+{
+    seedCardCatalog({"Forest", "Game Trail"});
+    addCardToHand(p1, QStringLiteral("Forest"));
+    ruled::v1::RuledPerPlayerView view;
+    view.set_player_id(p1->getPlayerId());
+    auto *hand = view.add_hand_cards();
+    hand->set_object_id(501u);
+    hand->set_card_id("forest");
+    applyZoneView(p1, view, nullptr);
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    std::string previousOpponent;
+    std::string previousSpectator;
+    for (const bool matching : {false, true}) {
+        ruled::v1::IpcResponse response;
+        response.set_ok(true);
+        auto *batch = response.mutable_batch();
+        (*batch->mutable_legal_by_player())[p1->getPlayerId()];
+        (*batch->mutable_legal_by_player())[p2->getPlayerId()];
+        batch->add_events()->mutable_active_public_reveal_snapshot();
+        auto *choice = batch->add_events()->mutable_resolution_choice_required();
+        choice->set_deciding_player_id(p1->getPlayerId());
+        choice->set_source_object_id(700u);
+        choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+        choice->set_prompt_text("As Game Trail enters, reveal one qualifying card or choose none.");
+        choice->set_min(0);
+        choice->set_max(1);
+        if (matching) {
+            choice->add_candidate_object_ids(501u);
+            choice->add_candidate_card_ids("forest");
+            choice->add_candidate_names("Forest");
+            choice->add_candidate_selectable(true);
+        }
+        const auto opponent = redactFor(*batch, p2);
+        const auto spectatorView = redactFor(*batch, spectator);
+        if (matching) {
+            EXPECT_EQ(opponent.SerializeAsString(), previousOpponent);
+            EXPECT_EQ(spectatorView.SerializeAsString(), previousSpectator);
+        } else {
+            previousOpponent = opponent.SerializeAsString();
+            previousSpectator = spectatorView.SerializeAsString();
+        }
+        updatePendingResolutionChoiceCache(response);
+        for (Server_Player *recipient : {p1, p2, spectator}) {
+            ResponseContainer reconnect(-1);
+            game->ruled()->enqueuePendingResolutionChoiceForParticipant(recipient, reconnect);
+            ASSERT_EQ(reconnect.getPostResponseQueue().size(), 1);
+            const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+            ASSERT_NE(container, nullptr);
+            ruled::v1::RuledEventBatch restored;
+            ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+            const auto it = std::find_if(restored.events().begin(), restored.events().end(),
+                                         [](const auto &event) { return event.has_resolution_choice_required(); });
+            ASSERT_NE(it, restored.events().end());
+            const auto &current = it->resolution_choice_required();
+            EXPECT_EQ(current.min(), 0u);
+            EXPECT_EQ(current.max(), 1u);
+            EXPECT_EQ(current.candidate_object_ids_size(), recipient == p1 && matching ? 1 : 0);
+            if (recipient != p1) {
+                EXPECT_EQ(current.prompt_text(), "Opponent is making a resolution choice.");
+                EXPECT_EQ(current.candidate_names_size(), 0);
+                EXPECT_EQ(current.candidate_server_card_ids_size(), 0);
+            }
+        }
+    }
+}
+
 TEST_F(RuledBatchTest, PendingTapPaymentCohortIsRestoredForPayerAndRedactedForOpponent)
 {
     Server_Card *bear = addCardToTable(p1, QStringLiteral("Grizzly Bears"));
