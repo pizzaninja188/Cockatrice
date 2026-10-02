@@ -133,6 +133,7 @@ fn issue_67_card_characteristics_and_effects_match_oracle() {
 fn battlefield_aggregate_conditions_reject_invalid_bounds_and_names() {
     let condition = |name: Option<&str>, min, max| GameCondition::BattlefieldAggregate {
         filter: BattlefieldPermanentFilter {
+            required_supertypes: Vec::new(),
             token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,

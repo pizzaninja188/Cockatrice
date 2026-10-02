@@ -605,6 +605,7 @@ fn match_affinity_for_artifacts(text: &str, _: &RecipeContext) -> Option<RecipeE
         RecipeEmission::SpellCostModifier(SpellCostModifier::BattlefieldCountGenericReduction {
             amount_per_match: 1,
             filter: BattlefieldPermanentFilter {
+                required_supertypes: Vec::new(),
                 token: None,
                 any_of: None,
                 controllers: RelativePlayerSet::Controller,
@@ -3745,6 +3746,7 @@ fn match_modal_damage_count_creatures_and_vehicles(
     context: &RecipeContext,
 ) -> Option<RecipeEmission> {
     let creature = BattlefieldPermanentFilter {
+        required_supertypes: Vec::new(),
         token: None,
         any_of: None,
         controllers: RelativePlayerSet::Controller,
@@ -3755,6 +3757,7 @@ fn match_modal_damage_count_creatures_and_vehicles(
         exclude_source: false,
     };
     let vehicle = BattlefieldPermanentFilter {
+        required_supertypes: Vec::new(),
         token: None,
         any_of: None,
         controllers: RelativePlayerSet::Controller,
@@ -3774,6 +3777,7 @@ fn match_modal_damage_count_creatures_and_vehicles(
             vec![SpellEffectKind::DamageTarget {
                 amount: Amount::Count(CountExpression::BattlefieldPermanents {
                     filter: BattlefieldPermanentFilter {
+                        required_supertypes: Vec::new(),
                         token: None,
                         any_of: Some(vec![creature, vehicle]),
                         controllers: RelativePlayerSet::Controller,
@@ -7274,6 +7278,7 @@ fn match_warmaker_etb_damage_artifact_count_opponent_creature(
                 vec![SpellEffectKind::DamageTarget {
                     amount: Amount::Count(CountExpression::BattlefieldPermanents {
                         filter: BattlefieldPermanentFilter {
+                            required_supertypes: Vec::new(),
                             token: None,
                             any_of: None,
                             controllers: RelativePlayerSet::Controller,
@@ -10102,6 +10107,7 @@ fn match_activated_tap_conditional_pair_mana(
                 },
                 GameCondition::BattlefieldAggregate {
                     filter: BattlefieldPermanentFilter {
+                        required_supertypes: Vec::new(),
                         token: None,
                         any_of: None,
                         controllers: RelativePlayerSet::Controller,
@@ -10407,6 +10413,7 @@ fn match_unconditional_creature_enters_tapped(
 fn land_count_entry_condition(min: Option<u32>, max: Option<u32>) -> GameCondition {
     GameCondition::BattlefieldAggregate {
         filter: BattlefieldPermanentFilter {
+            required_supertypes: Vec::new(),
             token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,
@@ -10476,6 +10483,7 @@ const ISSUE_416_MOUNT_OR_VEHICLE_ENTRY_CLAUSE: &str =
 /// when the condition holds, exactly as the fast/slow land conditions do.
 fn mount_or_vehicle_entry_condition() -> GameCondition {
     let subtype = |value: &str| BattlefieldPermanentFilter {
+        required_supertypes: Vec::new(),
         token: None,
         any_of: None,
         controllers: RelativePlayerSet::Controller,
@@ -10487,6 +10495,7 @@ fn mount_or_vehicle_entry_condition() -> GameCondition {
     };
     GameCondition::BattlefieldAggregate {
         filter: BattlefieldPermanentFilter {
+            required_supertypes: Vec::new(),
             token: None,
             any_of: Some(vec![subtype("Mount"), subtype("Vehicle")]),
             controllers: RelativePlayerSet::Controller,
@@ -11446,6 +11455,7 @@ fn match_static_self_count_scaled_artifact_plus_one_zero(
             definition: StaticAbilityDef::CountScaledSelfPt {
                 count: CountExpression::BattlefieldPermanents {
                     filter: BattlefieldPermanentFilter {
+                        required_supertypes: Vec::new(),
                         token: None,
                         any_of: None,
                         controllers: RelativePlayerSet::Controller,
@@ -12857,6 +12867,7 @@ fn match_static_control_artifact_plus_one_zero_deathtouch(
                 definition: StaticAbilityDef::ConditionalSelfModifier {
                     condition: GameCondition::BattlefieldAggregate {
                         filter: BattlefieldPermanentFilter {
+                            required_supertypes: Vec::new(),
                             token: None,
                             any_of: None,
                             controllers: RelativePlayerSet::Controller,
@@ -12919,6 +12930,7 @@ fn match_static_seven_lands_plus_p_plus_t(
         definition: StaticAbilityDef::ConditionalSelfModifier {
             condition: GameCondition::BattlefieldAggregate {
                 filter: BattlefieldPermanentFilter {
+                    required_supertypes: Vec::new(),
                     token: None,
                     any_of: None,
                     controllers: RelativePlayerSet::Controller,
@@ -14529,6 +14541,7 @@ fn match_triggered_etb_may_mill_count_lands_you_control(
                 SpellEffectKind::Mill {
                     count: Amount::Count(CountExpression::BattlefieldPermanents {
                         filter: BattlefieldPermanentFilter {
+                            required_supertypes: Vec::new(),
                             token: None,
                             any_of: None,
                             controllers: RelativePlayerSet::Controller,
@@ -15671,6 +15684,7 @@ fn match_control_another_villain_hexproof(
                 definition: StaticAbilityDef::ConditionalSelfModifier {
                     condition: GameCondition::BattlefieldAggregate {
                         filter: BattlefieldPermanentFilter {
+                            required_supertypes: Vec::new(),
                             token: None,
                             any_of: None,
                             controllers: RelativePlayerSet::Controller,
@@ -17749,6 +17763,7 @@ fn match_spell_cost_reduction_graveyard_caves_you_control_and_graveyard_one(
                         coefficient: 1,
                         quantity: CountExpression::BattlefieldPermanents {
                             filter: BattlefieldPermanentFilter {
+                                required_supertypes: Vec::new(),
                                 token: None,
                                 any_of: None,
                                 controllers: RelativePlayerSet::Controller,
@@ -30635,6 +30650,7 @@ mod tests {
             affected: EntersTappedAffected::Self_,
             condition: Some(GameCondition::BattlefieldAggregate {
                 filter: BattlefieldPermanentFilter {
+                    required_supertypes: Vec::new(),
                     token: None,
                     any_of: None,
                     controllers: RelativePlayerSet::Controller,
@@ -33140,6 +33156,7 @@ mod tests {
             [SpellEffectKind::DamageTarget {
                 amount: Amount::Count(CountExpression::BattlefieldPermanents {
                     filter: BattlefieldPermanentFilter {
+                        required_supertypes: Vec::new(),
                         token: None,
                         any_of: None,
                         controllers: RelativePlayerSet::Controller,
@@ -37793,6 +37810,7 @@ mod tests {
                 StaticAbilityDef::CountScaledSelfPt {
                     count: CountExpression::BattlefieldPermanents {
                         filter: BattlefieldPermanentFilter {
+                            required_supertypes: Vec::new(),
                             token: None,
                             any_of: None,
                             controllers: RelativePlayerSet::Controller,
@@ -40936,6 +40954,7 @@ mod tests {
             StaticAbilityDef::ConditionalSelfModifier {
                 condition: GameCondition::BattlefieldAggregate {
                     filter: BattlefieldPermanentFilter {
+                        required_supertypes: Vec::new(),
                         token: None,
                         any_of: None,
                         controllers: RelativePlayerSet::Controller,
@@ -43025,6 +43044,7 @@ mod tests {
             *count,
             Amount::Count(CountExpression::BattlefieldPermanents {
                 filter: BattlefieldPermanentFilter {
+                    required_supertypes: Vec::new(),
                     token: None,
                     any_of: None,
                     controllers: RelativePlayerSet::Controller,
@@ -46169,6 +46189,7 @@ mod tests {
                             coefficient: 1,
                             quantity: CountExpression::BattlefieldPermanents {
                                 filter: BattlefieldPermanentFilter {
+                                    required_supertypes: Vec::new(),
                                     token: None,
                                     any_of: None,
                                     controllers: RelativePlayerSet::Controller,
@@ -47748,6 +47769,7 @@ mod tests {
 
     fn issue_416_mount_or_vehicle_condition() -> GameCondition {
         let subtype = |value: &str| BattlefieldPermanentFilter {
+            required_supertypes: Vec::new(),
             token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,
@@ -47759,6 +47781,7 @@ mod tests {
         };
         GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
+                required_supertypes: Vec::new(),
                 token: None,
                 any_of: Some(vec![subtype("Mount"), subtype("Vehicle")]),
                 controllers: RelativePlayerSet::Controller,
@@ -49354,6 +49377,7 @@ mod tests {
         );
 
         let creature = BattlefieldPermanentFilter {
+            required_supertypes: Vec::new(),
             token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,
@@ -49364,6 +49388,7 @@ mod tests {
             exclude_source: false,
         };
         let vehicle = BattlefieldPermanentFilter {
+            required_supertypes: Vec::new(),
             token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,
@@ -49383,6 +49408,7 @@ mod tests {
                 effects: vec![SpellEffectKind::DamageTarget {
                     amount: Amount::Count(CountExpression::BattlefieldPermanents {
                         filter: BattlefieldPermanentFilter {
+                            required_supertypes: Vec::new(),
                             token: None,
                             any_of: Some(vec![creature, vehicle]),
                             controllers: RelativePlayerSet::Controller,
@@ -52560,6 +52586,7 @@ mod tests {
             },
             GameCondition::BattlefieldAggregate {
                 filter: BattlefieldPermanentFilter {
+                    required_supertypes: Vec::new(),
                     token: None,
                     any_of: None,
                     controllers: RelativePlayerSet::Controller,
@@ -52991,6 +53018,7 @@ mod tests {
     fn issue_458_seven_lands_condition() -> GameCondition {
         GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
+                required_supertypes: Vec::new(),
                 token: None,
                 any_of: None,
                 controllers: RelativePlayerSet::Controller,

@@ -88,6 +88,7 @@ fn hidden_lair_condition() -> GameCondition {
         },
         GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
+                required_supertypes: Vec::new(),
                 token: None,
                 any_of: None,
                 controllers: RelativePlayerSet::Controller,

@@ -212,9 +212,11 @@ fn issue_416_roads_fixture_matches_the_emitted_definition() {
                 affected: EntersTappedAffected::Self_,
                 condition: Some(GameCondition::BattlefieldAggregate {
                     filter: BattlefieldPermanentFilter {
+                        required_supertypes: Vec::new(),
                         token: None,
                         any_of: Some(vec![
                             BattlefieldPermanentFilter {
+                                required_supertypes: Vec::new(),
                                 token: None,
                                 any_of: None,
                                 controllers: RelativePlayerSet::Controller,
@@ -225,6 +227,7 @@ fn issue_416_roads_fixture_matches_the_emitted_definition() {
                                 exclude_source: false,
                             },
                             BattlefieldPermanentFilter {
+                                required_supertypes: Vec::new(),
                                 token: None,
                                 any_of: None,
                                 controllers: RelativePlayerSet::Controller,

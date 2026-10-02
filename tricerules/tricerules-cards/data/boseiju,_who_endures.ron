@@ -1,0 +1,54 @@
+(
+  id: "boseiju,_who_endures",
+  name: "Boseiju, Who Endures",
+  face_id: "boseiju_who_endures",
+  mana_cost: "",
+  types: ["Land"],
+  supertypes: ["Legendary"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(g: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      source_zone: Hand,
+      costs: [Mana("{1}{G}"), DiscardSelf],
+      cost_modifiers: [GenericReduction(amount: Count(BattlefieldPermanents(filter: (
+        controllers: Controller,
+        card_type: Some(Creature),
+        required_supertypes: ["Legendary"],
+      ))))],
+      effect: [
+        Destroy(subject: Chosen((any_of: Some([
+          (kind: AnyPermanent, controller: Opponent, permanent_types: [Artifact]),
+          (kind: AnyPermanent, controller: Opponent, permanent_types: [Enchantment]),
+          (kind: AnyPermanent, controller: Opponent, permanent_types: [Land], excluded_supertypes: ["Basic"]),
+        ])))),
+        SearchLibrary(
+          who: ControllerOfTargetGroup(group_index: 0),
+          optional: true,
+          filter: Some((any_of: Some([
+            (card_type: Some(Land), required_subtypes: ["Plains"]),
+            (card_type: Some(Land), required_subtypes: ["Island"]),
+            (card_type: Some(Land), required_subtypes: ["Swamp"]),
+            (card_type: Some(Land), required_subtypes: ["Mountain"]),
+            (card_type: Some(Land), required_subtypes: ["Forest"]),
+          ]))),
+          destination: Battlefield(tapped: false),
+          shuffle: true,
+          reveal: false,
+        ),
+      ],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target artifact, enchantment, or nonbasic land an opponent controls",
+        effect_indices: [0],
+      )])),
+    ),
+  ],
+)

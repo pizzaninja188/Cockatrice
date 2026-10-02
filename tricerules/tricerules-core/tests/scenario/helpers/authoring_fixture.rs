@@ -106,7 +106,10 @@ pub(crate) fn ability_source(
     face: usize,
     ability: usize,
 ) -> u32 {
-    let oid = if card == "fanatic_of_rhonas" && ability == 2 {
+    let oid = if card == "boseiju,_who_endures" && ability == 1 {
+        // Channel discards its hand source; its target/search use the existing fixture resources.
+        super::relocate_to_hand(e, player, card)
+    } else if card == "fanatic_of_rhonas" && ability == 2 {
         let oid = super::take_oid_from_library_or_hand(e, player, card);
         e.state.players[player].graveyard.push(oid);
         e.state.objects.get_mut(&oid).unwrap().zone = Zone::Graveyard;

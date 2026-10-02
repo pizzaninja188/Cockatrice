@@ -514,6 +514,7 @@ fn issue_373_lasyd_prowler_mills_per_land_and_renews_from_the_graveyard() {
         [SpellEffectKind::Mill {
             count: Amount::Count(CountExpression::BattlefieldPermanents {
                 filter: BattlefieldPermanentFilter {
+                    required_supertypes: Vec::new(),
                     token: None,
                     any_of: None,
                     controllers: RelativePlayerSet::Controller,

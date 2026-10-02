@@ -27,6 +27,7 @@ const ISSUE_333_CARDS: &[(&str, &str)] = &[
 
 fn artifact_count_filter() -> BattlefieldPermanentFilter {
     BattlefieldPermanentFilter {
+        required_supertypes: Vec::new(),
         token: None,
         any_of: None,
         controllers: RelativePlayerSet::Controller,

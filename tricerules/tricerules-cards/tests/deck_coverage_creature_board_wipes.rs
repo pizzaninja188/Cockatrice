@@ -70,6 +70,7 @@ fn assert_battlefield_creature_reduction(modifiers: &[SpellCostModifier]) {
     assert_eq!(
         filter,
         &BattlefieldPermanentFilter {
+            required_supertypes: Vec::new(),
             token: None,
             any_of: None,
             controllers: RelativePlayerSet::All,

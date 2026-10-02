@@ -6153,6 +6153,7 @@ mod tests {
                         [SpellEffectKind::DamageTarget {
                             amount: Amount::Count(CountExpression::BattlefieldPermanents {
                                 filter: BattlefieldPermanentFilter {
+                                    required_supertypes: Vec::new(),
                                     token: None,
                                     any_of: None,
                                     controllers: RelativePlayerSet::Controller,

@@ -1,0 +1,86 @@
+{
+  "format_version": 1,
+  "oracle_id": "bf1341dd-41a3-49f6-87ec-63170dde4324",
+  "spans": [
+    {
+      "face_id": "boseiju_who_endures",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "boseiju_who_endures",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_boseiju::boseiju_channel_counted_reduction_consumes_kopala_tax",
+      "covers": "channel counted reduction consumes kopala tax"
+    },
+    {
+      "test": "scenario deck_coverage_boseiju::boseiju_optional_search_uses_destroyed_targets_controller_and_all_basic_subtypes",
+      "covers": "optional search uses destroyed targets controller and all basic subtypes"
+    },
+    {
+      "test": "scenario deck_coverage_boseiju::boseiju_illegal_targets_missing_targets_and_stale_sources_preserve_resources",
+      "covers": "illegal targets missing targets and stale sources preserve resources"
+    },
+    {
+      "test": "scenario deck_coverage_boseiju::boseiju_decline_does_not_shuffle_but_accepted_failure_to_find_does",
+      "covers": "decline does not shuffle but accepted failure to find does"
+    },
+    {
+      "test": "scenario deck_coverage_boseiju::boseiju_stale_private_search_keeps_the_choice_and_recovers",
+      "covers": "stale private search keeps the choice and recovers"
+    },
+    {
+      "test": "scenario deck_coverage_boseiju::boseiju_fizzle_after_paid_response_retains_discard_without_search",
+      "covers": "fizzle after paid response retains discard without search"
+    },
+    {
+      "test": "scenario deck_coverage_boseiju::boseiju_countered_channel_retains_paid_discard_without_search",
+      "covers": "countered channel retains paid discard without search"
+    },
+    {
+      "test": "scenario deck_coverage_boseiju::boseiju_channel_preview_keeps_colored_cost_and_discards_as_cost",
+      "covers": "channel preview keeps colored cost and discards as cost"
+    },
+    {
+      "test": "scenario deck_coverage_boseiju::boseiju_discount_uses_copied_and_token_legendary_characteristics",
+      "covers": "discount uses copied and token legendary characteristics"
+    },
+    {
+      "test": "scenario deck_coverage_boseiju::boseiju_discount_excludes_face_down_legend_and_tracks_song_removal",
+      "covers": "discount excludes face down legend and tracks song removal"
+    },
+    {
+      "test": "scenario deck_coverage_boseiju::boseiju_serialized_paid_channel_and_private_search_replay_exactly",
+      "covers": "serialized paid channel and private search replay exactly"
+    },
+    {
+      "test": "scenario deck_coverage_boseiju::boseiju_printed_mana_ability_and_playing_land_are_independent_of_channel",
+      "covers": "printed mana ability and playing land are independent of channel"
+    },
+    {
+      "test": "scenario deck_coverage_boseiju::boseiju_target_union_accepts_enchantment_nonbasic_and_basic_artifact_land",
+      "covers": "target union accepts enchantment nonbasic and basic artifact land"
+    },
+    {
+      "test": "scenario deck_coverage_boseiju::boseiju_refresh_recounts_live_legends_and_sanitizes_excess_payment",
+      "covers": "refresh recounts live legends and sanitizes excess payment"
+    },
+    {
+      "test": "deck_coverage_boseiju::boseiju_exact_identity_maps_printed_mana_and_complete_channel",
+      "covers": "Exact identity, complete printed mana and Channel clauses, costs, derived legendary-creature count, target and search qualifications, and Oracle presentation."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

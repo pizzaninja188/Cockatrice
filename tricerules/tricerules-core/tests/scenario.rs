@@ -8,6 +8,9 @@
 #[path = "scenario/authoring_actions.rs"]
 mod authoring_actions;
 
+#[path = "scenario/deck_coverage_boseiju.rs"]
+mod deck_coverage_boseiju;
+
 #[path = "scenario/deck_coverage_land_type_pair.rs"]
 mod deck_coverage_land_type_pair;
 

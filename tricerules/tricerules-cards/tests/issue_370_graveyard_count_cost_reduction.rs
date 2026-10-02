@@ -148,6 +148,7 @@ fn issue_370_gargantuan_leech_cost_modifier_payload_is_exact() {
                         coefficient: 1,
                         quantity: CountExpression::BattlefieldPermanents {
                             filter: BattlefieldPermanentFilter {
+                                required_supertypes: Vec::new(),
                                 token: None,
                                 any_of: None,
                                 controllers: RelativePlayerSet::Controller,
@@ -306,6 +307,7 @@ fn issue_370_unretained_recipe_payloads_validate_in_the_registry() {
                         coefficient: 1,
                         quantity: CountExpression::BattlefieldPermanents {
                             filter: BattlefieldPermanentFilter {
+                                required_supertypes: Vec::new(),
                                 token: None,
                                 any_of: None,
                                 controllers: RelativePlayerSet::Controller,

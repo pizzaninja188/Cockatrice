@@ -1932,6 +1932,7 @@ mod tests {
     fn count_defined_pt_requires_a_supported_count_and_nonzero_axis() {
         let lands = CountExpression::BattlefieldPermanents {
             filter: crate::primitives::BattlefieldPermanentFilter {
+                required_supertypes: Vec::new(),
                 token: None,
                 any_of: None,
                 controllers: crate::primitives::RelativePlayerSet::Controller,

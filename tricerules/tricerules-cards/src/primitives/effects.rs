@@ -5776,9 +5776,11 @@ mod issue_158_predicate_tests {
     fn richer_public_predicates_validate_composable_filters() {
         let union = GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
+                required_supertypes: Vec::new(),
                 token: None,
                 any_of: Some(vec![
                     BattlefieldPermanentFilter {
+                        required_supertypes: Vec::new(),
                         token: None,
                         any_of: None,
                         controllers: RelativePlayerSet::Controller,
@@ -5789,6 +5791,7 @@ mod issue_158_predicate_tests {
                         exclude_source: false,
                     },
                     BattlefieldPermanentFilter {
+                        required_supertypes: Vec::new(),
                         token: None,
                         any_of: None,
                         controllers: RelativePlayerSet::Controller,

@@ -2841,3 +2841,27 @@ fn issue_227_discard_quantity_accepts_whole_hand() {
     assert!(crate::CardRegistry::from_chunks_and_tokens(&[&definition("Exact(0)")], &[]).is_err());
     assert!(ron::from_str::<super::SpellEffectKind>("Discard(count: 1)").is_err());
 }
+
+#[test]
+fn boseiju_counted_activation_reduction_validates_cost_time_predicates() {
+    let modifier = |amount: &str| {
+        ron::from_str::<super::ActivatedCostModifier>(&format!(
+            "GenericReduction(amount: {amount})"
+        ))
+        .expect("counted activation reduction must be expressible")
+    };
+    modifier("Count(BattlefieldPermanents(filter: (controllers: Controller, card_type: Some(Creature), required_supertypes: [\"Legendary\"])))")
+        .validate()
+        .expect("Boseiju and Otawara count derived legendary creatures");
+    for invalid in [
+        "0",
+        "\"X\"",
+        "EventCount",
+        "Count(SourcePower)",
+        "Count(CardsMatchingResult(filter: (source: PreviousEffect, action: Discard, players: Controller)))",
+        "Count(BattlefieldPermanents(filter: (controllers: Controller, required_supertypes: [\"\"])))",
+        "Count(BattlefieldPermanents(filter: (controllers: Controller, required_supertypes: [\"Legendary\", \"Legendary\"])))",
+    ] {
+        assert!(modifier(invalid).validate().is_err(), "accepted {invalid}");
+    }
+}

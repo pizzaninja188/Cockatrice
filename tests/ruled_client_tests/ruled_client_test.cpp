@@ -347,6 +347,89 @@ TEST_F(RuledClientTest, ConvokePreviewPreservesLegalActionsAndRejectsObsoleteRep
     EXPECT_EQ(spy.count(), 1);
 }
 
+TEST_F(RuledClientTest, HandActivationUsesAuthoritativePreviewAndRetiresSanitizedMana)
+{
+    ruled::v1::RuledEventBatch legal;
+    auto *offer = (*legal.mutable_legal_by_player())[kLocalPlayer].add_zone_ability_actions();
+    offer->set_source_zone(ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+    offer->set_object_id(7101);
+    offer->set_zone_change_generation(4);
+    offer->set_hand_index(3);
+    offer->set_ability_index(1);
+    offer->set_card_name("Boseiju, Who Endures");
+    offer->mutable_ability()->set_ability_index(1);
+    offer->mutable_ability()->set_mana_cost("{G}"); // Base offer with two legends; no chosen tax yet.
+    offer->mutable_ability()->set_activatable(true);
+    apply(legal);
+    ASSERT_TRUE(state->activatedAbilityForOid(7101, 1));
+    EXPECT_EQ(state->activatedAbilityForOid(7101, 1)->manaCost, QStringLiteral("{G}"));
+
+    PendingActivatedAbility pending;
+    pending.permanentOid = 7101;
+    pending.sourceZone = state->abilitySourceZone(7101);
+    pending.expectedZoneChangeGeneration = state->abilitySourceGeneration(7101);
+    pending.abilityIndex = 1;
+    ruled::v1::RuledCommand action;
+    pending.writeActivationHeader(*action.mutable_activate_ability());
+    auto *target = action.mutable_activate_ability()->add_targets();
+    target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    target->set_group_index(0);
+    target->set_object_id(203);
+
+    auto &payment = state->payment;
+    payment.begin(true); // Production activation path guards sanitized payment.
+    auto request = payment.requestAction(action);
+    EXPECT_EQ(request.activate_ability().source_zone(), ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+    EXPECT_EQ(request.activate_ability().expected_zone_change_generation(), 4u);
+    ruled::v1::RuledEventBatch replyBatch; // No legal_by_player replacement in a preview.
+    auto *reply = replyBatch.mutable_payment_preview();
+    reply->set_transaction_id(request.transaction_id());
+    reply->set_revision(request.revision());
+    reply->set_valid(true);
+    reply->set_total_cost("{1}{G}"); // (1 + Kopala's 2) - two legends.
+    reply->set_remaining_cost("{1}{G}");
+    QSignalSpy received(state, &RuledClientState::paymentPreviewReceived);
+    apply(replyBatch);
+    EXPECT_EQ(received.count(), 1);
+    EXPECT_EQ(payment.view.total_cost(), "{1}{G}");
+    EXPECT_EQ(payment.view.remaining_cost(), "{1}{G}");
+    EXPECT_FALSE(payment.beginSubmission());
+    EXPECT_EQ(state->zoneAbilityOidForHandSlot(3), 7101u);
+
+    ASSERT_TRUE(payment.payMana('G', 0, 17));
+    ASSERT_TRUE(payment.payMana('C', 0, 18));
+    const auto obsolete = payment.requestAction(action); // Full payment is awaiting its quote.
+    payment.invalidate(); // Same production operation on an authoritative gameplay refresh.
+    const auto current = payment.requestAction(action);
+    reply->set_revision(obsolete.revision());
+    reply->set_complete(true);
+    *reply->mutable_selection() = obsolete.activate_ability().payment();
+    apply(replyBatch);
+    EXPECT_TRUE(payment.pending);
+    EXPECT_EQ(received.count(), 1);
+
+    reply->set_revision(current.revision());
+    reply->set_total_cost("{G}"); // A third legend now consumes the whole generic tax.
+    reply->set_remaining_cost("");
+    reply->set_selection_changed(true);
+    reply->mutable_selection()->mutable_mana()->set_c(0);
+    apply(replyBatch);
+    EXPECT_EQ(received.count(), 2);
+    EXPECT_EQ(payment.view.total_cost(), "{G}");
+    EXPECT_EQ(payment.selection.mana().g(), 1u);
+    EXPECT_EQ(payment.selection.mana().c(), 0u);
+    EXPECT_EQ(payment.takeRetiredOptimisticManaCounterIds(), QVector<int>({18}));
+    EXPECT_EQ(payment.optimisticManaCounterSpendCount(17), 1);
+    EXPECT_FALSE(payment.beginSubmission()); // Sanitation requires renewed player intent.
+
+    payment.clear(); // Existing cancellation model; UI restores these retired counter IDs.
+    EXPECT_EQ(payment.takeRetiredOptimisticManaCounterIds(), QVector<int>({17}));
+    apply(replyBatch);
+    EXPECT_EQ(received.count(), 2);
+    EXPECT_FALSE(payment.active);
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+}
+
 TEST(RuledZoneSnapshotPolicyTest, OpenPermissionMirrorDoesNotDuplicatePublicExileOnFullSnapshots)
 {
     EXPECT_TRUE(ruledSnapshotPreservesEventAuthoritativeZone(QString::fromLatin1(ZoneNames::STACK)));

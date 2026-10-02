@@ -408,6 +408,23 @@ fn registry_execution_matches_reviewed_baseline() {
 }
 
 #[test]
+fn boseiju_battlefield_mana_and_hand_channel_have_complete_fixtures() {
+    for ability in 0..2 {
+        let case = Case {
+            card: "boseiju,_who_endures".into(),
+            face: 0,
+            ability: Some(ability),
+        };
+        assert_eq!(
+            evaluate(&case).expect("evaluate Boseiju conformance fixture"),
+            Outcome::Exercised,
+            "{}",
+            case.key()
+        );
+    }
+}
+
+#[test]
 fn pentavus_activated_abilities_have_complete_fixtures() {
     for ability in 0..2 {
         let case = Case {

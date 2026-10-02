@@ -346,6 +346,11 @@ impl GameEngine {
         let mut reduction = ActivatedManaReduction::default();
         for modifier in &ability.cost_modifiers {
             match modifier {
+                ActivatedCostModifier::GenericReduction { amount } => {
+                    reduction.generic = reduction.generic.saturating_add(
+                        self.resolve_amount(amount, AmountContext::from_condition(context)),
+                    );
+                }
                 ActivatedCostModifier::ConditionalGenericReduction { amount, condition }
                     if self.condition_holds(condition, context) =>
                 {

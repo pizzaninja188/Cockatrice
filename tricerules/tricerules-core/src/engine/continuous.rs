@@ -1865,6 +1865,7 @@ mod static_permanent_keyword_grant_tests {
         };
         *condition = Some(GameCondition::BattlefieldAggregate {
             filter: BattlefieldPermanentFilter {
+                required_supertypes: Vec::new(),
                 token: None,
                 any_of: None,
                 controllers: RelativePlayerSet::Controller,

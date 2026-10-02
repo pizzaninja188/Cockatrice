@@ -337,6 +337,7 @@ fn issue_351_gravblade_heavy_keeps_the_artifact_condition() {
         StaticAbilityDef::ConditionalSelfModifier {
             condition: GameCondition::BattlefieldAggregate {
                 filter: BattlefieldPermanentFilter {
+                    required_supertypes: Vec::new(),
                     token: None,
                     any_of: None,
                     controllers: RelativePlayerSet::Controller,

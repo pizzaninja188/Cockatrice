@@ -668,6 +668,8 @@ pub enum SpellCostModifier {
 /// One modifier applied while determining an activated ability's mana cost (CR 602.2b).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ActivatedCostModifier {
+    /// Boseiju and Otawara reduce activation costs by a public quantity at cost determination.
+    GenericReduction { amount: super::Amount },
     ConditionalGenericReduction {
         amount: u32,
         condition: GameCondition,
@@ -682,6 +684,7 @@ pub enum ActivatedCostModifier {
 impl ActivatedCostModifier {
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
+            Self::GenericReduction { amount } => amount.validate_cost(false),
             Self::ConditionalGenericReduction { amount, condition } => {
                 if *amount == 0 {
                     return Err("activated generic cost reduction must be nonzero".into());

@@ -5150,6 +5150,7 @@ mod attached_subject_tests {
                 let quantity = if spend_treasures {
                     CountExpression::BattlefieldPermanents {
                         filter: BattlefieldPermanentFilter {
+                            required_supertypes: Vec::new(),
                             token: None,
                             controllers: RelativePlayerSet::Opponents,
                             card_type: Some(CardTypeFilter::Artifact),
@@ -5163,6 +5164,7 @@ mod attached_subject_tests {
                 } else {
                     CountExpression::BattlefieldMaximum {
                         filter: BattlefieldPermanentFilter {
+                            required_supertypes: Vec::new(),
                             token: None,
                             controllers: RelativePlayerSet::Controller,
                             card_type: Some(CardTypeFilter::Creature),

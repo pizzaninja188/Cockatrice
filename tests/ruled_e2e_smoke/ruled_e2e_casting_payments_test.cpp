@@ -3429,5 +3429,245 @@ TEST_F(RuledE2ESmokeTest, ManholeMissileKeepsHandChoicePrivateAndMovesTheExactCa
                              [](const auto &line) { return line.contains(QStringLiteral("Lightning Bolt")); }));
 }
 
+TEST_F(RuledE2ESmokeTest, BoseijuChannelPreviewIsPrivateAndSearchMovesTheChosenPhysicalLand)
+{
+    const auto started = startServers();
+    if (!started)
+        FAIL() << started.message();
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0)
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    OpeningDriver p1(true, QStringLiteral("boseijup1"), &transcript);
+    OpeningDriver p2(false, QStringLiteral("boseijup2"), &transcript);
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000, "Boseiju p1 start"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000, "Boseiju p2 start"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000 &&
+           !(p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+             p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId)) {
+        p1.pump(25);
+        p2.pump(25);
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p2.phase, ruled::v1::PHASE_ID_MAIN1);
+    ASSERT_EQ(p1.priorityPlayer, p1.myId);
+    ASSERT_EQ(p2.priorityPlayer, p1.myId);
+
+    auto send = [&](OpeningDriver &sender, const ruled::v1::RuledCommand &command, const QString &label) {
+        const auto before1 = p1.stateVersion, before2 = p2.stateVersion;
+        sender.sendRuled(command, label);
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000 && (p1.stateVersion <= before1 || p2.stateVersion <= before2)) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > before1 && p2.stateVersion > before2;
+    };
+    auto put = [&](int controller, const char *name, ruled::v1::DevZone zone) {
+        ruled::v1::RuledCommand command;
+        auto *dev = command.mutable_dev_command();
+        dev->set_target_player_id(controller);
+        auto *card = dev->mutable_put_card_in_zone();
+        card->set_card_name(name);
+        card->set_zone(zone);
+        card->set_ready(true);
+        return send(p1, command, QStringLiteral("Boseiju setup: %1").arg(name));
+    };
+    auto permanent = [](const OpeningDriver &client, int controller, const char *id)
+        -> std::optional<OpeningDriver::Permanent> {
+        const auto objects = client.battlefieldByPlayer.find(controller);
+        if (objects == client.battlefieldByPlayer.end())
+            return std::nullopt;
+        const auto found = std::find_if(objects->second.begin(), objects->second.end(),
+                                        [&](const auto &card) { return card.cardId == QLatin1String(id); });
+        return found == objects->second.end() ? std::nullopt : std::optional(*found);
+    };
+    auto pass = [&](OpeningDriver &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return send(client, command, QStringLiteral("Boseiju resolution pass"));
+    };
+    auto redactedChoice = [](const OpeningDriver &client) {
+        if (!client.lastResolutionChoice)
+            return false;
+        const auto &choice = *client.lastResolutionChoice;
+        return choice.candidate_object_ids_size() == 0 && choice.candidate_card_ids_size() == 0 &&
+               choice.candidate_names_size() == 0 && choice.candidate_server_card_ids_size() == 0 &&
+               choice.candidate_source_zones_size() == 0 && choice.candidate_token_identities_size() == 0 &&
+               choice.selection_slots_size() == 0 && choice.resolution_branches_size() == 0 &&
+               choice.prompt_text() == "Opponent is making a resolution choice.";
+    };
+
+    ASSERT_TRUE(put(p1.myId, "Kopala, Warden of Waves", ruled::v1::DEV_ZONE_BATTLEFIELD));
+    ASSERT_TRUE(put(p1.myId, "Thorin Oakenshield", ruled::v1::DEV_ZONE_BATTLEFIELD));
+    ASSERT_TRUE(put(p1.myId, "Liquimetal Torque", ruled::v1::DEV_ZONE_BATTLEFIELD));
+    ASSERT_TRUE(put(p2.myId, "Kopala, Warden of Waves", ruled::v1::DEV_ZONE_BATTLEFIELD));
+    ASSERT_TRUE(put(p2.myId, "Merfolk of the Pearl Trident", ruled::v1::DEV_ZONE_BATTLEFIELD));
+    ASSERT_TRUE(put(p1.myId, "Boseiju, Who Endures", ruled::v1::DEV_ZONE_HAND));
+    const auto torque = permanent(p1, p1.myId, "liquimetal_torque");
+    const auto merfolk = permanent(p1, p2.myId, "merfolk_of_the_pearl_trident");
+    ASSERT_TRUE(torque && merfolk);
+    ruled::v1::RuledCommand mana;
+    mana.mutable_dev_command()->set_target_player_id(p1.myId);
+    mana.mutable_dev_command()->mutable_add_mana()->set_c(3);
+    mana.mutable_dev_command()->mutable_add_mana()->set_g(1);
+    ASSERT_TRUE(send(p1, mana, QStringLiteral("two for Torque tax and one-G for Boseiju")));
+    ruled::v1::RuledCommand artifact;
+    auto *torqueAbility = artifact.mutable_activate_ability();
+    p1.setBattlefieldAbilitySource(torqueAbility, torque->oid);
+    torqueAbility->set_ability_index(1);
+    auto *torqueTarget = torqueAbility->add_targets();
+    torqueTarget->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    torqueTarget->set_group_index(0);
+    torqueTarget->set_object_id(merfolk->oid);
+    ASSERT_TRUE(send(p1, artifact, QStringLiteral("paid Torque turns Merfolk into an artifact")));
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    EXPECT_EQ(p1.myPool.c, 1);
+    EXPECT_EQ(p1.myPool.g, 1);
+
+    const auto *published = p1.zoneAbilityAction(QStringLiteral("Boseiju, Who Endures"),
+                                                ruled::v1::ABILITY_SOURCE_ZONE_HAND);
+    ASSERT_NE(published, nullptr);
+    ASSERT_TRUE(published->has_ability() && published->ability().activatable());
+    const auto source = *published; // Do not retain a pointer across subsequent legal snapshots.
+    EXPECT_EQ(source.ability_index(), 1u);
+    EXPECT_EQ(source.ability().mana_cost(), "{G}");
+    EXPECT_EQ(p2.zoneAbilityAction(QStringLiteral("Boseiju, Who Endures"),
+                                   ruled::v1::ABILITY_SOURCE_ZONE_HAND), nullptr);
+    ASSERT_TRUE(p1.handServerCardBySlot.count(static_cast<int>(source.hand_index())));
+    const int sourcePhysical = p1.handServerCardBySlot.at(static_cast<int>(source.hand_index()));
+    const int handBefore = p1.handSizeByPlayer[p1.myId];
+    const auto version1 = p1.stateVersion, version2 = p2.stateVersion;
+    const int previewBefore = p1.paymentPreviewCount, observerPreviews = p2.paymentPreviewCount;
+    ruled::v1::RuledCommand query;
+    auto *preview = query.mutable_preview_payment();
+    preview->set_transaction_id(711);
+    preview->set_revision(1);
+    auto *channel = preview->mutable_activate_ability();
+    channel->set_source_object_id(source.object_id());
+    channel->set_source_zone(source.source_zone());
+    channel->set_expected_zone_change_generation(source.zone_change_generation());
+    channel->set_ability_index(source.ability_index());
+    auto *target = channel->add_targets();
+    target->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    target->set_group_index(0);
+    target->set_object_id(merfolk->oid);
+    p1.sendRuled(query, QStringLiteral("private Boseiju Channel preview"));
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.paymentPreviewCount == previewBefore + 1; }, 10000, "Boseiju quote"));
+    p2.pump(100);
+    ASSERT_TRUE(p1.paymentPreview.valid()) << p1.paymentPreview.error();
+    EXPECT_FALSE(p1.paymentPreview.complete());
+    EXPECT_EQ(p1.paymentPreview.total_cost(), "{1}{G}");
+    EXPECT_EQ(p1.paymentPreview.remaining_cost(), "{1}{G}");
+    EXPECT_EQ(p1.paymentPreview.selection().source().object_id(), source.object_id());
+    EXPECT_EQ(p1.paymentPreview.selection().source().zone_change_generation(), source.zone_change_generation());
+    EXPECT_EQ(p1.stateVersion, version1);
+    EXPECT_EQ(p2.stateVersion, version2);
+    EXPECT_EQ(p2.paymentPreviewCount, observerPreviews);
+    EXPECT_EQ(p1.handSizeByPlayer[p1.myId], handBefore);
+    EXPECT_EQ(p1.myPool.c, 1);
+    EXPECT_EQ(p1.myPool.g, 1);
+
+    preview->set_revision(2);
+    *channel->mutable_payment() = p1.paymentPreview.selection();
+    channel->mutable_payment()->mutable_mana()->set_c(1);
+    channel->mutable_payment()->mutable_mana()->set_g(1);
+    p1.sendRuled(query, QStringLiteral("exact private Boseiju payment preview"));
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.paymentPreviewCount == previewBefore + 2; }, 10000, "paid Boseiju quote"));
+    p2.pump(100);
+    ASSERT_TRUE(p1.paymentPreview.valid()) << p1.paymentPreview.error();
+    ASSERT_TRUE(p1.paymentPreview.complete());
+    EXPECT_EQ(p1.stateVersion, version1);
+    EXPECT_EQ(p2.paymentPreviewCount, observerPreviews);
+    ruled::v1::RuledCommand activate;
+    *activate.mutable_activate_ability() = *channel;
+    *activate.mutable_activate_ability()->mutable_payment() = p1.paymentPreview.selection();
+    ASSERT_TRUE(send(p1, activate, QStringLiteral("paid Boseiju Channel discards its physical hand card")));
+    EXPECT_EQ(p1.handSizeByPlayer[p1.myId], handBefore - 1);
+    EXPECT_EQ(p1.myPool.c, 0);
+    EXPECT_EQ(p1.myPool.g, 0);
+    EXPECT_EQ(p1.zoneAbilityAction(QStringLiteral("Boseiju, Who Endures"),
+                                   ruled::v1::ABILITY_SOURCE_ZONE_HAND), nullptr);
+    for (const auto *client : {&p1, &p2}) {
+        ASSERT_TRUE(client->graveyardOwnerByEngineOid.count(source.object_id()));
+        EXPECT_EQ(client->graveyardOwnerByEngineOid.at(source.object_id()), p1.myId);
+        EXPECT_EQ(client->serverCardByEngineOid.at(source.object_id()), sourcePhysical);
+        EXPECT_TRUE(std::any_of(client->physicalMoveEvents.begin(), client->physicalMoveEvents.end(),
+                                [&](const Event_MoveCard &move) {
+            return move.start_player_id() == p1.myId && move.start_zone() == ZoneNames::HAND &&
+                   move.target_zone() == ZoneNames::GRAVE && move.card_id() == sourcePhysical;
+        }));
+    }
+    ASSERT_TRUE(pass(p1));
+    ASSERT_TRUE(pass(p2));
+    ASSERT_TRUE(p2.pendingChoice);
+    EXPECT_EQ(p2.pendingChoice->choice_kind(), ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    EXPECT_EQ(p2.pendingChoice->deciding_player_id(), p2.myId);
+    ASSERT_EQ(p2.pendingChoice->resolution_branches_size(), 1);
+    EXPECT_EQ(p2.pendingChoice->resolution_branches(0).branch_index(), 0u);
+    EXPECT_FALSE(p1.pendingChoice);
+    EXPECT_TRUE(redactedChoice(p1));
+    EXPECT_FALSE(permanent(p1, p2.myId, "merfolk_of_the_pearl_trident"));
+
+    ruled::v1::RuledCommand accept;
+    accept.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_SELECT_BRANCH);
+    accept.mutable_submit_resolution_choice()->set_selected_branch_index(0);
+    p2.pendingChoice.reset();
+    p1.lastResolutionChoice.reset();
+    ASSERT_TRUE(send(p2, accept, QStringLiteral("target controller chooses to search")));
+    ASSERT_TRUE(p2.pendingChoice);
+    const auto choice = *p2.pendingChoice;
+    ASSERT_EQ(choice.choice_kind(), ruled::v1::CHOICE_KIND_LIBRARY_SEARCH);
+    EXPECT_EQ(choice.deciding_player_id(), p2.myId);
+    ASSERT_GT(choice.candidate_object_ids_size(), 0);
+    ASSERT_EQ(choice.candidate_object_ids_size(), choice.candidate_names_size());
+    ASSERT_EQ(choice.candidate_object_ids_size(), choice.candidate_card_ids_size());
+    ASSERT_EQ(choice.candidate_object_ids_size(), choice.candidate_server_card_ids_size());
+    EXPECT_EQ(choice.candidate_card_ids(0), "island");
+    EXPECT_EQ(choice.candidate_names(0), "Island");
+    EXPECT_FALSE(p1.pendingChoice);
+    EXPECT_TRUE(redactedChoice(p1));
+    const quint32 chosenOid = choice.candidate_object_ids(0);
+    // Library picker IDs are transient candidate indices, not persistent Server_Card IDs.
+    EXPECT_EQ(choice.candidate_server_card_ids(0), 0);
+    ruled::v1::RuledCommand choose;
+    choose.mutable_submit_resolution_choice()->add_chosen_object_ids(chosenOid);
+    p2.pendingChoice.reset();
+    ASSERT_TRUE(send(p2, choose, QStringLiteral("search finds the chosen physical Island")));
+    ASSERT_TRUE(p2.serverCardByEngineOid.count(chosenOid));
+    const int chosenPhysical = p2.serverCardByEngineOid.at(chosenOid);
+    for (const auto *client : {&p1, &p2}) {
+        const auto island = permanent(*client, p2.myId, "island");
+        ASSERT_TRUE(island);
+        EXPECT_EQ(island->oid, chosenOid);
+        EXPECT_FALSE(island->tapped);
+        ASSERT_TRUE(client->serverCardByEngineOid.count(chosenOid));
+        EXPECT_EQ(client->serverCardByEngineOid.at(chosenOid), chosenPhysical);
+        EXPECT_TRUE(std::any_of(client->physicalMoveEvents.begin(), client->physicalMoveEvents.end(),
+                                [&](const Event_MoveCard &move) {
+            return move.start_player_id() == p2.myId && move.target_player_id() == p2.myId &&
+                   move.start_zone() == ZoneNames::DECK && move.target_zone() == ZoneNames::TABLE &&
+                   move.new_card_id() == chosenPhysical;
+        }));
+        EXPECT_FALSE(client->pendingChoice);
+        EXPECT_EQ(client->stackDepth, 0);
+        EXPECT_TRUE(client->libraryDetailsStayedConcealed);
+    }
+}
+
 } // namespace
 } // namespace ruled_e2e

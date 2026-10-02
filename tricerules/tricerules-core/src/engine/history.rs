@@ -11,6 +11,10 @@ pub(super) fn battlefield_permanent_matches(
     context: ConditionContext<'_>,
 ) -> bool {
     relative_player_set_contains(state, filter.controllers, context.controller, c.controller)
+        && filter
+            .required_supertypes
+            .iter()
+            .all(|supertype| c.supertypes.contains(supertype))
         && filter.token.is_none_or(|token| {
             state
                 .objects
@@ -2494,6 +2498,7 @@ mod tests {
         let mut engine = quantity_engine();
         let quantity = CountExpression::BattlefieldPowerSum {
             filter: BattlefieldPermanentFilter {
+                required_supertypes: Vec::new(),
                 token: None,
                 any_of: None,
                 controllers: RelativePlayerSet::Controller,
@@ -2563,6 +2568,7 @@ mod tests {
     fn issue_165_maxima_use_derived_signed_values_and_all_opponents() {
         let mut engine = quantity_engine();
         let mut filter = BattlefieldPermanentFilter {
+            required_supertypes: Vec::new(),
             token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,
@@ -2922,6 +2928,7 @@ mod tests {
         move_to_battlefield(&mut engine, 1, "forest");
         let graveyard_card = move_to_graveyard(&mut engine, 0, "island");
         let filter = BattlefieldPermanentFilter {
+            required_supertypes: Vec::new(),
             token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,
@@ -3827,9 +3834,11 @@ mod tests {
         };
 
         let union = BattlefieldPermanentFilter {
+            required_supertypes: Vec::new(),
             token: None,
             any_of: Some(vec![
                 BattlefieldPermanentFilter {
+                    required_supertypes: Vec::new(),
                     token: None,
                     any_of: None,
                     controllers: RelativePlayerSet::Controller,
@@ -3840,6 +3849,7 @@ mod tests {
                     exclude_source: false,
                 },
                 BattlefieldPermanentFilter {
+                    required_supertypes: Vec::new(),
                     token: None,
                     any_of: None,
                     controllers: RelativePlayerSet::Controller,
@@ -4169,6 +4179,7 @@ mod tests {
         let bear = move_to_battlefield(&mut engine, 0, "grizzly_bears");
         let angel = move_to_battlefield(&mut engine, 0, "serra_angel");
         let filter = BattlefieldPermanentFilter {
+            required_supertypes: Vec::new(),
             token: None,
             any_of: None,
             controllers: RelativePlayerSet::Controller,

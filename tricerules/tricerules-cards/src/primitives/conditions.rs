@@ -643,6 +643,9 @@ pub enum PlayerQuantifier {
 /// uses the effective copiable face name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BattlefieldPermanentFilter {
+    /// Every listed derived supertype must be present (Boseiju and Otawara).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub required_supertypes: Vec<String>,
     /// Druid of the Spade and token-based sacrifice/activation cohorts use real token identity.
     #[serde(default)]
     pub token: Option<bool>,
@@ -668,6 +671,14 @@ pub struct BattlefieldPermanentFilter {
 
 impl BattlefieldPermanentFilter {
     pub(crate) fn validate(&self) -> Result<(), String> {
+        let mut seen = std::collections::BTreeSet::new();
+        for supertype in &self.required_supertypes {
+            if supertype.trim().is_empty() || !seen.insert(supertype) {
+                return Err(
+                    "battlefield permanent filter supertypes must be nonblank and unique".into(),
+                );
+            }
+        }
         if let Some(branches) = &self.any_of {
             if branches.len() < 2 {
                 return Err(

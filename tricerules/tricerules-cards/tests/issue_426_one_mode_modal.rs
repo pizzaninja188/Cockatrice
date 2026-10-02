@@ -194,6 +194,7 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
     assert_modal_schema("cerebral_confiscation", &cerebral);
 
     let creature = BattlefieldPermanentFilter {
+        required_supertypes: Vec::new(),
         token: None,
         any_of: None,
         controllers: RelativePlayerSet::Controller,
@@ -204,6 +205,7 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
         exclude_source: false,
     };
     let vehicle = BattlefieldPermanentFilter {
+        required_supertypes: Vec::new(),
         token: None,
         any_of: None,
         controllers: RelativePlayerSet::Controller,
@@ -219,6 +221,7 @@ fn issue_426_modes_expose_exact_effects_and_target_prompts() {
         [SpellEffectKind::DamageTarget {
             amount: Amount::Count(CountExpression::BattlefieldPermanents {
                 filter: BattlefieldPermanentFilter {
+                    required_supertypes: Vec::new(),
                     token: None,
                     any_of: Some(vec![creature, vehicle]),
                     controllers: RelativePlayerSet::Controller,
