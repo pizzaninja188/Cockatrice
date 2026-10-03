@@ -86,9 +86,24 @@ fn search_two(card: &str, subtype_card: &str, seed: u64) {
     assert!(choice.candidate_object_ids.contains(&basic));
     assert!(choice.candidate_object_ids.contains(&typed));
     assert!(!choice.candidate_object_ids.contains(&illegal));
-    let completion = e
+    let mut completion = e
         .apply_command(0, &submit_resolution_choice(vec![basic, typed]))
         .expect("choose two lands");
+    assert_eq!(
+        e.state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .choice_kind,
+        ChoiceKind::SimultaneousEntryOrder
+    );
+    assert!([basic, typed]
+        .iter()
+        .all(|id| e.state.objects[id].zone == Zone::Library));
+    for (_, _, ordered) in answer_simultaneous_entry_order_in_engine_order(&mut e) {
+        completion.events.extend(ordered.events);
+    }
     assert!(completion.events.iter().any(
         |event| matches!(&event.ev, Some(Ev::Log(log)) if log.text == "P0 shuffles their library.")
     ));

@@ -98,6 +98,7 @@ fn issue_428_search_mode_tutors_a_basic_land_onto_the_battlefield_tapped() {
             optional: false,
             count: 1,
             count_by_cast_cost: None,
+            selection_constraint: None,
             filter: Some(ZoneCardFilter {
                 card_type: Some(CardTypeFilter::BasicLand),
                 ..ZoneCardFilter::default()

@@ -115,6 +115,19 @@ fn grow_from_the_ashes_publishes_and_records_kicker_as_part_of_total_cost() {
     assert_eq!(chosen.len(), 2);
     e.apply_command(0, &submit_resolution_choice(chosen.clone()))
         .expect("choose two basic lands");
+    assert_eq!(
+        e.state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .choice_kind,
+        ChoiceKind::SimultaneousEntryOrder
+    );
+    assert!(chosen
+        .iter()
+        .all(|oid| e.state.objects[oid].zone == Zone::Library));
+    answer_simultaneous_entry_order_in_engine_order(&mut e);
     assert!(chosen
         .iter()
         .all(|oid| e.state.objects[oid].zone == Zone::Battlefield));

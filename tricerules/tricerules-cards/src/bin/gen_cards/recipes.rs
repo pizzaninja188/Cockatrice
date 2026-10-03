@@ -818,6 +818,7 @@ fn legendary_creature_search_effect() -> SpellEffectKind {
         conditional_destination: None,
         shuffle: true,
         reveal: true,
+        selection_constraint: None,
         result_id: None,
     }
 }
@@ -4111,6 +4112,7 @@ fn match_modal_destroy_land_its_controller_search_basic(
                         conditional_destination: None,
                         shuffle: true,
                         reveal: false,
+                        selection_constraint: None,
                         result_id: None,
                     },
                 ],
@@ -4271,6 +4273,7 @@ fn match_modal_search_artifact_reveal_hand(
                     conditional_destination: None,
                     shuffle: true,
                     reveal: true,
+                    selection_constraint: None,
                     result_id: None,
                 }],
                 None,
@@ -4577,6 +4580,7 @@ fn match_modal_search_basic_land_tapped(text: &str, _: &RecipeContext) -> Option
                     conditional_destination: None,
                     shuffle: true,
                     reveal: false,
+                    selection_constraint: None,
                     result_id: None,
                 }],
                 None,
@@ -5183,6 +5187,7 @@ fn match_self_enters_optional_search_basic_land_to_top(
                             conditional_destination: None,
                             shuffle: true,
                             reveal: true,
+                            selection_constraint: None,
                             result_id: None,
                         }],
                     }],
@@ -8216,6 +8221,7 @@ fn match_station_etb_sac_land_search_two(
                             conditional_destination: None,
                             shuffle: true,
                             reveal: false,
+                            selection_constraint: None,
                             result_id: None,
                         }],
                     }],
@@ -8278,6 +8284,7 @@ fn match_station_attack_put_creature_from_hand(
                     conditional_destination: None,
                     shuffle: false,
                     reveal: false,
+                    selection_constraint: None,
                     result_id: None,
                 }],
             )
@@ -10215,6 +10222,7 @@ fn match_land_tap_sacrifice_search_basic_tapped(
                     conditional_destination: None,
                     shuffle: true,
                     reveal: false,
+                    selection_constraint: None,
                     result_id: None,
                 }],
                 targeting: None,
@@ -10327,6 +10335,7 @@ fn typecycling_search(
             conditional_destination: None,
             shuffle: true,
             reveal: true,
+            selection_constraint: None,
             result_id: None,
         },
     )
@@ -10689,6 +10698,7 @@ fn match_spell_search_basic_land_battlefield_tapped(
             conditional_destination: None,
             shuffle: true,
             reveal: false,
+            selection_constraint: None,
             result_id: None,
         })
     })
@@ -13472,6 +13482,7 @@ fn match_etb_enchantment_search_two_basic_lands_tapped(
                 conditional_destination: None,
                 shuffle: true,
                 reveal: false,
+                selection_constraint: None,
                 result_id: None,
             }],
         )
@@ -29490,6 +29501,7 @@ mod tests {
             optional: search_optional,
             count,
             count_by_cast_cost,
+            selection_constraint,
             filter: Some(filter),
             slots,
             zones,
@@ -29506,6 +29518,7 @@ mod tests {
         assert!(!search_optional);
         assert_eq!(*count, 1);
         assert!(count_by_cast_cost.is_none());
+        assert!(selection_constraint.is_none());
         assert_eq!(filter.card_type, Some(CardTypeFilter::BasicLand));
         assert!(filter.any_of.is_none());
         assert!(filter.required_subtypes.is_empty());
@@ -35767,6 +35780,7 @@ mod tests {
                     conditional_destination: None,
                     shuffle: true,
                     reveal: false,
+                    selection_constraint: None,
                     result_id: None,
                 })
             );
@@ -42172,6 +42186,7 @@ mod tests {
                 conditional_destination: None,
                 shuffle: true,
                 reveal: false,
+                selection_constraint: None,
                 result_id: None,
             }]
         );
@@ -51317,6 +51332,7 @@ mod tests {
                         conditional_destination: None,
                         shuffle: true,
                         reveal: false,
+                        selection_constraint: None,
                         result_id: None,
                     },
                 ],
@@ -51448,6 +51464,7 @@ mod tests {
                     conditional_destination: None,
                     shuffle: true,
                     reveal: true,
+                    selection_constraint: None,
                     result_id: None,
                 }],
                 targeting: None,
@@ -52154,6 +52171,7 @@ mod tests {
                 conditional_destination: None,
                 shuffle: true,
                 reveal: false,
+                selection_constraint: None,
                 result_id: None,
             }]
         );

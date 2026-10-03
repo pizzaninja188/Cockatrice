@@ -126,3 +126,116 @@ fn farseek_uses_four_or_branches_for_land_subtypes_and_enters_tapped() {
     );
     assert!(branches.iter().all(|branch| branch.any_of.is_none()));
 }
+
+// Myriad Landscape adds a relation between cards in the shared land-search family.
+use tricerules_cards::primitives::*;
+use tricerules_cards::AbilityPresentation;
+
+#[test]
+fn myriad_landscape_complete_definition_is_exact_and_all_lines_are_presented() {
+    let registry = CardRegistry::global();
+    let card = registry.get("myriad_landscape").unwrap();
+    assert_eq!(
+        registry.id_for_name("Myriad Landscape"),
+        Some("myriad_landscape")
+    );
+    assert_eq!(card.face_count(), 1);
+    let face = card.primary_face();
+    assert_eq!(face.face_id.as_str(), "myriad_landscape");
+    assert_eq!(face.mana_cost.to_string(), "");
+    assert_eq!(face.types, ["Land"]);
+    assert!(
+        face.supertypes.is_empty()
+            && face.spell_effect.is_empty()
+            && face.triggered_abilities.is_empty()
+    );
+    assert_eq!(face.static_abilities.len(), 1);
+    assert_eq!(
+        face.static_abilities[0].presentation,
+        AbilityPresentation::OracleLines(vec![1])
+    );
+    assert!(matches!(
+        face.static_abilities[0].definition,
+        StaticAbilityDef::EntersTapped {
+            affected: EntersTappedAffected::Self_,
+            ..
+        }
+    ));
+    assert_eq!(face.activated_abilities.len(), 2);
+    let mana = &face.activated_abilities[0];
+    assert_eq!(mana.presentation, AbilityPresentation::OracleLines(vec![2]));
+    assert_eq!(mana.costs, [AbilityCost::Tap]);
+    assert!(
+        matches!(mana.effect.as_slice(), [SpellEffectKind::ProduceMana { options, restriction: None, conditional: None, commander_color_identity: false }] if options == &[ManaAmount { c: 1, ..Default::default() }])
+    );
+    let search = &face.activated_abilities[1];
+    assert_eq!(
+        search.presentation,
+        AbilityPresentation::OracleLines(vec![3])
+    );
+    assert!(
+        matches!(search.costs.as_slice(), [AbilityCost::Mana(cost), AbilityCost::Tap, AbilityCost::SacrificeSelf] if cost.to_string() == "{2}")
+    );
+    assert!(search.targeting.is_none());
+    assert!(
+        matches!(search.effect.as_slice(), [SpellEffectKind::SearchLibrary {
+        who: PlayerRecipient::Controller, optional: false, count: 2, count_by_cast_cost: None,
+        filter: Some(filter), selection_constraint: Some(SearchSelectionConstraint::SharedLandType),
+        slots, zones: SearchZoneSelection::Fixed(zones), destination: SearchDestination::Battlefield { tapped: true },
+        conditional_destination: None, shuffle: true, reveal: false, result_id: None,
+    }] if filter == &ZoneCardFilter { card_type: Some(CardTypeFilter::BasicLand), ..Default::default() }
+       && slots.is_empty() && zones == &[CardSearchZone::Library])
+    );
+}
+
+const SEARCH: &str = "SearchLibrary(count:2, filter:Some((card_type:Some(BasicLand))), selection_constraint:Some(SharedLandType), destination:Battlefield(tapped:true))";
+
+#[test]
+fn shared_land_search_constraint_is_typed_and_round_trips() {
+    let effect: SpellEffectKind = ron::from_str(SEARCH).expect("typed Myriad search");
+    effect.validate(EffectContext::Ability).unwrap();
+    let saved = ron::to_string(&effect).unwrap();
+    assert!(
+        saved.contains("selection_constraint:Some(SharedLandType)"),
+        "the relation must survive authored data, not be ignored: {saved}"
+    );
+    let restored: SpellEffectKind = ron::from_str(&saved).unwrap();
+    assert_eq!(effect, restored);
+}
+
+#[test]
+fn shared_land_search_rejects_every_unsupported_shape() {
+    let invalid = [
+        SEARCH.replace("count:2", "count:1"),
+        SEARCH.replace("count:2", "count:0"),
+        SEARCH.replace("count:2", "count:3"),
+        SEARCH.replace("count:2", "optional:true,count:2"),
+        SEARCH.replace("count:2", "who:EachPlayer,count:2"),
+        SEARCH.replace("filter:Some((card_type:Some(BasicLand)))", "filter:None"),
+        SEARCH.replace("BasicLand", "Land"),
+        SEARCH.replace("destination:Battlefield(tapped:true)", "destination:Hand"),
+        SEARCH.replace("tapped:true", "tapped:false"),
+        SEARCH.replace("count:2", "zones:Fixed([Graveyard]),count:2"),
+        SEARCH.replace("count:2", "zones:Fixed([Library,Hand]),count:2"),
+        SEARCH.replace("count:2", "zones:PlayerChoice([Library]),count:2"),
+        SEARCH.replace("count:2", "result_id:Some(\"found\"),count:2"),
+        SEARCH.replace("count:2", "count_by_cast_cost:Some((condition:(group_id:\"kicker\",option_id:\"paid\",expected_selected:true),if_selected:2,otherwise:1)),count:2"),
+        SEARCH.replace("count:2", "slots:[(slot_id:\"basic\",presentation:OracleLines([1]),filter:(card_type:Some(BasicLand)))],count:2"),
+        SEARCH.replace("count:2", "conditional_destination:Some((condition:ControllerLibraryEmpty,destination:Hand)),count:2"),
+    ];
+    for source in invalid {
+        let effect: SpellEffectKind = ron::from_str(&source).expect(&source);
+        assert!(
+            effect.validate(EffectContext::Ability).is_err(),
+            "must reject: {source}"
+        );
+    }
+}
+
+#[test]
+fn ordinary_searches_keep_their_default_schema_and_semantics() {
+    let effect: SpellEffectKind = ron::from_str("SearchLibrary(filter:Some((card_type:Some(BasicLand))),destination:Battlefield(tapped:true))").unwrap();
+    effect.validate(EffectContext::Ability).unwrap();
+    let round_trip: SpellEffectKind = ron::from_str(&ron::to_string(&effect).unwrap()).unwrap();
+    assert_eq!(effect, round_trip);
+}

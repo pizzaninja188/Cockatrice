@@ -5,9 +5,9 @@ use tricerules_cards::primitives::{
     CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
     DelayedTokenSacrificeTiming, EffectDuration, GameCondition, HandCardAction, Keyword,
     LibraryBottomOrder, LibraryPlacement, ManaAmount, ManaSpendingRestriction, ObjectCastCostKind,
-    PermanentTypeFilter, ResolvingPermanentModifier, SearchDestination, SearchSelectionSlot,
-    SearchZoneSelection, StaticEmblemEffect, TargetFilter, TriggeredAbilityDef,
-    TypeLineReplacement, ZoneCardFilter,
+    PermanentTypeFilter, ResolvingPermanentModifier, SearchDestination, SearchSelectionConstraint,
+    SearchSelectionSlot, SearchZoneSelection, StaticEmblemEffect, TargetFilter,
+    TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
 use tricerules_cards::{
@@ -1118,6 +1118,8 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         searcher: PlayerId,
         zones: Vec<CardSearchZone>,
+        filter: Option<ZoneCardFilter>,
+        selection_constraint: Option<SearchSelectionConstraint>,
         candidate_generations: Vec<(ObjectId, u64)>,
         selection_slot_candidates: Vec<Vec<ObjectId>>,
         destination: SearchDestination,
@@ -1647,6 +1649,16 @@ pub(crate) struct PendingZoneEntryBatch {
     pub origin_mana_values: Vec<(ObjectId, u64, u32)>,
     pub origin: Zone,
     pub spell_label: String,
+    pub search_completion: Option<LibrarySearchCompletion>,
+}
+
+/// One pure-library search finishes only after its simultaneous entry cohort commits.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct LibrarySearchCompletion {
+    pub searcher: PlayerId,
+    pub shuffle: bool,
+    pub searched_library: bool,
+    pub result_id: Option<SearchResultId>,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]

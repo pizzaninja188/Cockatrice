@@ -465,6 +465,19 @@ fn issue_423_larval_scoutlander_may_sacrifice_a_land_to_search_two_basics_tapped
     engine
         .apply_command(0, &submit_resolution_choice(vec![basic_a, basic_b]))
         .expect("put two basic lands onto the battlefield tapped");
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .choice_kind,
+        ChoiceKind::SimultaneousEntryOrder
+    );
+    assert_eq!(engine.state.objects[&basic_a].zone, Zone::Library);
+    assert_eq!(engine.state.objects[&basic_b].zone, Zone::Library);
+    answer_simultaneous_entry_order_in_engine_order(&mut engine);
     assert_eq!(engine.state.objects[&basic_a].zone, Zone::Battlefield);
     assert_eq!(engine.state.objects[&basic_b].zone, Zone::Battlefield);
     assert!(engine.state.objects[&basic_a].tapped);

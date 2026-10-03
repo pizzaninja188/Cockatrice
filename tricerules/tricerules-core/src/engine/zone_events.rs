@@ -35,12 +35,13 @@ pub(super) struct ZoneEventBatch {
 impl GameEngine {
     pub(super) fn begin_zone_entry_batch(
         &mut self,
-        item: StackItem,
+        stack: ParkedStackResolution,
         mut entries: Vec<BattlefieldEntryEvent>,
         origin: Zone,
         spell_label: &str,
+        search_completion: Option<crate::state::LibrarySearchCompletion>,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<bool, EngineError> {
+    ) -> Result<Option<ParkedStackResolution>, EngineError> {
         entries.sort_by_key(|entry| self.state.apnap_rank(entry.deciding_player));
         let generations: Vec<_> = entries
             .iter()
@@ -63,7 +64,7 @@ impl GameEngine {
             })
             .collect();
         self.continue_zone_entry_batch(
-            ParkedStackResolution::new(item),
+            stack,
             crate::state::PendingZoneEntryBatch {
                 ready: vec![],
                 remaining: entries,
@@ -71,6 +72,7 @@ impl GameEngine {
                 origin_mana_values,
                 origin,
                 spell_label: spell_label.into(),
+                search_completion,
             },
             events,
         )
@@ -100,7 +102,7 @@ impl GameEngine {
         stack: ParkedStackResolution,
         mut batch: crate::state::PendingZoneEntryBatch,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<bool, EngineError> {
+    ) -> Result<Option<ParkedStackResolution>, EngineError> {
         if !self.zone_entry_batch_current(&batch) {
             return Err(EngineError::Illegal("zone entry cohort became stale"));
         }
@@ -114,28 +116,30 @@ impl GameEngine {
             ) {
                 replacement::BattlefieldEntryProgress::Parked => {
                     self.transfer_entry_choice_resume(&stack);
-                    return Ok(true);
+                    return Ok(None);
                 }
                 replacement::BattlefieldEntryProgress::Ready(entry) => batch.ready.push(*entry),
             }
         }
         let Some(SimultaneousEntryBatch::Zone(batch)) = self.begin_entry_timestamp_order(
             SimultaneousEntryBatch::Zone(batch),
-            Some(stack),
+            Some(stack.clone()),
             events,
         )?
         else {
-            return Ok(true);
+            return Ok(None);
         };
-        self.commit_zone_entry_batch_ready(batch, events)?;
-        Ok(false)
+        self.commit_zone_entry_batch_ready(stack, batch, events)
+            .map(Some)
     }
 
     pub(super) fn commit_zone_entry_batch_ready(
         &mut self,
+        mut stack: ParkedStackResolution,
         batch: crate::state::PendingZoneEntryBatch,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<(), EngineError> {
+    ) -> Result<ParkedStackResolution, EngineError> {
+        let mut search_completion = batch.search_completion;
         let snapshot = self.snapshot_zone_event();
         let mut triggers = Vec::new();
         for entry in batch.ready {
@@ -152,24 +156,66 @@ impl GameEngine {
                 object_id: oid,
                 chosen_x,
             });
+            if let Some(completion) = search_completion.as_mut() {
+                if let Some(result_id) = completion.result_id.take() {
+                    stack.item.search_results.insert(
+                        result_id,
+                        TriggerObjectRef {
+                            object_id: oid,
+                            zone_change_generation: self
+                                .state
+                                .zone_change_generation
+                                .get(&oid)
+                                .copied()
+                                .unwrap_or(0),
+                            controller_at_event: entry.destination_controller,
+                        },
+                    );
+                }
+            }
             events.push(permanent_moved_event(
                 &self.state,
                 oid,
                 owner,
                 rv1::permanent_moved::Destination::Battlefield,
             ));
-            events.push(events::ev_log(format!(
-                "{} returns {label} from {} to battlefield.",
-                batch.spell_label,
-                match batch.origin {
-                    Zone::Graveyard => "graveyard",
-                    Zone::Exile => "exile",
-                    _ => "another zone",
-                }
-            )));
+            if search_completion.is_some() {
+                events.push(events::ev_log(format!(
+                    "P{} puts {label} onto the battlefield.",
+                    entry.destination_controller
+                )));
+            } else {
+                events.push(events::ev_log(format!(
+                    "{} returns {label} from {} to battlefield.",
+                    batch.spell_label,
+                    match batch.origin {
+                        Zone::Graveyard => "graveyard",
+                        Zone::Exile => "exile",
+                        _ => "another zone",
+                    }
+                )));
+            }
         }
         self.fire_zone_triggers(snapshot, triggers);
-        Ok(())
+        if let Some(completion) = search_completion {
+            if completion.shuffle {
+                crate::engine::shuffle_player_library_for_current_command(
+                    &mut self.state,
+                    completion.searcher,
+                );
+                events.push(events::ev_log(format!(
+                    "P{} shuffles their library.",
+                    completion.searcher
+                )));
+            }
+            if completion.searched_library {
+                self.fire_triggers(&[GameEvent::LibrarySearched {
+                    searcher: completion.searcher,
+                    library_owner: completion.searcher,
+                }]);
+            }
+        }
+        Ok(stack)
     }
 
     pub(super) fn commit_observed_zone_move(
@@ -479,8 +525,16 @@ mod timestamp_order_tests {
         let mut events = Vec::new();
         assert!(
             engine
-                .begin_zone_entry_batch(stack, entries, Zone::Graveyard, "return", &mut events)
-                .unwrap(),
+                .begin_zone_entry_batch(
+                    ParkedStackResolution::new(stack),
+                    entries,
+                    Zone::Graveyard,
+                    "return",
+                    None,
+                    &mut events
+                )
+                .unwrap()
+                .is_none(),
             "the simultaneous cohort must park for a logged timestamp-order choice"
         );
         let pending = engine
@@ -552,8 +606,16 @@ mod timestamp_order_tests {
             .collect();
         let stack = engine.observer_return_item(p0[0], 0);
         assert!(engine
-            .begin_zone_entry_batch(stack, entries, Zone::Graveyard, "return", &mut Vec::new())
-            .unwrap());
+            .begin_zone_entry_batch(
+                ParkedStackResolution::new(stack),
+                entries,
+                Zone::Graveyard,
+                "return",
+                None,
+                &mut Vec::new()
+            )
+            .unwrap()
+            .is_none());
         assert_eq!(
             engine
                 .state
@@ -615,8 +677,16 @@ mod timestamp_order_tests {
         let entries = ids.iter().map(|&oid| entry_for(&engine, oid, 0)).collect();
         let stack = engine.observer_return_item(ids[0], 0);
         assert!(engine
-            .begin_zone_entry_batch(stack, entries, Zone::Graveyard, "return", &mut Vec::new())
-            .unwrap());
+            .begin_zone_entry_batch(
+                ParkedStackResolution::new(stack),
+                entries,
+                Zone::Graveyard,
+                "return",
+                None,
+                &mut Vec::new()
+            )
+            .unwrap()
+            .is_none());
         move_object_to_zone(
             &mut engine.state,
             engine.registry,

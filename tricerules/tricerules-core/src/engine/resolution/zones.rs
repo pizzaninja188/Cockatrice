@@ -2235,13 +2235,18 @@ pub(super) fn return_exiled_cohort_to_owners_battlefield(
         })
         .collect();
     Ok(
-        if cx.engine.begin_zone_entry_batch(
-            cx.top.clone(),
-            entries,
-            Zone::Exile,
-            cx.spell_label,
-            cx.events,
-        )? {
+        if cx
+            .engine
+            .begin_zone_entry_batch(
+                ParkedStackResolution::new(cx.top.clone()),
+                entries,
+                Zone::Exile,
+                cx.spell_label,
+                None,
+                cx.events,
+            )?
+            .is_none()
+        {
             EffectOutcome::Suspended
         } else {
             EffectOutcome::Continue
@@ -2432,13 +2437,18 @@ pub(super) fn move_graveyard_cards(
             })
             .collect();
         return Ok(
-            if cx.engine.begin_zone_entry_batch(
-                cx.top.clone(),
-                entries,
-                Zone::Graveyard,
-                cx.spell_label,
-                cx.events,
-            )? {
+            if cx
+                .engine
+                .begin_zone_entry_batch(
+                    ParkedStackResolution::new(cx.top.clone()),
+                    entries,
+                    Zone::Graveyard,
+                    cx.spell_label,
+                    None,
+                    cx.events,
+                )?
+                .is_none()
+            {
                 EffectOutcome::Suspended
             } else {
                 EffectOutcome::Continue
@@ -2549,13 +2559,18 @@ pub(super) fn return_linked_exiled_cards(
         })
         .collect();
     Ok(
-        if cx.engine.begin_zone_entry_batch(
-            cx.top.clone(),
-            entries,
-            Zone::Exile,
-            cx.spell_label,
-            cx.events,
-        )? {
+        if cx
+            .engine
+            .begin_zone_entry_batch(
+                ParkedStackResolution::new(cx.top.clone()),
+                entries,
+                Zone::Exile,
+                cx.spell_label,
+                None,
+                cx.events,
+            )?
+            .is_none()
+        {
             EffectOutcome::Suspended
         } else {
             EffectOutcome::Continue
@@ -3762,9 +3777,74 @@ fn search_zone_proto(zone: CardSearchZone) -> i32 {
     }
 }
 
+fn searched_land_types(engine: &GameEngine, oid: ObjectId) -> Vec<String> {
+    engine.characteristics(oid).map_or_else(Vec::new, |value| {
+        value
+            .types
+            .into_iter()
+            .filter(|subtype| super::super::characteristics::is_land_subtype(subtype))
+            .collect()
+    })
+}
+
+pub(in crate::engine) fn search_selection_constraint_holds(
+    engine: &GameEngine,
+    selected: &[ObjectId],
+    constraint: Option<tricerules_cards::primitives::SearchSelectionConstraint>,
+) -> bool {
+    match constraint {
+        None => true,
+        Some(tricerules_cards::primitives::SearchSelectionConstraint::SharedLandType) => {
+            if selected.len() <= 1 {
+                return true;
+            }
+            selected.len() == 2
+                && searched_land_types(engine, selected[0])
+                    .iter()
+                    .any(|subtype| searched_land_types(engine, selected[1]).contains(subtype))
+        }
+    }
+}
+
+fn shared_land_search_alternatives(
+    engine: &GameEngine,
+    candidates: &[ObjectId],
+    constraint: Option<tricerules_cards::primitives::SearchSelectionConstraint>,
+) -> Vec<rv1::ResolutionSelectionAlternative> {
+    if constraint.is_none() || candidates.is_empty() {
+        return Vec::new();
+    }
+    let mut groups: BTreeMap<String, Vec<u32>> = BTreeMap::new();
+    for (index, &oid) in candidates.iter().enumerate() {
+        for subtype in searched_land_types(engine, oid) {
+            let group = groups.entry(subtype).or_default();
+            if !group.contains(&(index as u32)) {
+                group.push(index as u32);
+            }
+        }
+    }
+    let mut alternatives = vec![rv1::ResolutionSelectionAlternative {
+        count: 1,
+        candidate_indices: (0..candidates.len() as u32).collect(),
+    }];
+    for candidate_indices in groups.into_values().filter(|group| group.len() >= 2) {
+        // Distinct land types can describe the same physical candidate set.
+        if !alternatives.iter().any(|alternative| {
+            alternative.count == 2 && alternative.candidate_indices == candidate_indices
+        }) {
+            alternatives.push(rv1::ResolutionSelectionAlternative {
+                count: 2,
+                candidate_indices,
+            });
+        }
+    }
+    alternatives
+}
+
 pub(in crate::engine) struct ZoneSearchRequest {
     pub count: u32,
     pub filter: Option<ZoneCardFilter>,
+    pub selection_constraint: Option<tricerules_cards::primitives::SearchSelectionConstraint>,
     pub slots: Vec<SearchSelectionSlot>,
     pub zones: Vec<CardSearchZone>,
     pub destination: SearchDestination,
@@ -3777,6 +3857,7 @@ pub(in crate::engine) struct ZoneSearchRequest {
 pub(in crate::engine) struct SearchRequest {
     pub count: u32,
     pub filter: Option<ZoneCardFilter>,
+    pub selection_constraint: Option<tricerules_cards::primitives::SearchSelectionConstraint>,
     pub slots: Vec<SearchSelectionSlot>,
     pub zones: SearchZoneSelection,
     pub destination: SearchDestination,
@@ -3796,6 +3877,7 @@ pub(in crate::engine) fn park_zone_search_choice(
     let ZoneSearchRequest {
         count,
         filter,
+        selection_constraint,
         slots,
         zones,
         destination,
@@ -3857,7 +3939,9 @@ pub(in crate::engine) fn park_zone_search_choice(
         count
     };
     let ordered = matches!(destination, SearchDestination::BattlefieldTappedThenHand);
-    let prompt = if ordered {
+    let prompt = if selection_constraint.is_some() {
+        format!("P{searcher}: search your library for up to two basic land cards. If you choose two, they must share a land type.")
+    } else if ordered {
         format!(
             "P{searcher}: search {zone_names} for up to {max} matching card(s). Choose them in order: the first enters the battlefield tapped, and any remaining chosen card goes into your hand."
         )
@@ -3929,6 +4013,8 @@ pub(in crate::engine) fn park_zone_search_choice(
             )
         })
         .collect();
+    let selection_alternatives =
+        shared_land_search_alternatives(engine, &candidates, selection_constraint);
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
@@ -3961,7 +4047,7 @@ pub(in crate::engine) fn park_zone_search_choice(
                 waterbend: false,
                 selection_slots,
                 replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
+                selection_alternatives,
             },
         )),
     });
@@ -3982,6 +4068,8 @@ pub(in crate::engine) fn park_zone_search_choice(
             stack: ParkedStackResolution::new(top.clone()),
             searcher,
             zones,
+            filter,
+            selection_constraint,
             candidate_generations,
             selection_slot_candidates,
             destination,
@@ -4004,6 +4092,7 @@ pub(in crate::engine) fn begin_search_request(
     let SearchRequest {
         count,
         filter,
+        selection_constraint,
         slots,
         zones,
         destination,
@@ -4021,6 +4110,7 @@ pub(in crate::engine) fn begin_search_request(
             ZoneSearchRequest {
                 count,
                 filter,
+                selection_constraint,
                 slots,
                 zones,
                 destination,
@@ -4031,7 +4121,7 @@ pub(in crate::engine) fn begin_search_request(
             },
         ),
         SearchZoneSelection::PlayerChoice(available_zones) => {
-            if result_id.is_some() {
+            if result_id.is_some() || selection_constraint.is_some() {
                 return Err(EngineError::Illegal(
                     "search result binding requires a fixed library search",
                 ));
@@ -4125,6 +4215,7 @@ pub(super) fn search_library(
         who,
         optional,
         filter,
+        selection_constraint,
         count,
         count_by_cast_cost,
         slots,
@@ -4138,6 +4229,11 @@ pub(super) fn search_library(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    if optional && selection_constraint.is_some() {
+        return Err(EngineError::Illegal(
+            "shared land constraint requires a mandatory search",
+        ));
+    }
     let count = count_by_cast_cost.map_or(count, |conditional| {
         if cx.top.cast_cost_condition_matches(&conditional.condition) {
             conditional.if_selected
@@ -4234,6 +4330,7 @@ pub(super) fn search_library(
         SearchRequest {
             count,
             filter,
+            selection_constraint,
             slots,
             zones,
             destination,
@@ -4250,6 +4347,98 @@ pub(super) fn search_library(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_search_uses_all_actual_land_types_and_excludes_other_type_categories() {
+        use tricerules_cards::primitives::SearchSelectionConstraint::SharedLandType;
+        let cases = [
+            (vec!["Land", "Forest"], vec!["Land", "Forest"], true),
+            (
+                vec!["Land", "Forest", "Island"],
+                vec!["Land", "Island"],
+                true,
+            ),
+            (vec!["Land", "Planet"], vec!["Land", "Planet"], true),
+            (vec!["Land", "Town"], vec!["Land", "Town"], true),
+            (vec!["Land", "Plains"], vec!["Land", "Island"], false),
+            (vec!["Land"], vec!["Land"], false),
+            (
+                vec!["Land", "Creature", "Wizard"],
+                vec!["Land", "Creature", "Wizard"],
+                false,
+            ),
+        ];
+        for (left, right, allowed) in cases {
+            let draft = |id, types: &[&str]| {
+                format!(
+                "(id:\"{id}\",name:\"{id}\",face_id:\"{id}\",types:{},supertypes:[\"Basic\",\"Snow\"]{})",
+                serde_json::to_string(types).unwrap(),
+                if types.contains(&"Creature") { ",power:1,toughness:1" } else { "" },
+            )
+            };
+            let a = draft("typed_basic_a", &left);
+            let b = draft("typed_basic_b", &right);
+            let registry = Box::leak(Box::new(
+                CardRegistry::from_chunks_and_tokens(
+                    &[
+                        &a,
+                        &b,
+                        include_str!("../../../../tricerules-cards/data/forest.ron"),
+                        include_str!("../../../../tricerules-cards/data/island.ron"),
+                    ],
+                    &[],
+                )
+                .unwrap(),
+            ));
+            let decks = vec![
+                crate::EngineDeck {
+                    mainboard: vec!["forest".into(); 20],
+                    commanders: Vec::new()
+                };
+                2
+            ];
+            let mut engine =
+                GameEngine::new_with_registry(90_030, &[0, 1], 20, Some(decks), true, registry)
+                    .unwrap();
+            let ids = engine.state.players[0]
+                .hand
+                .iter()
+                .copied()
+                .take(2)
+                .collect::<Vec<_>>();
+            for (oid, card_id) in ids.iter().zip(["typed_basic_a", "typed_basic_b"]) {
+                engine.state.objects.get_mut(oid).unwrap().card_id = card_id.into();
+                move_object_to_zone(&mut engine.state, registry, *oid, Zone::Library, None)
+                    .unwrap();
+                assert!(zone_card_matches_filter(
+                    &engine.state,
+                    registry,
+                    *oid,
+                    Some(&ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::BasicLand),
+                        ..Default::default()
+                    })
+                ));
+            }
+            assert_eq!(
+                search_selection_constraint_holds(&engine, &ids, Some(SharedLandType)),
+                allowed,
+                "{left:?} and {right:?}"
+            );
+            let alternatives = shared_land_search_alternatives(&engine, &ids, Some(SharedLandType));
+            assert_eq!(
+                alternatives
+                    .iter()
+                    .any(|alternative| alternative.count == 2),
+                allowed
+            );
+            assert!(search_selection_constraint_holds(
+                &engine,
+                &ids[..1],
+                Some(SharedLandType)
+            ));
+        }
+    }
 
     #[test]
     fn bottom_placement_appends_to_the_owners_library() {

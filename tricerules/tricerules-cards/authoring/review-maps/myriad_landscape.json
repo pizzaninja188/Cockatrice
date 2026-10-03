@@ -1,0 +1,116 @@
+{
+  "format_version": 1,
+  "oracle_id": "2549bc57-9ffb-4053-9f10-f2a5f792b845",
+  "spans": [
+    {
+      "face_id": "myriad_landscape",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "myriad_landscape",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "myriad_landscape",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::EntersTapped",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceMana",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/1/costs/1"
+    },
+    {
+      "symbol": "AbilityCost::SacrificeSelf",
+      "typed_path": "/faces/0/activated_abilities/1/costs/2"
+    },
+    {
+      "symbol": "SpellEffectKind::SearchLibrary",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "SearchSelectionConstraint::SharedLandType",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0/SearchLibrary/selection_constraint"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario myriad_search_prerequisites::actual_myriad_rejects_incompatible_pair_atomically_and_publishes_relations",
+      "covers": "actual myriad rejects incompatible pair atomically and publishes relations"
+    },
+    {
+      "test": "scenario myriad_search_prerequisites::actual_myriad_zero_singleton_wastes_and_same_name_pair_complete",
+      "covers": "actual myriad zero singleton wastes and same name pair complete"
+    },
+    {
+      "test": "scenario myriad_search_prerequisites::actual_myriad_every_invalid_answer_preserves_the_pending_search",
+      "covers": "actual myriad every invalid answer preserves the pending search"
+    },
+    {
+      "test": "scenario myriad_search_prerequisites::actual_myriad_survives_source_owner_departure_at_search_and_timestamp_choice",
+      "covers": "actual myriad survives source owner departure at search and timestamp choice"
+    },
+    {
+      "test": "scenario myriad_search_prerequisites::actual_myriad_enters_tapped_makes_colorless_and_requires_each_source_cost",
+      "covers": "actual myriad enters tapped makes colorless and requires each source cost"
+    },
+    {
+      "test": "scenario myriad_search_prerequisites::actual_myriad_paid_search_choices_replay_deterministically_with_physical_generations",
+      "covers": "actual myriad paid search choices replay deterministically with physical generations"
+    },
+    {
+      "test": "scenario myriad_search_prerequisites::actual_myriad_timestamp_choice_rejects_a_stale_cohort_before_any_entry",
+      "covers": "actual myriad timestamp choice rejects a stale cohort before any entry"
+    },
+    {
+      "test": "scenario myriad_search_prerequisites::actual_myriad_searching_player_departure_cancels_search_and_entry_order_without_moves",
+      "covers": "actual myriad searching player departure cancels search and entry order without moves"
+    },
+    {
+      "test": "deck_coverage_search_lands::myriad_landscape_complete_definition_is_exact_and_all_lines_are_presented",
+      "covers": "myriad landscape complete definition is exact and all lines are presented"
+    },
+    {
+      "test": "deck_coverage_search_lands::shared_land_search_constraint_is_typed_and_round_trips",
+      "covers": "shared land search constraint is typed and round trips"
+    },
+    {
+      "test": "deck_coverage_search_lands::shared_land_search_rejects_every_unsupported_shape",
+      "covers": "shared land search rejects every unsupported shape"
+    },
+    {
+      "test": "deck_coverage_search_lands::ordinary_searches_keep_their_default_schema_and_semantics",
+      "covers": "ordinary searches keep their default schema and semantics"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

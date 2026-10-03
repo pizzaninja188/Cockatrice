@@ -81,6 +81,7 @@ fn assert_optional_basic_land_to_top(
         optional: search_optional,
         count,
         count_by_cast_cost,
+        selection_constraint,
         filter: Some(filter),
         slots,
         zones,
@@ -97,6 +98,7 @@ fn assert_optional_basic_land_to_top(
     assert!(!search_optional);
     assert_eq!(*count, 1);
     assert!(count_by_cast_cost.is_none());
+    assert!(selection_constraint.is_none());
     assert_eq!(filter.card_type, Some(CardTypeFilter::BasicLand));
     assert!(filter.any_of.is_none());
     assert!(filter.exact_name.is_none());

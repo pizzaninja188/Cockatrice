@@ -487,7 +487,9 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
             if (rcr->deciding_player_id() != participant->getPlayerId())
                 rcr->clear_candidate_token_identities();
             bool malformedAlternatives =
-                rcr->selection_alternatives_size() > 0 && rcr->choice_kind() != ruled::v1::CHOICE_KIND_HAND_CARDS;
+                rcr->selection_alternatives_size() > 0 &&
+                rcr->choice_kind() != ruled::v1::CHOICE_KIND_HAND_CARDS &&
+                rcr->choice_kind() != ruled::v1::CHOICE_KIND_LIBRARY_SEARCH;
             for (const auto &alternative : rcr->selection_alternatives()) {
                 QSet<quint32> indices;
                 if (alternative.count() == 0 || alternative.count() < rcr->min() || alternative.count() > rcr->max()) {

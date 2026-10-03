@@ -242,13 +242,15 @@ fn entry_reveal_pair_internal_hand_cohort_retains_paid_reveals_through_timestamp
             let mut events = Vec::new();
             assert!(engine
                 .begin_zone_entry_batch(
-                    item,
+                    ParkedStackResolution::new(item),
                     entries,
                     Zone::Hand,
                     "internal simultaneous hand instruction",
+                    None,
                     &mut events
                 )
-                .unwrap());
+                .unwrap()
+                .is_none());
             let choose = |ids| rv1::RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
                     rv1::SubmitResolutionChoice {

@@ -2049,6 +2049,8 @@ signals:
 
 private:
     [[nodiscard]] bool resolutionPickSelectionAdmitsSlots(const QList<int> &selectedServerCardIds) const;
+    [[nodiscard]] bool resolutionPickSelectionAdmitsAlternatives(const QList<int> &selectedServerCardIds,
+                                                               bool complete) const;
     void sendOpeningBottomCommandSequence(const QList<int> &adjustedIndices, int position);
 
     /// Push the local player's in-progress attacker / block staging to the server so the opponent

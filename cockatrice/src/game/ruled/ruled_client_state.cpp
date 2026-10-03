@@ -1088,7 +1088,7 @@ bool RuledClientState::isResolutionHandPickCardSelectable(int serverCardId) cons
     }
     QList<int> proposed = pendingChoice->selectedServerCardIds;
     proposed.append(serverCardId);
-    if (!resolutionPickSelectionAdmitsSlots(proposed)) {
+    if (!resolutionPickSelectionAdmitsSlots(proposed) || !resolutionPickSelectionAdmitsAlternatives(proposed, false)) {
         return false;
     }
     return true;
@@ -1185,12 +1185,20 @@ bool RuledClientState::resolutionHandPickConfirmable() const
     if (!resolutionPickSelectionAdmitsSlots(pendingChoice->selectedServerCardIds)) {
         return false;
     }
-    if (pendingChoice->selectionAlternativeCounts.isEmpty()) {
+    return resolutionPickSelectionAdmitsAlternatives(pendingChoice->selectedServerCardIds, true);
+}
+
+bool RuledClientState::resolutionPickSelectionAdmitsAlternatives(const QList<int> &selectedServerCardIds,
+                                                               bool complete) const
+{
+    const int n = selectedServerCardIds.size();
+    if (pendingChoice->selectionAlternativeCounts.isEmpty() || (n == 0 && pendingChoice->min == 0)) {
         return true;
     }
     for (int i = 0; i < pendingChoice->selectionAlternativeCounts.size(); ++i) {
-        if (n == pendingChoice->selectionAlternativeCounts.at(i) &&
-            std::all_of(pendingChoice->selectedServerCardIds.cbegin(), pendingChoice->selectedServerCardIds.cend(),
+        if ((complete ? n == pendingChoice->selectionAlternativeCounts.at(i)
+                      : n <= pendingChoice->selectionAlternativeCounts.at(i)) &&
+            std::all_of(selectedServerCardIds.cbegin(), selectedServerCardIds.cend(),
                         [&](int id) { return pendingChoice->selectionAlternativeServerCardIds.at(i).contains(id); })) {
             return true;
         }

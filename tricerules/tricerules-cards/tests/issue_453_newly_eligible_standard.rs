@@ -691,6 +691,7 @@ fn issue_453_landcycling_abilities_search_a_revealed_basic_land_to_hand() {
                 optional: false,
                 count: 1,
                 count_by_cast_cost: None,
+                selection_constraint: None,
                 filter: Some(ZoneCardFilter {
                     card_type: Some(CardTypeFilter::BasicLand),
                     ..ZoneCardFilter::default()

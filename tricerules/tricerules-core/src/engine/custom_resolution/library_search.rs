@@ -214,6 +214,7 @@ impl GameEngine {
             resolution::zones::ZoneSearchRequest {
                 count,
                 filter,
+                selection_constraint: None,
                 slots: Vec::new(),
                 zones: selected.expect("validated selected zones"),
                 destination,
@@ -307,6 +308,7 @@ impl GameEngine {
             resolution::zones::SearchRequest {
                 count,
                 filter,
+                selection_constraint: None,
                 slots,
                 zones,
                 destination,
@@ -561,6 +563,8 @@ impl GameEngine {
             stack,
             searcher,
             zones,
+            filter,
+            selection_constraint,
             candidate_generations,
             selection_slot_candidates,
             mut destination,
@@ -573,6 +577,8 @@ impl GameEngine {
                 stack,
                 searcher,
                 zones,
+                filter,
+                selection_constraint,
                 candidate_generations,
                 selection_slot_candidates,
                 destination,
@@ -584,6 +590,8 @@ impl GameEngine {
                 stack.clone(),
                 *searcher,
                 zones.clone(),
+                filter.clone(),
+                *selection_constraint,
                 candidate_generations.clone(),
                 selection_slot_candidates.clone(),
                 *destination,
@@ -619,12 +627,20 @@ impl GameEngine {
                 })
         });
         if !choices_are_current
+            || !chosen.iter().all(|oid| {
+                zone_card_matches_filter(&self.state, self.registry, *oid, filter.as_ref())
+            })
+            || !resolution::zones::search_selection_constraint_holds(
+                self,
+                chosen,
+                selection_constraint,
+            )
             || (!selection_slot_candidates.is_empty()
                 && !selection_admits_distinct_slots(chosen, &selection_slot_candidates))
         {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
-                "library-search choice became stale or violates its slot assignment",
+                "library-search choice became stale or violates its filter or selection constraint",
             ));
         }
         if let Some(conditional) = conditional_destination.filter(|conditional| {
@@ -749,6 +765,59 @@ impl GameEngine {
                     }
                 }
                 SearchDestination::Battlefield { tapped } => {
+                    if zones == [CardSearchZone::Library] {
+                        let entries = chosen
+                            .iter()
+                            .map(|&oid| BattlefieldEntryEvent {
+                                entry_reveal_receipts: Vec::new(),
+                                mana_colors_spent_to_cast: Default::default(),
+                                prepared: false,
+                                object_id: oid,
+                                deciding_player: controller,
+                                destination_controller: controller,
+                                battle_protector: None,
+                                face_index: 0,
+                                unlock_room_door: None,
+                                chosen_x: 0,
+                                cast_by: None,
+                                cast_cost_receipts: Vec::new(),
+                                player_life_snapshot: self.player_life_snapshot(),
+                                tapped,
+                                set_types: None,
+                                chosen_basic_land_type: None,
+                                chosen_opponents: Vec::new(),
+                                entry_counters: BTreeMap::new(),
+                                entry_modifiers: Vec::new(),
+                                attached_to: None,
+                                pending_copy_candidate: None,
+                                pending_aura_recipient: None,
+                                applied_effects: Vec::new(),
+                            })
+                            .collect();
+                        let label = object_display_name(&self.state, self.registry, stack.item.id);
+                        let Some(stack) = self.begin_zone_entry_batch(
+                            stack,
+                            entries,
+                            Zone::Library,
+                            &label,
+                            Some(crate::state::LibrarySearchCompletion {
+                                searcher,
+                                shuffle,
+                                searched_library,
+                                result_id,
+                            }),
+                            &mut ev,
+                        )?
+                        else {
+                            return Ok(finish_with_events(self, ev));
+                        };
+                        return self.complete_parked_resolution_with_previous(
+                            stack.item,
+                            stack.resume_effect_index,
+                            stack.previous_result,
+                            ev,
+                        );
+                    }
                     return self.continue_library_search_battlefield_entries(
                         stack,
                         LibrarySearchEntryProgress {
@@ -787,7 +856,12 @@ impl GameEngine {
                 library_owner: controller,
             }]);
         }
-        self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev)
+        self.complete_parked_resolution_with_previous(
+            stack.item,
+            stack.resume_effect_index,
+            stack.previous_result,
+            ev,
+        )
     }
 }
 
@@ -856,6 +930,186 @@ mod tests {
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: Default::default(),
+        }
+    }
+
+    #[test]
+    fn library_entry_cohort_preserves_previous_result_tail_and_one_search_completion() {
+        for count in [2, 0] {
+            let mut engine = GameEngine::new(90_020 + count, &[0, 1], 20, None, true).unwrap();
+            engine.state.turn_step = TurnStep::Main1;
+            battlefield_card(&mut engine, "orb_of_dreams");
+            battlefield_card(&mut engine, "orb_of_dreams");
+            let wan = battlefield_card(&mut engine, "wan_shi_tong,_librarian");
+            engine.state.players[0].battlefield.retain(|id| *id != wan);
+            engine.state.players[1].battlefield.push(wan);
+            let observer = engine.state.objects.get_mut(&wan).unwrap();
+            observer.owner = 1;
+            observer.controller = 1;
+            observer.base_controller = 1;
+            let forest = library_card(&mut engine, "forest");
+            let second = library_card(&mut engine, "forest");
+            let mut effect = engine
+                .registry
+                .get("grow_from_the_ashes")
+                .unwrap()
+                .primary_face()
+                .spell_effect[0]
+                .clone();
+            let SpellEffectKind::SearchLibrary {
+                count: search_count,
+                count_by_cast_cost,
+                reveal,
+                ..
+            } = &mut effect
+            else {
+                unreachable!()
+            };
+            *search_count = 2;
+            *count_by_cast_cost = None;
+            *reveal = false;
+            let mut tail = engine
+                .registry
+                .get("fanatic_of_the_harrowing")
+                .unwrap()
+                .primary_face()
+                .triggered_abilities[0]
+                .effect[1]
+                .clone();
+            let SpellEffectKind::ChooseResolutionBranch { branches, .. } = &mut tail else {
+                unreachable!()
+            };
+            let tricerules_cards::primitives::ResolutionBranchRequirement::CardResultCount {
+                filter,
+                ..
+            } = &mut branches[0].requirement
+            else {
+                unreachable!()
+            };
+            filter.action = tricerules_cards::primitives::CardResultAction::Mill;
+            branches[0].effects = vec![SpellEffectKind::GainLife {
+                amount: Amount::Fixed(3),
+            }];
+            let mut item = test_stack_item();
+            item.card_id = "myriad_landscape".into();
+            item.ability_text = Some("search plus sentinel".into());
+            let mut ability = engine
+                .registry
+                .get("myriad_landscape")
+                .unwrap()
+                .primary_face()
+                .activated_abilities[1]
+                .clone();
+            ability.effect = vec![effect, tail];
+            item.activated_ability = Some(ability);
+            let mut events = Vec::new();
+            resolution::zones::park_zone_search_choice(
+                &mut engine,
+                &mut events,
+                &item,
+                0,
+                resolution::zones::ZoneSearchRequest {
+                    count: 2,
+                    filter: Some(ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::BasicLand),
+                        ..Default::default()
+                    }),
+                    selection_constraint: None,
+                    slots: Vec::new(),
+                    zones: vec![CardSearchZone::Library],
+                    destination: SearchDestination::Battlefield { tapped: false },
+                    conditional_destination: None,
+                    shuffle: true,
+                    reveal: false,
+                    result_id: None,
+                },
+            )
+            .unwrap();
+            let saved = engine
+                .state
+                .pending_resolution
+                .as_mut()
+                .unwrap()
+                .continuation
+                .stack_mut()
+                .unwrap();
+            saved.resume_effect_index = Some(1);
+            saved
+                .previous_result
+                .cards
+                .push(crate::state::CardResultEntry {
+                    action: tricerules_cards::primitives::CardResultAction::Mill,
+                    affected_player: 0,
+                    object_id: forest,
+                    zone_change_generation: 0,
+                    matched_card_types: vec![CardTypeFilter::BasicLand],
+                });
+            let selected = if count == 0 {
+                Vec::new()
+            } else {
+                vec![forest, second]
+            };
+            let mut batches = vec![engine
+                .submit_resolution_choice(
+                    0,
+                    &rv1::SubmitResolutionChoice {
+                        chosen_object_ids: selected,
+                        ..Default::default()
+                    },
+                )
+                .unwrap()];
+            for _ in 0..4 {
+                let Some(pending) = engine.state.pending_resolution.as_ref() else {
+                    break;
+                };
+                assert_eq!(
+                    engine.state.players[0].life, 20,
+                    "tail waits for the entire entry cohort"
+                );
+                assert_eq!(engine.state.objects[&forest].zone, Zone::Library);
+                assert_eq!(engine.state.objects[&second].zone, Zone::Library);
+                assert!(
+                    engine.state.stack.is_empty(),
+                    "LibrarySearched observer is not dispatched early"
+                );
+                let chosen = match pending.presentation.choice_kind {
+                    custom::ChoiceKind::ReplacementEffect => {
+                        vec![pending.presentation.candidates[0]]
+                    }
+                    custom::ChoiceKind::SimultaneousEntryOrder => pending
+                        .presentation
+                        .candidates
+                        .iter()
+                        .rev()
+                        .copied()
+                        .collect(),
+                    other => panic!("unexpected entry choice {other:?}"),
+                };
+                batches.push(
+                    engine
+                        .submit_resolution_choice(
+                            0,
+                            &rv1::SubmitResolutionChoice {
+                                chosen_object_ids: chosen,
+                                ..Default::default()
+                            },
+                        )
+                        .unwrap(),
+                );
+            }
+            assert!(engine.state.pending_resolution.is_none());
+            assert_eq!(
+                engine.state.players[0].life, 23,
+                "saved previous result admits the sentinel tail exactly once, count {count}"
+            );
+            assert_eq!(batches.iter().flat_map(|batch| &batch.events).filter(|event| matches!(&event.ev, Some(rv1::ruled_event::Ev::Log(log)) if log.text == "P0 shuffles their library.")).count(), 1);
+            engine.flush_staged_triggers(&mut Vec::new());
+            assert_eq!(
+                engine.state.stack.len(),
+                1,
+                "one LibrarySearched observer after the tail"
+            );
+            assert_eq!(engine.state.stack[0].source_permanent_id, Some(wan));
         }
     }
 

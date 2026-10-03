@@ -13,6 +13,8 @@ mod deck_coverage_myr_battlesphere;
 mod deck_coverage_standstill;
 #[path = "scenario/myr_damage_prerequisites.rs"]
 mod myr_damage_prerequisites;
+#[path = "scenario/myriad_search_prerequisites.rs"]
+mod myriad_search_prerequisites;
 
 #[path = "scenario/authoring_actions.rs"]
 mod authoring_actions;

@@ -140,6 +140,20 @@ fn issue_363_encroaching_dragonstorm_searches_two_basic_lands_tapped() {
     engine
         .apply_command(0, &submit_resolution_choice(chosen.clone()))
         .expect("find two basic lands");
+    assert!(chosen
+        .iter()
+        .all(|oid| engine.state.objects[oid].zone == Zone::Library));
+    assert_eq!(
+        engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .choice_kind,
+        tricerules_proto::ruled::v1::ChoiceKind::SimultaneousEntryOrder
+    );
+    answer_simultaneous_entry_order_in_engine_order(&mut engine);
     for oid in &chosen {
         assert_eq!(engine.state.objects[oid].zone, Zone::Battlefield);
         assert!(

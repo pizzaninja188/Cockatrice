@@ -211,6 +211,7 @@ fn issue_318_stratosoarer_grants_flying_and_keeps_basic_landcycling() {
             optional: false,
             count: 1,
             count_by_cast_cost: None,
+            selection_constraint: None,
             filter: Some(tricerules_cards::primitives::ZoneCardFilter {
                 card_type: Some(tricerules_cards::primitives::CardTypeFilter::BasicLand),
                 ..tricerules_cards::primitives::ZoneCardFilter::default()

@@ -1856,6 +1856,72 @@ TEST_F(RuledBatchTest, PreparationCopiesHaveDedicatedExileIdentityAndFullReplace
     EXPECT_EQ(findCardByEngineOid(p1, 203u), source);
 }
 
+TEST_F(RuledBatchTest, LibraryAlternativesArePrivateValidatedAndRestoredOnReconnect)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(p1->getPlayerId());
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_SEARCH);
+    choice->set_min(0);
+    choice->set_max(2);
+    for (quint32 oid : {801u, 802u, 803u}) {
+        choice->add_candidate_object_ids(oid);
+        choice->add_candidate_card_ids("forest");
+        choice->add_candidate_names("Forest");
+    }
+    auto *one = choice->add_selection_alternatives();
+    one->set_count(1);
+    for (quint32 index : {0u, 1u, 2u})
+        one->add_candidate_indices(index);
+    auto *two = choice->add_selection_alternatives();
+    two->set_count(2);
+    two->add_candidate_indices(0);
+    two->add_candidate_indices(1);
+    const auto owner = redactFor(batch, p1);
+    ASSERT_EQ(owner.events(0).resolution_choice_required().selection_alternatives_size(), 2);
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    for (auto *participant : {p2, spectator}) {
+        const auto observer = redactFor(batch, participant);
+        const auto &hidden = observer.events(0).resolution_choice_required();
+        EXPECT_EQ(hidden.selection_alternatives_size(), 0);
+        EXPECT_EQ(hidden.candidate_object_ids_size(), 0);
+        EXPECT_EQ(hidden.candidate_card_ids_size(), 0);
+        EXPECT_EQ(hidden.candidate_names_size(), 0);
+    }
+    for (int malformed = 0; malformed < 5; ++malformed) {
+        auto invalid = batch;
+        auto *bad = invalid.mutable_events(0)->mutable_resolution_choice_required();
+        if (malformed == 0)
+            bad->mutable_selection_alternatives(0)->add_candidate_indices(99);
+        if (malformed == 1)
+            bad->mutable_selection_alternatives(0)->add_candidate_indices(0);
+        if (malformed == 2)
+            bad->mutable_selection_alternatives(0)->set_count(0);
+        if (malformed == 3)
+            bad->mutable_selection_alternatives(0)->set_count(3);
+        if (malformed == 4)
+            bad->set_choice_kind(ruled::v1::CHOICE_KIND_ZONE_SEARCH);
+        const auto rejected = redactFor(invalid, p1);
+        EXPECT_EQ(rejected.events(0).resolution_choice_required().selection_alternatives_size(), 0);
+        EXPECT_EQ(rejected.events(0).resolution_choice_required().candidate_object_ids_size(), 0);
+        EXPECT_GT(rejected.events(0).resolution_choice_required().min(), rejected.events(0).resolution_choice_required().max());
+    }
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    response.mutable_batch()->CopyFrom(batch);
+    updatePendingResolutionChoiceCache(response);
+    for (auto *participant : {p1, p2, spectator}) {
+        ResponseContainer reconnect(-1);
+        game->createGameJoinedEvent(participant, reconnect, true);
+        const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        EXPECT_EQ(restored.events(0).resolution_choice_required().selection_alternatives_size(), participant == p1 ? 2 : 0);
+    }
+}
+
 TEST_F(RuledBatchTest, SimultaneousEntryOrderCandidatesStayPrivateUntilEntryCommits)
 {
     ruled::v1::RuledEventBatch batch;

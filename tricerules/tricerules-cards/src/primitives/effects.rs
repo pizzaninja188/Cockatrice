@@ -1851,6 +1851,10 @@ pub enum SpellEffectKind {
         /// `None` = any card is valid; `Some(f)` = every authored predicate must match.
         #[serde(default)]
         filter: Option<ZoneCardFilter>,
+        /// Myriad Landscape's two found basic lands must share an actual land subtype.
+        /// This relation is distinct from independently filtered selection slots.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        selection_constraint: Option<SearchSelectionConstraint>,
         /// Independently filtered capacities. Empty selects homogeneous `count`/`filter` mode;
         /// nonempty selects heterogeneous slot mode and publishes only engine-authored edges.
         #[serde(default)]
@@ -2085,6 +2089,13 @@ pub enum CardSearchZone {
     Hand,
     Graveyard,
     Library,
+}
+
+/// A relation between cards selected in one library search. Myriad Landscape is the necessary
+/// specialized consumer; unsupported search shapes are rejected rather than generalized.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SearchSelectionConstraint {
+    SharedLandType,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -5069,6 +5080,7 @@ impl SpellEffectKind {
                 optional,
                 count,
                 filter,
+                selection_constraint,
                 slots,
                 zones,
                 destination,
@@ -5087,6 +5099,20 @@ impl SpellEffectKind {
                 }
                 if slots.is_empty() && *count == 0 {
                     return Err("SearchLibrary requires a positive count".into());
+                }
+                if selection_constraint.is_some()
+                    && (*optional
+                        || *count != 2
+                        || count_by_cast_cost.is_some()
+                        || !slots.is_empty()
+                        || !matches!(zones, SearchZoneSelection::Fixed(zones) if zones == &[CardSearchZone::Library])
+                        || filter.as_ref().and_then(|filter| filter.card_type)
+                            != Some(CardTypeFilter::BasicLand)
+                        || *destination != (SearchDestination::Battlefield { tapped: true })
+                        || conditional_destination.is_some()
+                        || result_id.is_some())
+                {
+                    return Err("shared land type requires a mandatory two-basic library search to the battlefield tapped without slots, conditional count/destination, or result binding".into());
                 }
                 if !slots.is_empty() && (filter.is_some() || count_by_cast_cost.is_some()) {
                     return Err(

@@ -1799,14 +1799,16 @@ const LAND_SUBTYPES: &[&str] = &[
     "Mine",
     "Mountain",
     "Plains",
+    "Planet",
     "Power-Plant",
     "Sphere",
     "Swamp",
     "Tower",
+    "Town",
     "Urza's",
 ];
 
-fn is_land_subtype(value: &str) -> bool {
+pub(super) fn is_land_subtype(value: &str) -> bool {
     LAND_SUBTYPES.contains(&value)
 }
 

@@ -990,15 +990,17 @@ impl GameEngine {
                 BattlefieldEntryCompletion::ZoneEntryBatch(mut batch) => {
                     self.reconcile_departed_zone_entry_members(&mut batch, departed_objects);
                     let mut resumed_events = Vec::new();
-                    if self.continue_zone_entry_batch(stack.clone(), *batch, &mut resumed_events)? {
-                        finish_with_events(self, resumed_events)
-                    } else {
+                    if let Some(stack) =
+                        self.continue_zone_entry_batch(stack, *batch, &mut resumed_events)?
+                    {
                         self.complete_parked_resolution_with_previous(
                             stack.item,
                             stack.resume_effect_index,
                             stack.previous_result,
                             resumed_events,
                         )?
+                    } else {
+                        finish_with_events(self, resumed_events)
                     }
                 }
                 completion => self.finish_entry_copy_without_recipient(
@@ -1765,15 +1767,15 @@ impl GameEngine {
                 self.continue_library_search_battlefield_entries(stack, progress, events)
             }
             BattlefieldEntryCompletion::ZoneEntryBatch(batch) => {
-                if self.continue_zone_entry_batch(stack.clone(), *batch, &mut events)? {
-                    Ok(finish_with_events(self, events))
-                } else {
+                if let Some(stack) = self.continue_zone_entry_batch(stack, *batch, &mut events)? {
                     self.complete_parked_resolution_with_previous(
                         stack.item,
                         stack.resume_effect_index,
                         stack.previous_result,
                         events,
                     )
+                } else {
+                    Ok(finish_with_events(self, events))
                 }
             }
             BattlefieldEntryCompletion::TokenBatch(batch) => self
@@ -3403,10 +3405,16 @@ impl GameEngine {
             }
             BattlefieldEntryCompletion::ZoneEntryBatch(mut batch) => {
                 batch.ready.push(event);
-                if self.continue_zone_entry_batch(stack.clone(), *batch, &mut events)? {
+                let Some(stack) = self.continue_zone_entry_batch(stack, *batch, &mut events)?
+                else {
                     return Ok(finish_with_events(self, events));
-                }
-                self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+                };
+                self.complete_parked_resolution_with_previous(
+                    stack.item,
+                    stack.resume_effect_index,
+                    stack.previous_result,
+                    events,
+                )
             }
             BattlefieldEntryCompletion::DevPlacement {
                 target,

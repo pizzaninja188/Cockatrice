@@ -165,6 +165,7 @@ fn issue_425_avengers_disassembled_sweeps_and_searches_for_the_lands_controller(
                 optional: true,
                 count: 1,
                 count_by_cast_cost: None,
+                selection_constraint: None,
                 filter: Some(ZoneCardFilter {
                     card_type: Some(CardTypeFilter::BasicLand),
                     ..ZoneCardFilter::default()
@@ -332,6 +333,7 @@ fn issue_425_scour_for_scrap_reveals_the_searched_artifact() {
             optional: false,
             count: 1,
             count_by_cast_cost: None,
+            selection_constraint: None,
             filter: Some(ZoneCardFilter {
                 card_type: Some(CardTypeFilter::Artifact),
                 ..ZoneCardFilter::default()
