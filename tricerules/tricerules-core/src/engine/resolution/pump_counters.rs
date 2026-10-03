@@ -1209,6 +1209,26 @@ pub(super) fn change_counters(
 ) -> Result<EffectOutcome, EngineError> {
     use tricerules_cards::primitives::CounterSnapshotSource;
     let (subject, counters, removing) = match effect {
+        SpellEffectKind::RemoveAllCounters { counter, subject } => {
+            for oid in cx.resolve_battlefield_subjects(&subject) {
+                let count = cx
+                    .engine
+                    .state
+                    .objects
+                    .get(&oid)
+                    .map_or(0, |object| object.counter_count(counter));
+                let changed = cx.engine.remove_counters(oid, counter, count);
+                if changed > 0 {
+                    cx.events.push(ev_log(format!(
+                        "{} removes {changed} {} counter(s) from {}",
+                        cx.spell_label,
+                        counter.label(),
+                        object_display_name(&cx.engine.state, cx.engine.registry, oid)
+                    )));
+                }
+            }
+            return Ok(EffectOutcome::Continue);
+        }
         SpellEffectKind::RemoveCounters {
             counter,
             count,

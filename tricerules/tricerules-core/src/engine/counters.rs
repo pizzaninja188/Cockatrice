@@ -16,6 +16,7 @@ pub(super) fn counter_option_id(kind: CounterKind) -> u32 {
         CounterKind::Foreshadow => 10,
         CounterKind::Storage => 11,
         CounterKind::Poison => 12,
+        CounterKind::Night => 13,
         CounterKind::Keyword(keyword) => 256 + keyword as u32,
     }
 }
@@ -220,4 +221,17 @@ fn counter_assignment_exists(
         remaining.insert(*candidate, available);
     }
     false
+}
+
+#[cfg(test)]
+mod replicating_ring_tests {
+    use super::*;
+
+    #[test]
+    fn night_counter_option_preserves_existing_ids_and_keyword_namespace() {
+        assert_eq!(counter_option_id(CounterKind::Night), 13);
+        assert_eq!(counter_option_id(CounterKind::Poison), 12);
+        assert_eq!(counter_option_id(CounterKind::Charge), 7);
+        assert!(counter_option_id(CounterKind::Keyword(Keyword::Flying)) >= 256);
+    }
 }

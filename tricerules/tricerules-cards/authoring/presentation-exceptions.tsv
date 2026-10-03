@@ -128,3 +128,6 @@ wash_out	wash_out	spell_effect/0/ChooseResolutionBranch/branches/blue	This optio
 wash_out	wash_out	spell_effect/0/ChooseResolutionBranch/branches/black	This option names only its chosen-color consequence; the complete Oracle line would hide the selected color and mislabel every branch identically.
 wash_out	wash_out	spell_effect/0/ChooseResolutionBranch/branches/red	This option names only its chosen-color consequence; the complete Oracle line would hide the selected color and mislabel every branch identically.
 wash_out	wash_out	spell_effect/0/ChooseResolutionBranch/branches/green	This option names only its chosen-color consequence; the complete Oracle line would hide the selected color and mislabel every branch identically.
+replicating_ring	replicating_ring	triggered_abilities/triggered_01/effect/1/ChooseResolutionBranch/branches/eight_or_more	Internal automatic threshold consequence has no separate printed ability line; the parent carries the complete upkeep wording.
+replicating_ring	replicating_ring	triggered_abilities/triggered_01/effect/1/ChooseResolutionBranch/branches/below_eight	Synthetic empty FirstApplicable fallback has no printed instruction.
+replicated_ring	replicated_ring	activated_abilities/activated_01	Ordinary named token has no normal-card Oracle fingerprint; exact token database supplies display identity.

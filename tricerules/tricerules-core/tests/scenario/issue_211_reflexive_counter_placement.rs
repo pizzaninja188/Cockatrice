@@ -16,13 +16,13 @@ fn choose_trigger_target(object_id: u32) -> RuledCommand {
     }
 }
 
-fn move_ascension_to_graveyard() -> RuledCommand {
+fn move_ascension_to(zone: DevZone) -> RuledCommand {
     RuledCommand {
         cmd: Some(Cmd::DevCommand(DevCommand {
             target_player_id: 0,
             dev: Some(dev_command::Dev::MoveCard(DevMoveCard {
                 card_name: "Earthbender Ascension".into(),
-                zone: DevZone::Graveyard as i32,
+                zone: zone as i32,
                 ready: false,
             })),
         })),
@@ -161,7 +161,7 @@ fn reflexive_intervening_if_is_rechecked_on_resolution() {
 }
 
 #[test]
-fn reflexive_trigger_does_nothing_after_its_source_leaves() {
+fn reflexive_trigger_uses_last_known_counters_after_its_source_leaves() {
     let (mut engine, ascension, creature) = threshold_engine(211_004);
     let forest = relocate_to_hand(&mut engine, 0, "forest");
     let forest_slot = engine.state.players[0]
@@ -179,16 +179,97 @@ fn reflexive_trigger_does_nothing_after_its_source_leaves() {
         .expect("target controlled creature");
     engine.enable_dev_commands();
     engine
-        .apply_command(0, &move_ascension_to_graveyard())
+        .apply_command(0, &move_ascension_to(DevZone::Graveyard))
         .expect("move source before reflexive trigger resolves");
     assert_eq!(engine.state.objects[&ascension].zone, Zone::Graveyard);
     pass_both_players(&mut engine);
 
     assert_eq!(
         engine.state.objects[&creature].counter_count(CounterKind::PlusOnePlusOne),
-        0
+        1
     );
-    assert!(!engine.effective_has_keyword(creature, Keyword::Trample));
+    assert!(engine.effective_has_keyword(creature, Keyword::Trample));
+}
+
+#[test]
+fn reflexive_intervening_if_uses_departed_generation_not_returned_counters() {
+    // CR 603.4 and 608.2h: recheck the original source using its exact-generation LKI.
+    for departed_count in [3, 4] {
+        for returned_count in [0, 9] {
+            let (mut engine, ascension, creature) = threshold_engine(211_005);
+            let forest = relocate_to_hand(&mut engine, 0, "forest");
+            let slot = engine.state.players[0]
+                .hand
+                .iter()
+                .position(|candidate| *candidate == forest)
+                .unwrap();
+            engine.apply_command(0, &play_land(slot)).unwrap();
+            pass_both_players(&mut engine);
+            engine
+                .apply_command(0, &choose_trigger_target(creature))
+                .unwrap();
+            assert_eq!(engine.state.stack.len(), 1);
+            let generation = engine
+                .state
+                .zone_change_generation
+                .get(&ascension)
+                .copied()
+                .unwrap_or(0);
+            engine
+                .state
+                .objects
+                .get_mut(&ascension)
+                .unwrap()
+                .counters
+                .insert(CounterKind::Quest, departed_count);
+            engine.enable_dev_commands();
+            engine
+                .apply_command(0, &move_ascension_to(DevZone::Graveyard))
+                .unwrap();
+            engine
+                .apply_command(0, &move_ascension_to(DevZone::Battlefield))
+                .unwrap();
+            assert_ne!(engine.state.zone_change_generation[&ascension], generation);
+            engine
+                .state
+                .objects
+                .get_mut(&ascension)
+                .unwrap()
+                .counters
+                .insert(CounterKind::Quest, returned_count);
+
+            // Resolve only the returned incarnation's entry ability first. Search for zero
+            // cards so no fresh landfall can change its counters or create another reflexive.
+            assert_eq!(engine.state.pending_triggers.len(), 1);
+            engine
+                .apply_command(0, &choose_trigger_target(forest))
+                .unwrap();
+            pass_both_players(&mut engine);
+            engine
+                .apply_command(0, &submit_resolution_choice(vec![]))
+                .unwrap();
+            assert_eq!(
+                engine.state.stack.len(),
+                1,
+                "only the original reflexive remains"
+            );
+            pass_both_players(&mut engine);
+            assert!(engine.state.pending_triggers.is_empty());
+            assert!(engine.state.stack.is_empty());
+            assert_eq!(
+                engine.state.objects[&creature].counter_count(CounterKind::PlusOnePlusOne),
+                u32::from(departed_count == 4)
+            );
+            assert_eq!(
+                engine.effective_has_keyword(creature, Keyword::Trample),
+                departed_count == 4
+            );
+            assert_eq!(
+                engine.state.objects[&ascension].counter_count(CounterKind::Quest),
+                returned_count
+            );
+        }
+    }
 }
 
 #[test]

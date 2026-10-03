@@ -1311,7 +1311,7 @@ impl GameEngine {
                 condition.matches_value(clamp_public_count(count))
             }
             GameCondition::SourceCounterCount { counter, .. } => {
-                let count = self
+                let live = self
                     .state
                     .objects
                     .get(&context.source_object_id)
@@ -1324,7 +1324,15 @@ impl GameEngine {
                             .unwrap_or(0)
                             == context.source_zone_change
                     })
-                    .map(|object| object.counter_count(*counter))
+                    .map(|object| &object.counters);
+                let counters = live.or_else(|| {
+                    self.state
+                        .last_known_counters_by_generation
+                        .get(&(context.source_object_id, context.source_zone_change))
+                });
+                let count = counters
+                    .and_then(|bag| bag.get(counter))
+                    .copied()
                     .unwrap_or(0);
                 condition.matches_value(count)
             }

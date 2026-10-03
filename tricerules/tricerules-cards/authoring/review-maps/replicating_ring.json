@@ -1,0 +1,64 @@
+{
+  "format_version": 1,
+  "oracle_id": "1ff00f5b-4bf9-4724-8bb5-6b9a9eb0ec7f",
+  "spans": [
+    {
+      "face_id": "replicating_ring",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "replicating_ring",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "tokens": [
+    "replicated_ring"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_replicating_ring::ring_paid_cast_and_exact_card_token_characteristics",
+      "covers": "paid cast and exact card token characteristics"
+    },
+    {
+      "test": "scenario deck_coverage_replicating_ring::ring_own_upkeep_threshold_removes_all_night_and_preserves_other_counters",
+      "covers": "own upkeep threshold removes all night and preserves other counters"
+    },
+    {
+      "test": "scenario deck_coverage_replicating_ring::ring_threshold_is_resolution_time_and_external_eighth_counter_is_not_an_event",
+      "covers": "threshold is resolution time and external eighth counter is not an event"
+    },
+    {
+      "test": "scenario deck_coverage_replicating_ring::ring_prevented_placement_still_checks_existing_eight_counters",
+      "covers": "prevented placement still checks existing eight counters"
+    },
+    {
+      "test": "scenario deck_coverage_replicating_ring::ring_departed_generation_uses_seven_or_eight_lki_and_cannot_mutate_returned_ring",
+      "covers": "departed generation uses seven or eight lki and cannot mutate returned ring"
+    },
+    {
+      "test": "scenario deck_coverage_replicating_ring::ring_control_changes_preserve_trigger_controller_and_new_upkeep_scope",
+      "covers": "control changes preserve trigger controller and new upkeep scope"
+    },
+    {
+      "test": "scenario deck_coverage_replicating_ring::ring_token_entry_parks_after_removal_rejects_bad_answers_and_commits_once",
+      "covers": "token entry parks after removal rejects bad answers and commits once"
+    },
+    {
+      "test": "scenario deck_coverage_replicating_ring::ring_and_tokens_produce_all_five_colors_immediately_and_reject_invalid_activations",
+      "covers": "and tokens produce all five colors immediately and reject invalid activations"
+    },
+    {
+      "test": "scenario deck_coverage_replicating_ring::ring_replays_paid_cast_eight_real_upkeeps_and_parked_token_entry_commands",
+      "covers": "replays paid cast eight real upkeeps and parked token entry commands"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

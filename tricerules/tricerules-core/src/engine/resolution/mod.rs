@@ -1820,6 +1820,7 @@ impl GameEngine {
                     }
                     SpellEffectKind::Blight { count } => blight::blight(&mut cx, count)?,
                     effect @ (SpellEffectKind::RemoveCounters { .. }
+                    | SpellEffectKind::RemoveAllCounters { .. }
                     | SpellEffectKind::PutCounterSnapshot { .. }) => {
                         pump_counters::change_counters(&mut cx, effect)?
                     }

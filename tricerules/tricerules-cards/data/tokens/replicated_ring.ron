@@ -1,0 +1,15 @@
+// Exact ordinary named token, Oracle 23ee9957-a9b7-4c2e-8bf6-95e89a0dac7d.
+// Token templates have no normal-card Oracle presentation fingerprint.
+(
+  id: "replicated_ring",
+  name: "Replicated Ring",
+  face_id: "replicated_ring",
+  supertypes: ["Snow"],
+  types: ["Artifact"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: Fallback,
+    costs: [Tap],
+    effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+  )],
+)

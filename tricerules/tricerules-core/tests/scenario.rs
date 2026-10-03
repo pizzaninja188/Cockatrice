@@ -8,6 +8,12 @@
 #[path = "scenario/authoring_actions.rs"]
 mod authoring_actions;
 
+#[path = "scenario/replicating_ring_runtime.rs"]
+mod replicating_ring_runtime;
+
+#[path = "scenario/deck_coverage_replicating_ring.rs"]
+mod deck_coverage_replicating_ring;
+
 #[path = "scenario/deck_coverage_crawlspace.rs"]
 mod deck_coverage_crawlspace;
 #[path = "scenario/deck_coverage_phyrexian_metamorph.rs"]

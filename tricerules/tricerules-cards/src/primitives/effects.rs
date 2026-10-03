@@ -90,6 +90,8 @@ pub enum CounterKind {
     Finality,
     /// CR 122.1 / 704.5c: a player with ten or more poison counters loses the game.
     Poison,
+    /// Replicating Ring's ordinary named upkeep counter.
+    Night,
 }
 
 impl CounterKind {
@@ -110,6 +112,7 @@ impl CounterKind {
             CounterKind::Foreshadow => "foreshadow".into(),
             CounterKind::Finality => "finality".into(),
             CounterKind::Poison => "poison".into(),
+            CounterKind::Night => "night".into(),
         }
     }
 
@@ -1733,6 +1736,12 @@ pub enum SpellEffectKind {
         #[serde(default)]
         subject: EffectSubject,
     },
+    /// Replicating Ring and Lightning Coils remove the entire live count of one named kind.
+    RemoveAllCounters {
+        counter: CounterKind,
+        #[serde(default)]
+        subject: EffectSubject,
+    },
     /// CR 122.8: recreate a departed object's counter bag, never move live counters.
     PutCounterSnapshot {
         from: CounterSnapshotSource,
@@ -2531,6 +2540,9 @@ impl SpellEffectKind {
             } | SpellEffectKind::RemoveCounters {
                 subject: EffectSubject::AttachedObject,
                 ..
+            } | SpellEffectKind::RemoveAllCounters {
+                subject: EffectSubject::AttachedObject,
+                ..
             } | SpellEffectKind::PutCounterSnapshot {
                 subject: EffectSubject::AttachedObject,
                 ..
@@ -2595,6 +2607,9 @@ impl SpellEffectKind {
                 subject: EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::RemoveCounters {
+                subject: EffectSubject::TriggerObject,
+                ..
+            } | SpellEffectKind::RemoveAllCounters {
                 subject: EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::PutCounterSnapshot {
@@ -2783,6 +2798,7 @@ impl SpellEffectKind {
             | SpellEffectKind::Explore { subject }
             | SpellEffectKind::PutCounters { subject, .. }
             | SpellEffectKind::RemoveCounters { subject, .. }
+            | SpellEffectKind::RemoveAllCounters { subject, .. }
             | SpellEffectKind::PutCounterSnapshot { subject, .. } => match subject {
                 EffectSubject::Chosen(target) => vec![TargetRole::Filtered(target)],
                 EffectSubject::Source
@@ -3190,6 +3206,7 @@ impl SpellEffectKind {
                 | SpellEffectKind::Explore { subject: value }
                 | SpellEffectKind::PutCounters { subject: value, .. }
                 | SpellEffectKind::RemoveCounters { subject: value, .. }
+                | SpellEffectKind::RemoveAllCounters { subject: value, .. }
                 | SpellEffectKind::PutCounterSnapshot { subject: value, .. } => subject(value),
                 _ => {}
             }
@@ -3617,7 +3634,8 @@ impl SpellEffectKind {
             filter.validate()?;
         }
         if let SpellEffectKind::PutCounters { counter, .. }
-        | SpellEffectKind::RemoveCounters { counter, .. } = self
+        | SpellEffectKind::RemoveCounters { counter, .. }
+        | SpellEffectKind::RemoveAllCounters { counter, .. } = self
         {
             counter.validate()?;
         }
@@ -4371,6 +4389,11 @@ impl SpellEffectKind {
                     | EffectSubject::AttachedObject
                     | EffectSubject::TriggerObject,
                 ..
+            } | SpellEffectKind::RemoveAllCounters {
+                subject: EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject,
+                ..
             } | SpellEffectKind::PutCounterSnapshot {
                 subject: EffectSubject::Source
                     | EffectSubject::AttachedObject
@@ -4566,6 +4589,10 @@ impl SpellEffectKind {
                 ..
             }
             | SpellEffectKind::RemoveCounters {
+                subject: EffectSubject::Chosen(target),
+                ..
+            }
+            | SpellEffectKind::RemoveAllCounters {
                 subject: EffectSubject::Chosen(target),
                 ..
             }

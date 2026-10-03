@@ -1,0 +1,40 @@
+// Oracle 1ff00f5b-4bf9-4724-8bb5-6b9a9eb0ec7f; exact source, rulings and token archived.
+(
+  id: "replicating_ring",
+  name: "Replicating Ring",
+  face_id: "replicating_ring",
+  mana_cost: "{3}",
+  supertypes: ["Snow"],
+  types: ["Artifact"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Tap],
+    effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: AtBeginningOfUpkeep(player: Controller),
+    effect: [
+      PutCounters(counter: Night, count: 1, subject: Source),
+      ChooseResolutionBranch(
+        selection: FirstApplicable,
+        branches: [
+          (
+            branch_id: "eight_or_more",
+            // Internal automatic branches have no separate printed ability line.
+            presentation: Fallback,
+            cost: None,
+            requirement: GameCondition(SourceCounterCount(counter: Night, min: Some(8))),
+            effects: [
+              RemoveAllCounters(counter: Night, subject: Source),
+              CreateTokens(token: "replicated_ring", count: 8),
+            ],
+          ),
+          (branch_id: "below_eight", presentation: Fallback, cost: None, requirement: Always, effects: []),
+        ],
+      ),
+    ],
+  )],
+)

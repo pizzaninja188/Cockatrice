@@ -1232,7 +1232,7 @@ fn validate_effect_targets(
         }
         SpellEffectKind::PumpTarget { subject, .. }
         | SpellEffectKind::Explore { subject }
-        | SpellEffectKind::PutCounters { subject, .. } | SpellEffectKind::RemoveCounters { subject, .. } | SpellEffectKind::PutCounterSnapshot { subject, .. }
+        | SpellEffectKind::PutCounters { subject, .. } | SpellEffectKind::RemoveCounters { subject, .. } | SpellEffectKind::RemoveAllCounters { subject, .. } | SpellEffectKind::PutCounterSnapshot { subject, .. }
         | SpellEffectKind::GrantKeywords { subject, .. }
         | SpellEffectKind::ApplyPermanentModifier { subject, .. }
         | SpellEffectKind::RemoveAllAbilities { subject, .. }
@@ -1907,6 +1907,10 @@ fn spell_target_legality_error_with_context(
             subject: EffectSubject::Chosen(_),
             ..
         }
+        | SpellEffectKind::RemoveAllCounters {
+            subject: EffectSubject::Chosen(_),
+            ..
+        }
         | SpellEffectKind::PutCounterSnapshot {
             subject: EffectSubject::Chosen(_),
             ..
@@ -1947,6 +1951,10 @@ fn spell_target_legality_error_with_context(
             subject: EffectSubject::Source,
         }
         | SpellEffectKind::RemoveCounters {
+            subject: EffectSubject::Source | EffectSubject::AttachedObject,
+            ..
+        }
+        | SpellEffectKind::RemoveAllCounters {
             subject: EffectSubject::Source | EffectSubject::AttachedObject,
             ..
         }
