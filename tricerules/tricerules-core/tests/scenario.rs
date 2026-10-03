@@ -1043,3 +1043,6 @@ mod deck_coverage_black_vise;
 
 #[path = "scenario/deck_coverage_war_room.rs"]
 mod deck_coverage_war_room;
+
+#[path = "scenario/into_the_wilds.rs"]
+mod into_the_wilds;

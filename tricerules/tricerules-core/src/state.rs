@@ -1025,6 +1025,7 @@ pub enum PendingLibraryPartitionKind {
 
 #[derive(serde::Serialize, Debug, Clone)]
 pub enum PendingLibraryLookStage {
+    IntoTheWilds,
     ChooseToHand {
         looked_at: Vec<ObjectId>,
         bottom_order: LibraryBottomOrder,

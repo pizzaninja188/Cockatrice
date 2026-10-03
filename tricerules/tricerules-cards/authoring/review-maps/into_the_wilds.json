@@ -1,0 +1,84 @@
+{
+  "format_version": 1,
+  "oracle_id": "70d6cd9c-6311-4d8e-b74a-8edc11d1c05e",
+  "spans": [
+    {
+      "face_id": "into_the_wilds",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::AtBeginningOfUpkeep",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::IntoTheWilds",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario into_the_wilds::actual_into_the_wilds_accepts_resolution_time_top_without_using_land_play",
+      "covers": "accepts resolution time top without using land play"
+    },
+    {
+      "test": "scenario into_the_wilds::actual_into_the_wilds_decline_and_nonland_acknowledgement_keep_exact_next_draw",
+      "covers": "decline and nonland acknowledgement keep exact next draw"
+    },
+    {
+      "test": "scenario into_the_wilds::actual_into_the_wilds_wrong_actor_and_duplicate_answer_are_atomic",
+      "covers": "wrong actor and duplicate answer are atomic"
+    },
+    {
+      "test": "scenario into_the_wilds::actual_into_the_wilds_empty_library_is_a_noop_without_a_picker",
+      "covers": "empty library is a noop without a picker"
+    },
+    {
+      "test": "scenario into_the_wilds::actual_into_the_wilds_stale_top_generation_zone_owner_and_land_type_are_atomic",
+      "covers": "stale top generation zone owner and land type are atomic"
+    },
+    {
+      "test": "scenario into_the_wilds::actual_into_the_wilds_nonland_cannot_be_accepted_but_can_be_acknowledged",
+      "covers": "nonland cannot be accepted but can be acknowledged"
+    },
+    {
+      "test": "scenario into_the_wilds::actual_into_the_wilds_source_departure_preserves_frozen_trigger_controller",
+      "covers": "source departure preserves frozen trigger controller"
+    },
+    {
+      "test": "scenario into_the_wilds::actual_into_the_wilds_ordinary_tapped_entry_and_etb_are_preserved",
+      "covers": "ordinary tapped entry and etb are preserved"
+    },
+    {
+      "test": "scenario into_the_wilds::actual_into_the_wilds_controller_departure_clears_the_private_picker",
+      "covers": "controller departure clears the private picker"
+    },
+    {
+      "test": "scenario into_the_wilds::actual_into_the_wilds_replacement_pause_and_controller_departure_are_safe",
+      "covers": "replacement pause and controller departure are safe"
+    },
+    {
+      "test": "scenario into_the_wilds::actual_into_the_wilds_logged_choice_replays_identically",
+      "covers": "logged choice replays identically"
+    },
+    {
+      "test": "scenario into_the_wilds::actual_into_the_wilds_real_cast_pays_exact_green_cost",
+      "covers": "real cast pays exact green cost"
+    },
+    {
+      "test": "scenario into_the_wilds::actual_into_the_wilds_private_image_and_public_wording_do_not_leak_land_eligibility",
+      "covers": "private image and public wording do not leak land eligibility"
+    },
+    {
+      "test": "deck_coverage_search_lands::into_the_wilds_complete_definition_and_oracle_presentation_are_exact",
+      "covers": "exact identity, single green enchantment face, cost, mandatory own-upkeep trigger, specialized effect and entire Oracle line presentation"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

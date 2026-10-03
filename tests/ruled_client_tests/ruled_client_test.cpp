@@ -7917,6 +7917,34 @@ TEST_F(RuledClientTest, LibraryLookChoiceShowsEveryCardImageButOnlyMatchingCards
     EXPECT_EQ(state->resolutionHandPickClickOrderFor(3), 1);
 }
 
+TEST_F(RuledClientTest, LibraryLookNonlandImageIsUnselectableAndEmptyConfirmationWorks)
+{
+    QSignalSpy started(state, &RuledClientState::librarySearchPickStarted);
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_LOOK);
+    choice->set_min(0);
+    choice->set_max(0);
+    choice->set_prompt_text("Look at the top card. You may put it onto the battlefield if it is a land.");
+    choice->add_candidate_object_ids(41);
+    choice->add_candidate_server_card_ids(0);
+    choice->add_candidate_names("Divination");
+    choice->add_candidate_selectable(false);
+    apply(batch);
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    ASSERT_EQ(started.count(), 1);
+    EXPECT_EQ(started.at(0).at(0).toStringList(), QStringList({QStringLiteral("Divination")}));
+    EXPECT_FALSE(state->isResolutionHandPickCardSelectable(0));
+    state->toggleResolutionHandPickCard(0);
+    EXPECT_EQ(state->resolutionHandPickSelected(), 0);
+    host.sentCommands.clear();
+    state->submitResolutionHandPick();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids_size(), 0);
+    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().decision(), ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED);
+}
+
 TEST_F(RuledClientTest, MandatoryLibraryLookRequiresTwoDistinctImagesAndCannotDecline)
 {
     ruled::v1::RuledEventBatch batch;

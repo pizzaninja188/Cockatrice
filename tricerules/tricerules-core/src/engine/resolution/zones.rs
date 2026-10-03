@@ -3605,9 +3605,131 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
     Ok(EffectOutcome::Suspended)
 }
 
-/// Look at a bounded top-of-library window, show every card image privately, and let the
-/// controller choose at most one matching card. Selection legality stays engine-authored through
-/// `candidate_selectable`; the client never derives it from display/Oracle data.
+/// Look privately at the current top card, including a nonland that must be acknowledged.
+/// The optional placement reuses normal library-origin entry after this choice is answered.
+pub(super) fn into_the_wilds(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
+    let engine = &mut *cx.engine;
+    let controller = cx.controller;
+    let Some(idx) = engine.state.player_idx(controller) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let looked: Vec<ObjectId> = engine.state.players[idx]
+        .library
+        .iter()
+        .take(1)
+        .copied()
+        .collect();
+    if looked.is_empty() {
+        cx.events.push(ev_log(format!(
+            "P{controller} looks at an empty library ({}).",
+            cx.spell_label
+        )));
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let selectable: Vec<bool> = looked
+        .iter()
+        .map(|&oid| {
+            zone_card_matches_filter(
+                &engine.state,
+                engine.registry,
+                oid,
+                Some(&ZoneCardFilter {
+                    card_type: Some(tricerules_cards::primitives::CardTypeFilter::Land),
+                    ..Default::default()
+                }),
+            )
+        })
+        .collect();
+    let legal: Vec<ObjectId> = looked
+        .iter()
+        .copied()
+        .zip(&selectable)
+        .filter_map(|(oid, selectable)| selectable.then_some(oid))
+        .collect();
+    let (candidate_card_ids, candidate_names) = candidate_identities(engine, &looked);
+    let n = looked.len() as u32;
+    let min = 0;
+    let max = legal.len() as u32;
+    // Wording must not disclose the hidden card's type to waiting recipients.
+    let prompt =
+        "Look at the top card. You may put it onto the battlefield if it is a land.".to_string();
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                candidate_token_identities: Vec::new(),
+                candidate_player_ids: Vec::new(),
+                deciding_player_id: controller,
+                source_object_id: cx.top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: custom::ChoiceKind::LibraryLook as i32,
+                candidate_object_ids: looked.clone(),
+                candidate_card_ids,
+                candidate_names: candidate_names.clone(),
+                min,
+                max,
+                ordered: false,
+                unique_names: false,
+                candidate_server_card_ids: Vec::new(),
+                resolution_branches: Vec::new(),
+                mana_cost: String::new(),
+                generic_mana_cost: 0,
+                payment_currently_legal: false,
+                candidate_selectable: selectable,
+                public_reveal: None,
+                candidate_source_zones: Vec::new(),
+                combat_defender_options: Vec::new(),
+                waterbend: false,
+                selection_slots: Vec::new(),
+                replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
+            },
+        )),
+    });
+    cx.events.push(ev_log(format!(
+        "P{controller} looks at the top {n} cards of their library ({}).",
+        cx.spell_label
+    )));
+    cx.events.push(ev_log_private(
+        format!("P{controller} looks at {}.", candidate_names.join(", ")),
+        controller,
+    ));
+    engine.state.pending_resolution = Some(PendingResolution {
+        deciding_player: controller,
+        presentation: PendingResolutionPresentation {
+            source_object_id: cx.top.id,
+            candidates: legal,
+            min,
+            max,
+            ordered: false,
+            unique_names: false,
+            prompt,
+            choice_kind: custom::ChoiceKind::LibraryLook,
+        },
+        continuation: ResolutionContinuation::LibraryLook {
+            stack: ParkedStackResolution::new(cx.top.clone()),
+            candidates: looked
+                .iter()
+                .map(|&oid| {
+                    (
+                        oid,
+                        engine
+                            .state
+                            .zone_change_generation
+                            .get(&oid)
+                            .copied()
+                            .unwrap_or(0),
+                    )
+                })
+                .collect(),
+            stage: PendingLibraryLookStage::IntoTheWilds,
+        },
+    });
+    Ok(EffectOutcome::Suspended)
+}
+
+/// Look at a bounded top-library cohort, publishing every card image while letting the
+/// controller choose matching cards to hand. Eligibility stays engine-authored.
 pub(super) fn look_choose_to_hand(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

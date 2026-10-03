@@ -239,3 +239,42 @@ fn ordinary_searches_keep_their_default_schema_and_semantics() {
     let round_trip: SpellEffectKind = ron::from_str(&ron::to_string(&effect).unwrap()).unwrap();
     assert_eq!(effect, round_trip);
 }
+
+#[test]
+fn into_the_wilds_complete_definition_and_oracle_presentation_are_exact() {
+    let registry = CardRegistry::global();
+    let card = registry.get("into_the_wilds").unwrap();
+    assert_eq!(
+        registry.id_for_name("Into the Wilds"),
+        Some("into_the_wilds")
+    );
+    assert_eq!(card.face_count(), 1);
+    assert_eq!(card.color_identity(), vec![Color::Green]);
+    let face = card.primary_face();
+    assert_eq!(face.face_id.as_str(), "into_the_wilds");
+    assert_eq!(face.mana_cost.to_string(), "{3}{G}");
+    assert_eq!(face.types, ["Enchantment"]);
+    assert_eq!(face.colors(), vec![Color::Green]);
+    assert!(
+        face.activated_abilities.is_empty()
+            && face.static_abilities.is_empty()
+            && face.spell_effect.is_empty()
+    );
+    assert_eq!(face.triggered_abilities.len(), 1);
+    let ability = &face.triggered_abilities[0];
+    assert_eq!(
+        ability.presentation,
+        AbilityPresentation::OracleLines(vec![1])
+    );
+    assert!(!ability.may && ability.targeting.is_none());
+    assert!(matches!(
+        ability.trigger,
+        TriggerCondition::AtBeginningOfUpkeep {
+            player: CastTriggerPlayer::Controller
+        }
+    ));
+    assert!(matches!(
+        ability.effect.as_slice(),
+        [SpellEffectKind::IntoTheWilds]
+    ));
+}

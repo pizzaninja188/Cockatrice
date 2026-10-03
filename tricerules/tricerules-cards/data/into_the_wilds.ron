@@ -1,0 +1,16 @@
+// Exact M14 Oracle and WotC rulings verified 2026-10-03.
+// CR 603.2b upkeep, 701.20e private look, 305.4 placement, 113.7a independent ability.
+(
+  id: "into_the_wilds",
+  name: "Into the Wilds",
+  face_id: "into_the_wilds",
+  mana_cost: "{3}{G}",
+  types: ["Enchantment"],
+  triggered_abilities: [(
+    ability_id: "upkeep_look_and_land",
+    presentation: OracleLines([1]),
+    trigger: AtBeginningOfUpkeep(player: Controller),
+    may: false,
+    effect: [IntoTheWilds],
+  )],
+)

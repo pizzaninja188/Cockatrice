@@ -1370,6 +1370,85 @@ TEST_F(RuledBatchTest, LibraryLookChoiceKeepsImagesAndEligibilityPrivate)
     EXPECT_EQ(hidden.prompt_text(), "Opponent is making a resolution choice.");
 }
 
+TEST_F(RuledBatchTest, LibraryLookLandAndNonlandWaitingPayloadsMatchLiveAndOnReconnect)
+{
+    auto *spectator = new Server_Player(game, 3, userA, true, nullptr);
+    insertParticipant(3, spectator);
+    std::string previousLive[2];
+    std::string previousReconnect[2];
+    for (const bool land : {false, true}) {
+        ruled::v1::RuledEventBatch batch;
+        auto *choice = batch.add_events()->mutable_resolution_choice_required();
+        choice->set_deciding_player_id(p1->getPlayerId());
+        choice->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_LOOK);
+        choice->set_min(0);
+        choice->set_max(land ? 1 : 0);
+        choice->set_prompt_text("Look at the top card. You may put it onto the battlefield if it is a land.");
+        choice->add_candidate_object_ids(81);
+        choice->add_candidate_card_ids(land ? "forest" : "divination");
+        choice->add_candidate_names(land ? "Forest" : "Divination");
+        choice->add_candidate_selectable(land);
+        const auto owner = redactFor(batch, p1);
+        const auto &ownerChoice = owner.events(0).resolution_choice_required();
+        EXPECT_EQ(ownerChoice.max(), land ? 1u : 0u);
+        ASSERT_EQ(ownerChoice.candidate_names_size(), 1);
+        EXPECT_EQ(ownerChoice.candidate_names(0), land ? "Forest" : "Divination");
+        ASSERT_EQ(ownerChoice.candidate_selectable_size(), 1);
+        EXPECT_EQ(ownerChoice.candidate_selectable(0), land);
+        ASSERT_EQ(ownerChoice.candidate_server_card_ids_size(), 1);
+        int index = 0;
+        for (auto *participant : {p2, spectator}) {
+            const auto observer = redactFor(batch, participant);
+            const auto &hidden = observer.events(0).resolution_choice_required();
+            EXPECT_EQ(hidden.min(), 0u);
+            EXPECT_EQ(hidden.max(), 0u);
+            EXPECT_EQ(hidden.candidate_object_ids_size(), 0);
+            EXPECT_EQ(hidden.candidate_card_ids_size(), 0);
+            EXPECT_EQ(hidden.candidate_names_size(), 0);
+            EXPECT_EQ(hidden.candidate_server_card_ids_size(), 0);
+            EXPECT_EQ(hidden.candidate_selectable_size(), 0);
+            if (land)
+                EXPECT_EQ(hidden.SerializeAsString(), previousLive[index]);
+            else
+                previousLive[index] = hidden.SerializeAsString();
+            ++index;
+        }
+        ruled::v1::IpcResponse response;
+        response.set_ok(true);
+        response.mutable_batch()->CopyFrom(batch);
+        updatePendingResolutionChoiceCache(response);
+        index = 0;
+        for (auto *participant : {p2, spectator, p1}) {
+            ResponseContainer reconnect(-1);
+            game->createGameJoinedEvent(participant, reconnect, true);
+            const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+            ASSERT_NE(container, nullptr);
+            ruled::v1::RuledEventBatch restored;
+            ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+            const auto found = std::find_if(restored.events().begin(), restored.events().end(),
+                [](const auto &event) { return event.has_resolution_choice_required(); });
+            ASSERT_NE(found, restored.events().end());
+            const auto &hidden = found->resolution_choice_required();
+            if (participant == p1) {
+                EXPECT_EQ(hidden.max(), land ? 1u : 0u);
+                ASSERT_EQ(hidden.candidate_names_size(), 1);
+                EXPECT_EQ(hidden.candidate_names(0), land ? "Forest" : "Divination");
+                ASSERT_EQ(hidden.candidate_selectable_size(), 1);
+                EXPECT_EQ(hidden.candidate_selectable(0), land);
+            } else {
+                EXPECT_EQ(hidden.min(), 0u);
+                EXPECT_EQ(hidden.max(), 0u);
+                EXPECT_EQ(hidden.SerializeAsString(), previousLive[index]);
+                if (land)
+                    EXPECT_EQ(hidden.SerializeAsString(), previousReconnect[index]);
+                else
+                    previousReconnect[index] = hidden.SerializeAsString();
+            }
+            ++index;
+        }
+    }
+}
+
 TEST_F(RuledBatchTest, MultiZoneSearchMetadataAndTransientIdsAreDeciderPrivate)
 {
     ruled::v1::RuledEventBatch batch;

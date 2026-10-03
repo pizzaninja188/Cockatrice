@@ -1779,6 +1779,7 @@ impl GameEngine {
                     }
                     effect @ SpellEffectKind::Explore { .. } => zones::explore(&mut cx, effect)?,
                     SpellEffectKind::ManifestDread => zones::manifest_dread(&mut cx)?,
+                    SpellEffectKind::IntoTheWilds => zones::into_the_wilds(&mut cx)?,
                     effect @ SpellEffectKind::LookChooseToHand { .. } => {
                         zones::look_choose_to_hand(&mut cx, effect)?
                     }

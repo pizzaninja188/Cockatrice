@@ -316,6 +316,86 @@ impl GameEngine {
             _ => return Err(EngineError::Illegal("library-look continuation missing")),
         };
 
+        if matches!(stage, PendingLibraryLookStage::IntoTheWilds) {
+            let ResolutionContinuation::LibraryLook { candidates, .. } = &pending.continuation
+            else {
+                unreachable!("validated library-look continuation")
+            };
+            let current_top = candidates.len() == 1
+                && self.state.players[idx].library.front().copied() == Some(candidates[0].0)
+                && stack.item.controller == controller;
+            let legal_accept = chosen.is_empty()
+                || (candidates.len() == 1
+                    && chosen.len() == 1
+                    && chosen[0] == candidates[0].0
+                    && zone_card_matches_filter(
+                        &self.state,
+                        self.registry,
+                        chosen[0],
+                        Some(&ZoneCardFilter {
+                            card_type: Some(tricerules_cards::primitives::CardTypeFilter::Land),
+                            ..Default::default()
+                        }),
+                    ));
+            if !current_top || !legal_accept {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "stale Into the Wilds top or land eligibility",
+                ));
+            }
+            if chosen.is_empty() {
+                return self.complete_parked_resolution_with_previous(
+                    stack.item,
+                    stack.resume_effect_index,
+                    stack.previous_result,
+                    ev,
+                );
+            }
+            let entry = BattlefieldEntryEvent {
+                entry_reveal_receipts: Vec::new(),
+                mana_colors_spent_to_cast: Default::default(),
+                prepared: false,
+                object_id: chosen[0],
+                deciding_player: controller,
+                destination_controller: controller,
+                battle_protector: None,
+                face_index: 0,
+                unlock_room_door: None,
+                chosen_x: 0,
+                cast_by: None,
+                cast_cost_receipts: Vec::new(),
+                player_life_snapshot: self.player_life_snapshot(),
+                tapped: false,
+                set_types: None,
+                chosen_basic_land_type: None,
+                chosen_opponents: Vec::new(),
+                entry_counters: BTreeMap::new(),
+                entry_modifiers: Vec::new(),
+                attached_to: None,
+                pending_copy_candidate: None,
+                pending_aura_recipient: None,
+                applied_effects: Vec::new(),
+            };
+            let label = object_display_name(&self.state, self.registry, stack.item.id);
+            let Some(stack) = self.begin_zone_entry_batch(
+                stack,
+                vec![entry],
+                Zone::Library,
+                &label,
+                None,
+                &mut ev,
+            )?
+            else {
+                return Ok(finish_with_events(self, ev));
+            };
+            return self.complete_parked_resolution_with_previous(
+                stack.item,
+                stack.resume_effect_index,
+                stack.previous_result,
+                ev,
+            );
+        }
+
         if matches!(stage, PendingLibraryLookStage::OrderBottom) {
             self.state.players[idx]
                 .library
@@ -469,5 +549,210 @@ impl GameEngine {
         candidates.retain(|(oid, _)| !chosen.contains(oid));
         self.state.pending_resolution = Some(pending);
         Ok(finish_with_events(self, ev))
+    }
+}
+
+#[cfg(test)]
+mod into_the_wilds_tests {
+    use super::*;
+    fn library_card(engine: &mut GameEngine, card_id: &str) -> ObjectId {
+        let player = &mut engine.state.players[0];
+        let object_id = player.hand.pop().expect("fixture card in hand");
+        let object = engine
+            .state
+            .objects
+            .get_mut(&object_id)
+            .expect("fixture object");
+        object.card_id = card_id.to_string();
+        object.zone = Zone::Library;
+        player.library.push_back(object_id);
+        object_id
+    }
+
+    fn battlefield_card(engine: &mut GameEngine, card_id: &str) -> ObjectId {
+        let player = &mut engine.state.players[0];
+        let object_id = player.hand.pop().expect("fixture card in hand");
+        let object = engine
+            .state
+            .objects
+            .get_mut(&object_id)
+            .expect("fixture object");
+        object.card_id = card_id.to_string();
+        object.zone = Zone::Battlefield;
+        player.battlefield.push(object_id);
+        object_id
+    }
+
+    fn test_stack_item() -> StackItem {
+        StackItem {
+            mana_colors_spent_to_cast: Default::default(),
+            id: 90_001,
+            controller: 0,
+            card_id: "cultivate".into(),
+            targets: Vec::new(),
+            ability_text: None,
+            source_permanent_id: None,
+            source_owner: Some(0),
+            source_zone_change: 0,
+            source_face_change: 0,
+            ability_index: None,
+            activated_ability: None,
+            triggered_ability: None,
+            is_triggered: false,
+            is_copy: false,
+            face_index: 0,
+            cast_method: SpellCastMethod::Normal,
+            returned_attacker_assignment: None,
+            chosen_x: 0,
+            chosen_modes: Vec::new(),
+            cast_cost_receipts: Vec::new(),
+            cast_condition_results: Vec::new(),
+            cast_occurrence: None,
+            cast_by: Some(0),
+            payment_result: Default::default(),
+            search_results: Default::default(),
+            exiled_cohorts: Default::default(),
+            resolution_branch_choices: Default::default(),
+            blight_receipts: Vec::new(),
+            trigger_context: Default::default(),
+        }
+    }
+
+    #[test]
+    fn optional_land_entry_preserves_saved_previous_result_and_runs_tail_once() {
+        for accept in [false, true] {
+            let mut engine = GameEngine::new(90_200, &[0, 1], 20, None, true).unwrap();
+            engine.state.turn_step = TurnStep::Upkeep;
+            battlefield_card(&mut engine, "orb_of_dreams");
+            battlefield_card(&mut engine, "orb_of_dreams");
+            let forest = library_card(&mut engine, "forest");
+            engine.state.players[0].library.retain(|id| *id != forest);
+            engine.state.players[0].library.push_front(forest);
+            let mut tail = engine
+                .registry
+                .get("fanatic_of_the_harrowing")
+                .unwrap()
+                .primary_face()
+                .triggered_abilities[0]
+                .effect[1]
+                .clone();
+            let SpellEffectKind::ChooseResolutionBranch { branches, .. } = &mut tail else {
+                unreachable!()
+            };
+            let tricerules_cards::primitives::ResolutionBranchRequirement::CardResultCount {
+                filter,
+                ..
+            } = &mut branches[0].requirement
+            else {
+                unreachable!()
+            };
+            filter.action = tricerules_cards::primitives::CardResultAction::Mill;
+            branches[0].effects = vec![SpellEffectKind::GainLife {
+                amount: Amount::Fixed(3),
+            }];
+            let mut item = test_stack_item();
+            item.card_id = "into_the_wilds".into();
+            item.is_triggered = true;
+            item.ability_text = Some("private look plus sentinel".into());
+            let mut ability = engine
+                .registry
+                .get("into_the_wilds")
+                .unwrap()
+                .primary_face()
+                .triggered_abilities[0]
+                .clone();
+            ability.effect = vec![SpellEffectKind::IntoTheWilds, tail];
+            item.triggered_ability = Some(ability);
+            let mut stack = ParkedStackResolution::new(item);
+            stack.resume_effect_index = Some(1);
+            stack
+                .previous_result
+                .cards
+                .push(crate::state::CardResultEntry {
+                    action: tricerules_cards::primitives::CardResultAction::Mill,
+                    affected_player: 0,
+                    object_id: forest,
+                    zone_change_generation: 0,
+                    matched_card_types: vec![CardTypeFilter::BasicLand],
+                });
+            engine.state.pending_resolution = Some(PendingResolution {
+                deciding_player: 0,
+                presentation: PendingResolutionPresentation {
+                    source_object_id: 90_001,
+                    candidates: vec![forest],
+                    min: 0,
+                    max: 1,
+                    ordered: false,
+                    unique_names: false,
+                    prompt: "look".into(),
+                    choice_kind: custom::ChoiceKind::LibraryLook,
+                },
+                continuation: ResolutionContinuation::LibraryLook {
+                    stack,
+                    stage: PendingLibraryLookStage::IntoTheWilds,
+                    candidates: vec![(forest, 0)],
+                },
+            });
+            let selected = if accept { vec![forest] } else { Vec::new() };
+            let mut batches = vec![engine
+                .submit_resolution_choice(
+                    0,
+                    &rv1::SubmitResolutionChoice {
+                        chosen_object_ids: selected,
+                        ..Default::default()
+                    },
+                )
+                .unwrap()];
+            if accept {
+                let pending = engine
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .expect("entry replacement pauses");
+                assert_eq!(
+                    pending.presentation.choice_kind,
+                    custom::ChoiceKind::ReplacementEffect
+                );
+                assert_eq!(
+                    engine.state.players[0].life, 20,
+                    "tail waits for accepted entry"
+                );
+                assert_eq!(engine.state.objects[&forest].zone, Zone::Library);
+                let chosen = pending.presentation.candidates[0];
+                batches.push(
+                    engine
+                        .submit_resolution_choice(
+                            0,
+                            &rv1::SubmitResolutionChoice {
+                                chosen_object_ids: vec![chosen],
+                                ..Default::default()
+                            },
+                        )
+                        .unwrap(),
+                );
+                assert_eq!(engine.state.objects[&forest].zone, Zone::Battlefield);
+                assert!(engine.state.objects[&forest].tapped);
+                assert_eq!(engine.state.zone_change_generation[&forest], 1);
+            } else {
+                assert_eq!(engine.state.players[0].library.front(), Some(&forest));
+                assert_eq!(
+                    engine
+                        .state
+                        .zone_change_generation
+                        .get(&forest)
+                        .copied()
+                        .unwrap_or(0),
+                    0
+                );
+            }
+            assert!(engine.state.pending_resolution.is_none());
+            assert_eq!(
+                engine.state.players[0].life, 23,
+                "saved result admits tail exactly once"
+            );
+            assert!(!batches.iter().flat_map(|batch| &batch.events).any(|event|
+                matches!(&event.ev, Some(rv1::ruled_event::Ev::Log(log)) if log.text.contains("shuffles"))));
+            assert!(engine.state.stack.is_empty());
+        }
     }
 }
