@@ -3259,7 +3259,12 @@ impl SpellEffectKind {
                 ),
                 CardResultAction::PutOnLibraryBottom => false,
                 CardResultAction::Sacrifice => {
-                    matches!(effect, SpellEffectKind::TargetPlayerSacrifices { .. })
+                    matches!(
+                        effect,
+                        SpellEffectKind::TargetPlayerSacrifices { .. }
+                            | SpellEffectKind::Sacrifice { .. }
+                            | SpellEffectKind::SacrificeAll { .. }
+                    )
                 }
                 CardResultAction::Mill => matches!(
                     effect,

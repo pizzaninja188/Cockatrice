@@ -1,0 +1,36 @@
+// Exact Oracle/WotC ruling verified 2026-10-03; CR 118.12, 603.3a, 701.21a, 400.7.
+(
+  id: "standstill",
+  name: "Standstill",
+  face_id: "standstill",
+  mana_cost: "{1}{U}",
+  types: ["Enchantment"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerCastsSpell(caster: AnyPlayer),
+    effect: [
+      Sacrifice(subject: Source),
+      ChooseResolutionBranch(
+        selection: FirstApplicable,
+        branches: [
+          (
+            branch_id: "sacrificed_draw", presentation: Fallback,
+            cost: None,
+            requirement: CardResultCount(
+              filter: (source: PreviousEffect, action: Sacrifice, players: Controller),
+              min: Some(1),
+            ),
+            effects: [Draw(count: 3, who: EachOtherPlayerThanAffectedPlayer)],
+          ),
+          (
+            branch_id: "not_sacrificed", presentation: Fallback,
+            cost: None,
+            requirement: Always,
+            effects: [],
+          ),
+        ],
+      ),
+    ],
+  )],
+)

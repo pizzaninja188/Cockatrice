@@ -7,6 +7,8 @@
 
 #[path = "scenario/deck_coverage_maze_of_ith.rs"]
 mod deck_coverage_maze_of_ith;
+#[path = "scenario/deck_coverage_standstill.rs"]
+mod deck_coverage_standstill;
 
 #[path = "scenario/authoring_actions.rs"]
 mod authoring_actions;

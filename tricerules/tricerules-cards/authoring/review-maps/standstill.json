@@ -1,0 +1,84 @@
+{
+  "format_version": 1,
+  "oracle_id": "fea4cb32-0329-4199-9abe-bff0cc45882a",
+  "spans": [
+    {
+      "face_id": "standstill",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPlayerCastsSpell",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Sacrifice",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseResolutionBranch",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1/ChooseResolutionBranch/branches/0/effects/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_standstill::standstill_sacrifices_then_draws_three_for_casters_opponents_before_spell",
+      "covers": "standstill sacrifices then draws three for casters opponents before spell"
+    },
+    {
+      "test": "scenario deck_coverage_standstill::standstill_absent_and_returned_incarnations_do_not_pay_or_prompt",
+      "covers": "standstill absent and returned incarnations do not pay or prompt"
+    },
+    {
+      "test": "scenario deck_coverage_standstill::standstill_requires_captured_controllers_payment_and_can_regain_control",
+      "covers": "standstill requires captured controllers payment and can regain control"
+    },
+    {
+      "test": "scenario deck_coverage_standstill::standstill_uses_controller_for_payment_and_owner_for_destination",
+      "covers": "standstill uses controller for payment and owner for destination"
+    },
+    {
+      "test": "scenario deck_coverage_standstill::standstill_first_successful_of_two_cast_triggers_draws_only_that_casters_opponents",
+      "covers": "standstill first successful of two cast triggers draws only that casters opponents"
+    },
+    {
+      "test": "scenario deck_coverage_standstill::standstill_replaced_exile_still_pays_and_fires_sacrifice_but_not_graveyard_observer",
+      "covers": "standstill replaced exile still pays and fires sacrifice but not graveyard observer"
+    },
+    {
+      "test": "scenario deck_coverage_standstill::standstill_caster_and_other_departure_preserve_cohort_but_controller_departure_removes_trigger",
+      "covers": "standstill caster and other departure preserve cohort but controller departure removes trigger"
+    },
+    {
+      "test": "scenario deck_coverage_standstill::standstill_own_cast_and_activated_ability_are_not_its_spell_cast_trigger",
+      "covers": "standstill own cast and activated ability are not its spell cast trigger"
+    },
+    {
+      "test": "scenario deck_coverage_standstill::standstill_logged_resolution_replays_identical_batches_and_state",
+      "covers": "standstill logged resolution replays identical batches and state"
+    },
+    {
+      "test": "scenario deck_coverage_standstill::standstill_on_battlefield_during_twincast_copy_is_not_triggered_by_copy_creation",
+      "covers": "standstill on battlefield during twincast copy is not triggered by copy creation"
+    },
+    {
+      "test": "issue_512_standstill::standstill_is_complete_one_face_enchantment_with_automatic_sacrifice_gated_opponent_draw",
+      "covers": "standstill is complete one face enchantment with automatic sacrifice gated opponent draw"
+    },
+    {
+      "test": "issue_512_standstill::sacrifice_receipt_validation_accepts_real_producers_and_rejects_wrong_or_missing_predecessor",
+      "covers": "sacrifice receipt validation accepts real producers and rejects wrong or missing predecessor"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
