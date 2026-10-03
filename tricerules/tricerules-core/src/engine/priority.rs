@@ -360,11 +360,35 @@ impl GameEngine {
             }
         }
         self.refresh_mass_sacrifice_departure(events)?;
+        self.refresh_combat_damage_departure(events)?;
         self.refresh_entry_timestamp_departure(&departed_objects, events)?;
         self.refresh_observer_aura_departure(events)?;
         self.refresh_participating_entry_departure(&departed_objects, events)?;
         self.refresh_entry_opponent_departure(&departed_objects, events)?;
         Ok(())
+    }
+
+    /// A combat step owes one priority window after the complete shared settlement boundary.
+    pub(super) fn publish_settled_combat_priority(&mut self, events: &mut Vec<rv1::RuledEvent>) {
+        if !self.state.combat_damage_priority_pending {
+            return;
+        }
+        events.retain(|event| !matches!(event.ev, Some(rv1::ruled_event::Ev::PriorityChanged(_))));
+        if self.state.is_terminal() || self.state.blocking_choice().is_some() {
+            return;
+        }
+        let active = self.state.active_player_idx;
+        let priority = if !self.state.players[active].has_lost {
+            Some(active)
+        } else {
+            self.state.next_in_game_player_idx(active)
+        };
+        if let Some(priority) = priority {
+            self.state.priority_idx = priority;
+            self.state.passes_since_stack_change = 0;
+            self.state.combat_damage_priority_pending = false;
+            events.push(ev_priority_changed(self));
+        }
     }
 
     /// Apply deferred draw-from-empty losses once a resolving effect has completed. A player
@@ -866,7 +890,9 @@ impl GameEngine {
                 ev.push(ev_priority_changed(self));
             }
         }
-        self.apply_sbas(ev)?;
+        if !self.state.combat_damage_priority_pending {
+            self.apply_sbas(ev)?;
+        }
         Ok(finish_with_events(self, std::mem::take(ev)))
     }
 

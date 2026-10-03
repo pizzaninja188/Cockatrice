@@ -351,7 +351,8 @@ impl GameEngine {
             ResolutionContinuation::SagaReadAhead { .. } => {
                 unreachable!("read-ahead branch handled before object-choice validation")
             }
-            ResolutionContinuation::DamageReplacement { .. } => {
+            ResolutionContinuation::DamageReplacement { .. }
+            | ResolutionContinuation::CombatDamageReplacement { .. } => {
                 return self.finish_damage_prevention_choice(pending, chosen[0]);
             }
             ResolutionContinuation::ManaAbilityDamageReplacement { .. } => {

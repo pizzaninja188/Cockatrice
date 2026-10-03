@@ -440,6 +440,23 @@ fn pentad_prism_counter_mana_ability_has_a_complete_fixture() {
 }
 
 #[test]
+fn maze_land_and_attacking_target_ability_have_complete_fixtures() {
+    for ability in [None, Some(0)] {
+        let case = Case {
+            card: "maze_of_ith".into(),
+            face: 0,
+            ability,
+        };
+        assert_eq!(
+            evaluate(&case).unwrap(),
+            Outcome::Exercised,
+            "{}",
+            case.key()
+        );
+    }
+}
+
+#[test]
 fn war_room_land_and_both_abilities_have_complete_commander_fixtures() {
     for ability in [None, Some(0), Some(1)] {
         let case = Case {

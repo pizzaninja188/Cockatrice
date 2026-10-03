@@ -574,6 +574,11 @@ pub enum DamagePreventionScope {
         object_id: ObjectId,
         zone_change_generation: u64,
     },
+    /// Source identity is captured on the damage event, including through parked choices.
+    CombatSource {
+        object_id: ObjectId,
+        zone_change_generation: u64,
+    },
     Combat,
     OtherCreaturesYouControl {
         source_id: ObjectId,
@@ -1228,6 +1233,10 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         effect_ids: Vec<u32>,
     },
+    /// Combat has no owned stack object whose departure could abandon the simultaneous batch.
+    CombatDamageReplacement {
+        effect_ids: Vec<u32>,
+    },
     /// CR 605.3b / 405.6c: a mana ability's immediate damage paused for a replacement choice.
     /// This carries event-time source identity without manufacturing a stack item to resume.
     ManaAbilityDamageReplacement {
@@ -1307,7 +1316,9 @@ impl ResolutionContinuation {
             Self::AuraReturn { stack, .. }
             | Self::SimultaneousEntryOrder { stack, .. }
             | Self::MassSacrificeGraveyardOrder { stack, .. } => stack.as_ref(),
-            Self::ManaAbilityDamageReplacement { .. } | Self::LegendKeep => None,
+            Self::ManaAbilityDamageReplacement { .. }
+            | Self::CombatDamageReplacement { .. }
+            | Self::LegendKeep => None,
         }
     }
 
@@ -1353,7 +1364,9 @@ impl ResolutionContinuation {
             Self::AuraReturn { stack, .. }
             | Self::SimultaneousEntryOrder { stack, .. }
             | Self::MassSacrificeGraveyardOrder { stack, .. } => stack.as_mut(),
-            Self::ManaAbilityDamageReplacement { .. } | Self::LegendKeep => None,
+            Self::ManaAbilityDamageReplacement { .. }
+            | Self::CombatDamageReplacement { .. }
+            | Self::LegendKeep => None,
         }
     }
 
@@ -2380,6 +2393,8 @@ pub struct GameState {
     pub pending_spell_cast: Option<PendingSpellCastState>,
     /// Consecutive priority passes; reset when a spell/ability is added to stack
     pub passes_since_stack_change: u32,
+    /// Combat priority is owed only after losses, departures, SBAs and trigger choices settle.
+    pub(crate) combat_damage_priority_pending: bool,
     /// Number of lands played this turn from any legal zone; compared against max (1 + extras).
     pub lands_played_this_turn: u32,
     /// Successful limited activations in the current turn, keyed to full object and ability

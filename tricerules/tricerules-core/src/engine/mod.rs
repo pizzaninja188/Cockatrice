@@ -1731,6 +1731,7 @@ impl GameEngine {
             next_spell_cast_transaction_id: 1,
             pending_spell_cast: None,
             passes_since_stack_change: 0,
+            combat_damage_priority_pending: false,
             lands_played_this_turn: 0,
             activation_uses_this_turn: HashMap::new(),
             activation_uses_per_object: HashMap::new(),
@@ -2475,10 +2476,15 @@ impl GameEngine {
                 break;
             }
             self.reconcile_departed_players(&mut next.events)?;
+            if self.state.combat_damage_priority_pending && self.state.pending_resolution.is_none()
+            {
+                self.apply_sbas(&mut next.events)?;
+            }
             // Internal passes bypass dispatch_command's normal post-command trigger flush. A
             // beginning-of-step trigger must reach the stack (or its ordering/target prompt)
             // before the settlement policy decides whether another priority pass is harmless.
             self.flush_staged_triggers(&mut next.events);
+            self.publish_settled_combat_priority(&mut next.events);
             batch.events.extend(next.events);
             automatic_passes += 1;
         }
@@ -2822,6 +2828,7 @@ impl GameEngine {
         if self.state.is_terminal() {
             return Ok(self.finish_terminal_batch(b));
         }
+        self.publish_settled_combat_priority(&mut b.events);
         self.reconcile_activated_ability_slots();
         b.events.push(self.ev_zone_view_sync_tracked());
         // CR 106: emit each player's authoritative mana pool so the relay/clients mirror it onto

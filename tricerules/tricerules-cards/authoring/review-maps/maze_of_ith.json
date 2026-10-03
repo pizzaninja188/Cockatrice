@@ -1,0 +1,88 @@
+{
+  "format_version": 1,
+  "oracle_id": "38a12bd7-4394-44a8-91a0-6a4ff7fa4f71",
+  "spans": [
+    {
+      "face_id": "maze_of_ith",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Untap",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PreventAllCombatDamageToTargetTurn",
+      "typed_path": "/faces/0/activated_abilities/0/effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::PreventAllCombatDamageByTargetTurn",
+      "typed_path": "/faces/0/activated_abilities/0/effect/2"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_maze_of_ith::maze_untaps_without_removing_attacker_and_prevents_both_combat_directions",
+      "covers": "maze untaps without removing attacker and prevents both combat directions"
+    },
+    {
+      "test": "scenario deck_coverage_maze_of_ith::maze_rejects_nonattacker_noncreature_wrong_actor_tap_stale_source_and_extra_targets_purely",
+      "covers": "maze rejects nonattacker noncreature wrong actor tap stale source and extra targets purely"
+    },
+    {
+      "test": "scenario deck_coverage_maze_of_ith::maze_accepts_an_already_untapped_attacker_and_suppresses_unblocked_player_damage",
+      "covers": "maze accepts an already untapped attacker and suppresses unblocked player damage"
+    },
+    {
+      "test": "scenario deck_coverage_maze_of_ith::maze_can_untap_at_end_combat_without_undoing_damage",
+      "covers": "maze can untap at end combat without undoing damage"
+    },
+    {
+      "test": "scenario deck_coverage_maze_of_ith::maze_fizzles_on_a_new_target_incarnation",
+      "covers": "maze fizzles on a new target incarnation"
+    },
+    {
+      "test": "scenario deck_coverage_maze_of_ith::maze_ability_and_resolved_shields_survive_its_source_departure_and_expire_at_cleanup",
+      "covers": "maze ability and resolved shields survive its source departure and expire at cleanup"
+    },
+    {
+      "test": "scenario deck_coverage_maze_of_ith::maze_cannot_prevent_unpreventable_combat_damage",
+      "covers": "maze cannot prevent unpreventable combat damage"
+    },
+    {
+      "test": "scenario deck_coverage_maze_of_ith::maze_outgoing_overlap_parks_the_entire_combat_batch_and_replays_choices",
+      "covers": "maze outgoing overlap parks the entire combat batch and replays choices"
+    },
+    {
+      "test": "scenario deck_coverage_maze_of_ith::maze_parked_damage_terminal_completion_publishes_no_priority_or_remaining_choice",
+      "covers": "maze parked damage terminal completion publishes no priority or remaining choice"
+    },
+    {
+      "test": "scenario deck_coverage_maze_of_ith::third_player_maze_targets_an_opponents_attacker_against_another_defender",
+      "covers": "third player maze targets an opponents attacker against another defender"
+    },
+    {
+      "test": "scenario deck_coverage_maze_of_ith::combat_damage_settles_player_departure_before_creature_deaths_and_targeted_triggers",
+      "covers": "combat damage settles player departure before creature deaths and targeted triggers"
+    },
+    {
+      "test": "issue_511_maze_of_ith::maze_is_the_exact_single_face_land_with_one_shared_attacking_target_and_no_mana_ability",
+      "covers": "maze is the exact single face land with one shared attacking target and no mana ability"
+    },
+    {
+      "test": "issue_511_maze_of_ith::outgoing_combat_prevention_rejects_player_and_noncreature_target_filters",
+      "covers": "outgoing combat prevention rejects player and noncreature target filters"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

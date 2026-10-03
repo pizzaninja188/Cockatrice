@@ -727,6 +727,39 @@ pub(super) fn prevent_all_combat_damage_to_target_turn(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn prevent_all_combat_damage_by_target_turn(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::PreventAllCombatDamageByTargetTurn { .. } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let Some(&object_id) = cx.targets.first() else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let zone_change_generation = cx
+        .engine
+        .state
+        .zone_change_generation
+        .get(&object_id)
+        .copied()
+        .unwrap_or(0);
+    cx.engine.add_damage_prevention(
+        Some(cx.top),
+        cx.spell_label,
+        DamagePreventionScope::CombatSource {
+            object_id,
+            zone_change_generation,
+        },
+        DamagePreventionAmount::All,
+    );
+    let target_name = object_display_name(&cx.engine.state, cx.engine.registry, object_id);
+    cx.events.push(ev_log(format!(
+        "All combat damage that would be dealt by {target_name} this turn is prevented."
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn damage_cant_be_prevented_this_turn(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

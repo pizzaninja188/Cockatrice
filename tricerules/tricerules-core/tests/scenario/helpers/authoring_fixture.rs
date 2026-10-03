@@ -108,6 +108,23 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
         // Ferocious needs a controlled creature with current power at least four.
         super::relocate_to_battlefield(&mut e, 0, "air_elemental", false);
     }
+    if card == "maze_of_ith" && ability == Some(0) {
+        // Supply a legally declared attacker; do not weaken the target or baseline.
+        let actor = e.state.active_player_id();
+        e.apply_command(actor, &super::primitive_yield()).unwrap();
+        super::pass_priority_round(&mut e);
+        let assignment =
+            e.initial_response_batch().legal_by_player[&actor].legal_attack_assignments[0];
+        e.apply_command(
+            actor,
+            &RuledCommand {
+                cmd: Some(Cmd::DeclareAttackers(DeclareAttackers {
+                    assignments: vec![assignment],
+                })),
+            },
+        )
+        .unwrap();
+    }
     e
 }
 

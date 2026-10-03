@@ -127,6 +127,7 @@ pub(crate) struct DamageSpec {
 
 #[derive(Debug, Clone)]
 enum DamageBatchContinuation {
+    Combat,
     Stack {
         item: Box<StackItem>,
         resume_effect_index: Option<u32>,
@@ -140,8 +141,13 @@ enum DamageBatchContinuation {
 }
 
 impl DamageBatchContinuation {
-    fn source_object_id(&self) -> ObjectId {
+    fn source_object_id(&self, batch: &PendingDamageBatch) -> ObjectId {
         match self {
+            Self::Combat => batch
+                .damage
+                .first()
+                .map(|damage| damage.spec.event.source.object_id)
+                .unwrap_or(0),
             Self::Stack { item, .. } => item.source_permanent_id.unwrap_or(item.id),
             Self::ManaAbility {
                 source_object_id, ..
@@ -151,6 +157,7 @@ impl DamageBatchContinuation {
 
     fn fallback_controller(&self) -> PlayerId {
         match self {
+            Self::Combat => unreachable!("combat choices require a surviving affected recipient"),
             Self::Stack { item, .. } => item.controller,
             Self::ManaAbility { actor, .. } => *actor,
         }
@@ -181,6 +188,14 @@ pub(crate) struct PendingDamageEvent {
     pub spec: DamageSpec,
     pub remaining: u32,
     pub applied_applications: Vec<DamagePreventionApplication>,
+    pub combat: Option<PendingCombatDamageOccurrence>,
+}
+
+/// The original combat relation, distinct from the presentation source and current controller.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct PendingCombatDamageOccurrence {
+    pub attacker: TriggerObjectRef,
+    pub recipient_generation: Option<u64>,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -284,6 +299,14 @@ impl GameEngine {
                         .unwrap_or(0)
                         == zone_change_generation
             }
+            DamagePreventionScope::CombatSource {
+                object_id,
+                zone_change_generation,
+            } => {
+                event.classification == DamageClassification::Combat
+                    && event.source.object_id == object_id
+                    && event.source.zone_change_generation == Some(zone_change_generation)
+            }
             DamagePreventionScope::Combat => event.classification == DamageClassification::Combat,
             DamagePreventionScope::OtherCreaturesYouControl {
                 source_id,
@@ -304,27 +327,6 @@ impl GameEngine {
                 DamageRecipient::Player(_) => false,
             },
         }
-    }
-
-    /// Process immediately when zero or one prevention effect applies; otherwise park the damage
-    /// event and reuse the generic resolution-choice protocol for CR 616 ordering.
-    pub(crate) fn process_or_park_damage_event(
-        &mut self,
-        item: &StackItem,
-        event: DamageEvent,
-        source_has_deathtouch: bool,
-        events: &mut Vec<rv1::RuledEvent>,
-    ) -> Option<DamageResult> {
-        self.process_or_park_damage_batch(
-            item,
-            vec![DamageSpec {
-                event,
-                source_has_deathtouch,
-                source_has_lifelink: false,
-            }],
-            events,
-        )
-        .and_then(|mut completed| completed.pop().map(|damage| damage.result))
     }
 
     pub(crate) fn process_or_park_damage_batch(
@@ -368,6 +370,7 @@ impl GameEngine {
                     remaining: spec.event.amount,
                     spec,
                     applied_applications: Vec::new(),
+                    combat: None,
                 })
                 .collect(),
             applications: Vec::new(),
@@ -446,6 +449,7 @@ impl GameEngine {
                 remaining: damage.event.amount,
                 spec: damage,
                 applied_applications: Vec::new(),
+                combat: None,
             }],
             applications: Vec::new(),
         };
@@ -535,46 +539,70 @@ impl GameEngine {
             .collect()
     }
 
+    fn damage_affected_player(&self, event: &DamageEvent) -> Option<PlayerId> {
+        let player = match event.recipient {
+            DamageRecipient::Player(player) => player,
+            DamageRecipient::Permanent(oid) => self.state.objects.get(&oid)?.controller,
+        };
+        self.state
+            .player_idx(player)
+            .filter(|&index| !self.state.players[index].has_lost)
+            .map(|_| player)
+    }
+
     fn next_prevention_ordering_choice(
         &self,
+        batch: &PendingDamageBatch,
         by_event: &[Vec<(DamagePreventionApplication, String)>],
     ) -> Vec<(usize, DamagePreventionApplication, String)> {
-        if let Some((event_index, candidates)) = by_event
-            .iter()
-            .enumerate()
-            .find(|(_, candidates)| candidates.len() > 1)
-        {
-            return candidates
-                .iter()
-                .map(|(application, label)| (event_index, *application, label.clone()))
-                .collect();
+        let mut pairs = Vec::new();
+        for (event_index, candidates) in by_event.iter().enumerate() {
+            if candidates.len() > 1 {
+                pairs.extend(
+                    candidates
+                        .iter()
+                        .map(|(application, label)| (event_index, *application, label.clone())),
+                );
+            }
         }
-
         for effect in &self.state.damage_prevention_effects {
             if !matches!(effect.amount, DamagePreventionAmount::Remaining(_)) {
                 continue;
             }
+            let application = DamagePreventionApplication::Effect(effect.id);
             let occurrences: Vec<_> = by_event
                 .iter()
                 .enumerate()
                 .filter(|(_, candidates)| {
-                    candidates.iter().any(|(application, _)| {
-                        *application == DamagePreventionApplication::Effect(effect.id)
-                    })
+                    candidates
+                        .iter()
+                        .any(|(candidate, _)| *candidate == application)
                 })
-                .map(|(event_index, _)| {
-                    (
-                        event_index,
-                        DamagePreventionApplication::Effect(effect.id),
-                        effect.source_label.clone(),
-                    )
-                })
+                .map(|(index, _)| (index, application, effect.source_label.clone()))
                 .collect();
             if occurrences.len() > 1 {
-                return occurrences;
+                for pair in occurrences {
+                    if !pairs.iter().any(
+                        |existing: &(usize, DamagePreventionApplication, String)| {
+                            existing.0 == pair.0 && existing.1 == pair.1
+                        },
+                    ) {
+                        pairs.push(pair);
+                    }
+                }
             }
         }
-        Vec::new()
+        let first_player = pairs
+            .iter()
+            .filter_map(|(index, _, _)| {
+                self.damage_affected_player(&batch.damage[*index].spec.event)
+            })
+            .min_by_key(|&player| self.state.apnap_rank(player));
+        pairs.retain(|(index, _, _)| {
+            first_player.is_some()
+                && self.damage_affected_player(&batch.damage[*index].spec.event) == first_player
+        });
+        pairs
     }
 
     fn advance_damage_batch(
@@ -584,7 +612,7 @@ impl GameEngine {
     ) -> DamageBatchProgress {
         loop {
             let by_event = self.pending_prevention_candidates(&batch);
-            let raw_candidates = self.next_prevention_ordering_choice(&by_event);
+            let raw_candidates = self.next_prevention_ordering_choice(&batch, &by_event);
             if !raw_candidates.is_empty() {
                 return DamageBatchProgress::NeedsChoice {
                     batch,
@@ -742,16 +770,10 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) {
         let deciding_event = &batch.damage[raw_candidates[0].0].spec.event;
-        let fallback_controller = completion.fallback_controller();
-        let deciding_player = match deciding_event.recipient {
-            DamageRecipient::Player(player) => player,
-            DamageRecipient::Permanent(permanent) => self
-                .state
-                .objects
-                .get(&permanent)
-                .map(|object| object.controller)
-                .unwrap_or(fallback_controller),
-        };
+        let deciding_player = self
+            .damage_affected_player(deciding_event)
+            .unwrap_or_else(|| completion.fallback_controller());
+        let source_object_id = completion.source_object_id(&batch);
         let mut applications = Vec::new();
         let mut candidates = Vec::new();
         let mut candidate_names = Vec::new();
@@ -810,8 +832,15 @@ impl GameEngine {
                     (source, format!("{effect_label}: Prevent all damage."))
                 },
             };
+            let recipient = match damage.spec.event.recipient {
+                DamageRecipient::Player(player) => format!("player {player}"),
+                DamageRecipient::Permanent(oid) => format!(
+                    "{} (object {oid})",
+                    object_display_name(&self.state, self.registry, oid)
+                ),
+            };
             let summary = format!(
-                "{description} ({} damage from {}.)",
+                "{description} ({} damage from {} to {recipient}.)",
                 damage.remaining, damage.spec.event.source.label
             );
             replacement_options.push(source.option(choice_id, summary.clone()));
@@ -824,7 +853,7 @@ impl GameEngine {
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: deciding_player,
-                    source_object_id: completion.source_object_id(),
+                    source_object_id,
                     prompt_text: prompt.clone(),
                     choice_kind: rv1::ChoiceKind::ReplacementEffect as i32,
                     candidate_object_ids: candidates.clone(),
@@ -857,7 +886,7 @@ impl GameEngine {
         self.state.pending_resolution = Some(PendingResolution {
             deciding_player,
             presentation: PendingResolutionPresentation {
-                source_object_id: completion.source_object_id(),
+                source_object_id,
                 candidates,
                 min: 1,
                 max: 1,
@@ -867,6 +896,11 @@ impl GameEngine {
                 unique_names: false,
             },
             continuation: match completion {
+                DamageBatchContinuation::Combat => {
+                    ResolutionContinuation::CombatDamageReplacement {
+                        effect_ids: candidate_effect_ids,
+                    }
+                }
                 DamageBatchContinuation::Stack {
                     item,
                     resume_effect_index,
@@ -900,71 +934,100 @@ impl GameEngine {
         source_has_lifelink: bool,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Option<DamageResult> {
-        let source_id = event.source.object_id;
-        let controller = event.source.controller;
-        let card_id = self
-            .state
-            .objects
-            .get(&source_id)
-            .map(|object| object.card_id.clone())
-            .unwrap_or_default();
-        let item = StackItem {
-            mana_colors_spent_to_cast: Default::default(),
-            id: source_id,
-            controller,
-            card_id,
-            targets: Vec::new(),
-            ability_text: Some("combat damage".to_string()),
-            source_permanent_id: Some(source_id),
-            source_owner: self
-                .state
-                .objects
-                .get(&source_id)
-                .map(|object| object.owner),
-            source_zone_change: self
-                .state
+        self.process_prepared_combat_damage_batch(
+            vec![DamageSpec {
+                event,
+                source_has_deathtouch,
+                source_has_lifelink,
+            }],
+            events,
+        )
+        .and_then(|completed| completed.first().map(|damage| damage.result))
+    }
+
+    fn capture_combat_damage_source(&self, event: &mut DamageEvent) {
+        let source = event.source.object_id;
+        event.source.zone_change_generation = self.state.objects.contains_key(&source).then(|| {
+            self.state
                 .zone_change_generation
-                .get(&source_id)
+                .get(&source)
                 .copied()
-                .unwrap_or(0),
-            source_face_change: self
-                .state
-                .face_change_generation
-                .get(&source_id)
-                .copied()
-                .unwrap_or(0),
-            ability_index: None,
-            activated_ability: None,
-            triggered_ability: None,
-            is_triggered: false,
-            is_copy: false,
-            face_index: 0,
-            cast_method: SpellCastMethod::Normal,
-            returned_attacker_assignment: None,
-            chosen_x: 0,
-            chosen_modes: Vec::new(),
-            cast_condition_results: Vec::new(),
-            cast_occurrence: None,
-            cast_by: None,
-            cast_cost_receipts: Vec::new(),
-            payment_result: CardResultCohort::default(),
-            search_results: Default::default(),
-            exiled_cohorts: Default::default(),
-            resolution_branch_choices: Default::default(),
-            blight_receipts: Vec::new(),
-            trigger_context: TriggerContext::default(),
+                .unwrap_or(0)
+        });
+        event.source.wither = self.effective_has_keyword(source, Keyword::Wither);
+        if let Some(characteristics) = self.characteristics(source) {
+            event.source.colors = characteristics.colors;
+            event.source.types = characteristics.types;
+        }
+    }
+
+    fn combat_damage_occurrence(
+        &self,
+        event: &DamageEvent,
+    ) -> Option<PendingCombatDamageOccurrence> {
+        let combat = self.state.combat.as_ref()?;
+        let attacker = if combat.attacking.contains(&event.source.object_id) {
+            event.source.object_id
+        } else if let DamageRecipient::Permanent(recipient) = event.recipient {
+            recipient
+        } else {
+            return None;
         };
-        let result = self.process_or_park_damage_event(&item, event, source_has_deathtouch, events);
-        if result.is_none() {
-            if let Some(super::replacement::PendingReplacementEvent::Damage(batch)) =
-                self.state.pending_replacement_event.as_mut()
-            {
-                if let Some(damage) = batch.damage.first_mut() {
-                    damage.spec.source_has_lifelink = source_has_lifelink;
+        let assignment = combat.attack_assignments.get(&attacker)?;
+        Some(PendingCombatDamageOccurrence {
+            attacker: assignment.attacker,
+            recipient_generation: match event.recipient {
+                DamageRecipient::Player(_) => None,
+                DamageRecipient::Permanent(oid) => {
+                    self.state.objects.contains_key(&oid).then(|| {
+                        self.state
+                            .zone_change_generation
+                            .get(&oid)
+                            .copied()
+                            .unwrap_or(0)
+                    })
                 }
+            },
+        })
+    }
+
+    fn process_prepared_combat_damage_batch(
+        &mut self,
+        damage: Vec<DamageSpec>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Option<Vec<CompletedDamage>> {
+        let pending = PendingDamageBatch {
+            damage: damage
+                .into_iter()
+                .map(|mut spec| {
+                    // Capture before any application, then retain unchanged through every choice.
+                    self.capture_combat_damage_source(&mut spec.event);
+                    PendingDamageEvent {
+                        remaining: spec.event.amount,
+                        combat: self.combat_damage_occurrence(&spec.event),
+                        spec,
+                        applied_applications: Vec::new(),
+                    }
+                })
+                .collect(),
+            applications: Vec::new(),
+        };
+        match self.advance_damage_batch(pending, events) {
+            DamageBatchProgress::Complete(completed) => Some(completed),
+            DamageBatchProgress::NeedsChoice {
+                batch,
+                raw_candidates,
+            } => {
+                self.state.combat_damage_priority_pending = true;
+                self.park_damage_prevention_choice(
+                    DamageBatchContinuation::Combat,
+                    batch,
+                    raw_candidates,
+                    events,
+                );
+                None
             }
         }
-        result
     }
 
     /// Preflight a simultaneous combat-damage batch. The legacy commit loop remains the fast path
@@ -990,7 +1053,6 @@ impl GameEngine {
                     .get(&source)
                     .map(|object| object.controller)
                     .unwrap_or(active);
-                let source_characteristics = engine.characteristics(source);
                 let mut event = DamageEvent::combat(
                     source,
                     controller,
@@ -998,10 +1060,7 @@ impl GameEngine {
                     recipient,
                     amount,
                 );
-                if let Some(characteristics) = source_characteristics {
-                    event.source.colors = characteristics.colors;
-                    event.source.types = characteristics.types;
-                }
+                engine.capture_combat_damage_source(&mut event);
                 damage.push(DamageSpec {
                     event,
                     source_has_deathtouch: engine
@@ -1088,60 +1147,177 @@ impl GameEngine {
         {
             return Ok(false);
         }
-        let first = damage
-            .first()
-            .ok_or(EngineError::Illegal("empty ordered combat-damage batch"))?;
-        let item = StackItem {
-            mana_colors_spent_to_cast: Default::default(),
-            id: first.event.source.object_id,
-            controller: first.event.source.controller,
-            card_id: self
-                .state
-                .objects
-                .get(&first.event.source.object_id)
-                .map(|object| object.card_id.clone())
-                .unwrap_or_default(),
-            targets: Vec::new(),
-            ability_text: Some("combat damage".to_string()),
-            source_permanent_id: Some(first.event.source.object_id),
-            source_owner: self
-                .state
-                .objects
-                .get(&first.event.source.object_id)
-                .map(|object| object.owner),
-            source_zone_change: self
-                .state
-                .zone_change_generation
-                .get(&first.event.source.object_id)
-                .copied()
-                .unwrap_or(0),
-            source_face_change: 0,
-            ability_index: None,
-            activated_ability: None,
-            triggered_ability: None,
-            is_triggered: false,
-            is_copy: false,
-            face_index: 0,
-            cast_method: SpellCastMethod::Normal,
-            returned_attacker_assignment: None,
-            chosen_x: 0,
-            chosen_modes: Vec::new(),
-            cast_condition_results: Vec::new(),
-            cast_occurrence: None,
-            cast_by: None,
-            cast_cost_receipts: Vec::new(),
-            payment_result: CardResultCohort::default(),
-            search_results: Default::default(),
-            exiled_cohorts: Default::default(),
-            resolution_branch_choices: Default::default(),
-            blight_receipts: Vec::new(),
-            trigger_context: TriggerContext::default(),
-        };
-        let completed = self.process_or_park_damage_batch(&item, damage, events);
+        let completed = self.process_prepared_combat_damage_batch(damage, events);
         if let Some(completed) = completed {
             self.commit_completed_damage_batch(&completed, events);
         }
         Ok(true)
+    }
+
+    fn combat_damage_occurrence_survives(&self, damage: &PendingDamageEvent) -> bool {
+        let Some(original) = &damage.combat else {
+            return false;
+        };
+        let event = &damage.spec.event;
+        let current_permanent = |oid, generation| {
+            self.state
+                .objects
+                .get(&oid)
+                .is_some_and(|object| object.zone == Zone::Battlefield)
+                && Some(
+                    self.state
+                        .zone_change_generation
+                        .get(&oid)
+                        .copied()
+                        .unwrap_or(0),
+                ) == generation
+        };
+        if !current_permanent(event.source.object_id, event.source.zone_change_generation)
+            || !current_permanent(
+                original.attacker.object_id,
+                Some(original.attacker.zone_change_generation),
+            )
+        {
+            return false;
+        }
+        match event.recipient {
+            DamageRecipient::Player(player) => {
+                if self
+                    .state
+                    .player_idx(player)
+                    .is_none_or(|index| self.state.players[index].has_lost)
+                {
+                    return false;
+                }
+            }
+            DamageRecipient::Permanent(oid) => {
+                if !current_permanent(oid, original.recipient_generation) {
+                    return false;
+                }
+            }
+        }
+        let Some(combat) = &self.state.combat else {
+            return false;
+        };
+        let attacker = original.attacker.object_id;
+        let Some(assignment) = combat.attack_assignments.get(&attacker) else {
+            return false;
+        };
+        if assignment.attacker != original.attacker
+            || !combat.attacking.contains(&attacker)
+            || self
+                .state
+                .player_idx(assignment.defending_player)
+                .is_none_or(|index| self.state.players[index].has_lost)
+        {
+            return false;
+        }
+        let blockers = combat
+            .blockers
+            .get(&attacker)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        if event.source.object_id == attacker {
+            match (event.recipient, assignment.defender) {
+                (DamageRecipient::Player(player), CombatDefenderTarget::Player(defender)) => {
+                    player == defender
+                }
+                (DamageRecipient::Permanent(oid), _) if blockers.contains(&oid) => true,
+                (DamageRecipient::Permanent(oid), CombatDefenderTarget::Permanent(defender)) => {
+                    oid == defender.object_id
+                        && original.recipient_generation == Some(defender.zone_change_generation)
+                }
+                _ => false,
+            }
+        } else {
+            blockers.contains(&event.source.object_id)
+                && event.recipient == DamageRecipient::Permanent(attacker)
+        }
+    }
+
+    /// Concession changes combat membership immediately, but does not abandon unrelated damage.
+    pub(super) fn refresh_combat_damage_departure(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(pending) = self.state.pending_resolution.clone() else {
+            return Ok(());
+        };
+        if !matches!(
+            pending.continuation,
+            ResolutionContinuation::CombatDamageReplacement { .. }
+        ) {
+            return Ok(());
+        }
+        let Some(super::replacement::PendingReplacementEvent::Damage(mut batch)) =
+            self.state.pending_replacement_event.take()
+        else {
+            return Err(EngineError::Illegal(
+                "combat damage continuation has no batch",
+            ));
+        };
+        let mut indices = Vec::with_capacity(batch.damage.len());
+        let mut retained = Vec::new();
+        for damage in std::mem::take(&mut batch.damage) {
+            if self.combat_damage_occurrence_survives(&damage) {
+                indices.push(Some(retained.len()));
+                retained.push(damage);
+            } else {
+                indices.push(None);
+            }
+        }
+        batch.damage = retained;
+        batch.applications.retain_mut(|application| {
+            let Some(index) = indices[application.event_index] else {
+                return false;
+            };
+            application.event_index = index;
+            true
+        });
+        let old_applications = batch.applications.clone();
+        self.state.pending_resolution = None;
+        match self.advance_damage_batch(batch, events) {
+            DamageBatchProgress::NeedsChoice {
+                mut batch,
+                raw_candidates,
+            } => {
+                let deciding_player =
+                    self.damage_affected_player(&batch.damage[raw_candidates[0].0].spec.event);
+                let same_published_candidates = old_applications.len()
+                    == pending.presentation.candidates.len()
+                    && old_applications
+                        .iter()
+                        .all(|old| pending.presentation.candidates.contains(&old.choice_id));
+                let same_pairs = same_published_candidates
+                    && old_applications.len() == raw_candidates.len()
+                    && old_applications.iter().all(|old| {
+                        raw_candidates.iter().any(|(index, application, _)| {
+                            *index == old.event_index && *application == old.application
+                        })
+                    });
+                let same_anchor = batch.damage.iter().any(|damage| {
+                    damage.spec.event.source.object_id == pending.presentation.source_object_id
+                });
+                if deciding_player == Some(pending.deciding_player) && same_pairs && same_anchor {
+                    batch.applications = old_applications;
+                    self.state.pending_replacement_event =
+                        Some(super::replacement::PendingReplacementEvent::Damage(batch));
+                    self.state.pending_resolution = Some(pending);
+                } else {
+                    self.park_damage_prevention_choice(
+                        DamageBatchContinuation::Combat,
+                        batch,
+                        raw_candidates,
+                        events,
+                    );
+                }
+            }
+            DamageBatchProgress::Complete(completed) => {
+                self.commit_completed_damage_batch(&completed, events);
+                self.state.combat_damage_priority_pending = true;
+            }
+        }
+        Ok(())
     }
 
     pub(crate) fn finish_damage_prevention_choice(
@@ -1150,6 +1326,9 @@ impl GameEngine {
         chosen_application_id: u32,
     ) -> Result<RuledEventBatch, EngineError> {
         let completion = match &pending.continuation {
+            ResolutionContinuation::CombatDamageReplacement { .. } => {
+                DamageBatchContinuation::Combat
+            }
             ResolutionContinuation::DamageReplacement { stack, .. } => {
                 DamageBatchContinuation::Stack {
                     item: Box::new(stack.item.clone()),
@@ -1229,6 +1408,10 @@ impl GameEngine {
         };
         self.commit_completed_damage_batch(&completed, &mut events);
         match completion {
+            DamageBatchContinuation::Combat => {
+                self.state.combat_damage_priority_pending = true;
+                Ok(finish_with_events(self, events))
+            }
             DamageBatchContinuation::Stack {
                 item,
                 resume_effect_index,
@@ -1411,6 +1594,616 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn outgoing_combat_prevention_uses_captured_generation_and_excludes_noncombat_and_copies() {
+        let decks = Some(vec![
+            vec!["grizzly_bears".into(); 7],
+            vec!["island".into(); 7],
+        ]);
+        let mut engine = GameEngine::new(305_513, &[0, 1], 20, decks, true).unwrap();
+        let source = move_bear_to_battlefield(&mut engine);
+        let id = engine.add_damage_prevention(
+            None,
+            "Maze outgoing",
+            DamagePreventionScope::CombatSource {
+                object_id: source,
+                zone_change_generation: 0,
+            },
+            DamagePreventionAmount::All,
+        );
+        let effect = engine
+            .state
+            .damage_prevention_effects
+            .iter()
+            .find(|effect| effect.id == id)
+            .unwrap()
+            .clone();
+        let mut event =
+            DamageEvent::combat(source, 0, "Grizzly Bears", DamageRecipient::Player(1), 2);
+        engine.capture_combat_damage_source(&mut event);
+        assert_eq!(
+            event.source.zone_change_generation,
+            Some(0),
+            "physical generation zero is distinct from no object"
+        );
+        assert!(engine.prevention_effect_applies(&effect, &event));
+        engine.state.objects.get_mut(&source).unwrap().controller = 1;
+        engine.state.objects.get_mut(&source).unwrap().face_down = true;
+        assert!(
+            engine.prevention_effect_applies(&effect, &event),
+            "controller/face do not change captured incarnation"
+        );
+        engine.state.zone_change_generation.insert(source, 1);
+        assert!(
+            engine.prevention_effect_applies(&effect, &event),
+            "a retained damage snapshot is not rebound to current generation"
+        );
+        event.source.zone_change_generation = Some(1);
+        assert!(!engine.prevention_effect_applies(&effect, &event));
+        event.source.zone_change_generation = None;
+        assert!(
+            !engine.prevention_effect_applies(&effect, &event),
+            "copy/no-physical-object does not match"
+        );
+        event.source.zone_change_generation = Some(0);
+        event.classification = DamageClassification::Noncombat;
+        assert!(!engine.prevention_effect_applies(&effect, &event));
+        let pending = engine
+            .process_or_park_damage_batch(
+                &source_item(source, 0),
+                vec![DamageSpec {
+                    event,
+                    source_has_deathtouch: false,
+                    source_has_lifelink: false,
+                }],
+                &mut Vec::new(),
+            )
+            .unwrap();
+        assert_eq!(
+            pending[0].result.dealt, 2,
+            "shielded creature still deals noncombat damage"
+        );
+    }
+
+    #[test]
+    fn combat_departure_refresh_preserves_unchanged_choices_and_applied_prevention() {
+        let mut engine = parked_departure_combat(1, false);
+        let original = engine.state.pending_resolution.clone().unwrap();
+        let before_id = engine.state.next_replacement_application_id;
+        engine
+            .refresh_combat_damage_departure(&mut Vec::new())
+            .unwrap();
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .candidates,
+            original.presentation.candidates
+        );
+        assert_eq!(engine.state.next_replacement_application_id, before_id);
+        let Some(super::super::replacement::PendingReplacementEvent::Damage(batch)) =
+            engine.state.pending_replacement_event.as_ref()
+        else {
+            panic!("damage")
+        };
+        let DamageRecipient::Permanent(attacker) = batch.damage[0].spec.event.recipient else {
+            panic!("attacker")
+        };
+        let fixed = engine.add_damage_prevention(
+            None,
+            "fixed shield",
+            DamagePreventionScope::Recipient(attacker),
+            DamagePreventionAmount::FixedPerEvent(1),
+        );
+        let finite = engine.add_damage_prevention(
+            None,
+            "finite shield",
+            DamagePreventionScope::Recipient(attacker),
+            DamagePreventionAmount::Remaining(3),
+        );
+        engine
+            .refresh_combat_damage_departure(&mut Vec::new())
+            .unwrap();
+        let Some(super::super::replacement::PendingReplacementEvent::Damage(batch)) =
+            engine.state.pending_replacement_event.as_ref()
+        else {
+            panic!("damage")
+        };
+        let fixed_choice = batch
+            .applications
+            .iter()
+            .find(|application| {
+                application.application == DamagePreventionApplication::Effect(fixed)
+            })
+            .unwrap()
+            .choice_id;
+        let command = rv1::RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![fixed_choice],
+                    ..Default::default()
+                },
+            )),
+        };
+        engine.apply_command(0, &command).unwrap();
+        let before_departure = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .candidates
+            .clone();
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            1
+        );
+        engine
+            .apply_command(
+                2,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .candidates,
+            before_departure,
+            "unrelated occurrence removal remaps indices without replacing valid opaque IDs"
+        );
+        let choice = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .candidates[0];
+        engine
+            .apply_command(
+                1,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![choice],
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .unwrap();
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(
+            engine
+                .state
+                .damage_prevention_effects
+                .iter()
+                .find(|effect| effect.id == finite)
+                .unwrap()
+                .amount,
+            DamagePreventionAmount::Remaining(2),
+            "fixed prevention applied once; the finite shield covers only the remaining one damage"
+        );
+    }
+
+    fn parked_departure_combat(blocker_owner: usize, shield_attacker: bool) -> GameEngine {
+        let decks = Some(vec![vec!["grizzly_bears".into(); 7]; 3]);
+        let mut engine = GameEngine::new(305_512, &[0, 1, 2], 20, decks, true).unwrap();
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::CombatDamage;
+        let mut move_card = |owner: usize, controller: usize| {
+            let oid = engine.state.players[owner].hand.remove(0);
+            engine.state.players[controller].battlefield.push(oid);
+            let object = engine.state.objects.get_mut(&oid).unwrap();
+            object.zone = Zone::Battlefield;
+            object.controller = controller as PlayerId;
+            oid
+        };
+        let attacker = move_card(0, 0);
+        let unrelated = move_card(0, 0);
+        let blocker = move_card(blocker_owner, 1);
+        let shielded = if shield_attacker { attacker } else { blocker };
+        engine.state.add_damage_prevention_shield(shielded, 1);
+        engine.state.add_damage_prevention_shield(shielded, 1);
+        let unrelated_defender = if blocker_owner == 1 { 2 } else { 1 };
+        let assignments = [(attacker, 1), (unrelated, unrelated_defender)]
+            .into_iter()
+            .map(|(oid, defender)| {
+                (
+                    oid,
+                    CombatAttackAssignment {
+                        attacker: TriggerObjectRef {
+                            object_id: oid,
+                            zone_change_generation: 0,
+                            controller_at_event: 0,
+                        },
+                        defender: CombatDefenderTarget::Player(defender),
+                        defending_player: defender,
+                    },
+                )
+            })
+            .collect();
+        let combat = CombatState {
+            attacking: vec![attacker, unrelated],
+            attack_assignments: assignments,
+            blockers: HashMap::from([(attacker, vec![blocker])]),
+            damage_assignments: HashMap::new(),
+            trample_player_damage: HashMap::new(),
+            damage_assignment_needed: false,
+            attackers_declared: true,
+            blockers_declared_by: vec![1, unrelated_defender],
+            blockers_declared: true,
+            assign_combat_damage_phase: false,
+            first_strike_attackers: vec![],
+            first_strike_blockers: HashMap::new(),
+            first_strike_damage_done: false,
+        };
+        engine.state.combat = Some(combat.clone());
+        assert!(engine
+            .try_park_ordered_combat_damage(
+                &combat,
+                super::super::combat::DamagePass::Normal,
+                &mut Vec::new()
+            )
+            .unwrap());
+        assert!(engine.state.pending_resolution.is_some());
+        assert_eq!(engine.state.players[unrelated_defender as usize].life, 20);
+        engine
+    }
+
+    #[test]
+    fn combat_departure_refreshes_removed_candidates_with_surviving_anchor_and_chooser() {
+        let mut engine = parked_departure_combat(1, true);
+        engine.state.pending_resolution = None;
+        engine.state.pending_replacement_event = None;
+        let combat = engine.state.combat.as_mut().unwrap();
+        let unrelated = combat.attacking[1];
+        let assignment = combat.attack_assignments.get_mut(&unrelated).unwrap();
+        assignment.defender = CombatDefenderTarget::Player(1);
+        assignment.defending_player = 1;
+        combat.blockers_declared_by = vec![1];
+        let departing_blocker = engine.state.players[2].hand.remove(0);
+        engine.state.players[1].battlefield.push(departing_blocker);
+        let object = engine.state.objects.get_mut(&departing_blocker).unwrap();
+        object.zone = Zone::Battlefield;
+        object.controller = 1;
+        combat.blockers.insert(unrelated, vec![departing_blocker]);
+        let combat = combat.clone();
+        engine.state.add_damage_prevention_shield(unrelated, 1);
+        engine.state.add_damage_prevention_shield(unrelated, 1);
+        assert!(engine
+            .try_park_ordered_combat_damage(
+                &combat,
+                super::super::combat::DamagePass::Normal,
+                &mut Vec::new()
+            )
+            .unwrap());
+        let original = engine.state.pending_resolution.clone().unwrap();
+        assert_eq!(original.deciding_player, 0);
+        assert_eq!(original.presentation.candidates.len(), 4);
+        engine
+            .apply_command(
+                2,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                },
+            )
+            .unwrap();
+        let refreshed = engine.state.pending_resolution.as_ref().unwrap();
+        assert_eq!(refreshed.deciding_player, 0);
+        assert_eq!(
+            refreshed.presentation.source_object_id,
+            original.presentation.source_object_id
+        );
+        assert_eq!(
+            refreshed.presentation.candidates.len(),
+            2,
+            "removed simultaneous occurrences must disappear from the published prompt"
+        );
+        assert!(refreshed
+            .presentation
+            .candidates
+            .iter()
+            .all(|choice| !original.presentation.candidates.contains(choice)));
+        let choice = refreshed.presentation.candidates[0];
+        for stale in original.presentation.candidates {
+            let before = engine.diagnostic_snapshot().unwrap();
+            assert!(engine
+                .apply_command(
+                    0,
+                    &rv1::RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                            rv1::SubmitResolutionChoice {
+                                chosen_object_ids: vec![stale],
+                                ..Default::default()
+                            }
+                        )),
+                    }
+                )
+                .is_err());
+            assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
+        }
+        engine
+            .apply_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![choice],
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .unwrap();
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_replacement_event.is_none());
+        assert_eq!(engine.state.objects[&unrelated].damage, 0);
+    }
+
+    #[test]
+    fn combat_departed_chooser_refreshes_to_surviving_player_and_rejects_old_ids() {
+        let mut engine = parked_departure_combat(1, false);
+        engine.state.add_damage_prevention_shield(2, 1);
+        engine.state.add_damage_prevention_shield(2, 1);
+        engine
+            .refresh_combat_damage_departure(&mut Vec::new())
+            .unwrap();
+        let old = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .candidates[0];
+        engine
+            .apply_command(
+                1,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            2
+        );
+        assert_eq!(
+            engine.state.players[2].life, 20,
+            "surviving damage waits for the refreshed choice"
+        );
+        let before = engine.diagnostic_snapshot().unwrap();
+        assert!(engine
+            .apply_command(
+                2,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![old],
+                            ..Default::default()
+                        }
+                    ))
+                }
+            )
+            .is_err());
+        assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
+        let choice = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .candidates[0];
+        engine
+            .apply_command(
+                2,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![choice],
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .unwrap();
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(engine.state.players[2].life, 20);
+    }
+
+    #[test]
+    fn defending_player_departure_removes_relation_even_when_stolen_blocker_survives() {
+        let mut engine = parked_departure_combat(2, true);
+        let combat = engine.state.combat.as_ref().unwrap();
+        let attacker = combat.attacking[0];
+        let blocker = combat.blockers[&attacker][0];
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(blocker),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: ControllerReference::Fixed(1),
+            },
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 1,
+        });
+        engine
+            .apply_command(
+                1,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                },
+            )
+            .unwrap();
+        assert_eq!(engine.state.objects[&blocker].controller, 2);
+        assert_eq!(
+            engine.state.objects[&blocker].zone,
+            Zone::Battlefield,
+            "the surviving blocker is no longer in the departed defender's combat relation"
+        );
+        assert_eq!(engine.state.objects[&attacker].damage, 0);
+        assert_eq!(engine.state.objects[&blocker].damage, 0);
+        assert!(engine.state.pending_resolution.is_none());
+    }
+
+    #[test]
+    fn combat_prevention_chooser_departure_settles_surviving_damage_once() {
+        let mut engine = parked_departure_combat(1, false);
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            1
+        );
+        let command = rv1::RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+        };
+        engine.apply_command(1, &command).unwrap();
+        assert!(
+            engine.state.pending_resolution.is_none(),
+            "departed chooser cannot strand combat"
+        );
+        assert!(engine.state.pending_replacement_event.is_none());
+        assert_eq!(
+            engine.state.players[2].life, 18,
+            "unrelated simultaneous damage remains owed"
+        );
+        engine.reconcile_departed_players(&mut Vec::new()).unwrap();
+        assert_eq!(
+            engine.state.players[2].life, 18,
+            "departure refresh cannot commit damage twice"
+        );
+        assert_eq!(engine.state.turn_step, TurnStep::CombatDamage);
+        assert_eq!(engine.state.priority_player_id(), 0);
+    }
+
+    #[test]
+    fn combat_prevention_presentation_source_owner_departure_preserves_other_damage() {
+        let mut engine = parked_departure_combat(2, true);
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            0
+        );
+        let command = rv1::RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+        };
+        engine.apply_command(2, &command).unwrap();
+        assert_eq!(
+            engine.state.players[1].life, 18,
+            "combat is not an owned stack resolution that disappears with its presentation source"
+        );
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_replacement_event.is_none());
+    }
+
+    #[test]
+    fn simultaneous_prevention_choices_follow_apnap_and_allow_own_event_order() {
+        let decks = Some(vec![vec!["grizzly_bears".into(); 7]; 3]);
+        let mut engine = GameEngine::new(305_511, &[7, 13, 29], 20, decks, true).unwrap();
+        let mut move_card = |player_index: usize| {
+            let oid = engine.state.players[player_index].hand.remove(0);
+            engine.state.players[player_index].battlefield.push(oid);
+            engine.state.objects.get_mut(&oid).unwrap().zone = Zone::Battlefield;
+            oid
+        };
+        let first = move_card(0);
+        let second = move_card(1);
+        let third = move_card(0);
+        let source = move_card(2);
+        for recipient in [first, second, third] {
+            engine.state.add_damage_prevention_shield(recipient, 1);
+            engine.state.add_damage_prevention_shield(recipient, 1);
+        }
+        let damage = [first, second, third]
+            .into_iter()
+            .map(|recipient| DamageSpec {
+                event: DamageEvent::noncombat(
+                    source,
+                    29,
+                    "Grizzly Bears",
+                    DamageRecipient::Permanent(recipient),
+                    3,
+                ),
+                source_has_deathtouch: false,
+                source_has_lifelink: false,
+            })
+            .collect();
+        let mut item = source_item(source, 0);
+        item.controller = 29;
+        item.source_owner = Some(29);
+        assert!(engine
+            .process_or_park_damage_batch(&item, damage, &mut Vec::new())
+            .is_none());
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            7
+        );
+        let Some(super::super::replacement::PendingReplacementEvent::Damage(batch)) =
+            engine.state.pending_replacement_event.as_ref()
+        else {
+            panic!("parked damage batch");
+        };
+        assert_eq!(batch.applications.len(), 4, "active player can choose either of their simultaneous events before the defender decides");
+        let chosen = batch
+            .applications
+            .iter()
+            .find(|application| application.event_index == 2)
+            .unwrap()
+            .choice_id;
+        let pending = engine.state.pending_resolution.take().unwrap();
+        engine
+            .finish_damage_prevention_choice(pending, chosen)
+            .unwrap();
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .deciding_player,
+            7,
+            "all remaining active-player choices precede the defender's choice"
+        );
+        assert_eq!(
+            engine.state.objects[&first].damage, 0,
+            "no simultaneous damage commits during choices"
+        );
+        assert_eq!(engine.state.objects[&second].damage, 0);
+        assert_eq!(engine.state.objects[&third].damage, 0);
+    }
 
     fn source_item(source: ObjectId, generation: u64) -> StackItem {
         StackItem {

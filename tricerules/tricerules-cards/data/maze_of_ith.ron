@@ -1,0 +1,19 @@
+// Oracle 38a12bd7-4394-44a8-91a0-6a4ff7fa4f71 and WotC rulings checked 2026-10-03.
+// Untapping preserves attack; prevention is prospective and incarnation-bound. No mana ability.
+(
+  id: "maze_of_ith",
+  name: "Maze of Ith",
+  face_id: "maze_of_ith",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Tap],
+    effect: [
+      Untap(subject: Chosen((kind: Creature, combat_role: Some(Attacking)))),
+      PreventAllCombatDamageToTargetTurn(target: (kind: Creature, combat_role: Some(Attacking))),
+      PreventAllCombatDamageByTargetTurn(target: (kind: Creature, combat_role: Some(Attacking))),
+    ],
+  )],
+)

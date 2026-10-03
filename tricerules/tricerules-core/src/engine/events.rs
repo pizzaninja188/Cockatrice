@@ -8,6 +8,7 @@ impl GameEngine {
         let outcome = self.state.outcome.expect("terminal batch has an outcome");
         self.state.pending_resolution = None;
         self.state.pending_replacement_event = None;
+        self.state.combat_damage_priority_pending = false;
         self.state.pending_spell_cast = None;
         self.state.pending_trigger_order = None;
         self.state.pending_triggers.clear();
@@ -166,8 +167,18 @@ impl GameEngine {
         let mut per_event_prevention = 0u32;
         let mut prevents_all = false;
         let mut prevents_all_combat = false;
+        let mut prevents_all_combat_by = false;
         for effect in &self.state.damage_prevention_effects {
             if effect.duration != EffectDuration::UntilEndOfTurn {
+                continue;
+            }
+            if effect.scope
+                == (DamagePreventionScope::CombatSource {
+                    object_id: oid,
+                    zone_change_generation: generation,
+                })
+            {
+                prevents_all_combat_by |= effect.amount == DamagePreventionAmount::All;
                 continue;
             }
             if effect.scope
@@ -200,6 +211,9 @@ impl GameEngine {
         }
         if prevents_all_combat {
             labels.push("Prevent all combat damage".to_string());
+        }
+        if prevents_all_combat_by {
+            labels.push("Prevent all combat damage dealt by this creature".to_string());
         }
         if per_event_prevention > 0 {
             labels.push(format!(

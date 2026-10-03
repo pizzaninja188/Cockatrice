@@ -3,10 +3,11 @@ use tricerules_cards::primitives::CounterKind;
 use tricerules_core::state::{DamagePreventionScope, PendingResolution, ResolutionContinuation};
 
 fn damage_effect_ids(pending: &PendingResolution) -> &[u32] {
-    let ResolutionContinuation::DamageReplacement { effect_ids, .. } = &pending.continuation else {
-        panic!("typed damage-replacement continuation")
-    };
-    effect_ids
+    match &pending.continuation {
+        ResolutionContinuation::DamageReplacement { effect_ids, .. }
+        | ResolutionContinuation::CombatDamageReplacement { effect_ids } => effect_ids,
+        _ => panic!("typed damage-replacement continuation"),
+    }
 }
 
 /// CR 615.12: Stomp makes the damage unpreventable, so an existing prevention shield neither

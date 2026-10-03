@@ -1389,7 +1389,8 @@ fn validate_effect_targets(
             }
         }
         SpellEffectKind::PreventNextDamage { target: filter, .. }
-        | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target: filter } => {
+        | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target: filter }
+        | SpellEffectKind::PreventAllCombatDamageByTargetTurn { target: filter } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));
             }
@@ -1920,7 +1921,8 @@ fn spell_target_legality_error_with_context(
             subject: EffectSubject::Chosen(_),
         }
         | SpellEffectKind::PreventNextDamage { target: _, .. }
-        | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target: _ } => {
+        | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target: _ }
+        | SpellEffectKind::PreventAllCombatDamageByTargetTurn { target: _ } => {
             let roles = effect.target_roles();
             let [TargetRole::Filtered(filter)] = roles.as_slice() else {
                 return Err(EngineError::Illegal(

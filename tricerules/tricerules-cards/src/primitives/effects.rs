@@ -1913,6 +1913,11 @@ pub enum SpellEffectKind {
     PreventAllCombatDamageToTargetTurn {
         target: TargetFilter,
     },
+    /// CR 615: prevent combat damage dealt by one chosen creature's captured incarnation.
+    /// Complements incoming prevention for Maze of Ith; outgoing-only use: Kor Haven.
+    PreventAllCombatDamageByTargetTurn {
+        target: TargetFilter,
+    },
     /// CR 614.1a: prevent all combat damage that would be dealt this turn (Fog, Holy Day,
     /// Safe Passage partial). Untargeted — sets a global flag checked when combat damage resolves.
     /// Cleared at the cleanup step alongside marked damage.
@@ -2844,7 +2849,8 @@ impl SpellEffectKind {
             | SpellEffectKind::Equip { target }
             | SpellEffectKind::TargetPlayerSacrifices { target, .. }
             | SpellEffectKind::PreventNextDamage { target, .. }
-            | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target } => {
+            | SpellEffectKind::PreventAllCombatDamageToTargetTurn { target }
+            | SpellEffectKind::PreventAllCombatDamageByTargetTurn { target } => {
                 vec![TargetRole::Filtered(target)]
             }
             SpellEffectKind::ExileTargetGainLifeEqualToPower => {
@@ -3981,11 +3987,10 @@ impl SpellEffectKind {
                 }
             }
             SpellEffectKind::PreventAllCombatDamageToTargetTurn { target }
+            | SpellEffectKind::PreventAllCombatDamageByTargetTurn { target }
                 if !target.all_terminal_filters_match(|leaf| leaf.kind == TargetKind::Creature) =>
             {
-                return Err(
-                    "PreventAllCombatDamageToTargetTurn requires a creature target filter".into(),
-                );
+                return Err("targeted combat prevention requires a creature target filter".into());
             }
             SpellEffectKind::DestroyAttached {
                 target,

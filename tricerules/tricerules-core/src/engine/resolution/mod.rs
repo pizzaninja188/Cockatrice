@@ -1994,6 +1994,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::PreventAllCombatDamageToTargetTurn { .. } => {
                         misc::prevent_all_combat_damage_to_target_turn(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::PreventAllCombatDamageByTargetTurn { .. } => {
+                        misc::prevent_all_combat_damage_by_target_turn(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::PreventAllCombatDamageTurn => {
                         misc::prevent_all_combat_damage_turn(&mut cx, effect)?
                     }
@@ -3258,7 +3261,8 @@ fn commit_zone_move(
         state.damage_prevention_effects.retain(|effect| {
             let recipient_is_this_object = match effect.scope {
                 DamagePreventionScope::Recipient(recipient) => recipient == oid,
-                DamagePreventionScope::CombatRecipient { object_id, .. } => object_id == oid,
+                DamagePreventionScope::CombatRecipient { object_id, .. }
+                | DamagePreventionScope::CombatSource { object_id, .. } => object_id == oid,
                 DamagePreventionScope::Combat
                 | DamagePreventionScope::OtherCreaturesYouControl { .. } => false,
             };

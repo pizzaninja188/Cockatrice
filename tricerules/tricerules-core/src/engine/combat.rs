@@ -1469,10 +1469,8 @@ impl GameEngine {
             ) {
                 return Ok(());
             }
-            // CR 510.2 + 704: SBAs run between damage steps so creatures with lethal damage are
-            // moved to graveyards before the regular step decides who deals damage.
-            self.apply_sbas(events)?;
-            events.push(ev_priority_changed(self));
+            // Command settlement performs losses, departures, SBAs and triggers before
+            // the first-strike priority window; the next damage step remains a later command.
         } else {
             // Emit PhaseChanged before resolving damage so the C++ client clears its
             // stack-object set before any combat damage triggers are pushed (StackPushed).
@@ -1491,8 +1489,7 @@ impl GameEngine {
             ) {
                 return Ok(());
             }
-            self.apply_sbas(events)?;
-            events.push(ev_priority_changed(self));
+            // The shared post-command boundary settles this simultaneous batch before priority.
         }
         Ok(())
     }
@@ -1504,6 +1501,7 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         use tricerules_cards::Keyword;
+        self.state.combat_damage_priority_pending = true;
         if self.try_park_ordered_combat_damage(c, pass, events)? {
             return Ok(());
         }
