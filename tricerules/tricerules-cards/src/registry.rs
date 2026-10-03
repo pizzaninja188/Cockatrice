@@ -1258,6 +1258,44 @@ fn collect_linked_exile_uses(effect: &SpellEffectKind, uses: &mut HashMap<String
     }
 }
 
+fn validate_chosen_opponent_links(face: &CardFace) -> Result<(), String> {
+    let producers = face
+        .static_abilities
+        .iter()
+        .filter_map(|ability| match &ability.definition {
+            StaticAbilityDef::AsEntersChooseOpponent { link_id } => Some(link_id),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    let consumers = face
+        .triggered_abilities
+        .iter()
+        .filter_map(|ability| match &ability.trigger {
+            TriggerCondition::AtBeginningOfChosenPlayerUpkeep { link_id } => Some(link_id),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    if producers.is_empty() && consumers.is_empty() {
+        return Ok(());
+    }
+    if producers.len() != 1 || consumers.len() != 1 || producers[0] != consumers[0] {
+        return Err(
+            "chosen-opponent link requires one matching printed producer and consumer".into(),
+        );
+    }
+    producers[0].validate()
+}
+
+fn validate_granted_chosen_opponent(ability: &crate::TriggeredAbilityDef) -> Result<(), String> {
+    if matches!(
+        ability.trigger,
+        TriggerCondition::AtBeginningOfChosenPlayerUpkeep { .. }
+    ) {
+        return Err("chosen-opponent upkeep links must be a printed face-local pair".into());
+    }
+    Ok(())
+}
+
 fn validate_linked_exile_pairs(face: &CardFace) -> Result<(), String> {
     let mut uses = HashMap::new();
     let mut collect = |effects: &[SpellEffectKind]| {
@@ -1480,6 +1518,7 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
                 }
                 for nested_ability in triggered_abilities {
                     insert_ability_id(&mut nested, &nested_ability.ability_id)?;
+                    validate_granted_chosen_opponent(nested_ability)?;
                     nested_ability.validate_shape()?;
                     validate_effect_list_metadata(&nested_ability.effect)?;
                 }
@@ -1501,6 +1540,7 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
                 }
                 for nested_ability in triggered_abilities {
                     insert_ability_id(&mut nested, &nested_ability.ability_id)?;
+                    validate_granted_chosen_opponent(nested_ability)?;
                     nested_ability.validate_shape()?;
                     validate_effect_list_metadata(&nested_ability.effect)?;
                 }
@@ -1511,6 +1551,7 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
             } => {
                 for nested_ability in triggered_abilities {
                     insert_ability_id(&mut nested, &nested_ability.ability_id)?;
+                    validate_granted_chosen_opponent(nested_ability)?;
                     nested_ability.validate_shape()?;
                     validate_effect_list_metadata(&nested_ability.effect)?;
                 }
@@ -1535,6 +1576,7 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
         }
     }
     validate_linked_exile_pairs(face)?;
+    validate_chosen_opponent_links(face)?;
     let mut cast_cost_group_ids = HashSet::new();
     for group in &face.cast_cost_groups {
         group.validate()?;

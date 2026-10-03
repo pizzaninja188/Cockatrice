@@ -1,0 +1,24 @@
+(
+  id: "black_vise",
+  name: "Black Vise",
+  face_id: "black_vise",
+  mana_cost: "{1}",
+  types: ["Artifact"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: AsEntersChooseOpponent(link_id: "chosen_opponent"),
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: AtBeginningOfChosenPlayerUpkeep(link_id: "chosen_opponent"),
+    effect: [DamagePlayer(
+      amount: Count(Affine(constant: -4, terms: [(
+        coefficient: 1,
+        quantity: CardsInHand(players: AffectedPlayer),
+      )])),
+      who: AffectedPlayer,
+    )],
+  )],
+)

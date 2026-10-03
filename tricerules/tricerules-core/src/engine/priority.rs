@@ -126,6 +126,9 @@ impl GameEngine {
             .stack_presentations
             .retain(|id, _| !owned.contains(id));
         self.state.objects.retain(|id, _| !owned.contains(id));
+        self.state
+            .chosen_opponents
+            .retain(|record| !owned.contains(&record.key.source_object_id));
         for id in unowned_stack_cards {
             move_object_to_zone(&mut self.state, self.registry, id, Zone::Exile, None)?;
         }
@@ -210,6 +213,7 @@ impl GameEngine {
                 events.push(ev_priority_changed(self));
             }
         }
+        self.refresh_entry_opponent_departure(events)?;
         Ok(())
     }
 
@@ -271,6 +275,19 @@ impl GameEngine {
             })
             .map(|stack| stack.item.id);
         if let Some(id) = departed_resolution_object {
+            if self
+                .state
+                .pending_resolution
+                .as_ref()
+                .is_some_and(|pending| {
+                    matches!(
+                        pending.continuation,
+                        ResolutionContinuation::EntryChooseOpponent { .. }
+                    )
+                })
+            {
+                self.state.pending_replacement_event = None;
+            }
             self.state.pending_resolution = None;
             if self
                 .state

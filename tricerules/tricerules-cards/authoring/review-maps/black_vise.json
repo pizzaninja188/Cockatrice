@@ -1,0 +1,103 @@
+{
+  "format_version": 1,
+  "oracle_id": "de7839fb-7040-48ab-a6d4-d1952972943d",
+  "spans": [
+    {
+      "face_id": "black_vise",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0/definition"
+      ]
+    },
+    {
+      "face_id": "black_vise",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_black_vise::black_vise_rejects_stale_generation_and_copy_occurrence_atomically",
+      "covers": "rejects stale generation and copy occurrence atomically"
+    },
+    {
+      "test": "scenario deck_coverage_black_vise::black_vise_uses_resolution_hand_size_and_triggers_even_when_zero",
+      "covers": "uses resolution hand size and triggers even when zero"
+    },
+    {
+      "test": "scenario deck_coverage_black_vise::black_vise_preserves_choice_after_control_transfer_even_to_chosen_player",
+      "covers": "preserves choice after control transfer even to chosen player"
+    },
+    {
+      "test": "scenario deck_coverage_black_vise::black_vise_chosen_departure_keeps_designation_without_retargeting",
+      "covers": "chosen departure keeps designation without retargeting"
+    },
+    {
+      "test": "scenario deck_coverage_black_vise::black_vise_acquired_copy_is_undefined_and_native_choice_restores",
+      "covers": "acquired copy is undefined and native choice restores"
+    },
+    {
+      "test": "scenario deck_coverage_black_vise::black_vise_suppression_hides_active_link_and_restores_original_choice",
+      "covers": "suppression hides active link and restores original choice"
+    },
+    {
+      "test": "scenario deck_coverage_black_vise::black_vise_decider_departure_abandons_pending_entry",
+      "covers": "decider departure abandons pending entry"
+    },
+    {
+      "test": "scenario deck_coverage_black_vise::black_vise_queued_trigger_survives_logged_dev_bounce_and_fresh_reentry_choice",
+      "covers": "queued trigger survives logged dev bounce and fresh reentry choice"
+    },
+    {
+      "test": "scenario deck_coverage_black_vise::black_vise_actual_paid_boomerang_and_recast_reset_choice",
+      "covers": "actual paid boomerang and recast reset choice"
+    },
+    {
+      "test": "scenario deck_coverage_black_vise::black_vise_exact_single_face_and_complete_linked_damage_definition",
+      "covers": "exact single face and complete linked damage definition"
+    },
+    {
+      "test": "scenario deck_coverage_black_vise::black_vise_replays_exact_logged_paid_cast_choice_departure_and_reentry_commands",
+      "covers": "replays exact logged paid cast choice departure and reentry commands"
+    },
+    {
+      "test": "scenario deck_coverage_black_vise::black_vise_four_nonconsecutive_players_choose_zero_and_reject_malformed_answers",
+      "covers": "four nonconsecutive players choose zero and reject malformed answers"
+    },
+    {
+      "test": "scenario deck_coverage_black_vise::black_vise_pending_departure_disables_original_branch_without_renumbering",
+      "covers": "pending departure disables original branch without renumbering"
+    },
+    {
+      "test": "scenario deck_coverage_black_vise::black_vise_paid_cast_parks_before_entry_for_private_opponent_choice",
+      "covers": "paid cast parks before entry for private opponent choice"
+    },
+    {
+      "test": "deck_coverage_black_vise::chosen_opponent_links_require_one_matching_printed_pair",
+      "covers": "chosen opponent links require one matching printed pair"
+    },
+    {
+      "test": "deck_coverage_black_vise::chosen_opponent_upkeep_cannot_be_statically_or_dynamically_granted",
+      "covers": "chosen opponent upkeep cannot be statically or dynamically granted"
+    },
+    {
+      "test": "scenario deck_coverage_black_vise::black_vise_reanimated_copy_owner_departure_finishes_surviving_outer_spell",
+      "covers": "reanimated copy owner departure finishes surviving outer spell"
+    },
+    {
+      "test": "scenario deck_coverage_black_vise::black_vise_successful_reanimated_copy_uses_resulting_mana_value",
+      "covers": "successful reanimated copy uses resulting mana value"
+    },
+    {
+      "test": "scenario deck_coverage_black_vise::black_vise_ghost_vacuum_other_entrant_departure_preserves_current_choice",
+      "covers": "surviving Ghost Vacuum entry choice completes after another cohort member departs, preserving original branch indices and modified-entry annotations"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

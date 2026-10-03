@@ -47,6 +47,7 @@ impl GameEngine {
         face: Option<&CardFace>,
     ) -> Vec<String> {
         let mut labels = Vec::new();
+        labels.extend(self.chosen_opponent_labels(oid));
         if self.state.prepared_permanents.contains_key(&oid) {
             labels.push("Prepared".into());
         } else if self.copiable_values_for(oid).is_some_and(|v| {
@@ -759,6 +760,7 @@ impl GameEngine {
                     .iter()
                     .filter_map(|oid| self.state.objects.get(oid))
                     .map(|object| BattlefieldObjectSnapshot {
+                        chosen_opponent_labels: self.chosen_opponent_labels(object.id),
                         preparation: self.state.prepared_permanents.get(&object.id).copied(),
                         object_id: object.id,
                         card_id: object.card_id.clone(),

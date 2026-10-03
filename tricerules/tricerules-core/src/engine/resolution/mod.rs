@@ -1026,6 +1026,7 @@ impl GameEngine {
                         tapped: top.cast_method == SpellCastMethod::Sneak,
                         set_types: None,
                         chosen_basic_land_type: None,
+                        chosen_opponents: Vec::new(),
                         entry_counters: BTreeMap::new(),
                         entry_modifiers: Vec::new(),
                         attached_to: None,
@@ -2334,6 +2335,7 @@ impl GameEngine {
                 tapped: false,
                 set_types: None,
                 chosen_basic_land_type: None,
+                chosen_opponents: Vec::new(),
                 entry_counters: BTreeMap::new(),
                 entry_modifiers: Vec::new(),
                 attached_to: None,
@@ -2649,6 +2651,7 @@ impl GameEngine {
                         tapped: enters_tapped,
                         set_types: None,
                         chosen_basic_land_type: None,
+                        chosen_opponents: Vec::new(),
                         entry_counters: BTreeMap::new(),
                         entry_modifiers: Vec::new(),
                         attached_to: None,
@@ -3103,6 +3106,9 @@ fn commit_zone_move(
         state.room_states.remove(&oid);
         super::preparation::unprepare_permanent(state, oid);
         state.battle_protectors.remove(&oid);
+        state
+            .chosen_opponents
+            .retain(|record| record.key.source_object_id != oid);
         {
             let object = TriggerObjectRef {
                 object_id: oid,

@@ -19,6 +19,28 @@ use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 pub type PlayerId = i32;
 pub type ObjectId = u32;
 
+/// CR 607.5a: an acquired pair cannot borrow a choice made by an earlier occurrence.
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ChosenOpponentOccurrence {
+    NativeOrTokenBase,
+    AcquiredCopy(u64),
+}
+
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub struct ChosenOpponentKey {
+    pub(crate) source_object_id: ObjectId,
+    pub(crate) source_zone_change: u64,
+    pub(crate) producer: AbilityDefinitionId,
+    pub(crate) link_id: AbilityLinkId,
+    pub(crate) occurrence: ChosenOpponentOccurrence,
+}
+
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ChosenOpponentRecord {
+    pub key: ChosenOpponentKey,
+    pub player: PlayerId,
+}
+
 /// CR 104: a game ends either with a winner or in a draw. Windfall's simultaneous
 /// library losses and Risky Shortcut's simultaneous life losses share the draw outcome.
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -1161,6 +1183,14 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
         effect_id: EntryReplacementEffectId,
     },
+    EntryChooseOpponent {
+        stack: ParkedStackResolution,
+        effect_id: EntryReplacementEffectId,
+        key: ChosenOpponentKey,
+        entering_zone: Zone,
+        entering_generation: u64,
+        players: Vec<PlayerId>,
+    },
     SagaReadAhead {
         stack: ParkedStackResolution,
         effect_id: EntryReplacementEffectId,
@@ -1240,6 +1270,7 @@ impl ResolutionContinuation {
             | Self::EntryCost { stack, .. }
             | Self::EntryReveal { stack, .. }
             | Self::EntryBasicLandType { stack, .. }
+            | Self::EntryChooseOpponent { stack, .. }
             | Self::SagaReadAhead { stack, .. }
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }
@@ -1286,6 +1317,7 @@ impl ResolutionContinuation {
             | Self::EntryCost { stack, .. }
             | Self::EntryReveal { stack, .. }
             | Self::EntryBasicLandType { stack, .. }
+            | Self::EntryChooseOpponent { stack, .. }
             | Self::SagaReadAhead { stack, .. }
             | Self::DamageReplacement { stack, .. }
             | Self::BattleProtector { stack }
@@ -1474,6 +1506,8 @@ pub struct BattlefieldEntryEvent {
     /// A basic land type chosen by a still-resolving intrinsic entry replacement. Kept on the
     /// proposed event so later replacement predicates see the provisional characteristics.
     pub chosen_basic_land_type: Option<tricerules_cards::BasicLandType>,
+    /// Provisional linked choices; installed only with the committed incarnation.
+    pub(crate) chosen_opponents: Vec<ChosenOpponentRecord>,
     /// Counter state accumulated by entry replacement effects before zone commitment.
     pub entry_counters: BTreeMap<CounterKind, u32>,
     /// CR 611.2e continuous effects created by the instruction putting this object onto the
@@ -1568,6 +1602,9 @@ pub(crate) struct PendingZoneEntryBatch {
     pub ready: Vec<BattlefieldEntryEvent>,
     pub remaining: Vec<BattlefieldEntryEvent>,
     pub generations: Vec<(ObjectId, u64)>,
+    /// Actual origin information before provisional copy-entry projection. An interrupted
+    /// move has no resulting object for a trailing Reanimate instruction (CR 608.2h/400.7j).
+    pub origin_mana_values: Vec<(ObjectId, u64, u32)>,
     pub origin: Zone,
     pub spell_label: String,
 }
@@ -2290,6 +2327,8 @@ pub struct GameState {
     pub captured_spell_copies: BTreeMap<ObjectId, StackItem>,
     /// CR 406.6 / 607.2a source-incarnation links to exact objects exiled by the paired ability.
     pub(crate) linked_exile_records: BTreeMap<LinkedExileKey, Vec<LinkedExiledObject>>,
+    /// Small deterministic entry-ordered collection; designations are not copiable values.
+    pub(crate) chosen_opponents: Vec<ChosenOpponentRecord>,
     /// CR 310.11a: public protector chosen for each battlefield Siege. The zone-change funnel
     /// removes this mapping so a returned Battle must choose again.
     pub battle_protectors: HashMap<ObjectId, PlayerId>,

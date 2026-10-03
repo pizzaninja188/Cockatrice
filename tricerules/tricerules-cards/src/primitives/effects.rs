@@ -4708,6 +4708,12 @@ impl SpellEffectKind {
                 Ok(())
             }
             SpellEffectKind::GrantTriggeredAbility { subject, ability } => {
+                if matches!(
+                    ability.trigger,
+                    TriggerCondition::AtBeginningOfChosenPlayerUpkeep { .. }
+                ) {
+                    return Err("chosen-opponent upkeep links cannot be granted".into());
+                }
                 if let EffectSubject::Chosen(target) = subject {
                     if !target.all_terminal_filters_match(|leaf| {
                         matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)

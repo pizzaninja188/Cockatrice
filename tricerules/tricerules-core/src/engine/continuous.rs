@@ -529,7 +529,8 @@ impl GameEngine {
                 }
                 StaticAbilityDef::EntersPrepared
                 | StaticAbilityDef::EntersTapped { .. }
-                | StaticAbilityDef::EntersWithChosenBasicLandType { .. } => {
+                | StaticAbilityDef::EntersWithChosenBasicLandType { .. }
+                | StaticAbilityDef::AsEntersChooseOpponent { .. } => {
                     // CR 614.12 entry replacements are evaluated against the proposed event in
                     // `engine::replacement`; there is no post-entry continuous effect to emit.
                 }

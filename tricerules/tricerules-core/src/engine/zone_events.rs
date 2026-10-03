@@ -42,7 +42,7 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
         entries.sort_by_key(|entry| self.state.apnap_rank(entry.deciding_player));
-        let generations = entries
+        let generations: Vec<_> = entries
             .iter()
             .map(|entry| {
                 (
@@ -55,12 +55,20 @@ impl GameEngine {
                 )
             })
             .collect();
+        let origin_mana_values = generations
+            .iter()
+            .filter_map(|(oid, generation)| {
+                characteristics::characteristics_from(&self.state, self.registry, *oid)
+                    .map(|characteristics| (*oid, *generation, characteristics.mana_value))
+            })
+            .collect();
         self.continue_zone_entry_batch(
             ParkedStackResolution::new(item),
             crate::state::PendingZoneEntryBatch {
                 ready: vec![],
                 remaining: entries,
                 generations,
+                origin_mana_values,
                 origin,
                 spell_label: spell_label.into(),
             },
@@ -418,6 +426,7 @@ mod timestamp_order_tests {
             tapped: false,
             set_types: None,
             chosen_basic_land_type: None,
+            chosen_opponents: Vec::new(),
             entry_counters: Default::default(),
             entry_modifiers: vec![],
             attached_to: None,

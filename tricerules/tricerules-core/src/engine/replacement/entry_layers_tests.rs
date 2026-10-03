@@ -135,6 +135,7 @@ fn event(engine: &GameEngine, oid: ObjectId) -> BattlefieldEntryEvent {
         tapped: false,
         set_types: None,
         chosen_basic_land_type: None,
+        chosen_opponents: Vec::new(),
         entry_counters: BTreeMap::new(),
         entry_modifiers: Vec::new(),
         attached_to: None,
@@ -142,6 +143,48 @@ fn event(engine: &GameEngine, oid: ObjectId) -> BattlefieldEntryEvent {
         pending_aura_recipient: None,
         applied_effects: Vec::new(),
     }
+}
+
+#[test]
+fn black_vise_internal_entry_without_eligible_opponents_completes_undefined() {
+    let mut engine = engine();
+    let source = object(&mut engine, "black_vise", Zone::Hand, 0);
+    engine.state.players[0].hand.push(source);
+    engine.state.players[0].mana_pool.colorless = 1;
+    let slot = engine.state.players[0].hand.len() - 1;
+    engine
+        .apply_command(
+            0,
+            &rv1::RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::CastSpell(rv1::CastSpell {
+                    cast_method: rv1::CastMethod::Normal as i32,
+                    source: Some(rv1::CastSource {
+                        location: Some(rv1::cast_source::Location::HandIndex(slot as u32)),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                })),
+            },
+        )
+        .unwrap();
+    let item = engine.state.stack.pop().unwrap();
+    // Intermediate resolution fixture: the departure is known before final outcome publication.
+    engine.state.players[1].has_lost = true;
+    let mut events = Vec::new();
+    let progress = engine.advance_or_park_battlefield_entry(
+        item,
+        event(&engine, source),
+        BattlefieldEntryCompletion::PermanentSpell { attached_to: None },
+        &mut events,
+    );
+    let BattlefieldEntryProgress::Ready(entry) = progress else {
+        panic!("impossible choice must not park");
+    };
+    engine.commit_battlefield_entry_state(*entry, None).unwrap();
+    assert_eq!(engine.state.objects[&source].zone, Zone::Battlefield);
+    assert!(engine.state.chosen_opponents.is_empty());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.chosen_opponent_labels(source).is_empty());
 }
 
 // No registered simultaneous hand-entry producer exists. This invokes the production batch

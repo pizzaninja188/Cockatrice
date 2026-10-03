@@ -6,7 +6,7 @@ use super::{
     PowerComparison, RelativePlayerSet, SpellCostFilter, SpellEffectKind, StackSpellFilter,
     TargetController, TargetFilter, TargetKind, TargetingDef,
 };
-use crate::{AbilityId, AbilityPresentation, ManaAmount, ModalDef};
+use crate::{AbilityId, AbilityLinkId, AbilityPresentation, ManaAmount, ModalDef};
 use serde::{Deserialize, Serialize};
 
 /// The rules zones used by Three Tree Scribe and Slagstone Refinery's departure predicates.
@@ -660,6 +660,8 @@ pub enum TriggerCondition {
     /// [`Self::AtBeginningOfDrawStep`]: for an `Opponent`-scoped trigger whose effect is meant
     /// to benefit the *controller*, `affected_player` is the wrong player — such a card needs an
     /// explicit recipient on the effect. No shipped card hits it.
+    /// CR 607.2d: the player designated by this face's linked as-entry producer.
+    AtBeginningOfChosenPlayerUpkeep { link_id: AbilityLinkId },
     AtBeginningOfUpkeep {
         /// Whose upkeep fires this, relative to the source permanent's controller. Defaults to
         /// `Controller` — the printed template on the overwhelming majority of upkeep triggers,
@@ -907,6 +909,7 @@ impl TriggerCondition {
 
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
+            Self::AtBeginningOfChosenPlayerUpkeep { link_id } => link_id.validate(),
             Self::SagaChapter { chapters } => {
                 if chapters.is_empty() {
                     return Err("Saga chapter trigger requires at least one chapter".into());
@@ -1980,6 +1983,8 @@ pub enum StaticAbilityDef {
     /// linked optional cost. The type choice and cost are one replacement-effect application;
     /// no unrelated replacement effect may be interposed between them.
     EntersWithChosenBasicLandType { untapped_cost: EntryCost },
+    /// CR 614.12 / 607.2d: Black Vise and The Rack choose before committing entry.
+    AsEntersChooseOpponent { link_id: AbilityLinkId },
     /// CR 614.1d: modify a proposed battlefield-entry event rather than tapping the permanent
     /// after it enters. Intrinsic examples include Diregraf Ghoul and the gainland cycle;
     /// `Permanents` is the global Orb of Dreams form.

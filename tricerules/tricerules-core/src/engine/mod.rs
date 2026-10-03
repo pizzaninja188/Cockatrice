@@ -175,6 +175,7 @@ mod blight;
 mod card_predicates;
 mod casting;
 mod characteristics;
+mod chosen_opponents;
 mod combat;
 mod continuous;
 mod copying;
@@ -1154,6 +1155,7 @@ struct PlayerBattlefieldSnapshot {
 
 #[derive(Clone, PartialEq, Eq)]
 struct BattlefieldObjectSnapshot {
+    chosen_opponent_labels: Vec<String>,
     preparation: Option<ObjectId>,
     object_id: ObjectId,
     card_id: String,
@@ -1641,6 +1643,7 @@ impl GameEngine {
             prepare_spell_sources: Default::default(),
             captured_spell_copies: Default::default(),
             linked_exile_records: Default::default(),
+            chosen_opponents: Vec::new(),
             battle_protectors: HashMap::new(),
             stack: Vec::new(),
             stack_presentations: HashMap::new(),

@@ -1635,6 +1635,17 @@ impl GameEngine {
                         let player_filter = match (phase, condition) {
                             (
                                 rv1::PhaseId::Upkeep,
+                                TriggerCondition::AtBeginningOfChosenPlayerUpkeep { link_id },
+                            ) => {
+                                return self.chosen_opponent_for(source.object_id, link_id)
+                                    == Some(*active_player)
+                                    && self
+                                        .state
+                                        .player_idx(*active_player)
+                                        .is_some_and(|index| !self.state.players[index].has_lost);
+                            }
+                            (
+                                rv1::PhaseId::Upkeep,
                                 TriggerCondition::AtBeginningOfUpkeep { player },
                             )
                             | (
@@ -2321,6 +2332,30 @@ impl GameEngine {
             .triggered_abilities
             .iter()
             .filter(|(_, ability, _)| filter(&ability.trigger))
+            .filter(|(_, ability, origin)| {
+                let TriggerCondition::AtBeginningOfChosenPlayerUpkeep { link_id } =
+                    &ability.trigger
+                else {
+                    return true;
+                };
+                let TriggerAbilityOrigin::Printed(consumer) = origin else {
+                    return false;
+                };
+                self.effective_face(source.object_id)
+                    .and_then(|face| {
+                        self.chosen_opponent_key(
+                            source.object_id,
+                            source.face_index,
+                            &face,
+                            link_id,
+                        )
+                    })
+                    .is_some_and(|key| {
+                        key.source_zone_change == source.zone_change_generation
+                            && key.producer.card_id == consumer.card_id
+                            && key.producer.face_id == consumer.face_id
+                    })
+            })
             .filter(|(_, ability, _)| {
                 let requires_event_context =
                     ability.intervening_if.as_ref().is_some_and(|condition| {
