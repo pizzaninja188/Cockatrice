@@ -500,7 +500,8 @@ fn song_retains_independent_mana_grants_in_either_order_and_restores_original_ma
         if !gift_first {
             cast_gift(&mut engine);
         }
-        let mut grant = activate_ability_for(&engine, island, 2, vec![]);
+        // Island's authored intrinsic marker already owns slot 0; the grant appends at 1.
+        let mut grant = activate_ability_for(&engine, island, 1, vec![]);
         let Some(Cmd::ActivateAbility(ability)) = grant.cmd.as_mut() else {
             unreachable!()
         };

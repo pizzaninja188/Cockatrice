@@ -292,6 +292,27 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn scoped_activated_grants_keep_parent_and_child_presentation_paths() {
+        let definition: StaticAbilityDef = ron::from_str(
+            r#"GrantActivatedAbilityToPermanents(
+            filter: (kind: AnyPermanent), activated_abilities: [(
+                ability_id: "activated_01", presentation: Fallback, costs: [Tap],
+                effect: [ProduceMana(options: [(g: 1)])],
+            )],
+        )"#,
+        )
+        .unwrap();
+        let node = json!({"ability_id": "static_01", "presentation": {"OracleLines": [1]},
+            "definition": serde_json::to_value(definition).unwrap()});
+        let mut found = Vec::new();
+        nodes(&node, "static_abilities/static_01", &mut found);
+        assert_eq!(found.iter().map(|entry| entry.0.as_str()).collect::<Vec<_>>(), [
+            "static_abilities/static_01",
+            "static_abilities/static_01/definition/GrantActivatedAbilityToPermanents/activated_abilities/activated_01",
+        ]);
+    }
+
+    #[test]
     fn token_names_cannot_shadow_normal_card_fingerprints() {
         let token =
             json!({"name":"Spellgorger Weird", "layout":"token", "oracle_text":"Token wording"});

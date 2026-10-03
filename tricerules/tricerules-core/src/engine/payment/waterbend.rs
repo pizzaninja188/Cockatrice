@@ -14,6 +14,16 @@ pub(super) fn generic_component(cost: &ManaCost) -> Result<u32, EngineError> {
 }
 
 impl GameEngine {
+    pub(in crate::engine) fn resolving_mana_payment_for(&self, player: PlayerId) -> bool {
+        self.state
+            .pending_resolution
+            .as_ref()
+            .is_some_and(|pending| {
+                pending.deciding_player == player
+                    && pending.continuation.mana_window_undo_start().is_some()
+            })
+    }
+
     pub(in crate::engine) fn waterbend_candidate(
         &self,
         player: PlayerId,
@@ -40,9 +50,16 @@ impl GameEngine {
     ) -> Result<PreparedPaymentCosts, EngineError> {
         use super::super::targeting::{validate_ability_targets, TargetSourceIdentity};
         let source = command.source_object_id;
-        if self.state.priority_player_id() != player
-            || self.state.blocking_choice().is_some()
-            || self.state.turn_step == TurnStep::Cleanup
+        let resolving_mana_payment = self.resolving_mana_payment_for(player);
+        let casting_mana_payment = self
+            .state
+            .pending_spell_cast
+            .as_ref()
+            .is_some_and(|pending| pending.caster == player);
+        if (!resolving_mana_payment
+            && (self.state.priority_player_id() != player
+                || self.state.blocking_choice().is_some()
+                || self.state.turn_step == TurnStep::Cleanup))
             || super::super::combat::priority_locked_for_combat_declaration(&self.state)
         {
             return Err(EngineError::Illegal("activation payment unavailable now"));
@@ -89,8 +106,8 @@ impl GameEngine {
             AbilitySourceZone::Battlefield => self
                 .effective_activated_abilities(source)
                 .into_iter()
-                .find(|(index, _, _, _)| *index == command.ability_index as usize)
-                .map(|(_, ability, _, _)| ability),
+                .find(|effective| effective.slot == command.ability_index)
+                .map(|effective| effective.definition),
             AbilitySourceZone::Hand | AbilitySourceZone::Graveyard => self
                 .authored_zone_activated_abilities(source, source_zone)
                 .into_iter()
@@ -98,6 +115,11 @@ impl GameEngine {
                 .map(|(_, ability, _)| ability),
         }
         .ok_or(EngineError::Illegal("missing activated ability"))?;
+        if (resolving_mana_payment || casting_mana_payment) && !ability.is_mana_ability() {
+            return Err(EngineError::Illegal(
+                "only mana abilities may be activated during payment",
+            ));
+        }
         self.validate_activation_mana_choice(
             source,
             source_zone,

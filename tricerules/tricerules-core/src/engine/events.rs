@@ -29,6 +29,7 @@ impl GameEngine {
             )
         });
         batch.events.push(ev_game_over(outcome));
+        self.reconcile_activated_ability_slots();
         // Terminal publication also serves startup/reconnect responses, which must
         // seed every physical zone even when an earlier batch populated the caches.
         batch.events.push(self.ev_zone_view_sync());
@@ -143,12 +144,14 @@ impl GameEngine {
             "Face-down permanent".to_string()
         } else {
             self.effective_face(oid)
-            .map(|face| face.name.clone())
+                .map(|face| face.name.clone())
                 .unwrap_or_else(|| object.card_id.clone())
         };
-        for (_, ability, granted, path) in self.effective_activated_abilities(oid) {
-            let fallback = ability.fallback_text_with_path(&face_name, &path);
-            if granted && !labels.contains(&fallback) {
+        for effective in self.effective_activated_abilities(oid) {
+            let fallback = effective
+                .definition
+                .fallback_text_with_path(&face_name, &effective.ability_path());
+            if effective.granted && !labels.contains(&fallback) {
                 labels.push(fallback);
             }
         }
@@ -208,6 +211,7 @@ impl GameEngine {
     }
 
     pub fn initial_response_batch(&mut self) -> RuledEventBatch {
+        self.reconcile_activated_ability_slots();
         let mut batch = RuledEventBatch::default();
         // Catalog first: Servatrice resolves the zone-view card ids below through it.
         batch.events.push(self.ev_card_catalog());
@@ -543,15 +547,8 @@ impl GameEngine {
                         let activated_abilities = self
                             .effective_activated_abilities(oid)
                             .into_iter()
-                            .map(|(ability_index, ability, _, path)| {
-                                super::legal_actions::activated_ability_info(
-                                    self,
-                                    oid,
-                                    object.face_up_index,
-                                    ability_index,
-                                    &path,
-                                    &ability,
-                                )
+                            .map(|effective| {
+                                super::legal_actions::activated_ability_info(self, oid, &effective)
                             })
                             .collect();
                         let keywords = [
@@ -795,6 +792,7 @@ impl GameEngine {
             static_emblems: self.state.static_emblems.clone(),
             activation_uses_this_turn: self.state.activation_uses_this_turn.clone(),
             activation_uses_per_object: self.state.activation_uses_per_object.clone(),
+            activated_ability_slots: self.state.activated_ability_slots.clone(),
             turn_history: self.state.turn_history.clone(),
             active_player: self.state.active_player_id(),
             turn_step: self.state.turn_step,

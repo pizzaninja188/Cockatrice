@@ -968,8 +968,12 @@ fn zone_view_includes_battlefield_object_ids() {
     let mut e = GameEngine::new(404, &[0, 1], 20, decks, true).expect("new");
     advance_to_main1_from_game_start(&mut e);
     let bears = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
-    // ZoneViewSync is emitted as part of every batch via apply_command's tail.
-    let b = e.apply_command(0, &pass()).expect("ap pass main1");
+    // The fixture was published at insertion. A reconnect snapshot contains full objects;
+    // an unchanged priority-pass publication correctly uses the compact battlefield flag.
+    let b = e.initial_response_batch();
+    let passed = e.apply_command(0, &pass()).expect("ap pass main1");
+    assert!(passed.events.iter().any(|event| matches!(&event.ev,
+        Some(Ev::ZoneView(view)) if view.battlefields_unchanged)));
     let zone_view = b
         .events
         .iter()

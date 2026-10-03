@@ -2,7 +2,8 @@
 
 use crate::custom::{self, ResolutionChoice, ResolutionCtx, ResolutionStep};
 use crate::state::{
-    AbilityDefinitionId, ActivationUseKey, ActiveDamagePrevention, ActiveDeathReplacement,
+    AbilityDefinitionId, ActivatedAbilityOccurrence, ActivatedAbilitySlotLedger,
+    ActivationUseIdentity, ActivationUseKey, ActiveDamagePrevention, ActiveDeathReplacement,
     ActiveEventObserver, ActiveExilePlayPermission, AffectedScope, AttachmentRecipient,
     AttackingTokenBatch, BattlefieldEntryCompletion, BattlefieldEntryEvent, BlockingChoice,
     CardResultCohort, CardResultEntry, CastCostObjectReceipt, CastCostReceipt, ChosenMode,
@@ -178,6 +179,7 @@ mod characteristics;
 mod chosen_opponents;
 mod combat;
 mod continuous;
+use continuous::EffectiveActivatedAbility;
 mod copying;
 mod counters;
 mod custom_resolution;
@@ -523,10 +525,11 @@ mod face_change_tests {
         let info = legal_actions::activated_ability_info(
             &engine,
             source,
-            0,
-            0,
-            std::slice::from_ref(&ability.ability_id),
-            ability,
+            &EffectiveActivatedAbility::authored(
+                0,
+                ability.clone(),
+                engine.ability_definition(source, 0, vec![ability.ability_id.clone()]),
+            ),
         );
         assert!(info.is_mana_ability);
         assert!(info.mana_produced.is_empty());
@@ -1132,6 +1135,7 @@ struct BattlefieldViewSnapshot {
     static_emblems: Vec<StaticEmblemInstance>,
     activation_uses_this_turn: HashMap<ActivationUseKey, u32>,
     activation_uses_per_object: HashMap<PersistentActivationUseKey, u32>,
+    activated_ability_slots: BTreeMap<ObjectId, ActivatedAbilitySlotLedger>,
     turn_history: TurnHistory,
     active_player: PlayerId,
     turn_step: TurnStep,
@@ -1668,6 +1672,7 @@ impl GameEngine {
             lands_played_this_turn: 0,
             activation_uses_this_turn: HashMap::new(),
             activation_uses_per_object: HashMap::new(),
+            activated_ability_slots: BTreeMap::new(),
             triggered_once: HashSet::new(),
             trigger_uses_this_turn: HashMap::new(),
             next_trigger_grant_id: 0,
@@ -2463,6 +2468,7 @@ impl GameEngine {
             self.battlefield_view_cache,
             self.first_strike_step_pending_cache,
         ) = zone_view_cache_before;
+        self.reconcile_activated_ability_slots();
         batch.events.push(self.ev_zone_view_sync_tracked());
         for player_index in 0..self.state.players.len() {
             batch.events.push(self.ev_mana_pool_updated(player_index));
@@ -2574,14 +2580,7 @@ impl GameEngine {
                             .pending_spell_cast
                             .as_ref()
                             .is_some_and(|pending| pending.caster == player)
-                            || self
-                                .state
-                                .pending_resolution
-                                .as_ref()
-                                .is_some_and(|pending| {
-                                    pending.continuation.mana_window_undo_start().is_some()
-                                        && pending.deciding_player == player
-                                }))
+                            || self.resolving_mana_payment_for(player))
                 }
                 BlockingChoice::TriggerOrder => {
                     matches!(cmd.cmd.as_ref(), Some(Cmd::SubmitTriggerOrder(_)))
@@ -2750,6 +2749,7 @@ impl GameEngine {
         if self.state.is_terminal() {
             return Ok(self.finish_terminal_batch(b));
         }
+        self.reconcile_activated_ability_slots();
         b.events.push(self.ev_zone_view_sync_tracked());
         // CR 106: emit each player's authoritative mana pool so the relay/clients mirror it onto
         // their mana-pool counters. An absolute snapshot per batch covers production (mana

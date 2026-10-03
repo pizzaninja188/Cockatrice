@@ -524,6 +524,90 @@ TEST_F(RuledClientTest, SharedPaymentTracksOptimisticPoolDebitsAndRetiresSanitiz
     EXPECT_EQ(payment.takeRetiredOptimisticManaCounterIds(), QVector<int>({17}));
 }
 
+TEST_F(RuledClientTest, SanitizedWardUndoDoesNotRestoreManaRemovedByTheEngine)
+{
+    auto &payment = state->payment;
+    payment.begin(true);
+    RuledManaPoolTracker tracker;
+    EXPECT_EQ(tracker.observe(17, 0, 1, 0).displayedBeforeNewStaging, 1);
+    ASSERT_TRUE(payment.payMana('W', 0, 17));
+    auto request = payment.requestAction({});
+    ruled::v1::PaymentPreview preview;
+    preview.set_transaction_id(request.transaction_id());
+    preview.set_revision(request.revision());
+    preview.set_valid(true);
+    *preview.mutable_selection() = payment.selection;
+    ASSERT_TRUE(payment.apply(preview));
+
+    // Undo's absolute pool event arrives before its fresh preview removes the stale pip.
+    int displayed = tracker.observe(17, 0, 0, payment.optimisticManaCounterSpendCount(17))
+                        .displayedBeforeNewStaging;
+    request = payment.requestAction({});
+    preview.set_revision(request.revision());
+    preview.mutable_selection()->Clear();
+    preview.set_selection_changed(true);
+    ASSERT_TRUE(payment.apply(preview));
+    for (const int id : payment.takeRetiredOptimisticManaCounterIds())
+        displayed = tracker.restoreOptimisticDebit(id, displayed, payment.optimisticManaCounterSpendCount(id));
+    EXPECT_EQ(displayed, 0) << "retiring a staged debit must not recreate undone engine mana";
+    EXPECT_FALSE(payment.beginSubmission());
+    EXPECT_TRUE(payment.active);
+    EXPECT_EQ(tracker.observe(17, displayed, 0, 0).newlyProduced, 0);
+}
+
+TEST_F(RuledClientTest, WardUndoRetainsOldStagedManaAndCancellationRefundsOnlyThatMana)
+{
+    auto &payment = state->payment;
+    payment.begin(true);
+    RuledManaPoolTracker tracker;
+    tracker.observe(17, 0, 1, 0);
+    ASSERT_TRUE(payment.payMana('W', 0, 17));
+    EXPECT_EQ(tracker.observe(17, 0, 2, 1).newlyProduced, 1);
+    ASSERT_TRUE(payment.payMana('W', 0, 17));
+    int displayed = tracker.observe(17, 0, 1, 2).displayedBeforeNewStaging;
+    const auto request = payment.requestAction({});
+    ruled::v1::PaymentPreview preview;
+    preview.set_transaction_id(request.transaction_id());
+    preview.set_revision(request.revision());
+    preview.set_valid(true);
+    preview.mutable_selection()->mutable_mana()->set_w(1);
+    preview.set_selection_changed(true);
+    ASSERT_TRUE(payment.apply(preview));
+    EXPECT_EQ(payment.optimisticManaCounterSpendCount(17), 1);
+    for (const int id : payment.takeRetiredOptimisticManaCounterIds())
+        displayed = tracker.restoreOptimisticDebit(id, displayed, payment.optimisticManaCounterSpendCount(id));
+    EXPECT_EQ(displayed, 0);
+    payment.clear();
+    for (const int id : payment.takeRetiredOptimisticManaCounterIds())
+        displayed = tracker.restoreOptimisticDebit(id, displayed, payment.optimisticManaCounterSpendCount(id));
+    EXPECT_EQ(displayed, 1) << "cancellation restores the old pip, never the undone pip";
+}
+
+TEST_F(RuledClientTest, SubmissionRefundsQueuedExcessWithoutRefundingSelectedMana)
+{
+    auto &payment = state->payment;
+    payment.begin(true);
+    RuledManaPoolTracker tracker;
+    tracker.observe(17, 0, 3, 0);
+    ASSERT_TRUE(payment.payMana('W', 0, 17));
+    ASSERT_TRUE(payment.payMana('W', 0, 17));
+    const auto request = payment.requestAction({});
+    ASSERT_TRUE(payment.stageMana('W', 0, 17)); // Produced after the pending preview's selection.
+    ruled::v1::PaymentPreview preview;
+    preview.set_transaction_id(request.transaction_id());
+    preview.set_revision(request.revision());
+    preview.set_valid(true);
+    preview.set_complete(true);
+    *preview.mutable_selection() = payment.selection;
+    ASSERT_TRUE(payment.apply(preview));
+    ASSERT_TRUE(payment.beginSubmission());
+    int displayed = 0;
+    for (const int id : payment.takeRetiredOptimisticManaCounterIds())
+        displayed = tracker.restoreOptimisticDebit(id, displayed, payment.optimisticManaCounterSpendCount(id));
+    EXPECT_EQ(displayed, 1) << "two selected pips remain hidden until the engine consumes them";
+    EXPECT_EQ(tracker.restoreOptimisticDebit(18, 0, 0), 1) << "unknown snapshots retain local credit behavior";
+}
+
 TEST_F(RuledClientTest, SuspendingPaymentDoesNotRefundTheOuterSpellIntoTheManaPool)
 {
     auto &payment = state->payment;
@@ -4388,6 +4472,56 @@ TEST_F(RuledClientTest, AbilityDecodingPreservesSparseSlotsAndPresentationAcross
         EXPECT_EQ(state->activatedAbilityMenuLabel(oid, 2), QStringLiteral("Updated ability"));
         EXPECT_FALSE(state->abilityActivatable(oid, 2));
     }
+}
+
+TEST_F(RuledClientTest, RemovingEarlierGrantRetainsSurvivingSparseSlotAndRecipientGeneration)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *object = batch.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    object->set_object_id(203);
+    object->set_zone_change_generation(4);
+    for (quint32 slot : {0u, 1u, 2u}) {
+        auto *ability = object->add_activated_abilities();
+        ability->set_ability_index(slot);
+        ability->set_text(slot == 0 ? "Native mana" : "{T}: Add one mana of any color.");
+        ability->set_mana_produced(slot == 0 ? "G" : "W|U|B|R|G");
+        ability->set_is_mana_ability(true);
+        ability->set_has_only_tap_cost(true);
+        ability->set_activatable(true);
+    }
+    apply(batch);
+    EXPECT_EQ(state->activatedAbilityIndicesForOid(203), QList<int>({0, 1, 2}));
+    const auto survivor = state->activatedAbilitiesForOid(203)[2];
+
+    object->mutable_activated_abilities()->DeleteSubrange(1, 1);
+    apply(batch);
+    EXPECT_EQ(state->activatedAbilityIndicesForOid(203), QList<int>({0, 2}));
+    const auto current = state->activatedAbilitiesForOid(203);
+    ASSERT_EQ(current.size(), 3);
+    EXPECT_FALSE(current[1]);
+    ASSERT_TRUE(current[2]);
+    EXPECT_EQ(current[2]->manaProduced, survivor->manaProduced);
+    EXPECT_EQ(state->activatedAbilityMenuLabel(203, 2), QStringLiteral("{T}: Add one mana of any color."));
+    EXPECT_FALSE(state->abilityActivatable(203, 1));
+    EXPECT_TRUE(state->abilityActivatable(203, 2));
+    EXPECT_EQ(state->abilitySourceGeneration(203), 4u);
+
+    ruled::v1::RuledEventBatch unchanged;
+    unchanged.add_events()->mutable_zone_view()->set_battlefields_unchanged(true);
+    apply(unchanged);
+    EXPECT_EQ(state->activatedAbilityIndicesForOid(203), QList<int>({0, 2}));
+
+    // A new recipient incarnation replaces the catalog; old tombstones do not survive it.
+    object->set_zone_change_generation(5);
+    object->clear_activated_abilities();
+    auto *newAbility = object->add_activated_abilities();
+    newAbility->set_ability_index(0);
+    newAbility->set_text("New incarnation");
+    newAbility->set_activatable(true);
+    apply(batch);
+    EXPECT_EQ(state->activatedAbilityIndicesForOid(203), QList<int>({0}));
+    EXPECT_EQ(state->abilitySourceGeneration(203), 5u);
+    EXPECT_TRUE(state->activatedAbilityMenuLabel(203, 2).isEmpty());
 }
 
 TEST_F(RuledClientTest, AbilitySnapshotsRetainBattlefieldButExpireZoneOffersAndResetTogether)

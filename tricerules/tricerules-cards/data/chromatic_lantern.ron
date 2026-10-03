@@ -1,0 +1,29 @@
+// Exact Oracle 539f5396-d99a-417d-a84c-dff7930b5900 and rulings checked 2026-10-02.
+// The grant preserves native land types and abilities; tap eligibility still applies to creatures.
+(
+  id: "chromatic_lantern",
+  name: "Chromatic Lantern",
+  face_id: "chromatic_lantern",
+  mana_cost: "{3}",
+  types: ["Artifact"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: GrantActivatedAbilityToPermanents(
+      filter: (kind: AnyPermanent, controller: You, permanent_types: [Land]),
+      activated_abilities: [(
+        ability_id: "activated_01",
+        // A quoted child fragment; the complete granting instruction belongs to the parent.
+        presentation: Fallback,
+        costs: [Tap],
+        effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+      )],
+    ),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Tap],
+    effect: [ProduceMana(options: [(w: 1), (u: 1), (b: 1), (r: 1), (g: 1)])],
+  )],
+)

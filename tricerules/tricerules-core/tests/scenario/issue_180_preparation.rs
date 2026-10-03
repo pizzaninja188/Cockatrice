@@ -84,12 +84,14 @@ fn preparation_logged_instructions_reprepare_once_and_invalidate_old_copy() {
         face,
         room_faces: None,
     });
-    let unprepare = activate_ability_for(&engine, permanent, 0, vec![]);
+    engine.initial_response_batch();
+    // The already published incarnation reserved intrinsic slot 0 before these new definitions.
+    let unprepare = activate_ability_for(&engine, permanent, 1, vec![]);
     engine.apply_command(0, &unprepare).unwrap();
     resolve_entire_stack_two_player(&mut engine);
     assert!(!engine.state.prepared_permanents.contains_key(&permanent));
     assert!(!engine.state.objects.contains_key(&old_copy));
-    let prepare = activate_ability_for(&engine, permanent, 1, vec![]);
+    let prepare = activate_ability_for(&engine, permanent, 2, vec![]);
     engine.apply_command(0, &prepare).unwrap();
     resolve_entire_stack_two_player(&mut engine);
     let new_copy = engine.state.prepared_permanents[&permanent];

@@ -526,6 +526,7 @@ pub(crate) fn deploy_to_battlefield(
     obj.zone = tricerules_core::Zone::Battlefield;
     obj.tapped = tapped;
     obj.summoning_sick = false;
+    e.initial_response_batch();
     oid
 }
 
@@ -829,6 +830,7 @@ pub(crate) fn put_creature_on_battlefield(e: &mut GameEngine, player: usize, car
         obj.summoning_sick = false;
         obj.tapped = false;
     }
+    e.initial_response_batch();
     oid
 }
 
@@ -872,6 +874,9 @@ pub(crate) fn inject_creature_on_battlefield(
         },
     );
     e.state.players[player].battlefield.push(id);
+    // Direct fixture insertion bypasses accepted command settlement. Publish it explicitly so
+    // identity-bearing ability slots exist before the scenario reads offers or rejects commands.
+    e.initial_response_batch();
     id
 }
 
@@ -915,6 +920,7 @@ pub(crate) fn inject_permanent_on_battlefield(
         },
     );
     e.state.players[player].battlefield.push(id);
+    e.initial_response_batch();
     id
 }
 
@@ -1040,6 +1046,7 @@ pub(crate) fn inject_creature_under_foreign_control(
     );
     // The battlefield list is the control index, so the permanent goes on the *controller's*.
     e.state.players[controller].battlefield.push(id);
+    e.initial_response_batch();
     id
 }
 
@@ -1293,6 +1300,7 @@ pub(crate) fn inject_creature_with_stats(
         },
     );
     e.state.players[player].battlefield.push(id);
+    e.initial_response_batch();
     id
 }
 
@@ -1446,6 +1454,7 @@ pub(crate) fn relocate_to_battlefield(
     o.zone = tricerules_core::Zone::Battlefield;
     o.tapped = tapped;
     o.summoning_sick = false;
+    e.initial_response_batch();
     oid
 }
 

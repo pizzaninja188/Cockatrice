@@ -237,6 +237,7 @@ fn issue_494_pure_talisman_mana_remains_undoable_and_damage_activation_invalidat
 fn issue_494_prevention_choice_preserves_source_identity_and_resumes_once() {
     let (mut engine, source) = damage_mana_engine(494_020, 20, "talisman_of_impulse");
     engine.state.zone_change_generation.insert(source, 7);
+    engine.initial_response_batch();
     engine.state.add_damage_prevention_shield(0, 1);
     engine.state.add_damage_prevention_shield(0, 1);
 
@@ -622,6 +623,7 @@ fn issue_494_activation_and_prevention_choice_replay_deterministically() {
     for engine in [&mut original, &mut replay] {
         engine.state.add_damage_prevention_shield(0, 1);
         engine.state.add_damage_prevention_shield(0, 1);
+        engine.initial_response_batch();
     }
 
     let activation = activate_ability_for(&original, source, 1, vec![]);

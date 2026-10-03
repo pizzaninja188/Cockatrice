@@ -1492,9 +1492,9 @@ fn effect_scope_affects_with_reference(
                 reference_override
                     .or_else(|| {
                         effect.source_id.map(|source| {
-                        CharacteristicsEvaluator { state, registry }
-                            .layer_2_controller(source, &mut Vec::new())
-                    })
+                            CharacteristicsEvaluator { state, registry }
+                                .layer_2_controller(source, &mut Vec::new())
+                        })
                     })
                     .unwrap_or(*reference_player)
             } else {
@@ -1519,9 +1519,9 @@ fn effect_scope_affects_with_reference(
                 reference_override
                     .or_else(|| {
                         effect.source_id.map(|source| {
-                        CharacteristicsEvaluator { state, registry }
-                            .layer_2_controller(source, &mut Vec::new())
-                    })
+                            CharacteristicsEvaluator { state, registry }
+                                .layer_2_controller(source, &mut Vec::new())
+                        })
                     })
                     .unwrap_or(*reference_player)
             } else {
@@ -2773,6 +2773,7 @@ mod tests {
             .base_controller = 0;
         engine.state.objects.get_mut(&recipient).unwrap().controller = 0;
         engine.emit_static_abilities_on_enter(forge);
+        engine.reconcile_activated_ability_slots();
         assert!(!engine.effective_activated_abilities(mana).is_empty());
         assert!(!engine
             .effective_triggered_abilities(trigger, "psychosis_crawler", 0)
@@ -2802,11 +2803,11 @@ mod tests {
         let mana_abilities = engine.effective_activated_abilities(mana);
         assert_eq!(mana_abilities.len(), 1);
         assert!(
-            mana_abilities[0].1.intrinsic_land_mana,
+            mana_abilities[0].definition.intrinsic_land_mana,
             "the printed ability disappears; the resulting Forest derives its own mana ability"
         );
         assert_eq!(
-            mana_abilities[0].1.mana_options(),
+            mana_abilities[0].definition.mana_options(),
             Some(&vec![BasicLandType::Forest.mana()])
         );
         assert!(

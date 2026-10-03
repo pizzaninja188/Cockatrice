@@ -142,6 +142,7 @@ fn set_charge(engine: &mut GameEngine, object_id: u32, count: u32) {
         .get_mut(&object_id)
         .unwrap()
         .set_counter(CounterKind::Charge, count);
+    engine.initial_response_batch();
 }
 
 #[test]

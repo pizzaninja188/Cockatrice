@@ -39,7 +39,8 @@ fn pass_all_players(engine: &mut GameEngine) {
 
 fn exile_with(engine: &mut GameEngine, vacuum: u32, target: u32) {
     engine.state.objects.get_mut(&vacuum).unwrap().tapped = false;
-    let command = activate_ability_for(engine, vacuum, 0, target_object(target));
+    let slot = vacuum_ability_slots(engine, vacuum)[0];
+    let command = activate_ability_for(engine, vacuum, slot, target_object(target));
     engine
         .apply_command(0, &command)
         .expect("activate linked graveyard exile");
@@ -48,12 +49,36 @@ fn exile_with(engine: &mut GameEngine, vacuum: u32, target: u32) {
 
 fn release_with(engine: &mut GameEngine, vacuum: u32) {
     engine.state.objects.get_mut(&vacuum).unwrap().tapped = false;
-    let command = activate_ability_for(engine, vacuum, 1, vec![]);
+    let slot = vacuum_ability_slots(engine, vacuum)[1];
+    let command = activate_ability_for(engine, vacuum, slot, vec![]);
     engine
         .apply_command(0, &command)
         .expect("activate linked return");
     assert_ne!(engine.state.objects[&vacuum].zone, Zone::Battlefield);
     resolve_top(engine);
+}
+
+fn vacuum_ability_slots(engine: &mut GameEngine, object_id: u32) -> Vec<u32> {
+    engine
+        .initial_response_batch()
+        .events
+        .iter()
+        .find_map(|event| match &event.ev {
+            Some(Ev::ZoneView(view)) => view
+                .per_player
+                .iter()
+                .flat_map(|player| &player.battlefield_objects)
+                .find(|object| object.object_id == object_id)
+                .map(|object| {
+                    object
+                        .activated_abilities
+                        .iter()
+                        .map(|ability| ability.ability_index)
+                        .collect()
+                }),
+            _ => None,
+        })
+        .expect("published Vacuum abilities")
 }
 
 fn dev_move(target_player_id: i32, card_name: &str, zone: DevZone) -> RuledCommand {
@@ -392,11 +417,13 @@ fn issue_234_copied_release_and_permanent_or_token_copies_keep_source_links() {
         display_name: "Ghost Vacuum".into(),
     });
     let creature = inject_graveyard_card(&mut engine, 1, "grizzly_bears");
+    assert_eq!(vacuum_ability_slots(&mut engine, token), [2, 3],
+        "copied definitions append after Treasure's previously published native and intrinsic slots");
     exile_with(&mut engine, token, creature);
 
     engine.state.objects.get_mut(&token).unwrap().tapped = false;
     engine
-        .apply_command(0, &activate_ability(token, 1, vec![]))
+        .apply_command(0, &activate_ability(token, 3, vec![]))
         .unwrap();
     let mut copy = engine.state.stack.last().unwrap().clone();
     copy.id = engine.state.next_object_id;
@@ -422,6 +449,11 @@ fn issue_234_copied_release_and_permanent_or_token_copies_keep_source_links() {
         display_name: "Ghost Vacuum".into(),
     });
     let second_creature = inject_graveyard_card(&mut engine, 1, "hill_giant");
+    assert_eq!(
+        vacuum_ability_slots(&mut engine, permanent_copy),
+        [1, 2],
+        "the existing intrinsic reservation precedes newly encountered copied definitions"
+    );
     exile_with(&mut engine, permanent_copy, second_creature);
     release_with(&mut engine, permanent_copy);
     assert_eq!(

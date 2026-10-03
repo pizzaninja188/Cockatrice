@@ -1,0 +1,78 @@
+{
+  "format_version": 1,
+  "oracle_id": "539f5396-d99a-417d-a84c-dff7930b5900",
+  "spans": [
+    {
+      "face_id": "chromatic_lantern",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "chromatic_lantern",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_chromatic_lantern::lantern_paid_cast_exact_definition_and_both_oracle_clauses",
+      "covers": "paid cast, exact identity and both complete Oracle clauses"
+    },
+    {
+      "test": "scenario deck_coverage_chromatic_lantern::lantern_own_and_granted_basic_nonbasic_mana_have_five_immediate_single_outputs_and_undo",
+      "covers": "own and granted five colors, one tap and one immediate mana, basic and nonbasic lands, undo"
+    },
+    {
+      "test": "scenario deck_coverage_chromatic_lantern::lantern_dynamic_scope_preserves_native_types_and_abilities_and_excludes_opponents_nonlands",
+      "covers": "current land scope, later entrants, native land types and abilities, opponent and nonland exclusion"
+    },
+    {
+      "test": "scenario deck_coverage_chromatic_lantern::lantern_second_grant_survives_first_departure_without_rebinding_and_new_incarnations_append",
+      "covers": "distinct duplicate sources, stable surviving slots, stale origin rejection and source/recipient incarnations"
+    },
+    {
+      "test": "scenario deck_coverage_chromatic_lantern::lantern_source_suppression_works_before_or_after_grant_and_restores_the_same_slot",
+      "covers": "unstarted source-grant dependency, earlier and later removal, stable restoration"
+    },
+    {
+      "test": "scenario deck_coverage_chromatic_lantern::lantern_new_noncreature_land_can_tap_but_sick_creature_land_requires_haste",
+      "covers": "noncreature land tap eligibility versus sick creature land and haste"
+    },
+    {
+      "test": "scenario deck_coverage_chromatic_lantern::lantern_invalid_option_targets_slot_generation_and_actor_are_atomic",
+      "covers": "invalid color, targets, slot, generation and wrong actor preserve complete diagnostic state"
+    },
+    {
+      "test": "scenario deck_coverage_chromatic_lantern::lantern_granted_mana_can_pay_casts_and_parked_resolution_payments_with_undo",
+      "covers": "pure activation previews and normalized granted mana pay casts and active/nonactive parked ward payments; undo, declined-payment rewind, wrong actor, nonmana and nonpayment choice rejection"
+    },
+    {
+      "test": "scenario deck_coverage_chromatic_lantern::lantern_replays_paid_cast_grants_undo_and_new_source_incarnation",
+      "covers": "accepted-command replay preserves batches and diagnostics through casting, grant, undo, removal and reentry"
+    },
+    {
+      "test": "scenario deck_coverage_chromatic_lantern::lantern_granted_mana_pays_an_open_spell_transaction_with_preview_and_undo",
+      "covers": "pending BeginSpellCast, immutable payment preview, undo, atomic unaffordable and wrong-seat rejection, retry and commit"
+    },
+    {
+      "test": "scenario deck_coverage_chromatic_lantern::lantern_recipient_scope_loss_rejects_the_old_slot_and_restoration_reuses_it",
+      "covers": "recipient control and type scope loss, atomic stale-slot rejection and stable restoration"
+    },
+    {
+      "test": "scenario deck_coverage_chromatic_lantern::lantern_recipient_removal_respects_timestamp_and_equal_timestamp_insertion",
+      "covers": "recipient removal before, after and equal grant timestamp with both insertion orders"
+    },
+    {
+      "test": "scenario deck_coverage_chromatic_lantern::lantern_settled_reconnect_publication_is_idempotent_without_new_slots_or_state",
+      "covers": "settled engine reconnect publication preserves diagnostics, batches and slots"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

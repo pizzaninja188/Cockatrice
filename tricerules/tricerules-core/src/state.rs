@@ -182,7 +182,7 @@ impl From<CardResultCohort> for EffectResult {
 pub struct ActivationUseKey {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
-    pub definition: AbilityDefinitionId,
+    pub identity: ActivationUseIdentity,
 }
 
 /// One activated ability on one CR 400.7 permanent object. Unlike [`ActivationUseKey`], this key
@@ -192,7 +192,7 @@ pub struct ActivationUseKey {
 pub struct PersistentActivationUseKey {
     pub object_id: ObjectId,
     pub zone_change_generation: u64,
-    pub definition: AbilityDefinitionId,
+    pub occurrence: ActivatedAbilityOccurrence,
 }
 
 /// Authored ability slot, independent of display names and flattened live ability indexes.
@@ -214,6 +214,31 @@ pub enum TriggerAbilityOrigin {
         definition: AbilityDefinitionId,
     },
     ResolvingGrant(u64),
+}
+
+/// An activated ability occurrence on one recipient incarnation. Suppression and expiry do
+/// not change its slot; a copied definition or a new granting source gets a distinct occurrence.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ActivatedAbilityOccurrence {
+    Printed(AbilityDefinitionId),
+    IntrinsicLandMana,
+    Granted(TriggerAbilityOrigin),
+}
+
+/// Loyalty's once-per-turn restriction belongs to the permanent, independently of which
+/// printed or granted loyalty ability is selected. Individual authored limits use occurrences.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ActivationUseIdentity {
+    Ability(ActivatedAbilityOccurrence),
+    Loyalty,
+}
+
+/// Vector positions are wire slots, including inactive tombstones. No definitions or legality
+/// are cached here: those are evaluated from the current rules state when the catalog is read.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ActivatedAbilitySlotLedger {
+    pub zone_change_generation: u64,
+    pub slots: Vec<ActivatedAbilityOccurrence>,
 }
 
 /// One ability on one CR 400.7 source incarnation. Control, turn and face-status generations
@@ -2358,6 +2383,7 @@ pub struct GameState {
     /// Successful once-per-object activations. Old-generation entries are inert after a zone
     /// change and remain deterministic replay evidence for the lifetime of the game.
     pub activation_uses_per_object: HashMap<PersistentActivationUseKey, u32>,
+    pub(crate) activated_ability_slots: BTreeMap<ObjectId, ActivatedAbilitySlotLedger>,
     /// Persistent "triggers only once" usage. Generation-aware keys make leave-and-return a
     /// fresh object without copying or resetting usage on control changes or turn boundaries.
     #[serde(serialize_with = "crate::diagnostic_json::serialize_set")]
@@ -2523,6 +2549,25 @@ impl GameState {
         if effect.trigger_grant_origin.is_none() {
             effect.trigger_grant_origin = Some(self.allocate_trigger_grant_origin());
         }
+        self.continuous_effects.push(effect);
+    }
+
+    /// Resolving grants need creation identity even when their definitions and timestamps match.
+    /// Static producers supply the granting source incarnation and full child definition instead.
+    pub fn add_activated_ability_grant(&mut self, mut effect: ContinuousEffect) {
+        assert!(matches!(
+            effect.kind,
+            ContinuousEffectKind::GrantActivatedAbility(_)
+        ));
+        if effect.trigger_grant_origin.is_none() {
+            effect.trigger_grant_origin = Some(self.allocate_trigger_grant_origin());
+        }
+        assert!(matches!(
+            effect.trigger_grant_origin,
+            Some(
+                TriggerAbilityOrigin::StaticGrant { .. } | TriggerAbilityOrigin::ResolvingGrant(_)
+            )
+        ));
         self.continuous_effects.push(effect);
     }
 

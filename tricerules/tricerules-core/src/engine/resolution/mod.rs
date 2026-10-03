@@ -3131,6 +3131,7 @@ fn commit_zone_move(
     // This matters for exile permissions: exiling an already-exiled card cannot preserve an old
     // Adventure or "play it" permission merely because the destination enum is unchanged.
     if old_zone.is_some() {
+        state.activated_ability_slots.remove(&oid);
         state.spell_effects_carry_to_permanent.remove(&oid);
         state.spell_entry_facts.remove(&oid);
         state
@@ -5267,6 +5268,7 @@ mod attached_subject_tests {
             if spend_treasures {
                 // This unit fixture runs the effect directly, bypassing the normal pass sequence.
                 engine.state.priority_idx = 1;
+                engine.reconcile_activated_ability_slots();
                 for (index, treasure) in treasures.iter().enumerate() {
                     engine
                         .apply_command(

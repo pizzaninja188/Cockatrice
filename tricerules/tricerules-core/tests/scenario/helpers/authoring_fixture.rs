@@ -115,6 +115,10 @@ pub(crate) fn ability_source(
         e.state.objects.get_mut(&oid).unwrap().zone = Zone::Graveyard;
         oid
     } else {
+        // Select the fixture face before the first battlefield publication seeds its slots.
+        // This is initial setup, not a front-face permanent changing faces in play.
+        let oid = super::relocate_to_hand(e, player, card);
+        e.state.objects.get_mut(&oid).unwrap().face_up_index = face;
         super::relocate_to_battlefield(e, player, card, false)
     };
     e.state.objects.get_mut(&oid).unwrap().face_up_index = face;

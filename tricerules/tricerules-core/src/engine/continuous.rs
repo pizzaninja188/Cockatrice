@@ -25,6 +25,47 @@ pub(super) enum CounterPlacementOrigin {
     Damage,
 }
 
+struct ActivatedAbilityCandidate {
+    occurrence: ActivatedAbilityOccurrence,
+    definition: ActivatedAbilityDef,
+    granted: bool,
+}
+
+/// One live ability with a stable recipient slot and captured occurrence/provenance. The
+/// physical activating object stays separate from the definition that supplies its presentation.
+#[derive(Debug, Clone)]
+pub(super) struct EffectiveActivatedAbility {
+    pub slot: u32,
+    pub definition: ActivatedAbilityDef,
+    pub occurrence: ActivatedAbilityOccurrence,
+    pub presentation_definition: Option<AbilityDefinitionId>,
+    pub granted: bool,
+}
+
+impl EffectiveActivatedAbility {
+    pub fn authored(
+        slot: u32,
+        definition: ActivatedAbilityDef,
+        identity: AbilityDefinitionId,
+    ) -> Self {
+        let presentation_definition = (!definition.intrinsic_land_mana).then(|| identity.clone());
+        Self {
+            slot,
+            occurrence: ActivatedAbilityOccurrence::Printed(identity),
+            definition,
+            presentation_definition,
+            granted: false,
+        }
+    }
+
+    pub fn ability_path(&self) -> Vec<tricerules_cards::AbilityId> {
+        self.presentation_definition
+            .as_ref()
+            .map(|definition| definition.ability_path.clone())
+            .unwrap_or_else(|| vec![self.definition.ability_id.clone()])
+    }
+}
+
 impl GameEngine {
     /// CR 613.7n: entry-created continuous effects follow the entrant's own simultaneous statics.
     pub(super) fn order_new_entry_statics_before_modifiers(
@@ -885,6 +926,36 @@ impl GameEngine {
                         timestamp,
                     });
                 }
+                StaticAbilityDef::GrantActivatedAbilityToPermanents {
+                    filter,
+                    activated_abilities,
+                } => {
+                    let affected = AffectedScope::PermanentsMatching {
+                        reference_player: controller,
+                        filter: Box::new(filter),
+                        // This is the reference for an explicit Source exclusion predicate.
+                        exclude: Some(object_id),
+                    };
+                    for ability in activated_abilities {
+                        let mut granted_definition = definition.clone();
+                        granted_definition
+                            .ability_path
+                            .push(ability.ability_id.clone());
+                        self.state.add_activated_ability_grant(ContinuousEffect {
+                            trigger_grant_origin: Some(TriggerAbilityOrigin::StaticGrant {
+                                source_id: object_id,
+                                source_zone_change,
+                                definition: granted_definition,
+                            }),
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::GrantActivatedAbility(Box::new(ability)),
+                            condition: None,
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                }
                 StaticAbilityDef::GrantTriggeredAbilityToPermanents {
                     filter,
                     condition,
@@ -1065,17 +1136,130 @@ impl GameEngine {
         }
     }
 
-    /// CR 113.10 / 613.1f: printed abilities retain their card-definition order, followed by
-    /// applicable granted abilities in continuous-effect timestamp and insertion order.
+    /// Mutable accepted-state publication allocates slots; immutable catalogs only read them.
+    /// Build every update before installation so no partially reconciled catalog is observable.
+    pub(crate) fn reconcile_activated_ability_slots(&mut self) {
+        let mut next = BTreeMap::new();
+        let mut recipients: Vec<_> = self
+            .state
+            .objects
+            .values()
+            .filter(|object| object.zone == Zone::Battlefield)
+            .map(|object| object.id)
+            .collect();
+        recipients.sort_unstable();
+        for source_id in recipients {
+            let generation = self
+                .state
+                .zone_change_generation
+                .get(&source_id)
+                .copied()
+                .unwrap_or(0);
+            let mut ledger = self
+                .state
+                .activated_ability_slots
+                .get(&source_id)
+                .filter(|ledger| ledger.zone_change_generation == generation)
+                .cloned()
+                .unwrap_or(ActivatedAbilitySlotLedger {
+                    zone_change_generation: generation,
+                    slots: Vec::new(),
+                });
+            // Include authored inactive/private-zone entries as holes, but never let a hidden
+            // face's authored span influence its first public slot.
+            if !self.state.objects[&source_id].face_down {
+                if let Some(face) = self.effective_face(source_id) {
+                    let face_index = self
+                        .effective_card_identity(source_id)
+                        .map_or(0, |(_, index)| index);
+                    for ability in &face.activated_abilities {
+                        let occurrence = if ability.intrinsic_land_mana {
+                            ActivatedAbilityOccurrence::IntrinsicLandMana
+                        } else {
+                            ActivatedAbilityOccurrence::Printed(self.ability_definition(
+                                source_id,
+                                face_index,
+                                vec![ability.ability_id.clone()],
+                            ))
+                        };
+                        if !ledger.slots.contains(&occurrence) {
+                            ledger.slots.push(occurrence);
+                        }
+                    }
+                }
+            }
+            if !ledger
+                .slots
+                .contains(&ActivatedAbilityOccurrence::IntrinsicLandMana)
+            {
+                ledger
+                    .slots
+                    .push(ActivatedAbilityOccurrence::IntrinsicLandMana);
+            }
+            for candidate in self.activated_ability_candidates(source_id) {
+                if !ledger.slots.contains(&candidate.occurrence) {
+                    ledger.slots.push(candidate.occurrence);
+                }
+            }
+            // This is an engine resource invariant, never a reject after gameplay costs. Slots
+            // grow only with real encountered occurrences, not encoded object identifiers.
+            u32::try_from(ledger.slots.len().saturating_sub(1))
+                .expect("activated ability slot capacity exhausted");
+            next.insert(source_id, ledger);
+        }
+        self.state.activated_ability_slots = next;
+    }
+
+    /// CR 113.2c: a removed grant leaves a tombstone, so its stale slot cannot activate a
+    /// different occurrence. Reads and rejected commands never allocate or compact slots.
     pub(super) fn effective_activated_abilities(
         &self,
         source_id: ObjectId,
-    ) -> Vec<(
-        usize,
-        ActivatedAbilityDef,
-        bool,
-        Vec<tricerules_cards::AbilityId>,
-    )> {
+    ) -> Vec<EffectiveActivatedAbility> {
+        let generation = self
+            .state
+            .zone_change_generation
+            .get(&source_id)
+            .copied()
+            .unwrap_or(0);
+        let Some(ledger) = self
+            .state
+            .activated_ability_slots
+            .get(&source_id)
+            .filter(|ledger| ledger.zone_change_generation == generation)
+        else {
+            return Vec::new();
+        };
+        let mut abilities: Vec<_> =
+            self.activated_ability_candidates(source_id)
+                .into_iter()
+                .filter_map(|candidate| {
+                    let slot = ledger
+                        .slots
+                        .iter()
+                        .position(|key| key == &candidate.occurrence)?;
+                    let presentation_definition = match &candidate.occurrence {
+                        ActivatedAbilityOccurrence::Printed(definition)
+                        | ActivatedAbilityOccurrence::Granted(
+                            TriggerAbilityOrigin::StaticGrant { definition, .. },
+                        ) => Some(definition.clone()),
+                        _ => None,
+                    };
+                    Some(EffectiveActivatedAbility {
+                        slot: u32::try_from(slot).expect("reconciled ability slot fits the wire"),
+                        definition: candidate.definition,
+                        occurrence: candidate.occurrence,
+                        presentation_definition,
+                        granted: candidate.granted,
+                    })
+                })
+                .collect();
+        abilities.sort_by_key(|ability| ability.slot);
+        abilities
+    }
+
+    /// Pure live selection in authored order, then grant timestamp/insertion order.
+    fn activated_ability_candidates(&self, source_id: ObjectId) -> Vec<ActivatedAbilityCandidate> {
         let Some(object) = self
             .state
             .objects
@@ -1088,43 +1272,40 @@ impl GameEngine {
         let face = (!face_down)
             .then(|| self.effective_face(source_id))
             .flatten();
-        let authored_span = face
-            .as_ref()
-            .map_or(0, |face| face.activated_abilities.len());
+        let face_index = self
+            .effective_card_identity(source_id)
+            .map_or(0, |(_, index)| index);
         let removed_at = super::characteristics::latest_active_ability_removal(
             &self.state,
             self.registry,
             source_id,
         );
-        let mut abilities: Vec<(
-            usize,
-            ActivatedAbilityDef,
-            bool,
-            Vec<tricerules_cards::AbilityId>,
-        )> = (!face_down
-            && removed_at.is_none()
-            && super::characteristics::printed_rules_text_is_present(
-                &self.state,
-                self.registry,
-                source_id,
-            ))
-        .then(|| face.clone())
+        let mut abilities =
+            (!face_down
+                && removed_at.is_none()
+                && super::characteristics::printed_rules_text_is_present(
+                    &self.state,
+                    self.registry,
+                    source_id,
+                ))
+            .then(|| face.clone())
             .flatten()
             .map(|face| {
                 face.activated_abilities
                     .iter()
-                    .enumerate()
-                .filter(|(_, ability)| {
-                    ability.source_zone == AbilitySourceZone::Battlefield
-                        && !ability.intrinsic_land_mana
-                })
-                    .map(|(index, ability)| {
-                        (
-                            index,
-                            ability.clone(),
-                            false,
-                            vec![ability.ability_id.clone()],
-                        )
+                    .filter(|ability| {
+                        ability.source_zone == AbilitySourceZone::Battlefield
+                            && !ability.intrinsic_land_mana
+                    })
+                    .map(|ability| {
+                        let path = vec![ability.ability_id.clone()];
+                        ActivatedAbilityCandidate {
+                            occurrence: ActivatedAbilityOccurrence::Printed(
+                                self.ability_definition(source_id, face_index, path.clone()),
+                            ),
+                            definition: ability.clone(),
+                            granted: false,
+                        }
                     })
                     .collect()
             })
@@ -1133,20 +1314,17 @@ impl GameEngine {
             return abilities;
         };
         if removed_at.is_none() {
-            if let Some((index, ability)) =
+            if let Some((_, ability)) =
                 land_mana::derived_intrinsic_land_mana(face.as_deref(), &characteristics)
             {
-                let path = vec![ability.ability_id.clone()];
-                abilities.push((index, ability, false, path));
+                abilities.push(ActivatedAbilityCandidate {
+                    occurrence: ActivatedAbilityOccurrence::IntrinsicLandMana,
+                    definition: ability,
+                    granted: false,
+                });
             }
         }
-        abilities.sort_by_key(|(index, ..)| *index);
-        let mut granted: Vec<(
-            u64,
-            usize,
-            ActivatedAbilityDef,
-            Vec<tricerules_cards::AbilityId>,
-        )> = self
+        let mut granted: Vec<_> = self
             .state
             .continuous_effects
             .iter()
@@ -1172,24 +1350,25 @@ impl GameEngine {
                     &characteristics,
                 ) && self.continuous_effect_condition_holds(effect))
                 .then(|| {
-                    let path = match effect.trigger_grant_origin.as_ref() {
-                        Some(TriggerAbilityOrigin::StaticGrant { definition, .. }) => {
-                            definition.ability_path.clone()
-                        }
-                        _ => vec![ability.ability_id.clone()],
-                    };
-                    (effect.timestamp, insertion_index, (**ability).clone(), path)
+                    let origin = effect.trigger_grant_origin.as_ref()?;
+                    if matches!(origin, TriggerAbilityOrigin::Printed(_)) {
+                        return None;
+                    }
+                    Some((
+                        effect.timestamp,
+                        insertion_index,
+                        ActivatedAbilityCandidate {
+                            occurrence: ActivatedAbilityOccurrence::Granted(origin.clone()),
+                            definition: (**ability).clone(),
+                            granted: true,
+                        },
+                    ))
                 })
+                .flatten()
             })
             .collect();
-        granted.sort_by_key(|(timestamp, insertion_index, _, _)| (*timestamp, *insertion_index));
-        // Reserve the derived intrinsic slot even when there are no basic land types today.
-        let mut next_index = authored_span + 1;
-        abilities.extend(granted.into_iter().map(|(_, _, ability, path)| {
-            let indexed = (next_index, ability, true, path);
-            next_index += 1;
-            indexed
-        }));
+        granted.sort_by_key(|(timestamp, insertion_index, _)| (*timestamp, *insertion_index));
+        abilities.extend(granted.into_iter().map(|(_, _, candidate)| candidate));
         abilities
     }
 
@@ -1757,6 +1936,7 @@ mod static_permanent_keyword_grant_tests {
         *triggered_abilities = triggers;
         engine.refresh_source_static_abilities(aura);
         remove(&mut engine, aura);
+        engine.reconcile_activated_ability_slots();
         assert_eq!(engine.effective_activated_abilities(host).len(), 1);
         let triggered = engine.effective_triggered_abilities(host, "grizzly_bears", 0);
         assert_eq!(triggered.len(), 1);
@@ -1772,7 +1952,12 @@ mod static_permanent_keyword_grant_tests {
         assert_eq!(definition.ability_path.len(), 2);
         assert_eq!(definition.ability_path[0].as_str(), "static_01");
         assert_eq!(definition.ability_path[1].as_str(), "triggered_01");
-        assert_eq!(engine.effective_activated_abilities(host)[0].3.len(), 2);
+        assert_eq!(
+            engine.effective_activated_abilities(host)[0]
+                .ability_path()
+                .len(),
+            2
+        );
     }
 
     #[test]

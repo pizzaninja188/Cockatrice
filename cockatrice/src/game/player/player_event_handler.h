@@ -109,6 +109,11 @@ public:
     void eventRevealCards(const Event_RevealCards &event, EventProcessingOptions options);
     void eventChangeZoneProperties(const Event_ChangeZoneProperties &event);
 
+    [[nodiscard]] int restoreRuledManaCounterDebit(int counterId, int displayedValue, int stillStaged) const
+    {
+        return ruledManaPoolTracker.restoreOptimisticDebit(counterId, displayedValue, stillStaged);
+    }
+
 private:
     Player *player;
     RuledManaPoolTracker ruledManaPoolTracker;

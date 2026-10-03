@@ -11,6 +11,8 @@ mod authoring_actions;
 #[path = "scenario/replicating_ring_runtime.rs"]
 mod replicating_ring_runtime;
 
+#[path = "scenario/deck_coverage_chromatic_lantern.rs"]
+mod deck_coverage_chromatic_lantern;
 #[path = "scenario/deck_coverage_replicating_ring.rs"]
 mod deck_coverage_replicating_ring;
 

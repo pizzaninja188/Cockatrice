@@ -212,7 +212,7 @@ fn attached_activation_prohibition_preserves_keywords_static_and_triggered_abili
         .primary_face()
         .activated_abilities[0]
         .clone();
-    e.state.continuous_effects.push(ContinuousEffect {
+    e.state.add_activated_ability_grant(ContinuousEffect {
         trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(equipment),
@@ -221,6 +221,7 @@ fn attached_activation_prohibition_preserves_keywords_static_and_triggered_abili
         duration: EffectDuration::UntilEndOfTurn,
         timestamp: e.state.command_index,
     });
+    e.initial_response_batch();
     let granted_trigger = tricerules_cards::CardRegistry::global()
         .get("soul_warden")
         .expect("Soul Warden definition")

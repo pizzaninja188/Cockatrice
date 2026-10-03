@@ -1661,10 +1661,11 @@ impl GameEngine {
         let restricted_mana = command.restricted_mana.as_slice();
         let x_value = command.x_value;
         let mana_split_first_color_count = command.mana_split_first_color_count;
-        if self.state.priority_player_id() != player && self.special_cast_method(player).is_none() {
+        let resolving_mana_payment = self.resolving_mana_payment_for(player);
+        if self.state.priority_player_id() != player && !resolving_mana_payment {
             return Err(EngineError::Illegal("not your priority"));
         }
-        if self.state.turn_step == TurnStep::Cleanup && self.special_cast_method(player).is_none() {
+        if self.state.turn_step == TurnStep::Cleanup && !resolving_mana_payment {
             return Err(EngineError::Illegal("no abilities during cleanup"));
         }
         if priority_locked_for_combat_declaration(&self.state) {
@@ -1716,19 +1717,19 @@ impl GameEngine {
             return Err(EngineError::Illegal("stale ability source generation"));
         }
 
-        let (card_id, face_up_index, ability, ability_path) = match source_zone {
+        let concealed = source_zone == AbilitySourceZone::Battlefield && object.face_down;
+        let (card_id, face_up_index, effective) = match source_zone {
             AbilitySourceZone::Battlefield => {
                 let (card_id, face_index) = self
                     .effective_card_identity(permanent_id)
                     .map(|(card_id, face_index)| (card_id.to_string(), face_index))
                     .ok_or(EngineError::Illegal("bad face index on permanent"))?;
-                let (ability, ability_path) = self
+                let effective = self
                     .effective_activated_abilities(permanent_id)
                     .into_iter()
-                    .find(|(index, _, _, _)| *index == ability_index)
-                    .map(|(_, ability, _, path)| (ability, path))
+                    .find(|effective| effective.slot == command.ability_index)
                     .ok_or(EngineError::Illegal("no such activated ability"))?;
-                (card_id, face_index, ability, ability_path)
+                (card_id, face_index, effective)
             }
             AbilitySourceZone::Hand | AbilitySourceZone::Graveyard => {
                 let card_id = object.card_id.clone();
@@ -1738,10 +1739,20 @@ impl GameEngine {
                     .find(|(index, _, _)| *index == ability_index)
                     .map(|(_, ability, face_index)| (ability, face_index))
                     .ok_or(EngineError::Illegal("no such activated ability"))?;
-                let ability_path = vec![ability.ability_id.clone()];
-                (card_id, face_index, ability, ability_path)
+                let definition = self.ability_definition(
+                    permanent_id,
+                    face_index,
+                    vec![ability.ability_id.clone()],
+                );
+                (
+                    card_id,
+                    face_index,
+                    EffectiveActivatedAbility::authored(command.ability_index, ability, definition),
+                )
             }
         };
+        let ability = effective.definition.clone();
+        let ability_path = effective.ability_path();
         self.validate_activation_mana_choice(
             permanent_id,
             source_zone,
@@ -1767,14 +1778,6 @@ impl GameEngine {
             } else {
                 None
             };
-        let resolving_mana_payment =
-            self.state
-                .pending_resolution
-                .as_ref()
-                .is_some_and(|pending| {
-                    pending.continuation.mana_window_undo_start().is_some()
-                        && pending.deciding_player == player
-                });
         let casting_mana_payment = self
             .state
             .pending_spell_cast
@@ -1814,10 +1817,8 @@ impl GameEngine {
                 player,
                 idx,
                 permanent_id,
-                ability_index,
                 &card_id,
-                &ability,
-                &ability_path,
+                &effective,
                 mana_option_index,
                 targets,
                 flex_payments,
@@ -1880,7 +1881,34 @@ impl GameEngine {
         let targeting_cost =
             self.targeting_cost_increase(player, TargetingCostAction::ActivatedAbilities, targets);
         let mana_reduction = self.activated_mana_reduction(player, permanent_id, &ability)?;
-        let activation_uses = self.limited_activation_uses(permanent_id, ability_index, &ability);
+        let activation_uses =
+            self.limited_activation_uses(permanent_id, &effective.occurrence, &ability);
+        let card_name = if concealed {
+            "Face-down permanent".to_string()
+        } else {
+            source_token_identity
+                .as_ref()
+                .map(|identity| identity.name.clone())
+                .filter(|name| !name.is_empty())
+                .or_else(|| {
+                    self.registry
+                        .get(&card_id)
+                        .map(|definition| definition.name.clone())
+                })
+                .unwrap_or_else(|| card_id.clone())
+        };
+        let ability_text = ability.fallback_text_with_path(&card_name, &ability_path);
+        let primary_presentation = (!concealed)
+            .then_some(effective.presentation_definition.as_ref())
+            .flatten()
+            .map(|definition| {
+                ability_presentation(
+                    self.registry,
+                    definition,
+                    &ability.presentation,
+                    ability_text.clone(),
+                )
+            });
         let prepared_payment = self.prepare_ability_costs(
             player,
             idx,
@@ -1918,33 +1946,6 @@ impl GameEngine {
                 }
             }
         }
-
-        let concealed = self
-            .state
-            .objects
-            .get(&permanent_id)
-            .is_some_and(|object| object.face_down);
-        let card_name = if concealed {
-            "Face-down permanent".to_string()
-        } else {
-            source_token_identity
-            .as_ref()
-            .map(|identity| identity.name.clone())
-            .filter(|name| !name.is_empty())
-            .or_else(|| self.registry.get(&card_id).map(|d| d.name.clone()))
-                .unwrap_or_else(|| card_id.clone())
-        };
-        let ability_text = ability.fallback_text_with_path(&card_name, &ability_path);
-        let ability_definition =
-            self.ability_definition(permanent_id, face_up_index, ability_path.clone());
-        let primary_presentation = (!concealed).then(|| {
-            ability_presentation(
-            self.registry,
-            &ability_definition,
-            &ability.presentation,
-            ability_text.clone(),
-            )
-        });
 
         self.state.stack_presentations.insert(
             virtual_id,
@@ -2155,9 +2156,8 @@ impl GameEngine {
     fn activation_use_key(
         &self,
         permanent_id: ObjectId,
-        ability_path: Vec<tricerules_cards::AbilityId>,
+        identity: ActivationUseIdentity,
     ) -> ActivationUseKey {
-        let face_index = self.state.objects[&permanent_id].face_up_index;
         ActivationUseKey {
             object_id: permanent_id,
             zone_change_generation: self
@@ -2166,16 +2166,15 @@ impl GameEngine {
                 .get(&permanent_id)
                 .copied()
                 .unwrap_or(0),
-            definition: self.ability_definition(permanent_id, face_index, ability_path),
+            identity,
         }
     }
 
     fn persistent_activation_use_key(
         &self,
         permanent_id: ObjectId,
-        ability_path: Vec<tricerules_cards::AbilityId>,
+        occurrence: ActivatedAbilityOccurrence,
     ) -> PersistentActivationUseKey {
-        let face_index = self.state.objects[&permanent_id].face_up_index;
         PersistentActivationUseKey {
             object_id: permanent_id,
             zone_change_generation: self
@@ -2184,40 +2183,66 @@ impl GameEngine {
                 .get(&permanent_id)
                 .copied()
                 .unwrap_or(0),
-            definition: self.ability_definition(permanent_id, face_index, ability_path),
+            occurrence,
+        }
+    }
+
+    fn activated_ability_occurrence(
+        &self,
+        permanent_id: ObjectId,
+        ability_index: usize,
+        ability: &ActivatedAbilityDef,
+    ) -> Option<ActivatedAbilityOccurrence> {
+        match ability.source_zone {
+            AbilitySourceZone::Battlefield => self
+                .effective_activated_abilities(permanent_id)
+                .into_iter()
+                .find(|effective| {
+                    effective.slot as usize == ability_index
+                        && effective.definition.ability_id == ability.ability_id
+                })
+                .map(|effective| effective.occurrence),
+            AbilitySourceZone::Hand | AbilitySourceZone::Graveyard => {
+                let (_, _, face_index) = self
+                    .authored_zone_activated_abilities(permanent_id, ability.source_zone)
+                    .into_iter()
+                    .find(|(slot, candidate, _)| {
+                        *slot == ability_index && candidate.ability_id == ability.ability_id
+                    })?;
+                Some(ActivatedAbilityOccurrence::Printed(
+                    self.ability_definition(
+                        permanent_id,
+                        face_index,
+                        vec![ability.ability_id.clone()],
+                    ),
+                ))
+            }
         }
     }
 
     fn limited_activation_uses(
         &self,
         permanent_id: ObjectId,
-        ability_index: usize,
-        ability: &tricerules_cards::ActivatedAbilityDef,
+        occurrence: &ActivatedAbilityOccurrence,
+        ability: &ActivatedAbilityDef,
     ) -> Vec<LimitedActivationUse> {
-        let ability_path = self
-            .effective_activated_abilities(permanent_id)
-            .into_iter()
-            .find(|(index, _, _, _)| *index == ability_index)
-            .map(|(_, _, _, path)| path)
-            .unwrap_or_else(|| vec![ability.ability_id.clone()]);
         let mut uses = Vec::with_capacity(2);
         if ability.is_loyalty_ability() {
-            uses.push(LimitedActivationUse::PerTurn(self.activation_use_key(
-                permanent_id,
-                vec![tricerules_cards::AbilityId::new("loyalty_activation")
-                        .expect("intrinsic ability id")],
-            )));
+            uses.push(LimitedActivationUse::PerTurn(
+                self.activation_use_key(permanent_id, ActivationUseIdentity::Loyalty),
+            ));
         }
         if let Some(limit) = ability.activation_limit {
             uses.push(match limit {
                 tricerules_cards::primitives::ActivationLimit::PerTurn { .. } => {
-                    LimitedActivationUse::PerTurn(
-                        self.activation_use_key(permanent_id, ability_path.clone()),
-                    )
+                    LimitedActivationUse::PerTurn(self.activation_use_key(
+                        permanent_id,
+                        ActivationUseIdentity::Ability(occurrence.clone()),
+                    ))
                 }
                 tricerules_cards::primitives::ActivationLimit::PerObject { .. } => {
                     LimitedActivationUse::PerObject(
-                        self.persistent_activation_use_key(permanent_id, ability_path),
+                        self.persistent_activation_use_key(permanent_id, occurrence.clone()),
                     )
                 }
             });
@@ -2229,43 +2254,43 @@ impl GameEngine {
         &self,
         permanent_id: ObjectId,
         ability_index: usize,
-        ability: &tricerules_cards::ActivatedAbilityDef,
+        ability: &ActivatedAbilityDef,
     ) -> bool {
-        let ability_path = self
-            .effective_activated_abilities(permanent_id)
-            .into_iter()
-            .find(|(index, _, _, _)| *index == ability_index)
-            .map(|(_, _, _, path)| path)
-            .unwrap_or_else(|| vec![ability.ability_id.clone()]);
         if ability.is_loyalty_ability()
             && self
                 .state
                 .activation_uses_this_turn
-                .get(&self.activation_use_key(
-                    permanent_id,
-                    vec![tricerules_cards::AbilityId::new("loyalty_activation")
-                        .expect("intrinsic ability id")],
-                ))
+                .get(&self.activation_use_key(permanent_id, ActivationUseIdentity::Loyalty))
                 .copied()
                 .unwrap_or(0)
                 >= 1
         {
             return false;
         }
-        match ability.activation_limit {
-            None => true,
-            Some(tricerules_cards::primitives::ActivationLimit::PerTurn { max_activations }) => {
+        let Some(limit) = ability.activation_limit else {
+            return true;
+        };
+        let Some(occurrence) =
+            self.activated_ability_occurrence(permanent_id, ability_index, ability)
+        else {
+            return false;
+        };
+        match limit {
+            tricerules_cards::primitives::ActivationLimit::PerTurn { max_activations } => {
                 self.state
                     .activation_uses_this_turn
-                    .get(&self.activation_use_key(permanent_id, ability_path.clone()))
+                    .get(&self.activation_use_key(
+                        permanent_id,
+                        ActivationUseIdentity::Ability(occurrence),
+                    ))
                     .copied()
                     .unwrap_or(0)
                     < max_activations
             }
-            Some(tricerules_cards::primitives::ActivationLimit::PerObject { max_activations }) => {
+            tricerules_cards::primitives::ActivationLimit::PerObject { max_activations } => {
                 self.state
                     .activation_uses_per_object
-                    .get(&self.persistent_activation_use_key(permanent_id, ability_path))
+                    .get(&self.persistent_activation_use_key(permanent_id, occurrence))
                     .copied()
                     .unwrap_or(0)
                     < max_activations
@@ -2356,10 +2381,8 @@ impl GameEngine {
         player: PlayerId,
         idx: usize,
         permanent_id: ObjectId,
-        ability_index: usize,
         card_id: &str,
-        ability: &tricerules_cards::ActivatedAbilityDef,
-        ability_path: &[tricerules_cards::AbilityId],
+        effective: &EffectiveActivatedAbility,
         mana_option_index: u32,
         targets: &[rv1::TargetRef],
         flex_payments: &[rv1::FlexPipPayment],
@@ -2369,6 +2392,9 @@ impl GameEngine {
         mana_split_first_color_count: u32,
         selection: Option<&rv1::PaymentSelection>,
     ) -> Result<RuledEventBatch, EngineError> {
+        let ability = &effective.definition;
+        let ability_path = effective.ability_path();
+        let ability_path = ability_path.as_slice();
         if !targets.is_empty() {
             return Err(EngineError::Illegal("mana ability takes no targets"));
         }
@@ -2377,8 +2403,8 @@ impl GameEngine {
             "Face-down permanent".to_string()
         } else {
             self.registry
-            .get(card_id)
-            .map(|definition| definition.name.clone())
+                .get(card_id)
+                .map(|definition| definition.name.clone())
                 .unwrap_or_else(|| card_id.to_owned())
         };
         let mana_damage = ability.mana_ability_damage_to_controller().map(|amount| {
@@ -2414,24 +2440,27 @@ impl GameEngine {
                 .copied()
                 .ok_or(EngineError::Illegal("invalid mana option"))?
         };
-        let activation_uses = self.limited_activation_uses(permanent_id, ability_index, ability);
+        let activation_uses =
+            self.limited_activation_uses(permanent_id, &effective.occurrence, ability);
 
         let primary_presentation = if concealed || ability.intrinsic_land_mana {
             None
         } else {
-        let face_index = self.state.objects[&permanent_id].face_up_index;
-            let definition =
-                self.ability_definition(permanent_id, face_index, ability_path.to_vec());
-        let face_name = self
-            .effective_face(permanent_id)
-            .map(|face| face.name.clone())
-            .unwrap_or_else(|| card_id.to_owned());
-            Some(ability_presentation(
-            self.registry,
-            &definition,
-            &ability.presentation,
-            ability.fallback_text_with_path(&face_name, ability_path),
-            ))
+            let face_name = self
+                .effective_face(permanent_id)
+                .map(|face| face.name.clone())
+                .unwrap_or_else(|| card_id.to_owned());
+            effective
+                .presentation_definition
+                .as_ref()
+                .map(|definition| {
+                    ability_presentation(
+                        self.registry,
+                        definition,
+                        &ability.presentation,
+                        ability.fallback_text_with_path(&face_name, ability_path),
+                    )
+                })
         };
 
         let prepared = self.prepare_ability_costs(
@@ -2459,29 +2488,14 @@ impl GameEngine {
             {
                 (position + 1) as u32
             } else {
-                let restriction_presentation = if concealed {
-                    None
-            } else {
-                let face_index = self.state.objects[&permanent_id].face_up_index;
-                let definition =
-                    self.ability_definition(permanent_id, face_index, ability_path.to_vec());
-                let face_name = self
-                    .effective_face(permanent_id)
-                    .map(|face| face.name.clone())
-                    .unwrap_or_else(|| card_id.to_owned());
-                let parent = ability_presentation(
-                    self.registry,
-                    &definition,
-                    &ability.presentation,
-                    ability.fallback_text_with_path(&face_name, ability_path),
-                );
-                    Some(child_presentation_ref(
-                    &parent,
-                    PresentationPath::ManaRestriction(&restriction.restriction_id),
-                    &restriction.presentation,
-                    restriction.fallback_label(),
-                    ))
-                };
+                let restriction_presentation = primary_presentation.as_ref().map(|parent| {
+                    child_presentation_ref(
+                        parent,
+                        PresentationPath::ManaRestriction(&restriction.restriction_id),
+                        &restriction.presentation,
+                        restriction.fallback_label(),
+                    )
+                });
                 self.state.mana_restrictions.push(restriction.clone());
                 self.state
                     .mana_restriction_presentations
@@ -2659,7 +2673,7 @@ impl GameEngine {
                 } else {
                     self.registry
                         .get(&o.card_id)
-            .map(|d| d.name.clone())
+                        .map(|d| d.name.clone())
                         .unwrap_or_else(|| "permanent".to_string())
                 }
             })
@@ -4231,6 +4245,7 @@ mod mana_payment_tests {
                 display_name,
             });
         e.state.players[0].mana_pool.colorless = 2;
+        e.reconcile_activated_ability_slots();
         let generation = e
             .state
             .zone_change_generation
@@ -4373,7 +4388,7 @@ mod mana_payment_tests {
     }
 
     #[test]
-    fn activation_limit_counts_follow_stable_id_across_effective_index_changes() {
+    fn activation_limit_counts_follow_stable_occurrences_and_reject_unpublished_slots() {
         let mut engine = engine_with_priority();
         let object_id = engine.state.players[0].library[0];
         let ability = CardRegistry::global()
@@ -4382,10 +4397,19 @@ mod mana_payment_tests {
             .primary_face()
             .activated_abilities[0]
             .clone();
+        engine.state.players[0].library.pop_front();
+        engine.state.players[0].battlefield.push(object_id);
+        let object = engine.state.objects.get_mut(&object_id).unwrap();
+        object.card_id = "temur_devotee".into();
+        object.zone = Zone::Battlefield;
+        engine.reconcile_activated_ability_slots();
+        let occurrence = engine.effective_activated_abilities(object_id)[0]
+            .occurrence
+            .clone();
 
         assert!(engine.activation_limit_allows(object_id, 0, &ability));
-        assert!(engine.activation_limit_allows(object_id, 1, &ability));
-        let key = engine.activation_use_key(object_id, vec![ability.ability_id.clone()]);
+        assert!(!engine.activation_limit_allows(object_id, 1, &ability));
+        let key = engine.activation_use_key(object_id, ActivationUseIdentity::Ability(occurrence));
         engine.record_limited_activations(vec![LimitedActivationUse::PerTurn(key)]);
         assert!(!engine.activation_limit_allows(object_id, 0, &ability));
         assert!(!engine.activation_limit_allows(object_id, 1, &ability));
@@ -4520,10 +4544,14 @@ mod mana_payment_tests {
     fn limited_activation_records_the_pre_cost_object_identity() {
         let mut engine = engine_with_priority();
         let object_id = engine.state.players[0].library[0];
-        let key_before_costs = engine.activation_use_key(
-            object_id,
-            vec![tricerules_cards::AbilityId::new("activated_01").unwrap()],
-        );
+        let identity = ActivationUseIdentity::Ability(ActivatedAbilityOccurrence::Printed(
+            engine.ability_definition(
+                object_id,
+                0,
+                vec![tricerules_cards::AbilityId::new("activated_01").unwrap()],
+            ),
+        ));
+        let key_before_costs = engine.activation_use_key(object_id, identity.clone());
 
         *engine
             .state
@@ -4536,10 +4564,7 @@ mod mana_payment_tests {
 
         assert_eq!(engine.state.activation_uses_this_turn[&key_before_costs], 1);
         assert_ne!(
-            engine.activation_use_key(
-                object_id,
-                vec![tricerules_cards::AbilityId::new("activated_01").unwrap()],
-            ),
+            engine.activation_use_key(object_id, identity,),
             key_before_costs
         );
     }

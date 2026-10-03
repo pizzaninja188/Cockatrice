@@ -825,6 +825,14 @@ impl CardFace {
                         push_triggered_ability_mana_colors(&mut collected, nested);
                     }
                 }
+                StaticAbilityDef::GrantActivatedAbilityToPermanents {
+                    activated_abilities,
+                    ..
+                } => {
+                    for nested in activated_abilities {
+                        push_activated_ability_mana_colors(&mut collected, nested);
+                    }
+                }
                 StaticAbilityDef::GrantTriggeredAbilityToPermanents {
                     triggered_abilities,
                     ..

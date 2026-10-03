@@ -83,6 +83,7 @@ fn mass_exile_rejects_forged_targets_and_stale_activation_without_changing_state
         assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
     }
     engine.state.zone_change_generation.insert(lantern, 2);
+    engine.initial_response_batch();
     let before = engine.diagnostic_snapshot().unwrap();
     assert!(engine
         .apply_command(0, &activate_ability(lantern, 0, vec![]))

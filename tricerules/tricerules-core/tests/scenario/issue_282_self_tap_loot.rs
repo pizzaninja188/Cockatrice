@@ -13,7 +13,7 @@ fn grant_llanowar_tap_ability(engine: &mut GameEngine, source: u32) {
         .primary_face()
         .activated_abilities[0]
         .clone();
-    engine.state.continuous_effects.push(ContinuousEffect {
+    engine.state.add_activated_ability_grant(ContinuousEffect {
         trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(source),
@@ -22,6 +22,7 @@ fn grant_llanowar_tap_ability(engine: &mut GameEngine, source: u32) {
         duration: EffectDuration::WhileSourceOnBattlefield,
         timestamp: engine.state.command_index,
     });
+    engine.initial_response_batch();
 }
 
 fn move_hand_to_library(engine: &mut GameEngine, player: usize) {

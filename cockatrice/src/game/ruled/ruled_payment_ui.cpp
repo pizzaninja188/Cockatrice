@@ -6,6 +6,7 @@
 #include "../game_event_handler.h"
 #include "../player/player.h"
 #include "../player/player_actions.h"
+#include "../player/player_event_handler.h"
 #include "../player/player_info.h"
 #include "../zones/logic/card_zone_logic.h"
 #include "ruled_actions.h"
@@ -568,7 +569,8 @@ void RuledPaymentUi::restoreOptimisticManaCounters(const QVector<int> &counterId
 {
     for (const int counterId : counterIds)
         if (auto *counter = actions->player->getCounters().value(counterId, nullptr))
-            counter->setValue(counter->getValue() + 1);
+            counter->setValue(actions->player->getPlayerEventHandler()->restoreRuledManaCounterDebit(
+                counterId, counter->getValue(), actions->ruledManaCounterOptimisticSpendCount(counterId)));
 }
 
 QString RuledPaymentUi::prompt() const

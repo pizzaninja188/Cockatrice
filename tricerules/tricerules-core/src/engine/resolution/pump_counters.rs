@@ -391,7 +391,7 @@ pub(super) fn apply_permanent_modifier(
     };
     let kinds = materialize_resolving_modifier(modifier);
     for kind in kinds {
-        cx.engine.state.continuous_effects.push(ContinuousEffect {
+        let effect = ContinuousEffect {
             trigger_grant_origin: None,
             source_id,
             affected: AffectedScope::Single(object_id),
@@ -399,7 +399,12 @@ pub(super) fn apply_permanent_modifier(
             condition: None,
             duration: runtime_duration.clone(),
             timestamp: cx.engine.state.command_index,
-        });
+        };
+        if matches!(effect.kind, ContinuousEffectKind::GrantActivatedAbility(_)) {
+            cx.engine.state.add_activated_ability_grant(effect);
+        } else {
+            cx.engine.state.continuous_effects.push(effect);
+        }
     }
     cx.events.push(ev_log(format!(
         "{} modifies {}{}",

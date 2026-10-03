@@ -26,7 +26,7 @@ fn earthbend_fixture_count(count: u32) -> (GameEngine, u32, u32) {
     advance_to_main1_from_game_start(&mut engine);
     let land = inject_permanent_on_battlefield(&mut engine, 0, "forest");
     let source = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
-    engine.state.continuous_effects.push(ContinuousEffect {
+    engine.state.add_activated_ability_grant(ContinuousEffect {
         trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(source),
@@ -42,6 +42,7 @@ fn earthbend_fixture_count(count: u32) -> (GameEngine, u32, u32) {
         duration: EffectDuration::WhileSourceOnBattlefield,
         timestamp: engine.state.command_index,
     });
+    engine.initial_response_batch();
     (engine, source, land)
 }
 

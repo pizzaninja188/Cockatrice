@@ -96,7 +96,9 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 if !eng.state.objects.contains_key(&poid) {
                     continue;
                 }
-                for (ai, ability, _, _) in eng.effective_activated_abilities(poid) {
+                for effective in eng.effective_activated_abilities(poid) {
+                    let ai = effective.slot as usize;
+                    let ability = effective.definition;
                     let key = (poid as u64) << 32 | ai as u64;
                     if ability.is_mana_ability() {
                         mana_ability_keys.insert(key);
@@ -435,11 +437,11 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
 pub(super) fn activated_ability_info(
     eng: &GameEngine,
     source_id: ObjectId,
-    face_index: usize,
-    ability_index: usize,
-    ability_path: &[tricerules_cards::AbilityId],
-    ability: &ActivatedAbilityDef,
+    effective: &EffectiveActivatedAbility,
 ) -> rv1::AbilityInfo {
+    let ability = &effective.definition;
+    let ability_index = effective.slot as usize;
+    let ability_path = effective.ability_path();
     let controller = eng
         .state
         .objects
@@ -544,22 +546,26 @@ pub(super) fn activated_ability_info(
             .map(|face| face.name.clone())
             .unwrap_or_else(|| "Unknown card".into())
     };
-    let fallback = ability.fallback_text_with_path(&public_name, ability_path);
+    let fallback = ability.fallback_text_with_path(&public_name, &ability_path);
     let presentation = if concealed || ability.intrinsic_land_mana {
         None
     } else {
-    let definition = eng.ability_definition(source_id, face_index, ability_path.to_vec());
-        Some(presentation_ref(
-            eng.registry,
-            &definition.card_id,
-            &definition.face_id,
-            definition
-                .ability_path
-                .iter()
-                .map(PresentationPath::Ability),
-            &ability.presentation,
-            fallback.clone(),
-        ))
+        effective
+            .presentation_definition
+            .as_ref()
+            .map(|definition| {
+                presentation_ref(
+                    eng.registry,
+                    &definition.card_id,
+                    &definition.face_id,
+                    definition
+                        .ability_path
+                        .iter()
+                        .map(PresentationPath::Ability),
+                    &ability.presentation,
+                    fallback.clone(),
+                )
+            })
     };
     rv1::AbilityInfo {
         text: fallback.clone(),
@@ -637,10 +643,15 @@ fn legal_zone_ability_actions(
                     ability: Some(activated_ability_info(
                         eng,
                         object_id,
-                        face_index,
-                        ability_index,
-                        std::slice::from_ref(&ability.ability_id),
-                        &ability,
+                        &EffectiveActivatedAbility::authored(
+                            u32::try_from(ability_index).expect("authored slot fits wire"),
+                            ability.clone(),
+                            eng.ability_definition(
+                                object_id,
+                                face_index,
+                                vec![ability.ability_id.clone()],
+                            ),
+                        ),
                     )),
                 });
             }

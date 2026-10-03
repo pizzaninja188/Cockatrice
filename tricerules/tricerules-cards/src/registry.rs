@@ -63,6 +63,352 @@ fn face_can_reference_attached_object(face: &CardFace) -> bool {
         })
 }
 
+// This traversal belongs to the new scoped grant boundary. Existing grant families retain
+// their validation contracts; recipient-dependent metadata cannot be checked on the grantor.
+fn visit_scoped_grant_effect(
+    effect: &SpellEffectKind,
+    visit: &mut impl FnMut(&SpellEffectKind) -> Result<(), String>,
+) -> Result<(), String> {
+    visit(effect)?;
+    match effect {
+        SpellEffectKind::Conditional { effect, .. }
+        | SpellEffectKind::ConditionalCastCost { effect, .. } => {
+            visit_scoped_grant_effect(effect, visit)?
+        }
+        SpellEffectKind::ChooseResolutionBranch {
+            branches,
+            otherwise,
+            ..
+        } => {
+            for nested in branches
+                .iter()
+                .flat_map(|branch| &branch.effects)
+                .chain(otherwise)
+            {
+                visit_scoped_grant_effect(nested, visit)?;
+            }
+        }
+        SpellEffectKind::MayBehold { if_beheld, .. } => {
+            for nested in if_beheld {
+                visit_scoped_grant_effect(nested, visit)?;
+            }
+        }
+        SpellEffectKind::ApplyPermanentModifier {
+            modifier: crate::primitives::ResolvingPermanentModifier::GrantActivatedAbility(ability),
+            ..
+        } => {
+            for nested in &ability.effect {
+                visit_scoped_grant_effect(nested, visit)?;
+            }
+        }
+        SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
+            for nested in &ability.effect {
+                visit_scoped_grant_effect(nested, visit)?;
+            }
+        }
+        SpellEffectKind::GrantTriggeredAbility { ability, .. }
+        | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
+            for nested in ability.effect.iter().chain(
+                ability
+                    .modal
+                    .iter()
+                    .flat_map(|modal| &modal.modes)
+                    .flat_map(|mode| &mode.effects),
+            ) {
+                visit_scoped_grant_effect(nested, visit)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn validate_scoped_granted_activation_metadata(
+    ability: &crate::ActivatedAbilityDef,
+) -> Result<(), String> {
+    if ability.source_zone != crate::AbilitySourceZone::Battlefield {
+        return Err("scoped granted activation requires a battlefield source".into());
+    }
+    if ability.intrinsic_land_mana {
+        return Err("intrinsic land mana cannot be an independently granted ability".into());
+    }
+    ability.validate_shape()?;
+    validate_effect_list_metadata(&ability.effect)?;
+    if ability.cost_modifiers.iter().any(|modifier| {
+        matches!(
+            modifier,
+            ActivatedCostModifier::ConditionalSourceManaCostReduction { .. }
+        )
+    }) {
+        return Err(
+            "scoped grants do not support recipient-dependent source mana cost reduction".into(),
+        );
+    }
+    validate_scoped_grant_targeting(ability.targeting.as_ref())?;
+    let allowed = ability_cost_result_actions(&ability.costs);
+    validate_scoped_grant_payment_effects(&ability.effect, &allowed)?;
+    Ok(())
+}
+
+fn validate_scoped_grant_targeting(targeting: Option<&TargetingDef>) -> Result<(), String> {
+    if targeting
+        .iter()
+        .flat_map(|targeting| &targeting.groups)
+        .any(|group| group.cast_cost_expansion.is_some())
+    {
+        return Err("scoped grants cannot reference cast-cost target expansion".into());
+    }
+    Ok(())
+}
+
+fn validate_scoped_grant_condition(condition: &GameCondition) -> Result<(), String> {
+    if condition.any_node_matches(|condition| matches!(condition, GameCondition::CastOrigin { .. }))
+    {
+        return Err("CastOrigin is available only as a face cast condition".into());
+    }
+    Ok(())
+}
+
+fn scoped_grant_effect_amount(effect: &SpellEffectKind) -> Option<&Amount> {
+    match effect {
+        SpellEffectKind::DamageTarget { amount, .. }
+        | SpellEffectKind::DamageAll { amount, .. }
+        | SpellEffectKind::DamageTargets { amount, .. }
+        | SpellEffectKind::DamagePlayer { amount, .. }
+        | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { amount }
+        | SpellEffectKind::Scry { count: amount }
+        | SpellEffectKind::Earthbend { count: amount }
+        | SpellEffectKind::CounterTargetSpell {
+            unless_controller_pays: Some(amount),
+            ..
+        }
+        | SpellEffectKind::Draw { count: amount, .. }
+        | SpellEffectKind::TargetPlayerDraws { count: amount, .. }
+        | SpellEffectKind::GainLife { amount }
+        | SpellEffectKind::TargetPlayerGainsLife { amount, .. }
+        | SpellEffectKind::Mill { count: amount, .. }
+        | SpellEffectKind::PutCounters { count: amount, .. }
+        | SpellEffectKind::PutCountersAll { count: amount, .. }
+        | SpellEffectKind::PutCountersAllPlaneswalkers { count: amount, .. }
+        | SpellEffectKind::Amass { count: amount, .. }
+        | SpellEffectKind::CreateTokens { count: amount, .. }
+        | SpellEffectKind::CreateTokenCopies { count: amount, .. }
+        | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),
+        SpellEffectKind::PumpTarget {
+            scale: Some(scale), ..
+        } => scale.amount(),
+        _ => None,
+    }
+}
+
+fn validate_scoped_grant_amount(
+    amount: &Amount,
+    allowed: &[CardResultAction],
+) -> Result<(), String> {
+    if amount.card_result_filter().is_some_and(|filter| {
+        filter.source == CardResultSource::Payment && !allowed.contains(&filter.action)
+    }) {
+        return Err("Payment card result requires a compatible card cost".into());
+    }
+    if let Some(conditional) = amount.cast_cost_amount() {
+        validate_cast_cost_condition(&[], &conditional.condition)?;
+    }
+    match amount {
+        Amount::Conditional { condition, .. } => validate_scoped_grant_condition(condition)?,
+        Amount::DivideRoundedDown { amount, .. } => validate_scoped_grant_amount(amount, allowed)?,
+        _ => {}
+    }
+    Ok(())
+}
+
+fn validate_scoped_grant_payment_effects(
+    effects: &[SpellEffectKind],
+    allowed: &[CardResultAction],
+) -> Result<(), String> {
+    for effect in effects {
+        validate_effect_payment_results(allowed, effect)?;
+        if let Some(amount) = scoped_grant_effect_amount(effect) {
+            validate_scoped_grant_amount(amount, allowed)?;
+        }
+        match effect {
+            SpellEffectKind::Conditional { effect, .. }
+            | SpellEffectKind::ConditionalCastCost { effect, .. } => {
+                validate_scoped_grant_payment_effects(
+                    std::slice::from_ref(effect.as_ref()),
+                    allowed,
+                )?
+            }
+            SpellEffectKind::MayBehold { if_beheld, .. } => {
+                validate_scoped_grant_payment_effects(if_beheld, allowed)?
+            }
+            SpellEffectKind::ChooseResolutionBranch {
+                branches,
+                otherwise,
+                ..
+            } => {
+                for branch in branches {
+                    validate_scoped_grant_payment_effects(&branch.effects, allowed)?;
+                }
+                validate_scoped_grant_payment_effects(otherwise, allowed)?;
+            }
+            SpellEffectKind::ApplyPermanentModifier {
+                modifier:
+                    crate::primitives::ResolvingPermanentModifier::GrantActivatedAbility(ability),
+                ..
+            } => {
+                validate_scoped_grant_payment_effects(
+                    &ability.effect,
+                    &ability_cost_result_actions(&ability.costs),
+                )?;
+            }
+            SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
+                validate_scoped_grant_payment_effects(&ability.effect, &[])?
+            }
+            SpellEffectKind::GrantTriggeredAbility { ability, .. }
+            | SpellEffectKind::CreateDelayedTrigger { ability, .. } => {
+                validate_scoped_grant_payment_effects(&ability.effect, &[])?;
+                for mode in ability.modal.iter().flat_map(|modal| &modal.modes) {
+                    validate_scoped_grant_payment_effects(&mode.effects, &[])?;
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn validate_scoped_granted_activation(ability: &crate::ActivatedAbilityDef) -> Result<(), String> {
+    validate_scoped_granted_activation_metadata(ability)?;
+    for effect in &ability.effect {
+        visit_scoped_grant_effect(effect, &mut |effect| {
+            validate_effect_cast_cost_conditions(&[], effect)?;
+            match effect {
+                SpellEffectKind::Conditional { condition, .. }
+                | SpellEffectKind::WinGameIf { condition } => {
+                    validate_scoped_grant_condition(condition)?
+                }
+                SpellEffectKind::SearchLibrary {
+                    conditional_destination: Some(conditional),
+                    ..
+                } => validate_scoped_grant_condition(&conditional.condition)?,
+                SpellEffectKind::ProduceMana {
+                    conditional: Some(conditional),
+                    ..
+                } => validate_scoped_grant_condition(&conditional.condition)?,
+                SpellEffectKind::ChooseResolutionBranch { branches, .. } => {
+                    for branch in branches {
+                        if let ResolutionBranchRequirement::GameCondition(condition) =
+                            &branch.requirement
+                        {
+                            validate_scoped_grant_condition(condition)?;
+                        }
+                    }
+                }
+                _ => {}
+            }
+            if matches!(
+                effect,
+                SpellEffectKind::ChangeSourceFace { .. }
+                    | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
+                    | SpellEffectKind::AttachSource { .. }
+                    | SpellEffectKind::AuraAttach { .. }
+            ) || effect.uses_attached_object_subject()
+                || matches!(
+                    effect,
+                    SpellEffectKind::Sacrifice {
+                        subject: crate::primitives::EffectSubject::AttachedObject
+                    } | SpellEffectKind::RemoveAllAbilities {
+                        subject: crate::primitives::EffectSubject::AttachedObject,
+                        ..
+                    } | SpellEffectKind::GrantProtection {
+                        subject: crate::primitives::EffectSubject::AttachedObject,
+                        ..
+                    }
+                )
+            {
+                return Err(
+                    "scoped grants do not support recipient layout or attachment dependencies"
+                        .into(),
+                );
+            }
+            if matches!(
+                effect,
+                SpellEffectKind::SiegeDefeat | SpellEffectKind::CastMadness { .. }
+            ) {
+                return Err(
+                    "scoped grants cannot use engine-synthesized defeat or madness context".into(),
+                );
+            }
+            if let SpellEffectKind::ApplyPermanentModifier {
+                modifier:
+                    crate::primitives::ResolvingPermanentModifier::GrantActivatedAbility(nested),
+                ..
+            } = effect
+            {
+                validate_scoped_granted_activation_metadata(nested)?;
+            }
+            if let SpellEffectKind::CreateReflexiveTrigger { ability, .. } = effect {
+                if let Some(condition) = &ability.intervening_if {
+                    validate_scoped_grant_condition(condition)?;
+                }
+                validate_scoped_grant_targeting(ability.targeting.as_ref())?;
+            }
+            if let SpellEffectKind::GrantTriggeredAbility { ability, .. }
+            | SpellEffectKind::CreateDelayedTrigger { ability, .. } = effect
+            {
+                if let Some(condition) = &ability.intervening_if {
+                    validate_scoped_grant_condition(condition)?;
+                }
+                validate_scoped_grant_targeting(ability.targeting.as_ref())?;
+                if let Some(modal) = &ability.modal {
+                    if modal.all_modes_cast_cost.is_some()
+                        || modal
+                            .modes
+                            .iter()
+                            .any(|mode| mode.linked_cast_cost.is_some())
+                    {
+                        return Err("scoped grants cannot reference modal cast-cost links".into());
+                    }
+                    for mode in &modal.modes {
+                        validate_scoped_grant_targeting(mode.targeting.as_ref())?;
+                    }
+                }
+            }
+            Ok(())
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_scoped_grant_tokens(
+    face: &CardFace,
+    tokens: &HashMap<String, CardDefinition>,
+) -> Result<(), String> {
+    for static_ability in &face.static_abilities {
+        let StaticAbilityDef::GrantActivatedAbilityToPermanents {
+            activated_abilities,
+            ..
+        } = &static_ability.definition
+        else {
+            continue;
+        };
+        for effect in activated_abilities
+            .iter()
+            .flat_map(|ability| &ability.effect)
+        {
+            visit_scoped_grant_effect(effect, &mut |effect| {
+                for token in effect.referenced_token_ids() {
+                    if !tokens.contains_key(token) {
+                        return Err(format!("CreateTokens references unknown token '{token}'"));
+                    }
+                }
+                Ok(())
+            })?;
+        }
+    }
+    Ok(())
+}
+
 fn validate_saga_face(card: &CardDefinition, face: &CardFace) -> Result<(), RegistryError> {
     let is_saga = face
         .types
@@ -401,7 +747,8 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 })?;
         }
         if let StaticAbilityDef::GrantKeywordToPermanents { filter, .. }
-        | StaticAbilityDef::AddTypesToPermanents { filter, .. } = ability
+        | StaticAbilityDef::AddTypesToPermanents { filter, .. }
+        | StaticAbilityDef::GrantActivatedAbilityToPermanents { filter, .. } = ability
         {
             filter
                 .validate_characteristic_constraints()
@@ -425,6 +772,27 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     id: card.id.clone(),
                     reason: "live static permanent effects require a supported earlier-layer scope without tapped, keyword, P/T, defending-player or attached-object constraints".into(),
                 });
+            }
+        }
+        if let StaticAbilityDef::GrantActivatedAbilityToPermanents {
+            activated_abilities,
+            ..
+        } = ability
+        {
+            if activated_abilities.is_empty() {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "GrantActivatedAbilityToPermanents requires at least one ability"
+                        .into(),
+                });
+            }
+            for granted in activated_abilities {
+                validate_scoped_granted_activation(granted).map_err(|reason| {
+                    RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    }
+                })?;
             }
         }
         if let StaticAbilityDef::GrantTriggeredAbilityToPermanents {
@@ -1298,20 +1666,20 @@ fn validate_granted_chosen_opponent(ability: &crate::TriggeredAbilityDef) -> Res
 
 fn validate_linked_exile_pairs(face: &CardFace) -> Result<(), String> {
     let mut uses = HashMap::new();
-    let mut collect = |effects: &[SpellEffectKind]| {
+    let collect = |effects: &[SpellEffectKind], uses: &mut HashMap<String, (u32, u32)>| {
         for effect in effects {
-            collect_linked_exile_uses(effect, &mut uses);
+            collect_linked_exile_uses(effect, uses);
         }
     };
-    collect(&face.spell_effect);
+    collect(&face.spell_effect, &mut uses);
     for mode in face.modal_spell.iter().flat_map(|modal| &modal.modes) {
-        collect(&mode.effects);
+        collect(&mode.effects, &mut uses);
     }
     for ability in &face.activated_abilities {
-        collect(&ability.effect);
+        collect(&ability.effect, &mut uses);
     }
     for ability in &face.triggered_abilities {
-        collect(&ability.effect);
+        collect(&ability.effect, &mut uses);
     }
     for ability in &face.static_abilities {
         match &ability.definition {
@@ -1326,10 +1694,39 @@ fn validate_linked_exile_pairs(face: &CardFace) -> Result<(), String> {
                 ..
             } => {
                 for ability in activated_abilities {
-                    collect(&ability.effect);
+                    collect(&ability.effect, &mut uses);
                 }
                 for ability in triggered_abilities {
-                    collect(&ability.effect);
+                    collect(&ability.effect, &mut uses);
+                }
+            }
+            StaticAbilityDef::GrantActivatedAbilityToPermanents {
+                activated_abilities,
+                ..
+            } => {
+                for ability in activated_abilities {
+                    // Scoped traversal also includes MayBehold and nested triggered modes.
+                    // Collect direct leaves exactly once instead of recursively collecting twice.
+                    for effect in &ability.effect {
+                        visit_scoped_grant_effect(effect, &mut |effect| {
+                            match effect {
+                                SpellEffectKind::MoveGraveyardCards {
+                                    linked_exile_id: Some(link_id),
+                                    ..
+                                } => uses.entry(link_id.as_str().to_owned()).or_default().0 += 1,
+                                SpellEffectKind::ReturnLinkedExiledCards {
+                                    linked_exile_id,
+                                    ..
+                                } => {
+                                    uses.entry(linked_exile_id.as_str().to_owned())
+                                        .or_default()
+                                        .1 += 1
+                                }
+                                _ => {}
+                            }
+                            Ok(())
+                        })?;
+                    }
                 }
             }
             StaticAbilityDef::GrantTriggeredAbilityToPermanents {
@@ -1337,7 +1734,7 @@ fn validate_linked_exile_pairs(face: &CardFace) -> Result<(), String> {
                 ..
             } => {
                 for ability in triggered_abilities {
-                    collect(&ability.effect);
+                    collect(&ability.effect, &mut uses);
                 }
             }
             _ => {}
@@ -1545,6 +1942,15 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
                     validate_effect_list_metadata(&nested_ability.effect)?;
                 }
             }
+            StaticAbilityDef::GrantActivatedAbilityToPermanents {
+                activated_abilities,
+                ..
+            } => {
+                for nested_ability in activated_abilities {
+                    insert_ability_id(&mut nested, &nested_ability.ability_id)?;
+                    validate_scoped_granted_activation(nested_ability)?;
+                }
+            }
             StaticAbilityDef::GrantTriggeredAbilityToPermanents {
                 triggered_abilities,
                 ..
@@ -1706,6 +2112,12 @@ impl CardRegistry {
                 reason,
             })?;
             validate_static_abilities(token, face)?;
+            validate_scoped_grant_tokens(face, &reg.tokens).map_err(|reason| {
+                RegistryError::InvalidCard {
+                    id: id.clone(),
+                    reason,
+                }
+            })?;
             validate_saga_face(token, face)?;
             let can_reference_attached_object = face_can_reference_attached_object(face);
             let can_reference_attached_player = face_can_reference_attached_player(face);
@@ -2119,6 +2531,12 @@ impl CardRegistry {
                     });
                 }
                 validate_static_abilities(&card, face)?;
+                validate_scoped_grant_tokens(face, &reg.tokens).map_err(|reason| {
+                    RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason,
+                    }
+                })?;
                 validate_saga_face(&card, face)?;
                 for ability in &face.triggered_abilities {
                     if ability.trigger.is_delayed_only() {

@@ -2207,6 +2207,13 @@ pub enum StaticAbilityDef {
         required_land_type: BasicLandType,
         keyword: Keyword,
     },
+    /// CR 113.10 / 613.1f: live earlier-layer permanent characteristics select recipients.
+    /// Chromatic Lantern grants land mana abilities; Cryptolith Rite grants creature mana
+    /// abilities. Each child retains this static parent's definition and source incarnation.
+    GrantActivatedAbilityToPermanents {
+        filter: TargetFilter,
+        activated_abilities: Vec<ActivatedAbilityDef>,
+    },
     /// CR 113.10 / 613.1f: permanents matching `filter` have the listed triggered abilities
     /// while this static ability and its optional condition apply. Thorin Oakenshield grants
     /// ward to artifacts and creatures; Infernal Scarring supplies the attached-object version

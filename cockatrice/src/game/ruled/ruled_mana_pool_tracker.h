@@ -30,6 +30,17 @@ public:
         authoritativeValues.remove(counterId);
     }
 
+    [[nodiscard]] int restoreOptimisticDebit(int counterId, int displayedValue, int stillStaged) const
+    {
+        // A later preview can retire a debit after Undo already removed its engine mana.
+        // Cap this credit rather than refunding other pips awaiting submission.
+        const int credited = displayedValue + 1;
+        const auto authoritative = authoritativeValues.constFind(counterId);
+        return authoritative == authoritativeValues.cend()
+                   ? credited
+                   : qMax(0, qMin(credited, authoritative.value() - stillStaged));
+    }
+
 private:
     QHash<int, int> authoritativeValues;
 };

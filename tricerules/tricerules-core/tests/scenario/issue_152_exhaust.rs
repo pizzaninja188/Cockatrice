@@ -25,7 +25,7 @@ fn grant_exhaust_ability(engine: &mut GameEngine, source: u32, ability_id: &str)
         .clone();
     ability.activation_limit = Some(ActivationLimit::PerObject { max_activations: 1 });
     ability.ability_id = AbilityId::new(ability_id).unwrap();
-    engine.state.continuous_effects.push(ContinuousEffect {
+    engine.state.add_activated_ability_grant(ContinuousEffect {
         trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(source),
@@ -34,6 +34,7 @@ fn grant_exhaust_ability(engine: &mut GameEngine, source: u32, ability_id: &str)
         duration: EffectDuration::WhileSourceOnBattlefield,
         timestamp: engine.state.command_index,
     });
+    engine.initial_response_batch();
 }
 
 #[test]
@@ -207,7 +208,7 @@ fn a_countered_exhaust_ability_remains_spent() {
         .activated_abilities[0]
         .clone();
     ability.activation_limit = Some(ActivationLimit::PerObject { max_activations: 1 });
-    engine.state.continuous_effects.push(ContinuousEffect {
+    engine.state.add_activated_ability_grant(ContinuousEffect {
         trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(source),
@@ -216,6 +217,7 @@ fn a_countered_exhaust_ability_remains_spent() {
         duration: EffectDuration::WhileSourceOnBattlefield,
         timestamp: engine.state.command_index,
     });
+    engine.initial_response_batch();
 
     engine
         .apply_command(0, &activate_ability(source, 2, target_object(warded)))
@@ -248,7 +250,15 @@ fn a_countered_exhaust_ability_remains_spent() {
 
 #[test]
 fn same_seed_and_commands_replay_the_same_exhaust_state() {
-    fn replay() -> ((u32, u64, Vec<AbilityId>, u32), Vec<bool>) {
+    fn replay() -> (
+        (
+            u32,
+            u64,
+            tricerules_core::state::ActivatedAbilityOccurrence,
+            u32,
+        ),
+        Vec<bool>,
+    ) {
         let mut engine = anthem_engine(15_205, "mountain");
         let source = inject_creature_on_battlefield(&mut engine, 0, "grizzly_bears");
         grant_exhaust_ability(&mut engine, source, "exhaust_granted");
@@ -273,7 +283,7 @@ fn same_seed_and_commands_replay_the_same_exhaust_state() {
             (
                 key.object_id,
                 key.zone_change_generation,
-                key.definition.ability_path.clone(),
+                key.occurrence.clone(),
                 *count,
             ),
             zone_view_ability_flags(&mut engine, 0, source),

@@ -21,7 +21,7 @@ fn setup() -> GameEngine {
 }
 
 fn modify(engine: &mut GameEngine, object: u32, kind: ContinuousEffectKind) {
-    engine.state.continuous_effects.push(ContinuousEffect {
+    let effect = ContinuousEffect {
         source_id: None,
         trigger_grant_origin: None,
         affected: AffectedScope::Single(object),
@@ -29,7 +29,13 @@ fn modify(engine: &mut GameEngine, object: u32, kind: ContinuousEffectKind) {
         condition: None,
         duration: EffectDuration::Indefinite,
         timestamp: engine.state.command_index,
-    });
+    };
+    if matches!(effect.kind, ContinuousEffectKind::GrantActivatedAbility(_)) {
+        engine.state.add_activated_ability_grant(effect);
+    } else {
+        engine.state.continuous_effects.push(effect);
+    }
+    engine.initial_response_batch();
 }
 
 fn begin(engine: &mut GameEngine) -> u64 {

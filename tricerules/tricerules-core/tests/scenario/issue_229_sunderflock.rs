@@ -55,7 +55,7 @@ fn grant_sacrifice_for_blue(engine: &mut GameEngine, source: u32) {
         .primary_face()
         .activated_abilities[0]
         .clone();
-    engine.state.continuous_effects.push(ContinuousEffect {
+    engine.state.add_activated_ability_grant(ContinuousEffect {
         trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(source),
@@ -64,6 +64,7 @@ fn grant_sacrifice_for_blue(engine: &mut GameEngine, source: u32) {
         duration: EffectDuration::WhileSourceOnBattlefield,
         timestamp: engine.state.command_index,
     });
+    engine.initial_response_batch();
 }
 
 fn grant_nonmana_ability(engine: &mut GameEngine, source: u32) {
@@ -82,7 +83,7 @@ fn grant_nonmana_ability(engine: &mut GameEngine, source: u32) {
         .primary_face()
         .activated_abilities[0]
         .clone();
-    engine.state.continuous_effects.push(ContinuousEffect {
+    engine.state.add_activated_ability_grant(ContinuousEffect {
         trigger_grant_origin: None,
         source_id: None,
         affected: AffectedScope::Single(source),
@@ -91,6 +92,7 @@ fn grant_nonmana_ability(engine: &mut GameEngine, source: u32) {
         duration: EffectDuration::WhileSourceOnBattlefield,
         timestamp: engine.state.command_index,
     });
+    engine.initial_response_batch();
 }
 
 fn grant_any_creature_dies_life_trigger(engine: &mut GameEngine, source: u32) {

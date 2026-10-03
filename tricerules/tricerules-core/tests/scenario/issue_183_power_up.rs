@@ -70,6 +70,7 @@ fn power_up_reduces_fixed_symbols_then_overflows_to_generic() {
         room_faces: None,
         display_name: "Rough Rhino Cavalry".into(),
     });
+    engine.initial_response_batch();
 
     assert_eq!(
         published_ability_mana_cost(&mut engine, 0, source, 0),
@@ -336,7 +337,8 @@ fn copied_power_up_abilities_keep_independent_once_per_object_limits() {
     );
     apply_ability(&mut engine, 0, source, 0, vec![]).expect("first copied power-up");
     resolve_entire_stack_two_player(&mut engine);
-    apply_ability(&mut engine, 0, source, 1, vec![]).expect("independent copied power-up");
+    // Slot 1 was already reserved for intrinsic mana; the newly encountered second child is 2.
+    apply_ability(&mut engine, 0, source, 2, vec![]).expect("independent copied power-up");
     resolve_entire_stack_two_player(&mut engine);
     apply_ability(&mut engine, 0, source, 0, vec![])
         .expect_err("the first copied ability has used its own allowance");
