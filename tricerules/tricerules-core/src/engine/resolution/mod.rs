@@ -748,7 +748,7 @@ fn resolve_zone_effect_subject(
 /// One entry of a resolving stack item's flattened effect list. Target group identities stay
 /// attached so one primitive can consume multiple independently filtered roles.
 pub(super) struct ResolutionEffect {
-    effect: SpellEffectKind,
+    pub(super) effect: SpellEffectKind,
     targets: Vec<ObjectId>,
     target_damage: Vec<u32>,
     target_group_indices: Vec<u32>,
@@ -1755,6 +1755,9 @@ impl GameEngine {
                     }
                     effect @ SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. } => {
                         damage::damage_attacked_player_or_planeswalker(&mut cx, effect)?
+                    }
+                    SpellEffectKind::MyrBattlesphereAttack => {
+                        damage::myr_battlesphere_attack(&mut cx)?
                     }
                     effect @ SpellEffectKind::Draw { .. } => zones::draw(&mut cx, effect)?,
                     effect @ SpellEffectKind::TargetPlayerDraws { .. } => {
@@ -2999,6 +3002,37 @@ pub(crate) fn move_object_to_zone(
 
 /// Ordinary moves commit the returned history receipt immediately. The sole exception is
 /// early custom-resolution bookkeeping, whose receipt belongs to the resolution completion.
+/// Record source qualities without inventing a zone change (also used by CR 800.4a removal).
+pub(super) fn record_last_known_characteristics(
+    state: &mut GameState,
+    oid: ObjectId,
+    generation: u64,
+    characteristics: super::characteristics::Characteristics,
+) {
+    state
+        .last_known_mana_value_by_generation
+        .insert((oid, generation), characteristics.mana_value);
+    state.last_known_pt_by_generation.insert(
+        (oid, generation),
+        (
+            characteristics.signed_power,
+            characteristics.signed_toughness,
+        ),
+    );
+    state
+        .last_known_controller_by_generation
+        .insert((oid, generation), characteristics.controller);
+    state
+        .last_known_keywords_by_generation
+        .insert((oid, generation), characteristics.keywords);
+    state
+        .last_known_colors_by_generation
+        .insert((oid, generation), characteristics.colors);
+    state
+        .last_known_types_by_generation
+        .insert((oid, generation), characteristics.types);
+}
+
 struct PreparedZoneMove {
     oid: ObjectId,
     owner: PlayerId,
@@ -3310,28 +3344,7 @@ fn commit_zone_move(
             state.last_known_tapped.insert(oid, was_tapped);
         }
         if let Some(characteristics) = last_known_characteristics {
-            state
-                .last_known_mana_value_by_generation
-                .insert((oid, prior_generation), characteristics.mana_value);
-            state.last_known_pt_by_generation.insert(
-                (oid, prior_generation),
-                (
-                    characteristics.signed_power,
-                    characteristics.signed_toughness,
-                ),
-            );
-            state
-                .last_known_controller_by_generation
-                .insert((oid, prior_generation), characteristics.controller);
-            state
-                .last_known_keywords_by_generation
-                .insert((oid, prior_generation), characteristics.keywords);
-            state
-                .last_known_colors_by_generation
-                .insert((oid, prior_generation), characteristics.colors);
-            state
-                .last_known_types_by_generation
-                .insert((oid, prior_generation), characteristics.types);
+            record_last_known_characteristics(state, oid, prior_generation, characteristics);
         }
     }
 

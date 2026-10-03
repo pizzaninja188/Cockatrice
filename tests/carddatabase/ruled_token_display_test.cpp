@@ -9,6 +9,32 @@
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_card.pb.h>
 
+TEST(RuledTokenDisplayTest, QualifiedMyrRulesNameResolvesExactTokenArtwork)
+{
+    auto db = std::make_unique<CardDatabase>(nullptr, new NoopCardPreferenceProvider(),
+        new TestCardDatabasePathProvider(), new NoopCardSetPriorityController());
+    db->loadCardDatabases();
+    ASSERT_EQ(db->getLoadStatus(), Ok);
+    const CardRef qualified = RuledTokenDisplay::resolve(db->query(), "Myr Token", "1/1", "", {}, {});
+    EXPECT_EQ(qualified.name, QStringLiteral("Myr Token"));
+    const CardRef unqualified = RuledTokenDisplay::resolve(db->query(), "Myr", "1/1", "", {}, {});
+    EXPECT_EQ(unqualified.name, QStringLiteral("Myr Token"));
+    EXPECT_TRUE(RuledTokenDisplay::resolve(db->query(), "Myr Token", "2/2", "", {}, {}).name.isEmpty());
+    EXPECT_TRUE(RuledTokenDisplay::resolve(db->query(), "Myr Token", "1/1", "r", {}, {}).name.isEmpty());
+    ruled::v1::TokenIdentity identity;
+    identity.set_name("Myr Token");
+    identity.set_pt("1/1");
+    identity.set_is_creature(true);
+    for (const char *type : {"Artifact", "Creature", "Myr"}) identity.add_types(type);
+    ServerInfo_Card physical;
+    physical.set_id(47);
+    RuledTokenDisplay::applyProposal(physical, identity, db->query());
+    EXPECT_EQ(physical.id(), 47);
+    EXPECT_EQ(physical.name(), "Myr Token");
+    EXPECT_EQ(physical.pt(), "1/1");
+    EXPECT_NE(physical.annotation().find("1/1 | Colorless | Artifact Creature Myr"), std::string::npos);
+}
+
 TEST(RuledTokenDisplayTest, SameNameGolemProposalsUseExactArtAndKeepCompleteMissingArtLabels)
 {
     auto db = std::make_unique<CardDatabase>(nullptr, new NoopCardPreferenceProvider(),

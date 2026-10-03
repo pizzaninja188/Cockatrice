@@ -119,7 +119,9 @@ CardRef RuledTokenDisplay::resolve(const CardDatabaseQuerier *db,
     expectedAbilities.removeAll(QString());
     const QString expectedText = normalizeAbilityText(keywords.join(QString()) + printedAbilityTexts.join(QString()));
     const QString expectedColors = normalizeColors(color);
-    const QString baseName = tokenName + QStringLiteral(" Token");
+    const QString baseName = tokenName.endsWith(QStringLiteral(" Token"))
+                                 ? tokenName
+                                 : tokenName + QStringLiteral(" Token");
     CardRef structuralFallback;
     int structuralFallbackCount = 0;
 

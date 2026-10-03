@@ -295,6 +295,33 @@ impl GameEngine {
             .filter(|object| departed.contains(&object.owner))
             .map(|object| object.id)
             .collect();
+        // Capture the complete cohort before deleting any static-grant provider or ending
+        // control effects. A surviving foreign-controlled ability reads this exact source.
+        let source_snapshots: Vec<_> = departed_objects
+            .iter()
+            .filter_map(|&oid| {
+                self.state
+                    .objects
+                    .get(&oid)
+                    .filter(|object| object.zone == Zone::Battlefield)?;
+                let generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&oid)
+                    .copied()
+                    .unwrap_or(0);
+                self.characteristics(oid)
+                    .map(|characteristics| (oid, generation, characteristics))
+            })
+            .collect();
+        for (oid, generation, characteristics) in source_snapshots {
+            super::resolution::record_last_known_characteristics(
+                &mut self.state,
+                oid,
+                generation,
+                characteristics,
+            );
+        }
         self.detach_departed_outer_resolution(&departed)?;
         for player in departed {
             self.remove_departing_player_objects(player, events)?;
@@ -360,7 +387,7 @@ impl GameEngine {
             }
         }
         self.refresh_mass_sacrifice_departure(events)?;
-        self.refresh_combat_damage_departure(events)?;
+        self.refresh_damage_departure(events)?;
         self.refresh_entry_timestamp_departure(&departed_objects, events)?;
         self.refresh_observer_aura_departure(events)?;
         self.refresh_participating_entry_departure(&departed_objects, events)?;

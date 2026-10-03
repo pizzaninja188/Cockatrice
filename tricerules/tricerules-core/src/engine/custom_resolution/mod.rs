@@ -817,6 +817,20 @@ impl GameEngine {
                     .unwrap_or(pending.deciding_player),
             });
         }
+        let myr_consumer = stack.resume_effect_index.is_some_and(|index| {
+            self.build_resolution_effects(&stack.item)
+                .0
+                .get(index as usize)
+                .is_some_and(|effect| {
+                    matches!(effect.effect, SpellEffectKind::MyrBattlesphereAttack)
+                })
+        });
+        if myr_consumer
+            && !self.myr_attack_cohort_is_legal(pending.deciding_player, &produced_objects)
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal("stale Myr attack payment"));
+        }
         let names = chosen
             .iter()
             .map(|oid| object_display_name(&self.state, self.registry, *oid))

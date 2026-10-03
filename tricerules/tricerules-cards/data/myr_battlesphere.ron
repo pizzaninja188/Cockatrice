@@ -1,0 +1,32 @@
+// Oracle c53ba31a-ba27-4e17-9a92-311acb1cab29; exact source/rulings checked 2026-10-03.
+// https://scryfall.com/card/tdc/322/myr-battlesphere
+// https://api.scryfall.com/cards/71e7ef4a-2032-4571-afc6-5207d4b40c3d/rulings
+// CR 107.3f, 111.4, 113.7a, 208.3a, 508.3a, 608.2h, 611.2a/d, 701.26a.
+(
+  id: "myr_battlesphere",
+  name: "Myr Battlesphere",
+  face_id: "myr_battlesphere",
+  mana_cost: "{7}",
+  types: ["Artifact", "Creature", "Myr", "Construct"],
+  power: 4,
+  toughness: 7,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [CreateTokens(token: "myr_token_c_1_1", count: 4)],
+  ), (
+    ability_id: "triggered_02",
+    presentation: OracleLines([2]),
+    trigger: WheneverSelfAttacks(minimum_other_attackers: 0),
+    effect: [
+      ChoosePermanents(
+        chooser: Controller,
+        filter: (kind: AnyPermanent, controller: You, required_subtypes: ["Myr"], tapped: Some(false)),
+        min: 0,
+        max: 4294967295,
+      ),
+      MyrBattlesphereAttack,
+    ],
+  )],
+)

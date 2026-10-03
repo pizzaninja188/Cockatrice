@@ -1,0 +1,142 @@
+{
+  "format_version": 1,
+  "oracle_id": "c53ba31a-ba27-4e17-9a92-311acb1cab29",
+  "spans": [
+    {
+      "face_id": "myr_battlesphere",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "myr_battlesphere",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ChoosePermanents",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::MyrBattlesphereAttack",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/1"
+    }
+  ],
+  "tokens": [
+    "myr_token_c_1_1"
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_myr_battlesphere::myr_battlesphere_actual_cast_creates_four_exact_rules_named_tokens",
+      "covers": "myr battlesphere actual cast creates four exact rules named tokens"
+    },
+    {
+      "test": "scenario deck_coverage_myr_battlesphere::myr_battlesphere_partial_selection_taps_only_chosen_and_counts_once",
+      "covers": "myr battlesphere partial selection taps only chosen and counts once"
+    },
+    {
+      "test": "scenario deck_coverage_myr_battlesphere::myr_battlesphere_zero_selection_declines_tap_bonus_and_damage",
+      "covers": "myr battlesphere zero selection declines tap bonus and damage"
+    },
+    {
+      "test": "scenario deck_coverage_myr_battlesphere::myr_battlesphere_prevention_parks_after_one_tap_and_bonus",
+      "covers": "myr battlesphere prevention parks after one tap and bonus"
+    },
+    {
+      "test": "scenario deck_coverage_myr_battlesphere::myr_battlesphere_invalid_and_stale_cohorts_reject_without_mutation",
+      "covers": "myr battlesphere invalid and stale cohorts reject without mutation"
+    },
+    {
+      "test": "scenario deck_coverage_myr_battlesphere::myr_battlesphere_eligible_scope_includes_nontoken_sick_and_noncreature_myr",
+      "covers": "myr battlesphere eligible scope includes nontoken sick and noncreature myr"
+    },
+    {
+      "test": "scenario deck_coverage_myr_battlesphere::myr_battlesphere_no_untapped_myr_skips_choice_and_vigilant_source_is_eligible",
+      "covers": "myr battlesphere no untapped myr skips choice and vigilant source is eligible"
+    },
+    {
+      "test": "scenario deck_coverage_myr_battlesphere::myr_battlesphere_absent_or_returned_source_still_taps_and_damages_without_bonus",
+      "covers": "myr battlesphere absent or returned source still taps and damages without bonus"
+    },
+    {
+      "test": "scenario deck_coverage_myr_battlesphere::myr_battlesphere_noncreature_source_retains_bonus_for_same_incarnation_until_cleanup",
+      "covers": "myr battlesphere noncreature source retains bonus for same incarnation until cleanup"
+    },
+    {
+      "test": "scenario deck_coverage_myr_battlesphere::myr_battlesphere_frozen_chooser_and_current_damage_source_controller_are_distinct",
+      "covers": "myr battlesphere frozen chooser and current damage source controller are distinct"
+    },
+    {
+      "test": "scenario deck_coverage_myr_battlesphere::myr_battlesphere_departed_damage_recipient_drains_parked_batch_without_repeating_bonus",
+      "covers": "myr battlesphere departed damage recipient drains parked batch without repeating bonus"
+    },
+    {
+      "test": "scenario deck_coverage_myr_battlesphere::myr_battlesphere_accepted_choice_and_damage_resumption_replay_identically",
+      "covers": "myr battlesphere accepted choice and damage resumption replay identically"
+    },
+    {
+      "test": "scenario deck_coverage_myr_battlesphere::myr_battlesphere_original_planeswalker_generation_and_battle_recipient_are_preserved",
+      "covers": "myr battlesphere original planeswalker generation and battle recipient are preserved"
+    },
+    {
+      "test": "scenario deck_coverage_myr_battlesphere::myr_battlesphere_surviving_foreign_trigger_retains_damage_after_source_owner_departure",
+      "covers": "myr battlesphere surviving foreign trigger retains damage after source owner departure"
+    },
+    {
+      "test": "scenario deck_coverage_myr_battlesphere::myr_battlesphere_parked_damage_retains_departed_source_and_current_prevention_choice",
+      "covers": "myr battlesphere parked damage retains departed source and current prevention choice"
+    },
+    {
+      "test": "scenario myr_damage_prerequisites::attacked_damage_lifelink_uses_current_source_controller_not_trigger_controller",
+      "covers": "attacked damage lifelink uses current source controller not trigger controller"
+    },
+    {
+      "test": "scenario myr_damage_prerequisites::foreign_trigger_survives_source_owner_departure_with_source_qualities",
+      "covers": "foreign trigger survives source owner departure with source qualities"
+    },
+    {
+      "test": "scenario myr_damage_prerequisites::attacked_animated_planeswalker_takes_source_deathtouch",
+      "covers": "attacked animated planeswalker takes source deathtouch"
+    },
+    {
+      "test": "scenario myr_damage_prerequisites::departed_attacked_player_receives_no_damage_from_surviving_trigger",
+      "covers": "departed attacked player receives no damage from surviving trigger"
+    },
+    {
+      "test": "scenario myr_damage_prerequisites::parked_attacked_damage_finishes_when_recipient_chooser_concedes",
+      "covers": "parked attacked damage finishes when recipient chooser concedes"
+    },
+    {
+      "test": "deck_coverage_myr_battlesphere::myr_battlesphere_complete_definition_and_rules_named_token_are_exact",
+      "covers": "myr battlesphere complete definition and rules named token are exact"
+    },
+    {
+      "test": "deck_coverage_myr_battlesphere::myr_attack_consumer_rejects_missing_incompatible_and_wrong_trigger_producers",
+      "covers": "myr attack consumer rejects missing incompatible and wrong trigger producers"
+    },
+    {
+      "test": "deck_coverage_myr_battlesphere::myr_attack_consumer_rejects_reflexive_trigger_context",
+      "covers": "reflexive child cannot admit the otherwise valid attack producer and consumer without attack context"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

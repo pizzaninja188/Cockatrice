@@ -1,0 +1,9 @@
+// CR 111.4: the default name is the token's subtype followed by Token.
+(
+  id: "myr_token_c_1_1",
+  name: "Myr Token",
+  face_id: "myr_token",
+  types: ["Artifact", "Creature", "Myr"],
+  power: 1,
+  toughness: 1,
+)

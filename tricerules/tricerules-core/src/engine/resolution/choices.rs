@@ -188,6 +188,7 @@ pub(super) fn choose_permanents(
     if candidates.is_empty() && min == 0 {
         return Ok(EffectOutcome::Continue);
     }
+    let max = max.min(candidates.len() as u32);
     if min == max && candidates.len() == min as usize {
         cx.effect_result.produced_objects = candidates
             .iter()

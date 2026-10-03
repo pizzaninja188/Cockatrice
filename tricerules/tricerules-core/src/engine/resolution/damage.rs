@@ -385,7 +385,11 @@ pub(super) fn damage_attacked_player_or_planeswalker(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let recipient = if let Some(player) = cx.top.trigger_context.attacked_player {
-        Some(DamageRecipient::Player(player))
+        cx.engine
+            .state
+            .player_idx(player)
+            .filter(|&index| !cx.engine.state.players[index].has_lost)
+            .map(|_| DamageRecipient::Player(player))
     } else if let Some(permanent) = cx.top.trigger_context.attacked_planeswalker {
         let generation = cx
             .engine
@@ -419,12 +423,14 @@ pub(super) fn damage_attacked_player_or_planeswalker(
     let damage = vec![DamageSpec {
         event: DamageEvent::noncombat(
             resolving_damage_source_id(cx.top),
-            cx.controller,
+            super::source_controller(cx.engine, cx.top).unwrap_or(cx.controller),
             cx.spell_label,
             recipient,
             amount,
         ),
-        source_has_deathtouch: false,
+        source_has_deathtouch: cx
+            .engine
+            .resolving_source_has_keyword(cx.top, Keyword::Deathtouch),
         source_has_lifelink,
     }];
     let Some(completed) = cx
@@ -436,6 +442,77 @@ pub(super) fn damage_attacked_player_or_planeswalker(
     cx.engine
         .commit_completed_damage_batch(&completed, cx.events);
     Ok(EffectOutcome::Continue)
+}
+
+impl GameEngine {
+    pub(in crate::engine) fn myr_attack_cohort_is_legal(
+        &self,
+        controller: PlayerId,
+        cohort: &[TriggerObjectRef],
+    ) -> bool {
+        let mut seen = std::collections::HashSet::new();
+        cohort.iter().all(|member| {
+            seen.insert(member.object_id)
+                && self
+                    .state
+                    .zone_change_generation
+                    .get(&member.object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == member.zone_change_generation
+                && self
+                    .state
+                    .objects
+                    .get(&member.object_id)
+                    .is_some_and(|object| object.zone == Zone::Battlefield && !object.tapped)
+                && self
+                    .characteristics(member.object_id)
+                    .is_some_and(|values| values.controller == controller && values.has_type("Myr"))
+        })
+    }
+}
+
+pub(super) fn myr_battlesphere_attack(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
+    let cohort = &cx.previous_effect_result.produced_objects;
+    if !cx.engine.myr_attack_cohort_is_legal(cx.controller, cohort) {
+        return Err(EngineError::Illegal("stale Myr attack payment"));
+    }
+    if cohort.is_empty() {
+        return Ok(EffectOutcome::Continue);
+    }
+    let selected: Vec<_> = cohort.iter().map(|member| member.object_id).collect();
+    let count = selected.len() as u32;
+    let tap_events = cx.engine.tap_permanents(cx.controller, &selected);
+    cx.engine.fire_triggers(&tap_events);
+    cx.events
+        .push(ev_log(format!("{} taps {count} Myr", cx.spell_label)));
+    if cx.engine.source_is_current_object(cx.top) {
+        if let Some(source) = cx.top.source_permanent_id {
+            // CR 208.3a: install even on a temporarily noncreature source occurrence.
+            cx.engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: Some(source),
+                affected: AffectedScope::Single(source),
+                kind: ContinuousEffectKind::PtModify {
+                    delta_power: count.min(i32::MAX as u32) as i32,
+                    delta_toughness: 0,
+                },
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: cx.engine.state.command_index,
+            });
+            cx.events.push(ev_log(format!(
+                "{} gets +{count}/+0 until end of turn",
+                cx.spell_label
+            )));
+        }
+    }
+    damage_attacked_player_or_planeswalker(
+        cx,
+        SpellEffectKind::DamageAttackedPlayerOrPlaneswalker {
+            amount: Amount::Fixed(count),
+        },
+    )
 }
 
 #[cfg(test)]

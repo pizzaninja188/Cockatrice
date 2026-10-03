@@ -7,8 +7,12 @@
 
 #[path = "scenario/deck_coverage_maze_of_ith.rs"]
 mod deck_coverage_maze_of_ith;
+#[path = "scenario/deck_coverage_myr_battlesphere.rs"]
+mod deck_coverage_myr_battlesphere;
 #[path = "scenario/deck_coverage_standstill.rs"]
 mod deck_coverage_standstill;
+#[path = "scenario/myr_damage_prerequisites.rs"]
+mod myr_damage_prerequisites;
 
 #[path = "scenario/authoring_actions.rs"]
 mod authoring_actions;

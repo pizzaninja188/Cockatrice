@@ -510,6 +510,13 @@ impl ActivatedAbilityDef {
             effect.validate(EffectContext::Ability)?;
         }
         SpellEffectKind::validate_list(&self.effect)?;
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::requires_attack_trigger)
+        {
+            return Err("attack-recipient effects require an attack trigger".into());
+        }
         TargetingDef::validate_optional(self.targeting.as_ref(), &self.effect)
     }
 }
@@ -1520,6 +1527,21 @@ impl TriggeredAbilityDef {
             }
             condition.validate_trigger_condition()?;
         }
+        let requires_attack = self
+            .effect
+            .iter()
+            .any(SpellEffectKind::requires_attack_trigger)
+            || self.modal.as_ref().is_some_and(|modal| {
+                modal.modes.iter().any(|mode| {
+                    mode.effects
+                        .iter()
+                        .any(SpellEffectKind::requires_attack_trigger)
+                })
+            });
+        if requires_attack && !matches!(self.trigger, TriggerCondition::WheneverSelfAttacks { .. })
+        {
+            return Err("MyrBattlesphereAttack requires WheneverSelfAttacks".into());
+        }
         for effect in &self.effect {
             effect.validate(EffectContext::Ability)?;
         }
@@ -1565,6 +1587,13 @@ impl ReflexiveTriggeredAbilityDef {
         self.presentation.validate()?;
         if self.effect.is_empty() {
             return Err("reflexive triggered ability requires effects".into());
+        }
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::requires_attack_trigger)
+        {
+            return Err("reflexive triggered abilities cannot reference attack context".into());
         }
         if self
             .effect

@@ -970,6 +970,9 @@ pub enum SpellEffectKind {
     DamageAttackedPlayerOrPlaneswalker {
         amount: Amount,
     },
+    /// Myr Battlesphere's inseparable resolution-time tap/count, source bonus and attack
+    /// recipient damage. Consumes the immediately preceding optional controlled Myr choice.
+    MyrBattlesphereAttack,
     /// Damage each chosen target using the declared division mode. ChooseAtCast distributes a
     /// total (Fire); EvenAtResolution divides a total among legal targets (Fireball); PerTarget
     /// deals the amount independently to each legal target (Prismari Charm and Dual Shot).
@@ -2874,6 +2877,7 @@ impl SpellEffectKind {
             | SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
             | SpellEffectKind::CreateStaticEmblem { .. }
             | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. }
+            | SpellEffectKind::MyrBattlesphereAttack
             | SpellEffectKind::Draw { .. }
             | SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary
             | SpellEffectKind::Discard { .. }
@@ -3353,6 +3357,21 @@ impl SpellEffectKind {
             let previous = index
                 .checked_sub(1)
                 .and_then(|previous| effects.get(previous));
+            if matches!(effect, SpellEffectKind::MyrBattlesphereAttack) {
+                let expected = TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    controller: TargetController::You,
+                    tapped: Some(false),
+                    required_subtypes: vec!["Myr".into()],
+                    ..Default::default()
+                };
+                if !matches!(previous, Some(SpellEffectKind::ChoosePermanents {
+                    chooser: PlayerRecipient::Controller, filter, min: 0, max: u32::MAX, constraints,
+                }) if *filter == expected && constraints.is_empty())
+                {
+                    return Err("MyrBattlesphereAttack requires an immediately preceding optional controlled untapped Myr choice".into());
+                }
+            }
             if matches!(effect, SpellEffectKind::UntapChosenPermanents)
                 && !matches!(previous, Some(SpellEffectKind::ChoosePermanents { .. }))
             {
@@ -3473,6 +3492,9 @@ impl SpellEffectKind {
     /// `context` distinguishes spells from abilities so source-bound subjects are
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
+        if matches!(self, Self::MyrBattlesphereAttack) && context != EffectContext::Ability {
+            return Err("MyrBattlesphereAttack requires an attack ability source".into());
+        }
         if matches!(
             self,
             Self::DamagePlayer {
@@ -5322,6 +5344,29 @@ impl SpellEffectKind {
                 }
             }
             _ => Ok(()),
+        }
+    }
+
+    pub(crate) fn requires_attack_trigger(&self) -> bool {
+        match self {
+            Self::MyrBattlesphereAttack => true,
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.requires_attack_trigger()
+            }
+            Self::MayBehold { if_beheld, .. } => {
+                if_beheld.iter().any(Self::requires_attack_trigger)
+            }
+            Self::ChooseResolutionBranch {
+                branches,
+                otherwise,
+                ..
+            } => {
+                branches
+                    .iter()
+                    .any(|branch| branch.effects.iter().any(Self::requires_attack_trigger))
+                    || otherwise.iter().any(Self::requires_attack_trigger)
+            }
+            _ => false,
         }
     }
 

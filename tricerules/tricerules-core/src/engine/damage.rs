@@ -189,6 +189,8 @@ pub(crate) struct PendingDamageEvent {
     pub remaining: u32,
     pub applied_applications: Vec<DamagePreventionApplication>,
     pub combat: Option<PendingCombatDamageOccurrence>,
+    /// Original noncombat recipient occurrence; never rebound during a parked choice.
+    pub recipient_generation: Option<u64>,
 }
 
 /// The original combat relation, distinct from the presentation source and current controller.
@@ -367,6 +369,7 @@ impl GameEngine {
             damage: damage
                 .into_iter()
                 .map(|spec| PendingDamageEvent {
+                    recipient_generation: self.damage_recipient_generation(&spec.event),
                     remaining: spec.event.amount,
                     spec,
                     applied_applications: Vec::new(),
@@ -446,6 +449,7 @@ impl GameEngine {
         };
         let pending = PendingDamageBatch {
             damage: vec![PendingDamageEvent {
+                recipient_generation: self.damage_recipient_generation(&damage.event),
                 remaining: damage.event.amount,
                 spec: damage,
                 applied_applications: Vec::new(),
@@ -1003,6 +1007,7 @@ impl GameEngine {
                     // Capture before any application, then retain unchanged through every choice.
                     self.capture_combat_damage_source(&mut spec.event);
                     PendingDamageEvent {
+                        recipient_generation: self.damage_recipient_generation(&spec.event),
                         remaining: spec.event.amount,
                         combat: self.combat_damage_occurrence(&spec.event),
                         spec,
@@ -1235,31 +1240,69 @@ impl GameEngine {
         }
     }
 
-    /// Concession changes combat membership immediately, but does not abandon unrelated damage.
-    pub(super) fn refresh_combat_damage_departure(
+    fn damage_recipient_generation(&self, event: &DamageEvent) -> Option<u64> {
+        match event.recipient {
+            DamageRecipient::Player(_) => None,
+            DamageRecipient::Permanent(oid) => Some(
+                self.state
+                    .zone_change_generation
+                    .get(&oid)
+                    .copied()
+                    .unwrap_or(0),
+            ),
+        }
+    }
+
+    fn stack_damage_occurrence_survives(&self, damage: &PendingDamageEvent) -> bool {
+        match damage.spec.event.recipient {
+            DamageRecipient::Player(player) => self
+                .state
+                .player_idx(player)
+                .is_some_and(|index| !self.state.players[index].has_lost),
+            DamageRecipient::Permanent(oid) => {
+                self.state
+                    .objects
+                    .get(&oid)
+                    .is_some_and(|object| object.zone == Zone::Battlefield)
+                    && self.damage_recipient_generation(&damage.spec.event)
+                        == damage.recipient_generation
+            }
+        }
+    }
+
+    /// Reconcile recipients without cancelling independently owed damage from an absent source.
+    pub(super) fn refresh_damage_departure(
         &mut self,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         let Some(pending) = self.state.pending_resolution.clone() else {
             return Ok(());
         };
-        if !matches!(
-            pending.continuation,
-            ResolutionContinuation::CombatDamageReplacement { .. }
-        ) {
-            return Ok(());
-        }
+        let completion = match &pending.continuation {
+            ResolutionContinuation::CombatDamageReplacement { .. } => {
+                DamageBatchContinuation::Combat
+            }
+            ResolutionContinuation::DamageReplacement { stack, .. } => {
+                DamageBatchContinuation::Stack {
+                    item: Box::new(stack.item.clone()),
+                    resume_effect_index: stack.resume_effect_index,
+                }
+            }
+            _ => return Ok(()),
+        };
         let Some(super::replacement::PendingReplacementEvent::Damage(mut batch)) =
             self.state.pending_replacement_event.take()
         else {
-            return Err(EngineError::Illegal(
-                "combat damage continuation has no batch",
-            ));
+            return Err(EngineError::Illegal("damage continuation has no batch"));
         };
         let mut indices = Vec::with_capacity(batch.damage.len());
         let mut retained = Vec::new();
         for damage in std::mem::take(&mut batch.damage) {
-            if self.combat_damage_occurrence_survives(&damage) {
+            let survives = match completion {
+                DamageBatchContinuation::Combat => self.combat_damage_occurrence_survives(&damage),
+                _ => self.stack_damage_occurrence_survives(&damage),
+            };
+            if survives {
                 indices.push(Some(retained.len()));
                 retained.push(damage);
             } else {
@@ -1304,17 +1347,30 @@ impl GameEngine {
                         Some(super::replacement::PendingReplacementEvent::Damage(batch));
                     self.state.pending_resolution = Some(pending);
                 } else {
-                    self.park_damage_prevention_choice(
-                        DamageBatchContinuation::Combat,
-                        batch,
-                        raw_candidates,
-                        events,
-                    );
+                    self.park_damage_prevention_choice(completion, batch, raw_candidates, events);
                 }
             }
             DamageBatchProgress::Complete(completed) => {
                 self.commit_completed_damage_batch(&completed, events);
-                self.state.combat_damage_priority_pending = true;
+                match completion {
+                    DamageBatchContinuation::Combat => {
+                        self.state.combat_damage_priority_pending = true
+                    }
+                    DamageBatchContinuation::Stack {
+                        item,
+                        resume_effect_index,
+                    } => {
+                        let completed = self.complete_parked_resolution(
+                            *item,
+                            resume_effect_index,
+                            Vec::new(),
+                        )?;
+                        events.extend(completed.events);
+                    }
+                    DamageBatchContinuation::ManaAbility { .. } => {
+                        unreachable!("departure refresh excludes mana abilities")
+                    }
+                }
             }
         }
         Ok(())
@@ -1443,6 +1499,9 @@ impl GameEngine {
                 let Some(index) = self.state.player_idx(player) else {
                     return 0;
                 };
+                if self.state.players[index].has_lost {
+                    return 0;
+                }
                 super::history::commit_life_change(&mut self.state, index, -(result.dealt as i32));
                 events.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
@@ -1671,9 +1730,7 @@ mod tests {
         let mut engine = parked_departure_combat(1, false);
         let original = engine.state.pending_resolution.clone().unwrap();
         let before_id = engine.state.next_replacement_application_id;
-        engine
-            .refresh_combat_damage_departure(&mut Vec::new())
-            .unwrap();
+        engine.refresh_damage_departure(&mut Vec::new()).unwrap();
         assert_eq!(
             engine
                 .state
@@ -1705,9 +1762,7 @@ mod tests {
             DamagePreventionScope::Recipient(attacker),
             DamagePreventionAmount::Remaining(3),
         );
-        engine
-            .refresh_combat_damage_departure(&mut Vec::new())
-            .unwrap();
+        engine.refresh_damage_departure(&mut Vec::new()).unwrap();
         let Some(super::super::replacement::PendingReplacementEvent::Damage(batch)) =
             engine.state.pending_replacement_event.as_ref()
         else {
@@ -1960,9 +2015,7 @@ mod tests {
         let mut engine = parked_departure_combat(1, false);
         engine.state.add_damage_prevention_shield(2, 1);
         engine.state.add_damage_prevention_shield(2, 1);
-        engine
-            .refresh_combat_damage_departure(&mut Vec::new())
-            .unwrap();
+        engine.refresh_damage_departure(&mut Vec::new()).unwrap();
         let old = engine
             .state
             .pending_resolution
