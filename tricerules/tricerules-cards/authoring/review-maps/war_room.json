@@ -1,0 +1,33 @@
+{
+  "format_version": 1,
+  "oracle_id": "71c52bf5-2a5d-488e-8b15-7ef290e4b77d",
+  "spans": [
+    { "face_id": "war_room", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/activated_abilities/0"] },
+    { "face_id": "war_room", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/activated_abilities/1"] }
+  ],
+  "primitive_references": [
+    { "symbol": "AbilityCost::Tap", "typed_path": "/faces/0/activated_abilities/0/costs/0" },
+    { "symbol": "SpellEffectKind::ProduceMana", "typed_path": "/faces/0/activated_abilities/0/effect/0" },
+    { "symbol": "AbilityCost::Mana", "typed_path": "/faces/0/activated_abilities/1/costs/0" },
+    { "symbol": "AbilityCost::Tap", "typed_path": "/faces/0/activated_abilities/1/costs/1" },
+    { "symbol": "AbilityCost::PayCommanderColorIdentityLife", "typed_path": "/faces/0/activated_abilities/1/costs/2" },
+    { "symbol": "SpellEffectKind::Draw", "typed_path": "/faces/0/activated_abilities/1/effect/0" }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    { "test": "scenario deck_coverage_war_room::war_room_pays_one_life_taps_and_draws_only_on_resolution", "covers": "paid draw ability requires three mana, tap and one life; draws only at resolution" },
+    { "test": "scenario deck_coverage_war_room::war_room_without_commander_rejects_draw_purely_but_produces_colorless_mana", "covers": "absent commander rejects without state changes while C mana remains immediate and legal" },
+    { "test": "scenario deck_coverage_war_room::war_room_resolves_zero_through_five_unique_colors_in_labels_and_actual_payments", "covers": "declared colorless, one through five colors and overlapping commander union; computed labels and exact life payments" },
+    { "test": "scenario deck_coverage_war_room::war_room_missing_declaration_publishes_disabled_draw_and_rejects_preview", "covers": "no declaration is distinct from colorless, unavailable label and invalid preview" },
+    { "test": "scenario deck_coverage_war_room::war_room_preview_cancellation_and_normalized_commit_charge_exactly_once", "covers": "wrong actor, preview purity, cancelled proposals and zero/positive normalized commit" },
+    { "test": "scenario deck_coverage_war_room::war_room_illegal_mana_life_actor_tap_generation_and_stale_preview_are_atomic", "covers": "insufficient mana/life, wrong actor, tap, stale generation and stale committed payment preserve state" },
+    { "test": "scenario deck_coverage_war_room::war_room_uses_current_controller_identity_and_draw_recipient", "covers": "stolen source uses controller declaration and draws for that controller" },
+    { "test": "scenario deck_coverage_war_room::war_room_identity_is_frozen_after_commander_color_changes_and_hidden_zone_moves", "covers": "commander color changes and hidden zone moves leave frozen declaration cost unchanged" },
+    { "test": "scenario deck_coverage_war_room::war_room_paid_ability_draws_after_source_departure", "covers": "paid stack ability survives source departure" },
+    { "test": "scenario deck_coverage_war_room::war_room_exact_life_payment_is_accepted_before_existing_state_based_loss", "covers": "exact life payment is accepted before normal state-based loss" },
+    { "test": "scenario deck_coverage_war_room::war_room_replays_accepted_mana_activation_draw_and_pass_commands", "covers": "accepted commands reproduce batches and full diagnostic state from identical seeded fixture" },
+    { "test": "issue_510_war_room::war_room_registers_the_complete_exact_card_and_two_mapped_abilities", "covers": "exact identity, single land face, both lines, costs, C production and untargeted draw" },
+    { "test": "issue_510_war_room::dynamic_commander_life_cost_does_not_weaken_fixed_zero_life_validation", "covers": "specialized cost validation preserves positive fixed PayLife constraint" }
+  ],
+  "complete_definition_review_confirmed": true
+}

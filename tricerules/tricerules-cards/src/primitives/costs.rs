@@ -112,6 +112,9 @@ pub enum AbilityCost {
     /// CR 119.4 / 602.2b: pay a fixed amount of life as part of one atomic activation cost.
     /// Elven Passage and Champion of the Weird are the first data consumers.
     PayLife { amount: u32 },
+    /// War Room's specialized life cost uses the activating player's frozen declared identity.
+    /// A declared colorless commander costs zero; no declared commander is unpayable.
+    PayCommanderColorIdentityLife,
     /// CR 702.49a: return one unblocked attacking creature you control to its owner's hand.
     /// Ninjutsu abilities use the existing generation-bound battlefield selection surface.
     ReturnUnblockedAttacker,

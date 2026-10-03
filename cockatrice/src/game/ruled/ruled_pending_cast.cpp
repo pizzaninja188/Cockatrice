@@ -131,14 +131,14 @@ RuledPendingCast::cardActionMenuOptions(const QVector<RuledFaceOption> &castFace
         if (!ability || (manaAbilitiesOnly && !ability->isManaAbility()))
             continue;
         const QStringList manaOptions = ability->manaOptionsForSelection();
+        const QString abilityLabel = ability->menuLabel();
         for (int optionIndex = 0; optionIndex < manaOptions.size(); ++optionIndex) {
-            const QString label = manaOptions.size() > 1
-                                      ? (ability->manaProduced.isEmpty()
-                                             ? QObject::tr("%1 — Choose {%2}")
-                                                   .arg(ability->text, manaOptions.at(optionIndex))
-                                             : QObject::tr("%1 — Add {%2}")
-                                                   .arg(ability->text, manaOptions.at(optionIndex)))
-                                      : ability->text;
+            const QString label =
+                manaOptions.size() > 1
+                    ? (ability->manaProduced.isEmpty()
+                           ? QObject::tr("%1 — Choose {%2}").arg(abilityLabel, manaOptions.at(optionIndex))
+                           : QObject::tr("%1 — Add {%2}").arg(abilityLabel, manaOptions.at(optionIndex)))
+                    : abilityLabel;
             options.append({RuledCardActionMenuOption::Kind::ActivateAbility, abilityIndex, label,
                             state.abilityActivatable(sourceOid, abilityIndex), optionIndex});
         }

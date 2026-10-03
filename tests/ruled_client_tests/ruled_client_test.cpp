@@ -4731,6 +4731,92 @@ TEST_F(RuledClientTest, ActivatedAbilityMenuLabelsDoNotDuplicateStructuredCosts)
     EXPECT_EQ(state->activatedAbilityMenuLabel(100, 1), QStringLiteral("{2}, {T}, Sacrifice a creature: Draw a card."));
 }
 
+TEST_F(RuledClientTest, WarRoomNumericEngineCostsReachBothMenusWithoutChangingUnsupportedPrefixes)
+{
+    host.presentationCards = readPresentationCards(R"(<cockatrice_carddatabase version="4"><cards><card>
+      <name>War Room</name><ruled-oracle><face card-name="War Room" face-name="War Room">
+      <text>{3}, {T}, Pay life equal to the number of colors in your commanders' color identity: Draw a card.</text>
+      </face></ruled-oracle></card><card><name>Fountainport</name><ruled-oracle>
+      <face card-name="Fountainport" face-name="Fountainport">
+      <text>{2}, {T}, Sacrifice a token: Draw a card.</text></face>
+      </ruled-oracle></card></cards></cockatrice_carddatabase>)");
+    const QString oracle = QStringLiteral(
+        "{3}, {T}, Pay life equal to the number of colors in your commanders' color identity: Draw a card.");
+    const QString fountain = QStringLiteral("{2}, {T}, Sacrifice a token: Draw a card.");
+    for (int life : {0, 1, 5}) {
+        ruled::v1::RuledEventBatch batch;
+        auto *object = batch.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+        object->set_object_id(100);
+        auto *ability = object->add_activated_abilities();
+        ability->set_ability_index(0);
+        const QString cost = QStringLiteral("{3}, {T}, Pay %1 life").arg(life);
+        const QString expected = cost + QStringLiteral(": Draw a card.");
+        ability->set_text(expected.toStdString());
+        ability->set_cost_label(cost.toStdString());
+        ability->set_activatable(true);
+        auto *presentation = ability->mutable_presentation();
+        presentation->set_external_card_name("War Room");
+        presentation->set_external_face_name("War Room");
+        presentation->set_oracle_text_sha256(RuledOracleText::textSha256(oracle).toStdString());
+        presentation->add_oracle_line_indices(1);
+        presentation->set_fallback_text(expected.toStdString());
+        apply(batch);
+        EXPECT_EQ(state->activatedAbilityMenuLabel(100, 0), expected);
+        const auto options = RuledPendingCast::cardActionMenuOptions({}, *state, 100);
+        ASSERT_EQ(options.size(), 1);
+        EXPECT_EQ(options[0].label, expected);
+        EXPECT_TRUE(options[0].enabled);
+    }
+
+    const QList<QPair<QString, QString>> unsupported{
+        {QStringLiteral("Fountainport — activated ability (activated_02)"),
+         QStringLiteral("{2}, {T}, Sacrifice a permanent")},
+        {QStringLiteral("{2}, {T}, Sacrifice a permanent: Draw a card."),
+         QStringLiteral("{2}, {T}, Sacrifice a permanent")},
+        {QStringLiteral("{2}, Discard a card: Draw a card."), QStringLiteral("{2}, Discard a card")},
+        {QStringLiteral("{X}, {T}: Draw a card."), QStringLiteral("{X}, {T}")},
+        {QStringLiteral("Unstructured fallback"), QStringLiteral("{3}, {T}, Pay 1 life")}};
+    for (const auto &entry : unsupported) {
+        ruled::v1::RuledEventBatch batch;
+        auto *object = batch.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+        object->set_object_id(100);
+        auto *ability = object->add_activated_abilities();
+        ability->set_ability_index(0);
+        ability->set_text(entry.first.toStdString());
+        ability->set_cost_label(entry.second.toStdString());
+        auto *presentation = ability->mutable_presentation();
+        presentation->set_external_card_name("Fountainport");
+        presentation->set_external_face_name("Fountainport");
+        presentation->set_oracle_text_sha256(RuledOracleText::textSha256(fountain).toStdString());
+        presentation->add_oracle_line_indices(1);
+        presentation->set_fallback_text(entry.first.toStdString());
+        apply(batch);
+        EXPECT_EQ(state->activatedAbilityMenuLabel(100, 0), fountain);
+        const auto options = RuledPendingCast::cardActionMenuOptions({}, *state, 100);
+        ASSERT_EQ(options.size(), 1);
+        EXPECT_EQ(options[0].label, fountain);
+        EXPECT_FALSE(options[0].enabled);
+    }
+}
+
+TEST_F(RuledClientTest, WarRoomAbsentCommanderRetainsOracleLabelAndEngineDisabledAction)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *object = batch.add_events()->mutable_zone_view()->add_per_player()->add_battlefield_objects();
+    object->set_object_id(100);
+    auto *ability = object->add_activated_abilities();
+    ability->set_ability_index(1);
+    ability->set_text("{3}, {T}, Pay commander identity life: Draw a card.");
+    ability->set_cost_label("{3}, {T}, Pay life (no commander)");
+    ability->set_activatable(false);
+    apply(batch);
+    EXPECT_FALSE(state->abilityActivatable(100, 1));
+    const auto options = RuledPendingCast::cardActionMenuOptions({}, *state, 100);
+    ASSERT_EQ(options.size(), 1);
+    EXPECT_FALSE(options[0].enabled);
+    EXPECT_EQ(options[0].label, QString::fromStdString(ability->text()));
+}
+
 TEST_F(RuledClientTest, ActivatedAbilityAvailabilityTracksTheEngineAcrossFullZoneViews)
 {
     auto availabilityBatch = [](bool activatable) {

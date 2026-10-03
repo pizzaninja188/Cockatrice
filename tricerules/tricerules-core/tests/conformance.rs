@@ -440,6 +440,23 @@ fn pentad_prism_counter_mana_ability_has_a_complete_fixture() {
 }
 
 #[test]
+fn war_room_land_and_both_abilities_have_complete_commander_fixtures() {
+    for ability in [None, Some(0), Some(1)] {
+        let case = Case {
+            card: "war_room".into(),
+            face: 0,
+            ability,
+        };
+        assert_eq!(
+            evaluate(&case).expect("evaluate War Room conformance fixture"),
+            Outcome::Exercised,
+            "{}",
+            case.key()
+        );
+    }
+}
+
+#[test]
 fn pentavus_activated_abilities_have_complete_fixtures() {
     for ability in 0..2 {
         let case = Case {

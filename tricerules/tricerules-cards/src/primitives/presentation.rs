@@ -81,6 +81,10 @@ pub(super) fn simple_costs(costs: &[AbilityCost], source: &str) -> Option<String
                 AbilityCost::DiscardSelf => format!("Discard {source}"),
                 AbilityCost::ExileSelf => format!("Exile {source}"),
                 AbilityCost::PayLife { amount } => format!("Pay {amount} life"),
+                AbilityCost::PayCommanderColorIdentityLife => {
+                    "Pay life equal to the number of colors in your commanders' color identity"
+                        .into()
+                }
                 AbilityCost::Loyalty(amount) => format!("{amount:+}"),
                 _ => return None,
             })

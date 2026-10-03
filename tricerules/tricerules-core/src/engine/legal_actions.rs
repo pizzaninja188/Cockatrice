@@ -509,6 +509,10 @@ pub(super) fn activated_ability_info(
             },
             AbilityCost::Blight { count } => format!("Blight {count}"),
             AbilityCost::PayLife { amount } => format!("Pay {amount} life"),
+            AbilityCost::PayCommanderColorIdentityLife => eng
+                .activated_life_cost(controller, std::slice::from_ref(cost))
+                .map(|amount| format!("Pay {amount} life"))
+                .unwrap_or_else(|| "Pay life (no commander)".to_string()),
             AbilityCost::ReturnUnblockedAttacker => "Return an unblocked attacker".to_string(),
             AbilityCost::Loyalty(delta) if *delta >= 0 => format!("+{delta}"),
             AbilityCost::Loyalty(delta) => delta.to_string(),
@@ -546,7 +550,29 @@ pub(super) fn activated_ability_info(
             .map(|face| face.name.clone())
             .unwrap_or_else(|| "Unknown card".into())
     };
-    let fallback = ability.fallback_text_with_path(&public_name, &ability_path);
+    let mut fallback = ability.fallback_text_with_path(&public_name, &ability_path);
+    // Opt in only for the new dynamic producer with a provably complete cost sequence.
+    // Legacy cost labels can omit restrictions (e.g. Fountainport's token sacrifice).
+    if ability
+        .costs
+        .contains(&AbilityCost::PayCommanderColorIdentityLife)
+        && ability.costs.iter().all(|cost| {
+            matches!(
+                cost,
+                AbilityCost::Mana(_)
+                    | AbilityCost::Tap
+                    | AbilityCost::PayLife { .. }
+                    | AbilityCost::PayCommanderColorIdentityLife
+            )
+        })
+        && eng
+            .activated_life_cost(controller, &ability.costs)
+            .is_some()
+    {
+        if let Some((_, effect)) = fallback.split_once(':') {
+            fallback = format!("{cost_label}:{effect}");
+        }
+    }
     let presentation = if concealed || ability.intrinsic_land_mana {
         None
     } else {
@@ -1173,6 +1199,7 @@ fn legal_ability_cost_choices(
             }
             AbilityCost::Tap
             | AbilityCost::PayLife { .. }
+            | AbilityCost::PayCommanderColorIdentityLife
             | AbilityCost::Mana(_)
             | AbilityCost::RemoveXStorageCountersFromSource
             | AbilityCost::Waterbend(_)

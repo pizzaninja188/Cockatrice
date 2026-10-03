@@ -60,7 +60,7 @@ struct RuledAbilityEntry
     QString manaCost;
     /// Empty for non-mana abilities; otherwise engine options separated by "/" (e.g. "W/U").
     QString manaProduced;
-    /// Used for generated mana-picker labels; text already contains the ordinary menu's cost.
+    /// Engine cost prefix; legacy entries may summarize restricted costs.
     QString costLabel;
     bool activatable = false;
     bool hasOnlyTapCost = false;
@@ -70,6 +70,16 @@ struct RuledAbilityEntry
     std::optional<RuledXCounterManaChoice> xCounterManaChoice;
     /// CR 605.1a/605.2 classification supplied by the engine, including no-output game states.
     bool manaAbility = false;
+    /// Presentation-only proof from the engine fallback and a closed complete-cost grammar.
+    bool hasCompleteCostPrefix = false;
+
+    [[nodiscard]] QString menuLabel() const
+    {
+        const auto colon = text.indexOf(QLatin1Char(':'));
+        if (!hasCompleteCostPrefix || costLabel.isEmpty() || colon <= 0)
+            return text;
+        return costLabel + text.mid(colon);
+    }
 
     [[nodiscard]] bool isManaAbility() const
     {
@@ -1339,13 +1349,11 @@ public:
         }
         return indices;
     }
-    /// User-facing label for one entry in the ordinary activation context menu. AbilityInfo.text
-    /// already carries the complete Oracle-style "cost: effect" text; cost_label remains separate
-    /// for generated labels such as the dual-land color picker.
+    /// Retains Oracle effects while using a proven engine prefix for dynamic activation costs.
     [[nodiscard]] QString activatedAbilityMenuLabel(quint32 oid, int abilityIndex) const
     {
         const auto ability = activatedAbilityForOid(oid, abilityIndex);
-        return ability ? ability->text : QString{};
+        return ability ? ability->menuLabel() : QString{};
     }
     /// Whether the engine will currently accept activating `abilityIndex` on this permanent.
     /// Defaults to true for an ability the engine never described, so an unknown ability is

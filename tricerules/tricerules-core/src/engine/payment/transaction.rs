@@ -1283,6 +1283,14 @@ impl GameEngine {
                 AbilityCost::PayLife { amount } => {
                     debits.push(CostDebit::Life { amount: *amount });
                 }
+                AbilityCost::PayCommanderColorIdentityLife => {
+                    let amount = self
+                        .activated_life_cost(player, std::slice::from_ref(cost))
+                        .ok_or(EngineError::Illegal("commander life cost is undefined"))?;
+                    if amount > 0 {
+                        debits.push(CostDebit::Life { amount });
+                    }
+                }
                 AbilityCost::ReturnUnblockedAttacker => {
                     expected_selections += 1;
                     let selection = by_index
@@ -2079,8 +2087,9 @@ impl GameEngine {
                 "combined life payment exceeds supported range",
             ))
         })?;
-        if u64::try_from(self.state.players[plan.player_idx].life)
-            .map_or(true, |life| total_life_payment > life)
+        if total_life_payment > 0
+            && u64::try_from(self.state.players[plan.player_idx].life)
+                .map_or(true, |life| total_life_payment > life)
         {
             return Err(EngineError::Illegal("not enough life to pay all costs"));
         }
@@ -2535,6 +2544,70 @@ impl GameEngine {
 #[cfg(test)]
 mod convoke_transaction_tests {
     use super::*;
+
+    #[test]
+    fn war_room_zero_life_transaction_is_valid_at_zero_or_negative_life() {
+        // Bounded transaction fixtures: no claim that a nonpositive-life player has priority.
+        for life in [0, -2] {
+            let mut engine = GameEngine::new(510_020, &[7, 19], 20, None, true).unwrap();
+            engine.state.players[0].life = life;
+            engine.state.players[0].has_declared_commander = true;
+            assert_eq!(
+                engine.activated_life_cost(7, &[AbilityCost::PayCommanderColorIdentityLife]),
+                Some(0)
+            );
+            let source = engine.state.players[0].hand[0];
+            let plan = engine
+                .plan_ability_costs(
+                    7,
+                    0,
+                    source,
+                    &[AbilityCost::PayCommanderColorIdentityLife],
+                    &[],
+                    &[],
+                    &[],
+                    0,
+                    0,
+                )
+                .unwrap();
+            assert!(!plan
+                .debits
+                .iter()
+                .any(|debit| matches!(debit, CostDebit::Life { .. })));
+            let receipt = engine.commit_cost_transaction(plan).unwrap();
+            assert_eq!(receipt.life_paid, 0);
+            assert_eq!(engine.state.players[0].life, life);
+            assert_eq!(engine.state.turn_history.current.player(7).life_lost, 0);
+            let before = format!("{:?}", engine.state);
+            let positive = CostTransactionPlan {
+                purpose: CostPurpose::Ability,
+                player: 7,
+                player_idx: 0,
+                debits: vec![CostDebit::Life { amount: 1 }],
+                cast_cost_receipts: vec![],
+            };
+            assert!(engine.commit_cost_transaction(positive).is_err());
+            assert_eq!(format!("{:?}", engine.state), before);
+            engine.state.players[0].has_declared_commander = false;
+            assert_eq!(
+                engine.activated_life_cost(7, &[AbilityCost::PayCommanderColorIdentityLife]),
+                None
+            );
+            assert!(engine
+                .plan_ability_costs(
+                    7,
+                    0,
+                    source,
+                    &[AbilityCost::PayCommanderColorIdentityLife],
+                    &[],
+                    &[],
+                    &[],
+                    0,
+                    0
+                )
+                .is_err());
+        }
+    }
 
     #[test]
     fn pentad_prism_combined_additional_payment_colors_life_exclusion_and_stale_atomicity() {

@@ -1029,3 +1029,6 @@ mod deck_coverage_windfall;
 
 #[path = "scenario/deck_coverage_black_vise.rs"]
 mod deck_coverage_black_vise;
+
+#[path = "scenario/deck_coverage_war_room.rs"]
+mod deck_coverage_war_room;

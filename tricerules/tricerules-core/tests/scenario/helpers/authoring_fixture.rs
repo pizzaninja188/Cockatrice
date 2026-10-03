@@ -53,7 +53,20 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
         cards.push("air_elemental");
     }
     let deck = super::deck_with("forest", &cards);
-    let mut e = GameEngine::new(seed, players, 20, Some(vec![deck; players.len()]), true).unwrap();
+    let mut e = if card == "war_room" {
+        // War Room's draw cost is undefined without a declaration. Supply a real commander
+        // for this exact card fixture rather than weakening activation legality or baseline.
+        let decks = players
+            .iter()
+            .map(|_| tricerules_core::EngineDeck {
+                mainboard: deck.clone(),
+                commanders: vec!["kami_of_the_crescent_moon".into()],
+            })
+            .collect();
+        GameEngine::new_with_commander_decks(seed, players, 20, Some(decks), true).unwrap()
+    } else {
+        GameEngine::new(seed, players, 20, Some(vec![deck; players.len()]), true).unwrap()
+    };
     super::advance_to_main1_from_game_start(&mut e);
     for player in 0..e.state.players.len() {
         super::relocate_to_battlefield(&mut e, player, "grizzly_bears", false);

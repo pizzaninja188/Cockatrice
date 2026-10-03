@@ -281,6 +281,7 @@ pub(super) fn assert_zone_integrity(e: &GameEngine, expected_objects: usize, ctx
             .chain(p.battlefield.iter())
             .chain(p.graveyard.iter())
             .chain(p.exile.iter())
+            .chain(p.command_zone.iter())
         {
             assert!(seen.insert(*oid), "{ctx}: object {oid} is in two zones");
             count_in_zones += 1;

@@ -718,6 +718,9 @@ pub struct PlayerState {
     pub command_zone: Vec<ObjectId>,
     /// CR 903.4: frozen union of the declared commanders' card color identities.
     pub color_identity: Vec<Color>,
+    /// Initial declaration, retained even when all commanders leave the command zone.
+    /// Distinguishes a colorless commander from no commander for War Room's life cost.
+    pub has_declared_commander: bool,
     pub mana_pool: ManaPool,
     /// Unrestricted mana included in `mana_pool` that survives ordinary combat-step boundaries.
     /// This engine-private subset is never published separately; it exists only to implement
@@ -745,6 +748,7 @@ impl PlayerState {
             exile: Vec::new(),
             command_zone: Vec::new(),
             color_identity: Vec::new(),
+            has_declared_commander: false,
             mana_pool: ManaPool::default(),
             retained_combat_mana: ManaPool::default(),
             restricted_mana: Vec::new(),

@@ -459,6 +459,18 @@ mod face_change_tests {
         )
         .expect("commander leaves battlefield");
         assert_eq!(engine.state.players[0].color_identity, identity);
+        for zone in [Zone::Graveyard, Zone::Hand, Zone::Library] {
+            if engine.state.objects[&commander].zone != zone {
+                move_object_to_zone(&mut engine.state, engine.registry, commander, zone, None)
+                    .expect("commander moves through engine zone handling");
+            }
+            assert!(engine.state.players[0].command_zone.is_empty());
+            assert!(engine.state.players[0].has_declared_commander);
+            assert_eq!(
+                engine.activated_life_cost(0, &[AbilityCost::PayCommanderColorIdentityLife]),
+                Some(4)
+            );
+        }
         assert_eq!(
             engine.active_mana_options(signet, signet_ability),
             Some(options)
@@ -483,6 +495,54 @@ mod face_change_tests {
                 "Commander setup-only card cannot be used in a mainboard"
             ))
         ));
+    }
+
+    #[test]
+    fn war_room_initial_declaration_distinguishes_colorless_from_absent_commander() {
+        let engine = GameEngine::new_with_commander_decks(
+            510_030,
+            &[7, 19],
+            20,
+            Some(vec![
+                commander_engine_deck(&["forest"; 10], &["viv_vision,_teen_synthezoid"]),
+                commander_engine_deck(&["forest"; 10], &[]),
+            ]),
+            true,
+        )
+        .unwrap();
+        assert!(engine.state.players[0].color_identity.is_empty());
+        assert!(engine.state.players[1].color_identity.is_empty());
+        assert!(engine.state.players[0].has_declared_commander);
+        assert!(!engine.state.players[1].has_declared_commander);
+        assert_eq!(
+            engine.activated_life_cost(7, &[AbilityCost::PayCommanderColorIdentityLife]),
+            Some(0)
+        );
+        assert_eq!(
+            engine.activated_life_cost(19, &[AbilityCost::PayCommanderColorIdentityLife]),
+            None
+        );
+        assert_eq!(
+            engine.activated_life_cost(
+                7,
+                &[
+                    AbilityCost::PayLife { amount: 2 },
+                    AbilityCost::PayCommanderColorIdentityLife,
+                    AbilityCost::PayLife { amount: 3 }
+                ]
+            ),
+            Some(5)
+        );
+        assert_eq!(
+            engine.activated_life_cost(
+                7,
+                &[
+                    AbilityCost::PayLife { amount: u32::MAX },
+                    AbilityCost::PayLife { amount: 1 }
+                ]
+            ),
+            None
+        );
     }
 
     #[test]
@@ -1536,6 +1596,8 @@ impl GameEngine {
         for (i, &pid) in player_ids.iter().enumerate() {
             let mut p = PlayerState::new(pid, starting_life);
             let submitted_deck = decks.as_ref().and_then(|decks| decks.get(i));
+            p.has_declared_commander =
+                submitted_deck.is_some_and(|deck| !deck.commanders.is_empty());
             let deck_list = submitted_deck
                 .filter(|deck| !deck.mainboard.is_empty())
                 .map(|deck| deck.mainboard.clone())

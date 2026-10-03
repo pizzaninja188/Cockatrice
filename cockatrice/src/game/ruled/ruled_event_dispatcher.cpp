@@ -5,6 +5,7 @@
 #include "ruled_token_display.h"
 
 #include <QDebug>
+#include <QRegularExpression>
 #include <algorithm>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/protocol/ruled_choice_metadata.h>
@@ -383,6 +384,22 @@ parseSpellModes(const google::protobuf::RepeatedPtrField<ruled::v1::LegalSpellMo
     return modes;
 }
 
+bool engineFallbackHasCompleteCostPrefix(const ruled::v1::AbilityInfo &ability)
+{
+    const QString fallback = QString::fromStdString(ability.text());
+    const QString prefix = QString::fromStdString(ability.cost_label());
+    const auto colon = fallback.indexOf(QLatin1Char(':'));
+    if (prefix.isEmpty() || colon <= 0 || fallback.left(colon) != prefix)
+        return false;
+    // Only classify presentation forms whose entire cost is represented. In particular,
+    // sacrifice/tap/discard summaries can omit restrictions and must retain Oracle text.
+    static const QRegularExpression completePart(
+        QStringLiteral("^(?:\\{T\\}|(?:\\{(?:[0-9]+|[WUBRGC])\\})+|Pay [0-9]+ life)$"));
+    const auto parts = prefix.split(QStringLiteral(", "));
+    return std::all_of(parts.cbegin(), parts.cend(),
+                       [](const QString &part) { return completePart.match(part).hasMatch(); });
+}
+
 // Callers own the authoritative index and snapshot lifetime for their source-zone path.
 RuledAbilityEntry parseAbilityInfo(const ruled::v1::AbilityInfo &ability, const RuledPresentationResolver &resolver)
 {
@@ -405,7 +422,8 @@ RuledAbilityEntry parseAbilityInfo(const ruled::v1::AbilityInfo &ability, const 
             ability.has_only_tap_cost(),
             manaOptionLabels,
             xCounterManaChoice,
-            ability.is_mana_ability()};
+            ability.is_mana_ability(),
+            engineFallbackHasCompleteCostPrefix(ability)};
 }
 
 /// Copies the engine's structured hand-action contract into the generic client-side indexes.

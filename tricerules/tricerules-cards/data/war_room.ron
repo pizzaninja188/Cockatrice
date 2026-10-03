@@ -1,0 +1,24 @@
+// Oracle 71c52bf5-2a5d-488e-8b15-7ef290e4b77d and WotC rulings checked 2026-10-03.
+// CR 903.4a/f fixes initial commander identity; CR 119.4b permits zero life payment.
+// No declared commander makes the last cost undefined and activation unavailable.
+(
+  id: "war_room",
+  name: "War Room",
+  face_id: "war_room",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceMana(options: [(c: 1)])],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([2]),
+      costs: [Mana("{3}"), Tap, PayCommanderColorIdentityLife],
+      effect: [Draw(who: Controller, count: 1)],
+    ),
+  ],
+)

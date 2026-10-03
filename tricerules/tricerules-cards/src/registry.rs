@@ -656,6 +656,7 @@ fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
             }
             AbilityCost::Tap
             | AbilityCost::PayLife { .. }
+            | AbilityCost::PayCommanderColorIdentityLife
             | AbilityCost::ReturnUnblockedAttacker
             | AbilityCost::Blight { .. }
             | AbilityCost::RemoveCounters { .. }

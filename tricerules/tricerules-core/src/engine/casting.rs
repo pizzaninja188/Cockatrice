@@ -211,6 +211,29 @@ pub(in crate::engine) fn announcement_from_cast(
 }
 
 impl GameEngine {
+    /// One resolver for activation legality, published labels and atomic payment planning.
+    /// None denotes an undefined commander cost or overflow, never a zero-life payment.
+    pub(super) fn activated_life_cost(
+        &self,
+        player: PlayerId,
+        costs: &[AbilityCost],
+    ) -> Option<u32> {
+        let state = &self.state.players[self.state.player_idx(player)?];
+        costs.iter().try_fold(0u32, |total, cost| {
+            let amount = match cost {
+                AbilityCost::PayLife { amount } => *amount,
+                AbilityCost::PayCommanderColorIdentityLife => {
+                    if !state.has_declared_commander {
+                        return None;
+                    }
+                    u32::try_from(state.color_identity.len()).ok()?
+                }
+                _ => 0,
+            };
+            total.checked_add(amount)
+        })
+    }
+
     /// Mana abilities can create new payment resources after CR 601.2f locks the cost.
     /// Refresh eligibility against the accepted spell face without preparing its cost again.
     pub(super) fn eligible_restricted_mana_for_pending_spell_cast(
@@ -2116,13 +2139,7 @@ impl GameEngine {
         {
             return false;
         }
-        let life_cost = ability
-            .costs
-            .iter()
-            .try_fold(0u32, |total, cost| match cost {
-                AbilityCost::PayLife { amount } => total.checked_add(*amount),
-                _ => Some(total),
-            });
+        let life_cost = self.activated_life_cost(activating_player, &ability.costs);
         let available_life = self
             .state
             .player_idx(activating_player)
