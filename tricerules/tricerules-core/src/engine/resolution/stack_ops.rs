@@ -403,9 +403,9 @@ pub(crate) fn counter_stack_object(
         .and_then(|presentation| presentation.source_label.clone())
         .unwrap_or_else(|| {
             engine
-        .registry
-        .get(&target.card_id)
-        .map(|definition| definition.name.as_str())
+                .registry
+                .get(&target.card_id)
+                .map(|definition| definition.name.as_str())
                 .unwrap_or("spell")
                 .to_owned()
         });
@@ -598,6 +598,7 @@ pub(super) fn copy_target_spell(
                 cast_cost_receipts: src.cast_cost_receipts.clone(),
                 payment_result: src.payment_result.clone(),
                 search_results: Default::default(),
+                exiled_cohorts: Default::default(),
                 resolution_branch_choices: Default::default(),
                 blight_receipts: src.blight_receipts.clone(),
                 // CR 707.2: the copy has the original's characteristics and choices. `None`

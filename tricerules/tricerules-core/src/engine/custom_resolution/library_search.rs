@@ -852,6 +852,7 @@ mod tests {
             cast_by: Some(0),
             payment_result: Default::default(),
             search_results: Default::default(),
+            exiled_cohorts: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: Default::default(),

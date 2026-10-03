@@ -198,6 +198,7 @@ impl GameEngine {
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
+            exiled_cohorts: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context,

@@ -1,0 +1,12 @@
+// Exact Oracle 62dac700-49f7-4745-af67-37d2a81dcebc and official ruling checked 2026-10-03.
+// The last instruction returns only the first instruction's original graveyard cohort.
+(
+  id: "scrap_mastery", name: "Scrap Mastery", face_id: "scrap_mastery",
+  mana_cost: "{3}{R}{R}", types: ["Sorcery"],
+  spell_effect: [
+    ExileGraveyards(players: All, filter: Some((card_type: Some(Artifact))),
+      capture_exile_cohort: Some("original_graveyards")),
+    SacrificeAll(players: All, filter: (kind: AnyPermanent, permanent_types: [Artifact])),
+    ReturnExiledCohortToOwnersBattlefield(cohort_id: "original_graveyards"),
+  ],
+)

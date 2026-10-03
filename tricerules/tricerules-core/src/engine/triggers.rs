@@ -2185,7 +2185,7 @@ impl GameEngine {
                 "Face-down permanent".to_owned()
             } else {
                 self.effective_face(source_id)
-                .map(|face| face.name.clone())
+                    .map(|face| face.name.clone())
                     .unwrap_or_else(|| object.card_id.clone())
             },
             card_id,
@@ -2706,6 +2706,7 @@ impl GameEngine {
                 cast_cost_receipts: vec![],
                 payment_result: CardResultCohort::default(),
                 search_results: Default::default(),
+                exiled_cohorts: Default::default(),
                 resolution_branch_choices: Default::default(),
                 blight_receipts: Vec::new(),
                 trigger_context,
@@ -3901,6 +3902,7 @@ mod tests {
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
+            exiled_cohorts: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),

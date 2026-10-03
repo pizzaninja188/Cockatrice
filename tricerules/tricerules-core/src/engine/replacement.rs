@@ -781,8 +781,145 @@ impl GameEngine {
         });
     }
 
+    pub(super) fn refresh_participating_entry_departure(
+        &mut self,
+        departed_objects: &HashSet<ObjectId>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        if let Some(batch) = self.state.pending_observer_return_batch.as_mut() {
+            batch
+                .ready
+                .retain(|entry| self.state.objects.contains_key(&entry.event.object_id));
+            batch.remaining.retain(|action| {
+                let ImmediateObserverAction::ReturnExiledObject { exiled } = action;
+                self.state.objects.contains_key(&exiled.object_id)
+            });
+        }
+        let Some(pending) = self.state.pending_resolution.clone() else {
+            return Ok(());
+        };
+        let Some(PendingReplacementEvent::BattlefieldEntry(entry)) =
+            self.state.pending_replacement_event.clone()
+        else {
+            return Ok(());
+        };
+        let mut entry = *entry;
+        let decider_live = self
+            .state
+            .player_idx(pending.deciding_player)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        match &mut entry.completion {
+            BattlefieldEntryCompletion::ZoneEntryBatch(batch) => {
+                self.reconcile_departed_zone_entry_members(batch, departed_objects)
+            }
+            BattlefieldEntryCompletion::ObserverReturn { .. } => {}
+            _ => return Ok(()),
+        }
+        let stack = pending
+            .continuation
+            .stack()
+            .cloned()
+            .ok_or(EngineError::Illegal("entry continuation missing"))?;
+        if let BattlefieldEntryCompletion::ZoneEntryBatch(batch) = &entry.completion {
+            if !self.zone_entry_batch_current(batch) {
+                self.state.pending_resolution = None;
+                self.state.pending_replacement_event = None;
+                return self.abandon_participating_resolution(Some(stack), events);
+            }
+        }
+        let entrant_live = self.state.objects.contains_key(&entry.event.object_id) && decider_live;
+        if !entrant_live {
+            self.state.pending_resolution = None;
+            self.state.pending_replacement_event = None;
+            if !departed_objects.contains(&entry.event.object_id)
+                && matches!(
+                    entry.completion,
+                    BattlefieldEntryCompletion::ZoneEntryBatch(_)
+                )
+            {
+                return self.abandon_participating_resolution(Some(stack), events);
+            }
+            let resumed = self.finish_entry_copy_without_recipient(
+                stack,
+                entry.event,
+                entry.completion,
+                Vec::new(),
+            )?;
+            events.extend(resumed.events);
+            return Ok(());
+        }
+        if matches!(
+            pending.continuation,
+            ResolutionContinuation::EntryCopySource { .. }
+        ) {
+            let retained: Vec<_> = entry
+                .copy_source_candidates
+                .iter()
+                .copied()
+                .filter(|(oid, _)| self.state.objects.contains_key(oid))
+                .collect();
+            if retained != entry.copy_source_candidates {
+                let effect_id = entry
+                    .copy_source_effect
+                    .clone()
+                    .ok_or(EngineError::Illegal("entry copy effect missing"))?;
+                self.park_copy_source_choice(
+                    stack.item.clone(),
+                    entry.event,
+                    entry.completion,
+                    effect_id,
+                    retained.iter().map(|(oid, _)| *oid).collect(),
+                    events,
+                );
+                // Refreshing the prompt must not rebind any surviving source to a new incarnation.
+                if let Some(PendingReplacementEvent::BattlefieldEntry(entry)) =
+                    self.state.pending_replacement_event.as_mut()
+                {
+                    entry.copy_source_candidates = retained;
+                }
+                self.transfer_entry_choice_resume(&stack);
+                return Ok(());
+            }
+        }
+        let affected_application = match &pending.continuation {
+            ResolutionContinuation::EntryReplacement { .. } => entry.applications.iter().any(|application|
+                matches!(application.effect_id, EntryReplacementEffectId::Battlefield { source_id, .. } if !self.state.objects.contains_key(&source_id))),
+            ResolutionContinuation::EntryCost { effect_id, .. } | ResolutionContinuation::EntryReveal { effect_id, .. } =>
+                matches!(effect_id, EntryReplacementEffectId::Battlefield { source_id, .. } if !self.state.objects.contains_key(source_id)),
+            _ => false,
+        };
+        if affected_application {
+            self.state.pending_resolution = None;
+            self.state.pending_replacement_event = None;
+            match self.advance_or_park_battlefield_entry(
+                stack.item.clone(),
+                entry.event,
+                entry.completion.clone(),
+                events,
+            ) {
+                BattlefieldEntryProgress::Parked => self.transfer_entry_choice_resume(&stack),
+                BattlefieldEntryProgress::Ready(event) => {
+                    events.extend(
+                        self.complete_pending_battlefield_entry(
+                            pending,
+                            *event,
+                            entry.completion,
+                            Vec::new(),
+                        )?
+                        .events,
+                    );
+                }
+            }
+        } else {
+            self.state.pending_replacement_event =
+                Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
+        }
+        Ok(())
+    }
+
     pub(super) fn refresh_entry_opponent_departure(
         &mut self,
+        departed_objects: &HashSet<ObjectId>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         let Some(pending) = self.state.pending_resolution.clone() else {
@@ -806,7 +943,7 @@ impl GameEngine {
         };
         let mut entry = (**entry).clone();
         if let BattlefieldEntryCompletion::ZoneEntryBatch(batch) = &mut entry.completion {
-            self.reconcile_departed_zone_entry_members(batch, None);
+            self.reconcile_departed_zone_entry_members(batch, departed_objects);
         }
         self.state.pending_replacement_event = Some(PendingReplacementEvent::BattlefieldEntry(
             Box::new(entry.clone()),
@@ -851,10 +988,7 @@ impl GameEngine {
                         Vec::new(),
                     )?,
                 BattlefieldEntryCompletion::ZoneEntryBatch(mut batch) => {
-                    self.reconcile_departed_zone_entry_members(
-                        &mut batch,
-                        Some(entry.event.object_id),
-                    );
+                    self.reconcile_departed_zone_entry_members(&mut batch, departed_objects);
                     let mut resumed_events = Vec::new();
                     if self.continue_zone_entry_batch(stack.clone(), *batch, &mut resumed_events)? {
                         finish_with_events(self, resumed_events)
@@ -910,10 +1044,10 @@ impl GameEngine {
         Ok(())
     }
 
-    fn reconcile_departed_zone_entry_members(
+    pub(super) fn reconcile_departed_zone_entry_members(
         &mut self,
         batch: &mut crate::state::PendingZoneEntryBatch,
-        failed_entry: Option<ObjectId>,
+        departed_objects: &HashSet<ObjectId>,
     ) {
         for (oid, generation, mana_value) in &batch.origin_mana_values {
             if !self.state.objects.contains_key(oid) {
@@ -923,19 +1057,10 @@ impl GameEngine {
                     .or_insert(*mana_value);
             }
         }
-        batch.generations.retain(|(oid, generation)| {
-            Some(*oid) != failed_entry
-                && self.state.objects.get(oid).is_some_and(|object| {
-                    object.zone == batch.origin
-                        && self
-                            .state
-                            .zone_change_generation
-                            .get(oid)
-                            .copied()
-                            .unwrap_or(0)
-                            == *generation
-                })
-        });
+        // A missing live-owner member remains in the frozen cohort so validation fails closed.
+        batch
+            .generations
+            .retain(|(oid, _)| !departed_objects.contains(oid));
         let survivors: HashSet<_> = batch.generations.iter().map(|(oid, _)| *oid).collect();
         batch
             .ready
@@ -1643,7 +1768,12 @@ impl GameEngine {
                 if self.continue_zone_entry_batch(stack.clone(), *batch, &mut events)? {
                     Ok(finish_with_events(self, events))
                 } else {
-                    self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+                    self.complete_parked_resolution_with_previous(
+                        stack.item,
+                        stack.resume_effect_index,
+                        stack.previous_result,
+                        events,
+                    )
                 }
             }
             BattlefieldEntryCompletion::TokenBatch(batch) => self

@@ -76,6 +76,9 @@ impl GameEngine {
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<Option<SimultaneousEntryBatch>, EngineError> {
         while let Some((player, candidates)) = order.remaining_groups.pop_front() {
+            if candidates.is_empty() {
+                continue;
+            }
             if candidates.len() == 1 {
                 order.chosen_order.push(candidates[0]);
                 continue;
@@ -220,11 +223,25 @@ impl GameEngine {
         else {
             return Ok(events::finish_with_events(self, events));
         };
+        self.complete_entry_timestamp_order(batch, stack, events)
+    }
+
+    fn complete_entry_timestamp_order(
+        &mut self,
+        batch: SimultaneousEntryBatch,
+        stack: Option<ParkedStackResolution>,
+        mut events: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
         match batch {
             SimultaneousEntryBatch::Zone(batch) => {
                 let stack = stack.ok_or(EngineError::Illegal("zone entry has no stack"))?;
                 self.commit_zone_entry_batch_ready(batch, &mut events)?;
-                self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
+                self.complete_parked_resolution_with_previous(
+                    stack.item,
+                    stack.resume_effect_index,
+                    stack.previous_result,
+                    events,
+                )
             }
             SimultaneousEntryBatch::Token(batch) => {
                 let stack = stack.ok_or(EngineError::Illegal("token entry has no stack"))?;
@@ -271,6 +288,127 @@ impl GameEngine {
                 }
             }
         }
+    }
+
+    pub(super) fn refresh_entry_timestamp_departure(
+        &mut self,
+        departed_objects: &HashSet<ObjectId>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(mut pending) = self.state.pending_resolution.clone() else {
+            return Ok(());
+        };
+        let ResolutionContinuation::SimultaneousEntryOrder { stack, order } =
+            &mut pending.continuation
+        else {
+            return Ok(());
+        };
+        match &mut order.batch {
+            SimultaneousEntryBatch::Zone(batch) => {
+                self.reconcile_departed_zone_entry_members(batch, departed_objects)
+            }
+            SimultaneousEntryBatch::Observer(batch) => {
+                batch
+                    .ready
+                    .retain(|entry| !departed_objects.contains(&entry.event.object_id));
+            }
+            SimultaneousEntryBatch::Token(_) => return Ok(()),
+        }
+        // Remove only departed entries before validating every surviving frozen incarnation.
+        let members: HashSet<_> = Self::simultaneous_entry_ids(&order.batch)
+            .into_iter()
+            .map(|(oid, _)| oid)
+            .collect();
+        order
+            .original_generations
+            .retain(|(oid, _, _)| members.contains(oid));
+        if !self.entry_timestamp_cohort_current(order) {
+            match &mut order.batch {
+                SimultaneousEntryBatch::Zone(_) => {
+                    let stack = stack.clone();
+                    self.state.pending_resolution = None;
+                    return self.abandon_participating_resolution(stack, events);
+                }
+                SimultaneousEntryBatch::Observer(batch) => {
+                    let valid: HashSet<_> = order
+                        .original_generations
+                        .iter()
+                        .filter_map(|(oid, generation, zone)| {
+                            (self
+                                .state
+                                .objects
+                                .get(oid)
+                                .is_some_and(|object| object.zone == *zone)
+                                && self
+                                    .state
+                                    .zone_change_generation
+                                    .get(oid)
+                                    .copied()
+                                    .unwrap_or(0)
+                                    == *generation)
+                                .then_some(*oid)
+                        })
+                        .collect();
+                    batch
+                        .ready
+                        .retain(|entry| valid.contains(&entry.event.object_id));
+                    order
+                        .original_generations
+                        .retain(|(oid, _, _)| valid.contains(oid));
+                    if let Some(stack) = batch.resume_stack.as_mut() {
+                        stack.resume_effect_index =
+                            Some(self.build_resolution_effects(&stack.item).0.len() as u32);
+                    }
+                    *stack = batch.resume_stack.clone();
+                    events.push(events::ev_log("Interrupted return batch discarded stale incarnations; valid independent returns remain owed.".into()));
+                }
+                SimultaneousEntryBatch::Token(_) => unreachable!(),
+            }
+        }
+        let survivors: HashSet<_> = Self::simultaneous_entry_ids(&order.batch)
+            .into_iter()
+            .map(|(oid, _)| oid)
+            .collect();
+        order
+            .original_generations
+            .retain(|(oid, _, _)| survivors.contains(oid));
+        order.chosen_order.retain(|oid| survivors.contains(oid));
+        for (_, ids) in &mut order.remaining_groups {
+            ids.retain(|oid| survivors.contains(oid));
+        }
+        let old_candidates = pending.presentation.candidates.clone();
+        let candidates: Vec<_> = old_candidates
+            .iter()
+            .copied()
+            .filter(|oid| survivors.contains(oid))
+            .collect();
+        if old_candidates == candidates
+            && self
+                .state
+                .player_idx(pending.deciding_player)
+                .is_some_and(|index| !self.state.players[index].has_lost)
+        {
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        }
+        // Restore the current group ahead of the frozen remaining groups. Singleton/empty groups
+        // are completed by the same advancement path used after an accepted ordering answer.
+        order
+            .remaining_groups
+            .push_front((pending.deciding_player, candidates));
+        let stack = stack.clone();
+        let order = *order.clone();
+        self.state.pending_resolution = None;
+        let mut resumed = Vec::new();
+        if let Some(batch) =
+            self.advance_entry_timestamp_order(order, stack.clone(), &mut resumed)?
+        {
+            resumed = self
+                .complete_entry_timestamp_order(batch, stack, resumed)?
+                .events;
+        }
+        events.extend(resumed);
+        Ok(())
     }
 }
 

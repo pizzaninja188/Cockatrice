@@ -200,6 +200,7 @@ fn graveyard_exile_primitive_filters_printed_cards_for_each_relative_player_set(
             .unwrap()
             .effect = vec![SpellEffectKind::ExileGraveyards {
             players,
+            capture_exile_cohort: None,
             filter: Some(ZoneCardFilter {
                 card_type: Some(CardTypeFilter::Creature),
                 ..Default::default()

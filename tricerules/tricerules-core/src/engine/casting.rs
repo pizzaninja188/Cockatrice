@@ -1318,6 +1318,7 @@ impl GameEngine {
             cast_cost_receipts,
             payment_result,
             search_results: Default::default(),
+            exiled_cohorts: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: payment.blight_receipts.clone(),
             // A spell's effects always act on its controller.
@@ -1986,6 +1987,7 @@ impl GameEngine {
                     .collect(),
             },
             search_results: Default::default(),
+            exiled_cohorts: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: payment.blight_receipts.clone(),
             // An activated ability's effects act on the player who activated it.
@@ -2834,6 +2836,7 @@ impl GameEngine {
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
+            exiled_cohorts: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),

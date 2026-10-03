@@ -13,6 +13,8 @@ pub(super) struct SacrificeDeparture {
 pub struct PendingMassSacrifice {
     pub(super) zone: zone_events::ZoneEventBatch,
     pub(super) departures: Vec<SacrificeDeparture>,
+    /// Validation is reduced by player departure; the committed rules event is immutable.
+    pub(super) live_validation: Vec<zone_events::ZoneChangeReceipt>,
     pub(super) remaining: VecDeque<(PlayerId, Vec<ObjectId>)>,
 }
 
@@ -45,8 +47,9 @@ impl GameEngine {
             .collect::<Vec<_>>();
         groups.sort_by_key(|(owner, _)| self.state.apnap_rank(*owner));
         self.advance_mass_sacrifice_order(
-            ParkedStackResolution::new(item),
+            Some(ParkedStackResolution::new(item)),
             PendingMassSacrifice {
+                live_validation: zone.moves.clone(),
                 zone,
                 departures,
                 remaining: groups.into(),
@@ -57,29 +60,19 @@ impl GameEngine {
 
     fn advance_mass_sacrifice_order(
         &mut self,
-        stack: ParkedStackResolution,
+        stack: Option<ParkedStackResolution>,
         mut sacrifice: PendingMassSacrifice,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> bool {
+        sacrifice
+            .remaining
+            .retain(|(_, candidates)| candidates.len() > 1);
         let Some((owner, candidates)) = sacrifice.remaining.pop_front() else {
-            let mut triggers = sacrifice
-                .departures
-                .into_iter()
-                .flat_map(|departure| {
-                    let player = departure.source.controller;
-                    sacrifice_events(
-                        departure.source,
-                        departure.was_creature,
-                        player,
-                        departure.died,
-                    )
-                })
-                .collect::<Vec<_>>();
-            triggers.push(GameEvent::ZoneChanges(sacrifice.zone));
-            self.fire_triggers(&triggers);
+            self.finish_mass_sacrifice_events(sacrifice);
             return false;
         };
         let count = candidates.len() as u32;
+        let source_object_id = stack.as_ref().map_or(0, |stack| stack.item.id);
         let prompt =
             "Order the cards entering your graveyard, oldest first; the last card is on top."
                 .to_string();
@@ -87,7 +80,7 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
                     deciding_player_id: owner,
-                    source_object_id: stack.item.id,
+                    source_object_id,
                     prompt_text: prompt.clone(),
                     choice_kind: custom::ChoiceKind::GraveyardCards as i32,
                     candidate_object_ids: candidates.clone(),
@@ -113,7 +106,7 @@ impl GameEngine {
         self.state.pending_resolution = Some(PendingResolution {
             deciding_player: owner,
             presentation: PendingResolutionPresentation {
-                source_object_id: stack.item.id,
+                source_object_id,
                 candidates,
                 min: count,
                 max: count,
@@ -130,6 +123,24 @@ impl GameEngine {
         true
     }
 
+    fn finish_mass_sacrifice_events(&mut self, sacrifice: PendingMassSacrifice) {
+        let mut triggers = sacrifice
+            .departures
+            .into_iter()
+            .flat_map(|departure| {
+                let player = departure.source.controller;
+                sacrifice_events(
+                    departure.source,
+                    departure.was_creature,
+                    player,
+                    departure.died,
+                )
+            })
+            .collect::<Vec<_>>();
+        triggers.push(GameEvent::ZoneChanges(sacrifice.zone));
+        self.fire_triggers(&triggers);
+    }
+
     pub(super) fn finish_mass_sacrifice_graveyard_order(
         &mut self,
         pending: PendingResolution,
@@ -140,8 +151,8 @@ impl GameEngine {
         else {
             return Err(EngineError::Illegal("mass sacrifice continuation missing"));
         };
-        // Revalidate the entire committed event, including other owners and replacement exits.
-        let current = sacrifice.zone.moves.iter().all(|receipt| {
+        // Revalidate all surviving arrivals, including replacement exits, without erasing history.
+        let current = sacrifice.live_validation.iter().all(|receipt| {
             self.state
                 .objects
                 .get(&receipt.before.object_id)
@@ -183,14 +194,90 @@ impl GameEngine {
         if self.advance_mass_sacrifice_order(stack.clone(), sacrifice, &mut events) {
             return Ok(events::finish_with_events(self, events));
         }
-        if self.drain_immediate_observer_actions(Some(stack.clone()), &mut events)? {
+        self.complete_mass_sacrifice_order(stack, events)
+    }
+
+    fn complete_mass_sacrifice_order(
+        &mut self,
+        stack: Option<ParkedStackResolution>,
+        mut events: Vec<rv1::RuledEvent>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        if self.drain_immediate_observer_actions(stack.clone(), &mut events)? {
             return Ok(events::finish_with_events(self, events));
         }
-        self.complete_parked_resolution_with_previous(
-            stack.item,
-            stack.resume_effect_index,
-            stack.previous_result,
-            events,
-        )
+        if let Some(stack) = stack {
+            self.complete_parked_resolution_with_previous(
+                stack.item,
+                stack.resume_effect_index,
+                stack.previous_result,
+                events,
+            )
+        } else {
+            Ok(events::finish_with_events(self, events))
+        }
+    }
+
+    pub(super) fn refresh_mass_sacrifice_departure(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(mut pending) = self.state.pending_resolution.clone() else {
+            return Ok(());
+        };
+        let ResolutionContinuation::MassSacrificeGraveyardOrder { stack, sacrifice } =
+            &mut pending.continuation
+        else {
+            return Ok(());
+        };
+        let live_owners: HashSet<_> = self
+            .state
+            .players
+            .iter()
+            .filter(|player| !player.has_lost)
+            .map(|player| player.id)
+            .collect();
+        sacrifice
+            .live_validation
+            .retain(|receipt| live_owners.contains(&receipt.before.owner));
+        let live_ids: HashSet<_> = sacrifice
+            .live_validation
+            .iter()
+            .map(|receipt| receipt.before.object_id)
+            .collect();
+        sacrifice.remaining.retain_mut(|(owner, ids)| {
+            ids.retain(|oid| live_ids.contains(oid));
+            live_owners.contains(owner) && ids.len() > 1
+        });
+        let current = sacrifice.live_validation.iter().all(|receipt| {
+            self.state
+                .objects
+                .get(&receipt.before.object_id)
+                .is_some_and(|object| {
+                    object.zone == receipt.destination
+                        && object.owner == receipt.before.owner
+                        && self.state.zone_change_generation.get(&object.id).copied()
+                            == Some(receipt.destination_generation)
+                })
+        });
+        if !current {
+            let stack = stack.clone();
+            let sacrifice = *sacrifice.clone();
+            self.state.pending_resolution = None;
+            self.finish_mass_sacrifice_events(sacrifice);
+            return self.abandon_participating_resolution(stack, events);
+        }
+        if live_owners.contains(&pending.deciding_player) {
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        }
+        let stack = stack.clone();
+        let sacrifice = *sacrifice.clone();
+        self.state.pending_resolution = None;
+        let mut resumed = Vec::new();
+        if !self.advance_mass_sacrifice_order(stack.clone(), sacrifice, &mut resumed) {
+            resumed = self.complete_mass_sacrifice_order(stack, resumed)?.events;
+        }
+        events.extend(resumed);
+        Ok(())
     }
 }

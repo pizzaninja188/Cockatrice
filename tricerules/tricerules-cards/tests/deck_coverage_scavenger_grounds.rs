@@ -63,6 +63,7 @@ fn scavenger_grounds_registers_colorless_mana_and_all_graveyards_exile() {
         [SpellEffectKind::ExileGraveyards {
             players: RelativePlayerSet::All,
             filter: None,
+            capture_exile_cohort: None,
         }]
     );
 }

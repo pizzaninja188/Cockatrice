@@ -39,6 +39,8 @@ mod misc;
 mod proliferate;
 mod pump_counters;
 mod restrictions;
+#[cfg(test)]
+mod retained_exile_tests;
 mod stack_ops;
 pub(super) use pump_counters::materialize_resolving_modifier;
 pub(super) use stack_ops::{counter_stack_object, counter_stack_object_ref};
@@ -361,11 +363,12 @@ pub(super) fn token_identity(values: &CopiableValues) -> rv1::TokenIdentity {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum EffectOutcome {
     Continue,
     GameEnded,
     Blighted(crate::state::BlightReceipt),
+    RetainedExile(tricerules_cards::ExiledCohortId, Vec<TriggerObjectRef>),
     Suspended,
     RestartResolutionBranch(Option<usize>),
 }
@@ -2003,8 +2006,18 @@ impl GameEngine {
                     effect @ SpellEffectKind::ReturnLinkedExiledCards { .. } => {
                         zones::return_linked_exiled_cards(&mut cx, effect)?
                     }
-                    SpellEffectKind::ExileGraveyards { players, filter } => {
-                        zones::exile_graveyards(&mut cx, players, filter.as_ref())?
+                    SpellEffectKind::ExileGraveyards {
+                        players,
+                        filter,
+                        capture_exile_cohort,
+                    } => zones::exile_graveyards(
+                        &mut cx,
+                        players,
+                        filter.as_ref(),
+                        capture_exile_cohort,
+                    )?,
+                    SpellEffectKind::ReturnExiledCohortToOwnersBattlefield { cohort_id } => {
+                        zones::return_exiled_cohort_to_owners_battlefield(&mut cx, &cohort_id)?
                     }
                     effect @ SpellEffectKind::ChooseGraveyardCard { .. } => {
                         zones::choose_graveyard_card(&mut cx, effect)?
@@ -2060,8 +2073,13 @@ impl GameEngine {
                 return Ok(ResolutionProgress::GameEnded);
             }
             let mut completed_item = top.clone();
-            if let EffectOutcome::Blighted(receipt) = outcome {
-                completed_item.blight_receipts.push(receipt);
+            if let EffectOutcome::Blighted(receipt) = &outcome {
+                completed_item.blight_receipts.push(*receipt);
+            }
+            if let EffectOutcome::RetainedExile(id, objects) = &outcome {
+                completed_item
+                    .exiled_cohorts
+                    .insert(id.clone(), objects.clone());
             }
             self.refresh_enduring_story_designations();
             let mut observer_stack = ParkedStackResolution::new(completed_item.clone());
@@ -2071,7 +2089,7 @@ impl GameEngine {
                 return Ok(ResolutionProgress::Parked);
             }
             match outcome {
-                EffectOutcome::Blighted(_) => {
+                EffectOutcome::Blighted(_) | EffectOutcome::RetainedExile(..) => {
                     let (effects, label) = self.build_resolution_effects(&completed_item);
                     return self.run_effect_list_with_previous(
                         &completed_item,
@@ -2445,6 +2463,70 @@ impl GameEngine {
         Ok(())
     }
 
+    pub(super) fn refresh_observer_aura_departure(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(pending) = self.state.pending_resolution.as_ref() else {
+            return Ok(());
+        };
+        let ResolutionContinuation::AuraReturn { stack, exiled } = &pending.continuation else {
+            return Ok(());
+        };
+        let decider_live = self
+            .state
+            .player_idx(pending.deciding_player)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        let recipients_live = pending.presentation.candidates.iter().all(|oid| {
+            if pending.presentation.choice_kind == rv1::ChoiceKind::AuraPlayer {
+                self.state
+                    .player_idx(*oid as PlayerId)
+                    .is_some_and(|index| !self.state.players[index].has_lost)
+            } else {
+                self.state
+                    .objects
+                    .get(oid)
+                    .is_some_and(|object| object.zone == Zone::Battlefield)
+            }
+        });
+        if decider_live && recipients_live {
+            return Ok(());
+        }
+        let stack = stack.clone();
+        let exiled = *exiled;
+        self.state.pending_resolution = None;
+        let batch = self
+            .state
+            .pending_observer_return_batch
+            .get_or_insert_with(|| PendingObserverReturnBatch {
+                ready: Vec::new(),
+                remaining: VecDeque::new(),
+                resume_stack: stack.clone(),
+            });
+        if decider_live {
+            // The current action was popped before parking. Refresh it through the normal
+            // chooser path without losing the ready prefix or later independent returns.
+            batch
+                .remaining
+                .push_front(ImmediateObserverAction::ReturnExiledObject { exiled });
+        }
+        let mut resumed = Vec::new();
+        if !self.drain_immediate_observer_actions(stack.clone(), &mut resumed)? {
+            if let Some(stack) = stack {
+                resumed = self
+                    .complete_parked_resolution_with_previous(
+                        stack.item,
+                        stack.resume_effect_index,
+                        stack.previous_result,
+                        resumed,
+                    )?
+                    .events;
+            }
+        }
+        events.extend(resumed);
+        Ok(())
+    }
+
     pub(super) fn observer_return_item(
         &self,
         object_id: ObjectId,
@@ -2483,6 +2565,7 @@ impl GameEngine {
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
+            exiled_cohorts: Default::default(),
             resolution_branch_choices: BTreeMap::new(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
@@ -3792,6 +3875,7 @@ mod attached_subject_tests {
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
+            exiled_cohorts: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
@@ -6681,6 +6765,7 @@ mod source_keyword_tests {
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
+            exiled_cohorts: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
@@ -6715,6 +6800,7 @@ mod source_keyword_tests {
             cast_cost_receipts: vec![],
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
+            exiled_cohorts: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),

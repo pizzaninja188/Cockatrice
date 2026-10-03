@@ -2152,7 +2152,16 @@ pub(super) fn exile_graveyards(
     cx: &mut EffectCx<'_>,
     players: RelativePlayerSet,
     filter: Option<&ZoneCardFilter>,
+    capture_exile_cohort: Option<tricerules_cards::ExiledCohortId>,
 ) -> Result<EffectOutcome, EngineError> {
+    if capture_exile_cohort
+        .as_ref()
+        .is_some_and(|id| cx.top.exiled_cohorts.contains_key(id))
+    {
+        return Err(EngineError::Illegal(
+            "retained exile cohort already captured",
+        ));
+    }
     let engine = &*cx.engine;
     let cohort = engine
         .state
@@ -2177,7 +2186,99 @@ pub(super) fn exile_graveyards(
         })
         .filter(|oid| zone_card_matches_filter(&engine.state, engine.registry, *oid, filter))
         .collect();
-    exile_graveyard_cohort(cx, cohort, None)
+    exile_graveyard_cohort(cx, cohort, None)?;
+    Ok(if let Some(id) = capture_exile_cohort {
+        EffectOutcome::RetainedExile(
+            id,
+            cx.effect_result
+                .cards
+                .iter()
+                .map(|card| TriggerObjectRef {
+                    object_id: card.object_id,
+                    zone_change_generation: card.zone_change_generation,
+                    controller_at_event: card.affected_player,
+                })
+                .collect(),
+        )
+    } else {
+        EffectOutcome::Continue
+    })
+}
+
+pub(super) fn return_exiled_cohort_to_owners_battlefield(
+    cx: &mut EffectCx<'_>,
+    id: &tricerules_cards::ExiledCohortId,
+) -> Result<EffectOutcome, EngineError> {
+    let cohort = cx.top.exiled_cohorts.get(id).ok_or(EngineError::Illegal(
+        "retained exile cohort was not captured",
+    ))?;
+    let entries = cohort
+        .iter()
+        .filter(|reference| {
+            cx.engine
+                .state
+                .objects
+                .get(&reference.object_id)
+                .is_some_and(|object| object.zone == Zone::Exile)
+                && cx
+                    .engine
+                    .state
+                    .zone_change_generation
+                    .get(&reference.object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == reference.zone_change_generation
+        })
+        .map(|reference| {
+            let owner = cx.engine.state.objects[&reference.object_id].owner;
+            plain_return_entry(cx.engine, reference.object_id, owner)
+        })
+        .collect();
+    Ok(
+        if cx.engine.begin_zone_entry_batch(
+            cx.top.clone(),
+            entries,
+            Zone::Exile,
+            cx.spell_label,
+            cx.events,
+        )? {
+            EffectOutcome::Suspended
+        } else {
+            EffectOutcome::Continue
+        },
+    )
+}
+
+fn plain_return_entry(
+    engine: &GameEngine,
+    object_id: ObjectId,
+    destination_controller: PlayerId,
+) -> BattlefieldEntryEvent {
+    BattlefieldEntryEvent {
+        entry_reveal_receipts: Vec::new(),
+        mana_colors_spent_to_cast: Default::default(),
+        prepared: false,
+        object_id,
+        deciding_player: engine.state.objects[&object_id].owner,
+        destination_controller,
+        battle_protector: None,
+        face_index: 0,
+        unlock_room_door: None,
+        chosen_x: 0,
+        cast_by: None,
+        cast_cost_receipts: Vec::new(),
+        player_life_snapshot: engine.player_life_snapshot(),
+        tapped: false,
+        set_types: None,
+        chosen_basic_land_type: None,
+        chosen_opponents: Vec::new(),
+        entry_counters: Default::default(),
+        entry_modifiers: Vec::new(),
+        attached_to: None,
+        pending_copy_candidate: None,
+        pending_aura_recipient: None,
+        applied_effects: Vec::new(),
+    }
 }
 
 /// Selection is caller-owned: targeted moves have already revalidated their targets;
@@ -2413,7 +2514,6 @@ pub(super) fn return_linked_exiled_cards(
         .get(&key)
         .cloned()
         .unwrap_or_default();
-    let player_life_snapshot = cx.engine.player_life_snapshot();
     let entry_counters: BTreeMap<_, _> = entry_counters
         .into_iter()
         .map(|placement| (placement.counter, placement.count))
@@ -2442,32 +2542,10 @@ pub(super) fn return_linked_exiled_cards(
                 )
         })
         .map(|linked| {
-            let object = &cx.engine.state.objects[&linked.object_id];
-            BattlefieldEntryEvent {
-                entry_reveal_receipts: Vec::new(),
-                mana_colors_spent_to_cast: Default::default(),
-                prepared: false,
-                object_id: linked.object_id,
-                deciding_player: object.owner,
-                destination_controller: cx.controller,
-                battle_protector: None,
-                face_index: 0,
-                unlock_room_door: None,
-                chosen_x: 0,
-                cast_by: None,
-                cast_cost_receipts: Vec::new(),
-                player_life_snapshot: player_life_snapshot.clone(),
-                tapped: false,
-                set_types: None,
-                chosen_basic_land_type: None,
-                chosen_opponents: Vec::new(),
-                entry_counters: entry_counters.clone(),
-                entry_modifiers: entry_modifiers.clone(),
-                attached_to: None,
-                pending_copy_candidate: None,
-                pending_aura_recipient: None,
-                applied_effects: Vec::new(),
-            }
+            let mut event = plain_return_entry(cx.engine, linked.object_id, cx.controller);
+            event.entry_counters = entry_counters.clone();
+            event.entry_modifiers = entry_modifiers.clone();
+            event
         })
         .collect();
     Ok(

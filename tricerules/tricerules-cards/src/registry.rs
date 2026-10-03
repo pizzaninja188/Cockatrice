@@ -1847,7 +1847,73 @@ fn validate_source_mana_cost_reduction(
     Ok(())
 }
 
+fn validate_retained_exile_cohorts(
+    effects: &[SpellEffectKind],
+    direct_spell: bool,
+) -> Result<(), String> {
+    let mut producers = HashSet::new();
+    let mut consumers = HashSet::new();
+    for effect in effects {
+        let binding = match effect {
+            SpellEffectKind::ExileGraveyards {
+                capture_exile_cohort: Some(id),
+                ..
+            } => Some((id, true)),
+            SpellEffectKind::ReturnExiledCohortToOwnersBattlefield { cohort_id } => {
+                Some((cohort_id, false))
+            }
+            _ => None,
+        };
+        if let Some((id, producer)) = binding {
+            if !direct_spell {
+                return Err(
+                    "retained exile cohorts require a direct nonmodal spell effect list".into(),
+                );
+            }
+            if producer {
+                if !producers.insert(id.as_str()) {
+                    return Err(format!("duplicate retained exile cohort producer '{id}'"));
+                }
+            } else if !producers.contains(id.as_str()) || !consumers.insert(id.as_str()) {
+                return Err(format!(
+                    "retained exile cohort '{id}' requires one earlier producer and one consumer"
+                ));
+            }
+        }
+        match effect {
+            SpellEffectKind::Conditional { effect, .. }
+            | SpellEffectKind::ConditionalCastCost { effect, .. } => {
+                validate_retained_exile_cohorts(std::slice::from_ref(effect), false)?;
+            }
+            SpellEffectKind::MayBehold { if_beheld, .. } => {
+                validate_retained_exile_cohorts(if_beheld, false)?
+            }
+            SpellEffectKind::ChooseResolutionBranch {
+                branches,
+                otherwise,
+                ..
+            } => {
+                for branch in branches {
+                    validate_retained_exile_cohorts(&branch.effects, false)?;
+                }
+                validate_retained_exile_cohorts(otherwise, false)?;
+            }
+            _ => {}
+        }
+    }
+    if producers != consumers {
+        return Err("every retained exile cohort requires one later consumer".into());
+    }
+    Ok(())
+}
+
 fn validate_face_identity(face: &CardFace) -> Result<(), String> {
+    validate_retained_exile_cohorts(&face.spell_effect, face.modal_spell.is_none())?;
+    if let Some(modal) = &face.modal_spell {
+        for mode in &modal.modes {
+            validate_retained_exile_cohorts(&mode.effects, false)?;
+        }
+    }
     face.face_id.validate()?;
     if face
         .activated_abilities

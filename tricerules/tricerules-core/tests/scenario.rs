@@ -15,6 +15,8 @@ mod replicating_ring_runtime;
 mod deck_coverage_chromatic_lantern;
 #[path = "scenario/deck_coverage_replicating_ring.rs"]
 mod deck_coverage_replicating_ring;
+#[path = "scenario/deck_coverage_scrap_mastery.rs"]
+mod deck_coverage_scrap_mastery;
 
 #[path = "scenario/deck_coverage_crawlspace.rs"]
 mod deck_coverage_crawlspace;

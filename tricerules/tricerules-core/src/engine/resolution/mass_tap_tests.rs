@@ -104,6 +104,7 @@ fn resolve_with_source_and_target(
         cast_cost_receipts: vec![],
         payment_result: CardResultCohort::default(),
         search_results: Default::default(),
+        exiled_cohorts: Default::default(),
         resolution_branch_choices: Default::default(),
         blight_receipts: vec![],
         trigger_context: TriggerContext::default(),

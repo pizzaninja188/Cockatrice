@@ -11,8 +11,8 @@ use tricerules_cards::primitives::{
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
 use tricerules_cards::{
-    is_creature_type, AbilityLinkId, CardFace, ChoiceId, ManaCost, ManaSymbol, ModeId,
-    SearchResultId,
+    is_creature_type, AbilityLinkId, CardFace, ChoiceId, ExiledCohortId, ManaCost, ManaSymbol,
+    ModeId, SearchResultId,
 };
 use tricerules_proto::ruled::v1::{ChoiceKind, RuledEvent, TokenCreated};
 
@@ -1097,7 +1097,7 @@ pub enum ResolutionContinuation {
         stack: ParkedStackResolution,
     },
     MassSacrificeGraveyardOrder {
-        stack: ParkedStackResolution,
+        stack: Option<ParkedStackResolution>,
         sacrifice: Box<crate::engine::PendingMassSacrifice>,
     },
     CopyTargets {
@@ -1277,7 +1277,6 @@ impl ResolutionContinuation {
             | Self::PlayerSetDiscard { stack, .. }
             | Self::GraveyardChoice { stack, .. }
             | Self::Sacrifice { stack }
-            | Self::MassSacrificeGraveyardOrder { stack, .. }
             | Self::CopyTargets { stack, .. }
             | Self::SearchLibrary { stack, .. }
             | Self::SearchZoneScope { stack, .. }
@@ -1301,9 +1300,9 @@ impl ResolutionContinuation {
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
             Self::SpecialCast { stack, .. } => Some(stack),
-            Self::AuraReturn { stack, .. } | Self::SimultaneousEntryOrder { stack, .. } => {
-                stack.as_ref()
-            }
+            Self::AuraReturn { stack, .. }
+            | Self::SimultaneousEntryOrder { stack, .. }
+            | Self::MassSacrificeGraveyardOrder { stack, .. } => stack.as_ref(),
             Self::ManaAbilityDamageReplacement { .. } | Self::LegendKeep => None,
         }
     }
@@ -1324,7 +1323,6 @@ impl ResolutionContinuation {
             | Self::PlayerSetDiscard { stack, .. }
             | Self::GraveyardChoice { stack, .. }
             | Self::Sacrifice { stack }
-            | Self::MassSacrificeGraveyardOrder { stack, .. }
             | Self::CopyTargets { stack, .. }
             | Self::SearchLibrary { stack, .. }
             | Self::SearchZoneScope { stack, .. }
@@ -1348,9 +1346,9 @@ impl ResolutionContinuation {
             | Self::BattleProtector { stack }
             | Self::AttackingTokenDefenders { stack, .. } => Some(stack),
             Self::SpecialCast { stack, .. } => Some(stack),
-            Self::AuraReturn { stack, .. } | Self::SimultaneousEntryOrder { stack, .. } => {
-                stack.as_mut()
-            }
+            Self::AuraReturn { stack, .. }
+            | Self::SimultaneousEntryOrder { stack, .. }
+            | Self::MassSacrificeGraveyardOrder { stack, .. } => stack.as_mut(),
             Self::ManaAbilityDamageReplacement { .. } | Self::LegendKeep => None,
         }
     }
@@ -1879,6 +1877,9 @@ pub struct StackItem {
     pub(crate) payment_result: CardResultCohort,
     /// Server-only generation-bound objects published by earlier library-search instructions.
     pub search_results: BTreeMap<SearchResultId, TriggerObjectRef>,
+    /// Server-only exact post-exile incarnations from this resolution; fresh spell copies
+    /// start empty and parked continuations retain the same map.
+    pub(crate) exiled_cohorts: BTreeMap<ExiledCohortId, Vec<TriggerObjectRef>>,
     /// Resolution branches already answered, keyed by their index in the original effect list.
     /// `None` records an optional decline; `Some(i)` records the chosen authored branch.
     pub resolution_branch_choices: BTreeMap<u32, Option<usize>>,

@@ -15,7 +15,8 @@ use super::{
     PermanentEventFilter,
 };
 use crate::{
-    choice_fallback, AbilityLinkId, AbilityPresentation, ChoiceId, ManaCost, SearchResultId,
+    choice_fallback, AbilityLinkId, AbilityPresentation, ChoiceId, ExiledCohortId, ManaCost,
+    SearchResultId,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
@@ -1525,6 +1526,14 @@ pub enum SpellEffectKind {
         players: RelativePlayerSet,
         #[serde(default)]
         filter: Option<ZoneCardFilter>,
+        /// Scrap Mastery / Living Death retain only this instruction's actual post-exile
+        /// incarnations through later instructions of the same resolving spell.
+        #[serde(default)]
+        capture_exile_cohort: Option<ExiledCohortId>,
+    },
+    /// Return the surviving captured incarnations, simultaneously under their owners' control.
+    ReturnExiledCohortToOwnersBattlefield {
+        cohort_id: ExiledCohortId,
     },
     /// Choose a card from the controller's graveyard when this instruction resolves rather than
     /// targeting it while casting. Say Its Name mills first, then optionally chooses the current
@@ -2887,6 +2896,7 @@ impl SpellEffectKind {
             | SpellEffectKind::SacrificeObservedObjects
             | SpellEffectKind::ExileWarpedObject
             | SpellEffectKind::ReturnLinkedExiledCards { .. }
+            | SpellEffectKind::ReturnExiledCohortToOwnersBattlefield { .. }
             | SpellEffectKind::ChooseGraveyardCard { .. }
             | SpellEffectKind::GrantKeywordsAllPermanents { .. }
             | SpellEffectKind::GainLife { .. }
@@ -3627,11 +3637,43 @@ impl SpellEffectKind {
             }
         }
         if let SpellEffectKind::ExileGraveyards {
-            filter: Some(filter),
-            ..
+            players,
+            filter,
+            capture_exile_cohort,
         } = self
         {
-            filter.validate()?;
+            if let Some(filter) = filter {
+                filter.validate()?;
+            }
+            if let Some(id) = capture_exile_cohort {
+                id.validate()?;
+                if context != EffectContext::Spell || *players != RelativePlayerSet::All {
+                    return Err(
+                        "retained exile cohorts require an all-player spell instruction".into(),
+                    );
+                }
+                if !filter.as_ref().is_some_and(|filter| {
+                    matches!(
+                        filter.card_type,
+                        Some(CardTypeFilter::Artifact | CardTypeFilter::Creature)
+                    ) && *filter
+                        == ZoneCardFilter {
+                            card_type: filter.card_type,
+                            ..Default::default()
+                        }
+                }) {
+                    return Err(
+                        "retained exile cohorts require a pure Artifact or Creature card filter"
+                            .into(),
+                    );
+                }
+            }
+        }
+        if let SpellEffectKind::ReturnExiledCohortToOwnersBattlefield { cohort_id } = self {
+            cohort_id.validate()?;
+            if context != EffectContext::Spell {
+                return Err("retained exile cohorts require a spell instruction".into());
+            }
         }
         if let SpellEffectKind::PutCounters { counter, .. }
         | SpellEffectKind::RemoveCounters { counter, .. }

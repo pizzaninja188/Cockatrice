@@ -1549,6 +1549,7 @@ fn validate_effect_targets(
         | SpellEffectKind::ChangeSourceFace { .. }
         | SpellEffectKind::ReturnTriggeredCard { .. }
         | SpellEffectKind::ReturnLinkedExiledCards { .. }
+        | SpellEffectKind::ReturnExiledCohortToOwnersBattlefield { .. }
         | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
         | SpellEffectKind::CastMadness { .. }
         | SpellEffectKind::SiegeDefeat
@@ -2330,6 +2331,7 @@ mod tests {
             cast_cost_receipts: Vec::new(),
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
+            exiled_cohorts: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),

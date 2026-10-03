@@ -28,6 +28,141 @@ pub(super) fn instant_timing_step_allowed(state: &GameState) -> bool {
 }
 
 impl GameEngine {
+    /// Fail closed on an unexpected stale surviving incarnation without refusing concession.
+    /// Independent returns use an end-of-list frame so they still finish before the outer exit.
+    pub(super) fn abandon_participating_resolution(
+        &mut self,
+        mut stack: Option<ParkedStackResolution>,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        if let Some(stack) = stack.as_mut() {
+            stack.resume_effect_index =
+                Some(self.build_resolution_effects(&stack.item).0.len() as u32);
+        }
+        if let Some(batch) = self.state.pending_observer_return_batch.as_mut() {
+            batch.resume_stack = stack.clone();
+        }
+        events.push(ev_log(
+            "Interrupted resolution abandoned because a surviving arrival changed incarnation."
+                .into(),
+        ));
+        if self.drain_immediate_observer_actions(stack.clone(), events)? {
+            return Ok(());
+        }
+        if let Some(stack) = stack {
+            let completed = self.complete_parked_resolution_with_previous(
+                stack.item,
+                stack.resume_effect_index,
+                stack.previous_result,
+                Vec::new(),
+            )?;
+            events.extend(completed.events);
+        }
+        Ok(())
+    }
+    /// Cancel the departed player's unfinished instruction while retaining committed ordering
+    /// and independently owed one-shot returns (CR 800.4a, 404.3 and 610.3).
+    fn detach_departed_outer_resolution(
+        &mut self,
+        departed: &[PlayerId],
+    ) -> Result<(), EngineError> {
+        let is_departed = |stack: &ParkedStackResolution| {
+            departed.contains(&stack.item.controller)
+                || self
+                    .state
+                    .objects
+                    .get(&stack.item.id)
+                    .is_some_and(|object| departed.contains(&object.owner))
+        };
+        let independent_entry = matches!(self.state.pending_replacement_event.as_ref(),
+            Some(super::replacement::PendingReplacementEvent::BattlefieldEntry(entry))
+                if matches!(entry.completion, BattlefieldEntryCompletion::ObserverReturn { resume_original_stack: false, .. }));
+        let outer = self
+            .state
+            .pending_resolution
+            .as_ref()
+            .and_then(|pending| {
+                (!independent_entry)
+                    .then(|| pending.continuation.stack())
+                    .flatten()
+            })
+            .filter(|stack| is_departed(stack))
+            .cloned()
+            .or_else(|| {
+                self.state
+                    .pending_observer_return_batch
+                    .as_ref()
+                    .and_then(|batch| batch.resume_stack.as_ref())
+                    .filter(|stack| is_departed(stack))
+                    .cloned()
+            });
+        let Some(outer) = outer else {
+            return Ok(());
+        };
+        if let Some(batch) = self.state.pending_observer_return_batch.as_mut() {
+            batch.resume_stack = None;
+        }
+        let observer_entry = match self.state.pending_replacement_event.as_mut() {
+            Some(super::replacement::PendingReplacementEvent::BattlefieldEntry(entry)) => {
+                match &mut entry.completion {
+                    BattlefieldEntryCompletion::ObserverReturn {
+                        owner,
+                        resume_original_stack,
+                        ..
+                    } => {
+                        *resume_original_stack = false;
+                        Some((entry.event.object_id, *owner))
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
+        let synthetic = observer_entry
+            .map(|(oid, owner)| ParkedStackResolution::new(self.observer_return_item(oid, owner)));
+        let mut preserve = false;
+        if let Some(pending) = self.state.pending_resolution.as_mut() {
+            match &mut pending.continuation {
+                ResolutionContinuation::MassSacrificeGraveyardOrder { stack, .. }
+                | ResolutionContinuation::AuraReturn { stack, .. } => {
+                    *stack = None;
+                    preserve = true;
+                }
+                ResolutionContinuation::SimultaneousEntryOrder { stack, order } => {
+                    if let SimultaneousEntryBatch::Observer(batch) = &mut order.batch {
+                        *stack = None;
+                        batch.resume_stack = None;
+                        preserve = true;
+                    }
+                }
+                continuation => {
+                    if let (Some(synthetic), Some(stack)) = (synthetic, continuation.stack_mut()) {
+                        *stack = synthetic;
+                        preserve = true;
+                    }
+                }
+            }
+        }
+        if !preserve {
+            self.state.pending_resolution = None;
+            self.state.pending_replacement_event = None;
+        }
+        if self
+            .state
+            .objects
+            .get(&outer.item.id)
+            .is_some_and(|object| !departed.contains(&object.owner) && object.zone == Zone::Stack)
+        {
+            move_object_to_zone(
+                &mut self.state,
+                self.registry,
+                outer.item.id,
+                Zone::Exile,
+                None,
+            )?;
+        }
+        Ok(())
+    }
     /// CR 800.4a/e: objects owned by a departing player leave the game, and attacks aimed at
     /// that player stop participating in combat. No zone-change triggers fire for this removal.
     fn remove_departing_player_objects(
@@ -152,6 +287,15 @@ impl GameEngine {
         if departed.is_empty() {
             return Ok(());
         }
+        // Preserve actual owner removals across deletion; entry controllers/deciders may survive.
+        let departed_objects: HashSet<_> = self
+            .state
+            .objects
+            .values()
+            .filter(|object| departed.contains(&object.owner))
+            .map(|object| object.id)
+            .collect();
+        self.detach_departed_outer_resolution(&departed)?;
         for player in departed {
             self.remove_departing_player_objects(player, events)?;
             // CR 800.4a: an effect granting control to a player who left ends immediately.
@@ -210,10 +354,16 @@ impl GameEngine {
             if let Some(next) = self.state.next_in_game_player_idx(self.state.priority_idx) {
                 self.state.priority_idx = next;
                 self.state.passes_since_stack_change = 0;
-                events.push(ev_priority_changed(self));
+                if self.state.pending_resolution.is_none() {
+                    events.push(ev_priority_changed(self));
+                }
             }
         }
-        self.refresh_entry_opponent_departure(events)?;
+        self.refresh_mass_sacrifice_departure(events)?;
+        self.refresh_entry_timestamp_departure(&departed_objects, events)?;
+        self.refresh_observer_aura_departure(events)?;
+        self.refresh_participating_entry_departure(&departed_objects, events)?;
+        self.refresh_entry_opponent_departure(&departed_objects, events)?;
         Ok(())
     }
 
@@ -260,44 +410,6 @@ impl GameEngine {
         player: PlayerId,
     ) -> Result<RuledEventBatch, EngineError> {
         // A concession removes this player; other free-for-all players continue until one remains.
-        let departed_resolution_object = self
-            .state
-            .pending_resolution
-            .as_ref()
-            .and_then(|pending| pending.continuation.stack())
-            .filter(|stack| {
-                stack.item.controller == player
-                    || self
-                        .state
-                        .objects
-                        .get(&stack.item.id)
-                        .is_some_and(|object| object.owner == player)
-            })
-            .map(|stack| stack.item.id);
-        if let Some(id) = departed_resolution_object {
-            if self
-                .state
-                .pending_resolution
-                .as_ref()
-                .is_some_and(|pending| {
-                    matches!(
-                        pending.continuation,
-                        ResolutionContinuation::EntryChooseOpponent { .. }
-                    )
-                })
-            {
-                self.state.pending_replacement_event = None;
-            }
-            self.state.pending_resolution = None;
-            if self
-                .state
-                .objects
-                .get(&id)
-                .is_some_and(|object| object.owner != player && object.zone == Zone::Stack)
-            {
-                move_object_to_zone(&mut self.state, self.registry, id, Zone::Exile, None)?;
-            }
-        }
         for p in &mut self.state.players {
             if p.id == player {
                 p.has_lost = true;
@@ -316,7 +428,20 @@ impl GameEngine {
         batch.events.push(ev_log(format!("P{player} conceded")));
         // Apply the concession's already-ended control durations before it determines a winner.
         self.reindex_battlefield_control(&mut batch.events);
-        self.sweep_life();
+        // Concession takes effect immediately, but a parked instruction/payment must not
+        // turn a surviving player's intermediate life value into an early SBA loss.
+        let still_in: Vec<_> = self
+            .state
+            .players
+            .iter()
+            .filter(|player| !player.has_lost)
+            .map(|player| player.id)
+            .collect();
+        self.state.outcome = match still_in.as_slice() {
+            [] => Some(crate::state::GameOutcome::Draw),
+            [winner] => Some(crate::state::GameOutcome::Winner(*winner)),
+            _ => None,
+        };
         if self.state.is_terminal() {
             return Ok(self.finish_terminal_batch(batch));
         }
@@ -326,10 +451,6 @@ impl GameEngine {
         self.reconcile_departed_players(&mut batch.events)?;
         self.reindex_battlefield_control(&mut batch.events);
         self.reconcile_draw_departure(&mut batch.events)?;
-        if self.state.is_terminal() {
-            return Ok(self.finish_terminal_batch(batch));
-        }
-        self.apply_sbas(&mut batch.events)?;
         if self.state.is_terminal() {
             return Ok(self.finish_terminal_batch(batch));
         }

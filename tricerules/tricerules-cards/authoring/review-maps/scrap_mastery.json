@@ -1,0 +1,116 @@
+{
+  "format_version": 1,
+  "oracle_id": "62dac700-49f7-4745-af67-37d2a81dcebc",
+  "spans": [
+    {
+      "face_id": "scrap_mastery",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/2"
+      ]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_paid_cast_returns_only_original_artifacts_to_each_owner",
+      "covers": "paid cast returns only original artifacts to each owner"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_retains_exiled_cohort_across_each_owners_sacrifice_order",
+      "covers": "retains exiled cohort across each owners sacrifice order"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_last_sacrifice_chooser_concession_resumes_surviving_cohort",
+      "covers": "last sacrifice chooser concession resumes surviving cohort"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_future_sacrifice_owner_departure_keeps_current_choice_usable",
+      "covers": "future sacrifice owner departure keeps current choice usable"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_caster_departure_preserves_committed_survivor_graveyard_order",
+      "covers": "caster departure preserves committed survivor graveyard order"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_copy_entrant_owner_departure_skips_only_that_entrant",
+      "covers": "copy entrant owner departure skips only that entrant"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_timestamp_owner_departure_retains_surviving_order",
+      "covers": "timestamp owner departure retains surviving order"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_copy_source_departure_refreshes_without_removing_entrant",
+      "covers": "copy source departure refreshes without removing entrant"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_caster_departure_detaches_owed_aura_and_queued_returns",
+      "covers": "caster departure detaches owed aura and queued returns"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_last_order_departure_flushes_surviving_committed_departure_trigger",
+      "covers": "last order departure flushes surviving committed departure trigger"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_unrelated_concession_does_not_check_life_during_entry_choice",
+      "covers": "unrelated concession does not check life during entry choice"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_caster_departure_detaches_owed_copy_entry_and_queued_returns",
+      "covers": "caster departure detaches owed copy entry and queued returns"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_owed_aura_owner_departure_skips_it_and_resumes_survivors",
+      "covers": "owed aura owner departure skips it and resumes survivors"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_concession_accepts_but_abandons_stale_surviving_sacrifice_arrival",
+      "covers": "concession accepts but abandons stale surviving sacrifice arrival"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_concession_accepts_but_abandons_stale_surviving_timestamp_entry",
+      "covers": "concession accepts but abandons stale surviving timestamp entry"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_excludes_replacement_exile_and_sacrifices_stolen_artifact_lands_creatures_and_tokens",
+      "covers": "excludes replacement exile and sacrifices stolen artifact lands creatures and tokens"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_freezes_current_derived_artifact_membership_before_source_departure",
+      "covers": "freezes current derived artifact membership before source departure"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_present_empty_original_cohort_completes_without_a_choice",
+      "covers": "present empty original cohort completes without a choice"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_paid_cast_choices_and_concession_replay_encoded_commands",
+      "covers": "paid cast choices and concession replay encoded commands"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_actual_twincast_resolves_a_fresh_cohort_in_each_spell",
+      "covers": "actual twincast resolves a fresh cohort in each spell"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_unexpected_missing_survivor_abandons_the_entire_proposed_return",
+      "covers": "unexpected missing survivor abandons the entire proposed return"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_stale_observer_entry_preserves_valid_owed_returns_and_cancels_tail",
+      "covers": "stale observer entry preserves valid owed returns and cancels tail"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_future_timestamp_departure_preserves_already_chosen_order",
+      "covers": "future timestamp departure preserves already chosen order"
+    },
+    {
+      "test": "scenario deck_coverage_scrap_mastery::scrap_mastery_detached_synthetic_entry_owner_departure_preserves_independent_queue",
+      "covers": "four-player caster departure followed by synthetic entry owner departure preserves independent queue and cancels outer tail"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

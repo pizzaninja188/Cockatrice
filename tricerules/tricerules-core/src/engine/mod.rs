@@ -2488,7 +2488,11 @@ impl GameEngine {
         // CR 104.3a: a player may concede at any time. Handle it before the opening early-return so
         // a player can bail out of the choose-first / mulligan sequence.
         if matches!(cmd.cmd.as_ref(), Some(Cmd::Concede(_))) {
-            return self.concede_batch(player);
+            let batch = self.concede_batch(player)?;
+            if self.state.is_terminal() {
+                return Ok(batch);
+            }
+            return self.settle_command_batch(batch);
         }
         // Refuse dev commands explicitly rather than letting them fall into the two guards below.
         // During the opening procedure a zone move would desync the mulligan bookkeeping, and a
@@ -2641,7 +2645,7 @@ impl GameEngine {
             Some(Cmd::ChooseStartingPlayer(_)) | Some(Cmd::PutOpeningHandOnBottom(_)) => {
                 return Err(EngineError::Illegal("opening-only command"));
             }
-            Some(Cmd::Concede(_)) => return self.concede_batch(player),
+            Some(Cmd::Concede(_)) => self.concede_batch(player),
             Some(Cmd::DeclareAttackers(a)) => {
                 if self.state.turn_step != TurnStep::DeclareAttackers
                     || self.state.active_player_id() != player
@@ -2716,7 +2720,14 @@ impl GameEngine {
                 self.assign_combat_damage(acd.attacker_id, &pairs, acd.defending_player_damage)
             }
         };
-        let mut b = res?;
+        self.settle_command_batch(res?)
+    }
+
+    /// Concessions may complete a parked resolution and owe the same observer/SBA/trigger boundary.
+    fn settle_command_batch(
+        &mut self,
+        mut b: RuledEventBatch,
+    ) -> Result<RuledEventBatch, EngineError> {
         if self.state.is_terminal() {
             return Ok(self.finish_terminal_batch(b));
         }
