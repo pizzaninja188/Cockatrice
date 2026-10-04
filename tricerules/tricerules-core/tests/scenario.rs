@@ -1059,3 +1059,6 @@ mod into_the_wilds;
 
 #[path = "scenario/deck_coverage_arena.rs"]
 mod deck_coverage_arena;
+
+#[path = "scenario/deck_coverage_unnatural_growth.rs"]
+mod deck_coverage_unnatural_growth;

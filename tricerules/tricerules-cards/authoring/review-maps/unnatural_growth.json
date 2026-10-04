@@ -1,0 +1,19 @@
+{
+  "format_version": 1,
+  "oracle_id": "7324abaa-48da-439d-9339-b0ea5eea612e",
+  "complete_definition_review_confirmed": true,
+  "tokens": [],
+  "spans": [
+    {"face_id": "unnatural_growth", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/triggered_abilities/0"]}
+  ],
+  "semantic_fixtures": [
+    {"covers": "Complete one-face green Enchantment, cost five, each-combat mandatory untargeted trigger and exact Oracle line", "test": "deck_coverage_unnatural_growth::growth_registers_complete_single_combat_trigger_and_exact_oracle_mapping"},
+    {"covers": "Paid actual Growth independently doubles unequal P/T on all three players' combat boundaries; opponents and noncreatures excluded; wrong actor preserves state", "test": "scenario deck_coverage_unnatural_growth::growth_paid_card_doubles_unequal_creatures_on_every_players_combat"},
+    {"covers": "Two triggers apply independently, with resolution-time membership for entrants between and after resolutions", "test": "scenario deck_coverage_unnatural_growth::growth_two_triggers_snapshot_membership_at_each_resolution"},
+    {"covers": "Saved trigger controller and current derived creature control; destroying changed-control source does not stop trigger", "test": "scenario deck_coverage_unnatural_growth::growth_uses_saved_trigger_controller_current_control_and_survives_source_departure"},
+    {"covers": "Existing setters, modifiers and counters snapshot together; later Giant Growth adds three; cleanup expires effects and preserves counters", "test": "scenario deck_coverage_unnatural_growth::growth_composes_with_setters_counters_later_pumps_and_cleanup"},
+    {"covers": "Actual bounce and paid recast of the same physical card remove old-incarnation doubling", "test": "scenario deck_coverage_unnatural_growth::growth_leaving_and_returning_same_physical_card_loses_old_incarnation_modifier"},
+    {"covers": "Mixed-cohort range error restores entire direct and canonical resolving commands", "test": "scenario deck_coverage_unnatural_growth::growth_out_of_range_resolution_and_canonical_commands_restore_whole_command"},
+    {"covers": "Serialized accepted commands replay cast and trigger resolution from an identical physical fixture", "test": "scenario deck_coverage_unnatural_growth::growth_replays_serialized_accepted_commands_from_identical_fixture"}
+  ]
+}

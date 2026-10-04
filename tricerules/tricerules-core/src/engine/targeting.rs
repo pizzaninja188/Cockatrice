@@ -1509,6 +1509,7 @@ fn validate_effect_targets(
             ..
         }
         | SpellEffectKind::PumpAll { .. }
+        | SpellEffectKind::DoublePowerToughnessAll { .. }
         | SpellEffectKind::PutCountersAll { .. }
         | SpellEffectKind::PutCountersAllPlaneswalkers { .. }
         | SpellEffectKind::GrantKeywordsAll { .. }

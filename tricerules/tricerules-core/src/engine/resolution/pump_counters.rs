@@ -260,6 +260,66 @@ pub(super) fn pump_all(
     Ok(EffectOutcome::Continue)
 }
 
+fn doubling_delta(value: i64, characteristic: &'static str) -> Result<i32, EngineError> {
+    let delta = i32::try_from(value)
+        .map_err(|_| EngineError::PowerToughnessNumericRange(characteristic))?;
+    // PtModify stores i32 bonuses, and Qt projects the unsigned public P/T into int.
+    // Check the doubled result too: a representable bonus alone can overflow that projection.
+    let doubled = value
+        .checked_mul(2)
+        .ok_or(EngineError::PowerToughnessNumericRange(characteristic))?;
+    i32::try_from(doubled).map_err(|_| EngineError::PowerToughnessNumericRange(characteristic))?;
+    Ok(delta)
+}
+
+pub(super) fn double_power_toughness_all(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::DoublePowerToughnessAll { filter } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let source = cx.top.source_permanent_id.unwrap_or(cx.top.id);
+    let affected = snapshot_mass_creature_scope(
+        cx.engine,
+        &filter,
+        cx.controller,
+        source,
+        cx.targets,
+        cx.target_group_indices,
+    );
+    // CR 608.2h / 701.10b,c: fix every creature's two signed values before installing
+    // any layer-7c effect. Independent instructions would observe earlier modifications.
+    let mut adjustments = Vec::with_capacity(affected.len());
+    for oid in affected {
+        let Some(characteristics) = cx.engine.characteristics(oid) else {
+            continue;
+        };
+        let power = doubling_delta(characteristics.signed_power.unwrap_or(0), "power")?;
+        let toughness = doubling_delta(characteristics.signed_toughness.unwrap_or(0), "toughness")?;
+        adjustments.push((oid, power, toughness));
+    }
+    for (oid, delta_power, delta_toughness) in adjustments {
+        cx.engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: Some(cx.top.id),
+            affected: AffectedScope::Single(oid),
+            kind: ContinuousEffectKind::PtModify {
+                delta_power,
+                delta_toughness,
+            },
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: cx.engine.state.command_index,
+        });
+    }
+    cx.events.push(ev_log(format!(
+        "{} doubles the power and toughness of each affected creature until end of turn",
+        cx.spell_label
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn grant_keywords_all(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -1285,6 +1345,187 @@ pub(super) fn change_counters(
         }
     }
     Ok(EffectOutcome::Continue)
+}
+
+#[cfg(test)]
+mod growth_tests {
+    use super::*;
+
+    fn signed_fixture(pairs: &[(i64, i64)]) -> (GameEngine, Vec<ObjectId>) {
+        let mut engine = GameEngine::new(104_910, &[0, 1], 20, None, true).unwrap();
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+        let growth = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&growth).unwrap().card_id = "unnatural_growth".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            growth,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        let mut creatures = Vec::new();
+        for &(power, toughness) in pairs {
+            let oid = engine.state.players[0].hand[0];
+            engine.state.objects.get_mut(&oid).unwrap().card_id = "grizzly_bears".into();
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                oid,
+                Zone::Battlefield,
+                None,
+            )
+            .unwrap();
+            engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: None,
+                affected: AffectedScope::Single(oid),
+                kind: ContinuousEffectKind::Layer7bSetPt { power, toughness },
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: 0,
+            });
+            creatures.push(oid);
+        }
+        // Negative-toughness pairs deliberately exercise the private instruction before SBA.
+        // This is not a claim that such creatures survive an ordinary priority boundary.
+        engine.fire_triggers(&[GameEvent::PhaseBegan {
+            phase: rv1::PhaseId::BeginCombat,
+            active_player: 0,
+        }]);
+        engine.flush_staged_triggers(&mut Vec::new());
+        assert_eq!(engine.state.stack.len(), 1);
+        (engine, creatures)
+    }
+
+    fn double_now(engine: &mut GameEngine) -> Result<EffectOutcome, EngineError> {
+        let top = engine.state.stack.last().unwrap().clone();
+        let mut events = Vec::new();
+        let previous = EffectResult::default();
+        let mut result = EffectResult::default();
+        let mut cx = EffectCx {
+            engine,
+            events: &mut events,
+            targets: &[],
+            targets_by_role: &[],
+            target_damage: &[],
+            target_group_indices: &[],
+            top: &top,
+            controller: 0,
+            affected_player: 0,
+            spell_label: "Unnatural Growth",
+            previous_effect_result: &previous,
+            effect_result: &mut result,
+            effect_index: 0,
+        };
+        double_power_toughness_all(
+            &mut cx,
+            SpellEffectKind::DoublePowerToughnessAll {
+                filter: CreatureScopeFilter {
+                    controller: Some(CreatureScopeController::YouControl),
+                    ..Default::default()
+                },
+            },
+        )
+    }
+
+    #[test]
+    fn growth_joint_signed_pairs_and_exact_numeric_boundaries() {
+        let pairs = [
+            (-2, 3),
+            (3, -2),
+            (-2, -3),
+            (0, 0),
+            (1_073_741_823, -1_073_741_824),
+        ];
+        let (mut engine, creatures) = signed_fixture(&pairs);
+        double_now(&mut engine).unwrap();
+        for (oid, (power, toughness)) in creatures.into_iter().zip(pairs) {
+            let c = engine.characteristics(oid).unwrap();
+            assert_eq!(
+                (c.signed_power, c.signed_toughness),
+                (Some(power * 2), Some(toughness * 2))
+            );
+        }
+        for value in [1_073_741_824, -1_073_741_825, i64::MAX, i64::MIN] {
+            assert!(matches!(
+                doubling_delta(value, "power"),
+                Err(EngineError::PowerToughnessNumericRange("power"))
+            ));
+        }
+    }
+
+    #[test]
+    fn growth_actual_trigger_keeps_negative_power_and_reuses_same_turn_boundary() {
+        let (mut engine, creatures) = signed_fixture(&[(-2, 3)]);
+        let pass = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+        };
+        for _ in 0..2 {
+            let actor = engine.state.priority_player_id();
+            engine.apply_command(actor, &pass).unwrap();
+        }
+        let c = engine.characteristics(creatures[0]).unwrap();
+        assert_eq!((c.signed_power, c.signed_toughness), (Some(-4), Some(6)));
+        let turn = engine.state.turn;
+        engine.fire_triggers(&[GameEvent::PhaseBegan {
+            phase: rv1::PhaseId::BeginCombat,
+            active_player: 1,
+        }]);
+        engine.flush_staged_triggers(&mut Vec::new());
+        for _ in 0..2 {
+            let actor = engine.state.priority_player_id();
+            engine.apply_command(actor, &pass).unwrap();
+        }
+        assert_eq!(engine.state.turn, turn);
+        let c = engine.characteristics(creatures[0]).unwrap();
+        assert_eq!((c.signed_power, c.signed_toughness), (Some(-8), Some(12)));
+        // Public unsigned projection remains baseline 0, independently of rules arithmetic.
+        assert_eq!(c.power, Some(0));
+    }
+
+    #[test]
+    fn growth_numeric_failure_restores_earlier_draw_and_all_publication_caches() {
+        let (mut engine, _) = signed_fixture(&[(2, 3), (1_073_741_824, 3)]);
+        engine
+            .state
+            .stack
+            .last_mut()
+            .unwrap()
+            .triggered_ability
+            .as_mut()
+            .unwrap()
+            .effect
+            .insert(
+                0,
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::Controller,
+                    count: Amount::Fixed(1),
+                },
+            );
+        engine.initial_response_batch();
+        let pass = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+        };
+        engine.apply_command(0, &pass).unwrap();
+        let before = engine.diagnostic_snapshot().unwrap();
+        let zones = engine.private_zone_cache.clone();
+        let battlefield = engine.battlefield_view_cache.clone();
+        let strike = engine.first_strike_step_pending_cache;
+        assert!(matches!(
+            engine.apply_command(1, &pass),
+            Err(EngineError::PowerToughnessNumericRange(_))
+        ));
+        assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
+        assert!(engine.private_zone_cache == zones);
+        assert!(engine.battlefield_view_cache == battlefield);
+        assert_eq!(engine.first_strike_step_pending_cache, strike);
+        assert!(engine.pending_spell_cast_internal.is_none());
+        assert!(engine.pending_ability_activation_internal.is_none());
+    }
 }
 
 #[cfg(test)]

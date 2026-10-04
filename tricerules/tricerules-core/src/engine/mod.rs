@@ -981,6 +981,8 @@ pub enum EngineError {
     MissingCard(String),
     #[error("life numeric range exceeded: {0}")]
     LifeNumericRange(&'static str),
+    #[error("power/toughness numeric range exceeded: {0}")]
+    PowerToughnessNumericRange(&'static str),
 }
 
 /// Internal game events emitted at state-change sites to drive the unified trigger-collection pass
@@ -2340,9 +2342,9 @@ impl GameEngine {
         }
         // `set_tapped` appends to this while the command runs; anything left over from an earlier
         // command (or from a rejected one, which never drains) is stale by definition.
-        // An earlier instruction can install a replacement before the gain, so capture even
-        // when no life doubler is currently present. Restore only numeric failures below.
-        let life_checkpoint = self.life_numeric_checkpoint();
+        // An earlier instruction can change the numeric domain before a later gain or P/T
+        // doubling. Capture the whole command; restore only typed numeric failures below.
+        let numeric_checkpoint = self.numeric_checkpoint();
         self.state.untapped_this_command.clear();
         // Canonical settlement may discard every intermediate ZoneView and publish one final
         // replacement. Preserve the cache that describes what was actually published before this
@@ -2356,16 +2358,22 @@ impl GameEngine {
             )
         });
         let mut result = self.dispatch_command(player, cmd);
-        if matches!(result, Err(EngineError::LifeNumericRange(_))) {
-            self.restore_life_numeric_checkpoint(life_checkpoint);
+        if matches!(
+            result,
+            Err(EngineError::LifeNumericRange(_) | EngineError::PowerToughnessNumericRange(_))
+        ) {
+            self.restore_numeric_checkpoint(numeric_checkpoint);
             return result;
         }
         if let (Ok(batch), Some(policies), Some(cache_before)) =
             (result.as_mut(), auto_pass_policies, zone_view_cache_before)
         {
             if let Err(error) = self.settle_automatic_priority(policies, batch, cache_before) {
-                if matches!(error, EngineError::LifeNumericRange(_)) {
-                    self.restore_life_numeric_checkpoint(life_checkpoint);
+                if matches!(
+                    error,
+                    EngineError::LifeNumericRange(_) | EngineError::PowerToughnessNumericRange(_)
+                ) {
+                    self.restore_numeric_checkpoint(numeric_checkpoint);
                 }
                 return Err(error);
             }

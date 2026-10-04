@@ -1,0 +1,18 @@
+// Oracle 7324abaa-48da-439d-9339-b0ea5eea612e; printing/ruling checked 2026-10-04.
+// https://api.scryfall.com/cards/08fa38c0-353c-4f6a-b87e-3f6366af44d8
+// https://api.scryfall.com/cards/08fa38c0-353c-4f6a-b87e-3f6366af44d8/rulings
+// CR 701.10b/c, 608.2h and 611.2c govern signed joint snapshot and fixed membership.
+(
+  id: "unnatural_growth",
+  name: "Unnatural Growth",
+  face_id: "unnatural_growth",
+  mana_cost: "{1}{G}{G}{G}{G}",
+  types: ["Enchantment"],
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01", presentation: OracleLines([1]),
+      trigger: AtBeginningOfCombat(player: AnyPlayer),
+      effect: [DoublePowerToughnessAll(filter: (controller: Some(YouControl)))],
+    ),
+  ],
+)

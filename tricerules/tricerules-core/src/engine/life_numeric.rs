@@ -1,7 +1,7 @@
-//! Atomic rejection of life changes outside the engine's signed public numeric domain.
+//! Complete-command rollback for typed life and power/toughness numeric failures.
 use super::*;
 
-pub(super) struct LifeNumericCheckpoint {
+pub(super) struct NumericCheckpoint {
     state: GameState,
     pending_spell: Option<casting::PendingSpellCastInternal>,
     pending_ability: Option<activation::PendingAbilityActivationInternal>,
@@ -11,8 +11,8 @@ pub(super) struct LifeNumericCheckpoint {
 }
 
 impl GameEngine {
-    pub(super) fn life_numeric_checkpoint(&self) -> LifeNumericCheckpoint {
-        LifeNumericCheckpoint {
+    pub(super) fn numeric_checkpoint(&self) -> NumericCheckpoint {
+        NumericCheckpoint {
             state: self.state.clone(),
             pending_spell: self.pending_spell_cast_internal.clone(),
             pending_ability: self.pending_ability_activation_internal.clone(),
@@ -22,7 +22,7 @@ impl GameEngine {
         }
     }
 
-    pub(super) fn restore_life_numeric_checkpoint(&mut self, checkpoint: LifeNumericCheckpoint) {
+    pub(super) fn restore_numeric_checkpoint(&mut self, checkpoint: NumericCheckpoint) {
         self.state = checkpoint.state;
         self.pending_spell_cast_internal = checkpoint.pending_spell;
         self.pending_ability_activation_internal = checkpoint.pending_ability;
@@ -327,12 +327,12 @@ mod tests {
             }
             // Warm the publication caches; cold views would swamp the checkpoint measurement.
             engine.initial_response_batch();
-            let fixture = engine.life_numeric_checkpoint();
+            let fixture = engine.numeric_checkpoint();
             let mut cloning = Vec::new();
             let mut command = Vec::new();
             for _ in 0..80 {
                 let started = Instant::now();
-                let checkpoint = std::hint::black_box(engine.life_numeric_checkpoint());
+                let checkpoint = std::hint::black_box(engine.numeric_checkpoint());
                 cloning.push(started.elapsed().as_nanos());
                 drop(checkpoint);
                 let started = Instant::now();

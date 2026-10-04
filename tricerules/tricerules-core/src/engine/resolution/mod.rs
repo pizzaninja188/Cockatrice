@@ -1819,6 +1819,9 @@ impl GameEngine {
                     effect @ SpellEffectKind::PumpAll { .. } => {
                         pump_counters::pump_all(&mut cx, effect)?
                     }
+                    effect @ SpellEffectKind::DoublePowerToughnessAll { .. } => {
+                        pump_counters::double_power_toughness_all(&mut cx, effect)?
+                    }
                     effect @ SpellEffectKind::GrantKeywordsAll { .. } => {
                         pump_counters::grant_keywords_all(&mut cx, effect)?
                     }

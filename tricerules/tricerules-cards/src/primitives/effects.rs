@@ -1278,6 +1278,13 @@ pub enum SpellEffectKind {
         power: i32,
         toughness: i32,
     },
+    /// CR 701.10b/c: snapshot each creature's signed power and toughness together, then
+    /// add those respective values until end of turn. Unnatural Growth and Zopandrel,
+    /// Hunger Dominus use this untargeted instruction, including for negative values.
+    DoublePowerToughnessAll {
+        #[serde(default)]
+        filter: CreatureScopeFilter,
+    },
     /// CR 303.4: the aura's "Enchant [type]" clause. Authored in `spell_effect` of every Aura
     /// enchantment — it is the sole effect that requires a target during casting, and at resolution
     /// it records the attachment (engine sets `attached_to` before processing this effect). The
@@ -2550,6 +2557,14 @@ impl SpellEffectKind {
                     },
                 ..
             }
+            | Self::DoublePowerToughnessAll {
+                filter:
+                    CreatureScopeFilter {
+                        controller:
+                            Some(super::CreatureScopeController::TargetedPlayer { group_index, kind }),
+                        ..
+                    },
+            }
             | Self::GrantKeywordsAll {
                 filter:
                     CreatureScopeFilter {
@@ -2925,6 +2940,7 @@ impl SpellEffectKind {
             | SpellEffectKind::UntapAll { .. }
             | SpellEffectKind::UntapChosenPermanents
             | SpellEffectKind::PumpAll { .. }
+            | SpellEffectKind::DoublePowerToughnessAll { .. }
             | SpellEffectKind::PutCountersAll { .. }
             | SpellEffectKind::PutCountersAllPlaneswalkers { .. }
             | SpellEffectKind::Proliferate
@@ -4061,6 +4077,7 @@ impl SpellEffectKind {
                 attachments.validate()?;
             }
             SpellEffectKind::PumpAll { filter, .. }
+            | SpellEffectKind::DoublePowerToughnessAll { filter }
             | SpellEffectKind::GrantKeywordsAll { filter, .. }
             | SpellEffectKind::RemoveAbilitiesAll { filter } => filter.validate()?,
             SpellEffectKind::RemoveAllAbilities {
