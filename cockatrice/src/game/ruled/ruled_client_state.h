@@ -155,6 +155,7 @@ struct RuledTargetGroupData
     QString promptText;
     QVector<int> distinctFromGroupIndices;
     bool sameGraveyard = false;
+    bool chosenByOpponent = false;
 };
 
 /// Builds the common ruled target prompt from engine-authored source and group presentation data.
@@ -667,6 +668,7 @@ public:
         return hasPendingChoiceOfKind(ChoiceKind::ReplacementEffect);
     }
     void submitReplacementEffect(int tileIndex, quint64 choiceRevision);
+    void submitAbilityActivationOpponent(int playerId, quint64 transaction, quint64 revision);
     struct ReplacementImage
     {
         int tileIndex;
@@ -722,6 +724,8 @@ public:
     /// Caster-private engine-owned CR 601 transaction. Presence, identity, and locked cost come
     /// only from the latest authoritative LegalActions entry.
     std::optional<ruled::v1::PendingSpellCast> pendingSpellCast;
+    /// Public activation announcement and only this seat's engine-authored choice/payment offers.
+    std::optional<ruled::v1::PendingAbilityActivation> pendingAbilityActivation;
     [[nodiscard]] bool hasPendingSpellCast() const
     {
         return pendingSpellCast.has_value();

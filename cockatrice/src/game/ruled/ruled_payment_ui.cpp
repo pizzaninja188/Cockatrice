@@ -10,6 +10,7 @@
 #include "../player/player_info.h"
 #include "../zones/logic/card_zone_logic.h"
 #include "ruled_actions.h"
+#include "ruled_activation.h"
 #include "ruled_diagnostic_values.h"
 
 #include <QCursor>
@@ -41,12 +42,15 @@ RuledPaymentUi::RuledPaymentUi(PlayerActions *value) : actions(value)
     QObject::connect(state, &RuledClientState::legalActionsChanged, actions, [this] {
         if (actions->player->getPlayerInfo()->getLocal()) {
             reconcileEnginePendingSpellCast();
+            reconcileEnginePendingAbilityActivation();
+            resumeAfterManaAbility();
             startOrRefresh();
         }
     });
     QObject::connect(state, &RuledClientState::sessionReset, actions, [this] {
         suspendedPayments.clear();
         actions->ruledPendingCast->clearSpell();
+        actions->ruledPendingCast->clearAbility();
         clear();
     });
     QObject::connect(state, &RuledClientState::localActionAuthorityRevoked, actions, [this] {
@@ -165,6 +169,88 @@ void RuledPaymentUi::reconcileEnginePendingSpellCast()
     emit actions->ruledSpellManaPromptChanged();
 }
 
+void RuledPaymentUi::reconcileEnginePendingAbilityActivation()
+{
+    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    auto &local = actions->pendingActivatedAbility;
+    const int actor = actions->player->getPlayerInfo()->getId();
+    const auto &engine = state->pendingAbilityActivation;
+    for (int i = suspendedPayments.size() - 1; i >= 0; --i) {
+        auto &frame = suspendedPayments[i];
+        if (!frame.ability || frame.ability->engineTransactionId == 0)
+            continue;
+        if (!engine || engine->actor_player_id() != actor || engine->transaction_id() != frame.ability->engineTransactionId) {
+            restoreOptimisticManaCounters(frame.payment.takeAllOptimisticManaCounterIds());
+            suspendedPayments.removeAt(i);
+        } else {
+            ruledApplyActivationView(*frame.ability, *engine);
+            return;
+        }
+    }
+    if (!engine || engine->actor_player_id() != actor) {
+        if (local.valid && local.engineTransactionId != 0) {
+            actions->ruledPendingCast->clearAbility();
+            clear();
+            emit actions->ruledActivatedAbilityTargetPendingChanged(false, {});
+            emit actions->ruledAbilityActivationPendingChanged(false);
+        }
+        return;
+    }
+    if (local.valid && local.engineTransactionId == 0 && local.stage != PendingActivatedAbility::Stage::BeginPending)
+        return; // An inner mana ability owns this local draft while the outer payment is parked.
+    if (!local.valid || (local.engineTransactionId != engine->transaction_id() &&
+                        local.stage != PendingActivatedAbility::Stage::BeginPending)) {
+        clear();
+        actions->ruledPendingCast->beginAbility();
+        local.cardName = QString::fromStdString(engine->source_description());
+    }
+    ruledApplyActivationView(local, *engine);
+    emit actions->ruledActivatedAbilityTargetPendingChanged(false, {});
+    emit actions->ruledAbilityActivationPendingChanged(true);
+    emit actions->ruledAbilityManaPromptChanged();
+}
+
+bool RuledPaymentUi::beginAbilityActivation()
+{
+    auto &local = actions->pendingActivatedAbility;
+    if (!local.valid || !local.chosenOpponentTargets || local.stage != PendingActivatedAbility::Stage::Announcing ||
+        local.selectedTargets.size() != 1 || local.selectedTargets.first().ref.group_index() != 0 ||
+        RuledActions::gameplayInputLocked(actions->player->getGame()))
+        return false;
+    ruled::v1::RuledCommand command;
+    auto *begin = command.mutable_begin_ability_activation();
+    begin->set_source_object_id(local.permanentOid);
+    begin->set_expected_zone_change_generation(local.expectedZoneChangeGeneration);
+    begin->set_ability_index(static_cast<quint32>(local.abilityIndex));
+    const auto &target = local.selectedTargets.first();
+    begin->mutable_own_target()->set_object_id(target.ref.object_id());
+    begin->mutable_own_target()->set_group_index(target.ref.group_index());
+    begin->mutable_own_target()->set_zone_change_generation(target.zoneChangeGeneration);
+    local.stage = PendingActivatedAbility::Stage::BeginPending;
+    const auto source = local.permanentOid;
+    const auto generation = local.expectedZoneChangeGeneration;
+    const auto slot = local.abilityIndex;
+    RuledActions::sendRuledCommandExpectingAck(actions->player->getGame(), command,
+        [this, source, generation, slot](bool accepted) {
+            auto &current = actions->pendingActivatedAbility;
+            if (!current.valid || current.permanentOid != source || current.expectedZoneChangeGeneration != generation ||
+                current.abilityIndex != slot)
+                return;
+            if (accepted) {
+                reconcileEnginePendingAbilityActivation();
+                startOrRefresh();
+            } else if (current.stage == PendingActivatedAbility::Stage::BeginPending) {
+                current.stage = PendingActivatedAbility::Stage::Announcing;
+                current.waitingForTarget = true;
+                current.activeTargetGroupPosition = 0;
+                current.selectedTargets.clear();
+                emit actions->ruledActivatedAbilityTargetPendingChanged(true,
+                    ruledPendingAbilityTargetPrompt(current, *actions->player->getGame()->getGameEventHandler()->ruled()));
+            }
+        });
+    return true;
+}
+
 bool RuledPaymentUi::isStagingSpecialCast(const RuledClientState &state) const
 {
     if (actions->pendingRuledSpellCast.valid && actions->pendingRuledSpellCast.resolutionTimeOffer)
@@ -188,6 +274,14 @@ RuledPaymentUi::Context RuledPaymentUi::context() const
     const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     const auto &ability = actions->pendingActivatedAbility;
     if (ability.valid) {
+        if (ability.chosenOpponentTargets)
+            return ability.stage == PendingActivatedAbility::Stage::Paying &&
+                           state->pendingAbilityActivation &&
+                           state->pendingAbilityActivation->transaction_id() == ability.engineTransactionId &&
+                           ruledActivationCanPay(*state, actions->player->getPlayerInfo()->getId())
+                       ? Context::Ability : Context::None;
+        if (state->pendingAbilityActivation && ruledActivationNestedChoice(*state))
+            return Context::None;
         return !ability.waitingForTarget && !ability.waitingForCost ? Context::Ability : Context::None;
     }
     if (state->isResolutionPaymentActive())
@@ -242,7 +336,7 @@ bool RuledPaymentUi::startOrRefresh()
     }
     const auto nextContext = context();
     if (nextContext == Context::None) {
-        if (suspendedPayments.isEmpty() && !state->isResolutionPaymentActive() && activeContext != Context::None)
+        if (suspendedPayments.isEmpty() && !state->pendingAbilityActivation && !state->isResolutionPaymentActive() && activeContext != Context::None)
             clear();
         return false;
     }
@@ -380,6 +474,8 @@ void RuledPaymentUi::received()
         const auto transaction = model.transaction();
         if (submittingContext == Context::Spell && actions->pendingRuledSpellCast.valid)
             actions->pendingRuledSpellCast.stage = PendingRuledSpellCast::Stage::CommitPending;
+        if (submittingContext == Context::Ability && actions->pendingActivatedAbility.chosenOpponentTargets)
+            actions->pendingActivatedAbility.stage = PendingActivatedAbility::Stage::CommitPending;
         RuledActions::sendRuledCommandExpectingAck(
             game, *command, [this, transaction, submittingContext](bool accepted) {
                 auto &current = actions->player->getGame()->getGameEventHandler()->ruled()->payment;
@@ -400,6 +496,8 @@ void RuledPaymentUi::received()
                 } else if (current.active) {
                     if (submittingContext == Context::Spell && actions->pendingRuledSpellCast.valid)
                         actions->pendingRuledSpellCast.stage = PendingRuledSpellCast::Stage::Paying;
+                    if (submittingContext == Context::Ability && actions->pendingActivatedAbility.chosenOpponentTargets)
+                        actions->pendingActivatedAbility.stage = PendingActivatedAbility::Stage::Paying;
                     current.submitting = false;
                     schedule();
                 }
@@ -640,8 +738,13 @@ void RuledPaymentUi::resumeAfterManaAbility()
 {
     if (suspendedPayments.isEmpty())
         return;
-    auto frame = suspendedPayments.takeLast();
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    if (ruledActivationNestedChoice(*state) || state->isEngineCommandPending() || actions->pendingActivatedAbility.valid)
+        return;
+    // Retire only the inner model's unpaid counter debits while the outer frame is still
+    // present in the optimistic-spend accounting. Then restore that exact parked selection.
+    clear();
+    auto frame = suspendedPayments.takeLast();
     state->payment = std::move(frame.payment);
     state->payment.submitting = false;
     activeContext = frame.context;
@@ -834,6 +937,17 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildActivationCommand(Pl
     const auto &restrictedManaPaymentSelections = actions->restrictedManaPaymentSelections;
     auto *player = actions->player;
     ruled::v1::RuledCommand cmd;
+    if (pendingActivatedAbility.chosenOpponentTargets) {
+        const auto *state = player->getGame()->getGameEventHandler()->ruled();
+        if (pendingActivatedAbility.stage != PendingActivatedAbility::Stage::Paying ||
+            !ruledActivationCanPay(*state, player->getPlayerInfo()->getId()) ||
+            state->pendingAbilityActivation->transaction_id() != pendingActivatedAbility.engineTransactionId)
+            return std::nullopt;
+        auto *commit = cmd.mutable_commit_ability_activation();
+        commit->set_transaction_id(pendingActivatedAbility.engineTransactionId);
+        commit->set_expected_revision(pendingActivatedAbility.engineRevision);
+        return cmd; // Shared RuledPayment appends the authoritative payment selection.
+    }
     ruled::v1::ActivateAbility *aa = nullptr;
     ruled::v1::ExecutePermanentAction *permanentAction = nullptr;
     if (pendingActivatedAbility.permanentAction) {
@@ -848,17 +962,9 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildActivationCommand(Pl
         aa = cmd.mutable_activate_ability();
         pendingActivatedAbility.writeActivationHeader(*aa);
     }
-    if (aa && pendingActivatedAbility.needsTarget) {
-        auto *tref = aa->add_targets();
-        tref->set_object_id(pendingActivatedAbility.selectedTargetOid);
-        tref->set_group_index(0);
-        const auto *state = player->getGame()->getGameEventHandler()->ruled();
-        const auto data =
-            state ? state->abilityTargetData(pendingActivatedAbility.permanentOid, pendingActivatedAbility.abilityIndex)
-                  : RuledSpellTargetData{};
-        tref->set_kind(ruledTargetRefKind(data.groups.value(0), pendingActivatedAbility.selectedTargetOid,
-                                          player->getPlayerInfo()->getId()));
-    }
+    if (aa)
+        for (const auto &target : pendingActivatedAbility.selectedTargets)
+            *aa->add_targets() = target.ref;
     // CR 107.4f: Phyrexian pips the player chose to pay with life (via self-portrait click).
     for (const quint32 pipIndex : pendingActivatedAbility.lifePipIndices) {
         auto *flex = permanentAction ? permanentAction->add_flex_payments() : aa->add_flex_payments();

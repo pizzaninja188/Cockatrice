@@ -55,8 +55,10 @@ impl GameEngine {
             .state
             .pending_spell_cast
             .as_ref()
-            .is_some_and(|pending| pending.caster == player);
+            .is_some_and(|pending| pending.caster == player)
+            || self.paying_ability_activation(player);
         if (!resolving_mana_payment
+            && !self.paying_ability_activation(player)
             && (self.state.priority_player_id() != player
                 || self.state.blocking_choice().is_some()
                 || self.state.turn_step == TurnStep::Cleanup))
@@ -115,6 +117,11 @@ impl GameEngine {
                 .map(|(_, ability, _)| ability),
         }
         .ok_or(EngineError::Illegal("missing activated ability"))?;
+        if ability.requires_opponent_target_choice() {
+            return Err(EngineError::Illegal(
+                "opponent target choices require staged activation before payment",
+            ));
+        }
         if (resolving_mana_payment || casting_mana_payment) && !ability.is_mana_ability() {
             return Err(EngineError::Illegal(
                 "only mana abilities may be activated during payment",

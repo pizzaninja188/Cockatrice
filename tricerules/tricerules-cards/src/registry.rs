@@ -2808,15 +2808,12 @@ impl CardRegistry {
                         }
                     })?;
                 }
+                // Activated groups were checked by validate_shape, including CR 602.3 chooser
+                // authority. Triggers retain the ordinary controller-owned target contract.
                 for (effects, targeting) in face
-                    .activated_abilities
+                    .triggered_abilities
                     .iter()
                     .map(|ability| (&ability.effect, ability.targeting.as_ref()))
-                    .chain(
-                        face.triggered_abilities
-                            .iter()
-                            .map(|ability| (&ability.effect, ability.targeting.as_ref())),
-                    )
                 {
                     TargetingDef::validate_optional(targeting, effects).map_err(|reason| {
                         RegistryError::InvalidCard {

@@ -127,6 +127,8 @@ private:
     void received();
     void changed();
     void reconcileEnginePendingSpellCast();
+    void reconcileEnginePendingAbilityActivation();
+    bool beginAbilityActivation();
     void restoreOptimisticManaCounters(const QVector<int> &counterIds);
     bool stageMana(RuledPayment &model, const QString &name, quint32 groupId);
     PlayerActions *actions;

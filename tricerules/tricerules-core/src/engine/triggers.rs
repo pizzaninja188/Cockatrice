@@ -744,7 +744,9 @@ impl GameEngine {
             // (CR 603.3d) stops the drain because targets are chosen as each ability is put on the
             // stack — so the next trigger cannot be placed until this one is finished.
             match self.state.blocking_choice() {
-                Some(BlockingChoice::Resolution) | Some(BlockingChoice::TriggerTarget) => return,
+                Some(BlockingChoice::Resolution)
+                | Some(BlockingChoice::AbilityActivation)
+                | Some(BlockingChoice::TriggerTarget) => return,
                 // Not a stopping condition here: this is the block we are draining, and the
                 // handling below is what either prompts for it or finishes it.
                 Some(BlockingChoice::TriggerOrder) | None => {}
@@ -3964,6 +3966,7 @@ mod tests {
             .push(issue_219_creature_spell_item(copy_id, 0, true));
         let physical_target = |object_id| StackTarget {
             object_id,
+            required_controller: None,
             group_index: 0,
             damage_amount: 0,
             kind: rv1::TargetRefKind::Stack as i32,
@@ -3973,6 +3976,7 @@ mod tests {
         let bear_two = physical_target(bears[1]);
         let copy = StackTarget {
             object_id: copy_id,
+            required_controller: None,
             zone_change_generation: None,
             ..bear_one
         };
@@ -4079,6 +4083,7 @@ mod tests {
                 .into_iter()
                 .map(|object_id| StackTarget {
                     object_id,
+                    required_controller: None,
                     group_index: 0,
                     damage_amount: 0,
                     kind: rv1::TargetRefKind::Permanent as i32,

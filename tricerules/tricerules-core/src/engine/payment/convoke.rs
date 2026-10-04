@@ -200,6 +200,7 @@ impl GameEngine {
             request.resolution_choice.is_some(),
             request.execute_permanent_action.is_some(),
             request.commit_spell_cast.is_some(),
+            request.commit_ability_activation.is_some(),
         ]
         .into_iter()
         .filter(|present| *present)
@@ -234,6 +235,20 @@ impl GameEngine {
                 self.payment_object_ref(pending.reserved_object_id),
                 command.payment.clone().unwrap_or_default(),
                 internal.prepared.convoke,
+            )
+        } else if let Some(command) = &request.commit_ability_activation {
+            let costs = self.prepare_pending_ability_payment(player, command)?;
+            let source = self
+                .state
+                .pending_ability_activation
+                .as_ref()
+                .unwrap()
+                .source_object_id;
+            (
+                costs,
+                self.payment_object_ref(source),
+                command.payment.clone().unwrap_or_default(),
+                false,
             )
         } else if let Some(command) = &request.cast_spell {
             if self.special_cast_method(player).is_none()

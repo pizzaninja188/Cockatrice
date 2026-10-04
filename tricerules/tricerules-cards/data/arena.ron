@@ -1,0 +1,24 @@
+// Oracle 12326d23-1fb5-4084-a23a-d6e2c90ea36c; exact source/rulings retained in Arena preflight.
+// Target announcement is staged before mana/tap payment. Resolution taps each legal target
+// independently; Fight requires both legal creatures and uses their current characteristics.
+(
+  id: "arena",
+  name: "Arena",
+  face_id: "arena",
+  types: ["Land"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Mana("{3}"), Tap],
+    effect: [
+      Tap(subject: Chosen((kind: Creature, controller: You))),
+      Tap(subject: Chosen((kind: Creature, controller: Opponent))),
+      Fight(first: Chosen((kind: Creature, controller: You)),
+            second: Chosen((kind: Creature, controller: Opponent))),
+    ],
+    targeting: Some((groups: [
+      (min: 1, max: 1, prompt: "Choose your creature", effect_indices: [0, 2]),
+      (min: 1, max: 1, prompt: "Choose your creature", effect_indices: [1, 2], chooser: ChosenOpponent),
+    ])),
+  )],
+)

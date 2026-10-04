@@ -6,6 +6,7 @@
 #include "../player/player_info.h"
 #include "../zones/logic/card_zone_logic.h"
 #include "ruled_actions.h"
+#include "ruled_activation.h"
 #include "ruled_payment_ui.h"
 #include "ruled_pending_cast.h"
 
@@ -35,7 +36,7 @@ void RuledTargetUi::reconcile(PlayerActions *actions)
     }
     const int localPlayerId = actions->player->getPlayerInfo()->getId();
     const bool spellHadTargets = !actions->pendingRuledSpellCast.selectedTargetOids.isEmpty();
-    const bool abilityHadTarget = actions->pendingActivatedAbility.selectedTargetOid != 0;
+    const bool abilityHadTarget = !actions->pendingActivatedAbility.selectedTargets.isEmpty();
     if (!reconcileRuledPendingTargets(actions->pendingRuledSpellCast, actions->pendingActivatedAbility, *state,
                                       localPlayerId)) {
         return;
@@ -56,7 +57,7 @@ void RuledTargetUi::reconcile(PlayerActions *actions)
         }
     }
     auto &ability = actions->pendingActivatedAbility;
-    if (abilityHadTarget && ability.valid && ability.selectedTargetOid == 0) {
+    if (abilityHadTarget && ability.valid && ability.waitingForTarget) {
         ability.waitingForTarget = true;
         ability.waitingForMana = false;
         const QString prompt = ruledPendingAbilityTargetPrompt(ability, *state);
@@ -688,6 +689,21 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(PlayerActions *actions, Car
     if (actions->ruledPayment->tryHandleAdditionalCostClick(card))
         return true;
 
+    // An opponent answers the engine offer directly; they never own the actor's local draft.
+    if (handler->pendingAbilityActivation && !ruledActivationNestedChoice(*handler)) {
+        const auto &pending = *handler->pendingAbilityActivation;
+        if (pending.stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET &&
+            pending.deciding_player_id() == actions->player->getPlayerInfo()->getId()) {
+            if (card && card->getZone() && card->getOwner() && card->getZone()->getName() == ZoneNames::TABLE) {
+                const auto oid = handler->engineOidForCardId(card->getOwner()->getPlayerInfo()->getId(), card->getId());
+                const auto command = ruledActivationChoice(*handler, actions->player->getPlayerInfo()->getId(),
+                                                           pending.transaction_id(), pending.revision(), std::nullopt, oid);
+                if (command)
+                    RuledActions::sendRuledCommandExpectingAck(actions->player->getGame(), *command, [](bool) {});
+            }
+            return true;
+        }
+    }
     // Check pending activated ability target.
     if (!actions->pendingActivatedAbility.valid || !actions->pendingActivatedAbility.waitingForTarget) {
         return false;
@@ -711,12 +727,26 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(PlayerActions *actions, Car
                                                                          : RuledTargetCandidateKind::Battlefield;
     const auto targetData = handler->abilityTargetData(actions->pendingActivatedAbility.permanentOid,
                                                        actions->pendingActivatedAbility.abilityIndex);
-    if (!ruledTargetDataContains(targetData, kind, targetOid, actions->player->getPlayerInfo()->getId())) {
+    const auto group = targetData.groups.isEmpty() ? static_cast<const RuledTargetGroupData &>(targetData)
+                                                 : targetData.groups.value(actions->pendingActivatedAbility.activeTargetGroupPosition);
+    if (group.chosenByOpponent || !ruledTargetDataContains(group, kind, targetOid, actions->player->getPlayerInfo()->getId())) {
         return true;
     }
 
-    actions->pendingActivatedAbility.selectedTargetOid = targetOid;
-    actions->pendingActivatedAbility.waitingForTarget = false;
+    PendingActivatedAbility::Target selected;
+    selected.ref.set_object_id(targetOid);
+    selected.ref.set_group_index(static_cast<quint32>(group.groupIndex));
+    selected.ref.set_kind(ruledTargetRefKind(group, targetOid, actions->player->getPlayerInfo()->getId()));
+    selected.zoneChangeGeneration = handler->battlefieldGenerationByOid.value(targetOid);
+    actions->pendingActivatedAbility.selectedTargets.append(selected);
+    ++actions->pendingActivatedAbility.activeTargetGroupPosition;
+    actions->pendingActivatedAbility.waitingForTarget =
+        actions->pendingActivatedAbility.activeTargetGroupPosition < targetData.groups.size() &&
+        !targetData.groups.at(actions->pendingActivatedAbility.activeTargetGroupPosition).chosenByOpponent;
+    if (actions->pendingActivatedAbility.waitingForTarget) {
+        emit actions->ruledActivatedAbilityTargetPendingChanged(true, ruledPendingAbilityTargetPrompt(actions->pendingActivatedAbility, *handler));
+        return true;
+    }
     emit actions->ruledActivatedAbilityTargetPendingChanged(false, {});
     actions->ruledPayment->continuePendingActivatedAbilityAfterChoice();
     return true;
@@ -816,11 +846,18 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetPlayerClick(PlayerActions *action
     const quint32 targetOid = static_cast<quint32>(targetPlayer->getPlayerInfo()->getId());
     const quint32 permOid = actions->pendingActivatedAbility.permanentOid;
     const int abilityIdx = actions->pendingActivatedAbility.abilityIndex;
-    if (!ruledTargetDataContains(handler->abilityTargetData(permOid, abilityIdx), RuledTargetCandidateKind::Player,
+    const auto data = handler->abilityTargetData(permOid, abilityIdx);
+    const auto group = data.groups.isEmpty() ? static_cast<const RuledTargetGroupData &>(data)
+                                          : data.groups.value(actions->pendingActivatedAbility.activeTargetGroupPosition);
+    if (group.chosenByOpponent || !ruledTargetDataContains(group, RuledTargetCandidateKind::Player,
                                  targetOid, actions->player->getPlayerInfo()->getId())) {
         return true;
     }
-    actions->pendingActivatedAbility.selectedTargetOid = targetOid;
+    PendingActivatedAbility::Target selected;
+    selected.ref.set_object_id(targetOid);
+    selected.ref.set_group_index(static_cast<quint32>(group.groupIndex));
+    selected.ref.set_kind(ruled::v1::TARGET_REF_KIND_PLAYER);
+    actions->pendingActivatedAbility.selectedTargets.append(selected);
     actions->pendingActivatedAbility.waitingForTarget = false;
     emit actions->ruledActivatedAbilityTargetPendingChanged(false, {});
     actions->ruledPayment->continuePendingActivatedAbilityAfterChoice();

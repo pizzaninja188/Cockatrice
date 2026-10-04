@@ -8,6 +8,7 @@
 #include "../player/player_info.h"
 #include "../zones/logic/card_zone_logic.h"
 #include "ruled_actions.h"
+#include "ruled_activation.h"
 #include "ruled_payment_ui.h"
 
 #include <QComboBox>
@@ -662,6 +663,8 @@ bool RuledPaymentUi::completePendingRuledSpellCast()
 
 bool RuledPaymentUi::completeActivateAbility()
 {
+    if (actions->pendingActivatedAbility.chosenOpponentTargets)
+        return startOrRefresh(); // Only shared preview/payment may commit an engine announcement.
     if (RuledActions::gameplayInputLocked(actions->player->getGame())) {
         return false;
     }
@@ -975,17 +978,30 @@ void RuledPaymentUi::continuePendingActivatedAbilityAfterChoice()
     if (!actions->pendingActivatedAbility.valid || actions->pendingActivatedAbility.waitingForTarget) {
         return;
     }
+    if (actions->pendingActivatedAbility.chosenOpponentTargets) {
+        if (actions->pendingActivatedAbility.stage == PendingActivatedAbility::Stage::Announcing)
+            beginAbilityActivation();
+        else
+            startOrRefresh();
+        return;
+    }
     if (!RuledPendingCast::chooseCounterCosts(nullptr, actions->pendingActivatedAbility)) {
         cancelPendingActivatedAbility();
         return;
     }
     if (!actions->pendingActivatedAbility.targetingCostApplied &&
-        actions->pendingActivatedAbility.selectedTargetOid != 0) {
+        !actions->pendingActivatedAbility.selectedTargets.isEmpty()) {
         RuledClientState *const state = actions->player->getGame()->getGameEventHandler()->ruled();
         const auto data = state->abilityTargetData(actions->pendingActivatedAbility.permanentOid,
                                                    actions->pendingActivatedAbility.abilityIndex);
+        QVector<QVector<quint32>> grouped;
+        for (const auto &target : actions->pendingActivatedAbility.selectedTargets) {
+            while (grouped.size() <= static_cast<int>(target.ref.group_index()))
+                grouped.append(QVector<quint32>{});
+            grouped[static_cast<int>(target.ref.group_index())].append(target.ref.object_id());
+        }
         const int increase = ruledTargetingCostForSelection(
-            data, {}, {actions->pendingActivatedAbility.selectedTargetOid}, actions->player->getPlayerInfo()->getId());
+            data, grouped, {}, actions->player->getPlayerInfo()->getId());
         if (increase > 0) {
             actions->pendingActivatedAbility.remainingCost[QChar('X')] += increase;
         }
@@ -1184,6 +1200,37 @@ bool RuledPaymentUi::tryPayRuledRestrictedMana(quint32 groupId, QChar symbol)
 
 void RuledPaymentUi::cancelPendingActivatedAbility()
 {
+    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    if (state->pendingAbilityActivation && actions->pendingActivatedAbility.chosenOpponentTargets) {
+        const auto &engine = *state->pendingAbilityActivation;
+        if (engine.actor_player_id() != actions->player->getPlayerInfo()->getId() ||
+            ruledActivationNestedChoice(*state) || state->isEngineCommandPending())
+            return;
+        ruled::v1::RuledCommand command;
+        command.mutable_cancel_ability_activation()->set_transaction_id(engine.transaction_id());
+        command.mutable_cancel_ability_activation()->set_expected_revision(engine.revision());
+        const auto transaction = engine.transaction_id();
+        actions->pendingActivatedAbility.stage = PendingActivatedAbility::Stage::CancelPending;
+        RuledActions::sendRuledCommandExpectingAck(actions->player->getGame(), command,
+            [this, transaction](bool accepted) {
+                auto &local = actions->pendingActivatedAbility;
+                if (!local.valid || local.engineTransactionId != transaction)
+                    return;
+                if (!accepted) {
+                    local.stage = PendingActivatedAbility::Stage::Waiting;
+                    reconcileEnginePendingAbilityActivation();
+                    startOrRefresh();
+                } else {
+                    actions->ruledPendingCast->clearAbility();
+                    clear();
+                    emit actions->ruledActivatedAbilityTargetPendingChanged(false, {});
+                    emit actions->ruledAbilityActivationPendingChanged(false);
+                }
+            });
+        return;
+    }
+    if (actions->pendingActivatedAbility.stage == PendingActivatedAbility::Stage::BeginPending)
+        return;
     if (!actions->pendingActivatedAbility.valid) {
         return;
     }
@@ -1440,6 +1487,13 @@ QSet<quint32> RuledPaymentUi::eligibleRestrictedManaForPendingAbility() const
     if (!state || !actions->pendingActivatedAbility.valid) {
         return {};
     }
+    if (actions->pendingActivatedAbility.engineTransactionId != 0 && state->pendingAbilityActivation &&
+        state->pendingAbilityActivation->transaction_id() == actions->pendingActivatedAbility.engineTransactionId) {
+        QSet<quint32> eligible;
+        for (const auto id : state->pendingAbilityActivation->eligible_restricted_mana_group_ids())
+            eligible.insert(id);
+        return eligible;
+    }
     if (actions->pendingActivatedAbility.permanentAction) {
         const auto action = state->permanentActionFor(actions->pendingActivatedAbility.permanentOid,
                                                       actions->pendingActivatedAbility.expectedZoneChangeGeneration,
@@ -1575,6 +1629,7 @@ void RuledPaymentUi::cancelRuledGraveyardCostSelection()
 
 void RuledPaymentUi::resumePendingRuledPaymentAfterEngineCommand()
 {
+    resumeAfterManaAbility();
     if (startOrRefresh())
         return;
     if (RuledActions::gameplayInputLocked(actions->player->getGame())) {
@@ -1934,6 +1989,9 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     if (!handler) {
         return false;
     }
+    if (handler->pendingAbilityActivation &&
+        !ruledActivationCanPay(*handler, actions->player->getPlayerInfo()->getId()))
+        return leftClick;
     // Resolution-time payments grant no priority, but the engine explicitly permits the deciding
     // player's mana abilities. Every other activation keeps the normal priority gate.
     {
@@ -2185,7 +2243,10 @@ bool RuledPaymentUi::tryRuledActivateAbilityMenu(CardItem *card, bool leftClick)
     actions->pendingActivatedAbility.cardName = card->getName();
     actions->pendingActivatedAbility.needsTarget = needsTarget;
     actions->pendingActivatedAbility.waitingForTarget = needsTarget;
-    actions->pendingActivatedAbility.selectedTargetOid = 0;
+    actions->pendingActivatedAbility.selectedTargets.clear();
+    const auto activationTargets = handler->abilityTargetData(oid, abilityIndex);
+    actions->pendingActivatedAbility.chosenOpponentTargets = std::any_of(
+        activationTargets.groups.cbegin(), activationTargets.groups.cend(), [](const auto &group) { return group.chosenByOpponent; });
     actions->pendingActivatedAbility.costChoices = handler->abilityCostChoices(oid, abilityIndex);
     actions->pendingActivatedAbility.nextCostChoice = 0;
     actions->pendingActivatedAbility.waitingForCost = false;

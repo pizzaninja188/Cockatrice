@@ -6124,6 +6124,83 @@ TEST_F(RuledBatchTest, PendingSpellCastReconnectRestoresOnlyTheCastersPrivateTra
     EXPECT_TRUE(afterCompletion.getPostResponseQueue().isEmpty());
 }
 
+TEST_F(RuledBatchTest, PendingAbilityActivationReconnectRetainsPublicStageAndOnlyEachSeatsOffers)
+{
+    for (const auto stage : {ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET,
+                             ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT}) {
+        ruled::v1::IpcResponse seed;
+        seed.set_ok(true);
+        auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+        *seedView->add_per_player() = buildPerPlayerView(p1, {700u, 701u}, {false, false});
+        *seedView->add_per_player() = buildPerPlayerView(p2, {702u}, {false});
+        updatePendingResolutionChoiceCache(seed);
+
+        ruled::v1::IpcResponse response;
+        response.set_ok(true);
+        auto *batch = response.mutable_batch();
+        for (Server_Player *seat : {p1, p2}) {
+            auto *pending = (*batch->mutable_legal_by_player())[seat->getPlayerId()].mutable_pending_ability_activation();
+            pending->set_transaction_id(77u);
+            pending->set_revision(2u);
+            pending->set_stage(stage);
+            pending->set_source_object_id(700u);
+            pending->set_source_zone_change_generation(4u);
+            pending->set_actor_player_id(p1->getPlayerId());
+            pending->set_deciding_player_id(stage == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT
+                                               ? p1->getPlayerId() : p2->getPlayerId());
+            pending->set_chosen_opponent_id(p2->getPlayerId());
+            pending->set_reserved_object_id(901u);
+            auto *own = pending->add_announced_targets();
+            own->set_object_id(701u);
+            own->set_zone_change_generation(5u);
+            own->set_group_index(0u);
+            if (stage == ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET && seat == p2) {
+                auto *candidate = pending->add_target_candidates();
+                candidate->set_object_id(702u);
+                candidate->set_zone_change_generation(6u);
+                candidate->set_group_index(1u);
+                pending->mutable_target_group()->add_valid_permanent_ids(702u);
+                pending->mutable_target_group()->set_chosen_by_opponent(true);
+            } else if (stage == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT && seat == p1) {
+                pending->set_locked_total_cost("{3}");
+                pending->mutable_payment_preview()->set_valid(true);
+                pending->mutable_payment_preview()->set_remaining_cost("{3}");
+                pending->add_eligible_restricted_mana_group_ids(12u);
+            }
+        }
+        auto *mana = batch->add_events()->mutable_mana_pool_updated();
+        mana->set_player_id(p1->getPlayerId());
+        mana->set_c(3u);
+        updatePendingResolutionChoiceCache(response);
+        for (Server_Player *recipient : {p1, p2}) {
+            ResponseContainer reconnect(-1);
+            game->createGameJoinedEvent(recipient, reconnect, true);
+            ASSERT_EQ(reconnect.getPostResponseQueue().size(), 3);
+            const auto *container = dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+            ASSERT_NE(container, nullptr);
+            ruled::v1::RuledEventBatch restored;
+            ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+            ASSERT_EQ(restored.legal_by_player().size(), 1u);
+            const auto &pending = restored.legal_by_player().at(recipient->getPlayerId()).pending_ability_activation();
+            EXPECT_EQ(pending.transaction_id(), 77u);
+            EXPECT_EQ(pending.stage(), stage);
+            EXPECT_EQ(pending.announced_targets(0).object_id(), 701u);
+            EXPECT_EQ(pending.target_candidates_size(), stage == ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET && recipient == p2 ? 1 : 0);
+            EXPECT_EQ(pending.has_payment_preview(), stage == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT && recipient == p1);
+            EXPECT_EQ(pending.eligible_restricted_mana_group_ids_size(), stage == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT && recipient == p1 ? 1 : 0);
+            EXPECT_TRUE(std::any_of(restored.events().begin(), restored.events().end(), [](const auto &event) { return event.has_zone_view(); }));
+            EXPECT_TRUE(std::any_of(restored.events().begin(), restored.events().end(), [](const auto &event) { return event.has_mana_pool_updated(); }));
+        }
+    }
+    ruled::v1::IpcResponse completed;
+    completed.set_ok(true);
+    (*completed.mutable_batch()->mutable_legal_by_player())[p1->getPlayerId()];
+    updatePendingResolutionChoiceCache(completed);
+    ResponseContainer afterCompletion(-1);
+    game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, afterCompletion);
+    EXPECT_TRUE(afterCompletion.getPostResponseQueue().isEmpty());
+}
+
 TEST_F(RuledBatchTest, DamageReplacementChoiceDuringSpellPaymentRestoresAlongsideCastOnReconnect)
 {
     ruled::v1::IpcResponse response;

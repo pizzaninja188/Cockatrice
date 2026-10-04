@@ -1026,6 +1026,78 @@ fn attack_declaration_limit_authoring_preserves_zero_and_scope_and_rejects_ambig
 }
 use crate::{AbilityId, AbilityPresentation, ManaCost};
 
+fn arena_opponent_chooser_ability() -> ActivatedAbilityDef {
+    ron::from_str(
+        r#"(
+            ability_id: "activated_01",
+            presentation: Fallback,
+            costs: [Mana("{3}"), Tap],
+            effect: [
+                Tap(subject: Chosen((kind: Creature, controller: You))),
+                Tap(subject: Chosen((kind: Creature, controller: Opponent))),
+                Fight(first: Chosen((kind: Creature, controller: You)),
+                      second: Chosen((kind: Creature, controller: Opponent))),
+            ],
+            targeting: Some((groups: [
+                (min: 1, max: 1, prompt: "Choose your creature", effect_indices: [0, 2]),
+                (min: 1, max: 1, prompt: "Choose your opponent's creature",
+                 effect_indices: [1, 2], chooser: ChosenOpponent),
+            ])),
+        )"#,
+    )
+    .expect("Arena's authored activation shape parses")
+}
+
+#[test]
+fn arena_opponent_chooser_survives_ron_roundtrip() {
+    let ability = arena_opponent_chooser_ability();
+    let encoded = ron::ser::to_string(&ability).unwrap();
+    assert!(
+        encoded.contains("ChosenOpponent"),
+        "the opponent's target-choice authority must not be discarded"
+    );
+    assert_eq!(
+        ron::from_str::<ActivatedAbilityDef>(&encoded).unwrap(),
+        ability
+    );
+}
+
+#[test]
+fn arena_opponent_chooser_is_not_a_spell_or_trigger_target_contract() {
+    let ability = arena_opponent_chooser_ability();
+    let error = TargetingDef::validate_optional(ability.targeting.as_ref(), &ability.effect)
+        .expect_err("ordinary spell/trigger target validation cannot assign an opponent's choice");
+    assert!(error.contains("activated"), "{error}");
+}
+
+#[test]
+fn arena_opponent_chooser_rejects_unsupported_activation_shapes() {
+    let ability = arena_opponent_chooser_ability();
+    ability.validate_shape().expect("bounded Arena activation");
+
+    let mut sacrifice = ability.clone();
+    sacrifice.costs.push(AbilityCost::SacrificeSelf);
+    assert!(
+        sacrifice.validate_shape().is_err(),
+        "the first opponent-choice contract supports demonstrated mana/source-tap costs"
+    );
+    let mut optional = ability.clone();
+    optional.targeting.as_mut().unwrap().groups[1].min = 0;
+    assert!(optional.validate_shape().is_err());
+    let mut several = ability.clone();
+    several.targeting.as_mut().unwrap().groups[1].max = 2;
+    assert!(several.validate_shape().is_err());
+    let mut wrong_controller = ability;
+    wrong_controller.effect[1] = SpellEffectKind::Tap {
+        subject: EffectSubject::Chosen(Box::new(TargetFilter {
+            kind: TargetKind::Creature,
+            controller: TargetController::You,
+            ..Default::default()
+        })),
+    };
+    assert!(wrong_controller.validate_shape().is_err());
+}
+
 #[test]
 fn issue_172_expend_threshold_is_positive_and_defaults_to_controller() {
     for amount in [0, 1, 4, u32::MAX] {

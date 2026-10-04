@@ -486,6 +486,7 @@ fn issue_429_friendly_neighborhood_creates_citizens_and_pumps_per_creature() {
                 }],
                 targeting: Some(tricerules_cards::primitives::TargetingDef {
                     groups: vec![tricerules_cards::primitives::TargetGroupDef {
+                        chooser: Default::default(),
                         min: 1,
                         max: 1,
                         prompt: "Choose target creature".into(),

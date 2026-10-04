@@ -3383,6 +3383,7 @@ mod tests {
         };
         let valid = StackTarget {
             object_id: 20,
+            required_controller: None,
             group_index: 2,
             damage_amount: 0,
             kind: rv1::TargetRefKind::Player as i32,
@@ -3400,6 +3401,7 @@ mod tests {
             (
                 StackTarget {
                     object_id: 30,
+                    required_controller: None,
                     ..valid
                 },
                 false,
@@ -3407,6 +3409,7 @@ mod tests {
             (
                 StackTarget {
                     object_id: 999,
+                    required_controller: None,
                     ..valid
                 },
                 false,

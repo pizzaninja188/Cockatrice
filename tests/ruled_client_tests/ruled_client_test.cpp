@@ -11,6 +11,7 @@
 // `RULED_PAYLOAD` case of the upstream `GameEventHandler`, behind the whole client.
 
 #include "game/ruled/ruled_auto_pass_policy.h"
+#include "game/ruled/ruled_activation.h"
 #include "game/ruled/ruled_card_display_identity.h"
 #include "game/ruled/ruled_client_host.h"
 #include "game/ruled/ruled_client_state.h"
@@ -1827,7 +1828,8 @@ TEST(RuledPendingTargetTest, ReconcileRepairsBothLegacyPendingFamiliesInOneLegal
     ability.valid = true;
     ability.permanentOid = 30;
     ability.abilityIndex = 1;
-    ability.selectedTargetOid = 40;
+    ability.selectedTargets.append(PendingActivatedAbility::Target{});
+    ability.selectedTargets.last().ref.set_object_id(40);
 
     RuledSpellTargetData noSpellCandidates;
     noSpellCandidates.groups.append(static_cast<const RuledTargetGroupData &>(noSpellCandidates));
@@ -1836,7 +1838,200 @@ TEST(RuledPendingTargetTest, ReconcileRepairsBothLegacyPendingFamiliesInOneLegal
 
     EXPECT_TRUE(reconcileRuledPendingTargets(spell, ability, state, 0));
     EXPECT_TRUE(spell.selectedTargetOids.isEmpty());
-    EXPECT_EQ(ability.selectedTargetOid, 0u);
+    EXPECT_TRUE(ability.selectedTargets.isEmpty());
+}
+
+TEST(RuledPendingTargetTest, EngineOwnedActivationSurvivesSuppressedOrdinaryOffers)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    auto &engine = state.pendingAbilityActivation.emplace();
+    engine.set_transaction_id(91);
+    engine.set_revision(3);
+    engine.set_actor_player_id(kLocalPlayer);
+    engine.set_source_object_id(30);
+    engine.set_source_zone_change_generation(4);
+    engine.set_ability_index(1);
+    engine.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.engineTransactionId = 91;
+    ability.engineRevision = 3;
+    ability.stage = PendingActivatedAbility::Stage::Paying;
+    ability.permanentOid = 30;
+    ability.expectedZoneChangeGeneration = 4;
+    ability.abilityIndex = 1;
+    ability.selectedTargets.append(PendingActivatedAbility::Target{});
+    ability.selectedTargets.last().ref.set_object_id(40);
+    EXPECT_TRUE(ruledPendingAbilitySourceStillCurrent(state, ability));
+    PendingRuledSpellCast spell;
+    EXPECT_FALSE(reconcileRuledPendingTargets(spell, ability, state, kLocalPlayer));
+    ASSERT_EQ(ability.selectedTargets.size(), 1);
+    EXPECT_EQ(ability.selectedTargets.first().ref.object_id(), 40u);
+}
+
+TEST(RuledPendingTargetTest, WaitingActivationCannotAutoSubmitAnEmptyLocalCost)
+{
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.chosenOpponentTargets = true;
+    ability.stage = PendingActivatedAbility::Stage::Waiting;
+    EXPECT_EQ(readyRuledPendingPaymentAction({}, ability), RuledPendingPaymentAction::None);
+}
+
+TEST(RuledPendingTargetTest, AbilityTargetInvalidationRewindsItsRequiredGroup)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    RuledSpellTargetData data;
+    data.groups.append(RuledTargetGroupData{});
+    data.groups[0].validPermanentIds = {41};
+    state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(30, 1), data);
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.permanentOid = 30;
+    ability.abilityIndex = 1;
+    ability.activeTargetGroupPosition = 1;
+    ability.selectedTargets.append(PendingActivatedAbility::Target{});
+    ability.selectedTargets.last().ref.set_object_id(40);
+    PendingRuledSpellCast spell;
+    ASSERT_TRUE(reconcileRuledPendingTargets(spell, ability, state, kLocalPlayer));
+    EXPECT_EQ(ability.activeTargetGroupPosition, 0);
+    EXPECT_TRUE(ability.waitingForTarget);
+    EXPECT_EQ(ruledTargetClickEligibility(spell, ability, state, RuledTargetCandidateKind::Battlefield, 41, kLocalPlayer),
+              RuledTargetClickEligibility::Legal);
+}
+
+TEST(RuledPendingTargetTest, ActivationOwnTargetEligibilityDoesNotUseTheOpponentsGroup)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    RuledSpellTargetData data;
+    data.groups.append(RuledTargetGroupData{});
+    data.groups.append(RuledTargetGroupData{});
+    data.groups[0].validPermanentIds = {40};
+    data.groups[1].validPermanentIds = {41};
+    data.groups[1].groupIndex = 1;
+    data.groups[1].chosenByOpponent = true;
+    data.validPermanentIds = {40, 41};
+    state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(30, 1), data);
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.waitingForTarget = true;
+    ability.permanentOid = 30;
+    ability.abilityIndex = 1;
+    EXPECT_EQ(ruledTargetClickEligibility({}, ability, state, RuledTargetCandidateKind::Battlefield, 40, kLocalPlayer),
+              RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(ruledTargetClickEligibility({}, ability, state, RuledTargetCandidateKind::Battlefield, 41, kLocalPlayer),
+              RuledTargetClickEligibility::Illegal);
+}
+
+TEST(RuledPendingTargetTest, ActivationChoiceUsesOnlyTheOfferedSeatRevisionAndGeneration)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    auto &engine = state.pendingAbilityActivation.emplace();
+    engine.set_transaction_id(91);
+    engine.set_revision(3);
+    engine.set_actor_player_id(kLocalPlayer);
+    engine.set_deciding_player_id(kOpponent);
+    engine.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET);
+    auto *target = engine.add_target_candidates();
+    target->set_object_id(40);
+    target->set_group_index(1);
+    target->set_zone_change_generation(8);
+    state.battlefieldGenerationByOid.insert(40, 19);
+    const auto command = ruledActivationChoice(state, kOpponent, 91, 3, std::nullopt, 40);
+    ASSERT_TRUE(command);
+    ASSERT_TRUE(command->has_submit_ability_activation_choice());
+    EXPECT_EQ(command->submit_ability_activation_choice().target().zone_change_generation(), 8u);
+    EXPECT_EQ(command->submit_ability_activation_choice().target().group_index(), 1u);
+    EXPECT_FALSE(command->has_submit_resolution_choice());
+    EXPECT_FALSE(ruledActivationChoice(state, kLocalPlayer, 91, 3, std::nullopt, 40));
+    EXPECT_FALSE(ruledActivationChoice(state, kOpponent, 90, 3, std::nullopt, 40));
+    EXPECT_FALSE(ruledActivationChoice(state, kOpponent, 91, 2, std::nullopt, 40));
+    EXPECT_FALSE(ruledActivationChoice(state, kOpponent, 91, 3, std::nullopt, 41));
+    EXPECT_FALSE(ruledActivationChoice(state, kOpponent, 91, 3, 1, 40));
+    engine.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_CHOOSE_OPPONENT);
+    engine.set_deciding_player_id(kLocalPlayer);
+    engine.add_valid_opponent_ids(kOpponent);
+    EXPECT_TRUE(ruledActivationChoice(state, kLocalPlayer, 91, 3, kOpponent, std::nullopt));
+    EXPECT_FALSE(ruledActivationChoice(state, kLocalPlayer, 91, 3, 2, std::nullopt));
+    EXPECT_FALSE(ruledActivationChoice(state, kLocalPlayer, 91, 3, std::nullopt, 40));
+}
+
+TEST(RuledPendingTargetTest, ActivationReconnectUsesPublicTargetsAndLockedPayment)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    auto &engine = state.pendingAbilityActivation.emplace();
+    engine.set_transaction_id(91);
+    engine.set_revision(3);
+    engine.set_actor_player_id(kLocalPlayer);
+    engine.set_source_object_id(30);
+    engine.set_source_zone_change_generation(4);
+    engine.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
+    engine.set_locked_total_cost("3");
+    for (int group = 0; group < 2; ++group) {
+        auto *target = engine.add_announced_targets();
+        target->set_object_id(40 + group);
+        target->set_group_index(group);
+        target->set_zone_change_generation(8 + group);
+    }
+    PendingActivatedAbility local;
+    ruledApplyActivationView(local, engine);
+    ASSERT_EQ(local.selectedTargets.size(), 2);
+    EXPECT_EQ(local.selectedTargets.last().ref.group_index(), 1u);
+    EXPECT_EQ(local.selectedTargets.last().zoneChangeGeneration, 9u);
+    EXPECT_EQ(local.remainingCost.value(QChar('X')), 3);
+    EXPECT_TRUE(ruledActivationCanPay(state, kLocalPlayer));
+    EXPECT_FALSE(ruledActivationCanPay(state, kOpponent));
+    local.remainingCost[QChar('X')] = 1;
+    ruledApplyActivationView(local, engine);
+    EXPECT_EQ(local.remainingCost.value(QChar('X')), 1);
+    state.choiceWaitingPlayerId = kOpponent;
+    EXPECT_FALSE(ruledActivationCanPay(state, kLocalPlayer));
+}
+
+TEST(RuledPendingTargetTest, ActivationCancelRaceInitializesPaymentWithoutDroppingTheAckPhase)
+{
+    ruled::v1::PendingAbilityActivation engine;
+    engine.set_transaction_id(91);
+    engine.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET);
+    PendingActivatedAbility local;
+    ruledApplyActivationView(local, engine);
+    local.stage = PendingActivatedAbility::Stage::CancelPending;
+    engine.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
+    engine.set_locked_total_cost("3");
+    ruledApplyActivationView(local, engine);
+    EXPECT_EQ(local.stage, PendingActivatedAbility::Stage::CancelPending);
+    EXPECT_EQ(local.remainingCost.value(QChar('X')), 3);
+    local.stage = PendingActivatedAbility::Stage::Paying;
+    local.remainingCost[QChar('X')] = 1;
+    for (const auto stage : {PendingActivatedAbility::Stage::CommitPending, PendingActivatedAbility::Stage::CancelPending}) {
+        local.stage = stage;
+        ruledApplyActivationView(local, engine);
+        EXPECT_EQ(local.stage, stage);
+        EXPECT_EQ(local.remainingCost.value(QChar('X')), 1);
+    }
+}
+
+TEST_F(RuledClientTest, StagedActivationRetainsPaymentWhileNestedReplacementOwnsInput)
+{
+    auto &engine = state->pendingAbilityActivation.emplace();
+    engine.set_actor_player_id(kLocalPlayer);
+    engine.set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT);
+    state->payment.begin();
+    state->payment.selection.mutable_mana()->set_c(1);
+    RuledClientState::RuledPendingChoice replacement;
+    replacement.kind = RuledClientState::ChoiceKind::ReplacementEffect;
+    state->setPendingChoice(replacement);
+    EXPECT_TRUE(state->payment.active);
+    EXPECT_EQ(state->payment.selection.mana().c(), 1u);
+    EXPECT_FALSE(ruledActivationCanPay(*state, kLocalPlayer));
+    state->clearPendingChoice();
+    EXPECT_TRUE(ruledActivationCanPay(*state, kLocalPlayer));
+    EXPECT_EQ(state->payment.selection.mana().c(), 1u);
 }
 
 TEST_F(RuledClientTest, HandSlotAndPublicZoneMapsAreQueryable)
@@ -7941,6 +8136,49 @@ TEST_F(RuledClientTest, PopupLocalIdsCannotInheritBattlefieldDisplayState)
         otherPopup.setProperty(marker, true);
         EXPECT_EQ(ruledPhysicalDisplayOid(*state, kLocalPlayer, 3, &otherPopup), 0u) << marker;
     }
+}
+
+TEST_F(RuledClientTest, PendingAbilityActivationIsAuthoritativePerBatchState)
+{
+    ruled::v1::RuledEventBatch begun;
+    auto *pending = (*begun.mutable_legal_by_player())[kLocalPlayer].mutable_pending_ability_activation();
+    pending->set_transaction_id(82u);
+    pending->set_revision(3u);
+    pending->set_actor_player_id(kLocalPlayer);
+    pending->set_deciding_player_id(kLocalPlayer + 1);
+    pending->set_stage(ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET);
+    pending->set_source_object_id(700u);
+    pending->add_announced_targets()->set_object_id(701u);
+    apply(begun);
+    ASSERT_TRUE(state->pendingAbilityActivation.has_value());
+    EXPECT_EQ(state->pendingAbilityActivation->transaction_id(), 82u);
+    EXPECT_EQ(state->pendingAbilityActivation->announced_targets(0).object_id(), 701u);
+    ruled::v1::RuledEventBatch previewOnly;
+    previewOnly.add_events()->mutable_attackers_preview();
+    apply(previewOnly);
+    ASSERT_TRUE(state->pendingAbilityActivation.has_value());
+    ruled::v1::RuledEventBatch completed;
+    (*completed.mutable_legal_by_player())[kLocalPlayer];
+    apply(completed);
+    EXPECT_FALSE(state->pendingAbilityActivation.has_value());
+}
+
+TEST(RuledPaymentTest, StagedAbilityCommitPreviewAndPaymentKeepTransactionAndRevision)
+{
+    RuledPayment payment;
+    payment.begin();
+    ruled::v1::RuledCommand commit;
+    commit.mutable_commit_ability_activation()->set_transaction_id(7002u);
+    commit.mutable_commit_ability_activation()->set_expected_revision(4u);
+    const auto request = payment.requestAction(commit);
+    ASSERT_TRUE(request.has_commit_ability_activation());
+    EXPECT_EQ(request.commit_ability_activation().transaction_id(), 7002u);
+    EXPECT_EQ(request.commit_ability_activation().expected_revision(), 4u);
+    EXPECT_TRUE(request.commit_ability_activation().has_payment());
+    EXPECT_FALSE(request.has_activate_ability());
+    payment.writePayment(commit);
+    EXPECT_TRUE(commit.commit_ability_activation().has_payment());
+    EXPECT_EQ(commit.commit_ability_activation().expected_revision(), 4u);
 }
 
 TEST_F(RuledClientTest, LibraryLookChoiceShowsEveryCardImageButOnlyMatchingCardsAreClickable)

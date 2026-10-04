@@ -52,6 +52,8 @@ public:
         ResolutionPayment,
         /// Engine-authored labeled choices rendered as ordinary buttons in this panel.
         ChoiceOptions,
+        /// An engine-owned activation is choosing an opponent/target, waiting, or paying.
+        AbilityAnnouncement,
         /// Engine-authored optional casting-cost choices. These are local transaction staging,
         /// not parked resolution choices, so their buttons route back to PlayerActions.
         CastCostOptions,
@@ -116,6 +118,9 @@ public:
         bool openingCanKeep = false;
         bool openingCanRedraw = false;
         bool resolutionPickConfirmable = false;
+        quint64 activationTransactionId = 0;
+        quint64 activationRevision = 0;
+        bool activationPayment = false;
     };
 
     /// Independent async inputs that all mean "mid-cast / mid-activation" and OR into
@@ -185,6 +190,7 @@ public slots:
     }
 
 signals:
+    void ruledActivationOpponentRequested(int playerId, quint64 transactionId, quint64 revision);
     void passPriorityRequested();
     void confirmAttackersRequested();
     void confirmBlockersRequested();

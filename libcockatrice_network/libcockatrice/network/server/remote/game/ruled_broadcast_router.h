@@ -43,7 +43,7 @@ private:
     std::optional<ruled::v1::ActivePublicRevealSnapshot> activePublicRevealSnapshot;
     // Caster-private engine transaction plus the public views required to rebuild payment after
     // reconnect. The fail-closed redactor removes the transaction for every other participant.
-    ruled::v1::RuledEventBatch pendingSpellCastState;
+    ruled::v1::RuledEventBatch pendingAnnouncementState;
     std::optional<ruled::v1::ZoneViewSync> currentPublicZoneView;
     // Opening legality/progress only; never replay one-shot logs or movement events.
     ruled::v1::RuledEventBatch pendingOpeningState;

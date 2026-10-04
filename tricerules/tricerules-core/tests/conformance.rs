@@ -72,6 +72,7 @@ fn cases() -> Vec<Case> {
 }
 fn settled(e: &GameEngine) -> bool {
     e.state.stack.is_empty()
+        && e.state.pending_ability_activation.is_none()
         && e.state.pending_resolution.is_none()
         && e.state.pending_triggers.is_empty()
         && e.state.pending_trigger_order.is_none()
@@ -211,6 +212,50 @@ fn drain(e: &mut GameEngine, mut batch: RuledEventBatch, budget: usize) -> Resul
                     diagnostic(e, "drain", "pending resolution omitted published offer")
                 })?;
             (choice.deciding_player_id, resolution_answer(choice)?)
+        } else if let Some(pending) = &e.state.pending_ability_activation {
+            let actor = pending.deciding_player_id;
+            let view = e.initial_response_batch().legal_by_player[&actor]
+                .pending_ability_activation
+                .clone()
+                .ok_or("missing staged activation offer")?;
+            let command = match AbilityActivationStage::try_from(view.stage)
+                .map_err(|_| "unknown activation stage")?
+            {
+                AbilityActivationStage::ChooseOpponent => {
+                    Cmd::SubmitAbilityActivationChoice(SubmitAbilityActivationChoice {
+                        transaction_id: view.transaction_id,
+                        expected_revision: view.revision,
+                        opponent_player_id: Some(
+                            *view
+                                .valid_opponent_ids
+                                .first()
+                                .ok_or("no offered opponent")?,
+                        ),
+                        ..Default::default()
+                    })
+                }
+                AbilityActivationStage::OpponentTarget => {
+                    Cmd::SubmitAbilityActivationChoice(SubmitAbilityActivationChoice {
+                        transaction_id: view.transaction_id,
+                        expected_revision: view.revision,
+                        target: Some(
+                            *view
+                                .target_candidates
+                                .first()
+                                .ok_or("no offered opponent target")?,
+                        ),
+                        ..Default::default()
+                    })
+                }
+                AbilityActivationStage::Payment => {
+                    Cmd::CommitAbilityActivation(CommitAbilityActivation {
+                        transaction_id: view.transaction_id,
+                        expected_revision: view.revision,
+                        ..Default::default()
+                    })
+                }
+            };
+            (actor, RuledCommand { cmd: Some(command) })
         } else if !e.state.pending_triggers.is_empty() {
             let choice = batch
                 .events
@@ -267,7 +312,8 @@ fn drain(e: &mut GameEngine, mut batch: RuledEventBatch, budget: usize) -> Resul
         } else {
             (e.state.priority_player_id(), helpers::pass())
         };
-        if matches!(&command.cmd, Some(Cmd::SubmitResolutionChoice(c)) if c.decision == ResolutionChoiceDecision::PayMana as i32)
+        if matches!(&command.cmd, Some(Cmd::CommitAbilityActivation(_)))
+            || matches!(&command.cmd, Some(Cmd::SubmitResolutionChoice(c)) if c.decision == ResolutionChoiceDecision::PayMana as i32)
         {
             offers::pay(e, actor, &mut command)?;
         }
@@ -375,7 +421,7 @@ fn evaluate(case: &Case) -> Result<Outcome, String> {
         };
         if !matches!(
             command.cmd,
-            Some(Cmd::PlayLand(_) | Cmd::ActivateAbility(_))
+            Some(Cmd::PlayLand(_) | Cmd::ActivateAbility(_) | Cmd::BeginAbilityActivation(_))
         ) {
             offers::pay(&e, actor, &mut command)?;
         }
@@ -417,6 +463,23 @@ fn boseiju_battlefield_mana_and_hand_channel_have_complete_fixtures() {
         };
         assert_eq!(
             evaluate(&case).expect("evaluate Boseiju conformance fixture"),
+            Outcome::Exercised,
+            "{}",
+            case.key()
+        );
+    }
+}
+
+#[test]
+fn arena_land_and_opponent_chosen_activation_have_complete_fixtures() {
+    for ability in [None, Some(0)] {
+        let case = Case {
+            card: "arena".into(),
+            face: 0,
+            ability,
+        };
+        assert_eq!(
+            evaluate(&case).unwrap(),
             Outcome::Exercised,
             "{}",
             case.key()

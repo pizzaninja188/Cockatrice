@@ -355,6 +355,7 @@ GamePromptWidget::PromptMode GamePromptWidget::effectiveMode() const
         case PromptMode::CostSelection:
         case PromptMode::ResolutionPayment:
         case PromptMode::ChoiceOptions:
+        case PromptMode::AbilityAnnouncement:
         case PromptMode::CastCostOptions:
         case PromptMode::CastCostObject:
         case PromptMode::ZoneSelection:
@@ -395,8 +396,11 @@ void GamePromptWidget::setRuledPromptState(RuledPromptState newState)
         button->setAccessibleName(option.label);
         button->setObjectName(QStringLiteral("ruledChoiceOptionButton_%1").arg(option.index));
         button->setEnabled(option.enabled);
-        connect(button, &QPushButton::clicked, this, [this, index = option.index] {
-            if (promptState.mode == PromptMode::CastCostOptions) {
+        connect(button, &QPushButton::clicked, this, [this, index = option.index, mode = promptState.mode,
+                transaction = promptState.activationTransactionId, revision = promptState.activationRevision] {
+            if (mode == PromptMode::AbilityAnnouncement) {
+                emit ruledActivationOpponentRequested(index, transaction, revision);
+            } else if (promptState.mode == PromptMode::CastCostOptions) {
                 emit ruledCastCostOptionRequested(index);
             } else {
                 emit ruledChoiceOptionRequested(index);
@@ -467,6 +471,7 @@ void GamePromptWidget::applyPromptStateText()
         case PromptMode::CostSelection:
         case PromptMode::ResolutionPayment:
         case PromptMode::ChoiceOptions:
+        case PromptMode::AbilityAnnouncement:
         case PromptMode::CastCostOptions:
         case PromptMode::CastCostObject:
         case PromptMode::ZoneSelection:
@@ -789,7 +794,7 @@ void GamePromptWidget::updateCombatButtonsVisibility()
     resolutionHandPickConfirmButton->setVisible(mode == PromptMode::ResolutionPick || mode == PromptMode::CostSelection);
     resolutionPaymentDeclineButton->setVisible(mode == PromptMode::ResolutionPayment);
     for (auto *button : choiceOptionButtons) {
-        button->setVisible(mode == PromptMode::ChoiceOptions || mode == PromptMode::CastCostOptions);
+        button->setVisible(mode == PromptMode::ChoiceOptions || mode == PromptMode::CastCostOptions || mode == PromptMode::AbilityAnnouncement);
     }
     updateZoneSelectionControls();
     declineClickChoiceButton->setVisible((mode == PromptMode::ClickChoice || mode == PromptMode::ChoiceOptions ||
@@ -805,7 +810,8 @@ void GamePromptWidget::updateCombatButtonsVisibility()
     // Every take-over mode suppresses the priority / combat / targeting controls.
     if (mode != PromptMode::Normal && mode != PromptMode::Targeting) {
         hideActionAndCombatButtons();
-        cancelTargetingButton->setVisible(mode == PromptMode::CastCostOptions || mode == PromptMode::CastCostObject);
+        cancelTargetingButton->setVisible(mode == PromptMode::CastCostOptions || mode == PromptMode::CastCostObject ||
+                                         (mode == PromptMode::AbilityAnnouncement && promptState.canCancel));
         declineClickChoiceButton->setVisible(
             mode == PromptMode::CastCostObject ||
             ((mode == PromptMode::ClickChoice || mode == PromptMode::ChoiceOptions ||
@@ -813,7 +819,8 @@ void GamePromptWidget::updateCombatButtonsVisibility()
               mode == PromptMode::ZoneSelection) &&
              promptState.canDecline));
         resolutionPaymentDeclineButton->setVisible(mode == PromptMode::ResolutionPayment);
-        undoLandTapButton->setVisible(mode == PromptMode::ResolutionPayment && landTapUndoAvailable);
+        undoLandTapButton->setVisible((mode == PromptMode::ResolutionPayment ||
+                                      (mode == PromptMode::AbilityAnnouncement && promptState.activationPayment)) && landTapUndoAvailable);
         confirmTargetsButton->setText(
             mode == PromptMode::CastCostOptions || mode == PromptMode::CastCostObject ? tr("Confirm Costs")
                                                                                        : tr("Confirm Targets"));

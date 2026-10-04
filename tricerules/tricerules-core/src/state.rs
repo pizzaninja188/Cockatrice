@@ -851,6 +851,8 @@ pub struct PendingTriggerOrder {
 /// [`GameState::blocking_choice`]; each variant names the single command that clears it.
 #[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BlockingChoice {
+    /// CR 602.3: an ability's multi-actor announcement/payment is incomplete.
+    AbilityActivation,
     /// A tier-3 custom resolution is parked mid-resolution (CR 608).
     Resolution,
     /// Simultaneous triggers are staged awaiting their controller's ordering (CR 603.3b).
@@ -1801,6 +1803,9 @@ pub struct StackTarget {
     pub kind: i32,
     /// Generation captured when an object target was chosen. Player targets have no generation.
     pub zone_change_generation: Option<u64>,
+    /// A target announced by a chosen opponent must remain under that player's control.
+    /// Copies preserve this receipt; ordinary controller-chosen targets have none.
+    pub required_controller: Option<PlayerId>,
 }
 
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
@@ -2436,6 +2441,9 @@ pub struct GameState {
     /// Caster-private, serializable portion of the one in-progress spell proposal. The locked
     /// debit plan remains engine-internal; this state is enough for diagnostics and LegalActions.
     pub pending_spell_cast: Option<PendingSpellCastState>,
+    pub next_ability_activation_transaction_id: u64,
+    /// Public procedure plus server-owned recipient offers. LegalActions projects each seat.
+    pub pending_ability_activation: Option<tricerules_proto::ruled::v1::PendingAbilityActivation>,
     /// Consecutive priority passes; reset when a spell/ability is added to stack
     pub passes_since_stack_change: u32,
     /// Combat priority is owed only after losses, departures, SBAs and trigger choices settle.
@@ -2717,6 +2725,9 @@ impl GameState {
     pub fn blocking_choice(&self) -> Option<BlockingChoice> {
         if self.pending_resolution.is_some() {
             return Some(BlockingChoice::Resolution);
+        }
+        if self.pending_ability_activation.is_some() {
+            return Some(BlockingChoice::AbilityActivation);
         }
         if !self.pending_triggers.is_empty() {
             return Some(BlockingChoice::TriggerTarget);

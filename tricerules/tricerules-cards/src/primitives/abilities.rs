@@ -122,6 +122,13 @@ pub enum ActivationTiming {
 }
 
 impl ActivatedAbilityDef {
+    /// CR 602.3: these target groups need the engine's multi-actor announcement procedure.
+    pub fn requires_opponent_target_choice(&self) -> bool {
+        self.targeting
+            .as_ref()
+            .is_some_and(TargetingDef::requires_opponent_choice)
+    }
+
     pub fn fallback_text(&self, face_name: &str) -> String {
         self.fallback_text_with_path(face_name, std::slice::from_ref(&self.ability_id))
     }
@@ -517,7 +524,12 @@ impl ActivatedAbilityDef {
         {
             return Err("attack-recipient effects require an attack trigger".into());
         }
-        TargetingDef::validate_optional(self.targeting.as_ref(), &self.effect)
+        TargetingDef::validate_activation(
+            self.targeting.as_ref(),
+            &self.effect,
+            self.source_zone,
+            &self.costs,
+        )
     }
 }
 

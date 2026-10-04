@@ -19,6 +19,9 @@ pub struct TargetingDef {
 /// requirements of every referenced effect.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TargetGroupDef {
+    /// Arena and Magus of the Arena delegate this group's announcement under CR 602.3.
+    #[serde(default, skip_serializing_if = "TargetChooser::is_controller")]
+    pub chooser: TargetChooser,
     pub min: u32,
     pub max: u32,
     pub prompt: String,
@@ -31,6 +34,19 @@ pub struct TargetGroupDef {
     pub same_graveyard: bool,
     #[serde(default)]
     pub cast_cost_expansion: Option<CastCostTargetExpansion>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum TargetChooser {
+    #[default]
+    Controller,
+    ChosenOpponent,
+}
+
+impl TargetChooser {
+    fn is_controller(&self) -> bool {
+        *self == Self::Controller
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -98,6 +114,7 @@ pub struct TargetBinding<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TargetGroupSchema<'effects, 'targeting> {
+    pub chooser: TargetChooser,
     pub min: u32,
     pub max: u32,
     pub prompt: Cow<'targeting, str>,
@@ -187,6 +204,7 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                     return Err("same_graveyard requires a graveyard-card target group".into());
                 }
                 groups.push(TargetGroupSchema {
+                    chooser: group.chooser,
                     min: group.min,
                     max: group.max,
                     prompt: Cow::Borrowed(group.prompt.as_str()),
@@ -223,6 +241,7 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
                 .collect::<Vec<_>>();
             if !bindings.is_empty() {
                 groups.push(TargetGroupSchema {
+                    chooser: TargetChooser::Controller,
                     min: 1,
                     max: 1,
                     prompt: Cow::Borrowed("Choose a target"),
@@ -421,11 +440,77 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
 }
 
 impl TargetingDef {
+    pub fn requires_opponent_choice(&self) -> bool {
+        self.groups
+            .iter()
+            .any(|group| group.chooser == TargetChooser::ChosenOpponent)
+    }
+
     pub(crate) fn validate_optional(
         targeting: Option<&Self>,
         effects: &[SpellEffectKind],
     ) -> Result<(), String> {
+        if targeting.is_some_and(Self::requires_opponent_choice) {
+            return Err("opponent target choices require a supported activated ability".into());
+        }
         TargetSchema::compile(effects, targeting).map(|_| ())
+    }
+
+    pub(crate) fn validate_activation(
+        targeting: Option<&Self>,
+        effects: &[SpellEffectKind],
+        source_zone: super::AbilitySourceZone,
+        costs: &[super::AbilityCost],
+    ) -> Result<(), String> {
+        let schema = TargetSchema::compile(effects, targeting)?;
+        if !targeting.is_some_and(Self::requires_opponent_choice) {
+            return Ok(());
+        }
+        let source_tap_and_mana = costs.len() == 2
+            && costs.contains(&super::AbilityCost::Tap)
+            && costs.iter().any(|cost| {
+                matches!(cost, super::AbilityCost::Mana(mana)
+                    if !mana.pips.contains(&crate::ManaSymbol::X))
+            });
+        if source_zone != super::AbilitySourceZone::Battlefield || !source_tap_and_mana {
+            return Err(
+                "opponent target choices require battlefield mana and source-tap activation costs"
+                    .into(),
+            );
+        }
+        if schema.groups.len() != 2
+            || schema.groups[0].chooser != TargetChooser::Controller
+            || schema.groups[1].chooser != TargetChooser::ChosenOpponent
+        {
+            return Err(
+                "opponent target choices require controller then chosen-opponent groups".into(),
+            );
+        }
+        for (group, controller) in schema
+            .groups
+            .iter()
+            .zip([TargetController::You, TargetController::Opponent])
+        {
+            if group.min != 1
+                || group.max != 1
+                || group.same_graveyard
+                || !group.bindings.iter().all(|binding| {
+                    matches!(binding.role, TargetRole::Filtered(filter)
+                        if filter.all_terminal_filters_match(|leaf|
+                            leaf.kind == TargetKind::Creature && leaf.controller == controller))
+                })
+            {
+                return Err("opponent target choices require singleton creatures with the declared controller".into());
+            }
+        }
+        if targeting
+            .into_iter()
+            .flat_map(|targeting| &targeting.groups)
+            .any(|group| group.cast_cost_expansion.is_some())
+        {
+            return Err("opponent target choices cannot use spell cast-cost expansion".into());
+        }
+        Ok(())
     }
 }
 
@@ -1340,6 +1425,7 @@ mod tests {
         for (min, max) in [(0, 1), (1, 2)] {
             let targeting = TargetingDef {
                 groups: vec![TargetGroupDef {
+                    chooser: Default::default(),
                     min,
                     max,
                     prompt: "Choose a creature".into(),
@@ -1365,6 +1451,7 @@ mod tests {
         );
         let group = |min, max| TargetingDef {
             groups: vec![TargetGroupDef {
+                chooser: Default::default(),
                 min,
                 max,
                 prompt: "Choose target player".into(),
@@ -1547,6 +1634,7 @@ mod tests {
         let targeting = TargetingDef {
             groups: vec![
                 TargetGroupDef {
+                    chooser: Default::default(),
                     min: 1,
                     max: 1,
                     prompt: "Choose a creature you control".into(),
@@ -1556,6 +1644,7 @@ mod tests {
                     cast_cost_expansion: None,
                 },
                 TargetGroupDef {
+                    chooser: Default::default(),
                     min: 1,
                     max: 1,
                     prompt: "Choose a creature an opponent controls".into(),
@@ -1631,6 +1720,7 @@ mod tests {
         }];
         let same_graveyard = TargetingDef {
             groups: vec![TargetGroupDef {
+                chooser: Default::default(),
                 min: 0,
                 max: 2,
                 prompt: "Choose up to two cards from a single graveyard".into(),

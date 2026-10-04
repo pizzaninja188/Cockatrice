@@ -20,6 +20,31 @@ enum LimitedActivationUse {
     PerObject(PersistentActivationUseKey),
 }
 
+/// Announcement receipts captured before costs can remove sources, targets or grants.
+#[derive(Clone)]
+pub(super) struct AnnouncedAbilityActivation {
+    player: PlayerId,
+    permanent_id: ObjectId,
+    source_owner: PlayerId,
+    source_zone_change: u64,
+    source_face_change: u64,
+    ability_index: usize,
+    card_id: String,
+    face_up_index: usize,
+    ability: ActivatedAbilityDef,
+    ability_text: String,
+    source_token_identity: Option<rv1::TokenIdentity>,
+    card_name: String,
+    primary_presentation: Option<rv1::PresentationRef>,
+    targets: Vec<rv1::TargetRef>,
+    stack_targets: Vec<StackTarget>,
+    reserved_virtual_id: ObjectId,
+    crime_events: Vec<GameEvent>,
+    target_triggers: Vec<super::triggers::CollectedTrigger>,
+    activation_uses: Vec<LimitedActivationUse>,
+    x_value: u32,
+}
+
 fn format_paid_card_costs_log(costs: &[PaidCardCost]) -> String {
     let phrases: Vec<_> = costs.iter().map(PaidCardCost::log_phrase).collect();
     match phrases.as_slice() {
@@ -900,6 +925,11 @@ impl GameEngine {
         // As in `pass_priority`: `dispatch_command`'s blocking gate normally catches these first;
         // this is the local refusal with a message that names casting.
         match self.state.blocking_choice().filter(|_| !special) {
+            Some(BlockingChoice::AbilityActivation) => {
+                return Err(EngineError::Illegal(
+                    "must finish ability activation before casting",
+                ));
+            }
             Some(BlockingChoice::TriggerTarget) => {
                 return Err(EngineError::Illegal(
                     "must choose trigger target before casting",
@@ -1730,8 +1760,6 @@ impl GameEngine {
                 "ability source is not in its authored zone",
             ));
         }
-        let source_is_token = object.is_token();
-        let source_owner = object.owner;
         let source_zone_change = self
             .state
             .zone_change_generation
@@ -1742,7 +1770,6 @@ impl GameEngine {
             return Err(EngineError::Illegal("stale ability source generation"));
         }
 
-        let concealed = source_zone == AbilitySourceZone::Battlefield && object.face_down;
         let (card_id, face_up_index, effective) = match source_zone {
             AbilitySourceZone::Battlefield => {
                 let (card_id, face_index) = self
@@ -1777,7 +1804,11 @@ impl GameEngine {
             }
         };
         let ability = effective.definition.clone();
-        let ability_path = effective.ability_path();
+        if ability.requires_opponent_target_choice() {
+            return Err(EngineError::Illegal(
+                "opponent target choices require staged activation",
+            ));
+        }
         self.validate_activation_mana_choice(
             permanent_id,
             source_zone,
@@ -1793,21 +1824,12 @@ impl GameEngine {
                 "activated abilities of this permanent can't be activated",
             ));
         }
-        // The source can leave the battlefield while its activation costs are committed (Clue and
-        // Lander both sacrifice themselves). Capture the existing public token identity now so a
-        // synthetic stack card can still render the exact token face after payment.
-        let source_token_identity =
-            if source_zone == AbilitySourceZone::Battlefield && source_is_token {
-                self.copiable_values_for(permanent_id)
-                    .map(|values| super::resolution::token_identity(&values))
-            } else {
-                None
-            };
         let casting_mana_payment = self
             .state
             .pending_spell_cast
             .as_ref()
-            .is_some_and(|pending| pending.caster == player);
+            .is_some_and(|pending| pending.caster == player)
+            || self.paying_ability_activation(player);
         if resolving_mana_payment || casting_mana_payment {
             if !ability.is_mana_ability() {
                 return Err(EngineError::Illegal(
@@ -1873,67 +1895,17 @@ impl GameEngine {
             targets,
         )?;
 
-        let trefs: Vec<ObjectId> = targets.iter().map(|t| t.object_id).collect();
-        let stack_targets: Vec<_> = targets
-            .iter()
-            .map(|target| capture_stack_target(self, target))
-            .collect();
-        // Reserve without consuming: a failed payment must not advance the deterministic id
-        // stream, while target-watchers collected before costs still need the eventual ability's
-        // identity. The reservation is provisional: paying a cost can itself stage triggers
-        // (madness, or a discard cost observed by a discard trigger), and those allocations
-        // consume the id stream, so the final identity is allocated only after payment commits.
-        let reserved_virtual_id = self.state.next_object_id;
-        let crime_events: Vec<_> = self.crime_event(player, targets).into_iter().collect();
-        // Snapshot target-watchers before costs: the source itself can be sacrificed while paying
-        // for the activation. Nothing is staged unless payment succeeds and the ability is pushed.
-        let mut target_triggers = self.collect_event_triggers(&[GameEvent::TargetsChosen {
-            controller: player,
-            source: TargetingSourceKind::Ability,
-            stack_object: StackObjectRef {
-                object_id: reserved_virtual_id,
-                zone_change_generation: None,
-            },
-            targets: stack_targets.clone(),
-        }]);
-
-        let source_face_change = self
-            .state
-            .face_change_generation
-            .get(&permanent_id)
-            .copied()
-            .unwrap_or(0);
+        let announcement = self.capture_ability_announcement(
+            player,
+            permanent_id,
+            &effective,
+            targets,
+            x_value,
+            (card_id.clone(), face_up_index),
+        )?;
         let targeting_cost =
             self.targeting_cost_increase(player, TargetingCostAction::ActivatedAbilities, targets);
         let mana_reduction = self.activated_mana_reduction(player, permanent_id, &ability)?;
-        let activation_uses =
-            self.limited_activation_uses(permanent_id, &effective.occurrence, &ability);
-        let card_name = if concealed {
-            "Face-down permanent".to_string()
-        } else {
-            source_token_identity
-                .as_ref()
-                .map(|identity| identity.name.clone())
-                .filter(|name| !name.is_empty())
-                .or_else(|| {
-                    self.registry
-                        .get(&card_id)
-                        .map(|definition| definition.name.clone())
-                })
-                .unwrap_or_else(|| card_id.clone())
-        };
-        let ability_text = ability.fallback_text_with_path(&card_name, &ability_path);
-        let primary_presentation = (!concealed)
-            .then_some(effective.presentation_definition.as_ref())
-            .flatten()
-            .map(|definition| {
-                ability_presentation(
-                    self.registry,
-                    definition,
-                    &ability.presentation,
-                    ability_text.clone(),
-                )
-            });
         let prepared_payment = self.prepare_ability_costs(
             player,
             idx,
@@ -1953,6 +1925,162 @@ impl GameEngine {
             command.payment.as_ref(),
         )?;
         let payment = self.commit_cost_transaction(cost_plan)?;
+        Ok(self.finish_announced_ability(announcement, payment))
+    }
+
+    pub(super) fn capture_ability_announcement(
+        &self,
+        player: PlayerId,
+        permanent_id: ObjectId,
+        effective: &EffectiveActivatedAbility,
+        targets: &[rv1::TargetRef],
+        x_value: u32,
+        source_identity: (String, usize),
+    ) -> Result<AnnouncedAbilityActivation, EngineError> {
+        let object = self
+            .state
+            .objects
+            .get(&permanent_id)
+            .ok_or(EngineError::Illegal("activation source missing"))?;
+        let concealed = object.zone == Zone::Battlefield && object.face_down;
+        let (card_id, face_up_index) = source_identity;
+        let source_token_identity =
+            if !concealed && object.zone == Zone::Battlefield && object.is_token() {
+                self.copiable_values_for(permanent_id)
+                    .map(|values| super::resolution::token_identity(&values))
+            } else {
+                None
+            };
+        let card_name = if concealed {
+            "Face-down permanent".to_string()
+        } else {
+            source_token_identity
+                .as_ref()
+                .map(|identity| identity.name.clone())
+                .filter(|name| !name.is_empty())
+                .or_else(|| {
+                    self.registry
+                        .get(&card_id)
+                        .map(|definition| definition.name.clone())
+                })
+                .unwrap_or_else(|| card_id.clone())
+        };
+        let ability = effective.definition.clone();
+        let ability_text = ability.fallback_text_with_path(&card_name, &effective.ability_path());
+        let primary_presentation = (!concealed)
+            .then_some(effective.presentation_definition.as_ref())
+            .flatten()
+            .map(|definition| {
+                ability_presentation(
+                    self.registry,
+                    definition,
+                    &ability.presentation,
+                    ability_text.clone(),
+                )
+            });
+        let mut snapshot = AnnouncedAbilityActivation {
+            player,
+            permanent_id,
+            source_owner: object.owner,
+            source_zone_change: self.payment_object_ref(permanent_id).zone_change_generation,
+            source_face_change: self
+                .state
+                .face_change_generation
+                .get(&permanent_id)
+                .copied()
+                .unwrap_or(0),
+            ability_index: effective.slot as usize,
+            card_id,
+            face_up_index,
+            ability_text,
+            source_token_identity,
+            card_name,
+            primary_presentation,
+            targets: Vec::new(),
+            stack_targets: Vec::new(),
+            reserved_virtual_id: self.state.next_object_id,
+            crime_events: Vec::new(),
+            target_triggers: Vec::new(),
+            activation_uses: self.limited_activation_uses(
+                permanent_id,
+                &effective.occurrence,
+                &ability,
+            ),
+            ability,
+            x_value,
+        };
+        self.append_ability_announcement_targets(&mut snapshot, targets, None);
+        Ok(snapshot)
+    }
+
+    pub(super) fn append_ability_announcement_targets(
+        &self,
+        snapshot: &mut AnnouncedAbilityActivation,
+        targets: &[rv1::TargetRef],
+        required_controller: Option<PlayerId>,
+    ) {
+        if targets.is_empty() {
+            return;
+        }
+        let captured: Vec<_> = targets
+            .iter()
+            .map(|target| {
+                let mut receipt = capture_stack_target(self, target);
+                receipt.required_controller = required_controller;
+                receipt
+            })
+            .collect();
+        snapshot
+            .target_triggers
+            .extend(self.collect_event_triggers(&[GameEvent::TargetsChosen {
+                controller: snapshot.player,
+                source: TargetingSourceKind::Ability,
+                stack_object: StackObjectRef {
+                    object_id: snapshot.reserved_virtual_id,
+                    zone_change_generation: None,
+                },
+                targets: captured.clone(),
+            }]));
+        snapshot
+            .crime_events
+            .extend(self.crime_event(snapshot.player, targets));
+        snapshot.targets.extend_from_slice(targets);
+        snapshot.stack_targets.extend(captured);
+    }
+
+    /// Infallible publication after all guards and atomic cost commitment have succeeded.
+    pub(super) fn finish_announced_ability(
+        &mut self,
+        announcement: AnnouncedAbilityActivation,
+        payment: super::payment::transaction::CostPaymentReceipt,
+    ) -> RuledEventBatch {
+        let AnnouncedAbilityActivation {
+            player,
+            permanent_id,
+            source_owner,
+            source_zone_change,
+            source_face_change,
+            ability_index,
+            card_id,
+            face_up_index,
+            ability,
+            ability_text,
+            source_token_identity,
+            card_name,
+            primary_presentation,
+            targets,
+            stack_targets,
+            reserved_virtual_id,
+            crime_events,
+            mut target_triggers,
+            activation_uses,
+            x_value,
+        } = announcement;
+        let idx = self
+            .state
+            .player_idx(player)
+            .expect("validated activation actor");
+        let trefs: Vec<_> = targets.iter().map(|target| target.object_id).collect();
         self.state.undoable_mana_abilities.clear();
         self.record_limited_activations(activation_uses);
 
@@ -2052,7 +2180,7 @@ impl GameEngine {
             ev: Some(rv1::ruled_event::Ev::StackPushed(rv1::StackPushed {
                 object_id: virtual_id,
                 description: card_name,
-                targets: targets.to_vec(),
+                targets,
                 ability_annotation: ability_text,
                 card_id: String::new(),
                 card_display_name: String::new(),
@@ -2063,7 +2191,7 @@ impl GameEngine {
                 chosen_mode_indices: vec![],
                 chosen_mode_labels: vec![],
                 chosen_cast_cost_labels: vec![],
-                source_token_identity: (!concealed).then_some(source_token_identity).flatten(),
+                source_token_identity,
                 primary_presentation,
                 chosen_mode_presentations: vec![],
                 chosen_cast_cost_presentations: vec![],
@@ -2081,7 +2209,7 @@ impl GameEngine {
         self.stage_triggers(target_triggers);
         batch.events.push(ev_priority_changed(self));
         fill_legal(&mut batch, self);
-        Ok(batch)
+        batch
     }
 
     /// Whether `ability` on `permanent_id` could be activated right now, so the client can grey it
@@ -2605,7 +2733,8 @@ impl GameEngine {
             .state
             .pending_spell_cast
             .as_ref()
-            .is_some_and(|pending| pending.caster == player);
+            .is_some_and(|pending| pending.caster == player)
+            || self.paying_ability_activation(player);
         if self.state.priority_player_id() != player
             && payment_undo_start.is_none()
             && !spell_payment

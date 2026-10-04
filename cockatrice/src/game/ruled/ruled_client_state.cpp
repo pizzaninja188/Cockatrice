@@ -1,6 +1,7 @@
 #include "ruled_client_state.h"
 
 #include "ruled_client_host.h"
+#include "ruled_activation.h"
 
 #include <QCoreApplication>
 #include <QPointer>
@@ -403,7 +404,8 @@ void RuledClientState::teardownPendingChoice()
 
 void RuledClientState::setPendingChoice(RuledPendingChoice choice)
 {
-    if (!(isResolutionPaymentActive() && choice.kind == ChoiceKind::ResolutionPayment &&
+    if (!(pendingAbilityActivation && pendingAbilityActivation->stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_PAYMENT) &&
+        !(isResolutionPaymentActive() && choice.kind == ChoiceKind::ResolutionPayment &&
           choice.paymentSourceOid == pendingChoice->paymentSourceOid))
         payment.clear();
     teardownPendingChoice();
@@ -432,6 +434,7 @@ void RuledClientState::revokeLocalActionAuthority()
     // Submitting a choice already empties the holder. Its outstanding ACK must still expire.
     ++pendingChoiceRevision;
     pendingSpellCast.reset();
+    pendingAbilityActivation.reset();
     payment.takeAllOptimisticManaCounterIds();
     payment.clear();
     emit localActionAuthorityRevoked();
@@ -728,6 +731,13 @@ void RuledClientState::declinePendingClickChoice()
     command.mutable_choose_trigger_target()->set_decline(true);
     clearPendingChoiceOfKind(kind);
     host->sendRuledCommand(command);
+}
+
+void RuledClientState::submitAbilityActivationOpponent(int playerId, quint64 transaction, quint64 revision)
+{
+    const auto command = ruledActivationChoice(*this, host->localPlayerId(), transaction, revision, playerId, std::nullopt);
+    if (command)
+        host->sendRuledCommandExpectingAck(*command, [](bool) {});
 }
 
 void RuledClientState::submitPendingChoiceOption(int optionIndex)
@@ -2148,6 +2158,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
         zoneLandSourceByOid.clear();
         exilePlayPermissionGroups.clear();
         pendingSpellCast.reset();
+        pendingAbilityActivation.reset();
         validTargetsByHandSlot.clear();
         validTargetsByZoneObject.clear();
         openingUiKind = RuledOpeningUiKind::None;

@@ -522,6 +522,11 @@ impl GameEngine {
         // `dispatch_command`'s blocking gate already rejects these before they reach here; kept as
         // the local, better-worded refusal for the internal callers that bypass dispatch.
         match self.state.blocking_choice() {
+            Some(BlockingChoice::AbilityActivation) => {
+                return Err(EngineError::Illegal(
+                    "must finish ability activation before passing priority",
+                ));
+            }
             Some(BlockingChoice::TriggerTarget) => {
                 return Err(EngineError::Illegal(
                     "must choose trigger target before passing priority",

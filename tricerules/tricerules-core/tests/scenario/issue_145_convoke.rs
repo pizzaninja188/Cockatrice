@@ -70,6 +70,7 @@ fn preview(engine: &GameEngine, cast: &rv1::CastSpell) -> rv1::PaymentPreview {
     engine.preview_payment(
         0,
         &rv1::PreviewPayment {
+            commit_ability_activation: None,
             activate_ability: None,
             resolution_choice: None,
             transaction_id: 13,

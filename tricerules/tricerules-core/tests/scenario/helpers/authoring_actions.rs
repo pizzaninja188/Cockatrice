@@ -90,6 +90,39 @@ pub(crate) fn activation(
             ability.activatable,
         )
     };
+    if let Some(offer) = legal.valid_targets_by_ability.get(&key) {
+        if offer.groups.iter().any(|group| group.chosen_by_opponent) {
+            let group = offer
+                .groups
+                .first()
+                .ok_or("missing controller target group")?;
+            if group.chosen_by_opponent || group.min != 1 || group.max != 1 || !activatable {
+                return Err("unsupported staged controller target group".into());
+            }
+            let &target = group
+                .valid_permanent_ids
+                .first()
+                .ok_or("no controller creature target")?;
+            return Ok(RuledCommand {
+                cmd: Some(Cmd::BeginAbilityActivation(BeginAbilityActivation {
+                    source_object_id: object,
+                    expected_zone_change_generation: generation,
+                    ability_index: index,
+                    own_target: Some(AbilityActivationTarget {
+                        object_id: target,
+                        zone_change_generation: e
+                            .state
+                            .zone_change_generation
+                            .get(&target)
+                            .copied()
+                            .unwrap_or(0),
+                        group_index: group.group_index,
+                    }),
+                    ..Default::default()
+                })),
+            });
+        }
+    }
     let mut command = RuledCommand {
         cmd: Some(Cmd::ActivateAbility(ActivateAbility {
             source_object_id: object,
@@ -291,6 +324,7 @@ pub(crate) fn pay(e: &GameEngine, actor: i32, command: &mut RuledCommand) -> Res
         match command.cmd.as_ref().unwrap() {
             Cmd::CastSpell(c) => q.cast_spell = Some(c.clone()),
             Cmd::ActivateAbility(c) => q.activate_ability = Some(c.clone()),
+            Cmd::CommitAbilityActivation(c) => q.commit_ability_activation = Some(c.clone()),
             Cmd::SubmitResolutionChoice(c) => q.resolution_choice = Some(c.clone()),
             _ => {}
         }
@@ -335,6 +369,7 @@ pub(crate) fn pay(e: &GameEngine, actor: i32, command: &mut RuledCommand) -> Res
     match command.cmd.as_mut().unwrap() {
         Cmd::CastSpell(c) => c.payment = Some(selection),
         Cmd::ActivateAbility(c) => c.payment = Some(selection),
+        Cmd::CommitAbilityActivation(c) => c.payment = Some(selection),
         Cmd::SubmitResolutionChoice(c) => c.payment = Some(selection),
         _ => return Err("unsupported payment action".into()),
     }

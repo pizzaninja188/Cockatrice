@@ -555,6 +555,7 @@ fn match_spell_controlled_creature_plus_one_then_power_damage(
             targeting: TargetingDef {
                 groups: vec![
                     TargetGroupDef {
+                        chooser: Default::default(),
                         min: 1,
                         max: 1,
                         prompt: "Choose target creature you control".into(),
@@ -564,6 +565,7 @@ fn match_spell_controlled_creature_plus_one_then_power_damage(
                         cast_cost_expansion: None,
                     },
                     TargetGroupDef {
+                        chooser: Default::default(),
                         min: u32::from(!optional_target),
                         max: 1,
                         prompt: if optional_target {
@@ -672,6 +674,7 @@ fn match_spell_return_nonland_then_surveil_one(
                 ],
                 targeting: TargetingDef {
                     groups: vec![TargetGroupDef {
+                        chooser: Default::default(),
                         min: 1,
                         max: 1,
                         prompt: "Choose target nonland permanent".into(),
@@ -711,6 +714,7 @@ fn match_spell_controlled_creature_power_damage(
                 targeting: TargetingDef {
                     groups: vec![
                         TargetGroupDef {
+                            chooser: Default::default(),
                             min: 1,
                             max: 1,
                             prompt: "Choose target creature you control".into(),
@@ -720,6 +724,7 @@ fn match_spell_controlled_creature_power_damage(
                             cast_cost_expansion: None,
                         },
                         TargetGroupDef {
+                            chooser: Default::default(),
                             min: 1,
                             max: 1,
                             prompt: "Choose target creature an opponent controls".into(),
@@ -777,6 +782,7 @@ fn match_spell_controlled_creature_power_damage_to_noncontroller_permanent(
                 targeting: TargetingDef {
                     groups: vec![
                         TargetGroupDef {
+                            chooser: Default::default(),
                             min: 1,
                             max: 1,
                             prompt: "Choose target creature you control".into(),
@@ -786,6 +792,7 @@ fn match_spell_controlled_creature_power_damage_to_noncontroller_permanent(
                             cast_cost_expansion: None,
                         },
                         TargetGroupDef {
+                            chooser: Default::default(),
                             min: 1,
                             max: 1,
                             prompt: "Choose target creature or planeswalker you don't control"
@@ -2397,6 +2404,7 @@ fn modal_targeting_groups(groups: Vec<(&str, Vec<u32>)>) -> Option<TargetingDef>
         groups: groups
             .into_iter()
             .map(|(prompt, effect_indices)| TargetGroupDef {
+                chooser: Default::default(),
                 min: 1,
                 max: 1,
                 prompt: prompt.into(),
@@ -2421,6 +2429,7 @@ fn modal_targeting_range(
 ) -> Option<TargetingDef> {
     Some(TargetingDef {
         groups: vec![TargetGroupDef {
+            chooser: Default::default(),
             min,
             max,
             prompt: prompt.into(),
@@ -3583,6 +3592,7 @@ fn match_modal_exile_graveyard_card_up_to_one_draw_one(
             ],
             Some(TargetingDef {
                 groups: vec![TargetGroupDef {
+                    chooser: Default::default(),
                     min: 0,
                     max: 1,
                     prompt: "Choose up to one target card from a graveyard".into(),
@@ -4760,6 +4770,7 @@ fn etb_instruction(text: &str) -> Option<&str> {
 fn exact_targeting(min: u32, max: u32, prompt: &str, effect_indices: Vec<u32>) -> TargetingDef {
     TargetingDef {
         groups: vec![TargetGroupDef {
+            chooser: Default::default(),
             min,
             max,
             prompt: prompt.into(),
@@ -5320,6 +5331,7 @@ fn match_land_etb_damage_target_opponent_one(
             };
             ability.targeting = Some(TargetingDef {
                 groups: vec![TargetGroupDef {
+                    chooser: Default::default(),
                     min: 1,
                     max: 1,
                     prompt: "Choose target opponent".into(),
@@ -6033,6 +6045,7 @@ fn match_creature_pay_mana_tap_tap_creature(
         }],
         Some(TargetingDef {
             groups: vec![TargetGroupDef {
+                chooser: Default::default(),
                 min: 1,
                 max: 1,
                 prompt: variant.prompt.into(),
@@ -6137,6 +6150,7 @@ fn match_etb_exile_up_to_two_cards_from_single_graveyard(
         };
         ability.targeting = Some(TargetingDef {
             groups: vec![TargetGroupDef {
+                chooser: Default::default(),
                 min: 0,
                 max: 2,
                 prompt: "Choose up to two target cards from a single graveyard".into(),
@@ -6574,6 +6588,7 @@ fn match_beginning_of_combat_exile_graveyard_card(
             };
             ability.targeting = Some(TargetingDef {
                 groups: vec![TargetGroupDef {
+                    chooser: Default::default(),
                     min: 0,
                     max: 1,
                     prompt: "Choose up to one target card from a graveyard".into(),
@@ -8532,6 +8547,7 @@ fn match_enchantment_etb_optional_linked_exile_gain_two(
             };
             ability.targeting = Some(TargetingDef {
                 groups: vec![TargetGroupDef {
+                    chooser: Default::default(),
                     min: 0,
                     max: 1,
                     prompt: "Choose up to one target nonland permanent an opponent controls".into(),
@@ -8570,6 +8586,7 @@ fn match_enchantment_etb_linked_exile(
             };
             ability.targeting = Some(TargetingDef {
                 groups: vec![TargetGroupDef {
+                    chooser: Default::default(),
                     min: 1,
                     max: 1,
                     prompt: "Choose target nonland permanent an opponent controls".into(),
@@ -8698,6 +8715,7 @@ fn match_etb_put_plus_one_counter_on_target_creature(
             };
             ability.targeting = Some(TargetingDef {
                 groups: vec![TargetGroupDef {
+                    chooser: Default::default(),
                     min: 1,
                     max: 1,
                     prompt: "Choose target creature".into(),
@@ -8848,6 +8866,7 @@ fn match_etb_return_opponent_creature(
             };
             ability.targeting = Some(TargetingDef {
                 groups: vec![TargetGroupDef {
+                    chooser: Default::default(),
                     min: 1,
                     max: 1,
                     prompt: "Choose target creature an opponent controls".into(),
@@ -8898,6 +8917,7 @@ fn match_etb_return_other_controlled_permanent_up_to_one(
             };
             ability.targeting = Some(TargetingDef {
                 groups: vec![TargetGroupDef {
+                    chooser: Default::default(),
                     min: 0,
                     max: 1,
                     prompt: "Choose up to one other target permanent you control".into(),
@@ -9715,6 +9735,7 @@ fn five_color_mana_effect() -> SpellEffectKind {
 fn single_targeting(prompt: &str) -> Option<TargetingDef> {
     Some(TargetingDef {
         groups: vec![TargetGroupDef {
+            chooser: Default::default(),
             min: 1,
             max: 1,
             prompt: prompt.into(),
@@ -14269,6 +14290,7 @@ fn match_triggered_etb_pump_affine_battlefield_and_graveyard_counts(
         ability.targeting = Some(TargetingDef {
             groups: vec![
                 TargetGroupDef {
+                    chooser: Default::default(),
                     min: 1,
                     max: 1,
                     prompt: "Choose target creature you control".into(),
@@ -14278,6 +14300,7 @@ fn match_triggered_etb_pump_affine_battlefield_and_graveyard_counts(
                     cast_cost_expansion: None,
                 },
                 TargetGroupDef {
+                    chooser: Default::default(),
                     min: 0,
                     max: 1,
                     prompt: "Choose up to one target creature an opponent controls".into(),
@@ -14611,6 +14634,7 @@ fn match_spell_violent_urge_aggregate(
                 ],
                 targeting: TargetingDef {
                     groups: vec![TargetGroupDef {
+                        chooser: Default::default(),
                         min: 1,
                         max: 1,
                         prompt: "Choose target creature".into(),
@@ -14670,6 +14694,7 @@ fn match_spell_beastie_beatdown_aggregate(
                 targeting: TargetingDef {
                     groups: vec![
                         TargetGroupDef {
+                            chooser: Default::default(),
                             min: 1,
                             max: 1,
                             prompt: "Choose target creature you control".into(),
@@ -14679,6 +14704,7 @@ fn match_spell_beastie_beatdown_aggregate(
                             cast_cost_expansion: None,
                         },
                         TargetGroupDef {
+                            chooser: Default::default(),
                             min: 1,
                             max: 1,
                             prompt: "Choose target creature an opponent controls".into(),
@@ -28474,6 +28500,7 @@ mod tests {
                     effects: vec![effect],
                     targeting: Some(TargetingDef {
                         groups: vec![TargetGroupDef {
+                            chooser: Default::default(),
                             min: 1,
                             max: 1,
                             prompt: "Choose target creature".into(),
@@ -46510,6 +46537,7 @@ mod tests {
                 ],
                 targeting: Some(TargetingDef {
                     groups: vec![TargetGroupDef {
+                        chooser: Default::default(),
                         min: 0,
                         max: 1,
                         prompt: "Choose up to one target card from a graveyard".into(),

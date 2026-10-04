@@ -17,6 +17,7 @@
 #include "../game/prompt/game_prompt_widget.h"
 #include "../game/replay.h"
 #include "../game/ruled/ruled_actions.h"
+#include "../game/ruled/ruled_activation_prompt.h"
 #include "../game/ruled/ruled_auto_pass_policy.h"
 #include "../game/ruled/ruled_card_display_identity.h"
 #include "../game/ruled/ruled_client_state.h"
@@ -477,6 +478,8 @@ void TabGame::connectToGameEventHandler()
         });
         connect(gamePromptWidget, &GamePromptWidget::ruledChoiceOptionRequested, game->getGameEventHandler()->ruled(),
                 &RuledClientState::submitPendingChoiceOption);
+        connect(gamePromptWidget, &GamePromptWidget::ruledActivationOpponentRequested, game->getGameEventHandler()->ruled(),
+                &RuledClientState::submitAbilityActivationOpponent);
         connect(game->getGameEventHandler()->ruled(), &RuledClientState::resolutionPaymentSubmissionFinished, this,
                 [this](bool accepted) {
                     const int localId = game->getPlayerManager()->getLocalPlayerId();
@@ -820,6 +823,12 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.selected = h->resolutionHandPickSelected();
         state.resolutionPickConfirmable = h->resolutionHandPickConfirmable();
         state.text = h->resolutionHandPickPromptText();
+    } else if (h->pendingAbilityActivation && localActions && localActions->isAwaitingRuledAbilityCostSelection()) {
+        state.mode = PromptMode::ClickChoice;
+        state.text = localActions->pendingRuledAbilityCostPromptText();
+    } else if (const auto activation = ruledActivationPrompt(*h, localPlayerId,
+                     localActions ? localActions->pendingRuledAbilityPromptText() : QString{})) {
+        state = *activation;
     } else if (opening == OpeningKind::ChooseFirst) {
         state.mode = PromptMode::OpeningChooseFirst;
         state.openingPickSeatIds = h->getOpeningPickSeatIds();

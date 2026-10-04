@@ -182,6 +182,7 @@ RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTarget
         }
         parsed.promptText = QString::fromStdString(group.prompt_text());
         parsed.sameGraveyard = group.same_graveyard();
+        parsed.chosenByOpponent = group.chosen_by_opponent();
         for (const quint32 other : group.distinct_from_group_indices()) {
             parsed.distinctFromGroupIndices.append(static_cast<int>(other));
         }
@@ -2031,6 +2032,10 @@ void RuledEventDispatcher::applyManaPoolUpdated(const ruled::v1::ManaPoolUpdated
 
 void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &actions, BatchContext &ctx)
 {
+    if (actions.has_pending_ability_activation())
+        state->pendingAbilityActivation = actions.pending_ability_activation();
+    else
+        state->pendingAbilityActivation.reset();
     if (actions.has_pending_spell_cast()) {
         state->pendingSpellCast = actions.pending_spell_cast();
         if (actions.pending_spell_cast().resolution_time_offer())

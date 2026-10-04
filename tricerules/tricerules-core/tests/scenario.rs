@@ -1052,3 +1052,6 @@ mod deck_coverage_war_room;
 
 #[path = "scenario/into_the_wilds.rs"]
 mod into_the_wilds;
+
+#[path = "scenario/deck_coverage_arena.rs"]
+mod deck_coverage_arena;

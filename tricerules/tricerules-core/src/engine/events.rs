@@ -10,6 +10,8 @@ impl GameEngine {
         self.state.pending_replacement_event = None;
         self.state.combat_damage_priority_pending = false;
         self.state.pending_spell_cast = None;
+        self.state.pending_ability_activation = None;
+        self.pending_ability_activation_internal = None;
         self.state.pending_trigger_order = None;
         self.state.pending_triggers.clear();
         self.state.staged_trigger_groups.clear();

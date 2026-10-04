@@ -172,6 +172,9 @@ impl<'a> ConditionContext<'a> {
 
 use card_predicates::zone_card_matches_filter;
 
+mod activation;
+#[cfg(test)]
+mod activation_tests;
 mod blight;
 mod card_predicates;
 mod casting;
@@ -1224,6 +1227,7 @@ pub struct EngineDeck {
 pub struct GameEngine {
     pub state: GameState,
     pending_spell_cast_internal: Option<casting::PendingSpellCastInternal>,
+    pending_ability_activation_internal: Option<activation::PendingAbilityActivationInternal>,
     /// Shared process-wide registry (`CardRegistry::global()`); read-only.
     registry: &'static CardRegistry,
     /// Debug-only: whether this session accepts `DevCommand` (see `engine::dev`). Off unless the
@@ -1804,6 +1808,8 @@ impl GameEngine {
             command_index: 0,
             next_spell_cast_transaction_id: 1,
             pending_spell_cast: None,
+            next_ability_activation_transaction_id: 1,
+            pending_ability_activation: None,
             passes_since_stack_change: 0,
             combat_damage_priority_pending: false,
             lands_played_this_turn: 0,
@@ -1854,6 +1860,7 @@ impl GameEngine {
         let mut eng = GameEngine {
             state,
             pending_spell_cast_internal: None,
+            pending_ability_activation_internal: None,
             registry,
             dev_commands_enabled: false,
             private_zone_cache: HashMap::new(),
@@ -2704,6 +2711,33 @@ impl GameEngine {
                 ));
             }
         }
+        if let Some(pending) = self.state.pending_ability_activation.as_ref() {
+            let allowed = matches!(
+                cmd.cmd.as_ref(),
+                Some(Cmd::SubmitAbilityActivationChoice(_))
+            ) && pending.stage() != rv1::AbilityActivationStage::Payment
+                && pending.deciding_player_id == player
+                || matches!(cmd.cmd.as_ref(), Some(Cmd::CancelAbilityActivation(_)))
+                    && pending.actor_player_id == player
+                || matches!(cmd.cmd.as_ref(), Some(Cmd::CommitAbilityActivation(_)))
+                    && self.paying_ability_activation(player)
+                || matches!(
+                    cmd.cmd.as_ref(),
+                    Some(Cmd::ActivateAbility(_) | Cmd::UndoManaAbility(_))
+                ) && self.paying_ability_activation(player)
+                || matches!(cmd.cmd.as_ref(), Some(Cmd::SubmitResolutionChoice(_)))
+                    && mana_ability_damage_choice_is_pending
+                    && self
+                        .state
+                        .pending_resolution
+                        .as_ref()
+                        .is_some_and(|choice| choice.deciding_player == player);
+            if !allowed {
+                return Err(EngineError::Illegal(
+                    "finish the pending ability activation before acting",
+                ));
+            }
+        }
         // An outstanding player decision blocks every action but the one that answers it (or
         // conceding, CR 104.3a). All three are decisions the rules require *before* any player
         // receives priority, so letting anything else through would act against a wrong or
@@ -2711,6 +2745,20 @@ impl GameEngine {
         // still off the stack.
         if let Some(blocking) = self.state.blocking_choice() {
             let answered = match blocking {
+                BlockingChoice::AbilityActivation => {
+                    matches!(
+                        cmd.cmd.as_ref(),
+                        Some(
+                            Cmd::SubmitAbilityActivationChoice(_)
+                                | Cmd::CancelAbilityActivation(_)
+                                | Cmd::CommitAbilityActivation(_)
+                        )
+                    ) || self.paying_ability_activation(player)
+                        && matches!(
+                            cmd.cmd.as_ref(),
+                            Some(Cmd::ActivateAbility(_) | Cmd::UndoManaAbility(_))
+                        )
+                }
                 BlockingChoice::Resolution => {
                     matches!(cmd.cmd.as_ref(), Some(Cmd::SubmitResolutionChoice(_)))
                         || self.state.pending_spell_cast.is_some()
@@ -2737,6 +2785,9 @@ impl GameEngine {
             };
             if !answered {
                 return Err(EngineError::Illegal(match blocking {
+                    BlockingChoice::AbilityActivation => {
+                        "finish the pending ability activation before acting"
+                    }
                     BlockingChoice::Resolution => "resolve the pending choice before acting",
                     BlockingChoice::TriggerOrder => {
                         "order your simultaneous triggers before acting"
@@ -2760,8 +2811,13 @@ impl GameEngine {
             cmd.cmd.as_ref(),
             Some(Cmd::CommitSpellCast(_) | Cmd::CancelSpellCast(_))
         ) && self.state.pending_spell_cast.is_some();
+        let preserves_ability_payment_undo = matches!(
+            cmd.cmd.as_ref(),
+            Some(Cmd::CommitAbilityActivation(_) | Cmd::CancelAbilityActivation(_))
+        ) && self.state.pending_ability_activation.is_some();
         if !preserves_payment_undo
             && !preserves_spell_payment_undo
+            && !preserves_ability_payment_undo
             && !matches!(
                 cmd.cmd.as_ref(),
                 Some(Cmd::ActivateAbility(_)) | Some(Cmd::UndoManaAbility(_))
@@ -2834,6 +2890,18 @@ impl GameEngine {
             Some(Cmd::BeginSpellCast(command)) => self.begin_spell_cast(player, command),
             Some(Cmd::CommitSpellCast(command)) => self.commit_spell_cast(player, command),
             Some(Cmd::CancelSpellCast(command)) => self.cancel_spell_cast(player, command),
+            Some(Cmd::BeginAbilityActivation(command)) => {
+                self.begin_ability_activation(player, command)
+            }
+            Some(Cmd::SubmitAbilityActivationChoice(command)) => {
+                self.submit_ability_activation_choice(player, command)
+            }
+            Some(Cmd::CancelAbilityActivation(command)) => {
+                self.cancel_ability_activation(player, command)
+            }
+            Some(Cmd::CommitAbilityActivation(command)) => {
+                self.commit_ability_activation(player, command)
+            }
             Some(Cmd::ActivateAbility(aa)) => self.activate_ability(player, aa),
             Some(Cmd::ExecutePermanentAction(command)) => {
                 self.execute_permanent_action(player, command)
@@ -2874,6 +2942,7 @@ impl GameEngine {
             return Ok(self.finish_terminal_batch(b));
         }
         self.drain_immediate_observer_actions(None, &mut b.events)?;
+        self.reconcile_pending_ability_activation(&mut b.events);
         if self.state.is_terminal() {
             return Ok(self.finish_terminal_batch(b));
         }
@@ -2883,7 +2952,10 @@ impl GameEngine {
         // cards and the choice prompt. Spell payment is another incomplete rules transaction: a
         // mana ability can lower life to 0 during payment, but CR 601.2h must finish before SBAs
         // eliminate that caster or change priority.
-        if self.state.pending_resolution.is_none() && self.state.pending_spell_cast.is_none() {
+        if self.state.pending_resolution.is_none()
+            && self.state.pending_spell_cast.is_none()
+            && self.state.pending_ability_activation.is_none()
+        {
             self.commit_pending_library_losses();
             self.sweep_life();
             if self.state.is_terminal() {

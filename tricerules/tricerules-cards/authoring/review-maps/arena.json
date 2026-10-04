@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "oracle_id": "12326d23-1fb5-4084-a23a-d6e2c90ea36c",
+  "complete_definition_review_confirmed": true,
+  "tokens": [],
+  "spans": [
+    {
+      "face_id": "arena",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "covers": "Exact colorless Land identity, no mana ability, {3} plus Tap costs, staged controller/opponent target groups and one complete Oracle line presentation",
+      "test": "deck_coverage_arena::arena_registers_its_complete_opponent_chosen_fight_ability"
+    },
+    {
+      "covers": "announces both targets before payment and fights tapped creatures",
+      "test": "scenario deck_coverage_arena::arena_announces_both_targets_before_payment_and_fights_tapped_creatures"
+    },
+    {
+      "covers": "fight uses current power and normal lifelink deathtouch",
+      "test": "scenario deck_coverage_arena::arena_fight_uses_current_power_and_normal_lifelink_deathtouch"
+    },
+    {
+      "covers": "partial illegality taps the remaining target without fighting and all illegal fizzles",
+      "test": "scenario deck_coverage_arena::arena_partial_illegality_taps_the_remaining_target_without_fighting_and_all_illegal_fizzles"
+    },
+    {
+      "covers": "rejected payment and cancel do not pay costs or lose the target receipts",
+      "test": "scenario deck_coverage_arena::arena_rejected_payment_and_cancel_do_not_pay_costs_or_lose_the_target_receipts"
+    },
+    {
+      "covers": "paid announcement and resolution replay serialized commands identically",
+      "test": "scenario deck_coverage_arena::arena_paid_announcement_and_resolution_replay_serialized_commands_identically"
+    }
+  ]
+}

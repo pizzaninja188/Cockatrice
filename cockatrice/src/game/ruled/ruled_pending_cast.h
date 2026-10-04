@@ -161,6 +161,12 @@ struct RuledPendingCastCostSelection
 
 struct PendingActivatedAbility
 {
+    enum class Stage { Announcing, BeginPending, Waiting, Paying, CommitPending, CancelPending };
+    Stage stage = Stage::Announcing;
+    quint64 engineTransactionId = 0;
+    quint64 engineRevision = 0;
+    bool chosenOpponentTargets = false;
+    bool enginePaymentInitialized = false;
     bool valid = false;
     bool permanentAction = false;
     ruled::v1::PermanentActionKind permanentActionKind = ruled::v1::PERMANENT_ACTION_KIND_UNSPECIFIED;
@@ -177,7 +183,13 @@ struct PendingActivatedAbility
     QString cardName;
     bool needsTarget = false;
     bool waitingForTarget = false;
-    quint32 selectedTargetOid = 0;
+    struct Target
+    {
+        ruled::v1::TargetRef ref;
+        quint64 zoneChangeGeneration = 0;
+    };
+    QVector<Target> selectedTargets;
+    int activeTargetGroupPosition = 0;
     bool waitingForCost = false;
     QVector<RuledCostChoice> costChoices;
     int nextCostChoice = 0;
@@ -349,6 +361,17 @@ template <typename PendingPayment>
 [[nodiscard]] inline bool ruledPendingAbilitySourceStillCurrent(const RuledClientState &state,
                                                                  const PendingActivatedAbility &pending)
 {
+    // The engine owns an accepted announcement even when its live ability/grant is no longer
+    // published. Begin also survives the short gap before its authoritative reply arrives.
+    if (pending.stage == PendingActivatedAbility::Stage::BeginPending)
+        return true;
+    if (pending.engineTransactionId != 0) {
+        return state.pendingAbilityActivation &&
+               state.pendingAbilityActivation->transaction_id() == pending.engineTransactionId &&
+               state.pendingAbilityActivation->source_object_id() == pending.permanentOid &&
+               state.pendingAbilityActivation->source_zone_change_generation() == pending.expectedZoneChangeGeneration &&
+               state.pendingAbilityActivation->ability_index() == static_cast<quint32>(pending.abilityIndex);
+    }
     if (pending.permanentAction) {
         return state
             .permanentActionFor(pending.permanentOid, pending.expectedZoneChangeGeneration,
@@ -768,8 +791,8 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
 {
     const RuledSpellTargetData data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
     const RuledTargetGroupData group =
-        data.groups.isEmpty() ? static_cast<const RuledTargetGroupData &>(data) : data.groups.first();
-    return formatRuledTargetPrompt(ability.abilityText, group, 0, data.groups.size());
+        data.groups.isEmpty() ? static_cast<const RuledTargetGroupData &>(data) : data.groups.value(ability.activeTargetGroupPosition);
+    return formatRuledTargetPrompt(ability.abilityText, group, ability.activeTargetGroupPosition, data.groups.size());
 }
 
 [[nodiscard]] inline int ruledTargetSelectionDisplayMaximum(const RuledTargetGroupData &group)
@@ -838,9 +861,21 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
                    ? RuledTargetClickEligibility::Legal
                    : RuledTargetClickEligibility::Illegal;
     }
+    if (state.pendingAbilityActivation && !state.pendingChoice && !state.isWaitingForChoice()) {
+        const auto &pending = *state.pendingAbilityActivation;
+        if (pending.stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET &&
+            pending.deciding_player_id() == localPlayerId) {
+            const bool legal = kind == RuledTargetCandidateKind::Battlefield &&
+                std::any_of(pending.target_candidates().begin(), pending.target_candidates().end(),
+                            [oid](const auto &target) { return target.object_id() == oid; });
+            return legal ? RuledTargetClickEligibility::Legal : RuledTargetClickEligibility::Illegal;
+        }
+    }
     if (ability.valid && ability.waitingForTarget) {
         const auto data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
-        return ruledTargetDataContains(data, kind, oid, localPlayerId) ? RuledTargetClickEligibility::Legal
+        const auto group = data.groups.isEmpty() ? static_cast<const RuledTargetGroupData &>(data)
+                                                : data.groups.value(ability.activeTargetGroupPosition);
+        return !group.chosenByOpponent && ruledTargetDataContains(group, kind, oid, localPlayerId) ? RuledTargetClickEligibility::Legal
                                                                        : RuledTargetClickEligibility::Illegal;
     }
     if (spell.valid && spell.waitingForTarget) {
@@ -974,11 +1009,23 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
             }
         }
     }
-    if (ability.valid && ability.selectedTargetOid != 0) {
+    if (ability.valid && ability.engineTransactionId == 0 &&
+        ability.stage == PendingActivatedAbility::Stage::Announcing && !ability.selectedTargets.isEmpty()) {
         const auto data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
-        if (!ruledTargetDataContainsOid(data, ability.selectedTargetOid, localPlayerId)) {
-            ability.selectedTargetOid = 0;
-            changed = true;
+        for (int index = ability.selectedTargets.size() - 1; index >= 0; --index) {
+            const auto &target = ability.selectedTargets.at(index);
+            const auto group = std::find_if(data.groups.cbegin(), data.groups.cend(), [&target](const auto &entry) {
+                return entry.groupIndex == static_cast<int>(target.ref.group_index());
+            });
+            const auto &candidates = group == data.groups.cend() ? static_cast<const RuledTargetGroupData &>(data) : *group;
+            if (!ruledTargetDataContainsOid(candidates, target.ref.object_id(), localPlayerId)) {
+                const int position = group == data.groups.cend() ? 0 : static_cast<int>(std::distance(data.groups.cbegin(), group));
+                ability.selectedTargets.resize(index);
+                ability.activeTargetGroupPosition = position;
+                ability.waitingForTarget = true;
+                ability.waitingForMana = false;
+                changed = true;
+            }
         }
     }
     return changed;
@@ -1003,6 +1050,7 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
         return RuledPendingPaymentAction::CastSpell;
     }
     if (ability.valid && !ability.waitingForTarget && !ability.waitingForCost &&
+        (!ability.chosenOpponentTargets || ability.stage == PendingActivatedAbility::Stage::Paying) &&
         costIsPaid(ability.remainingCost, ability.flexPips)) {
         return RuledPendingPaymentAction::ActivateAbility;
     }

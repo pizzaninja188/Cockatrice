@@ -381,6 +381,8 @@ bool RuledPendingCast::reconcileSpellCosts(const RuledClientState &state, int lo
 bool RuledPendingCast::reconcileAbilityCosts(const RuledClientState &state, int localPlayerId)
 {
     if (ability.valid) {
+        if (ability.stage == PendingActivatedAbility::Stage::BeginPending || ability.engineTransactionId != 0)
+            return ruledPendingAbilitySourceStillCurrent(state, ability);
         const bool sourceStillCurrent = ruledPendingAbilitySourceStillCurrent(state, ability);
         const auto latest = ability.permanentAction
                                 ? QVector<RuledCostChoice>{}

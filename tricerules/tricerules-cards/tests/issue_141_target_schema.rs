@@ -18,6 +18,7 @@ fn token_copy_requires_one_permanent_source() {
     };
     let targeting = TargetingDef {
         groups: vec![TargetGroupDef {
+            chooser: Default::default(),
             min: 1,
             max: 2,
             prompt: "Sources".into(),

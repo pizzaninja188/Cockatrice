@@ -116,6 +116,7 @@ QJsonObject RuledClientState::diagnosticSnapshot() const
     FIELD(restrictedManaByPlayer);
 #undef FIELD
     result.insert("pendingSpellCast", value(pendingSpellCast));
+    result.insert("pendingAbilityActivation", value(pendingAbilityActivation));
     result.insert("lastEnginePhaseId", QString::fromStdString(ruled::v1::PhaseId_Name(lastEnginePhaseId)));
     const char *combat[] = {
         "None", "DeclareAttackers", "DeclareBlockers", "AssignCombatDamage", "FirstStrikeDamage", "CombatDamage"};
@@ -541,7 +542,18 @@ QJsonValue value(const PendingActivatedAbility &v)
     result.insert("cardName", value(v.cardName));
     result.insert("needsTarget", value(v.needsTarget));
     result.insert("waitingForTarget", value(v.waitingForTarget));
-    result.insert("selectedTargetOid", value(v.selectedTargetOid));
+    QJsonArray targets;
+    for (const auto &target : v.selectedTargets) {
+        QJsonObject entry;
+        entry.insert("ref", value(target.ref));
+        entry.insert("generation", value(target.zoneChangeGeneration));
+        targets.append(entry);
+    }
+    result.insert("selectedTargets", targets);
+    result.insert("stage", static_cast<int>(v.stage));
+    result.insert("engineTransactionId", value(v.engineTransactionId));
+    result.insert("engineRevision", value(v.engineRevision));
+    result.insert("enginePaymentInitialized", value(v.enginePaymentInitialized));
     result.insert("waitingForCost", value(v.waitingForCost));
     result.insert("costChoices", value(v.costChoices));
     result.insert("nextCostChoice", value(v.nextCostChoice));

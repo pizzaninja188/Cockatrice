@@ -29,6 +29,53 @@ protected:
     }
 };
 
+TEST_F(GamePromptWidgetTest, AbilityAnnouncementUsesTypedOpponentButtonsAndActorCancel)
+{
+    widget->setLocalPlayerHasPriority(true);
+    widget->setSpellCastPending(true);
+    GamePromptWidget::RuledPromptState prompt;
+    prompt.mode = GamePromptWidget::PromptMode::AbilityAnnouncement;
+    prompt.text = "Choose an opponent for Arena.";
+    prompt.canCancel = true;
+    prompt.activationTransactionId = 91;
+    prompt.activationRevision = 3;
+    prompt.choiceOptions = {{2, "Alice", true}, {7, "Bob", true}};
+    widget->setRuledPromptState(prompt);
+    EXPECT_EQ(widget->effectiveMode(), GamePromptWidget::PromptMode::AbilityAnnouncement);
+    EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+    EXPECT_FALSE(btn("cancelTargetingButton")->isHidden());
+    ASSERT_NE(btn("ruledChoiceOptionButton_7"), nullptr);
+    EXPECT_FALSE(btn("ruledChoiceOptionButton_7")->isHidden());
+    QSignalSpy typed(widget.get(), &GamePromptWidget::ruledActivationOpponentRequested);
+    QSignalSpy resolution(widget.get(), &GamePromptWidget::ruledChoiceOptionRequested);
+    btn("ruledChoiceOptionButton_7")->click();
+    ASSERT_EQ(typed.count(), 1);
+    EXPECT_EQ(typed.at(0).at(0).toInt(), 7);
+    EXPECT_EQ(typed.at(0).at(1).toULongLong(), 91u);
+    EXPECT_EQ(typed.at(0).at(2).toULongLong(), 3u);
+    EXPECT_EQ(resolution.count(), 0);
+    EXPECT_EQ(label("promptLabel")->text(), prompt.text);
+}
+
+TEST_F(GamePromptWidgetTest, AbilityAnnouncementWaitingOpponentHasNoActorControls)
+{
+    widget->setLocalPlayerHasPriority(true);
+    widget->setLandTapUndoAvailable(true);
+    GamePromptWidget::RuledPromptState prompt;
+    prompt.mode = GamePromptWidget::PromptMode::AbilityAnnouncement;
+    prompt.text = "Choose a creature you control for Arena.";
+    widget->setRuledPromptState(prompt);
+    EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+    EXPECT_TRUE(btn("cancelTargetingButton")->isHidden());
+    EXPECT_TRUE(btn("undoLandTapButton")->isHidden());
+    EXPECT_TRUE(btn("confirmTargetsButton")->isHidden());
+    prompt.canCancel = true;
+    prompt.activationPayment = true;
+    widget->setRuledPromptState(prompt);
+    EXPECT_FALSE(btn("cancelTargetingButton")->isHidden());
+    EXPECT_FALSE(btn("undoLandTapButton")->isHidden());
+}
+
 // --- Pass priority ---
 
 TEST_F(GamePromptWidgetTest, PassPriorityButtonEnabledWhenSet)

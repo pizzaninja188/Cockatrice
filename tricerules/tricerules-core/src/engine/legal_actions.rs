@@ -31,7 +31,8 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             .state
             .pending_spell_cast
             .as_ref()
-            .is_some_and(|pending| pending.caster == p.id);
+            .is_some_and(|pending| pending.caster == p.id)
+            || eng.paying_ability_activation(p.id);
         let mut labels = legal_labels(eng, p.id);
         let mut hand_actions = legal_hand_actions(eng, p.id);
         let mut zone_cast_actions = legal_zone_cast_actions(eng, p.id);
@@ -329,7 +330,8 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             (Vec::new(), Vec::new())
         };
 
-        if eng.state.pending_spell_cast.is_some() {
+        if eng.state.pending_spell_cast.is_some() || eng.state.pending_ability_activation.is_some()
+        {
             labels.clear();
             hand_actions.clear();
             zone_cast_actions.clear();
@@ -407,6 +409,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
         batch.legal_by_player.insert(
             p.id,
             LegalActions {
+                pending_ability_activation: eng.pending_ability_activation_for(p.id),
                 opening: opening_actions(eng, p.id),
                 labels,
                 valid_targets_by_hand_slot,

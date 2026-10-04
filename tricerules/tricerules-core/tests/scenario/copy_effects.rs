@@ -225,6 +225,7 @@ fn token_copy_inline_ability_preserves_explicit_target_groups() {
     face.activated_abilities[0].targeting = Some(TargetingDef {
         groups: (0..2)
             .map(|index| TargetGroupDef {
+                chooser: Default::default(),
                 min: 1,
                 max: 1,
                 prompt: "Choose a damage recipient".into(),

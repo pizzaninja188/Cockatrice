@@ -807,6 +807,10 @@ impl GameEngine {
         let controller = top.controller;
         let legal = |requirements: &[TargetRole<'_>], target: &StackTarget| {
             stack_target_identity_is_current(self, target)
+                && target.required_controller.is_none_or(|player| {
+                    self.characteristics(target.object_id)
+                        .is_some_and(|value| value.controller == player)
+                })
                 && requirements.iter().all(|&role| {
                     target_role_legal_at_resolution(
                         self,
@@ -4535,6 +4539,7 @@ mod attached_subject_tests {
         let mut top = triggered_item(original, 0);
         top.targets.push(StackTarget {
             object_id: original,
+            required_controller: None,
             group_index: 0,
             damage_amount: 0,
             kind: 0,
@@ -5393,6 +5398,7 @@ mod attached_subject_tests {
             );
             item.targets = vec![StackTarget {
                 object_id: target_id,
+                required_controller: None,
                 group_index: 0,
                 damage_amount: 0,
                 kind: 0,

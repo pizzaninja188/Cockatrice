@@ -106,6 +106,7 @@ pub(super) fn capture_stack_target(engine: &GameEngine, target: &rv1::TargetRef)
     };
     StackTarget {
         object_id: target.object_id,
+        required_controller: None,
         group_index: target.group_index,
         damage_amount: target.damage_amount,
         kind: target.kind,
@@ -2272,6 +2273,8 @@ fn compute_targets_with_context(
                 }
             }
             rv1::LegalTargetGroup {
+                chosen_by_opponent: group.chooser
+                    == tricerules_cards::primitives::TargetChooser::ChosenOpponent,
                 group_index: group_index as u32,
                 prompt_text: group.prompt.to_string(),
                 min: group.min,
@@ -3183,6 +3186,7 @@ mod tests {
         let targeting = TargetingDef {
             groups: vec![
                 TargetGroupDef {
+                    chooser: Default::default(),
                     min: 1,
                     max: 1,
                     prompt: "Choose any player".into(),
@@ -3192,6 +3196,7 @@ mod tests {
                     cast_cost_expansion: None,
                 },
                 TargetGroupDef {
+                    chooser: Default::default(),
                     min: 1,
                     max: 1,
                     prompt: "Choose a different opponent".into(),
