@@ -2374,7 +2374,7 @@ impl TurnHistory {
     }
 }
 
-#[derive(serde::Serialize, Debug)]
+#[derive(serde::Serialize, Clone, Debug)]
 pub struct GameState {
     pub seed: u64,
     pub players: Vec<PlayerState>,

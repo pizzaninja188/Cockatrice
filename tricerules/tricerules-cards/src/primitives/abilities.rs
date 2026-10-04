@@ -1957,6 +1957,9 @@ pub enum DrawReplacementCondition {
 /// do not use the stack, unlike triggered and activated abilities.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StaticAbilityDef {
+    /// Alhammarret's Archive, Rhox Faithmender and Boon Reflection replace their controller's
+    /// individual incoming life-gain events with twice that amount (CR 119 / 614.5).
+    DoubleControllerLifeGain,
     /// Thought Reflection and Teferi's Ageless Insight replace individual draw events.
     DoubleControllerDraws { condition: DrawReplacementCondition },
     /// Laboratory Maniac and Jace, Wielder of Mysteries replace an empty-library draw.

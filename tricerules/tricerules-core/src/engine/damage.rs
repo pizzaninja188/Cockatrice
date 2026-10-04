@@ -440,7 +440,7 @@ impl GameEngine {
         &mut self,
         damage: DamageSpec,
         events: &mut Vec<rv1::RuledEvent>,
-    ) {
+    ) -> Result<(), EngineError> {
         let continuation = DamageBatchContinuation::ManaAbility {
             actor: damage.event.source.controller,
             source_object_id: damage.event.source.object_id,
@@ -459,7 +459,7 @@ impl GameEngine {
         };
         match self.advance_damage_batch(pending, events) {
             DamageBatchProgress::Complete(completed) => {
-                self.commit_completed_damage_batch(&completed, events);
+                self.commit_completed_damage_batch(&completed, events)?;
             }
             DamageBatchProgress::NeedsChoice {
                 batch,
@@ -495,6 +495,7 @@ impl GameEngine {
                 self.park_damage_prevention_choice(continuation, batch, raw_candidates, events);
             }
         }
+        Ok(())
     }
 
     fn pending_prevention_candidates(
@@ -1154,7 +1155,7 @@ impl GameEngine {
         }
         let completed = self.process_prepared_combat_damage_batch(damage, events);
         if let Some(completed) = completed {
-            self.commit_completed_damage_batch(&completed, events);
+            self.commit_completed_damage_batch(&completed, events)?;
         }
         Ok(true)
     }
@@ -1351,7 +1352,7 @@ impl GameEngine {
                 }
             }
             DamageBatchProgress::Complete(completed) => {
-                self.commit_completed_damage_batch(&completed, events);
+                self.commit_completed_damage_batch(&completed, events)?;
                 match completion {
                     DamageBatchContinuation::Combat => {
                         self.state.combat_damage_priority_pending = true
@@ -1462,7 +1463,7 @@ impl GameEngine {
                 return Ok(finish_with_events(self, events));
             }
         };
-        self.commit_completed_damage_batch(&completed, &mut events);
+        self.commit_completed_damage_batch(&completed, &mut events)?;
         match completion {
             DamageBatchContinuation::Combat => {
                 self.state.combat_damage_priority_pending = true;
@@ -1493,21 +1494,22 @@ impl GameEngine {
         result: DamageResult,
         source_has_deathtouch: bool,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> u32 {
+    ) -> Result<u32, EngineError> {
         match event.recipient {
             DamageRecipient::Player(player) => {
                 let Some(index) = self.state.player_idx(player) else {
-                    return 0;
+                    return Ok(0);
                 };
                 if self.state.players[index].has_lost {
-                    return 0;
+                    return Ok(0);
                 }
-                super::history::commit_life_change(&mut self.state, index, -(result.dealt as i32));
+                let delta = super::life_numeric::loss_delta(result.dealt)?;
+                super::history::commit_life_change_checked(&mut self.state, index, delta)?;
                 events.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
                         player_id: player,
                         new_total: self.state.players[index].life,
-                        delta: -(result.dealt as i32),
+                        delta,
                     })),
                 });
                 if result.dealt > 0 {
@@ -1516,12 +1518,12 @@ impl GameEngine {
                         event.source.label, result.dealt
                     )));
                 }
-                result.dealt
+                Ok(result.dealt)
             }
             DamageRecipient::Permanent(permanent) => {
                 let label = object_display_name(&self.state, self.registry, permanent);
                 let Some(characteristics) = self.characteristics(permanent) else {
-                    return 0;
+                    return Ok(0);
                 };
                 let is_creature = characteristics.is_creature();
                 let is_planeswalker = characteristics.has_type("Planeswalker");
@@ -1532,12 +1534,12 @@ impl GameEngine {
                     .get(&permanent)
                     .is_some_and(|object| object.counter_count(CounterKind::Defense) > 0);
                 let Some(object) = self.state.objects.get_mut(&permanent) else {
-                    return 0;
+                    return Ok(0);
                 };
                 if object.zone != Zone::Battlefield
                     || !(is_creature || is_planeswalker || is_battle)
                 {
-                    return 0;
+                    return Ok(0);
                 }
                 if is_creature {
                     if !event.source.wither {
@@ -1577,7 +1579,7 @@ impl GameEngine {
                 if defeated_siege {
                     self.stage_siege_defeat_trigger(permanent);
                 }
-                result.dealt
+                Ok(result.dealt)
             }
         }
     }
@@ -1586,7 +1588,7 @@ impl GameEngine {
         &mut self,
         completed: &[CompletedDamage],
         events: &mut Vec<rv1::RuledEvent>,
-    ) {
+    ) -> Result<(), EngineError> {
         let mut lifelink_by_source: BTreeMap<(ObjectId, PlayerId), u32> = BTreeMap::new();
         let mut trigger_events = Vec::new();
         for damage in completed {
@@ -1595,17 +1597,20 @@ impl GameEngine {
                 damage.result,
                 damage.spec.source_has_deathtouch,
                 events,
-            );
+            )?;
             if dealt == 0 {
                 continue;
             }
             if damage.spec.source_has_lifelink {
-                *lifelink_by_source
+                let total = lifelink_by_source
                     .entry((
                         damage.spec.event.source.object_id,
                         damage.spec.event.source.controller,
                     ))
-                    .or_insert(0) += dealt;
+                    .or_insert(0);
+                *total = total
+                    .checked_add(dealt)
+                    .ok_or(EngineError::LifeNumericRange("lifelink source sum"))?;
             }
             let mut event = damage.spec.event.clone();
             event.amount = dealt;
@@ -1614,11 +1619,12 @@ impl GameEngine {
         for ((_, controller), dealt) in lifelink_by_source {
             if let Some(event) = super::resolution::life::apply_life_gain_without_triggers(
                 self, events, controller, dealt, "lifelink",
-            ) {
+            )? {
                 trigger_events.push(event);
             }
         }
         self.fire_triggers(&trigger_events);
+        Ok(())
     }
 
     pub(crate) fn add_damage_prevention(
@@ -2387,7 +2393,9 @@ mod tests {
             )
             .expect("unprevented damage completes immediately");
         assert_eq!(completed[0].result.dealt, 1);
-        engine.commit_completed_damage_batch(&completed, &mut Vec::new());
+        engine
+            .commit_completed_damage_batch(&completed, &mut Vec::new())
+            .unwrap();
         assert_eq!(
             engine.state.turn_history.current.dealt_damage_objects,
             vec![(source, generation)]
@@ -2424,7 +2432,9 @@ mod tests {
             )
             .expect("fully prevented damage completes immediately");
         assert_eq!(prevented[0].result.dealt, 0);
-        engine.commit_completed_damage_batch(&prevented, &mut Vec::new());
+        engine
+            .commit_completed_damage_batch(&prevented, &mut Vec::new())
+            .unwrap();
         assert_eq!(
             engine.state.turn_history.current.dealt_damage_objects,
             vec![(source, generation)],

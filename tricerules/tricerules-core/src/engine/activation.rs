@@ -4,6 +4,7 @@ use super::payment::PreparedPaymentCosts;
 use super::targeting::{compute_ability_targets, TargetSourceIdentity};
 use super::*;
 
+#[derive(Clone)]
 pub(super) struct PendingAbilityActivationInternal {
     effective: EffectiveActivatedAbility,
     prepared_costs: Option<PreparedPaymentCosts>,

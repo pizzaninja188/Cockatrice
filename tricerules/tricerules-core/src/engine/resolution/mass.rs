@@ -463,7 +463,9 @@ pub(super) fn damage_all(
     let Some(completed) = engine.process_or_park_damage_batch(cx.top, damage, events) else {
         return Ok(EffectOutcome::Suspended);
     };
-    engine.commit_completed_damage_batch(&completed, events);
+    engine
+        .commit_completed_damage_batch(&completed, events)
+        .unwrap();
 
     Ok(EffectOutcome::Continue)
 }

@@ -205,6 +205,7 @@ mod history;
 #[cfg(test)]
 mod issue_169_taps;
 mod legal_actions;
+mod life_numeric;
 mod mass_sacrifice;
 #[cfg(test)]
 mod multikicker_tests;
@@ -978,6 +979,8 @@ pub enum EngineError {
     Illegal(&'static str),
     #[error("missing card data {0}")]
     MissingCard(String),
+    #[error("life numeric range exceeded: {0}")]
+    LifeNumericRange(&'static str),
 }
 
 /// Internal game events emitted at state-change sites to drive the unified trigger-collection pass
@@ -2337,6 +2340,9 @@ impl GameEngine {
         }
         // `set_tapped` appends to this while the command runs; anything left over from an earlier
         // command (or from a rejected one, which never drains) is stale by definition.
+        // An earlier instruction can install a replacement before the gain, so capture even
+        // when no life doubler is currently present. Restore only numeric failures below.
+        let life_checkpoint = self.life_numeric_checkpoint();
         self.state.untapped_this_command.clear();
         // Canonical settlement may discard every intermediate ZoneView and publish one final
         // replacement. Preserve the cache that describes what was actually published before this
@@ -2350,10 +2356,19 @@ impl GameEngine {
             )
         });
         let mut result = self.dispatch_command(player, cmd);
+        if matches!(result, Err(EngineError::LifeNumericRange(_))) {
+            self.restore_life_numeric_checkpoint(life_checkpoint);
+            return result;
+        }
         if let (Ok(batch), Some(policies), Some(cache_before)) =
             (result.as_mut(), auto_pass_policies, zone_view_cache_before)
         {
-            self.settle_automatic_priority(policies, batch, cache_before)?;
+            if let Err(error) = self.settle_automatic_priority(policies, batch, cache_before) {
+                if matches!(error, EngineError::LifeNumericRange(_)) {
+                    self.restore_life_numeric_checkpoint(life_checkpoint);
+                }
+                return Err(error);
+            }
         }
         // Replay determinism: `command_index` seeds shuffles (mulligan/search) and stamps
         // continuous-effect timestamps (CR 613.7). Only a command that is actually applied may

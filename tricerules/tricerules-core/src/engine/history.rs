@@ -162,6 +162,41 @@ pub(super) fn commit_life_change(state: &mut GameState, player_idx: usize, delta
     *total = total.saturating_add(u64::from(delta.unsigned_abs()));
 }
 
+/// Fallible life-gain/damage boundary. Preflight both counters before either mutation; command
+/// rejection restores earlier instructions through the life-numeric checkpoint.
+pub(super) fn commit_life_change_checked(
+    state: &mut GameState,
+    player_idx: usize,
+    delta: i32,
+) -> Result<(), EngineError> {
+    if delta == 0 {
+        return Ok(());
+    }
+    let player = &state.players[player_idx];
+    let new_total = player
+        .life
+        .checked_add(delta)
+        .ok_or(EngineError::LifeNumericRange("life total"))?;
+    let player_id = player.id;
+    let record = state.turn_history.current.player(player_id);
+    let prior = if delta > 0 {
+        record.life_gained
+    } else {
+        record.life_lost
+    };
+    let history = prior
+        .checked_add(u64::from(delta.unsigned_abs()))
+        .ok_or(EngineError::LifeNumericRange("life history"))?;
+    state.players[player_idx].life = new_total;
+    let record = state.turn_history.current.player_mut(player_id);
+    if delta > 0 {
+        record.life_gained = history;
+    } else {
+        record.life_lost = history;
+    }
+    Ok(())
+}
+
 pub(super) fn clamp_public_count(count: usize) -> u32 {
     u32::try_from(count).unwrap_or(u32::MAX)
 }

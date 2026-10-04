@@ -1,0 +1,22 @@
+// Exact Oracle d5c4d36c-54b3-4149-906b-a57a670260fc; printing/rulings checked 2026-10-04.
+// https://api.scryfall.com/cards/4f4187f1-05bd-4db6-a2e7-d677eff588ee
+// https://api.scryfall.com/cards/4f4187f1-05bd-4db6-a2e7-d677eff588ee/rulings
+// CR 119, 121, 614.5, 616 and 702.15 govern incoming gain and individual draw replacement.
+(
+  id: "alhammarrets_archive",
+  name: "Alhammarret's Archive",
+  face_id: "alhammarrets_archive",
+  mana_cost: "{5}",
+  supertypes: ["Legendary"],
+  types: ["Artifact"],
+  static_abilities: [
+    (
+      ability_id: "static_01", presentation: OracleLines([1]),
+      definition: DoubleControllerLifeGain,
+    ),
+    (
+      ability_id: "static_02", presentation: OracleLines([2]),
+      definition: DoubleControllerDraws(condition: ExceptFirstSuccessfulDrawInOwnDrawStep),
+    ),
+  ],
+)

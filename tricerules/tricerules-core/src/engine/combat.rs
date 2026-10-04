@@ -1575,12 +1575,16 @@ impl GameEngine {
                     let p = match recipient {
                         DamageRecipient::Player(player) => {
                             if let Some(index) = self.state.player_idx(player) {
-                                super::history::commit_life_change(
+                                let delta = super::life_numeric::loss_delta(result.dealt)?;
+                                super::history::commit_life_change_checked(
                                     &mut self.state,
                                     index,
-                                    -(result.dealt as i32),
-                                );
-                                *life_lost.entry(player).or_default() += result.dealt as i32;
+                                    delta,
+                                )?;
+                                let total = life_lost.entry(player).or_default();
+                                *total = total
+                                    .checked_add(delta)
+                                    .ok_or(EngineError::LifeNumericRange("combat life loss sum"))?;
                                 result.dealt
                             } else {
                                 0
@@ -1591,7 +1595,7 @@ impl GameEngine {
                             result,
                             att_has_deathtouch,
                             events,
-                        ),
+                        )?,
                     };
                     if p > 0 {
                         let mut dealt_event = damage_event;
@@ -1645,7 +1649,10 @@ impl GameEngine {
                         ));
                     }
                     if let Some(af) = self.state.objects.get_mut(&att) {
-                        af.damage += dmg_to_att;
+                        af.damage = af
+                            .damage
+                            .checked_add(dmg_to_att)
+                            .ok_or(EngineError::LifeNumericRange("combat damage sum"))?;
                         // CR 702.2b / CR 704.5h: any damage from a deathtouch source is lethal.
                         if blk_has_deathtouch && dmg_to_att > 0 {
                             af.deathtouch_damage = true;
@@ -1682,7 +1689,10 @@ impl GameEngine {
                         ));
                     }
                     if let Some(bf) = self.state.objects.get_mut(&blk) {
-                        bf.damage += dmg_to_blk;
+                        bf.damage = bf
+                            .damage
+                            .checked_add(dmg_to_blk)
+                            .ok_or(EngineError::LifeNumericRange("combat damage sum"))?;
                         // CR 702.2b: any damage from attacker with deathtouch is lethal.
                         if att_has_deathtouch && dmg_to_blk > 0 {
                             bf.deathtouch_damage = true;
@@ -1720,7 +1730,7 @@ impl GameEngine {
                 // Damage is dealt simultaneously, but prevention and lifelink are applied per
                 // source.  Tracking each blocker separately is important when a prevention shield
                 // prevents only part of the combined damage (CR 615.1, 702.15b).
-                let mut total_blocker_damage = 0;
+                let mut total_blocker_damage: u32 = 0;
                 let mut any_blocker_deathtouch_hit = false;
                 let mut blocker_damage_dealt = Vec::new();
                 for (
@@ -1750,7 +1760,9 @@ impl GameEngine {
                         return Ok(());
                     };
                     let dealt = result.dealt;
-                    total_blocker_damage += dealt;
+                    total_blocker_damage = total_blocker_damage
+                        .checked_add(dealt)
+                        .ok_or(EngineError::LifeNumericRange("combat damage sum"))?;
                     if dealt > 0 {
                         damage_dealt_events.push(DamageEvent::combat(
                             *blocker_id,
@@ -1766,7 +1778,10 @@ impl GameEngine {
                     blocker_damage_dealt.push((*has_lifelink, *blocker_controller, dealt));
                 }
                 if let Some(af) = self.state.objects.get_mut(&att) {
-                    af.damage += total_blocker_damage;
+                    af.damage = af
+                        .damage
+                        .checked_add(total_blocker_damage)
+                        .ok_or(EngineError::LifeNumericRange("combat damage sum"))?;
                     if any_blocker_deathtouch_hit {
                         af.deathtouch_damage = true;
                     }
@@ -1804,13 +1819,18 @@ impl GameEngine {
                             ));
                         }
                         if let Some(bf) = self.state.objects.get_mut(&blk) {
-                            bf.damage += dmg_to_blk;
+                            bf.damage = bf
+                                .damage
+                                .checked_add(dmg_to_blk)
+                                .ok_or(EngineError::LifeNumericRange("combat damage sum"))?;
                             // CR 702.2b: any damage from attacker with deathtouch is lethal.
                             if att_has_deathtouch && dmg_to_blk > 0 {
                                 bf.deathtouch_damage = true;
                             }
                         }
-                        total_att_lifelink += dmg_to_blk;
+                        total_att_lifelink = total_att_lifelink
+                            .checked_add(dmg_to_blk)
+                            .ok_or(EngineError::LifeNumericRange("combat damage sum"))?;
                     }
                     // CR 702.19: deal trample excess damage to the attacked recipient.
                     let player_trample_dmg =
@@ -1835,13 +1855,16 @@ impl GameEngine {
                             let trample_after = match recipient {
                                 DamageRecipient::Player(player) => {
                                     if let Some(index) = self.state.player_idx(player) {
-                                        super::history::commit_life_change(
+                                        let delta = super::life_numeric::loss_delta(result.dealt)?;
+                                        super::history::commit_life_change_checked(
                                             &mut self.state,
                                             index,
-                                            -(result.dealt as i32),
-                                        );
-                                        *life_lost.entry(player).or_default() +=
-                                            result.dealt as i32;
+                                            delta,
+                                        )?;
+                                        let total = life_lost.entry(player).or_default();
+                                        *total = total.checked_add(delta).ok_or(
+                                            EngineError::LifeNumericRange("combat life loss sum"),
+                                        )?;
                                         result.dealt
                                     } else {
                                         0
@@ -1852,14 +1875,16 @@ impl GameEngine {
                                     result,
                                     att_has_deathtouch,
                                     events,
-                                ),
+                                )?,
                             };
                             if trample_after > 0 {
                                 let mut dealt_event = damage_event;
                                 dealt_event.amount = trample_after;
                                 damage_dealt_events.push(dealt_event);
                             }
-                            total_att_lifelink += trample_after;
+                            total_att_lifelink = total_att_lifelink
+                                .checked_add(trample_after)
+                                .ok_or(EngineError::LifeNumericRange("combat damage sum"))?;
                         }
                     }
                     // CR 702.15b: attacker with lifelink gains life = damage dealt to all blockers.
@@ -1885,7 +1910,7 @@ impl GameEngine {
                     ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
                         player_id: player,
                         new_total: self.state.players[index].life,
-                        delta: -lost,
+                        delta: lost,
                     })),
                 });
             }
@@ -1897,7 +1922,7 @@ impl GameEngine {
         for (pid, amount) in lifelink_gains {
             if let Some(event) = super::resolution::life::apply_life_gain_without_triggers(
                 self, events, pid, amount, "lifelink",
-            ) {
+            )? {
                 trigger_events.push(event);
             }
         }

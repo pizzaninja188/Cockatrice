@@ -1,0 +1,21 @@
+{
+  "format_version": 1,
+  "oracle_id": "d5c4d36c-54b3-4149-906b-a57a670260fc",
+  "complete_definition_review_confirmed": true,
+  "tokens": [],
+  "spans": [
+    {"face_id": "alhammarrets_archive", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/static_abilities/0"]},
+    {"face_id": "alhammarrets_archive", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/static_abilities/1"]}
+  ],
+  "semantic_fixtures": [
+    {"covers": "Complete single-face colorless Legendary Artifact costs five with exact life and draw Oracle mappings", "test": "deck_coverage_alhammarrets_archive::archive_registers_complete_two_clause_legendary_artifact"},
+    {"covers": "Paid entry gains ten from five, records actual history and one Pridemate trigger; Divination draws four", "test": "scenario deck_coverage_alhammarrets_archive::archive_paid_entry_gain_history_single_trigger_and_divination_draws"},
+    {"covers": "Three-seat opponent drain gains its aggregate once and doubles six to twelve", "test": "scenario deck_coverage_alhammarrets_archive::archive_three_player_blood_tithe_doubles_one_aggregate_gain"},
+    {"covers": "First successful own-draw-step exception and later twelve Brainstorm draws with Insight in both source orders; wrong player rejected", "test": "scenario deck_coverage_alhammarrets_archive::archive_first_own_draw_exception_later_draws_and_insight_ordering"},
+    {"covers": "Both clauses replay serialized accepted commands from an identical physical fixture", "test": "scenario deck_coverage_alhammarrets_archive::archive_both_clauses_replay_serialized_accepted_commands_from_identical_fixture"},
+    {"covers": "Swords gain uses derived recipient control and overflow atomically restores the earlier exile", "test": "scenario deck_coverage_alhammarrets_archive::archive_swords_gain_follows_derived_target_controller_and_overflow_restores_exile"},
+    {"covers": "Actual lifelink uses post-prevention damage and failure restores damage and prevention shield", "test": "scenario deck_coverage_alhammarrets_archive::archive_actual_lifelink_after_prevention_and_overflow_restore_damage_and_shield"},
+    {"covers": "Separate combat source gains and canonical automatic settlement rollback", "test": "scenario deck_coverage_alhammarrets_archive::archive_combat_sources_gain_separately_and_canonical_settlement_rolls_back_overflow"},
+    {"covers": "Targeted gain belongs to its recipient; wrong actor rejected; opponent-turn draws double", "test": "scenario deck_coverage_alhammarrets_archive::archive_targeted_healing_salve_uses_recipient_and_opponent_turn_draws_double"}
+  ]
+}

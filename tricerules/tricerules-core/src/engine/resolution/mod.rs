@@ -4149,6 +4149,91 @@ mod attached_subject_tests {
     }
 
     #[test]
+    fn archive_numeric_command_failure_restores_earlier_draw_and_publication_caches() {
+        let mut engine = GameEngine::new(104_805, &[0, 1], 20, None, true).unwrap();
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+        let archive = add_battlefield_object(&mut engine, 0, "alhammarrets_archive");
+        engine.state.stack.push(quantity_item(
+            archive,
+            vec![
+                SpellEffectKind::Draw {
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                },
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(u32::MAX),
+                },
+            ],
+        ));
+        let pass = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+        };
+        engine.apply_command(0, &pass).unwrap();
+        engine.state.untapped_this_command.push(archive);
+        let before = engine.diagnostic_snapshot().unwrap();
+        let zones = engine.private_zone_cache.clone();
+        let battlefield = engine.battlefield_view_cache.clone();
+        let strike = engine.first_strike_step_pending_cache;
+        assert!(matches!(
+            engine.apply_command(1, &pass),
+            Err(EngineError::LifeNumericRange(_))
+        ));
+        assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
+        assert!(engine.private_zone_cache == zones);
+        assert!(engine.battlefield_view_cache == battlefield);
+        assert_eq!(engine.first_strike_step_pending_cache, strike);
+        assert!(engine.pending_spell_cast_internal.is_none());
+        assert!(engine.pending_ability_activation_internal.is_none());
+        // The rejected pass is reusable after removing the unsupported amount; no draw escaped.
+        engine
+            .state
+            .stack
+            .last_mut()
+            .unwrap()
+            .triggered_ability
+            .as_mut()
+            .unwrap()
+            .effect[1] = SpellEffectKind::GainLife {
+            amount: Amount::Fixed(1),
+        };
+        let hand = engine.state.players[0].hand.len();
+        engine.apply_command(1, &pass).unwrap();
+        assert_eq!(engine.state.players[0].hand.len(), hand + 2);
+        assert_eq!(engine.state.players[0].life, 22);
+    }
+
+    #[test]
+    fn archive_upstream_three_opponent_drain_sum_overflow_rolls_back_all_losses() {
+        let mut engine = GameEngine::new(104_818, &[0, 1, 2, 3], 20, None, true).unwrap();
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.active_player_idx = 0;
+        engine.state.priority_idx = 0;
+        let archive = add_battlefield_object(&mut engine, 0, "alhammarrets_archive");
+        engine.state.stack.push(quantity_item(
+            archive,
+            vec![SpellEffectKind::EachOpponentLosesLifeYouGainEqual {
+                amount: i32::MAX as u32,
+            }],
+        ));
+        let pass = RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+        };
+        for player in [0, 1, 2] {
+            engine.apply_command(player, &pass).unwrap();
+        }
+        let before = engine.diagnostic_snapshot().unwrap();
+        assert!(matches!(
+            engine.apply_command(3, &pass),
+            Err(EngineError::LifeNumericRange("opponent drain sum"))
+        ));
+        assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
+    }
+
+    #[test]
     fn blue_spell_shuffle_continues_tail_and_never_moves_an_off_stack_incarnation() {
         for on_stack in [true, false] {
             let mut engine = GameEngine::new(504_008, &[0, 1], 20, None, true).unwrap();
@@ -6810,7 +6895,9 @@ mod source_keyword_tests {
                             &mut events,
                         )
                         .unwrap();
-                    engine.commit_completed_damage_batch(&completed, &mut events);
+                    engine
+                        .commit_completed_damage_batch(&completed, &mut events)
+                        .unwrap();
                     let dealt = 3 - prevented;
                     let object = &engine.state.objects[&target];
                     assert_eq!(object.damage, 0);

@@ -48,7 +48,7 @@ pub(super) fn damage_target(
     let Some(completed) = engine.process_or_park_damage_batch(top, damage, events) else {
         return Ok(EffectOutcome::Suspended);
     };
-    engine.commit_completed_damage_batch(&completed, events);
+    engine.commit_completed_damage_batch(&completed, events)?;
 
     Ok(EffectOutcome::Continue)
 }
@@ -104,7 +104,7 @@ pub(super) fn creature_deals_damage_equal_to_power(
         return Ok(EffectOutcome::Suspended);
     };
     cx.engine
-        .commit_completed_damage_batch(&completed, cx.events);
+        .commit_completed_damage_batch(&completed, cx.events)?;
     Ok(EffectOutcome::Continue)
 }
 
@@ -206,7 +206,7 @@ pub(super) fn fight(
         return Ok(EffectOutcome::Suspended);
     };
     cx.engine
-        .commit_completed_damage_batch(&completed, cx.events);
+        .commit_completed_damage_batch(&completed, cx.events)?;
     Ok(EffectOutcome::Continue)
 }
 
@@ -324,7 +324,7 @@ pub(super) fn damage_targets(
     let Some(completed) = engine.process_or_park_damage_batch(cx.top, damage, events) else {
         return Ok(EffectOutcome::Suspended);
     };
-    engine.commit_completed_damage_batch(&completed, events);
+    engine.commit_completed_damage_batch(&completed, events)?;
 
     Ok(EffectOutcome::Continue)
 }
@@ -373,7 +373,7 @@ pub(super) fn damage_player(
         return Ok(EffectOutcome::Suspended);
     };
     cx.engine
-        .commit_completed_damage_batch(&completed, cx.events);
+        .commit_completed_damage_batch(&completed, cx.events)?;
     Ok(EffectOutcome::Continue)
 }
 
@@ -440,7 +440,7 @@ pub(super) fn damage_attacked_player_or_planeswalker(
         return Ok(EffectOutcome::Suspended);
     };
     cx.engine
-        .commit_completed_damage_batch(&completed, cx.events);
+        .commit_completed_damage_batch(&completed, cx.events)?;
     Ok(EffectOutcome::Continue)
 }
 

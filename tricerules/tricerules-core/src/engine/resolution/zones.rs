@@ -883,7 +883,7 @@ pub(super) fn exile_target_gain_life_equal_to_power(
         // CR 608: read effective power at resolution before the object leaves.
         let power = engine.effective_power(tid).unwrap_or(0);
         let owner = engine.state.objects.get(&tid).map(|o| o.owner);
-        let target_controller = engine.state.objects.get(&tid).map(|o| o.controller);
+        let target_controller = engine.controller_of(tid);
         let target_controller = target_controller.unwrap_or(controller);
         let zone_snapshot = engine.snapshot_zone_event();
         let leave_event = engine.battlefield_leave_event(tid);
@@ -898,7 +898,7 @@ pub(super) fn exile_target_gain_life_equal_to_power(
                 rv1::permanent_moved::Destination::Exile,
             ));
         }
-        super::life::apply_life_gain(engine, events, target_controller, power, spell_label);
+        super::life::apply_life_gain(engine, events, target_controller, power, spell_label)?;
     }
 
     Ok(EffectOutcome::Continue)

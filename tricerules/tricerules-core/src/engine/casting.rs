@@ -2721,7 +2721,7 @@ impl GameEngine {
         self.stage_triggers(cost_triggers);
         if let Some(damage) = mana_damage {
             self.state.undoable_mana_abilities.clear();
-            self.resolve_mana_ability_damage(damage, &mut batch.events);
+            self.resolve_mana_ability_damage(damage, &mut batch.events)?;
         }
         Ok(batch)
     }
