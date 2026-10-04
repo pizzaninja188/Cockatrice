@@ -82,6 +82,31 @@ impl GameEngine {
         &self,
         batch: &crate::state::PendingZoneEntryBatch,
     ) -> bool {
+        if let Some(crate::state::ZoneEntryCompletion::ChaosWarpRevealedTop {
+            library_owner,
+            object_id,
+            generation,
+        }) = &batch.completion
+        {
+            if self
+                .state
+                .player_idx(*library_owner)
+                .is_none_or(|idx| self.state.players[idx].has_lost)
+                || self.state.library_card_objects(*library_owner).next() != Some(*object_id)
+                || self.state.objects.get(object_id).is_none_or(|object| {
+                    object.zone != Zone::Library || object.owner != *library_owner
+                })
+                || self
+                    .state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    != *generation
+            {
+                return false;
+            }
+        }
         if let Some(crate::state::ZoneEntryCompletion::DeployRandomBottom {
             library_owner,
             looked_refs,
@@ -150,6 +175,9 @@ impl GameEngine {
                     return Ok(None);
                 }
                 replacement::BattlefieldEntryProgress::Ready(entry) => batch.ready.push(*entry),
+                replacement::BattlefieldEntryProgress::Skipped(entry) => {
+                    self.restore_skipped_battlefield_entry(&entry)?;
+                }
             }
         }
         let Some(SimultaneousEntryBatch::Zone(batch)) = self.begin_entry_timestamp_order(

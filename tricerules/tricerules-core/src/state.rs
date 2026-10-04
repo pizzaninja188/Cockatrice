@@ -721,6 +721,8 @@ pub struct PlayerState {
     pub exile: Vec<ObjectId>,
     /// Public cards declared as this player's Commander setup, outside the library.
     pub command_zone: Vec<ObjectId>,
+    /// CR 903.3: physical commander designation survives zone changes and copying.
+    pub declared_commander_object_ids: Vec<ObjectId>,
     /// CR 903.4: frozen union of the declared commanders' card color identities.
     pub color_identity: Vec<Color>,
     /// Initial declaration, retained even when all commanders leave the command zone.
@@ -752,6 +754,7 @@ impl PlayerState {
             graveyard: Vec::new(),
             exile: Vec::new(),
             command_zone: Vec::new(),
+            declared_commander_object_ids: Vec::new(),
             color_identity: Vec::new(),
             has_declared_commander: false,
             mana_pool: ManaPool::default(),
@@ -1161,6 +1164,14 @@ pub enum ResolutionContinuation {
         nonbottom_placement: LibraryPlacement,
         spell_label: String,
     },
+    ChaosWarpCommander {
+        stack: ParkedStackResolution,
+        owner: PlayerId,
+        target: ObjectId,
+        target_generation: u64,
+        stack_generation: u64,
+        effect_index: u32,
+    },
     LibraryPartition {
         stack: ParkedStackResolution,
         looked_at: Vec<ObjectId>,
@@ -1299,6 +1310,7 @@ impl ResolutionContinuation {
             | Self::SearchZoneScope { stack, .. }
             | Self::OptionalSearch { stack, .. }
             | Self::OwnerLibraryPlacement { stack, .. }
+            | Self::ChaosWarpCommander { stack, .. }
             | Self::LibraryPartition { stack, .. }
             | Self::LibraryLook { stack, .. }
             | Self::Explore { stack, .. }
@@ -1347,6 +1359,7 @@ impl ResolutionContinuation {
             | Self::SearchZoneScope { stack, .. }
             | Self::OptionalSearch { stack, .. }
             | Self::OwnerLibraryPlacement { stack, .. }
+            | Self::ChaosWarpCommander { stack, .. }
             | Self::LibraryPartition { stack, .. }
             | Self::LibraryLook { stack, .. }
             | Self::Explore { stack, .. }
@@ -1658,6 +1671,11 @@ pub(crate) struct PendingZoneEntryBatch {
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) enum ZoneEntryCompletion {
     LibrarySearch(LibrarySearchCompletion),
+    ChaosWarpRevealedTop {
+        library_owner: PlayerId,
+        object_id: ObjectId,
+        generation: u64,
+    },
     DeployRandomBottom {
         library_owner: PlayerId,
         looked_refs: Vec<(ObjectId, u64)>,
@@ -1921,6 +1939,9 @@ pub struct StackItem {
     /// Server-only exact post-exile incarnations from this resolution; fresh spell copies
     /// start empty and parked continuations retain the same map.
     pub(crate) exiled_cohorts: BTreeMap<ExiledCohortId, Vec<TriggerObjectRef>>,
+    /// Unfinished Chaos Warp owner instructions after committed movement/shuffle. The original
+    /// primitive index survives immediate observer choices; fresh spell copies start empty.
+    pub(crate) chaos_warp_owner_instructions: BTreeMap<u32, PlayerId>,
     /// Resolution branches already answered, keyed by their index in the original effect list.
     /// `None` records an optional decline; `Some(i)` records the chosen authored branch.
     pub resolution_branch_choices: BTreeMap<u32, Option<usize>>,
@@ -2575,6 +2596,19 @@ impl GameState {
             .get(&oid)
             .is_some_and(|object| !object.is_token())
             && !self.prepare_spell_sources.contains_key(&oid)
+    }
+
+    /// Physical library order excludes noncard objects awaiting normal SBAs (CR 108.2/111.7).
+    pub(crate) fn library_card_objects(
+        &self,
+        player: PlayerId,
+    ) -> impl Iterator<Item = ObjectId> + '_ {
+        self.players
+            .iter()
+            .find(|candidate| candidate.id == player)
+            .into_iter()
+            .flat_map(|player| player.library.iter().copied())
+            .filter(|oid| self.is_card_object(*oid))
     }
 
     pub(crate) fn allocate_trigger_grant_origin(&mut self) -> TriggerAbilityOrigin {

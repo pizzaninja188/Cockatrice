@@ -306,3 +306,33 @@ fn into_the_wilds_complete_definition_and_oracle_presentation_are_exact() {
         [SpellEffectKind::IntoTheWilds]
     ));
 }
+
+#[test]
+fn chaos_warp_complete_definition_has_exact_face_cost_identity_and_permanent_target() {
+    let registry = CardRegistry::global();
+    let card = registry.get("chaos_warp").unwrap();
+    assert_eq!(registry.id_for_name("Chaos Warp"), Some("chaos_warp"));
+    assert_eq!(card.face_count(), 1);
+    assert_eq!(card.layout, Layout::Normal);
+    assert_eq!(card.color_identity(), [Color::Red]);
+    let face = card.primary_face();
+    assert_eq!(face.face_id.as_str(), "chaos_warp");
+    assert_eq!(face.mana_cost.to_string(), "{2}{R}");
+    assert_eq!(face.types, ["Instant"]);
+    assert_eq!(face.colors(), [Color::Red]);
+    assert!(
+        face.activated_abilities.is_empty()
+            && face.static_abilities.is_empty()
+            && face.triggered_abilities.is_empty()
+            && face.modal_spell.is_none()
+    );
+    assert_eq!(face.spell_effect, [SpellEffectKind::ChaosWarp]);
+    face.spell_effect[0]
+        .validate(tricerules_cards::EffectContext::Spell)
+        .unwrap();
+    let groups = &face.targeting.as_ref().unwrap().groups;
+    assert_eq!(groups.len(), 1);
+    assert_eq!((groups[0].min, groups[0].max), (1, 1));
+    assert_eq!(groups[0].effect_indices, [0]);
+    assert_eq!(face.spell_effect[0].target_roles().len(), 1);
+}

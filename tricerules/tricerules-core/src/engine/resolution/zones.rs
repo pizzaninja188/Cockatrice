@@ -2715,6 +2715,10 @@ pub(super) fn return_triggered_card(
         cx.events,
     ) {
         super::super::replacement::BattlefieldEntryProgress::Parked => Ok(EffectOutcome::Suspended),
+        super::super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
+            cx.engine.restore_skipped_battlefield_entry(&entry)?;
+            Ok(EffectOutcome::Continue)
+        }
         super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
             let entry = *entry;
             cx.engine.commit_battlefield_entry(entry, None)?;
@@ -2800,6 +2804,10 @@ pub(super) fn put_ability_source_onto_battlefield_tapped_and_attacking(
         cx.events,
     ) {
         super::super::replacement::BattlefieldEntryProgress::Parked => Ok(EffectOutcome::Suspended),
+        super::super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
+            cx.engine.restore_skipped_battlefield_entry(&entry)?;
+            Ok(EffectOutcome::Continue)
+        }
         super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
             let entry = *entry;
             cx.engine.commit_battlefield_entry(entry, None)?;
@@ -2946,6 +2954,10 @@ pub(super) fn exile_source_then_return_transformed(
         cx.events,
     ) {
         super::super::replacement::BattlefieldEntryProgress::Parked => Ok(EffectOutcome::Suspended),
+        super::super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
+            cx.engine.restore_skipped_battlefield_entry(&entry)?;
+            Ok(EffectOutcome::Continue)
+        }
         super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
             let entry = *entry;
             cx.engine.commit_battlefield_entry(entry, None)?;
@@ -3513,6 +3525,13 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
         ) {
             super::super::replacement::BattlefieldEntryProgress::Parked => {
                 return Ok(EffectOutcome::Suspended);
+            }
+            super::super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
+                engine.restore_skipped_battlefield_entry(&entry)?;
+                if let Some(object) = engine.state.objects.get_mut(&entry.object_id) {
+                    object.face_down = false;
+                }
+                return Ok(EffectOutcome::Continue);
             }
             super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
                 let entry = *entry;

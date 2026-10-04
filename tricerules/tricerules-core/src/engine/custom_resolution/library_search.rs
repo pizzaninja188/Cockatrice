@@ -90,6 +90,10 @@ impl GameEngine {
                     let entry = *entry;
                     self.commit_battlefield_entry(entry, None)?;
                 }
+                super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
+                    self.restore_skipped_battlefield_entry(&entry)?;
+                    continue;
+                }
             }
             events.push(ev_log(format!(
                 "P{controller} puts {card_label} onto the battlefield."
@@ -502,6 +506,15 @@ impl GameEngine {
                     super::replacement::BattlefieldEntryProgress::Ready(entry) => {
                         let entry = *entry;
                         self.commit_battlefield_entry(entry, None)?;
+                    }
+                    super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
+                        self.restore_skipped_battlefield_entry(&entry)?;
+                        return self.complete_parked_resolution_with_previous(
+                            stack.item,
+                            stack.resume_effect_index,
+                            stack.previous_result,
+                            events,
+                        );
                     }
                 }
                 events.push(permanent_moved_event(
@@ -929,6 +942,7 @@ mod tests {
             payment_result: Default::default(),
             search_results: Default::default(),
             exiled_cohorts: Default::default(),
+            chaos_warp_owner_instructions: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: Default::default(),

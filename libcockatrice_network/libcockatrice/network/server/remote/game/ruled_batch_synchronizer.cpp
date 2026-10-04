@@ -882,6 +882,14 @@ void RuledBatchSynchronizer::applyPermanentMoves(const ruled::v1::RuledEventBatc
                     }
                 }
             }
+            // Follow the live exact binding, including Command origins and an earlier move
+            // in this batch. The physical card may already be on another seat's battlefield.
+            // Resolve it before the library fallback can steal a same-name duplicate.
+            if (!card) {
+                if (auto *sp = qobject_cast<Server_Player *>(holder)) {
+                    card = playerBinding(pid).findCardByEngineOid(sp, oid);
+                }
+            }
         }
         if (!card) {
             // A spell leaving the stack (e.g. countered) physically lives on the single shared
@@ -987,6 +995,10 @@ void RuledBatchSynchronizer::applyPermanentMoves(const ruled::v1::RuledEventBatc
                 break;
             case ruled::v1::PermanentMoved::DESTINATION_EXILE:
                 destZone = ZoneNames::EXILE;
+                destX = 0;
+                break;
+            case ruled::v1::PermanentMoved::DESTINATION_COMMAND:
+                destZone = ZoneNames::COMMAND;
                 destX = 0;
                 break;
             case ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD:
@@ -1108,6 +1120,8 @@ void RuledBatchSynchronizer::applyPermanentMoves(const ruled::v1::RuledEventBatc
                     binding.graveyardEngineOidToServerCardId.insert(oid, card->getId());
                 } else if (pm.destination() == ruled::v1::PermanentMoved::DESTINATION_EXILE) {
                     binding.exileEngineOidToServerCardId.insert(oid, card->getId());
+                } else if (pm.destination() == ruled::v1::PermanentMoved::DESTINATION_COMMAND) {
+                    binding.commandZoneEngineOidToServerCardId.insert(oid, card->getId());
                 } else if (pm.destination() == ruled::v1::PermanentMoved::DESTINATION_HAND) {
                     // Library identities use a separate reverse map. Once this exact card is
                     // in hand, bind it in the destination map before the private-zone reconcile;

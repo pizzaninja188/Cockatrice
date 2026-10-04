@@ -2047,6 +2047,8 @@ message PermanentMoved {
     DESTINATION_EXILE = 4;
     // Used by ReturnFromGraveyard with GraveyardDestination::Battlefield (reanimation).
     DESTINATION_BATTLEFIELD = 5;
+    // CR 903.9b: a commander owner may replace a hand/library move with the command zone.
+    DESTINATION_COMMAND = 6;
   }
   Destination destination = 3 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
   // tricerules card id (lowercase_underscore). Lets servers resolve cards that

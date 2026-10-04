@@ -1342,6 +1342,7 @@ impl GameEngine {
             payment_result,
             search_results: Default::default(),
             exiled_cohorts: Default::default(),
+            chaos_warp_owner_instructions: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: payment.blight_receipts.clone(),
             // A spell's effects always act on its controller.
@@ -2011,6 +2012,7 @@ impl GameEngine {
             },
             search_results: Default::default(),
             exiled_cohorts: Default::default(),
+            chaos_warp_owner_instructions: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: payment.blight_receipts.clone(),
             // An activated ability's effects act on the player who activated it.
@@ -2854,6 +2856,7 @@ impl GameEngine {
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
             exiled_cohorts: Default::default(),
+            chaos_warp_owner_instructions: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
@@ -2892,6 +2895,9 @@ impl GameEngine {
             &mut batch.events,
         ) {
             super::replacement::BattlefieldEntryProgress::Parked => return Ok(batch),
+            super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
+                self.restore_skipped_battlefield_entry(&entry)?;
+            }
             super::replacement::BattlefieldEntryProgress::Ready(entry) => {
                 let entry = *entry;
                 self.commit_battlefield_entry(entry, None)?;

@@ -1094,6 +1094,8 @@ pub enum SpellEffectKind {
     IntoTheWilds,
     /// Private top-seven look, optional simultaneous planeswalker entry, then random bottom.
     DeployTheGatewatch,
+    /// Chaos Warp's inseparable target-owner shuffle, public reveal and ordinary entry.
+    ChaosWarp,
     /// Look at the top `count` cards, choose `min..=max` matching cards for the controller's
     /// hand, and put the rest on the bottom. Omit `filter` for any card; selection bounds clamp
     /// to available matches (CR 609.3). This puts cards into hand without drawing (CR 121.5).
@@ -2511,6 +2513,15 @@ pub fn earthbend_target_filter() -> &'static TargetFilter {
     &FILTER
 }
 
+/// The specialized Chaos Warp instruction targets exactly one permanent.
+pub fn chaos_warp_target_filter() -> &'static TargetFilter {
+    static FILTER: LazyLock<TargetFilter> = LazyLock::new(|| TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        ..TargetFilter::default()
+    });
+    &FILTER
+}
+
 impl SpellEffectKind {
     pub(crate) fn targeted_mass_scope(&self) -> Option<(u32, TargetKind)> {
         match self {
@@ -2765,6 +2776,7 @@ impl SpellEffectKind {
             SpellEffectKind::Earthbend { .. } => {
                 vec![TargetRole::Filtered(earthbend_target_filter())]
             }
+            SpellEffectKind::ChaosWarp => vec![TargetRole::Filtered(chaos_warp_target_filter())],
             SpellEffectKind::CreatureDealsDamageEqualToPower { source, target } => {
                 vec![TargetRole::Filtered(source), TargetRole::Filtered(target)]
             }
@@ -5216,6 +5228,7 @@ impl SpellEffectKind {
             }
             SpellEffectKind::IntoTheWilds => Ok(()),
             SpellEffectKind::DeployTheGatewatch => Ok(()),
+            SpellEffectKind::ChaosWarp => Ok(()),
             SpellEffectKind::LookChooseToHand {
                 count,
                 filter,

@@ -393,7 +393,7 @@ impl GameEngine {
                     player.id,
                     PrivateZoneSnapshot {
                         hand: player.hand.clone(),
-                        library: player.library.iter().copied().collect(),
+                        library: self.state.library_card_objects(player.id).collect(),
                     },
                 )
             })
@@ -436,7 +436,7 @@ impl GameEngine {
             let p = &self.state.players[idx];
             let current = PrivateZoneSnapshot {
                 hand: p.hand.to_vec(),
-                library: p.library.iter().copied().collect(),
+                library: self.state.library_card_objects(p.id).collect(),
             };
             let unchanged = self.private_zone_cache.get(&p.id) == Some(&current);
             let mut view = self.per_player_view(
@@ -516,9 +516,9 @@ impl GameEngine {
                 Vec::new()
             },
             library_cards: if include_private {
-                p.library
-                    .iter()
-                    .map(|&oid| {
+                self.state
+                    .library_card_objects(p.id)
+                    .map(|oid| {
                         let card_id = self
                             .state
                             .objects
@@ -1063,5 +1063,105 @@ pub(super) fn ev_priority_changed(eng: &GameEngine) -> RuledEvent {
                 player_id: eng.state.priority_player_id(),
             },
         )),
+    }
+}
+
+#[cfg(test)]
+mod library_card_projection_tests {
+    use super::*;
+
+    fn token_in_library(engine: &mut GameEngine, position: usize) -> ObjectId {
+        let oid = engine.state.next_object_id;
+        engine.state.next_object_id += 1;
+        let mut token = engine.state.objects.values().next().unwrap().clone();
+        token.id = oid;
+        token.card_id = "grizzly_bears".into();
+        token.zone = Zone::Library;
+        token.owner = 0;
+        token.controller = 0;
+        token.copiable_values = None;
+        engine.state.objects.insert(oid, token);
+        let values = engine.copiable_values_for(oid).unwrap();
+        engine.state.objects.get_mut(&oid).unwrap().token_origin = Some(values);
+        engine.state.players[0].library.insert(position, oid);
+        oid
+    }
+
+    fn view(event: &RuledEvent) -> &rv1::RuledPerPlayerView {
+        let Some(rv1::ruled_event::Ev::ZoneView(view)) = &event.ev else {
+            panic!("zone view");
+        };
+        view.per_player
+            .iter()
+            .find(|player| player.player_id == 0)
+            .unwrap()
+    }
+
+    // Internal mid-resolution fixture: normal command completion runs the token SBA.
+    #[test]
+    fn deferred_library_tokens_are_not_physical_cards_in_full_or_tracked_views() {
+        for position in [0, 1, 3] {
+            let mut engine = GameEngine::new(
+                700_111,
+                &[0, 1],
+                20,
+                Some(vec![vec!["island".into(); 10], vec!["forest".into(); 10]]),
+                true,
+            )
+            .unwrap();
+            let cards: Vec<_> = engine.state.players[0].library.iter().copied().collect();
+            let token = token_in_library(&mut engine, position);
+            let full = engine.ev_zone_view_sync();
+            assert_eq!(
+                view(&full)
+                    .library_cards
+                    .iter()
+                    .map(|card| card.object_id)
+                    .collect::<Vec<_>>(),
+                cards
+            );
+            assert!(engine.state.objects[&token].is_token());
+            assert!(
+                engine.state.players[0].library.contains(&token),
+                "SBA is deferred"
+            );
+            let tracked = engine.ev_zone_view_sync_tracked();
+            assert!(view(&tracked).private_zones_unchanged);
+            assert!(view(&tracked).library_cards.is_empty());
+        }
+    }
+
+    #[test]
+    fn private_library_cache_ignores_token_only_changes_but_detects_card_order_changes() {
+        let mut engine = GameEngine::new(
+            700_112,
+            &[0, 1],
+            20,
+            Some(vec![vec!["island".into(); 10], vec!["forest".into(); 10]]),
+            true,
+        )
+        .unwrap();
+        engine.ev_zone_view_sync();
+        let token = token_in_library(&mut engine, 0);
+        assert!(
+            view(&engine.ev_zone_view_sync_tracked()).private_zones_unchanged,
+            "adding a noncard must not change the physical library projection"
+        );
+        let card = engine.state.players[0].library.remove(1).unwrap();
+        engine.state.players[0].library.push_back(card);
+        let changed = engine.ev_zone_view_sync_tracked();
+        assert!(!view(&changed).private_zones_unchanged);
+        assert_eq!(view(&changed).library_cards.len(), 3);
+        assert_eq!(view(&changed).library_cards.last().unwrap().object_id, card);
+        engine.state.players[0].library.retain(|oid| *oid == token);
+        let token_only = engine.ev_zone_view_sync_tracked();
+        assert!(!view(&token_only).private_zones_unchanged);
+        assert!(view(&token_only).library_cards.is_empty());
+        engine.state.players[0].library.clear();
+        assert!(view(&engine.ev_zone_view_sync_tracked()).private_zones_unchanged);
+        assert!(
+            engine.state.objects.contains_key(&token),
+            "projection never deletes tokens"
+        );
     }
 }

@@ -19,6 +19,9 @@ mod myriad_search_prerequisites;
 #[path = "scenario/deploy_the_gatewatch.rs"]
 mod deploy_the_gatewatch;
 
+#[path = "scenario/chaos_warp.rs"]
+mod chaos_warp;
+
 #[path = "scenario/authoring_actions.rs"]
 mod authoring_actions;
 

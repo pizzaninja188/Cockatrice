@@ -7,6 +7,8 @@
 #include "../../zones/table_zone.h"
 #include "card_menu.h"
 #include "hand_menu.h"
+#include "../../ruled/ruled_actions.h"
+#include "../../ruled/ruled_zone_view_policy.h"
 
 #include <libcockatrice/protocol/pb/command_reveal_cards.pb.h>
 
@@ -35,7 +37,9 @@ PlayerMenu::PlayerMenu(Player *_player) : QObject(_player), player(_player)
         utilityMenu = createManagedComponent<UtilityMenu>(player, playerMenu);
     } else {
         sideboardMenu = nullptr;
-        customZonesMenu = nullptr;
+        customZonesMenu = ruledPlayerNeedsCustomZoneMenu(false, RuledActions::isRuledGame(player->getGame()))
+                              ? addManagedMenu<CustomZoneMenu>(player)
+                              : nullptr;
         countersMenu = nullptr;
         utilityMenu = nullptr;
     }

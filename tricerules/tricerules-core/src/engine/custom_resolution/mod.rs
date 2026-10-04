@@ -164,6 +164,12 @@ impl GameEngine {
         ) {
             return self.finish_owner_library_placement(pending, answer, decision);
         }
+        if matches!(
+            pending.continuation,
+            ResolutionContinuation::ChaosWarpCommander { .. }
+        ) {
+            return self.finish_chaos_warp_commander(pending, answer, decision);
+        }
         if let Some(payment) = pending.continuation.mana_payment().cloned() {
             return self.finish_resolution_mana_payment(pending, payment, answer, decision, player);
         }
@@ -277,6 +283,9 @@ impl GameEngine {
             }
             ResolutionContinuation::OwnerLibraryPlacement { .. } => {
                 unreachable!("owner placement branch handled before object-choice validation")
+            }
+            ResolutionContinuation::ChaosWarpCommander { .. } => {
+                unreachable!("commander replacement handled before object-choice validation")
             }
             ResolutionContinuation::LibraryPartition { .. } => {
                 return self.finish_library_partition(pending, chosen);
@@ -542,6 +551,23 @@ impl GameEngine {
                 return Ok(finish_with_events(self, events));
             }
             super::replacement::BattlefieldEntryProgress::Ready(entry) => *entry,
+            super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
+                let item = stack
+                    .as_ref()
+                    .map(|stack| stack.item.clone())
+                    .unwrap_or_else(|| self.observer_return_item(exiled.object_id, owner));
+                return self.finish_entry_copy_without_recipient(
+                    stack.unwrap_or_else(|| ParkedStackResolution::new(item)),
+                    *entry,
+                    BattlefieldEntryCompletion::ObserverReturn {
+                        owner,
+                        object_label: label,
+                        attached_to: Some(recipient),
+                        resume_original_stack,
+                    },
+                    events,
+                );
+            }
         };
         self.state
             .pending_observer_return_batch

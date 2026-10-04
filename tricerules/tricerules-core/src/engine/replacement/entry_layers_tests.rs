@@ -145,6 +145,376 @@ fn event(engine: &GameEngine, oid: ObjectId) -> BattlefieldEntryEvent {
     }
 }
 
+fn paid_divination_stack(engine: &mut GameEngine) -> ParkedStackResolution {
+    let spell = object(engine, "divination", Zone::Hand, 0);
+    engine.state.players[0].hand.push(spell);
+    engine.state.players[0].mana_pool.blue = 1;
+    engine.state.players[0].mana_pool.colorless = 2;
+    let slot = engine.state.players[0].hand.len() - 1;
+    engine
+        .cast_spell(
+            0,
+            &rv1::CastSpell {
+                cast_method: rv1::CastMethod::Normal as i32,
+                source: Some(rv1::CastSource {
+                    location: Some(rv1::cast_source::Location::HandIndex(slot as u32)),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let mut stack = ParkedStackResolution::new(engine.state.stack.pop().unwrap());
+    stack.resume_effect_index = Some(0);
+    stack
+        .previous_result
+        .produced_objects
+        .push(TriggerObjectRef {
+            object_id: spell,
+            zone_change_generation: engine.state.zone_change_generation[&spell],
+            controller_at_event: 0,
+        });
+    stack
+}
+
+// Synthetic Library-entry instruction around a real paid outer spell and registered Pacifism.
+#[test]
+fn printed_aura_library_entry_parks_before_commit_and_preserves_original_tail() {
+    for keyword in [None, Some(Keyword::Shroud), Some(Keyword::Hexproof)] {
+        let mut engine = engine();
+        let recipient = object(&mut engine, "grizzly_bears", Zone::Battlefield, 1);
+        if let Some(keyword) = keyword {
+            let mut values = engine.copiable_values_for(recipient).unwrap();
+            values.face.keywords.push(keyword);
+            engine
+                .state
+                .objects
+                .get_mut(&recipient)
+                .unwrap()
+                .copiable_values = Some(values);
+        }
+        let protected = object(&mut engine, "grizzly_bears", Zone::Battlefield, 1);
+        let mut values = engine.copiable_values_for(protected).unwrap();
+        values
+            .face
+            .protections
+            .push(ProtectionQuality::Color(Color::White));
+        engine
+            .state
+            .objects
+            .get_mut(&protected)
+            .unwrap()
+            .copiable_values = Some(values);
+        let aura = object(&mut engine, "pacifism", Zone::Library, 0);
+        engine.state.players[0].library.push_front(aura);
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&aura)
+            .copied()
+            .unwrap_or(0);
+        let stack = paid_divination_stack(&mut engine);
+        let expected_previous = format!("{:?}", stack.previous_result);
+        let hand_before_tail = engine.state.players[0].hand.len();
+        let mut events = Vec::new();
+        let entry = event(&engine, aura);
+        assert!(
+            engine
+                .begin_zone_entry_batch(
+                    stack.clone(),
+                    vec![entry],
+                    Zone::Library,
+                    "internal printed Aura instruction",
+                    None,
+                    &mut events
+                )
+                .unwrap()
+                .is_none(),
+            "attachment must be chosen before entry commits"
+        );
+        assert_eq!(engine.state.objects[&aura].zone, Zone::Library);
+        assert_eq!(engine.state.players[0].library.front(), Some(&aura));
+        assert_eq!(
+            engine
+                .state
+                .zone_change_generation
+                .get(&aura)
+                .copied()
+                .unwrap_or(0),
+            generation
+        );
+        let pending = engine.state.pending_resolution.as_ref().unwrap();
+        assert_eq!(
+            pending.presentation.choice_kind,
+            rv1::ChoiceKind::AuraPermanent
+        );
+        assert_eq!(pending.deciding_player, 0);
+        assert_eq!(pending.presentation.candidates, [recipient]);
+        assert_eq!(
+            pending.continuation.stack().unwrap().resume_effect_index,
+            Some(0)
+        );
+        assert_eq!(
+            format!(
+                "{:?}",
+                pending.continuation.stack().unwrap().previous_result
+            ),
+            expected_previous
+        );
+        let answer = |recipient| rv1::RuledCommand {
+            cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![recipient],
+                    ..Default::default()
+                },
+            )),
+        };
+        let before = format!("{:?}", engine.state);
+        assert!(engine.apply_command(1, &answer(recipient)).is_err());
+        assert!(engine.apply_command(0, &answer(protected)).is_err());
+        assert_eq!(format!("{:?}", engine.state), before);
+        let batch = engine.apply_command(0, &answer(recipient)).unwrap();
+        assert_eq!(engine.state.objects[&aura].zone, Zone::Battlefield);
+        assert_eq!(
+            engine.state.objects[&aura].attached_to,
+            Some(AttachmentRecipient::Object(recipient))
+        );
+        assert_eq!(engine.state.zone_change_generation[&aura], generation + 1);
+        assert_eq!(
+            engine.state.players[0].hand.len(),
+            hand_before_tail + 2,
+            "original tail runs once"
+        );
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_replacement_event.is_none());
+        assert!(engine.state.stack.is_empty());
+        assert_eq!(
+            batch
+                .events
+                .iter()
+                .filter(|event| matches!(&event.ev,
+            Some(rv1::ruled_event::Ev::PermanentMoved(moved)) if moved.object_id == aura))
+                .count(),
+            1
+        );
+    }
+}
+
+#[test]
+fn printed_aura_without_recipient_stays_in_library_and_resumes_tail_once() {
+    for protected_recipient in [false, true] {
+        let mut engine = engine();
+        if protected_recipient {
+            let recipient = object(&mut engine, "grizzly_bears", Zone::Battlefield, 1);
+            let mut values = engine.copiable_values_for(recipient).unwrap();
+            values
+                .face
+                .protections
+                .push(ProtectionQuality::Color(Color::White));
+            engine
+                .state
+                .objects
+                .get_mut(&recipient)
+                .unwrap()
+                .copiable_values = Some(values);
+        }
+        let aura = object(&mut engine, "pacifism", Zone::Library, 0);
+        engine.state.players[0].library.push_front(aura);
+        let stack = paid_divination_stack(&mut engine);
+        let hand_before_tail = engine.state.players[0].hand.len();
+        let mut events = Vec::new();
+        let mut entry = event(&engine, aura);
+        entry.entry_counters.insert(CounterKind::Stun, 2);
+        let resumed = engine
+            .begin_zone_entry_batch(
+                stack,
+                vec![entry],
+                Zone::Library,
+                "internal printed Aura instruction",
+                None,
+                &mut events,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(engine.state.objects[&aura].zone, Zone::Library);
+        assert_eq!(engine.state.players[0].library.front(), Some(&aura));
+        assert_eq!(
+            engine.state.objects[&aura].counter_count(CounterKind::Stun),
+            0
+        );
+        assert!(!events.iter().any(|event| matches!(&event.ev,
+            Some(rv1::ruled_event::Ev::PermanentMoved(moved)) if moved.object_id == aura)));
+        assert!(engine.state.pending_resolution.is_none());
+        engine
+            .complete_parked_resolution_with_previous(
+                resumed.item,
+                resumed.resume_effect_index,
+                resumed.previous_result,
+                events,
+            )
+            .unwrap();
+        assert_eq!(engine.state.players[0].hand.len(), hand_before_tail + 2);
+        assert_eq!(
+            engine.state.objects[&aura].zone,
+            Zone::Hand,
+            "only the later draw moves it"
+        );
+    }
+}
+
+#[test]
+fn printed_aura_resumed_entry_keeps_deferred_tokens_out_of_library_views_and_rejects_stale_recipient(
+) {
+    for replacement_pause in [false, true] {
+        for stale_recipient in [false, true] {
+            let mut engine = engine();
+            let recipient = object(&mut engine, "grizzly_bears", Zone::Battlefield, 1);
+            if replacement_pause {
+                object(&mut engine, "orb_of_dreams", Zone::Battlefield, 0);
+                object(&mut engine, "orb_of_dreams", Zone::Battlefield, 1);
+            }
+            let aura = object(&mut engine, "pacifism", Zone::Library, 0);
+            engine.state.players[0].library.push_front(aura);
+            let token = object(&mut engine, "grizzly_bears", Zone::Library, 0);
+            let values = engine.copiable_values_for(token).unwrap();
+            engine.state.objects.get_mut(&token).unwrap().token_origin = Some(values);
+            engine.state.players[0].library.push_front(token);
+            let mut stack = paid_divination_stack(&mut engine);
+            // This composition's outer spell has no remaining effects. Draw-tail coverage is above.
+            stack.resume_effect_index = Some(1);
+            let expected_previous = format!("{:?}", stack.previous_result);
+            let mut events = Vec::new();
+            let entry = event(&engine, aura);
+            assert!(engine
+                .begin_zone_entry_batch(
+                    stack,
+                    vec![entry],
+                    Zone::Library,
+                    "internal printed Aura instruction",
+                    None,
+                    &mut events
+                )
+                .unwrap()
+                .is_none());
+            let answer = |chosen| rv1::RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                    rv1::SubmitResolutionChoice {
+                        chosen_object_ids: vec![chosen],
+                        ..Default::default()
+                    },
+                )),
+            };
+            assert_eq!(
+                engine
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .unwrap()
+                    .presentation
+                    .choice_kind,
+                if replacement_pause {
+                    rv1::ChoiceKind::ReplacementEffect
+                } else {
+                    rv1::ChoiceKind::AuraPermanent
+                }
+            );
+            for _ in 0..3 {
+                let pending = engine.state.pending_resolution.as_ref().unwrap();
+                if pending.presentation.choice_kind == rv1::ChoiceKind::AuraPermanent {
+                    break;
+                }
+                assert_eq!(
+                    pending.presentation.choice_kind,
+                    rv1::ChoiceKind::ReplacementEffect
+                );
+                let chosen = pending.presentation.candidates[0];
+                engine.apply_command(0, &answer(chosen)).unwrap();
+            }
+            let pending = engine.state.pending_resolution.as_ref().unwrap();
+            assert_eq!(
+                pending.presentation.choice_kind,
+                rv1::ChoiceKind::AuraPermanent
+            );
+            assert_eq!(
+                format!(
+                    "{:?}",
+                    pending.continuation.stack().unwrap().previous_result
+                ),
+                expected_previous
+            );
+            assert_eq!(
+                pending.continuation.stack().unwrap().resume_effect_index,
+                Some(1)
+            );
+            assert_eq!(engine.state.objects[&aura].zone, Zone::Library);
+            assert_eq!(engine.state.players[0].library.front(), Some(&token));
+            assert!(
+                engine.state.objects[&token].is_token(),
+                "normal SBA remains deferred"
+            );
+            let full = engine.ev_zone_view_sync();
+            let Some(rv1::ruled_event::Ev::ZoneView(full)) = full.ev else {
+                panic!("full view");
+            };
+            let owner = full
+                .per_player
+                .iter()
+                .find(|player| player.player_id == 0)
+                .unwrap();
+            assert_eq!(
+                owner.library_cards[0].object_id, aura,
+                "first physical card skips token"
+            );
+            assert!(!owner
+                .library_cards
+                .iter()
+                .any(|card| card.object_id == token));
+            let tracked = engine.ev_zone_view_sync_tracked();
+            let Some(rv1::ruled_event::Ev::ZoneView(tracked)) = tracked.ev else {
+                panic!("tracked view");
+            };
+            assert!(
+                tracked
+                    .per_player
+                    .iter()
+                    .find(|player| player.player_id == 0)
+                    .unwrap()
+                    .private_zones_unchanged
+            );
+            if stale_recipient {
+                for zone in [Zone::Hand, Zone::Battlefield] {
+                    super::super::resolution::move_object_to_zone(
+                        &mut engine.state,
+                        engine.registry,
+                        recipient,
+                        zone,
+                        Some(1),
+                    )
+                    .unwrap();
+                }
+                let before = format!("{:?}", engine.state);
+                assert!(engine.apply_command(0, &answer(recipient)).is_err());
+                assert_eq!(format!("{:?}", engine.state), before);
+                assert_eq!(engine.state.objects[&aura].zone, Zone::Library);
+            } else {
+                engine.apply_command(0, &answer(recipient)).unwrap();
+                assert_eq!(engine.state.objects[&aura].zone, Zone::Battlefield);
+                assert_eq!(
+                    engine.state.objects[&aura].attached_to,
+                    Some(AttachmentRecipient::Object(recipient))
+                );
+                assert_eq!(engine.state.objects[&aura].tapped, replacement_pause);
+                assert!(
+                    !engine.state.objects.contains_key(&token),
+                    "SBA runs at completed resolution"
+                );
+                assert!(engine.state.pending_resolution.is_none());
+                assert!(engine.state.pending_replacement_event.is_none());
+            }
+        }
+    }
+}
+
 #[test]
 fn black_vise_internal_entry_without_eligible_opponents_completes_undefined() {
     let mut engine = engine();

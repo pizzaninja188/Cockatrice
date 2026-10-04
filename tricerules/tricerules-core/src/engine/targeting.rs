@@ -1086,6 +1086,7 @@ fn validate_effect_targets(
             subject: EffectSubject::Chosen(_),
         }
         | SpellEffectKind::Earthbend { .. }
+        | SpellEffectKind::ChaosWarp
         | SpellEffectKind::SetBasePowerToughness { .. }
         | SpellEffectKind::ExileUntilSourceLeaves { target: _ }
         | SpellEffectKind::DestroyAttached { target: _, .. }
@@ -2337,6 +2338,7 @@ mod tests {
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
             exiled_cohorts: Default::default(),
+            chaos_warp_owner_instructions: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),

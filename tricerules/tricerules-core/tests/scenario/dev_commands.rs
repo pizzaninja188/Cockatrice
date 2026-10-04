@@ -62,6 +62,71 @@ fn basics_engine(seed: u64) -> GameEngine {
 }
 
 #[test]
+fn dev_move_declared_commander_from_command_zone_round_trips_physical_identity_and_replay() {
+    let create = || {
+        let decks = Some(vec![
+            tricerules_core::EngineDeck {
+                mainboard: vec!["island".into(); 12],
+                commanders: vec!["kami_of_the_crescent_moon".into()],
+            },
+            tricerules_core::EngineDeck {
+                mainboard: vec!["forest".into(); 12],
+                commanders: vec![],
+            },
+        ]);
+        let mut engine =
+            GameEngine::new_with_commander_decks(902_903, &[0, 1], 20, decks, true).unwrap();
+        engine.enable_dev_commands();
+        advance_to_main1_from_game_start(&mut engine);
+        engine
+    };
+    let mut engine = create();
+    let commander = engine.state.players[0].command_zone[0];
+    let initial_object_count = engine.state.objects.len();
+    let initial_command_index = engine.state.command_index;
+    let commands = [
+        mv(0, DevZone::Battlefield, "Kami of the Crescent Moon"),
+        mv(0, DevZone::Command, "Kami of the Crescent Moon"),
+    ];
+    let mut batches = vec![];
+    for (index, command) in commands.iter().enumerate() {
+        let batch = engine.apply_command(0, command).unwrap();
+        assert_eq!(engine.state.objects.len(), initial_object_count);
+        assert_eq!(
+            engine.state.players[0].declared_commander_object_ids,
+            [commander]
+        );
+        assert_eq!(
+            engine.state.zone_change_generation[&commander],
+            (index + 1) as u64
+        );
+        assert_eq!(
+            engine.state.command_index,
+            initial_command_index + index as u64 + 1
+        );
+        if index == 0 {
+            assert!(engine.state.players[0].command_zone.is_empty());
+            assert!(engine.state.players[0].battlefield.contains(&commander));
+        } else {
+            assert_eq!(engine.state.players[0].command_zone, [commander]);
+            assert!(!engine.state.players[0].battlefield.contains(&commander));
+            assert!(batch.events.iter().any(|event| matches!(
+                &event.ev,
+                Some(Ev::PermanentMoved(moved))
+                    if moved.object_id == commander
+                        && moved.destination() == permanent_moved::Destination::Command
+            )));
+        }
+        batches.push(batch);
+    }
+    let mut replay = create();
+    for (command, expected) in commands.iter().zip(batches) {
+        assert_eq!(replay.apply_command(0, command).unwrap(), expected);
+    }
+    assert_eq!(replay.state.players[0].command_zone, [commander]);
+}
+
+#[test]
 fn preparation_display_identity_matches_the_whole_card_database_entry() {
     let mut e = basics_engine(180_201);
     for name in [

@@ -599,6 +599,7 @@ pub(super) fn copy_target_spell(
                 payment_result: src.payment_result.clone(),
                 search_results: Default::default(),
                 exiled_cohorts: Default::default(),
+                chaos_warp_owner_instructions: Default::default(),
                 resolution_branch_choices: Default::default(),
                 blight_receipts: src.blight_receipts.clone(),
                 // CR 707.2: the copy has the original's characteristics and choices. `None`

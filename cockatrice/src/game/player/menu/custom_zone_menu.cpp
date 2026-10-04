@@ -1,6 +1,8 @@
 #include "custom_zone_menu.h"
 
 #include "../player.h"
+#include "../../ruled/ruled_actions.h"
+#include "../../ruled/ruled_zone_view_policy.h"
 
 CustomZoneMenu::CustomZoneMenu(Player *_player) : player(_player)
 {
@@ -17,11 +19,8 @@ void CustomZoneMenu::retranslateUi()
 {
     setTitle(tr("C&ustom Zones"));
 
-    if (player->getPlayerInfo()->getLocalOrJudge()) {
-
-        for (auto aViewZone : actions()) {
-            aViewZone->setText(tr("View custom zone '%1'").arg(aViewZone->data().toString()));
-        }
+    for (auto aViewZone : actions()) {
+        aViewZone->setText(tr("View custom zone '%1'").arg(aViewZone->data().toString()));
     }
 }
 
@@ -33,6 +32,10 @@ void CustomZoneMenu::clearCustomZonesMenu()
 
 void CustomZoneMenu::addViewCustomZoneActionToCustomZoneMenu(QString zoneName)
 {
+    if (!ruledCustomZoneViewAllowed(player->getPlayerInfo()->getLocalOrJudge(),
+                                   RuledActions::isRuledGame(player->getGame()), zoneName)) {
+        return;
+    }
     menuAction()->setVisible(true);
     QAction *aViewZone = addAction(tr("View custom zone '%1'").arg(zoneName));
     aViewZone->setData(zoneName);

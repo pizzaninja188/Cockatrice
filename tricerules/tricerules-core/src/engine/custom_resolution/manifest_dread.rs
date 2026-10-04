@@ -76,7 +76,15 @@ impl GameEngine {
             other_object_id: other,
             chosen_library_position: chosen_position,
         };
-        match self.begin_battlefield_entry(stack.item.clone(), entry, completion, &mut events) {
+        match self.begin_battlefield_entry(
+            stack.item.clone(),
+            entry,
+            completion.clone(),
+            &mut events,
+        ) {
+            super::super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
+                self.finish_entry_copy_without_recipient(stack, *entry, completion, events)
+            }
             super::super::replacement::BattlefieldEntryProgress::Parked => {
                 if let Some(replacement_pending) = self.state.pending_resolution.as_mut() {
                     if let Some(replacement_stack) = replacement_pending.continuation.stack_mut() {

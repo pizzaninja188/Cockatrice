@@ -18,6 +18,7 @@ use tricerules_cards::primitives::{
 };
 use tricerules_cards::{AbilityPresentation, ChoiceId};
 
+mod chaos_warp;
 mod choices;
 pub(super) use choices::resolution_branch_is_live;
 pub(in crate::engine) use choices::{
@@ -369,6 +370,8 @@ enum EffectOutcome {
     GameEnded,
     Blighted(crate::state::BlightReceipt),
     RetainedExile(tricerules_cards::ExiledCohortId, Vec<TriggerObjectRef>),
+    ChaosWarpOwnerInstructions(PlayerId),
+    ChaosWarpCommanderChoice,
     Suspended,
     RestartResolutionBranch(Option<usize>),
 }
@@ -1042,6 +1045,24 @@ impl GameEngine {
                 ) {
                     super::replacement::BattlefieldEntryProgress::Parked => {
                         return Ok(ResolutionProgress::Parked);
+                    }
+                    super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
+                        self.restore_skipped_battlefield_entry(&entry)?;
+                        let owner = self.state.objects.get(&top.id).map(|object| object.owner);
+                        events.push(rv1::RuledEvent {
+                            ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
+                                object_id: top.id,
+                                destination: rv1::StackResolveDestination::Graveyard as i32,
+                                owner_player_id: owner,
+                            })),
+                        });
+                        move_object_to_zone(
+                            &mut self.state,
+                            self.registry,
+                            top.id,
+                            Zone::Graveyard,
+                            None,
+                        )?;
                     }
                     super::replacement::BattlefieldEntryProgress::Ready(entry) => {
                         let entry = *entry;
@@ -1781,6 +1802,7 @@ impl GameEngine {
                     SpellEffectKind::ManifestDread => zones::manifest_dread(&mut cx)?,
                     SpellEffectKind::IntoTheWilds => zones::into_the_wilds(&mut cx)?,
                     SpellEffectKind::DeployTheGatewatch => zones::deploy_the_gatewatch(&mut cx)?,
+                    SpellEffectKind::ChaosWarp => chaos_warp::chaos_warp(&mut cx)?,
                     effect @ SpellEffectKind::LookChooseToHand { .. } => {
                         zones::look_choose_to_hand(&mut cx, effect)?
                     }
@@ -2090,6 +2112,39 @@ impl GameEngine {
                     .insert(id.clone(), objects.clone());
             }
             self.refresh_enduring_story_designations();
+            if let EffectOutcome::ChaosWarpOwnerInstructions(owner) = outcome {
+                completed_item
+                    .chaos_warp_owner_instructions
+                    .insert(index as u32, owner);
+                let mut resume = ParkedStackResolution::new(completed_item.clone());
+                resume.resume_effect_index = Some(index as u32);
+                resume.previous_result = previous_effect_result.clone();
+                if self.drain_immediate_observer_actions(Some(resume), events)? {
+                    return Ok(ResolutionProgress::Parked);
+                }
+                let (effects, label) = self.build_resolution_effects(&completed_item);
+                return self.run_effect_list_with_previous(
+                    &completed_item,
+                    &label,
+                    effects,
+                    index,
+                    previous_effect_result,
+                    events,
+                );
+            }
+            if outcome == EffectOutcome::ChaosWarpCommanderChoice {
+                if let Some(stack) = self
+                    .state
+                    .pending_resolution
+                    .as_mut()
+                    .and_then(|pending| pending.continuation.stack_mut())
+                {
+                    // The owner has not finished this primitive yet; retain its exact input.
+                    stack.resume_effect_index = Some(index as u32);
+                    stack.previous_result = previous_effect_result;
+                }
+                return Ok(ResolutionProgress::Parked);
+            }
             let mut observer_stack = ParkedStackResolution::new(completed_item.clone());
             observer_stack.resume_effect_index = Some(index as u32 + 1);
             observer_stack.previous_result = effect_result.clone();
@@ -2140,6 +2195,10 @@ impl GameEngine {
                     );
                 }
                 EffectOutcome::Continue => {}
+                EffectOutcome::ChaosWarpOwnerInstructions(_)
+                | EffectOutcome::ChaosWarpCommanderChoice => {
+                    unreachable!("Chaos Warp instruction stages handled before observer completion")
+                }
                 EffectOutcome::GameEnded => unreachable!("terminal resolution returned above"),
             }
             previous_effect_result = effect_result;
@@ -2412,6 +2471,9 @@ impl GameEngine {
                         attached_to: None,
                     });
                 }
+                super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
+                    self.restore_skipped_battlefield_entry(&entry)?;
+                }
             }
         }
         let Some(SimultaneousEntryBatch::Observer(batch)) = self.begin_entry_timestamp_order(
@@ -2574,6 +2636,7 @@ impl GameEngine {
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
             exiled_cohorts: Default::default(),
+            chaos_warp_owner_instructions: Default::default(),
             resolution_branch_choices: BTreeMap::new(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
@@ -3895,6 +3958,7 @@ mod attached_subject_tests {
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
             exiled_cohorts: Default::default(),
+            chaos_warp_owner_instructions: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
@@ -6785,6 +6849,7 @@ mod source_keyword_tests {
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
             exiled_cohorts: Default::default(),
+            chaos_warp_owner_instructions: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),
@@ -6820,6 +6885,7 @@ mod source_keyword_tests {
             payment_result: CardResultCohort::default(),
             search_results: Default::default(),
             exiled_cohorts: Default::default(),
+            chaos_warp_owner_instructions: Default::default(),
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: TriggerContext::default(),

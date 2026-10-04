@@ -22,6 +22,7 @@
 #include "game/ruled/ruled_public_zone_order_plan.h"
 #include "game/ruled/ruled_restricted_mana_model.h"
 #include "game/ruled/ruled_zone_snapshot_policy.h"
+#include "game/ruled/ruled_zone_view_policy.h"
 
 #include <QBuffer>
 #include <QJsonArray>
@@ -438,6 +439,24 @@ TEST(RuledZoneSnapshotPolicyTest, OpenPermissionMirrorDoesNotDuplicatePublicExil
     EXPECT_TRUE(ruledSnapshotPreservesEventAuthoritativeZone(QString::fromLatin1(ZoneNames::EXILE)));
     EXPECT_TRUE(ruledSnapshotPreservesEventAuthoritativeZone(QString::fromLatin1(ZoneNames::COMMAND)));
     EXPECT_FALSE(ruledSnapshotPreservesEventAuthoritativeZone(QString::fromLatin1(ZoneNames::HAND)));
+}
+
+TEST(RuledZoneViewPolicyTest, OpponentCommandZoneIsPublicOnlyInRuledGames)
+{
+    EXPECT_TRUE(ruledPlayerNeedsCustomZoneMenu(false, true));
+    EXPECT_FALSE(ruledPlayerNeedsCustomZoneMenu(false, false));
+    EXPECT_TRUE(ruledPlayerNeedsCustomZoneMenu(true, true));
+    EXPECT_TRUE(ruledPlayerNeedsCustomZoneMenu(true, false));
+    const auto command = QString::fromLatin1(ZoneNames::COMMAND);
+    EXPECT_TRUE(ruledCustomZoneViewAllowed(false, true, command));
+    EXPECT_FALSE(ruledCustomZoneViewAllowed(false, false, command));
+    EXPECT_TRUE(ruledCustomZoneViewAllowed(true, false, command));
+    for (const auto &zone : {QString::fromLatin1(ZoneNames::HAND), QString::fromLatin1(ZoneNames::DECK),
+                             QStringLiteral("private_custom_zone")}) {
+        EXPECT_FALSE(ruledCustomZoneViewAllowed(false, true, zone));
+        EXPECT_FALSE(ruledCustomZoneViewAllowed(false, false, zone));
+        EXPECT_TRUE(ruledCustomZoneViewAllowed(true, false, zone));
+    }
 }
 
 TEST_F(RuledClientTest, ConvokeSelectionUsesPublishedColorAndGeneration)

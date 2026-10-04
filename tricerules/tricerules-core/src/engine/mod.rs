@@ -263,6 +263,79 @@ mod face_change_tests {
     }
 
     #[test]
+    fn declared_commander_designation_survives_zones_and_excludes_same_name_copies() {
+        let mut engine = GameEngine::new_with_commander_decks(
+            821,
+            &[0, 1],
+            20,
+            Some(vec![
+                commander_engine_deck(
+                    &["kami_of_the_crescent_moon"; 10],
+                    &["kami_of_the_crescent_moon"],
+                ),
+                commander_engine_deck(&["forest"; 10], &[]),
+            ]),
+            true,
+        )
+        .unwrap();
+        let commander = engine.state.players[0].command_zone[0];
+        let ordinary = engine.state.players[0].hand[0];
+        assert_eq!(
+            engine.state.objects[&commander].card_id,
+            engine.state.objects[&ordinary].card_id
+        );
+        assert_eq!(
+            engine.state.players[0].declared_commander_object_ids,
+            [commander]
+        );
+        assert!(!engine.state.players[0]
+            .declared_commander_object_ids
+            .contains(&ordinary));
+        for zone in [
+            Zone::Battlefield,
+            Zone::Hand,
+            Zone::Library,
+            Zone::Exile,
+            Zone::Command,
+        ] {
+            resolution::move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                commander,
+                zone,
+                Some(1),
+            )
+            .unwrap();
+            assert_eq!(
+                engine.state.players[0].declared_commander_object_ids,
+                [commander]
+            );
+            assert!(engine.state.players[1]
+                .declared_commander_object_ids
+                .is_empty());
+        }
+        let copied = engine.state.next_object_id;
+        engine.state.next_object_id += 1;
+        let mut copy = engine.state.objects[&commander].clone();
+        copy.id = copied;
+        copy.zone = Zone::Battlefield;
+        copy.copiable_values = engine.copiable_values_for(commander);
+        engine.state.objects.insert(copied, copy);
+        engine.state.players[0].battlefield.push(copied);
+        assert_eq!(
+            engine.state.objects[&copied].card_id,
+            engine.state.objects[&commander].card_id
+        );
+        assert!(!engine.state.players[0]
+            .declared_commander_object_ids
+            .contains(&copied));
+        assert_eq!(
+            engine.state.players[0].declared_commander_object_ids,
+            [commander]
+        );
+    }
+
+    #[test]
     fn commander_identity_stays_outside_library_and_drives_dynamic_mana_for_current_controller() {
         let mainboard = [
             "arcane_signet",
@@ -1641,6 +1714,7 @@ impl GameEngine {
                     new_object_from_card(oid, pid, card_id, Zone::Command, def.primary_face()),
                 );
                 p.command_zone.push(oid);
+                p.declared_commander_object_ids.push(oid);
             }
             p.color_identity = [
                 Color::White,

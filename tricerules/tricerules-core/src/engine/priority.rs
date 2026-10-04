@@ -388,6 +388,7 @@ impl GameEngine {
         }
         self.refresh_mass_sacrifice_departure(events)?;
         self.refresh_damage_departure(events)?;
+        self.refresh_chaos_warp_departure(events)?;
         self.refresh_entry_timestamp_departure(&departed_objects, events)?;
         self.refresh_observer_aura_departure(events)?;
         self.refresh_participating_entry_departure(&departed_objects, events)?;

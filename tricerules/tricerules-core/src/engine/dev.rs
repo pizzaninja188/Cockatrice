@@ -201,6 +201,11 @@ impl GameEngine {
                 ev,
             ) {
                 super::replacement::BattlefieldEntryProgress::Parked => Ok(()),
+                super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
+                    self.restore_skipped_battlefield_entry(&entry)?;
+                    self.complete_skipped_dev_placement(&entry, deferred_events, announce_move, ev);
+                    Ok(())
+                }
                 super::replacement::BattlefieldEntryProgress::Ready(entry) => self
                     .complete_dev_battlefield_placement(
                         *entry,
@@ -220,6 +225,22 @@ impl GameEngine {
             zone_label(zone)
         )));
         Ok(())
+    }
+
+    pub(super) fn complete_skipped_dev_placement(
+        &mut self,
+        entry: &BattlefieldEntryEvent,
+        mut deferred_events: Vec<RuledEvent>,
+        announce_move: bool,
+        events: &mut Vec<RuledEvent>,
+    ) {
+        if !announce_move {
+            self.state.objects.remove(&entry.object_id);
+            self.state.zone_change_generation.remove(&entry.object_id);
+            deferred_events.retain(|event| !matches!(&event.ev,
+                Some(rv1::ruled_event::Ev::DevCardConjured(card)) if card.object_id == entry.object_id));
+        }
+        events.append(&mut deferred_events);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -389,7 +410,7 @@ impl GameEngine {
     }
 
     /// First object owned by `player` with this `card_id`, searching hand, library, graveyard,
-    /// exile, then battlefield. Hand comes first because it is the documented staging zone for
+    /// exile, battlefield, then command zone. Hand comes first because it is the documented staging zone for
     /// `put hand X` followed by `move gy X`; library still precedes battlefield so an unused deck
     /// copy is preferred over cannibalising the board the caller is in the middle of setting up.
     ///
@@ -418,6 +439,7 @@ impl GameEngine {
             .or_else(|| p.graveyard.iter().find(|o| matches(o)))
             .or_else(|| p.exile.iter().find(|o| matches(o)))
             .or_else(|| p.battlefield.iter().find(|o| matches(o)))
+            .or_else(|| p.command_zone.iter().find(|o| matches(o)))
             .copied()
     }
 }
@@ -454,7 +476,7 @@ fn zone_to_destination(z: Zone) -> rv1::permanent_moved::Destination {
         Zone::Exile => Destination::Exile,
         Zone::Library => Destination::Library,
         Zone::Stack => Destination::Unspecified,
-        Zone::Command => Destination::Unspecified,
+        Zone::Command => Destination::Command,
     }
 }
 
@@ -499,6 +521,7 @@ fn dev_entry_item(controller: PlayerId, object_id: ObjectId, card_id: &str) -> S
         payment_result: CardResultCohort::default(),
         search_results: Default::default(),
         exiled_cohorts: Default::default(),
+        chaos_warp_owner_instructions: Default::default(),
         resolution_branch_choices: Default::default(),
         blight_receipts: Vec::new(),
         trigger_context: TriggerContext::default(),

@@ -517,6 +517,48 @@ protected:
         }
         return v;
     }
+
+    void expectCommandEntryAndImmediateDeparture(Server_Player *entryController)
+    {
+        auto *command = new Server_CardZone(p1, ZoneNames::COMMAND, false, ServerInfo_Zone::PublicZone);
+        p1->addZone(command);
+        auto *selected = new Server_Card({QStringLiteral("Grizzly Bears")}, p1->newCardId(), 0, 0, command);
+        auto *otherCommander = new Server_Card({QStringLiteral("Grizzly Bears")}, p1->newCardId(), 0, 0, command);
+        command->insertCard(selected, -1, 0);
+        command->insertCard(otherCommander, -1, 0);
+        auto *libraryDuplicate = addCardToDeck(p1, "Grizzly Bears");
+        auto initial = buildPerPlayerView(p1, {}, {});
+        initial.add_command_zone_object_ids(601u);
+        initial.add_command_zone_object_ids(602u);
+        auto *libraryCard = initial.add_library_cards();
+        libraryCard->set_object_id(701u);
+        libraryCard->set_card_id("grizzly_bears");
+        applyZoneView(p1, initial, nullptr);
+        ASSERT_EQ(findCardByEngineOid(p1, 601u), selected);
+
+        ruled::v1::IpcResponse response;
+        response.set_ok(true);
+        for (const auto destination : {ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD,
+                                       ruled::v1::PermanentMoved::DESTINATION_GRAVEYARD}) {
+            auto *move = response.mutable_batch()->add_events()->mutable_permanent_moved();
+            move->set_object_id(601u);
+            move->set_owner_player_id(p1->getPlayerId());
+            move->set_controller_player_id(entryController->getPlayerId());
+            move->set_card_id("grizzly_bears");
+            move->set_destination(destination);
+        }
+        // An entry and immediate SBA departure precede the batch's final zone snapshot.
+        // Observe the physical result before a snapshot can hide a name-based substitution.
+        callBatchApply(response);
+        EXPECT_EQ(p1->getZones().value(ZoneNames::GRAVE)->getCards(), QList<Server_Card *>({selected}));
+        EXPECT_TRUE(p1->getZones().value(ZoneNames::TABLE)->getCards().isEmpty());
+        EXPECT_TRUE(p2->getZones().value(ZoneNames::TABLE)->getCards().isEmpty());
+        EXPECT_EQ(command->getCards(), QList<Server_Card *>({otherCommander}));
+        EXPECT_EQ(p1->getZones().value(ZoneNames::DECK)->getCards(), QList<Server_Card *>({libraryDuplicate}));
+        EXPECT_EQ(bindingFor(p1).findGraveyardCardByEngineOid(p1, 601u), selected);
+        EXPECT_EQ(bindingFor(p1).findCardByEngineOid(p1, 602u), otherCommander);
+        EXPECT_EQ(bindingFor(p1).findCardByEngineOid(p1, 701u), libraryDuplicate);
+    }
 };
 
 TEST_F(RuledBatchTest, RevealSnapshotsReachBothSeatsWithoutDependingOnCurrentPhysicalZone)
@@ -2949,6 +2991,109 @@ TEST_F(RuledBatchTest, InitialCommandZoneSnapshotBindsCommanderObjectsInDeclared
     EXPECT_EQ(findCardByEngineOid(p1, 502u), secondCommander);
 }
 
+TEST_F(RuledBatchTest, PermanentMovedFromCommandUsesExactIdentityBeforeSameNameLibraryFallback)
+{
+    auto *command = new Server_CardZone(p1, ZoneNames::COMMAND, false, ServerInfo_Zone::PublicZone);
+    p1->addZone(command);
+    auto *selected = new Server_Card({QStringLiteral("Grizzly Bears")}, p1->newCardId(), 0, 0, command);
+    auto *otherCommander = new Server_Card({QStringLiteral("Grizzly Bears")}, p1->newCardId(), 0, 0, command);
+    command->insertCard(selected, -1, 0);
+    command->insertCard(otherCommander, -1, 0);
+    auto *libraryDuplicate = addCardToDeck(p1, "Grizzly Bears");
+    const int selectedPhysicalId = selected->getId();
+
+    ruled::v1::RuledPerPlayerView initial = buildPerPlayerView(p1, {}, {});
+    initial.add_command_zone_object_ids(601u);
+    initial.add_command_zone_object_ids(602u);
+    auto *libraryCard = initial.add_library_cards();
+    libraryCard->set_object_id(701u);
+    libraryCard->set_card_id("grizzly_bears");
+    applyZoneView(p1, initial, nullptr);
+    ASSERT_EQ(findCardByEngineOid(p1, 601u), selected);
+    ASSERT_EQ(findCardByEngineOid(p1, 602u), otherCommander);
+    ASSERT_EQ(findCardByEngineOid(p1, 701u), libraryDuplicate);
+
+    ruled::v1::IpcResponse entered;
+    entered.set_ok(true);
+    auto *move = entered.mutable_batch()->add_events()->mutable_permanent_moved();
+    move->set_object_id(601u);
+    move->set_owner_player_id(p1->getPlayerId());
+    move->set_controller_player_id(p1->getPlayerId());
+    move->set_card_id("grizzly_bears");
+    move->set_destination(ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD);
+    // Inspect physical movement before a later snapshot can rebind identical cards.
+    callBatchApply(entered);
+    EXPECT_EQ(p1->getZones().value(ZoneNames::TABLE)->getCards(), QList<Server_Card *>({selected}));
+    EXPECT_EQ(command->getCards(), QList<Server_Card *>({otherCommander}));
+    EXPECT_EQ(p1->getZones().value(ZoneNames::DECK)->getCards(), QList<Server_Card *>({libraryDuplicate}));
+    EXPECT_EQ(selected->getId(), selectedPhysicalId);
+
+    auto finalView = buildPerPlayerView(p1, {601u}, {false});
+    finalView.add_command_zone_object_ids(602u);
+    *finalView.add_library_cards() = *libraryCard;
+    applyZoneView(p1, finalView, nullptr);
+    EXPECT_EQ(findCardByEngineOid(p1, 601u), selected);
+    EXPECT_EQ(findCardByEngineOid(p1, 602u), otherCommander);
+    EXPECT_EQ(findCardByEngineOid(p1, 701u), libraryDuplicate);
+}
+
+TEST_F(RuledBatchTest, CommandEntryAndImmediateDepartureKeepExactPhysicalIdentity)
+{
+    expectCommandEntryAndImmediateDeparture(p1);
+}
+
+TEST_F(RuledBatchTest, CommandEntryUnderAnotherControllerAndImmediateDepartureKeepExactPhysicalIdentity)
+{
+    expectCommandEntryAndImmediateDeparture(p2);
+}
+
+TEST_F(RuledBatchTest, PermanentMovedToCommandPreservesOwnedPhysicalCardsAndAuthoritativeOrder)
+{
+    auto *command = new Server_CardZone(p1, ZoneNames::COMMAND, false, ServerInfo_Zone::PublicZone);
+    p1->addZone(command);
+    auto *existing = new Server_Card({QStringLiteral("Grizzly Bears")}, p1->newCardId(), 0, 0, command);
+    command->insertCard(existing, -1, 0);
+    auto *first = addCardToTable(p2, "Grizzly Bears");
+    auto *second = addCardToTable(p2, "Grizzly Bears");
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto ownerView = buildPerPlayerView(p1, {}, {});
+    ownerView.add_command_zone_object_ids(601u);
+    *seedView->add_per_player() = ownerView;
+    *seedView->add_per_player() = buildPerPlayerView(p2, {703u, 704u}, {false, false},
+                                                   {p1->getPlayerId(), p1->getPlayerId()});
+    callBatchApply(seed);
+
+    ruled::v1::IpcResponse returned;
+    returned.set_ok(true);
+    for (const auto oid : {703u, 704u}) {
+        auto *move = returned.mutable_batch()->add_events()->mutable_permanent_moved();
+        move->set_object_id(oid);
+        move->set_owner_player_id(p1->getPlayerId());
+        move->set_controller_player_id(p1->getPlayerId());
+        move->set_card_id("grizzly_bears");
+        move->set_destination(ruled::v1::PermanentMoved::DESTINATION_COMMAND);
+    }
+    auto *finalView = returned.mutable_batch()->add_events()->mutable_zone_view();
+    auto ownerFinal = buildPerPlayerView(p1, {}, {});
+    for (const auto oid : {601u, 704u, 703u}) {
+        ownerFinal.add_command_zone_object_ids(oid);
+    }
+    *finalView->add_per_player() = ownerFinal;
+    *finalView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(returned);
+
+    ASSERT_EQ(command->getCards().size(), 3);
+    EXPECT_EQ(command->getCards(), QList<Server_Card *>({first, second, existing}));
+    EXPECT_EQ(findCardByEngineOid(p1, 601u), existing);
+    EXPECT_EQ(findCardByEngineOid(p1, 703u), first);
+    EXPECT_EQ(findCardByEngineOid(p1, 704u), second);
+    EXPECT_TRUE(p2->getZones().value(ZoneNames::TABLE)->getCards().isEmpty());
+    EXPECT_TRUE(p1->getZones().value(ZoneNames::GRAVE)->getCards().isEmpty());
+    EXPECT_TRUE(p2->getZones().value(ZoneNames::GRAVE)->getCards().isEmpty());
+}
+
 TEST_F(RuledBatchTest, PrivateZonesUnchangedSkipsTheHandAndLibraryReconcile)
 {
     Server_Card *inHand = addCardToHand(p1, "Hill Giant");
@@ -5174,6 +5319,70 @@ TEST_F(RuledBatchTest, LibrarySelectionsKeepTheExactDuplicateCardsWhenReconciled
     ASSERT_TRUE(callBatchApply(response).zoneViewApplied);
     EXPECT_EQ(p1->getZones().value(ZoneNames::HAND)->getCards(), QList<Server_Card *>({third, second}));
     EXPECT_EQ(p1->getZones().value(ZoneNames::DECK)->getCards(), QList<Server_Card *>({first}));
+    EXPECT_EQ(findCardByEngineOid(p1, 701u), first);
+    EXPECT_EQ(findCardByEngineOid(p1, 702u), second);
+    EXPECT_EQ(findCardByEngineOid(p1, 703u), third);
+}
+
+TEST_F(RuledBatchTest, TokenLibraryDeparturePreservesCardOnlyPoolAndDuplicateBindingsThroughPausedViews)
+{
+    Server_Card *first = addCardToDeck(p1, "Grizzly Bears");
+    Server_Card *second = addCardToDeck(p1, "Grizzly Bears");
+    Server_Card *third = addCardToDeck(p1, "Grizzly Bears");
+    ruled::v1::RuledPerPlayerView initial;
+    initial.set_player_id(p1->getPlayerId());
+    for (quint32 oid : {701u, 702u, 703u}) {
+        auto *card = initial.add_library_cards();
+        card->set_object_id(oid);
+        card->set_card_id("grizzly_bears");
+    }
+    applyZoneView(p1, initial, nullptr);
+    ruled::v1::IpcResponse created;
+    created.set_ok(true);
+    auto *token = created.mutable_batch()->add_events()->mutable_token_created();
+    token->set_object_id(704u);
+    token->set_controller_player_id(p1->getPlayerId());
+    token->set_card_id("grizzly_bears");
+    token->mutable_identity()->set_name("Grizzly Bears");
+    token->mutable_identity()->set_pt("2/2");
+    token->mutable_identity()->set_is_creature(true);
+    token->mutable_identity()->add_types("Creature");
+    callBatchApply(created);
+    ASSERT_NE(findCardByEngineOid(p1, 704u), nullptr);
+    ASSERT_TRUE(findCardByEngineOid(p1, 704u)->getDestroyOnZoneChange());
+
+    ruled::v1::IpcResponse paused;
+    paused.set_ok(true);
+    auto *move = paused.mutable_batch()->add_events()->mutable_permanent_moved();
+    move->set_object_id(704u);
+    move->set_card_id("grizzly_bears");
+    move->set_owner_player_id(p1->getPlayerId());
+    move->set_controller_player_id(p1->getPlayerId());
+    move->set_destination(ruled::v1::PermanentMoved::DESTINATION_LIBRARY);
+    auto *view = paused.mutable_batch()->add_events()->mutable_zone_view()->add_per_player();
+    view->set_player_id(p1->getPlayerId());
+    // The authoritative engine still retains the token until SBAs. Its physical-card
+    // projection excludes it while an Aura/replacement choice is paused.
+    for (quint32 oid : {703u, 701u, 702u}) {
+        auto *card = view->add_library_cards();
+        card->set_object_id(oid);
+        card->set_card_id("grizzly_bears");
+    }
+    ASSERT_TRUE(callBatchApply(paused).zoneViewApplied);
+    EXPECT_EQ(p1->getZones().value(ZoneNames::TABLE)->getCards().size(), 0);
+    EXPECT_EQ(p1->getZones().value(ZoneNames::DECK)->getCards(), QList<Server_Card *>({third, first, second}));
+    EXPECT_EQ(findCardByEngineOid(p1, 701u), first);
+    EXPECT_EQ(findCardByEngineOid(p1, 702u), second);
+    EXPECT_EQ(findCardByEngineOid(p1, 703u), third);
+    EXPECT_EQ(findCardByEngineOid(p1, 704u), nullptr);
+
+    ruled::v1::IpcResponse omitted;
+    omitted.set_ok(true);
+    auto *unchanged = omitted.mutable_batch()->add_events()->mutable_zone_view()->add_per_player();
+    unchanged->set_player_id(p1->getPlayerId());
+    unchanged->set_private_zones_unchanged(true);
+    callBatchApply(omitted);
+    EXPECT_EQ(p1->getZones().value(ZoneNames::DECK)->getCards(), QList<Server_Card *>({third, first, second}));
     EXPECT_EQ(findCardByEngineOid(p1, 701u), first);
     EXPECT_EQ(findCardByEngineOid(p1, 702u), second);
     EXPECT_EQ(findCardByEngineOid(p1, 703u), third);

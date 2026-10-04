@@ -1,0 +1,102 @@
+{
+  "format_version": 1,
+  "oracle_id": "07a0cba9-8768-4fd9-a3d5-b0f83b4bf8e8",
+  "complete_definition_review_confirmed": true,
+  "tokens": [],
+  "spans": [
+    {
+      "face_id": "chaos_warp",
+      "end_line": 1,
+      "start_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "covers": "copied aura without surviving recipient restores original library card values",
+      "test": "scenario chaos_warp::paid_chaos_warp_copied_aura_without_surviving_recipient_restores_original_library_card_values"
+    },
+    {
+      "covers": "copied aura owner departure is accepted without resurrection",
+      "test": "scenario chaos_warp::paid_chaos_warp_copied_aura_owner_departure_is_accepted_without_resurrection"
+    },
+    {
+      "covers": "permanent foreign control departure keeps exiled commander and finishes owner instructions",
+      "test": "scenario chaos_warp::paid_chaos_warp_permanent_foreign_control_departure_keeps_exiled_commander_and_finishes_owner_instructions"
+    },
+    {
+      "covers": "attachment recipient departure refreshes survivors or skips without moving aura",
+      "test": "scenario chaos_warp::paid_chaos_warp_attachment_recipient_departure_refreshes_survivors_or_skips_without_moving_aura"
+    },
+    {
+      "covers": "requires red mana and exactly one battlefield target",
+      "test": "scenario chaos_warp::paid_chaos_warp_requires_red_mana_and_exactly_one_battlefield_target"
+    },
+    {
+      "covers": "twincast copy can complete commander choice without a physical spell card",
+      "test": "scenario chaos_warp::paid_chaos_warp_twincast_copy_can_complete_commander_choice_without_a_physical_spell_card"
+    },
+    {
+      "covers": "replacement order then aura attachment preserves one public receipt",
+      "test": "scenario chaos_warp::paid_chaos_warp_replacement_order_then_aura_attachment_preserves_one_public_receipt"
+    },
+    {
+      "covers": "aura attachment is not targeting but obeys protection",
+      "test": "scenario chaos_warp::paid_chaos_warp_aura_attachment_is_not_targeting_but_obeys_protection"
+    },
+    {
+      "covers": "owner choice protobuf commands replay identical batches and identity",
+      "test": "scenario chaos_warp::paid_chaos_warp_owner_choice_protobuf_commands_replay_identical_batches_and_identity"
+    },
+    {
+      "covers": "aura choice retains public reveal and guards actual top generation owner and recipient",
+      "test": "scenario chaos_warp::paid_chaos_warp_aura_choice_retains_public_reveal_and_guards_actual_top_generation_owner_and_recipient"
+    },
+    {
+      "covers": "no recipient aura stays top and token only library reveals nothing",
+      "test": "scenario chaos_warp::paid_chaos_warp_no_recipient_aura_stays_top_and_token_only_library_reveals_nothing"
+    },
+    {
+      "covers": "entry owner caster and unrelated concessions settle without resurrection",
+      "test": "scenario chaos_warp::paid_chaos_warp_entry_owner_caster_and_unrelated_concessions_settle_without_resurrection"
+    },
+    {
+      "covers": "commander owner caster and unrelated concessions clear only relevant work",
+      "test": "scenario chaos_warp::paid_chaos_warp_commander_owner_caster_and_unrelated_concessions_clear_only_relevant_work"
+    },
+    {
+      "covers": "battle is a permanent and enters front face with owner protector choice",
+      "test": "scenario chaos_warp::paid_chaos_warp_battle_is_a_permanent_and_enters_front_face_with_owner_protector_choice"
+    },
+    {
+      "covers": "finishes owed creature return before choosing revealed aura recipient",
+      "test": "scenario chaos_warp::paid_chaos_warp_finishes_owed_creature_return_before_choosing_revealed_aura_recipient"
+    },
+    {
+      "covers": "preserves owner instruction through owed aura return choice without early reveal",
+      "test": "scenario chaos_warp::paid_chaos_warp_preserves_owner_instruction_through_owed_aura_return_choice_without_early_reveal"
+    },
+    {
+      "covers": "declared stolen commander owner chooses both destinations and rejects invalid answers atomically",
+      "test": "scenario chaos_warp::paid_chaos_warp_declared_stolen_commander_owner_chooses_both_destinations_and_rejects_invalid_answers_atomically"
+    },
+    {
+      "covers": "ordinary same name card does not inherit commander designation",
+      "test": "scenario chaos_warp::paid_chaos_warp_ordinary_same_name_card_does_not_inherit_commander_designation"
+    },
+    {
+      "covers": "illegal sole target fizzles without shuffle or reveal",
+      "test": "scenario chaos_warp::paid_chaos_warp_illegal_sole_target_fizzles_without_shuffle_or_reveal"
+    },
+    {
+      "covers": "token target uses owner library and reveals nonpermanent without moving it",
+      "test": "scenario chaos_warp::paid_chaos_warp_token_target_uses_owner_library_and_reveals_nonpermanent_without_moving_it"
+    },
+    {
+      "covers": "Exact single red Instant face, cost and one permanent target; physical spell artwork supplies Oracle presentation",
+      "test": "deck_coverage_search_lands::chaos_warp_complete_definition_has_exact_face_cost_identity_and_permanent_target"
+    }
+  ]
+}
