@@ -3608,6 +3608,26 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
 /// Look privately at the current top card, including a nonland that must be acknowledged.
 /// The optional placement reuses normal library-origin entry after this choice is answered.
 pub(super) fn into_the_wilds(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
+    look_choose_battlefield(cx, PendingLibraryLookStage::IntoTheWilds)
+}
+
+pub(super) fn deploy_the_gatewatch(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
+    look_choose_battlefield(cx, PendingLibraryLookStage::DeployTheGatewatch)
+}
+
+/// The two shipped library-entry looks share private image publication, not hand/search logic.
+fn look_choose_battlefield(
+    cx: &mut EffectCx<'_>,
+    stage: PendingLibraryLookStage,
+) -> Result<EffectOutcome, EngineError> {
+    use tricerules_cards::primitives::CardTypeFilter;
+    let (count, card_type, limit, prompt) = match stage {
+        PendingLibraryLookStage::IntoTheWilds => (1, CardTypeFilter::Land, 1,
+            "Look at the top card. You may put it onto the battlefield if it is a land."),
+        PendingLibraryLookStage::DeployTheGatewatch => (7, CardTypeFilter::Planeswalker, 2,
+            "Look at the top seven cards. You may put up to two planeswalker cards onto the battlefield."),
+        _ => return Err(EngineError::Illegal("unsupported battlefield look stage")),
+    };
     let engine = &mut *cx.engine;
     let controller = cx.controller;
     let Some(idx) = engine.state.player_idx(controller) else {
@@ -3616,7 +3636,7 @@ pub(super) fn into_the_wilds(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
     let looked: Vec<ObjectId> = engine.state.players[idx]
         .library
         .iter()
-        .take(1)
+        .take(count)
         .copied()
         .collect();
     if looked.is_empty() {
@@ -3635,7 +3655,7 @@ pub(super) fn into_the_wilds(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 engine.registry,
                 oid,
                 Some(&ZoneCardFilter {
-                    card_type: Some(tricerules_cards::primitives::CardTypeFilter::Land),
+                    card_type: Some(card_type),
                     ..Default::default()
                 }),
             )
@@ -3650,10 +3670,9 @@ pub(super) fn into_the_wilds(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
     let (candidate_card_ids, candidate_names) = candidate_identities(engine, &looked);
     let n = looked.len() as u32;
     let min = 0;
-    let max = legal.len() as u32;
+    let max = (legal.len() as u32).min(limit);
     // Wording must not disclose the hidden card's type to waiting recipients.
-    let prompt =
-        "Look at the top card. You may put it onto the battlefield if it is a land.".to_string();
+    let prompt = prompt.to_string();
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
@@ -3722,7 +3741,7 @@ pub(super) fn into_the_wilds(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                     )
                 })
                 .collect(),
-            stage: PendingLibraryLookStage::IntoTheWilds,
+            stage,
         },
     });
     Ok(EffectOutcome::Suspended)

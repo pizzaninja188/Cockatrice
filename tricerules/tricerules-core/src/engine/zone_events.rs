@@ -39,7 +39,7 @@ impl GameEngine {
         mut entries: Vec<BattlefieldEntryEvent>,
         origin: Zone,
         spell_label: &str,
-        search_completion: Option<crate::state::LibrarySearchCompletion>,
+        completion: Option<crate::state::ZoneEntryCompletion>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<Option<ParkedStackResolution>, EngineError> {
         entries.sort_by_key(|entry| self.state.apnap_rank(entry.deciding_player));
@@ -72,7 +72,7 @@ impl GameEngine {
                 origin_mana_values,
                 origin,
                 spell_label: spell_label.into(),
-                search_completion,
+                completion,
             },
             events,
         )
@@ -82,6 +82,37 @@ impl GameEngine {
         &self,
         batch: &crate::state::PendingZoneEntryBatch,
     ) -> bool {
+        if let Some(crate::state::ZoneEntryCompletion::DeployRandomBottom {
+            library_owner,
+            looked_refs,
+        }) = &batch.completion
+        {
+            let Some(idx) = self.state.player_idx(*library_owner) else {
+                return false;
+            };
+            if !looked_refs
+                .iter()
+                .map(|(oid, _)| *oid)
+                .eq(self.state.players[idx]
+                    .library
+                    .iter()
+                    .take(looked_refs.len())
+                    .copied())
+                || looked_refs.iter().any(|(oid, generation)| {
+                    self.state.objects.get(oid).is_none_or(|object| {
+                        object.zone != Zone::Library || object.owner != *library_owner
+                    }) || self
+                        .state
+                        .zone_change_generation
+                        .get(oid)
+                        .copied()
+                        .unwrap_or(0)
+                        != *generation
+                })
+            {
+                return false;
+            }
+        }
         batch.generations.iter().all(|(oid, generation)| {
             self.state
                 .objects
@@ -139,7 +170,12 @@ impl GameEngine {
         batch: crate::state::PendingZoneEntryBatch,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<ParkedStackResolution, EngineError> {
-        let mut search_completion = batch.search_completion;
+        // A looked remainder is frozen too: reject before committing even the first entrant.
+        if !self.zone_entry_batch_current(&batch) {
+            return Err(EngineError::Illegal("zone entry cohort became stale"));
+        }
+        let mut completion = batch.completion;
+        let mut committed = HashSet::new();
         let snapshot = self.snapshot_zone_event();
         let mut triggers = Vec::new();
         for entry in batch.ready {
@@ -156,7 +192,10 @@ impl GameEngine {
                 object_id: oid,
                 chosen_x,
             });
-            if let Some(completion) = search_completion.as_mut() {
+            committed.insert(oid);
+            if let Some(crate::state::ZoneEntryCompletion::LibrarySearch(completion)) =
+                completion.as_mut()
+            {
                 if let Some(result_id) = completion.result_id.take() {
                     stack.item.search_results.insert(
                         result_id,
@@ -179,7 +218,7 @@ impl GameEngine {
                 owner,
                 rv1::permanent_moved::Destination::Battlefield,
             ));
-            if search_completion.is_some() {
+            if completion.is_some() {
                 events.push(events::ev_log(format!(
                     "P{} puts {label} onto the battlefield.",
                     entry.destination_controller
@@ -197,7 +236,7 @@ impl GameEngine {
             }
         }
         self.fire_zone_triggers(snapshot, triggers);
-        if let Some(completion) = search_completion {
+        if let Some(crate::state::ZoneEntryCompletion::LibrarySearch(completion)) = completion {
             if completion.shuffle {
                 crate::engine::shuffle_player_library_for_current_command(
                     &mut self.state,
@@ -214,6 +253,31 @@ impl GameEngine {
                     library_owner: completion.searcher,
                 }]);
             }
+        } else if let Some(crate::state::ZoneEntryCompletion::DeployRandomBottom {
+            library_owner,
+            looked_refs,
+        }) = completion
+        {
+            let idx = self
+                .state
+                .player_idx(library_owner)
+                .ok_or(EngineError::Illegal("looking player missing"))?;
+            // Only known committed entry moves leave the cohort. Skipped entrants stay in rest.
+            let mut remaining: Vec<ObjectId> = looked_refs
+                .into_iter()
+                .filter_map(|(oid, _)| (!committed.contains(&oid)).then_some(oid))
+                .collect();
+            shuffle_object_ids_for_current_command(&self.state, library_owner, &mut remaining);
+            self.state.players[idx]
+                .library
+                .retain(|oid| !remaining.contains(oid));
+            self.state.players[idx]
+                .library
+                .extend(remaining.iter().copied());
+            events.push(events::ev_log(format!(
+                "P{library_owner} puts {} cards on the bottom of their library in a random order.",
+                remaining.len()
+            )));
         }
         Ok(stack)
     }

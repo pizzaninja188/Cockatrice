@@ -3,6 +3,34 @@ use tricerules_cards::primitives::{
 };
 use tricerules_cards::{CardRegistry, Color, Layout};
 
+#[test]
+fn deploy_the_gatewatch_complete_definition_and_identity_are_exact() {
+    let registry = CardRegistry::global();
+    let card = registry.get("deploy_the_gatewatch").unwrap();
+    assert_eq!(
+        registry.id_for_name("Deploy the Gatewatch"),
+        Some("deploy_the_gatewatch")
+    );
+    assert_eq!(card.face_count(), 1);
+    assert_eq!(card.layout, Layout::Normal);
+    assert_eq!(card.color_identity(), [Color::White]);
+    let face = card.primary_face();
+    assert_eq!(face.face_id.as_str(), "deploy_the_gatewatch");
+    assert_eq!(face.mana_cost.to_string(), "{4}{W}{W}");
+    assert_eq!(face.types, ["Sorcery"]);
+    assert_eq!(face.colors(), [Color::White]);
+    assert!(
+        face.activated_abilities.is_empty()
+            && face.static_abilities.is_empty()
+            && face.triggered_abilities.is_empty()
+    );
+    assert!(face.targeting.is_none());
+    assert_eq!(face.spell_effect, [SpellEffectKind::DeployTheGatewatch]);
+    face.spell_effect[0]
+        .validate(tricerules_cards::EffectContext::Spell)
+        .unwrap();
+}
+
 fn assert_search_defaults(
     card_id: &str,
     face_id: &str,

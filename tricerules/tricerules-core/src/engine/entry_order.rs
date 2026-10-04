@@ -24,6 +24,11 @@ impl GameEngine {
     }
 
     fn entry_timestamp_cohort_current(&self, order: &PendingEntryTimestampOrder) -> bool {
+        if let SimultaneousEntryBatch::Zone(batch) = &order.batch {
+            if !self.zone_entry_batch_current(batch) {
+                return false;
+            }
+        }
         order
             .original_generations
             .iter()

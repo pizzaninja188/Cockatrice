@@ -4432,6 +4432,128 @@ mod tests {
     use super::*;
 
     #[test]
+    fn deploy_private_skip_fixture_bottoms_selected_card_that_never_entered() {
+        // Characterize the shared copy/Aura skip seam, not a natural printed planeswalker copy.
+        let mut engine = GameEngine::new(90_220, &[0, 1], 20, None, true).unwrap();
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        engine.state.priority_idx = 0;
+        let spell = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&spell).unwrap().card_id = "deploy_the_gatewatch".into();
+        let mut looked = Vec::new();
+        for card in ["jace_beleren", "chandra,_novice_pyromancer", "forest"] {
+            let oid = engine.state.players[0].hand.pop().unwrap();
+            let object = engine.state.objects.get_mut(&oid).unwrap();
+            object.card_id = card.into();
+            object.zone = Zone::Library;
+            looked.push(oid);
+        }
+        for &oid in looked.iter().rev() {
+            engine.state.players[0].library.push_front(oid);
+        }
+        let original = engine.state.players[0]
+            .library
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        let window = original.iter().take(7).copied().collect::<Vec<_>>();
+        for _ in 0..2 {
+            let oid = engine.state.players[0].hand.pop().unwrap();
+            let object = engine.state.objects.get_mut(&oid).unwrap();
+            object.card_id = "orb_of_dreams".into();
+            object.zone = Zone::Battlefield;
+            engine.state.players[0].battlefield.push(oid);
+        }
+        engine.state.players[0].mana_pool.white = 2;
+        engine.state.players[0].mana_pool.colorless = 4;
+        engine
+            .cast_spell(
+                0,
+                &rv1::CastSpell {
+                    cast_method: rv1::CastMethod::Normal as i32,
+                    source: Some(rv1::CastSource {
+                        location: Some(rv1::cast_source::Location::HandIndex(0)),
+                        expected_zone_change_generation: None,
+                    }),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        engine.resolve_top_of_stack(&mut Vec::new()).unwrap();
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![looked[0], looked[1]],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let pending = engine.state.pending_resolution.take().unwrap();
+        let stack = pending.continuation.stack().unwrap().clone();
+        let Some(PendingReplacementEvent::BattlefieldEntry(entry)) =
+            engine.state.pending_replacement_event.take()
+        else {
+            panic!("replacement parks first proposed entry");
+        };
+        assert_eq!(entry.event.object_id, looked[0]);
+        engine
+            .finish_entry_copy_without_recipient(stack, entry.event, entry.completion, Vec::new())
+            .unwrap();
+        for _ in 0..10 {
+            let Some(pending) = engine.state.pending_resolution.as_ref() else {
+                break;
+            };
+            let chosen = if pending.presentation.choice_kind == rv1::ChoiceKind::ReplacementEffect {
+                vec![pending.presentation.candidates[0]]
+            } else {
+                pending.presentation.candidates.clone()
+            };
+            engine
+                .submit_resolution_choice(
+                    0,
+                    &rv1::SubmitResolutionChoice {
+                        chosen_object_ids: chosen,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+        }
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(engine.state.objects[&looked[0]].zone, Zone::Library);
+        assert_eq!(
+            engine
+                .state
+                .zone_change_generation
+                .get(&looked[0])
+                .copied()
+                .unwrap_or(0),
+            0
+        );
+        assert_eq!(engine.state.objects[&looked[1]].zone, Zone::Battlefield);
+        let library = engine.state.players[0]
+            .library
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            &library[..original.len() - window.len()],
+            &original[window.len()..]
+        );
+        let mut rest = library[original.len() - window.len()..].to_vec();
+        rest.sort_unstable();
+        let mut expected = window
+            .into_iter()
+            .filter(|oid| *oid != looked[1])
+            .collect::<Vec<_>>();
+        expected.sort_unstable();
+        assert_eq!(
+            rest, expected,
+            "skipped selected incarnation is part of the random bottom cohort"
+        );
+    }
+
+    #[test]
     fn issue_153_tatterkite_enters_without_proposed_counters() {
         let mut engine = GameEngine::new(153_008, &[0, 1], 20, None, true).unwrap();
         let object_id = engine.state.players[0].hand[0];

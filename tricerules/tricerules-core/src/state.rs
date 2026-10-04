@@ -1026,6 +1026,7 @@ pub enum PendingLibraryPartitionKind {
 #[derive(serde::Serialize, Debug, Clone)]
 pub enum PendingLibraryLookStage {
     IntoTheWilds,
+    DeployTheGatewatch,
     ChooseToHand {
         looked_at: Vec<ObjectId>,
         bottom_order: LibraryBottomOrder,
@@ -1650,7 +1651,17 @@ pub(crate) struct PendingZoneEntryBatch {
     pub origin_mana_values: Vec<(ObjectId, u64, u32)>,
     pub origin: Zone,
     pub spell_label: String,
-    pub search_completion: Option<LibrarySearchCompletion>,
+    pub completion: Option<ZoneEntryCompletion>,
+}
+
+/// Instructions that finish after the entire simultaneous entry cohort commits.
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) enum ZoneEntryCompletion {
+    LibrarySearch(LibrarySearchCompletion),
+    DeployRandomBottom {
+        library_owner: PlayerId,
+        looked_refs: Vec<(ObjectId, u64)>,
+    },
 }
 
 /// One pure-library search finishes only after its simultaneous entry cohort commits.

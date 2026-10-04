@@ -18,6 +18,7 @@
 #include "../game/replay.h"
 #include "../game/ruled/ruled_actions.h"
 #include "../game/ruled/ruled_auto_pass_policy.h"
+#include "../game/ruled/ruled_card_display_identity.h"
 #include "../game/ruled/ruled_client_state.h"
 #include "../game/ruled/ruled_dev_command_parser.h"
 #include "../game/ruled/ruled_dev_console.h"
@@ -2622,6 +2623,7 @@ void TabGame::onRuledLibrarySearchPickStarted(QStringList candidateNames, QVecto
     const bool showControls = game->getGameEventHandler()->ruled()->resolutionHandPickShowViewControls();
     librarySearchView =
         new ZoneViewWidget(localPlayer, deckZone, -1, true, false, cardList, false, showControls, false, false);
+    markRuledChoiceLocalIds(*librarySearchView->getZone()->getLogic());
     // The deck zone is only a scaffold for the widget; title the window for what it actually shows.
     librarySearchView->setWindowTitle(game->getGameEventHandler()->ruled()->resolutionHandPickViewTitle());
     scene->addItem(librarySearchView);
@@ -2692,6 +2694,7 @@ void TabGame::onRuledTriggerOrderUiChanged(bool active, QVector<RuledTriggerOrde
         // popup would strand the game with no way back to it.
         triggerOrderView =
             new ZoneViewWidget(localPlayer, deckZone, -1, true, false, cardList, false, false, true, false);
+        markRuledChoiceLocalIds(*triggerOrderView->getZone()->getLogic());
         scene->addItem(triggerOrderView);
         // Deliberately offset from the stack window's default corner (stackWindowPos): the two are
         // open at the same time during ordering, and stacking them exactly would hide the stack the
@@ -2750,6 +2753,7 @@ void TabGame::onRuledRevealedPickChanged(bool started,
     // revealZone = true shows cards face-up; _showControls = false omits search/sort.
     // Not closeable: resolution is mandatory per CR 608.
     revealedPickView = new ZoneViewWidget(localPlayer, deckZone, -1, true, false, cardList, false, false, true, false);
+    markRuledChoiceLocalIds(*revealedPickView->getZone()->getLogic());
     // The deck zone is only a scaffold for the widget: without this the window would announce
     // itself as somebody's library while showing a hand (Thoughtseize) or a revealed set (Gifts).
     revealedPickView->setWindowTitle(game->getGameEventHandler()->ruled()->resolutionHandPickViewTitle());

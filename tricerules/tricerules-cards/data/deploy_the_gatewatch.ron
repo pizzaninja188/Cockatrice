@@ -1,0 +1,8 @@
+(
+  id: "deploy_the_gatewatch",
+  name: "Deploy the Gatewatch",
+  face_id: "deploy_the_gatewatch",
+  mana_cost: "{4}{W}{W}",
+  types: ["Sorcery"],
+  spell_effect: [DeployTheGatewatch],
+)

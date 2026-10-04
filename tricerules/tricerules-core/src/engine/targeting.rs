@@ -1540,6 +1540,7 @@ fn validate_effect_targets(
         | SpellEffectKind::SearchLibrary { .. }
         | SpellEffectKind::ChooseGraveyardCard { .. }
         | SpellEffectKind::IntoTheWilds
+        | SpellEffectKind::DeployTheGatewatch
         | SpellEffectKind::LookChooseToHand { .. }
         | SpellEffectKind::Scry { .. }
         | SpellEffectKind::LibraryPartition { .. }

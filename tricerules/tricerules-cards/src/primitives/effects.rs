@@ -1092,6 +1092,8 @@ pub enum SpellEffectKind {
     ManifestDread,
     /// Into the Wilds: private top-card look followed by optional ordinary land entry.
     IntoTheWilds,
+    /// Private top-seven look, optional simultaneous planeswalker entry, then random bottom.
+    DeployTheGatewatch,
     /// Look at the top `count` cards, choose `min..=max` matching cards for the controller's
     /// hand, and put the rest on the bottom. Omit `filter` for any card; selection bounds clamp
     /// to available matches (CR 609.3). This puts cards into hand without drawing (CR 121.5).
@@ -2905,6 +2907,7 @@ impl SpellEffectKind {
             | SpellEffectKind::RevealTopCardToHandIfMatches { .. }
             | SpellEffectKind::ManifestDread
             | SpellEffectKind::IntoTheWilds
+            | SpellEffectKind::DeployTheGatewatch
             | SpellEffectKind::LookChooseToHand { .. }
             | SpellEffectKind::TapAll { .. }
             | SpellEffectKind::UntapAll { .. }
@@ -5212,6 +5215,7 @@ impl SpellEffectKind {
                 Ok(())
             }
             SpellEffectKind::IntoTheWilds => Ok(()),
+            SpellEffectKind::DeployTheGatewatch => Ok(()),
             SpellEffectKind::LookChooseToHand {
                 count,
                 filter,

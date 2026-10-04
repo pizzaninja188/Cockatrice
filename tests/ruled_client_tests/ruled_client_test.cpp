@@ -11,6 +11,7 @@
 // `RULED_PAYLOAD` case of the upstream `GameEventHandler`, behind the whole client.
 
 #include "game/ruled/ruled_auto_pass_policy.h"
+#include "game/ruled/ruled_card_display_identity.h"
 #include "game/ruled/ruled_client_host.h"
 #include "game/ruled/ruled_client_state.h"
 #include "game/ruled/ruled_dev_command_parser.h"
@@ -7871,6 +7872,56 @@ TEST_F(RuledClientTest, ManifestDreadChoiceUsesAControlFreeCardImageView)
     ASSERT_EQ(started.count(), 1);
     EXPECT_EQ(started.at(0).at(0).toStringList(),
               QStringList({QStringLiteral("Hill Giant"), QStringLiteral("Forest")}));
+}
+
+TEST_F(RuledClientTest, PopupLocalIdsCannotInheritBattlefieldDisplayState)
+{
+    ruled::v1::RuledEventBatch battlefield;
+    addPermanent(battlefield.add_events(), kLocalPlayer, 10, 3);
+    auto *view = battlefield.add_events()->mutable_zone_view()->add_per_player();
+    view->set_player_id(kLocalPlayer);
+    auto *planeswalker = view->add_battlefield_objects();
+    planeswalker->set_object_id(10);
+    planeswalker->set_is_planeswalker(true);
+    planeswalker->set_loyalty(5);
+    apply(battlefield);
+
+    QObject physicalZone;
+    QObject popupZone;
+    markRuledChoiceLocalIds(popupZone);
+    EXPECT_EQ(ruledPhysicalDisplayOid(*state, kLocalPlayer, 3, &physicalZone), 10u);
+    EXPECT_EQ(state->loyaltyForPermanentOid(10), 5);
+    EXPECT_EQ(ruledPhysicalDisplayOid(*state, kLocalPlayer, 3, &popupZone), 0u);
+
+    ruled::v1::RuledEventBatch look;
+    auto *choice = look.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_LIBRARY_LOOK);
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(2);
+    choice->add_candidate_server_card_ids(3);
+    choice->add_candidate_names("Chandra, Novice Pyromancer");
+    choice->add_candidate_selectable(true);
+    apply(look);
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    state->toggleResolutionHandPickCard(3);
+    EXPECT_EQ(state->resolutionHandPickClickOrderFor(3), 1);
+    state->submitResolutionHandPick();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    ASSERT_EQ(host.sentCommands.last().submit_resolution_choice().chosen_object_ids_size(), 1);
+    EXPECT_EQ(host.sentCommands.last().submit_resolution_choice().chosen_object_ids(0), 2u);
+    state->clearPendingChoice();
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+    EXPECT_EQ(ruledPhysicalDisplayOid(*state, kLocalPlayer, 3, &popupZone), 0u);
+    EXPECT_EQ(ruledPhysicalDisplayOid(*state, kLocalPlayer, 3, &physicalZone), 10u);
+    EXPECT_EQ(state->loyaltyForPermanentOid(10), 5);
+
+    for (const char *marker : {"ruledReplacementPicker", "ruledRevealSnapshot"}) {
+        QObject otherPopup;
+        otherPopup.setProperty(marker, true);
+        EXPECT_EQ(ruledPhysicalDisplayOid(*state, kLocalPlayer, 3, &otherPopup), 0u) << marker;
+    }
 }
 
 TEST_F(RuledClientTest, LibraryLookChoiceShowsEveryCardImageButOnlyMatchingCardsAreClickable)

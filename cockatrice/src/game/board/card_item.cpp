@@ -10,6 +10,7 @@
 #include "../player/player_actions.h"
 #include "../player/player_manager.h"
 #include "../ruled/ruled_actions.h"
+#include "../ruled/ruled_card_display_identity.h"
 #include "../ruled/ruled_client_state.h"
 #include "../ruled/ruled_payment_ui.h"
 #include "../ruled/ruled_token_display.h"
@@ -116,8 +117,8 @@ void CardItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, 
     quint32 ruledTargetSelectionOid = 0;
     if (ruledHandler) {
         const int ownerPlayerId = owner ? owner->getPlayerInfo()->getId() : -1;
-        ruledOid = ruledHandler->engineOidForCardId(ownerPlayerId, id);
-        ruledTargetSelectionOid = zone && zone->getName() == ZoneNames::GRAVE
+        ruledOid = ruledPhysicalDisplayOid(*ruledHandler, ownerPlayerId, id, zone);
+        ruledTargetSelectionOid = ruledCardSurfaceHasPhysicalIdentity(zone) && zone && zone->getName() == ZoneNames::GRAVE
                                       ? ruledHandler->graveyardEngineOidForOwnedCard(ownerPlayerId, id)
                                       : ruledOid;
     }

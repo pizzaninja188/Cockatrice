@@ -800,12 +800,14 @@ impl GameEngine {
                             entries,
                             Zone::Library,
                             &label,
-                            Some(crate::state::LibrarySearchCompletion {
-                                searcher,
-                                shuffle,
-                                searched_library,
-                                result_id,
-                            }),
+                            Some(crate::state::ZoneEntryCompletion::LibrarySearch(
+                                crate::state::LibrarySearchCompletion {
+                                    searcher,
+                                    shuffle,
+                                    searched_library,
+                                    result_id,
+                                },
+                            )),
                             &mut ev,
                         )?
                         else {

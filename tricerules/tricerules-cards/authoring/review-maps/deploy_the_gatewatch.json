@@ -1,0 +1,92 @@
+{
+  "complete_definition_review_confirmed": true,
+  "format_version": 1,
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deploy_the_gatewatch::actual_deploy_random_bottom_varies_with_seed_without_reordering_untouched_suffix",
+      "covers": "random bottom varies with seed without reordering untouched suffix"
+    },
+    {
+      "test": "scenario deploy_the_gatewatch::actual_deploy_private_images_have_engine_eligibility_and_constant_waiting_wording",
+      "covers": "private images have engine eligibility and constant waiting wording"
+    },
+    {
+      "test": "scenario deploy_the_gatewatch::actual_deploy_requires_two_white_mana_and_rejects_unaffordable_cast_atomically",
+      "covers": "requires two white mana and rejects unaffordable cast atomically"
+    },
+    {
+      "test": "scenario deploy_the_gatewatch::actual_deploy_is_not_a_library_search_and_does_not_fire_search_observers",
+      "covers": "is not a library search and does not fire search observers"
+    },
+    {
+      "test": "scenario deploy_the_gatewatch::actual_deploy_twincast_copy_looks_at_its_controller_library_and_original_looks_afresh",
+      "covers": "twincast copy looks at its controller library and original looks afresh"
+    },
+    {
+      "test": "scenario deploy_the_gatewatch::actual_deploy_zero_one_and_no_match_keep_suffix_and_bottom_the_full_rest",
+      "covers": "zero one and no match keep suffix and bottom the full rest"
+    },
+    {
+      "test": "scenario deploy_the_gatewatch::actual_deploy_short_and_empty_library_complete_without_inventing_cards",
+      "covers": "short and empty library complete without inventing cards"
+    },
+    {
+      "test": "scenario deploy_the_gatewatch::actual_deploy_wrong_actor_three_duplicates_nonplaneswalker_and_unrelated_are_atomic",
+      "covers": "wrong actor three duplicates nonplaneswalker and unrelated are atomic"
+    },
+    {
+      "test": "scenario deploy_the_gatewatch::actual_deploy_stale_looked_top_owner_zone_generation_or_selected_type_is_atomic",
+      "covers": "stale looked top owner zone generation or selected type is atomic"
+    },
+    {
+      "test": "scenario deploy_the_gatewatch::actual_deploy_stale_unselected_remainder_during_timestamp_is_rejected_before_any_entry",
+      "covers": "stale unselected remainder during timestamp is rejected before any entry"
+    },
+    {
+      "test": "scenario deploy_the_gatewatch::actual_deploy_replacement_then_timestamp_keeps_whole_library_until_simultaneous_commit",
+      "covers": "replacement then timestamp keeps whole library until simultaneous commit"
+    },
+    {
+      "test": "scenario deploy_the_gatewatch::actual_deploy_replacement_rejects_stale_remainder_and_concession_still_succeeds",
+      "covers": "replacement rejects stale remainder and concession still succeeds"
+    },
+    {
+      "test": "scenario deploy_the_gatewatch::actual_deploy_three_player_caster_and_unrelated_departure_preserve_correct_work",
+      "covers": "three player caster and unrelated departure preserve correct work"
+    },
+    {
+      "test": "scenario deploy_the_gatewatch::actual_deploy_duplicate_names_are_distinct_entries_and_legend_choice_follows_bottoming",
+      "covers": "duplicate names are distinct entries and legend choice follows bottoming"
+    },
+    {
+      "test": "scenario deploy_the_gatewatch::actual_deploy_logged_choices_replay_identically_without_random_order_logs",
+      "covers": "logged choices replay identically without random order logs"
+    },
+    {
+      "test": "scenario deploy_the_gatewatch::actual_deploy_paid_cast_selects_two_planeswalkers_then_random_bottoms_only_the_rest",
+      "covers": "paid cast selects two planeswalkers then random bottoms only the rest"
+    },
+    {
+      "test": "deck_coverage_search_lands::deploy_the_gatewatch_complete_definition_and_identity_are_exact",
+      "covers": "Exact released Oracle identity, single white Sorcery face, cost, no targets, complete specialized effect; physical spell artwork supplies Oracle presentation"
+    }
+  ],
+  "oracle_id": "e17ea7eb-362e-4c61-97cd-537f3921bced",
+  "spans": [
+    {
+      "start_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ],
+      "face_id": "deploy_the_gatewatch",
+      "end_line": 1
+    }
+  ],
+  "primitive_references": [
+    {
+      "typed_path": "/faces/0/spell_effect/0",
+      "symbol": "SpellEffectKind::DeployTheGatewatch"
+    }
+  ]
+}
