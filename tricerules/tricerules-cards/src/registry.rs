@@ -1197,6 +1197,28 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             cast_cost_condition,
         } = ability
         {
+            if let Some(reference) = amount.entry_cast_cost_reference() {
+                let linked = face
+                    .cast_cost_groups
+                    .iter()
+                    .find(|group| group.group_id == reference.group_id)
+                    .and_then(|group| {
+                        group
+                            .options
+                            .iter()
+                            .find(|option| option.option_id() == &reference.option_id)
+                    });
+                if linked
+                    .and_then(CastCostOptionDef::multikicker_generic_unit)
+                    .is_none()
+                {
+                    return Err(RegistryError::InvalidCard {
+                        id: card.id.clone(),
+                        reason: "entry cast-payment count requires its linked Multikicker option"
+                            .into(),
+                    });
+                }
+            }
             if let Some(condition) = cast_cost_condition {
                 validate_cast_cost_condition(&face.cast_cost_groups, condition).map_err(
                     |reason| RegistryError::InvalidCard {

@@ -230,6 +230,34 @@ impl GameEngine {
             .map(Cow::Borrowed)
     }
 
+    fn battlefield_entry_cast_cost_origin(
+        &self,
+        event: &BattlefieldEntryEvent,
+    ) -> Option<crate::state::CastCostAbilityOrigin> {
+        let object = self.state.objects.get(&event.object_id)?;
+        let (original_card_id, face_id) = if let Some(values) = object
+            .copiable_values
+            .as_ref()
+            .or(object.token_origin.as_ref())
+        {
+            (values.source_card_id.clone(), values.face.face_id.clone())
+        } else {
+            (
+                object.card_id.clone(),
+                self.registry
+                    .get(&object.card_id)?
+                    .face(event.face_index)?
+                    .face_id
+                    .clone(),
+            )
+        };
+        Some(crate::state::CastCostAbilityOrigin {
+            original_card_id,
+            face_id,
+            copy_revision: object.copy_revision,
+        })
+    }
+
     fn battlefield_entry_characteristics_through_layer_5(
         &self,
         event: &BattlefieldEntryEvent,
@@ -2331,9 +2359,12 @@ impl GameEngine {
                         amount,
                         ..
                     }) => {
+                        let origin = self.battlefield_entry_cast_cost_origin(event);
                         let count = self.resolve_amount(
                             amount,
                             AmountContext {
+                                entry_cast_cost_receipts: &event.cast_cost_receipts,
+                                entry_cast_cost_origin: origin.as_ref(),
                                 entry_mana_colors_spent: event.mana_colors_spent_to_cast,
                                 stack_item: None,
                                 controller: event.destination_controller,
@@ -2394,6 +2425,8 @@ impl GameEngine {
                         let count = self.resolve_amount(
                             amount,
                             AmountContext {
+                                entry_cast_cost_receipts: &[],
+                                entry_cast_cost_origin: None,
                                 entry_mana_colors_spent: Default::default(),
                                 stack_item: None,
                                 controller,

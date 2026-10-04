@@ -230,7 +230,13 @@ pub(super) fn spell_stack_presentation(
                     PresentationPath::CastCostGroup(&group.group_id),
                     PresentationPath::CastCostOption(option_id),
                 ],
-                mapping,
+                // The number paid is a runtime rules fact, absent from the static Oracle line.
+                // Preserve that complete annotation while offers retain their Oracle mapping.
+                if receipt.multikicker.is_some() {
+                    &AbilityPresentation::Fallback
+                } else {
+                    mapping
+                },
                 receipt.label.clone(),
             ))
         })
@@ -281,6 +287,7 @@ mod tests {
                 group_id: Some(tricerules_cards::ChoiceId::new("cast_cost_01").unwrap()),
                 option_id: Some(tricerules_cards::ChoiceId::new("option_01").unwrap()),
                 object_cost_kind: None,
+                multikicker: None,
                 label: "Kicker {2}".into(),
                 objects: vec![],
             }],

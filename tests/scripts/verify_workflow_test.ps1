@@ -36,17 +36,17 @@ try {
     Assert-Workflow ($result.ExitCode -eq 0) "Combined verification failed: $($result.Output)"
     Assert-Workflow ($result.Output -notmatch 'fixture successful (stdout|stderr)') 'Successful command output was noisy.'
     $trace = @(Read-WorkflowTrace $fixture)
-    $formatCalls = @($trace | Where-Object { $_.Tool -eq 'cargo' -and $_.Arguments -contains 'fmt' })
+    $formatCalls = @($trace | Where-Object { $_.Tool -eq 'rustfmt' })
     Assert-Workflow ($formatCalls.Count -eq 4) 'Each Rust workspace package must receive a separate formatting command to avoid Windows command-line limits.'
     foreach ($package in @('tricerules-proto', 'tricerules-core', 'tricerules-cards', 'tricerules-server')) {
-        Assert-Workflow (@($formatCalls | Where-Object { $_.Arguments -contains $package }).Count -eq 1) "Formatting did not cover exactly one $package package."
+        Assert-Workflow (@($formatCalls | Where-Object { ($_.Arguments -join ' ') -match $package }).Count -eq 1) "Formatting did not cover exactly one $package package."
     }
-    Assert-Workflow (($trace.Tool -join ',') -eq 'cargo,cargo,cargo,cargo,cargo,cargo,cargo,cargo,build,ctest,git') 'Wrong combined gate order.'
-    foreach ($call in $trace[2..7]) {
+    Assert-Workflow (($trace.Tool -join ',') -eq 'cargo,cargo,cargo,cargo,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,cargo,rustfmt,build,ctest,git') 'Wrong combined gate order.'
+    foreach ($call in $trace[2..11]) {
         Assert-Workflow ($call.Cwd -eq (Join-Path $fixture 'tricerules')) 'Rust command ran outside tricerules.'
     }
-    Assert-Workflow ($trace[9].RequireE2E -eq '1') 'CTest did not require E2E prerequisites.'
-    Assert-Workflow ($trace[9].Arguments -contains '--no-tests=error') 'CTest could accept an empty suite.'
+    Assert-Workflow ($trace[13].RequireE2E -eq '1') 'CTest did not require E2E prerequisites.'
+    Assert-Workflow ($trace[13].Arguments -contains '--no-tests=error') 'CTest could accept an empty suite.'
     $summaries = @(Get-ChildItem -LiteralPath (Join-Path $fixture 'build\verification-logs') -Filter summary.json -Recurse)
     Assert-Workflow ($summaries.Count -eq 1) 'Combined run did not save one summary.'
     $summary = Get-Content -LiteralPath $summaries[0].FullName -Raw | ConvertFrom-Json
@@ -86,13 +86,13 @@ exit $code
     Assert-Workflow ($result.ExitCode -eq 7) "Failed CTest environment restoration failed: $($result.Output)"
 
     # A package formatting failure stops the remaining packages and preserves its status.
-    Set-Content -LiteralPath (Join-Path $fixture 'fail-pattern') -Value 'cargo fmt --check -p tricerules-core' -NoNewline
+    Set-Content -LiteralPath (Join-Path $fixture 'fail-pattern') -Value 'rustfmt.*tricerules-core' -NoNewline
     $before = @(Read-WorkflowTrace $fixture).Count
     $result = Invoke-WorkflowFixture $fixture 'verify.ps1' @('-Side', 'Rust')
     Assert-Workflow ($result.ExitCode -eq 7 -and $result.Output -match 'fixture complete failure log') 'Package formatting failure lost its log or status.'
     $new = @(Read-WorkflowTrace $fixture | Select-Object -Skip $before)
-    Assert-Workflow ($new.Count -eq 4) 'Verification continued beyond the failing second package format check.'
-    Assert-Workflow ($new[3].Arguments -contains 'tricerules-core') 'The expected formatting package did not fail.'
+    Assert-Workflow ($new.Count -eq 6) 'Verification continued beyond the failing second package format check.'
+    Assert-Workflow (($new[5].Arguments -join ' ') -match 'tricerules-core') 'The expected formatting package did not fail.'
 
     # Preview derives coverage from the workspace, including newly added packages, without tools.
     $extra = Join-Path $fixture 'tricerules/extra-member'

@@ -8,6 +8,7 @@ use tricerules_proto::ruled::v1::{
 
 fn mana_option(option_index: u32) -> CastCostGroupSelection {
     CastCostGroupSelection {
+        repetitions: None,
         group_index: 0,
         option_index,
         selected_object: None,

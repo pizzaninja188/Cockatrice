@@ -2,6 +2,7 @@
 
 #include "ruled_client_host.h"
 #include "ruled_client_state.h"
+#include "ruled_pending_cast.h"
 #include "ruled_token_display.h"
 
 #include <QDebug>
@@ -29,8 +30,8 @@ bool parseSelectionAlternatives(const ruled::v1::ResolutionChoiceRequired &rcr,
     for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
         const int id = rcr.candidate_server_card_ids(i);
         const quint32 oid = rcr.candidate_object_ids(i);
-        if (id < 0 || serverIds.contains(id) || objectIds.contains(oid) ||
-            !pick.serverCardIdToOid.contains(id) || pick.serverCardIdToOid.value(id) != oid) {
+        if (id < 0 || serverIds.contains(id) || objectIds.contains(oid) || !pick.serverCardIdToOid.contains(id) ||
+            pick.serverCardIdToOid.value(id) != oid) {
             qWarning() << "Rejecting ruled alternatives with an ambiguous candidate binding";
             return false;
         }
@@ -361,7 +362,12 @@ RuledCostData parseCostData(const ruled::v1::LegalCostChoices &src, const RuledP
                     break;
             }
             parsedOption.additionalManaCost = QString::fromStdString(option.additional_mana_cost());
+            if (option.has_maximum_repetitions())
+                parsedOption.maximumRepetitions = option.maximum_repetitions();
             parsedOption.selectable = option.selectable() && parsedOption.kind != RuledCastCostOptionKind::Unspecified;
+            if (parsedOption.maximumRepetitions &&
+                (!RuledPendingCast::repeatedCastCostAmount(parsedOption, *parsedOption.maximumRepetitions)))
+                parsedOption.selectable = false;
             for (const quint32 candidate : option.valid_hand_indices()) {
                 parsedOption.validHandIndices.insert(candidate);
             }
@@ -587,10 +593,10 @@ void RuledEventDispatcher::processBatch(const ruled::v1::RuledEventBatch &batch)
     bool onlyCourtesyEvents = true;
     for (const auto &event : batch.events()) {
         hasCombatPreview |= event.has_attackers_preview() || event.has_blockers_preview();
-        onlyCourtesyEvents &= event.has_attackers_preview() || event.has_blockers_preview() ||
-                              event.has_log() || event.has_battlefield_object_map() ||
-                              event.has_face_down_object_map() || event.has_hand_slot_map() ||
-                              event.has_graveyard_object_map() || event.has_exile_object_map();
+        onlyCourtesyEvents &= event.has_attackers_preview() || event.has_blockers_preview() || event.has_log() ||
+                              event.has_battlefield_object_map() || event.has_face_down_object_map() ||
+                              event.has_hand_slot_map() || event.has_graveyard_object_map() ||
+                              event.has_exile_object_map();
     }
     const bool preserveCombatCapabilities = batch.legal_by_player().empty() && hasCombatPreview && onlyCourtesyEvents;
 

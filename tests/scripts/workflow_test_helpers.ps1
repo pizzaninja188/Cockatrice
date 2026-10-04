@@ -12,7 +12,7 @@ function New-WorkflowFixture {
     foreach ($directory in @('scripts', 'tricerules', 'bin', 'nested directory', 'Cockatrice\Cockatrice')) {
         New-Item -ItemType Directory -Path (Join-Path $root $directory) -Force | Out-Null
     }
-    foreach ($name in @('run-quiet-command.ps1', 'gen-cards.ps1', 'gen-card-checklist.ps1', 'verify.ps1', 'update-card-data.ps1', 'prepare-card-batch.ps1', 'focused-test-plan.ps1', 'rust-format-checks.ps1')) {
+    foreach ($name in @('run-quiet-command.ps1', 'gen-cards.ps1', 'gen-card-checklist.ps1', 'verify.ps1', 'update-card-data.ps1', 'prepare-card-batch.ps1', 'focused-test-plan.ps1', 'rust-format-checks.ps1', 'check-rust-format.ps1')) {
         $source = Join-Path $sourceRepo "scripts\$name"
         if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination (Join-Path $root "scripts\$name") }
     }
@@ -22,6 +22,14 @@ function New-WorkflowFixture {
         New-Item -ItemType Directory -Path $packageRoot | Out-Null
         Copy-Item -LiteralPath (Join-Path $sourceRepo "tricerules/$package/Cargo.toml") -Destination (Join-Path $packageRoot 'Cargo.toml')
     }
+    $formatPackages = @()
+    foreach ($package in @('tricerules-proto', 'tricerules-core', 'tricerules-cards', 'tricerules-server')) {
+        $sourcePath = Join-Path $root "tricerules/$package/lib.rs"
+        [IO.File]::WriteAllText($sourcePath, "fn main() {}`n")
+        $formatPackages += @{ name = $package; targets = @(@{ src_path = $sourcePath; edition = '2021' }) }
+    }
+    @{ packages = $formatPackages } | ConvertTo-Json -Depth 8 |
+        Set-Content -LiteralPath (Join-Path $root 'format-metadata.json')
     Set-Content -LiteralPath (Join-Path $root 'scripts/check-card-evidence.ps1') -Value @'
 param([string] $OracleBulk, [switch] $Preparation, [string] $MapListJson, [string] $MapListFile)
 if (-not (Test-Path -LiteralPath $OracleBulk)) { exit 13 }
@@ -55,6 +63,10 @@ if ((Test-Path -LiteralPath $failure) -and "$tool $joined" -match ([IO.File]::Re
     exit 7
 }
 if ($tool -eq 'cargo') {
+    if ($arguments -contains 'metadata') {
+        Get-Content -LiteralPath (Join-Path $root 'format-metadata.json') -Raw
+        exit 0
+    }
     if ($arguments -contains '--exact') {
         if (Test-Path -LiteralPath (Join-Path $root 'zero-tests')) {
             Write-Output 'test result: ok. 0 passed; 0 failed; 0 ignored;'
@@ -81,7 +93,7 @@ if ($tool -eq 'cargo') {
 Write-Output 'fixture successful stdout'
 exit 0
 '@
-    foreach ($tool in @('cargo', 'ctest', 'git', 'build')) {
+    foreach ($tool in @('cargo', 'rustfmt', 'ctest', 'git', 'build')) {
         Set-Content -LiteralPath (Join-Path $root "bin\$tool.cmd") -Encoding Ascii -Value @(
             '@echo off',
             "powershell.exe -NoProfile -File `"%~dp0tool.ps1`" $tool %*",

@@ -504,6 +504,7 @@ impl GameEngine {
             restricted_mana,
             eligible_restricted_mana,
             cast_method,
+            None,
         )?
         .finish(&self.state)
     }
@@ -526,6 +527,7 @@ impl GameEngine {
         restricted_mana: &[rv1::ManaSpendSelection],
         eligible_restricted_mana: &[u32],
         cast_method: SpellCastMethod,
+        cast_cost_origin: Option<&crate::state::CastCostAbilityOrigin>,
     ) -> Result<PreparedPaymentCosts, EngineError> {
         use rv1::cost_selection::Selection;
 
@@ -583,6 +585,12 @@ impl GameEngine {
                     .options
                     .get(selection.option_index as usize)
                     .ok_or(EngineError::Illegal("invalid cast cost option"))?;
+                let repetitions = selection.repetitions.unwrap_or(1);
+                let repeated_unit = option.multikicker_generic_unit();
+                if repetitions == 0 || (repeated_unit.is_none() && repetitions != 1) {
+                    return Err(EngineError::Illegal("invalid cast cost repetitions"));
+                }
+                let mut multikicker = None;
                 let objects = match option {
                     CastCostOptionDef::Blight { count, .. } => {
                         let Some(rv1::cast_cost_group_selection::SelectedObject::PermanentId(
@@ -610,12 +618,32 @@ impl GameEngine {
                         }]
                     }
                     CastCostOptionDef::Mana { cost, .. } => {
-                        if selection.selected_object.is_some() {
+                        if selection.selected_object.is_some()
+                            || selection.battlefield_objects.is_some()
+                            || selection.expected_zone_change_generation != 0
+                        {
                             return Err(EngineError::Illegal(
                                 "mana cast cost option cannot select an object",
                             ));
                         }
-                        combined_mana.pips.extend(cost.pips.iter().cloned());
+                        if let Some(unit) = repeated_unit {
+                            let fee = unit
+                                .checked_mul(repetitions)
+                                .filter(|fee| *fee <= i32::MAX as u32)
+                                .ok_or(EngineError::Illegal(
+                                    "Multikicker cost exceeds numeric limit",
+                                ))?;
+                            let origin = cast_cost_origin.ok_or(EngineError::Illegal(
+                                "Multikicker requires its casting ability origin",
+                            ))?;
+                            multikicker = Some(crate::state::MultikickerPaymentReceipt {
+                                repetitions,
+                                origin: origin.clone(),
+                            });
+                            combined_mana.pips.push(ManaSymbol::Generic(fee));
+                        } else {
+                            combined_mana.pips.extend(cost.pips.iter().cloned());
+                        }
                         vec![]
                     }
                     CastCostOptionDef::Behold {
@@ -828,13 +856,18 @@ impl GameEngine {
                         }]
                     }
                 };
-                let label = option.fallback_label();
+                let label = if multikicker.is_some() {
+                    format!("{} × {repetitions}", option.fallback_label())
+                } else {
+                    option.fallback_label()
+                };
                 cast_cost_receipts.push(CastCostReceipt {
                     group_index: group_index as u32,
                     option_index: selection.option_index,
                     group_id: Some(group.group_id.clone()),
                     option_id: Some(option.option_id().clone()),
                     object_cost_kind: option.object_cost_kind(),
+                    multikicker,
                     label,
                     objects,
                 });
@@ -849,6 +882,9 @@ impl GameEngine {
                     ));
                 }
                 let selection = selections[0];
+                if selection.repetitions.is_some_and(|count| count != 1) {
+                    return Err(EngineError::Illegal("invalid cast cost repetitions"));
+                }
                 use rv1::cast_cost_group_selection::SelectedObject;
                 if selection.option_index != 0 {
                     return Err(EngineError::Illegal("invalid harmonize cost option"));
@@ -895,6 +931,7 @@ impl GameEngine {
                     group_id: None,
                     option_id: None,
                     object_cost_kind: None,
+                    multikicker: None,
                     label: format!(
                         "Harmonize — tap {} (reduce {{{harmonize_reduction}}})",
                         object_display_name(&self.state, self.registry, object_id)
@@ -1079,6 +1116,36 @@ impl GameEngine {
         let expected_selections = costs.len() + usize::from(cast_method == SpellCastMethod::Sneak);
         if selections.len() != expected_selections {
             return Err(EngineError::Illegal("unexpected cost selection"));
+        }
+
+        // Validate every staged demand before a cast reserves its source. Qt currently uses
+        // signed-int cost totals; reduction cannot hide an unrepresentable announced cost.
+        if cast_cost_groups
+            .iter()
+            .flat_map(|group| &group.options)
+            .any(|option| option.multikicker_generic_unit().is_some())
+        {
+            for reduction in [0, generic_reduction.saturating_add(harmonize_reduction)] {
+                let demands = super::demand::normalize(
+                    &combined_mana,
+                    x_value,
+                    extra_generic,
+                    reduction,
+                    flex_payments,
+                )?;
+                if demands.iter().any(|demand| {
+                    demand
+                        .amounts
+                        .iter()
+                        .try_fold(0u32, |total, amount| total.checked_add(*amount))
+                        .is_none_or(|total| total > i32::MAX as u32)
+                        || demand.life > i32::MAX as u32
+                }) {
+                    return Err(EngineError::Illegal(
+                        "Multikicker total exceeds numeric limit",
+                    ));
+                }
+            }
         }
 
         Ok(PreparedPaymentCosts {
@@ -4241,6 +4308,7 @@ mod convoke_transaction_tests {
                 &[],
                 &[],
                 SpellCastMethod::Normal,
+                None,
             )
             .unwrap();
         assert!(prepared.can_convoke(bear));

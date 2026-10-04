@@ -12,6 +12,9 @@ use std::fmt;
 /// creation share one authoritative evaluator.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CountExpression {
+    /// Chalice's intrinsic entry reads the number of payments of its linked Multikicker
+    /// ability. This is casting history, not the current source's counters or mana value.
+    CastCostPaymentCount { cost: CastCostOptionRef },
     /// Pentad Prism and Clearwater Goblet: actual cast-payment colors, available only
     /// to this object's intrinsic entry replacement, including entry-copy reevaluation.
     ManaColorsSpentToCast,
@@ -165,6 +168,7 @@ impl CountExpression {
     }
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
+            Self::CastCostPaymentCount { cost } => cost.validate(),
             Self::SpellsCastThisTurn { filter, .. } => filter.validate(),
             Self::BattlefieldPermanents { filter }
             | Self::BattlefieldMaximum { filter, .. }
@@ -187,6 +191,7 @@ impl CountExpression {
                         || matches!(
                             term.quantity,
                             Self::Affine { .. }
+                                | Self::CastCostPaymentCount { .. }
                                 | Self::ManaColorsSpentToCast
                                 | Self::CardsMatchingResult { .. }
                                 | Self::MaximumCardsMatchingResult { .. }
@@ -264,6 +269,14 @@ pub enum Amount {
 }
 
 impl Amount {
+    pub(crate) fn entry_cast_cost_reference(&self) -> Option<&CastCostOptionRef> {
+        match self {
+            Self::Count(CountExpression::CastCostPaymentCount { cost }) => Some(cost),
+            Self::DivideRoundedDown { amount, .. } => amount.entry_cast_cost_reference(),
+            _ => None,
+        }
+    }
+
     pub(crate) fn uses_entry_cast_colors(&self) -> bool {
         match self {
             Self::Count(CountExpression::ManaColorsSpentToCast) => true,
@@ -276,10 +289,10 @@ impl Amount {
     }
 
     pub(crate) fn validate_entry(&self, intrinsic: bool) -> Result<(), String> {
-        if self.uses_entry_cast_colors() {
+        if self.uses_entry_cast_colors() || self.entry_cast_cost_reference().is_some() {
             if !intrinsic {
                 return Err(
-                    "cast-payment colors require an intrinsic self entry replacement".into(),
+                    "cast-payment history requires an intrinsic self entry replacement".into(),
                 );
             }
             self.validate()
@@ -333,7 +346,7 @@ impl Amount {
 
     pub(super) fn validate_effect(&self, context: EffectContext) -> Result<(), String> {
         self.validate()?;
-        if self.uses_entry_cast_colors() {
+        if self.uses_entry_cast_colors() || self.entry_cast_cost_reference().is_some() {
             return Err("cast-payment colors require an intrinsic entry replacement".into());
         }
         if context == EffectContext::Ability && self.contains_cast_cost() {
@@ -361,7 +374,7 @@ impl Amount {
     }
 
     pub(crate) fn validate_live(&self) -> Result<(), String> {
-        if self.uses_entry_cast_colors() {
+        if self.uses_entry_cast_colors() || self.entry_cast_cost_reference().is_some() {
             return Err("cast-payment colors require an intrinsic entry replacement".into());
         }
         if self.contains_cast_cost() {

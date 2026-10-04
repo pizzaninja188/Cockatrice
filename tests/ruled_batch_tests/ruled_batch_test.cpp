@@ -3538,6 +3538,13 @@ TEST_F(RuledBatchTest, CastCostCandidatesStayPrivateWhileActiveBeholdRevealIsPub
     option->add_valid_permanent_ids(900);
     option->add_valid_permanent_generations(12);
     option->set_selectable(true);
+    auto *repeated = action->mutable_cost_choices()->mutable_cast_cost_groups(0)->add_options();
+    repeated->set_option_index(1);
+    repeated->set_kind(ruled::v1::CAST_COST_OPTION_KIND_MANA);
+    repeated->set_label("Multikicker {2}");
+    repeated->set_additional_mana_cost("{2}");
+    repeated->set_maximum_repetitions(1073741823u);
+    repeated->set_selectable(true);
     auto *reveal = batch.add_events()->mutable_active_public_reveal_snapshot()->add_reveals();
     reveal->set_source_object_id(700);
     reveal->set_reveal_id("stack:700:cost:0");
@@ -3556,6 +3563,14 @@ TEST_F(RuledBatchTest, CastCostCandidatesStayPrivateWhileActiveBeholdRevealIsPub
                                        .options(0);
     EXPECT_EQ(controllerOption.valid_hand_indices_size(), 1);
     EXPECT_EQ(controllerOption.valid_permanent_generations(0), 12u);
+    const auto &controllerRepeated = forController.legal_by_player()
+                                         .at(p1->getPlayerId())
+                                         .hand_actions(0)
+                                         .cost_choices()
+                                         .cast_cost_groups(0)
+                                         .options(1);
+    ASSERT_TRUE(controllerRepeated.has_maximum_repetitions());
+    EXPECT_EQ(controllerRepeated.maximum_repetitions(), 1073741823u);
     ASSERT_EQ(forController.events_size(), 1);
     EXPECT_EQ(forController.events(0).active_public_reveal_snapshot().reveals(0).cards(0).card_name(),
               "Adult Gold Dragon");

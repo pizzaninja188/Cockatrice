@@ -179,7 +179,8 @@ void RuledPaymentUi::reconcileEnginePendingAbilityActivation()
         auto &frame = suspendedPayments[i];
         if (!frame.ability || frame.ability->engineTransactionId == 0)
             continue;
-        if (!engine || engine->actor_player_id() != actor || engine->transaction_id() != frame.ability->engineTransactionId) {
+        if (!engine || engine->actor_player_id() != actor ||
+            engine->transaction_id() != frame.ability->engineTransactionId) {
             restoreOptimisticManaCounters(frame.payment.takeAllOptimisticManaCounterIds());
             suspendedPayments.removeAt(i);
         } else {
@@ -199,7 +200,7 @@ void RuledPaymentUi::reconcileEnginePendingAbilityActivation()
     if (local.valid && local.engineTransactionId == 0 && local.stage != PendingActivatedAbility::Stage::BeginPending)
         return; // An inner mana ability owns this local draft while the outer payment is parked.
     if (!local.valid || (local.engineTransactionId != engine->transaction_id() &&
-                        local.stage != PendingActivatedAbility::Stage::BeginPending)) {
+                         local.stage != PendingActivatedAbility::Stage::BeginPending)) {
         clear();
         actions->ruledPendingCast->beginAbility();
         local.cardName = QString::fromStdString(engine->source_description());
@@ -230,11 +231,11 @@ bool RuledPaymentUi::beginAbilityActivation()
     const auto source = local.permanentOid;
     const auto generation = local.expectedZoneChangeGeneration;
     const auto slot = local.abilityIndex;
-    RuledActions::sendRuledCommandExpectingAck(actions->player->getGame(), command,
-        [this, source, generation, slot](bool accepted) {
+    RuledActions::sendRuledCommandExpectingAck(
+        actions->player->getGame(), command, [this, source, generation, slot](bool accepted) {
             auto &current = actions->pendingActivatedAbility;
-            if (!current.valid || current.permanentOid != source || current.expectedZoneChangeGeneration != generation ||
-                current.abilityIndex != slot)
+            if (!current.valid || current.permanentOid != source ||
+                current.expectedZoneChangeGeneration != generation || current.abilityIndex != slot)
                 return;
             if (accepted) {
                 reconcileEnginePendingAbilityActivation();
@@ -244,8 +245,9 @@ bool RuledPaymentUi::beginAbilityActivation()
                 current.waitingForTarget = true;
                 current.activeTargetGroupPosition = 0;
                 current.selectedTargets.clear();
-                emit actions->ruledActivatedAbilityTargetPendingChanged(true,
-                    ruledPendingAbilityTargetPrompt(current, *actions->player->getGame()->getGameEventHandler()->ruled()));
+                emit actions->ruledActivatedAbilityTargetPendingChanged(
+                    true, ruledPendingAbilityTargetPrompt(current,
+                                                          *actions->player->getGame()->getGameEventHandler()->ruled()));
             }
         });
     return true;
@@ -275,11 +277,11 @@ RuledPaymentUi::Context RuledPaymentUi::context() const
     const auto &ability = actions->pendingActivatedAbility;
     if (ability.valid) {
         if (ability.chosenOpponentTargets)
-            return ability.stage == PendingActivatedAbility::Stage::Paying &&
-                           state->pendingAbilityActivation &&
+            return ability.stage == PendingActivatedAbility::Stage::Paying && state->pendingAbilityActivation &&
                            state->pendingAbilityActivation->transaction_id() == ability.engineTransactionId &&
                            ruledActivationCanPay(*state, actions->player->getPlayerInfo()->getId())
-                       ? Context::Ability : Context::None;
+                       ? Context::Ability
+                       : Context::None;
         if (state->pendingAbilityActivation && ruledActivationNestedChoice(*state))
             return Context::None;
         return !ability.waitingForTarget && !ability.waitingForCost ? Context::Ability : Context::None;
@@ -336,7 +338,8 @@ bool RuledPaymentUi::startOrRefresh()
     }
     const auto nextContext = context();
     if (nextContext == Context::None) {
-        if (suspendedPayments.isEmpty() && !state->pendingAbilityActivation && !state->isResolutionPaymentActive() && activeContext != Context::None)
+        if (suspendedPayments.isEmpty() && !state->pendingAbilityActivation && !state->isResolutionPaymentActive() &&
+            activeContext != Context::None)
             clear();
         return false;
     }
@@ -739,7 +742,8 @@ void RuledPaymentUi::resumeAfterManaAbility()
     if (suspendedPayments.isEmpty())
         return;
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
-    if (ruledActivationNestedChoice(*state) || state->isEngineCommandPending() || actions->pendingActivatedAbility.valid)
+    if (ruledActivationNestedChoice(*state) || state->isEngineCommandPending() ||
+        actions->pendingActivatedAbility.valid)
         return;
     // Retire only the inner model's unpaid counter debits while the outer frame is still
     // present in the optimistic-spend accounting. Then restore that exact parked selection.
@@ -906,6 +910,8 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildCommand(PlayerAction
         auto *castSelection = cast->add_cast_cost_group_selections();
         castSelection->set_group_index(static_cast<quint32>(selection.groupIndex));
         castSelection->set_option_index(static_cast<quint32>(selection.optionIndex));
+        if (selection.repetitions)
+            castSelection->set_repetitions(*selection.repetitions);
         if (selection.objectKind == RuledPendingCastCostSelection::ObjectKind::Hand) {
             const int handSlot =
                 handler ? handler->engineHandSlotForServerCard(localPlayerId, static_cast<int>(selection.selectedId))

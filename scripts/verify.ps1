@@ -56,7 +56,7 @@ if ($Side -in @('Rust', 'Both')) {
     Add-VerificationStep 'Rust Clippy' 'cargo' @('clippy', '--all-targets', '--', '-D', 'warnings') $rust
     . (Join-Path $PSScriptRoot 'rust-format-checks.ps1')
     foreach ($format in @(Get-RustFormatChecks -Repository $repo)) {
-        Add-VerificationStep $format.Label 'cargo' $format.Args $rust
+        Add-VerificationStep $format.Label $format.Executable $format.Args $rust
     }
 }
 if ($Side -in @('Cpp', 'Both')) {

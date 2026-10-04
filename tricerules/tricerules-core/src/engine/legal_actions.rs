@@ -1462,6 +1462,9 @@ fn legal_spell_cost_choices(
                         label: option.fallback_label(),
                         kind: rv1::CastCostOptionKind::Mana as i32,
                         additional_mana_cost: cost.to_string(),
+                        maximum_repetitions: option
+                            .multikicker_generic_unit()
+                            .map(|unit| i32::MAX as u32 / unit),
                         selectable: true,
                         presentation: Some(presentation_ref(
                             eng.registry,

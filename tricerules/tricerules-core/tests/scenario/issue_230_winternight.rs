@@ -197,6 +197,7 @@ fn issue_230_harmonize_reuses_reduction_and_exiles_on_resolution_or_countering()
             );
             let selections = if tapped {
                 vec![rv1::CastCostGroupSelection {
+                    repetitions: None,
                     group_index: 0,
                     option_index: 0,
                     selected_object: Some(

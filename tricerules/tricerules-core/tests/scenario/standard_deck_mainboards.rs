@@ -102,6 +102,7 @@ fn requiting_hex_rewards_the_optional_blight_payment() {
                 slot,
                 target_object(target),
                 vec![CastCostGroupSelection {
+                    repetitions: None,
                     group_index: 0,
                     option_index: 0,
                     selected_object: Some(SelectedObject::PermanentId(blighted)),

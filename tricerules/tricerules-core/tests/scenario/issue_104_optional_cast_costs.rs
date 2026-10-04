@@ -9,6 +9,7 @@ use tricerules_proto::ruled::v1::{
 
 fn mana_option(group_index: u32, option_index: u32) -> CastCostGroupSelection {
     CastCostGroupSelection {
+        repetitions: None,
         group_index,
         option_index,
         selected_object: None,
@@ -159,6 +160,7 @@ fn behold_reveals_only_the_selected_dragon_until_the_spell_leaves_the_stack() {
                 spell_slot,
                 target_object(target),
                 vec![CastCostGroupSelection {
+                    repetitions: None,
                     group_index: 0,
                     option_index: 0,
                     selected_object: Some(SelectedObject::HandIndex(dragon_slot as u32)),
@@ -231,6 +233,7 @@ fn stale_behold_permanent_rejects_the_atomic_cast_without_spending_mana() {
                 slot,
                 target_object(target),
                 vec![CastCostGroupSelection {
+                    repetitions: None,
                     group_index: 0,
                     option_index: 0,
                     selected_object: Some(SelectedObject::PermanentId(dragon)),
@@ -298,6 +301,7 @@ fn osseous_exhale_uses_the_behold_receipt_after_the_revealed_card_is_unrelated_t
             spell,
             target_object(attacker),
             vec![CastCostGroupSelection {
+                repetitions: None,
                 group_index: 0,
                 option_index: 0,
                 selected_object: Some(SelectedObject::HandIndex(dragon as u32)),
@@ -337,6 +341,7 @@ fn dispelling_exhale_payment_cost(behold: bool, seed: u64) -> u32 {
     let selections = if behold {
         let dragon = hand_index_for_card(&e, 1, "adult_gold_dragon");
         vec![CastCostGroupSelection {
+            repetitions: None,
             group_index: 0,
             option_index: 0,
             selected_object: Some(SelectedObject::HandIndex(dragon as u32)),

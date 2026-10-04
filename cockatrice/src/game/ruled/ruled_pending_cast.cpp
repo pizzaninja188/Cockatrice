@@ -59,6 +59,7 @@ PendingRuledSpellCast &RuledPendingCast::beginSpell()
 {
     ability = {};
     spell = {};
+    spell.draftId = ++nextSpellDraftId;
     spell.valid = true;
     return spell;
 }

@@ -1178,6 +1178,11 @@ impl GameEngine {
             restricted_mana,
             &eligible_restricted_mana,
             cast_method,
+            Some(&crate::state::CastCostAbilityOrigin {
+                original_card_id: card_id.clone(),
+                face_id: face.face_id.clone(),
+                copy_revision: self.state.objects[&oid].copy_revision,
+            }),
         )?;
 
         Ok(PreparedSpellCast {
@@ -4470,6 +4475,7 @@ mod mana_payment_tests {
                 selected_object: None,
                 expected_zone_change_generation: 0,
                 battlefield_objects: None,
+                repetitions: None,
             }],
             &groups,
             &condition,
@@ -4481,6 +4487,7 @@ mod mana_payment_tests {
                 selected_object: None,
                 expected_zone_change_generation: 0,
                 battlefield_objects: None,
+                repetitions: None,
             }],
             &groups,
             &condition,

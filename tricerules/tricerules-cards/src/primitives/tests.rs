@@ -1,4 +1,46 @@
 #[test]
+fn multikicker_counted_entry_schema_is_linked_and_fail_closed() {
+    let definition = |kind: &str, cost: &str, affected: &str, option: &str| {
+        format!(
+            r#"(id: "repeated_entry", name: "Repeated Entry", face_id: "repeated_entry",
+                mana_cost: "{{0}}", types: ["Artifact"],
+                cast_cost_groups: [(group_id: "multikicker", presentation: Fallback,
+                    options: [Mana(option_id: "kick", presentation: Fallback,
+                        kind: {kind}, cost: "{cost}")])],
+                static_abilities: [(ability_id: "entry", presentation: Fallback,
+                    definition: EntersWithCounters(affected: {affected}, counter: Charge,
+                        amount: Count(CastCostPaymentCount(cost: (
+                            group_id: "multikicker", option_id: "{option}")))))])"#
+        )
+    };
+    for fee in ["{1}", "{2}"] {
+        let ron = definition("Multikicker", fee, "Self_", "kick");
+        crate::CardRegistry::from_chunks_and_tokens(&[&ron], &[])
+            .expect("Chalice and Comet Storm require repeated positive generic kicker fees");
+    }
+    for (kind, fee, affected, option) in [
+        ("Multikicker", "{0}", "Self_", "kick"),
+        ("Multikicker", "{G}", "Self_", "kick"),
+        ("Multikicker", "{X}", "Self_", "kick"),
+        ("Multikicker", "{2}", "Self_", "unknown"),
+        ("Multikicker", "{2}", "Creatures(())", "kick"),
+        ("Kicker", "{2}", "Self_", "kick"),
+        ("AdditionalPayment", "{2}", "Self_", "kick"),
+    ] {
+        let ron = definition(kind, fee, affected, option);
+        assert!(
+            crate::CardRegistry::from_chunks_and_tokens(&[&ron], &[]).is_err(),
+            "unsupported repeated-cost or entry context accepted: {ron}"
+        );
+    }
+    let required = definition("Multikicker", "{2}", "Self_", "kick").replace(
+        "presentation: Fallback,\n                    options:",
+        "presentation: Fallback, min: 1,\n                    options:",
+    );
+    assert!(crate::CardRegistry::from_chunks_and_tokens(&[&required], &[]).is_err());
+}
+
+#[test]
 fn mana_amount_ron_omits_zero_fields_and_round_trips() {
     let amount = super::ManaAmount {
         w: 1,

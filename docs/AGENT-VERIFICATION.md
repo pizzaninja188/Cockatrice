@@ -77,8 +77,10 @@ CTest uses `build/windows-ninja-all`, rejects an empty suite, and requires ruled
 with `RULED_E2E_REQUIRE=1`. The caller's E2E environment is restored after CTest.
 
 Rust selects full tests, all-target Clippy with warnings denied, and a separate format check for
-every package declared in the workspace. Separate rustfmt invocations avoid Windows command-line
-length limits as the test inventory grows. Package discovery is read-only during Preview. Cpp selects
+every package declared in the workspace. `check-rust-format.ps1` reads Cargo's target inventory
+and runs check-only rustfmt with each target's edition in bounded argument chunks. This preserves
+formatting coverage when even one package exceeds Windows command-line limits. Package discovery
+is read-only during Preview; target discovery runs only during the selected check. Cpp selects
 the full Ninja build and CTest. `-CardData` adds the read-only card check and requires Rust or Both.
 Every selection ends with `git diff --check`. Preview prints argument arrays and working
 directories without running commands or creating artifacts.
@@ -196,6 +198,7 @@ powershell.exe -NoProfile -File tests/scripts/prepare_card_batch_test.ps1
 powershell.exe -NoProfile -File tests/scripts/card_evidence_test.ps1
 powershell.exe -NoProfile -File tests/scripts/card_evidence_workflow_test.ps1
 powershell.exe -NoProfile -File tests/scripts/verify_workflow_test.ps1
+powershell.exe -NoProfile -File tests/scripts/rust_format_workflow_test.ps1
 powershell.exe -NoProfile -File tests/scripts/launch_ruled_game_test.ps1
 ```
 
@@ -236,10 +239,12 @@ ctest --test-dir build/windows-ninja-all --output-on-failure
 cd tricerules
 cargo test
 cargo clippy --all-targets -- -D warnings
-cargo fmt --check -p tricerules-proto
-cargo fmt --check -p tricerules-core
-cargo fmt --check -p tricerules-cards
-cargo fmt --check -p tricerules-server
+# From the repository root; bounded target coverage on Windows:
+cd ..
+./scripts/check-rust-format.ps1 -Package tricerules-proto
+./scripts/check-rust-format.ps1 -Package tricerules-core
+./scripts/check-rust-format.ps1 -Package tricerules-cards
+./scripts/check-rust-format.ps1 -Package tricerules-server
 ```
 
 Use the single-config Ninja tree without `-C` and without manually rewriting `PATH`. The vendored Qt kit is `6.6.3/msvc2019_64`. MSBuild presets remain for CI parity and Visual Studio use, but Ninja is the normal development loop.

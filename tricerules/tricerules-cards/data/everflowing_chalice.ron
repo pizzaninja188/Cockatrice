@@ -1,0 +1,39 @@
+// Oracle ID 0a79237e-0811-4a8a-bd4d-db3ca91bff22.
+// Scryfall printing e4ed0052-d6dd-4f69-8313-10863baefac9 and its rulings were checked.
+// https://api.scryfall.com/cards/e4ed0052-d6dd-4f69-8313-10863baefac9
+// https://api.scryfall.com/cards/e4ed0052-d6dd-4f69-8313-10863baefac9/rulings
+// CR 601.2b/f/h, 702.33, 607.2i/5, 122.6, 614.12 and 707.10 govern the modeled behavior.
+(
+  id: "everflowing_chalice",
+  name: "Everflowing Chalice",
+  face_id: "everflowing_chalice",
+  mana_cost: "{0}",
+  types: ["Artifact"],
+  cast_cost_groups: [(
+    group_id: "multikicker",
+    presentation: OracleLines([1]),
+    options: [Mana(
+      option_id: "kick",
+      presentation: OracleLines([1]),
+      kind: Multikicker,
+      cost: "{2}",
+    )],
+  )],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([2]),
+    definition: EntersWithCounters(
+      counter: Charge,
+      amount: Count(CastCostPaymentCount(cost: (
+        group_id: "multikicker", option_id: "kick",
+      ))),
+    ),
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    source_zone: Battlefield,
+    costs: [Tap],
+    effect: [ProduceManaPerSourceCounter(counter: Charge, options: [(c: 1)])],
+  )],
+)

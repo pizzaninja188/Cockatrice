@@ -115,6 +115,7 @@ fn issue_154_changeling_can_be_beheld_as_a_dragon_from_hand() {
                 spell_slot,
                 target_object(target),
                 vec![CastCostGroupSelection {
+                    repetitions: None,
                     group_index: 0,
                     option_index: 0,
                     selected_object: Some(SelectedObject::HandIndex(changeling_slot as u32)),

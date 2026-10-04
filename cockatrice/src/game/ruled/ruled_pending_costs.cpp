@@ -1,6 +1,7 @@
 #include "ruled_pending_cast.h"
 
 #include <QCoreApplication>
+#include <QRegularExpression>
 
 // Headless cost reconciliation and presentation. Separate from the menu implementation so
 // menu-only consumers need not link the authoritative client-state query implementation.
@@ -51,6 +52,150 @@ QMap<QChar, int> RuledPendingCast::parseSimpleManaCost(const QString &manaCost)
         addSymbol(c);
     }
     return parsed;
+}
+
+std::optional<QMap<QChar, int>> RuledPendingCast::parseRepresentableManaCost(const QString &manaCost)
+{
+    qint64 total = 0;
+    const QRegularExpression tokens(QStringLiteral("\\{([^{}]+)\\}"));
+    auto matches = tokens.globalMatch(manaCost);
+    while (matches.hasNext()) {
+        const QString token = matches.next().captured(1);
+        if (std::all_of(token.cbegin(), token.cend(), [](QChar c) { return c.isDigit(); })) {
+            bool valid = false;
+            const quint64 value = token.toULongLong(&valid);
+            if (!valid || value > static_cast<quint64>(std::numeric_limits<int>::max()))
+                return std::nullopt;
+            total += static_cast<qint64>(value);
+        } else {
+            for (QChar c : token)
+                total += QStringLiteral("WUBRGCX").contains(c.toUpper());
+        }
+        if (total > std::numeric_limits<int>::max())
+            return std::nullopt;
+    }
+    const auto parsed = parseSimpleManaCost(manaCost);
+    total = 0;
+    for (int value : parsed) {
+        if (value < 0)
+            return std::nullopt;
+        total += value;
+    }
+    return total <= std::numeric_limits<int>::max() ? std::optional(parsed) : std::nullopt;
+}
+
+std::optional<int> RuledPendingCast::repeatedCastCostAmount(const RuledCastCostOption &option, quint32 count)
+{
+    if (option.kind != RuledCastCostOptionKind::Mana || !option.maximumRepetitions || count == 0 ||
+        count > *option.maximumRepetitions)
+        return std::nullopt;
+    const auto unit = parseRepresentableManaCost(option.additionalManaCost);
+    if (!unit || unit->size() != 1 || unit->value('X') <= 0 ||
+        !QRegularExpression(QStringLiteral("^(\\{[0-9]+\\})+$")).match(option.additionalManaCost).hasMatch())
+        return std::nullopt;
+    const quint64 fee = static_cast<quint64>(unit->value('X')) * count;
+    return fee <= static_cast<quint64>(std::numeric_limits<int>::max()) ? std::optional(static_cast<int>(fee))
+                                                                        : std::nullopt;
+}
+
+bool RuledPendingCast::stageRepeatedCastCost(int optionIndex, quint32 count)
+{
+    if (!isAwaitingRuledCastCostOption() || spell.engineTransactionId != 0)
+        return false;
+    const auto &group = spell.castCostGroups.at(spell.nextCastCostGroup);
+    const auto option = std::find_if(group.options.cbegin(), group.options.cend(),
+                                     [optionIndex](const auto &entry) { return entry.optionIndex == optionIndex; });
+    if (group.min != 0 || group.max != 1 || group.options.size() != 1 || option == group.options.cend() ||
+        !option->selectable || ruledCastCostGroupSelectionCount(spell, group.groupIndex) != 0)
+        return false;
+    const auto fee = repeatedCastCostAmount(*option, count);
+    if (!fee)
+        return false;
+    qint64 total = *fee + static_cast<qint64>(spell.flexPips.size());
+    for (int value : spell.remainingCost) {
+        if (value < 0)
+            return false;
+        total += value;
+    }
+    if (total > std::numeric_limits<int>::max())
+        return false;
+    spell.remainingCost['X'] += *fee;
+    RuledPendingCastCostSelection selection;
+    selection.groupIndex = group.groupIndex;
+    selection.optionIndex = optionIndex;
+    selection.repetitions = count;
+    spell.castCostSelections.append(selection);
+    return true;
+}
+
+bool RuledPendingCast::repeatedCastCostPromptStillCurrent(const PendingRuledSpellCast &before, int optionIndex) const
+{
+    if (!before.valid || !isAwaitingRuledCastCostOption() || before.draftId != spell.draftId ||
+        spell.stage != PendingRuledSpellCast::Stage::Announcing || spell.engineTransactionId != 0 ||
+        spell.submissionPending || before.handIndex != spell.handIndex || before.source != spell.source ||
+        before.sourceZoneChangeGeneration != spell.sourceZoneChangeGeneration || before.faceIndex != spell.faceIndex ||
+        before.castMethod != spell.castMethod || before.castingPermissionId != spell.castingPermissionId ||
+        before.nextCastCostGroup != spell.nextCastCostGroup || before.nextCastCostGroup < 0 ||
+        before.nextCastCostGroup >= before.castCostGroups.size())
+        return false;
+    const auto &original = before.castCostGroups.at(before.nextCastCostGroup);
+    const auto &current = spell.castCostGroups.at(spell.nextCastCostGroup);
+    if (original.groupIndex != current.groupIndex || current.min != 0 || current.max != 1 ||
+        current.options.size() != 1 || original.options.size() != 1 ||
+        ruledCastCostGroupSelectionCount(spell, current.groupIndex) != 0)
+        return false;
+    const auto &oldOption = original.options.first();
+    const auto &liveOption = current.options.first();
+    return oldOption.optionIndex == optionIndex && liveOption.optionIndex == optionIndex && liveOption.selectable &&
+           liveOption.kind == RuledCastCostOptionKind::Mana && oldOption.kind == liveOption.kind &&
+           oldOption.maximumRepetitions == liveOption.maximumRepetitions && liveOption.maximumRepetitions &&
+           oldOption.additionalManaCost == liveOption.additionalManaCost;
+}
+
+bool RuledPendingCast::expandRepeatedCastX(int chosenX)
+{
+    if (chosenX < 0 || spell.xPips < 0)
+        return false;
+    const qint64 generic = static_cast<qint64>(spell.remainingCost.value('X')) +
+                           static_cast<qint64>(spell.xPips) * (static_cast<qint64>(chosenX) - 1);
+    qint64 total = generic + static_cast<qint64>(spell.flexPips.size());
+    if (generic < 0 || generic > std::numeric_limits<int>::max())
+        return false;
+    for (auto it = spell.remainingCost.cbegin(); it != spell.remainingCost.cend(); ++it) {
+        if (it.value() < 0)
+            return false;
+        if (it.key() != QChar('X'))
+            total += it.value();
+    }
+    if (total > std::numeric_limits<int>::max())
+        return false;
+    spell.xValue = chosenX;
+    if (generic == 0)
+        spell.remainingCost.remove('X');
+    else
+        spell.remainingCost['X'] = static_cast<int>(generic);
+    spell.xPips = 0;
+    return true;
+}
+
+bool RuledPendingCast::finalizeRepeatedCastManaCost(qint64 increase, qint64 reduction)
+{
+    qint64 total = increase + static_cast<qint64>(spell.flexPips.size());
+    if (increase < 0 || reduction < 0)
+        return false;
+    for (int value : spell.remainingCost) {
+        if (value < 0)
+            return false;
+        total += value;
+    }
+    if (total > std::numeric_limits<int>::max())
+        return false;
+    const qint64 generic = qMax<qint64>(0, spell.remainingCost.value('X') + increase - reduction);
+    if (generic > std::numeric_limits<int>::max())
+        return false;
+    spell.remainingCost['X'] = static_cast<int>(generic);
+    spell.manaCostFinalized = true;
+    return true;
 }
 
 QString RuledPendingCast::formatSimpleManaCost(const QMap<QChar, int> &cost)
@@ -318,6 +463,12 @@ bool RuledPendingCast::reconcileSpellCosts(const RuledClientState &state, int lo
                         return entry.optionIndex == selection.optionIndex;
                     });
                 if (option == group->options.cend() || !option->selectable) {
+                    return false;
+                }
+                if (option->maximumRepetitions) {
+                    if (!selection.repetitions || !repeatedCastCostAmount(*option, *selection.repetitions))
+                        return false;
+                } else if (selection.repetitions && *selection.repetitions != 1) {
                     return false;
                 }
                 if (selection.objectKind == RuledPendingCastCostSelection::ObjectKind::Hand) {
@@ -669,7 +820,9 @@ bool RuledPendingCast::declineCastCostGroup()
         const auto option = std::find_if(group.options.cbegin(), group.options.cend(),
                                          [&it](const auto &entry) { return entry.optionIndex == it->optionIndex; });
         if (option != group.options.cend() && option->kind == RuledCastCostOptionKind::Mana) {
-            const auto extra = parseSimpleManaCost(option->additionalManaCost);
+            const auto extra =
+                it->repetitions ? QMap<QChar, int>{{'X', repeatedCastCostAmount(*option, *it->repetitions).value_or(0)}}
+                                : parseSimpleManaCost(option->additionalManaCost);
             for (auto mana = extra.constBegin(); mana != extra.constEnd(); ++mana)
                 spell.remainingCost[mana.key()] -= mana.value();
         }

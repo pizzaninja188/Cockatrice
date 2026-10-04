@@ -1763,6 +1763,16 @@ impl GameEngine {
             previous_effect_result: context.previous_effect_result,
         };
         match expression {
+            CountExpression::CastCostPaymentCount { cost } => context
+                .entry_cast_cost_receipts
+                .iter()
+                .find(|receipt| {
+                    receipt.group_id.as_ref() == Some(&cost.group_id)
+                        && receipt.option_id.as_ref() == Some(&cost.option_id)
+                })
+                .and_then(|receipt| receipt.multikicker.as_ref())
+                .filter(|receipt| context.entry_cast_cost_origin == Some(&receipt.origin))
+                .map_or(0, |receipt| i64::from(receipt.repetitions)),
             CountExpression::ManaColorsSpentToCast => {
                 i64::from(context.entry_mana_colors_spent.count())
             }
@@ -2486,6 +2496,8 @@ mod tests {
 
     fn quantity_context(source: ObjectId) -> AmountContext<'static> {
         AmountContext {
+            entry_cast_cost_receipts: &[],
+            entry_cast_cost_origin: None,
             entry_mana_colors_spent: Default::default(),
             stack_item: None,
             controller: 0,
@@ -2495,6 +2507,84 @@ mod tests {
             chosen_x: 0,
             previous_effect_result: None,
         }
+    }
+
+    #[test]
+    fn multikicker_entry_query_matches_definition_face_revision_and_semantic_kind() {
+        use crate::state::{CastCostAbilityOrigin, CastCostReceipt, MultikickerPaymentReceipt};
+        let engine = quantity_engine();
+        let group_id = tricerules_cards::ChoiceId::new("multikicker").unwrap();
+        let option_id = tricerules_cards::ChoiceId::new("kick").unwrap();
+        let origin = CastCostAbilityOrigin {
+            original_card_id: "paid_definition".into(),
+            face_id: tricerules_cards::CardFaceId::new("paid_face").unwrap(),
+            copy_revision: 0,
+        };
+        let receipt = CastCostReceipt {
+            group_index: 0,
+            option_index: 0,
+            group_id: Some(group_id.clone()),
+            option_id: Some(option_id.clone()),
+            object_cost_kind: None,
+            multikicker: Some(MultikickerPaymentReceipt {
+                repetitions: 3,
+                origin: origin.clone(),
+            }),
+            label: "private linked receipt".into(),
+            objects: vec![],
+        };
+        let expression = CountExpression::CastCostPaymentCount {
+            cost: tricerules_cards::CastCostOptionRef {
+                group_id,
+                option_id,
+            },
+        };
+        for (effective_origin, expected) in [
+            (origin.clone(), 3),
+            (
+                CastCostAbilityOrigin {
+                    original_card_id: "foreign_definition".into(),
+                    ..origin.clone()
+                },
+                0,
+            ),
+            (
+                CastCostAbilityOrigin {
+                    face_id: tricerules_cards::CardFaceId::new("foreign_face").unwrap(),
+                    ..origin.clone()
+                },
+                0,
+            ),
+            (
+                CastCostAbilityOrigin {
+                    copy_revision: 1,
+                    ..origin.clone()
+                },
+                0,
+            ),
+        ] {
+            let receipts = [receipt.clone()];
+            let context = AmountContext {
+                entry_cast_cost_receipts: &receipts,
+                entry_cast_cost_origin: Some(&effective_origin),
+                ..quantity_context(1)
+            };
+            assert_eq!(engine.resolve_quantity(&expression, context), expected);
+        }
+        let ordinary = [CastCostReceipt {
+            multikicker: None,
+            ..receipt
+        }];
+        let context = AmountContext {
+            entry_cast_cost_receipts: &ordinary,
+            entry_cast_cost_origin: Some(&origin),
+            ..quantity_context(1)
+        };
+        assert_eq!(
+            engine.resolve_quantity(&expression, context),
+            0,
+            "ordinary kicker/bargain local ID collisions are not Multikicker history"
+        );
     }
 
     fn quantity_engine() -> GameEngine {

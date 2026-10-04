@@ -37,10 +37,11 @@ try {
         status = 'running'; semantic_approval = $false; final_gate = 'pending'; steps = @() }
     foreach ($check in $checks) {
         $started = [datetime]::UtcNow
+        $executable = if ($check.Executable) { $check.Executable } else { 'cargo' }
         $result = & (Join-Path $PSScriptRoot 'run-quiet-command.ps1') -Label $check.Label `
-            -Executable cargo -ArgumentList $check.Args -WorkingDirectory (Join-Path $repo 'tricerules') `
+            -Executable $executable -ArgumentList $check.Args -WorkingDirectory (Join-Path $repo 'tricerules') `
             -LogDirectory $OutDirectory -AsResultObject
-        $summary.steps += @{ label = $check.Label; arguments = $check.Args; exit_code = $result.ExitCode;
+        $summary.steps += @{ label = $check.Label; executable = $executable; arguments = $check.Args; exit_code = $result.ExitCode;
             started_at = $started.ToString('o'); completed_at = [datetime]::UtcNow.ToString('o'); log = $result.LogPath }
         Write-Host $result.Summary
         if ($result.ShowLog) { Get-Content -LiteralPath $result.LogPath | Out-Host }

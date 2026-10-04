@@ -19,6 +19,7 @@ fn engine(seed: u64) -> GameEngine {
 
 fn discard_option(hand_index: usize) -> CastCostGroupSelection {
     CastCostGroupSelection {
+        repetitions: None,
         group_index: 0,
         option_index: 0,
         selected_object: Some(SelectedObject::HandIndex(hand_index as u32)),
@@ -29,6 +30,7 @@ fn discard_option(hand_index: usize) -> CastCostGroupSelection {
 
 fn pay_life_option() -> CastCostGroupSelection {
     CastCostGroupSelection {
+        repetitions: None,
         group_index: 0,
         option_index: 1,
         selected_object: None,

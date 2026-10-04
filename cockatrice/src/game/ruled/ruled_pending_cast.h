@@ -24,8 +24,8 @@
 #include <QtGlobal>
 #include <algorithm>
 #include <limits>
-#include <optional>
 #include <numeric>
+#include <optional>
 
 class QWidget;
 class CardItem;
@@ -130,8 +130,7 @@ inline bool ruledCostSelectionConflicts(const RuledCostChoice &choice,
         previous->kind == RuledCostChoiceKind::ReturnUnblockedAttacker)
         return true;
     if (choice.kind == RuledCostChoiceKind::Blight || previous->kind == RuledCostChoiceKind::Blight ||
-        choice.kind == RuledCostChoiceKind::RemoveCounters ||
-        previous->kind == RuledCostChoiceKind::RemoveCounters)
+        choice.kind == RuledCostChoiceKind::RemoveCounters || previous->kind == RuledCostChoiceKind::RemoveCounters)
         return false;
     if ((choice.kind == RuledCostChoiceKind::Tap && previous->kind == RuledCostChoiceKind::Sacrifice) ||
         (choice.kind == RuledCostChoiceKind::Sacrifice && previous->kind == RuledCostChoiceKind::Tap))
@@ -157,11 +156,20 @@ struct RuledPendingCastCostSelection
     QVector<quint32> selectedObjectIds;
     QHash<quint32, quint64> selectedObjectGenerations;
     QHash<quint32, qint64> selectedObjectContributions;
+    std::optional<quint32> repetitions;
 };
 
 struct PendingActivatedAbility
 {
-    enum class Stage { Announcing, BeginPending, Waiting, Paying, CommitPending, CancelPending };
+    enum class Stage
+    {
+        Announcing,
+        BeginPending,
+        Waiting,
+        Paying,
+        CommitPending,
+        CancelPending
+    };
     Stage stage = Stage::Announcing;
     quint64 engineTransactionId = 0;
     quint64 engineRevision = 0;
@@ -231,8 +239,8 @@ struct PendingActivatedAbility
 
 /// Convert each printed {X} mana pip from the parser's one-generic placeholder to chosen X.
 /// The caller cancels the whole pending activation when the prompt returns no value.
-[[nodiscard]] inline bool ruledApplyActivatedXChoice(PendingActivatedAbility &pending, int xPips,
-                                                      std::optional<quint32> chosenX)
+[[nodiscard]] inline bool
+ruledApplyActivatedXChoice(PendingActivatedAbility &pending, int xPips, std::optional<quint32> chosenX)
 {
     if (!chosenX || xPips <= 0 || pending.remainingCost.value(QChar('X'), 0) < xPips ||
         *chosenX > ruledActivatedXChoiceMaximum(pending, xPips)) {
@@ -348,18 +356,18 @@ template <typename PendingPayment>
     if (!choice.candidateIds.contains(objectId)) {
         return false;
     }
-    return std::any_of(
-        pending.costSelections.cbegin(), pending.costSelections.cend(), [&choice, objectId](const auto &selection) {
-            return selection.costIndex == choice.costIndex && selection.zone == choice.zone &&
-                   selection.selectedIds.contains(objectId);
-        });
+    return std::any_of(pending.costSelections.cbegin(), pending.costSelections.cend(),
+                       [&choice, objectId](const auto &selection) {
+                           return selection.costIndex == choice.costIndex && selection.zone == choice.zone &&
+                                  selection.selectedIds.contains(objectId);
+                       });
 }
 
 /// Revalidate the source identity of a pending activated-ability-shaped UI transaction. Generic
 /// permanent actions deliberately carry no activated-ability index, so they must be matched
 /// against the engine's typed action list instead.
 [[nodiscard]] inline bool ruledPendingAbilitySourceStillCurrent(const RuledClientState &state,
-                                                                 const PendingActivatedAbility &pending)
+                                                                const PendingActivatedAbility &pending)
 {
     // The engine owns an accepted announcement even when its live ability/grant is no longer
     // published. Begin also survives the short gap before its authoritative reply arrives.
@@ -369,13 +377,14 @@ template <typename PendingPayment>
         return state.pendingAbilityActivation &&
                state.pendingAbilityActivation->transaction_id() == pending.engineTransactionId &&
                state.pendingAbilityActivation->source_object_id() == pending.permanentOid &&
-               state.pendingAbilityActivation->source_zone_change_generation() == pending.expectedZoneChangeGeneration &&
+               state.pendingAbilityActivation->source_zone_change_generation() ==
+                   pending.expectedZoneChangeGeneration &&
                state.pendingAbilityActivation->ability_index() == static_cast<quint32>(pending.abilityIndex);
     }
     if (pending.permanentAction) {
         return state
-            .permanentActionFor(pending.permanentOid, pending.expectedZoneChangeGeneration,
-                                pending.permanentActionKind, pending.permanentActionFaceIndex)
+            .permanentActionFor(pending.permanentOid, pending.expectedZoneChangeGeneration, pending.permanentActionKind,
+                                pending.permanentActionFaceIndex)
             .has_value();
     }
     return state.abilitySourceGeneration(pending.permanentOid) == pending.expectedZoneChangeGeneration &&
@@ -394,6 +403,8 @@ struct PendingRuledSpellCast
     };
 
     bool hasConvoke = false;
+    // Local announcement identity, preserved by nested-payment snapshots.
+    quint64 draftId = 0;
     Stage stage = Stage::Announcing;
     quint64 engineTransactionId = 0;
     quint32 reservedObjectId = 0;
@@ -466,10 +477,9 @@ struct PendingRuledSpellCast
 
 [[nodiscard]] inline int ruledCastCostGroupSelectionCount(const PendingRuledSpellCast &spell, int groupIndex)
 {
-    return static_cast<int>(std::count_if(spell.castCostSelections.cbegin(), spell.castCostSelections.cend(),
-                                          [groupIndex](const auto &selection) {
-                                              return selection.groupIndex == groupIndex;
-                                          }));
+    return static_cast<int>(
+        std::count_if(spell.castCostSelections.cbegin(), spell.castCostSelections.cend(),
+                      [groupIndex](const auto &selection) { return selection.groupIndex == groupIndex; }));
 }
 
 [[nodiscard]] inline bool
@@ -481,8 +491,8 @@ ruledCastCostOptionAlreadySelected(const PendingRuledSpellCast &spell, int group
                        });
 }
 
-[[nodiscard]] inline bool
-ruledCastCostGroupCanConfirm(const PendingRuledSpellCast &spell, const RuledCastCostGroup &group)
+[[nodiscard]] inline bool ruledCastCostGroupCanConfirm(const PendingRuledSpellCast &spell,
+                                                       const RuledCastCostGroup &group)
 {
     const int selected = ruledCastCostGroupSelectionCount(spell, group.groupIndex);
     return selected >= group.min && selected <= group.max;
@@ -490,8 +500,8 @@ ruledCastCostGroupCanConfirm(const PendingRuledSpellCast &spell, const RuledCast
 
 /// Choosing the sole allowed group entry is the declaration. Wider groups stay open so the player
 /// can build the intended subset before confirming it.
-[[nodiscard]] inline bool
-ruledCastCostGroupSelectionCompletesImmediately(const PendingRuledSpellCast &spell, const RuledCastCostGroup &group)
+[[nodiscard]] inline bool ruledCastCostGroupSelectionCompletesImmediately(const PendingRuledSpellCast &spell,
+                                                                          const RuledCastCostGroup &group)
 {
     return group.max == 1 && ruledCastCostGroupSelectionCount(spell, group.groupIndex) == 1 &&
            ruledCastCostGroupCanConfirm(spell, group);
@@ -579,8 +589,7 @@ ruledCastCostObjectEligibility(const PendingRuledSpellCast &spell, RuledCastCost
     }
     const bool legal = kind == RuledCastCostCandidateKind::Hand
                            ? ruledCastCostUsesHandChoice(option->kind) && option->validHandIndices.contains(id)
-                           : ruledCastCostUsesPermanentChoice(option->kind) &&
-                                 option->validPermanentIds.contains(id);
+                           : ruledCastCostUsesPermanentChoice(option->kind) && option->validPermanentIds.contains(id);
     return legal ? RuledTargetClickEligibility::Legal : RuledTargetClickEligibility::Illegal;
 }
 
@@ -589,14 +598,11 @@ ruledCastCostObjectEligibility(const PendingRuledSpellCast &spell, RuledCastCost
 /// would freeze the unreduced cost before Harmonize can record the selected creature's power.
 [[nodiscard]] inline bool ruledCastCostGroupsComplete(const PendingRuledSpellCast &spell)
 {
-    return spell.valid && !spell.waitingForCastCostObject &&
-           spell.nextCastCostGroup >= spell.castCostGroups.size();
+    return spell.valid && !spell.waitingForCastCostObject && spell.nextCastCostGroup >= spell.castCostGroups.size();
 }
 
-[[nodiscard]] inline bool ruledTargetDataContains(const RuledTargetGroupData &data,
-                                                  RuledTargetCandidateKind kind,
-                                                  quint32 oid,
-                                                  int localPlayerId)
+[[nodiscard]] inline bool
+ruledTargetDataContains(const RuledTargetGroupData &data, RuledTargetCandidateKind kind, quint32 oid, int localPlayerId)
 {
     switch (kind) {
         case RuledTargetCandidateKind::Battlefield:
@@ -613,9 +619,8 @@ ruledCastCostObjectEligibility(const PendingRuledSpellCast &spell, RuledCastCost
 
 /// Encode the physical surface represented by an engine ObjectId. The candidate group is
 /// authoritative; this exists because player ids and object ids intentionally share integers.
-[[nodiscard]] inline ruled::v1::TargetRefKind ruledTargetRefKind(const RuledTargetGroupData &data,
-                                                                 quint32 oid,
-                                                                 int localPlayerId)
+[[nodiscard]] inline ruled::v1::TargetRefKind
+ruledTargetRefKind(const RuledTargetGroupData &data, quint32 oid, int localPlayerId)
 {
     if (data.validGraveyardIds.contains(oid)) {
         return ruled::v1::TARGET_REF_KIND_GRAVEYARD;
@@ -641,8 +646,8 @@ inline void ruledAccumulateTargetingCosts(const RuledSpellTargetData &data,
     for (int groupPosition = 0; groupPosition < data.groups.size(); ++groupPosition) {
         const auto &group = data.groups.at(groupPosition);
         const QVector<quint32> selected = groupPosition < selectedByGroup.size()
-                                                ? selectedByGroup.at(groupPosition)
-                                                : (data.groups.size() == 1 ? fallbackSelected : QVector<quint32>{});
+                                              ? selectedByGroup.at(groupPosition)
+                                              : (data.groups.size() == 1 ? fallbackSelected : QVector<quint32>{});
         for (const quint32 oid : selected) {
             const auto kind = ruledTargetRefKind(group, oid, localPlayerId);
             for (const auto &application : data.targetingCostApplications) {
@@ -694,8 +699,8 @@ inline void ruledAccumulateTargetedCostReductions(const RuledSpellTargetData &da
     for (int groupPosition = 0; groupPosition < data.groups.size(); ++groupPosition) {
         const auto &group = data.groups.at(groupPosition);
         const QVector<quint32> selected = groupPosition < selectedByGroup.size()
-                                                ? selectedByGroup.at(groupPosition)
-                                                : (data.groups.size() == 1 ? fallbackSelected : QVector<quint32>{});
+                                              ? selectedByGroup.at(groupPosition)
+                                              : (data.groups.size() == 1 ? fallbackSelected : QVector<quint32>{});
         for (const quint32 oid : selected) {
             const auto kind = ruledTargetRefKind(group, oid, localPlayerId);
             for (const auto &application : data.targetedCostReductionApplications) {
@@ -710,13 +715,12 @@ inline void ruledAccumulateTargetedCostReductions(const RuledSpellTargetData &da
     }
 }
 
-[[nodiscard]] inline int ruledModalSpellTargetedCostReduction(const PendingRuledSpellCast &spell,
-                                                               int localPlayerId)
+[[nodiscard]] inline int ruledModalSpellTargetedCostReduction(const PendingRuledSpellCast &spell, int localPlayerId)
 {
     QHash<quint64, int> active;
     for (const auto &mode : spell.selectedModes) {
-        ruledAccumulateTargetedCostReductions(mode.targets, mode.selectedTargetOidsByGroup,
-                                              mode.selectedTargetOids, localPlayerId, active);
+        ruledAccumulateTargetedCostReductions(mode.targets, mode.selectedTargetOidsByGroup, mode.selectedTargetOids,
+                                              localPlayerId, active);
     }
     int total = 0;
     for (auto it = active.cbegin(); it != active.cend(); ++it) {
@@ -725,11 +729,10 @@ inline void ruledAccumulateTargetedCostReductions(const RuledSpellTargetData &da
     return total;
 }
 
-[[nodiscard]] inline int ruledTargetedCostReductionForSelection(
-    const RuledSpellTargetData &data,
-    const QVector<QVector<quint32>> &selectedByGroup,
-    const QVector<quint32> &fallbackSelected,
-    int localPlayerId)
+[[nodiscard]] inline int ruledTargetedCostReductionForSelection(const RuledSpellTargetData &data,
+                                                                const QVector<QVector<quint32>> &selectedByGroup,
+                                                                const QVector<quint32> &fallbackSelected,
+                                                                int localPlayerId)
 {
     QHash<quint64, int> active;
     ruledAccumulateTargetedCostReductions(data, selectedByGroup, fallbackSelected, localPlayerId, active);
@@ -747,8 +750,8 @@ inline void ruledAccumulateTargetedCostReductions(const RuledSpellTargetData &da
     return qMax(0, baseGeneric + genericIncreases - genericReduction);
 }
 
-[[nodiscard]] inline std::optional<RuledSpellTargetData>
-currentRuledSpellTargetData(const PendingRuledSpellCast &spell, const RuledClientState &state)
+[[nodiscard]] inline std::optional<RuledSpellTargetData> currentRuledSpellTargetData(const PendingRuledSpellCast &spell,
+                                                                                     const RuledClientState &state)
 {
     if (!spell.valid) {
         return std::nullopt;
@@ -790,8 +793,8 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
                                                              const RuledClientState &state)
 {
     const RuledSpellTargetData data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
-    const RuledTargetGroupData group =
-        data.groups.isEmpty() ? static_cast<const RuledTargetGroupData &>(data) : data.groups.value(ability.activeTargetGroupPosition);
+    const RuledTargetGroupData group = data.groups.isEmpty() ? static_cast<const RuledTargetGroupData &>(data)
+                                                             : data.groups.value(ability.activeTargetGroupPosition);
     return formatRuledTargetPrompt(ability.abilityText, group, ability.activeTargetGroupPosition, data.groups.size());
 }
 
@@ -802,13 +805,12 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
 
 /// One authoritative click predicate for every true target-selection flow. Untargeted resolution
 /// and cost choices deliberately stay out of this function.
-[[nodiscard]] inline RuledTargetClickEligibility
-ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
-                            const PendingActivatedAbility &ability,
-                            const RuledClientState &state,
-                            RuledTargetCandidateKind kind,
-                            quint32 oid,
-                            int localPlayerId)
+[[nodiscard]] inline RuledTargetClickEligibility ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
+                                                                             const PendingActivatedAbility &ability,
+                                                                             const RuledClientState &state,
+                                                                             RuledTargetCandidateKind kind,
+                                                                             quint32 oid,
+                                                                             int localPlayerId)
 {
     if (state.hasPendingChoiceOfKind(RuledClientState::ChoiceKind::CopyTarget)) {
         const bool supportedSurface = kind == RuledTargetCandidateKind::Battlefield ||
@@ -845,17 +847,15 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
     if (state.hasPendingChoiceOfKind(RuledClientState::ChoiceKind::AttackingTokenDefender)) {
         const bool legal = kind == RuledTargetCandidateKind::Player
                                ? state.isLegalAttackPlayerDefender(static_cast<int>(oid))
-                           : kind == RuledTargetCandidateKind::Battlefield
-                               ? state.isLegalAttackPermanentDefender(oid)
-                               : false;
+                           : kind == RuledTargetCandidateKind::Battlefield ? state.isLegalAttackPermanentDefender(oid)
+                                                                           : false;
         return legal ? RuledTargetClickEligibility::Legal : RuledTargetClickEligibility::Illegal;
     }
     if (state.hasPendingTriggerTarget()) {
-        const auto refKind = kind == RuledTargetCandidateKind::Graveyard
-                                 ? ruled::v1::TARGET_REF_KIND_GRAVEYARD
-                             : kind == RuledTargetCandidateKind::Stack ? ruled::v1::TARGET_REF_KIND_STACK
-                             : kind == RuledTargetCandidateKind::Player ? ruled::v1::TARGET_REF_KIND_PLAYER
-                                                                        : ruled::v1::TARGET_REF_KIND_PERMANENT;
+        const auto refKind = kind == RuledTargetCandidateKind::Graveyard ? ruled::v1::TARGET_REF_KIND_GRAVEYARD
+                             : kind == RuledTargetCandidateKind::Stack   ? ruled::v1::TARGET_REF_KIND_STACK
+                             : kind == RuledTargetCandidateKind::Player  ? ruled::v1::TARGET_REF_KIND_PLAYER
+                                                                         : ruled::v1::TARGET_REF_KIND_PERMANENT;
         const int targetPlayerId = kind == RuledTargetCandidateKind::Player ? static_cast<int>(oid) : localPlayerId;
         return state.isPendingTriggerTargetCandidate(refKind, oid, targetPlayerId)
                    ? RuledTargetClickEligibility::Legal
@@ -866,17 +866,18 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
         if (pending.stage() == ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET &&
             pending.deciding_player_id() == localPlayerId) {
             const bool legal = kind == RuledTargetCandidateKind::Battlefield &&
-                std::any_of(pending.target_candidates().begin(), pending.target_candidates().end(),
-                            [oid](const auto &target) { return target.object_id() == oid; });
+                               std::any_of(pending.target_candidates().begin(), pending.target_candidates().end(),
+                                           [oid](const auto &target) { return target.object_id() == oid; });
             return legal ? RuledTargetClickEligibility::Legal : RuledTargetClickEligibility::Illegal;
         }
     }
     if (ability.valid && ability.waitingForTarget) {
         const auto data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
         const auto group = data.groups.isEmpty() ? static_cast<const RuledTargetGroupData &>(data)
-                                                : data.groups.value(ability.activeTargetGroupPosition);
-        return !group.chosenByOpponent && ruledTargetDataContains(group, kind, oid, localPlayerId) ? RuledTargetClickEligibility::Legal
-                                                                       : RuledTargetClickEligibility::Illegal;
+                                                 : data.groups.value(ability.activeTargetGroupPosition);
+        return !group.chosenByOpponent && ruledTargetDataContains(group, kind, oid, localPlayerId)
+                   ? RuledTargetClickEligibility::Legal
+                   : RuledTargetClickEligibility::Illegal;
     }
     if (spell.valid && spell.waitingForTarget) {
         const auto data = currentRuledSpellTargetGroup(spell, state);
@@ -887,9 +888,7 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
     return RuledTargetClickEligibility::NotTargeting;
 }
 
-[[nodiscard]] inline bool ruledTargetDataContainsOid(const RuledTargetGroupData &data,
-                                                     quint32 oid,
-                                                     int localPlayerId)
+[[nodiscard]] inline bool ruledTargetDataContainsOid(const RuledTargetGroupData &data, quint32 oid, int localPlayerId)
 {
     return data.validPermanentIds.contains(oid) || data.validStackIds.contains(oid) ||
            data.validGraveyardIds.contains(oid) ||
@@ -905,9 +904,7 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
                                                        int localPlayerId)
 {
     bool changed = false;
-    const auto prune = [&](QVector<quint32> &oids,
-                           QVector<quint32> &damages,
-                           QVector<int> *allocations,
+    const auto prune = [&](QVector<quint32> &oids, QVector<quint32> &damages, QVector<int> *allocations,
                            const RuledTargetGroupData &data) {
         for (int i = oids.size() - 1; i >= 0; --i) {
             if (ruledTargetDataContainsOid(data, oids.at(i), localPlayerId)) {
@@ -939,17 +936,15 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
                 spell.selectedTargetDamagesByGroup[spell.activeTargetGroupPosition] = spell.selectedTargetDamages;
             }
             for (int groupIndex = 0; groupIndex < data.groups.size(); ++groupIndex) {
-                QVector<int> *const allocations = groupIndex == spell.activeTargetGroupPosition
-                                                      ? &spell.targetDamageAllocations
-                                                      : nullptr;
+                QVector<int> *const allocations =
+                    groupIndex == spell.activeTargetGroupPosition ? &spell.targetDamageAllocations : nullptr;
                 prune(spell.selectedTargetOidsByGroup[groupIndex], spell.selectedTargetDamagesByGroup[groupIndex],
                       allocations, data.groups.at(groupIndex));
             }
             if (spell.activeTargetGroupPosition >= 0 &&
                 spell.activeTargetGroupPosition < spell.selectedTargetOidsByGroup.size()) {
                 spell.selectedTargetOids = spell.selectedTargetOidsByGroup.at(spell.activeTargetGroupPosition);
-                spell.selectedTargetDamages =
-                    spell.selectedTargetDamagesByGroup.at(spell.activeTargetGroupPosition);
+                spell.selectedTargetDamages = spell.selectedTargetDamagesByGroup.at(spell.activeTargetGroupPosition);
             }
             for (int groupIndex = 0; groupIndex < data.groups.size(); ++groupIndex) {
                 const auto &group = data.groups.at(groupIndex);
@@ -967,8 +962,7 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
             for (int modePosition = 0; modePosition < spell.selectedModes.size(); ++modePosition) {
                 auto &mode = spell.selectedModes[modePosition];
                 const auto data = state.modalSpellTargetData(spell.handIndex, spell.faceIndex, mode.modeIndex,
-                                                             spell.source, spell.castMethod,
-                                                             spell.castingPermissionId);
+                                                             spell.source, spell.castMethod, spell.castingPermissionId);
                 if (!data.has_value()) {
                     continue;
                 }
@@ -981,14 +975,12 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
                 if (modePosition == spell.activeModePosition && spell.activeTargetGroupPosition >= 0 &&
                     spell.activeTargetGroupPosition < mode.selectedTargetOidsByGroup.size()) {
                     mode.selectedTargetOidsByGroup[spell.activeTargetGroupPosition] = spell.selectedTargetOids;
-                    mode.selectedTargetDamagesByGroup[spell.activeTargetGroupPosition] =
-                        spell.selectedTargetDamages;
+                    mode.selectedTargetDamagesByGroup[spell.activeTargetGroupPosition] = spell.selectedTargetDamages;
                 }
                 for (int groupIndex = 0; groupIndex < data->groups.size(); ++groupIndex) {
                     prune(mode.selectedTargetOidsByGroup[groupIndex], mode.selectedTargetDamagesByGroup[groupIndex],
                           nullptr, data->groups.at(groupIndex));
-                    if (modePosition == spell.activeModePosition &&
-                        groupIndex == spell.activeTargetGroupPosition) {
+                    if (modePosition == spell.activeModePosition && groupIndex == spell.activeTargetGroupPosition) {
                         spell.selectedTargetOids = mode.selectedTargetOidsByGroup.at(groupIndex);
                         spell.selectedTargetDamages = mode.selectedTargetDamagesByGroup.at(groupIndex);
                     }
@@ -1017,9 +1009,11 @@ ruledTargetClickEligibility(const PendingRuledSpellCast &spell,
             const auto group = std::find_if(data.groups.cbegin(), data.groups.cend(), [&target](const auto &entry) {
                 return entry.groupIndex == static_cast<int>(target.ref.group_index());
             });
-            const auto &candidates = group == data.groups.cend() ? static_cast<const RuledTargetGroupData &>(data) : *group;
+            const auto &candidates =
+                group == data.groups.cend() ? static_cast<const RuledTargetGroupData &>(data) : *group;
             if (!ruledTargetDataContainsOid(candidates, target.ref.object_id(), localPlayerId)) {
-                const int position = group == data.groups.cend() ? 0 : static_cast<int>(std::distance(data.groups.cbegin(), group));
+                const int position =
+                    group == data.groups.cend() ? 0 : static_cast<int>(std::distance(data.groups.cbegin(), group));
                 ability.selectedTargets.resize(index);
                 ability.activeTargetGroupPosition = position;
                 ability.waitingForTarget = true;
@@ -1090,6 +1084,12 @@ public:
 
     // Headless cost staging and display helpers; engine choices remain authoritative.
     static QMap<QChar, int> parseSimpleManaCost(const QString &manaCost);
+    static std::optional<QMap<QChar, int>> parseRepresentableManaCost(const QString &manaCost);
+    static std::optional<int> repeatedCastCostAmount(const RuledCastCostOption &option, quint32 count);
+    bool stageRepeatedCastCost(int optionIndex, quint32 count);
+    bool repeatedCastCostPromptStillCurrent(const PendingRuledSpellCast &before, int optionIndex) const;
+    bool expandRepeatedCastX(int chosenX);
+    bool finalizeRepeatedCastManaCost(qint64 increase, qint64 reduction);
     static QString formatSimpleManaCost(const QMap<QChar, int> &cost);
     static QVector<RuledFlexPip> parseFlexPips(const QString &manaCost);
     static bool flexPipMatchesColor(const RuledFlexPip &pip, QChar color);
@@ -1137,7 +1137,7 @@ public:
     /// Spell casts and activated abilities are mutually exclusive local UI transactions.
     /// A parked cast offer owns the exact source, generation, face, method, and permission.
     [[nodiscard]] static bool matchesSpecialCastOffer(const PendingRuledSpellCast &spell,
-                                                       const RuledClientState &state);
+                                                      const RuledClientState &state);
     [[nodiscard]] bool resolutionChoiceBlocksSpell(const RuledClientState &state) const;
     PendingRuledSpellCast &beginSpell();
     PendingActivatedAbility &beginAbility();
@@ -1177,6 +1177,9 @@ public:
 
     PendingRuledSpellCast spell;
     PendingActivatedAbility ability;
+
+private:
+    quint64 nextSpellDraftId = 0;
 };
 
 /// Fork-owned bridge between PlayerActions' pending state and concrete CardItem/Player target

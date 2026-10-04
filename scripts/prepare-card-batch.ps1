@@ -38,8 +38,9 @@ try {
     $checks += @{ Label = 'Authoring lint'; Args = @('clippy', '--quiet', '-p', 'tricerules-cards', '-p',
         'tricerules-core', '--all-targets', '--features', 'tricerules-cards/authoring', '--', '-D', 'warnings'); Exact = $false }
     foreach ($check in $checks) {
+        $executable = if ($check.Executable) { $check.Executable } else { 'cargo' }
         $result = & (Join-Path $PSScriptRoot 'run-quiet-command.ps1') -Label $check.Label `
-            -Executable cargo -ArgumentList $check.Args -WorkingDirectory (Join-Path $repo 'tricerules') `
+            -Executable $executable -ArgumentList $check.Args -WorkingDirectory (Join-Path $repo 'tricerules') `
             -LogDirectory $logs -AsResultObject
         Write-Host $result.Summary
         if ($result.ShowLog) { Get-Content -LiteralPath $result.LogPath | Out-Host }

@@ -6,14 +6,14 @@ try {
     $result = Invoke-WorkflowFixture $fixture 'prepare-card-batch.ps1' $arguments (Join-Path $fixture 'nested directory')
     Assert-Workflow ($result.ExitCode -eq 0) "Preparation failed: $($result.Output)"
     $trace = @(Read-WorkflowTrace $fixture)
-    Assert-Workflow ($trace.Count -eq 9) 'Expected four package format checks, identity, conformance, authoring lint, fingerprint and checklist steps.'
-    Assert-Workflow ($trace[0].Arguments -contains 'fmt') 'Formatting must reject before expensive preparation.'
-    Assert-Workflow ($trace[4].Arguments -contains 'registry::tests::card_ids_follow_slug_convention') 'Identity check must precede conformance.'
-    Assert-Workflow ($trace[5].Arguments -contains 'registry_execution_matches_reviewed_baseline') 'Conformance must precede refresh.'
+    Assert-Workflow ($trace.Count -eq 13) 'Expected four package target discoveries/format checks, identity, conformance, authoring lint, fingerprint and checklist steps.'
+    Assert-Workflow ($trace[1].Tool -eq 'rustfmt') 'Formatting must reject before expensive preparation.'
+    Assert-Workflow ($trace[8].Arguments -contains 'registry::tests::card_ids_follow_slug_convention') 'Identity check must precede conformance.'
+    Assert-Workflow ($trace[9].Arguments -contains 'registry_execution_matches_reviewed_baseline') 'Conformance must precede refresh.'
     Assert-Workflow ($trace[0].Cwd -eq (Join-Path $fixture 'tricerules')) 'Wrong Cargo working directory.'
-    Assert-Workflow ($trace[6].Arguments -contains 'tricerules-cards/authoring') 'Authoring-only code must be linted before review.'
-    Assert-Workflow ($trace[7].Arguments -contains '--refresh-presentation') 'Preparation must use metadata-only refresh.'
-    foreach ($pattern in @('cargo fmt', 'card_ids_follow_slug_convention', 'registry_execution_matches_reviewed_baseline', 'cargo clippy')) {
+    Assert-Workflow ($trace[10].Arguments -contains 'tricerules-cards/authoring') 'Authoring-only code must be linted before review.'
+    Assert-Workflow ($trace[11].Arguments -contains '--refresh-presentation') 'Preparation must use metadata-only refresh.'
+    foreach ($pattern in @('rustfmt', 'card_ids_follow_slug_convention', 'registry_execution_matches_reviewed_baseline', 'cargo clippy')) {
         $before = @(Read-WorkflowTrace $fixture).Count
         [IO.File]::WriteAllText((Join-Path $fixture 'fail-pattern'), $pattern)
         $result = Invoke-WorkflowFixture $fixture 'prepare-card-batch.ps1' $arguments

@@ -10,8 +10,8 @@
 // This is the layer that used to be untestable — the same logic lived inline in the
 // `RULED_PAYLOAD` case of the upstream `GameEventHandler`, behind the whole client.
 
-#include "game/ruled/ruled_auto_pass_policy.h"
 #include "game/ruled/ruled_activation.h"
+#include "game/ruled/ruled_auto_pass_policy.h"
 #include "game/ruled/ruled_card_display_identity.h"
 #include "game/ruled/ruled_client_host.h"
 #include "game/ruled/ruled_client_state.h"
@@ -561,8 +561,7 @@ TEST_F(RuledClientTest, SanitizedWardUndoDoesNotRestoreManaRemovedByTheEngine)
     ASSERT_TRUE(payment.apply(preview));
 
     // Undo's absolute pool event arrives before its fresh preview removes the stale pip.
-    int displayed = tracker.observe(17, 0, 0, payment.optimisticManaCounterSpendCount(17))
-                        .displayedBeforeNewStaging;
+    int displayed = tracker.observe(17, 0, 0, payment.optimisticManaCounterSpendCount(17)).displayedBeforeNewStaging;
     request = payment.requestAction({});
     preview.set_revision(request.revision());
     preview.mutable_selection()->Clear();
@@ -1898,8 +1897,9 @@ TEST(RuledPendingTargetTest, AbilityTargetInvalidationRewindsItsRequiredGroup)
     ASSERT_TRUE(reconcileRuledPendingTargets(spell, ability, state, kLocalPlayer));
     EXPECT_EQ(ability.activeTargetGroupPosition, 0);
     EXPECT_TRUE(ability.waitingForTarget);
-    EXPECT_EQ(ruledTargetClickEligibility(spell, ability, state, RuledTargetCandidateKind::Battlefield, 41, kLocalPlayer),
-              RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(
+        ruledTargetClickEligibility(spell, ability, state, RuledTargetCandidateKind::Battlefield, 41, kLocalPlayer),
+        RuledTargetClickEligibility::Legal);
 }
 
 TEST(RuledPendingTargetTest, ActivationOwnTargetEligibilityDoesNotUseTheOpponentsGroup)
@@ -2008,7 +2008,8 @@ TEST(RuledPendingTargetTest, ActivationCancelRaceInitializesPaymentWithoutDroppi
     EXPECT_EQ(local.remainingCost.value(QChar('X')), 3);
     local.stage = PendingActivatedAbility::Stage::Paying;
     local.remainingCost[QChar('X')] = 1;
-    for (const auto stage : {PendingActivatedAbility::Stage::CommitPending, PendingActivatedAbility::Stage::CancelPending}) {
+    for (const auto stage :
+         {PendingActivatedAbility::Stage::CommitPending, PendingActivatedAbility::Stage::CancelPending}) {
         local.stage = stage;
         ruledApplyActivationView(local, engine);
         EXPECT_EQ(local.stage, stage);
@@ -2836,7 +2837,7 @@ TEST_F(RuledClientTest, RequirementSetsSurviveABatchWithoutLegalActions)
     addHandAction(actions, ruled::v1::HAND_ACTION_CAST_SPELL, 0, "Grizzly Bears");
     actions.add_attack_requirement_ids(100); // CR 508.1d
     actions.set_minimum_attack_requirement_count(1);
-    actions.add_required_blocker_ids(200);  // CR 509.1c
+    actions.add_required_blocker_ids(200); // CR 509.1c
     actions.add_selectable_attacker_ids(100);
     addLegalPlayerAttack(actions, 100);
     addLegalBlockPair(actions, 200, 300);
@@ -2970,7 +2971,8 @@ TEST_F(RuledClientTest, PlayerAttackCapsExcludePermanentDefendersAndGlobalCapsCo
             *actions.add_legal_attack_assignments() = permanentAttackAssignment(oid, 500, 9);
         }
         auto *limit = actions.add_attack_declaration_limits();
-        if (!global) limit->set_attacked_player_id(kOpponent);
+        if (!global)
+            limit->set_attacked_player_id(kOpponent);
         limit->set_maximum_attackers(2);
         apply(batch);
         for (const quint32 oid : {100u, 101u, 102u}) {
@@ -7119,6 +7121,155 @@ TEST_F(RuledClientTest, ParsesEngineAuthoredOptionalCastCostGroups)
     EXPECT_EQ(costs.castCostGroups.first().options.at(3).kind, RuledCastCostOptionKind::PayLife);
 }
 
+TEST_F(RuledClientTest, MultikickerOfferPreservesEngineQuantityBound)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *hand = (*batch.mutable_legal_by_player())[kLocalPlayer].add_hand_actions();
+    hand->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+    hand->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+    hand->set_hand_index(3);
+    auto *group = hand->mutable_cost_choices()->add_cast_cost_groups();
+    group->set_max(1);
+    auto *option = group->add_options();
+    option->set_kind(ruled::v1::CAST_COST_OPTION_KIND_MANA);
+    option->set_additional_mana_cost("{2}");
+    option->set_maximum_repetitions(1073741823u);
+    option->set_selectable(true);
+    apply(batch);
+    const auto costs = state->spellCostData(3, 0, RuledCastSource::Hand);
+    ASSERT_EQ(costs.castCostGroups.size(), 1);
+    ASSERT_EQ(costs.castCostGroups.first().options.size(), 1);
+    EXPECT_EQ(costs.castCostGroups.first().options.first().maximumRepetitions, std::optional<quint32>(1073741823u));
+}
+
+TEST(RuledPendingCastTest, MultikickerStagesOneCountThenDeclineRemovesItsWholeFee)
+{
+    RuledPendingCast pending;
+    auto &spell = pending.beginSpell();
+    RuledCastCostOption option;
+    option.optionIndex = 0;
+    option.kind = RuledCastCostOptionKind::Mana;
+    option.additionalManaCost = "{2}";
+    option.maximumRepetitions = 1073741823u;
+    option.selectable = true;
+    RuledCastCostGroup group;
+    group.groupIndex = 0;
+    group.options = {option};
+    spell.castCostGroups = {group};
+    spell.remainingCost = {{'X', 1}, {'R', 1}};
+    EXPECT_TRUE(pending.stageRepeatedCastCost(0, 3));
+    EXPECT_EQ(spell.remainingCost.value('X'), 7);
+    ASSERT_EQ(spell.castCostSelections.size(), 1);
+    EXPECT_EQ(spell.castCostSelections.first().repetitions, std::optional<quint32>(3));
+    EXPECT_TRUE(ruledCastCostGroupSelectionCompletesImmediately(spell, group));
+    EXPECT_FALSE(pending.stageRepeatedCastCost(0, 2));
+    EXPECT_EQ(spell.remainingCost.value('X'), 7);
+    EXPECT_TRUE(pending.declineCastCostGroup());
+    EXPECT_TRUE(spell.valid);
+    EXPECT_EQ(spell.remainingCost.value('X'), 1);
+    EXPECT_EQ(spell.remainingCost.value('R'), 1);
+    EXPECT_EQ(spell.nextCastCostGroup, 1);
+    EXPECT_TRUE(spell.castCostSelections.isEmpty());
+}
+
+TEST(RuledPendingCastTest, MultikickerRejectsOversizedNumbersAndCombinedTotals)
+{
+    RuledCastCostOption option;
+    option.kind = RuledCastCostOptionKind::Mana;
+    option.additionalManaCost = "{2}";
+    option.maximumRepetitions = 1073741823u;
+    EXPECT_EQ(RuledPendingCast::repeatedCastCostAmount(option, 1073741823u), std::optional<int>(2147483646));
+    EXPECT_FALSE(RuledPendingCast::repeatedCastCostAmount(option, 0));
+    EXPECT_FALSE(RuledPendingCast::repeatedCastCostAmount(option, 1073741824u));
+    EXPECT_FALSE(RuledPendingCast::repeatedCastCostAmount(option, std::numeric_limits<quint32>::max()));
+    EXPECT_FALSE(RuledPendingCast::parseRepresentableManaCost("{2147483648}"));
+    EXPECT_FALSE(RuledPendingCast::parseRepresentableManaCost("{2147483647}{1}"));
+    EXPECT_FALSE(RuledPendingCast::parseRepresentableManaCost("{2147483647}{R}"));
+    EXPECT_EQ(RuledPendingCast::parseRepresentableManaCost("{2147483646}{R}")->value('X'), 2147483646);
+
+    RuledPendingCast pending;
+    auto &spell = pending.beginSpell();
+    spell.remainingCost = {{'X', 2147483646}};
+    EXPECT_FALSE(pending.finalizeRepeatedCastManaCost(2, 2));
+    EXPECT_EQ(spell.remainingCost.value('X'), 2147483646);
+    EXPECT_FALSE(spell.manaCostFinalized);
+    EXPECT_TRUE(pending.finalizeRepeatedCastManaCost(1, 2147483647));
+    EXPECT_EQ(spell.remainingCost.value('X'), 0);
+}
+
+TEST_F(RuledClientTest, MultikickerPromptRevalidatesRefreshedOfferAndReplacedDraft)
+{
+    auto offer = [](int groupIndex, bool selectable) {
+        ruled::v1::RuledEventBatch batch;
+        auto *hand = (*batch.mutable_legal_by_player())[kLocalPlayer].add_hand_actions();
+        hand->set_kind(ruled::v1::HAND_ACTION_CAST_SPELL);
+        hand->set_cast_method(ruled::v1::CAST_METHOD_NORMAL);
+        hand->set_hand_index(3);
+        auto *group = hand->mutable_cost_choices()->add_cast_cost_groups();
+        group->set_group_index(groupIndex);
+        group->set_max(1);
+        auto *option = group->add_options();
+        option->set_kind(ruled::v1::CAST_COST_OPTION_KIND_MANA);
+        option->set_additional_mana_cost("{2}");
+        option->set_maximum_repetitions(1073741823u);
+        option->set_selectable(selectable);
+        return batch;
+    };
+    apply(offer(0, true));
+    RuledPendingCast pending;
+    auto &spell = pending.beginSpell();
+    spell.handIndex = 3;
+    spell.castCostGroups = state->spellCostData(3, 0, RuledCastSource::Hand).castCostGroups;
+    const auto before = spell;
+    apply(offer(0, true));
+    ASSERT_TRUE(pending.reconcileSpellCosts(*state, kLocalPlayer));
+    EXPECT_TRUE(pending.repeatedCastCostPromptStillCurrent(before, 0));
+    EXPECT_TRUE(pending.stageRepeatedCastCost(0, 3));
+    EXPECT_TRUE(ruledCastCostGroupSelectionCompletesImmediately(spell, spell.castCostGroups.first()));
+
+    spell.castCostSelections.clear();
+    spell.remainingCost.clear();
+    apply(offer(7, true));
+    ASSERT_TRUE(pending.reconcileSpellCosts(*state, kLocalPlayer));
+    EXPECT_FALSE(pending.repeatedCastCostPromptStillCurrent(before, 0));
+    apply(offer(0, false));
+    ASSERT_TRUE(pending.reconcileSpellCosts(*state, kLocalPlayer));
+    EXPECT_FALSE(pending.repeatedCastCostPromptStillCurrent(before, 0));
+    pending.clearSpell();
+    auto &replacement = pending.beginSpell();
+    replacement.handIndex = before.handIndex;
+    replacement.castCostGroups = before.castCostGroups;
+    EXPECT_FALSE(pending.repeatedCastCostPromptStillCurrent(before, 0));
+}
+
+TEST(RuledPendingCastTest, MultikickerXExpansionChecksAggregateBeforeMutation)
+{
+    RuledPendingCast pending;
+    auto &spell = pending.beginSpell();
+    spell.remainingCost = {{'X', std::numeric_limits<int>::max()}};
+    spell.xPips = 1;
+    const auto before = spell;
+    EXPECT_FALSE(pending.expandRepeatedCastX(2));
+    EXPECT_EQ(spell.remainingCost, before.remainingCost);
+    EXPECT_EQ(spell.xPips, before.xPips);
+    EXPECT_EQ(spell.xValue, before.xValue);
+    spell = before;
+    spell.remainingCost = {{'X', 2147483646}, {'R', 1}};
+    const auto coloredBefore = spell.remainingCost;
+    EXPECT_FALSE(pending.expandRepeatedCastX(2));
+    EXPECT_EQ(spell.remainingCost, coloredBefore);
+    EXPECT_EQ(spell.xPips, 1);
+    spell = before;
+    spell.remainingCost = {{'X', 2147483645}, {'R', 1}};
+    EXPECT_TRUE(pending.expandRepeatedCastX(2));
+    EXPECT_EQ(spell.remainingCost.value('X'), 2147483646);
+    EXPECT_EQ(spell.xValue, 2);
+    EXPECT_EQ(spell.xPips, 0);
+    spell = before;
+    EXPECT_TRUE(pending.expandRepeatedCastX(0));
+    EXPECT_EQ(spell.remainingCost.value('X'), 2147483646);
+}
+
 TEST_F(RuledClientTest, ParsesTeamworkCohortsTargetRequirementsAndAllModesCost)
 {
     ruled::v1::RuledEventBatch batch;
@@ -7702,7 +7853,8 @@ TEST_F(RuledClientTest, EntryRevealHandPickRejectedAckRestoresSelectionAndDeclin
         choice->add_candidate_names("Forest");
         apply(batch);
         ASSERT_TRUE(state->isResolutionHandPickActive());
-        if (selectCard) state->toggleResolutionHandPickCard(41);
+        if (selectCard)
+            state->toggleResolutionHandPickCard(41);
         state->submitResolutionHandPick();
         EXPECT_FALSE(state->isResolutionHandPickActive());
         const auto &answer = host.sentCommands.last().submit_resolution_choice();
@@ -7752,13 +7904,27 @@ TEST_F(RuledClientTest, EntryRevealMalformedEmptyHandPickIsRejected)
         choice->set_min(0);
         choice->set_max(1);
         switch (variant) {
-            case 0: choice->set_min(1); break;
-            case 1: choice->set_max(0); break;
-            case 2: choice->set_ordered(true); break;
-            case 3: choice->add_candidate_names("Forest"); break;
-            case 4: choice->add_candidate_server_card_ids(41); break;
-            case 5: choice->add_candidate_selectable(true); break;
-            case 6: choice->mutable_public_reveal(); break;
+            case 0:
+                choice->set_min(1);
+                break;
+            case 1:
+                choice->set_max(0);
+                break;
+            case 2:
+                choice->set_ordered(true);
+                break;
+            case 3:
+                choice->add_candidate_names("Forest");
+                break;
+            case 4:
+                choice->add_candidate_server_card_ids(41);
+                break;
+            case 5:
+                choice->add_candidate_selectable(true);
+                break;
+            case 6:
+                choice->mutable_public_reveal();
+                break;
         }
         apply(batch);
         EXPECT_FALSE(state->isResolutionHandPickActive()) << variant;
@@ -7787,12 +7953,14 @@ TEST_F(RuledClientTest, EntryRevealHandPickLateRejectedAckCannotRestoreSupersede
             ruled::v1::RuledEventBatch revoked;
             revoked.add_events()->mutable_active_public_reveal_snapshot();
             apply(revoked);
-        } else state->clearSessionState();
+        } else
+            state->clearSessionState();
         const auto revision = state->pendingChoiceRevision;
         host.answerPendingAck(false);
         EXPECT_EQ(state->pendingChoiceRevision, revision);
         EXPECT_EQ(state->isResolutionHandPickActive(), interruption == 0);
-        if (interruption == 0) EXPECT_EQ(state->resolutionHandPickPromptText(), "New entry reveal");
+        if (interruption == 0)
+            EXPECT_EQ(state->resolutionHandPickPromptText(), "New entry reveal");
     }
 }
 
@@ -8250,7 +8418,8 @@ TEST_F(RuledClientTest, LibraryLookNonlandImageIsUnselectableAndEmptyConfirmatio
     state->submitResolutionHandPick();
     ASSERT_EQ(host.sentCommands.size(), 1);
     EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().chosen_object_ids_size(), 0);
-    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().decision(), ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED);
+    EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().decision(),
+              ruled::v1::RESOLUTION_CHOICE_DECISION_UNSPECIFIED);
 }
 
 TEST_F(RuledClientTest, MandatoryLibraryLookRequiresTwoDistinctImagesAndCannotDecline)

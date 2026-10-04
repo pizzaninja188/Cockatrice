@@ -96,6 +96,9 @@ fn attachment_recipient_proto(recipient: AttachmentRecipient) -> rv1::Attachment
 
 #[derive(Clone, Copy)]
 struct AmountContext<'a> {
+    /// Borrowed only by the entering object's intrinsic replacement evaluator.
+    entry_cast_cost_receipts: &'a [crate::state::CastCostReceipt],
+    entry_cast_cost_origin: Option<&'a crate::state::CastCostAbilityOrigin>,
     /// Supplied only by the entering object's intrinsic replacement evaluator.
     entry_mana_colors_spent: crate::state::ManaColorsSpent,
     stack_item: Option<&'a StackItem>,
@@ -113,6 +116,8 @@ struct AmountContext<'a> {
 impl<'a> AmountContext<'a> {
     fn from_condition(context: ConditionContext<'a>) -> Self {
         Self {
+            entry_cast_cost_receipts: &[],
+            entry_cast_cost_origin: None,
             entry_mana_colors_spent: Default::default(),
             stack_item: context.stack_item,
             controller: context.controller,
@@ -125,6 +130,8 @@ impl<'a> AmountContext<'a> {
     }
     fn for_stack_item(item: &'a StackItem, controller: PlayerId) -> Self {
         Self {
+            entry_cast_cost_receipts: &[],
+            entry_cast_cost_origin: None,
             entry_mana_colors_spent: Default::default(),
             stack_item: Some(item),
             controller,
@@ -199,6 +206,8 @@ mod history;
 mod issue_169_taps;
 mod legal_actions;
 mod mass_sacrifice;
+#[cfg(test)]
+mod multikicker_tests;
 mod opening;
 mod payment;
 mod preparation;

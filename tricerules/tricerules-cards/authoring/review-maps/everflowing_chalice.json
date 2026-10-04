@@ -1,0 +1,55 @@
+{
+  "format_version": 1,
+  "oracle_id": "0a79237e-0811-4a8a-bd4d-db3ca91bff22",
+  "complete_definition_review_confirmed": true,
+  "tokens": [],
+  "spans": [
+    {
+      "face_id": "everflowing_chalice",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/cast_cost_groups/0",
+        "/faces/0/cast_cost_groups/0/options/0"
+      ]
+    },
+    {
+      "face_id": "everflowing_chalice",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "everflowing_chalice",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "covers": "Complete one-face colorless zero-cost Artifact, repeated generic fee, linked count entry and colorless-only source-counter mana with three exact Oracle line mappings",
+      "test": "deck_coverage_everflowing_chalice::everflowing_chalice_registers_its_complete_typed_face"
+    },
+    {
+      "covers": "Zero, one and three kicks cost 0/2/6, enter with 0/1/3 Charge and tap for exactly 0/1/3 colorless without using the stack",
+      "test": "scenario deck_coverage_everflowing_chalice::everflowing_chalice_casts_zero_one_three_and_produces_live_colorless_mana"
+    },
+    {
+      "covers": "Mana production reads current counters; invalid option rejects without mutation",
+      "test": "scenario deck_coverage_everflowing_chalice::everflowing_chalice_reads_live_counters_and_rejects_invalid_mana_choice"
+    },
+    {
+      "covers": "Direct entry and leaving/returning cannot inherit previous multikicker payment history",
+      "test": "scenario deck_coverage_everflowing_chalice::everflowing_chalice_direct_entry_and_leave_return_have_no_cast_payment_history"
+    },
+    {
+      "covers": "Serialized repetition count, paid spell resolution, charge entry and colorless mana replay with identical event batches and final state",
+      "test": "scenario deck_coverage_everflowing_chalice::everflowing_chalice_replays_serialized_count_payment_entry_and_mana_identically"
+    }
+  ]
+}

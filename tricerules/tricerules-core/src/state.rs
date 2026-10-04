@@ -1824,6 +1824,22 @@ pub enum CastCostObjectReceipt {
     },
 }
 
+/// Identity of the specific printed/acquired linked pair that announced a cast cost. Copies
+/// of a paid spell retain it; a subsequently installed entry-copy pair has a new revision.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub struct CastCostAbilityOrigin {
+    pub original_card_id: String,
+    pub face_id: tricerules_cards::CardFaceId,
+    pub copy_revision: u64,
+}
+
+/// Semantic Multikicker receipt; unrelated ordinary kicker receipts cannot satisfy its query.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub struct MultikickerPaymentReceipt {
+    pub repetitions: u32,
+    pub origin: CastCostAbilityOrigin,
+}
+
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct CastCostReceipt {
     pub group_index: u32,
@@ -1832,6 +1848,7 @@ pub struct CastCostReceipt {
     pub option_id: Option<ChoiceId>,
     /// Semantic identity for a cost paid with battlefield objects. Copies retain the receipt.
     pub object_cost_kind: Option<ObjectCastCostKind>,
+    pub multikicker: Option<MultikickerPaymentReceipt>,
     pub label: String,
     pub objects: Vec<CastCostObjectReceipt>,
 }

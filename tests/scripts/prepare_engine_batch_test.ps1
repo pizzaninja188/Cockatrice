@@ -12,11 +12,11 @@ try {
     $result = Invoke-WorkflowFixture $fixture 'prepare-engine-batch.ps1' $arguments
     Assert-Workflow ($result.ExitCode -eq 0) "Engine preparation failed: $($result.Output)"
     $trace = @(Read-WorkflowTrace $fixture)
-    Assert-Workflow ($trace.Count -eq 7) 'Expected four package format checks, two exact regressions and focused lint.'
-    Assert-Workflow ($trace[0].Arguments -contains 'fmt') 'Format must precede compilation.'
-    Assert-Workflow ($trace[4].Arguments -contains '--exact') 'Scenario must use exact selection.'
-    Assert-Workflow ($trace[5].Arguments -contains '--lib') 'Library regressions must use the lib target.'
-    Assert-Workflow ($trace[6].Arguments -contains 'clippy') 'Focused lint missing.'
+    Assert-Workflow ($trace.Count -eq 11) 'Expected four package target discoveries/format checks, two exact regressions and focused lint.'
+    Assert-Workflow ($trace[1].Tool -eq 'rustfmt') 'Format must precede compilation.'
+    Assert-Workflow ($trace[8].Arguments -contains '--exact') 'Scenario must use exact selection.'
+    Assert-Workflow ($trace[9].Arguments -contains '--lib') 'Library regressions must use the lib target.'
+    Assert-Workflow ($trace[10].Arguments -contains 'clippy') 'Focused lint missing.'
     Assert-Workflow (@($trace | Where-Object { $_.Arguments -contains '--refresh-presentation' }).Count -eq 0) 'Engine preparation must not mutate card metadata.'
     $summary = Get-Content -LiteralPath (Join-Path $fixture 'review preparation/summary.json') -Raw | ConvertFrom-Json
     Assert-Workflow (-not $summary.semantic_approval -and $summary.final_gate -eq 'pending' -and $summary.steps.Count -eq 7) 'Preparation incorrectly granted final approval.'
@@ -38,8 +38,8 @@ try {
     $result = Invoke-WorkflowFixture $fixture 'prepare-engine-batch.ps1' @('-FocusedTests', $plan, '-OutDirectory', 'feature coverage', '-Workers', '3')
     Assert-Workflow ($result.ExitCode -eq 0) "Feature preparation failed: $($result.Output)"
     $featureTrace = @(Read-WorkflowTrace $fixture | Select-Object -Skip $before)
-    Assert-Workflow ($featureTrace.Count -eq 7 -and $featureTrace[4].Arguments -contains '--features' -and $featureTrace[6].Arguments -contains '--features') 'Feature code was not both tested and linted.'
-    Assert-Workflow ($featureTrace[4].BuildJobs -eq '3' -and $featureTrace[4].TestThreads -eq '3') 'Explicit worker settings were lost.'
+    Assert-Workflow ($featureTrace.Count -eq 11 -and $featureTrace[8].Arguments -contains '--features' -and $featureTrace[10].Arguments -contains '--features') 'Feature code was not both tested and linted.'
+    Assert-Workflow ($featureTrace[8].BuildJobs -eq '3' -and $featureTrace[8].TestThreads -eq '3') 'Explicit worker settings were lost.'
     foreach ($invalid in @('[{"package":"tricerules-core","target":"scenario","test":"copy::test","ignored":true}]', '[{"package":"tricerules-core","target":"scenario","test":"copy::test"},{"package":"tricerules-core","target":"scenario","test":"copy::test"}]')) {
         Set-Content -LiteralPath $plan -Value $invalid
         $before = @(Read-WorkflowTrace $fixture).Count

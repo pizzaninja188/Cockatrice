@@ -22,6 +22,9 @@ function Get-RustFormatChecks {
         $packageName = $name.Groups['name'].Value
         if ($seen.ContainsKey($packageName)) { throw "Duplicate Rust workspace package: $packageName" }
         $seen[$packageName] = $true
-        @{ Label = "Rust formatting ($packageName)"; Args = @('fmt', '--check', '-p', $packageName); Exact = $false }
+        @{ Label = "Rust formatting ($packageName)";
+            Executable = (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe');
+            Args = @('-NoProfile', '-File', (Join-Path $Repository 'scripts/check-rust-format.ps1'), '-Package', $packageName);
+            Exact = $false }
     }
 }

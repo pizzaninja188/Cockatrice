@@ -299,6 +299,7 @@ fn cast_blight(
     generation: u64,
 ) -> tricerules_proto::ruled::v1::CastCostGroupSelection {
     tricerules_proto::ruled::v1::CastCostGroupSelection {
+        repetitions: None,
         group_index: 0,
         option_index: 0,
         selected_object: Some(

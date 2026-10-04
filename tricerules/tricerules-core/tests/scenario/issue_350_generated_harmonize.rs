@@ -37,6 +37,7 @@ fn harmonize_cast(
             cast_cost_group_selections: tap
                 .map(|(object_id, generation)| {
                     vec![CastCostGroupSelection {
+                        repetitions: None,
                         group_index: 0,
                         option_index: 0,
                         selected_object: Some(SelectedObject::PermanentId(object_id)),

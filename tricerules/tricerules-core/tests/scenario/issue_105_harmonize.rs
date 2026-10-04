@@ -44,6 +44,7 @@ fn harmonize_cast(engine: &GameEngine, whisper: u32, bear: Option<(u32, u64)>) -
             cast_cost_group_selections: bear
                 .map(|(object_id, generation)| {
                     vec![CastCostGroupSelection {
+                        repetitions: None,
                         group_index: 0,
                         option_index: 0,
                         selected_object: Some(SelectedObject::PermanentId(object_id)),

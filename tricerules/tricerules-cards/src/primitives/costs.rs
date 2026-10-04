@@ -348,6 +348,8 @@ mod sacrifice_count_tests {
 pub enum ManaCostChoiceKind {
     AdditionalPayment,
     Kicker,
+    /// Chalice and Comet Storm announce repetitions of a positive generic kicker fee.
+    Multikicker,
 }
 
 /// Rules identity of an object paid as an announced optional or additional cast cost. The
@@ -448,6 +450,18 @@ impl CastCostGroupDef {
         {
             return Err("Bargain must be one optional cast-cost option".into());
         }
+        if self.options.iter().any(|option| {
+            matches!(
+                option,
+                CastCostOptionDef::Mana {
+                    kind: ManaCostChoiceKind::Multikicker,
+                    ..
+                }
+            )
+        }) && (self.min != 0 || self.max != 1 || self.options.len() != 1)
+        {
+            return Err("Multikicker must be one optional cast-cost option".into());
+        }
         let mut option_ids = std::collections::HashSet::new();
         for option in &self.options {
             let option_id = option.option_id();
@@ -462,9 +476,14 @@ impl CastCostGroupDef {
                         return Err("blight option requires a positive count".into());
                     }
                 }
-                CastCostOptionDef::Mana { cost, .. } => {
+                CastCostOptionDef::Mana { kind, cost, .. } => {
                     if cost.is_empty() {
                         return Err("cast mana option requires a nonempty cost".into());
+                    }
+                    if *kind == ManaCostChoiceKind::Multikicker
+                        && option.multikicker_generic_unit().is_none()
+                    {
+                        return Err("Multikicker requires a positive signed-representable fixed generic fee".into());
                     }
                 }
                 CastCostOptionDef::Behold {
@@ -541,6 +560,26 @@ fn is_bargain_filter(filter: &TargetFilter) -> bool {
 }
 
 impl CastCostOptionDef {
+    /// The bounded generic-only fee supported by this repeated-payment contract. Fold pips
+    /// numerically rather than allocating a repeated vector from an untrusted quantity.
+    pub fn multikicker_generic_unit(&self) -> Option<u32> {
+        let Self::Mana {
+            kind: ManaCostChoiceKind::Multikicker,
+            cost,
+            ..
+        } = self
+        else {
+            return None;
+        };
+        let unit = cost.pips.iter().try_fold(0_u32, |total, pip| {
+            let crate::ManaSymbol::Generic(amount) = pip else {
+                return None;
+            };
+            total.checked_add(*amount)
+        })?;
+        (unit > 0 && unit <= i32::MAX as u32).then_some(unit)
+    }
+
     pub fn option_id(&self) -> &ChoiceId {
         match self {
             Self::Blight { option_id, .. }
@@ -584,6 +623,7 @@ impl CastCostOptionDef {
             Self::Mana { kind, cost, .. } => match kind {
                 ManaCostChoiceKind::AdditionalPayment => format!("Pay {cost}"),
                 ManaCostChoiceKind::Kicker => format!("Kicker {cost}"),
+                ManaCostChoiceKind::Multikicker => format!("Multikicker {cost}"),
             },
             Self::Behold { option_id, .. } => choice_fallback("Behold", option_id),
             Self::DiscardCard { .. } => "Discard a card".into(),

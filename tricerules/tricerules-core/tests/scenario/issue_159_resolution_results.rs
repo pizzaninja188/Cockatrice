@@ -335,6 +335,7 @@ fn issue_159_midnight_tilling_offers_only_surviving_cards_milled_this_way() {
 
 fn cast_blight(object_id: u32, generation: u64) -> CastCostGroupSelection {
     CastCostGroupSelection {
+        repetitions: None,
         group_index: 0,
         option_index: 0,
         selected_object: Some(
@@ -475,6 +476,7 @@ fn issue_159_lost_days_owner_places_the_exact_target_second_from_top() {
 
 fn kicker_option() -> CastCostGroupSelection {
     CastCostGroupSelection {
+        repetitions: None,
         group_index: 0,
         option_index: 0,
         selected_object: None,

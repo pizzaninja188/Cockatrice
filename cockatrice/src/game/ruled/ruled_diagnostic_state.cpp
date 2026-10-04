@@ -370,6 +370,7 @@ QJsonValue value(const RuledCastCostOption &v)
     result.insert("label", value(v.label));
     result.insert("kind", value(v.kind));
     result.insert("additionalManaCost", value(v.additionalManaCost));
+    result.insert("maximumRepetitions", value(v.maximumRepetitions));
     result.insert("validHandIndices", value(v.validHandIndices));
     result.insert("validPermanentIds", value(v.validPermanentIds));
     result.insert("validPermanentGenerations", value(v.validPermanentGenerations));
@@ -524,6 +525,7 @@ QJsonValue value(const RuledPendingCastCostSelection &v)
     result.insert("selectedObjectIds", value(v.selectedObjectIds));
     result.insert("selectedObjectGenerations", value(v.selectedObjectGenerations));
     result.insert("selectedObjectContributions", value(v.selectedObjectContributions));
+    result.insert("repetitions", value(v.repetitions));
     return result;
 }
 QJsonValue value(const PendingActivatedAbility &v)
