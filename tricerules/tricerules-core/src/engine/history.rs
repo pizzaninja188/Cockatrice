@@ -1866,6 +1866,17 @@ impl GameEngine {
                 context.controller,
                 context.resolving_spell_id,
             ) as i64,
+            CountExpression::ControlledNoncreatureArtifactManaValueSum => i64::from(
+                self.state
+                    .players
+                    .iter()
+                    .flat_map(|player| player.battlefield.iter().copied())
+                    .filter_map(|oid| self.characteristics(oid))
+                    .filter(|c| {
+                        c.controller == context.controller && c.is_artifact() && !c.is_creature()
+                    })
+                    .fold(0_u32, |total, c| total.saturating_add(c.mana_value)),
+            ),
             CountExpression::SourcePower => self.source_power_toughness(context).0,
             CountExpression::DeclaredAttackers { players, filter } => self
                 .state

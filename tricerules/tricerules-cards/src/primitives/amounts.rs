@@ -52,6 +52,10 @@ pub enum CountExpression {
     /// the signed total of current creature powers. Negative powers subtract before
     /// the final amount is clamped; this layer-7 quantity is unsafe for static P/T scaling.
     BattlefieldPowerSum { filter: BattlefieldPermanentFilter },
+    /// Metalwork Colossus reduces its generic casting cost by the total derived mana value
+    /// of its controller's noncreature artifacts. This necessary specialized formula has
+    /// one demonstrated user; it is not admitted for static P/T scaling.
+    ControlledNoncreatureArtifactManaValueSum,
     /// Brambleguard Captain and Boulderbranch Golem use the original source's power.
     SourcePower,
     /// Witchstalker Frenzy and Search Party Captain count distinct declared creatures.
@@ -178,6 +182,7 @@ impl CountExpression {
             }
             Self::PlayersWhoLostLifeThisTurn { .. }
             | Self::SourcePower
+            | Self::ControlledNoncreatureArtifactManaValueSum
             | Self::ManaColorsSpentToCast => Ok(()),
             Self::CardsInHand { players } if players.identifies_one_player() => Ok(()),
             Self::CardsInHand { .. } => Err("CardsInHand requires a single player selector".into()),

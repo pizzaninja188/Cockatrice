@@ -554,6 +554,23 @@ fn pentavus_activated_abilities_have_complete_fixtures() {
 }
 
 #[test]
+fn metalwork_colossus_cast_and_graveyard_activation_have_complete_fixtures() {
+    for ability in [None, Some(0)] {
+        let case = Case {
+            card: "metalwork_colossus".into(),
+            face: 0,
+            ability,
+        };
+        assert_eq!(
+            evaluate(&case).expect("evaluate actual Metalwork fixture"),
+            Outcome::Exercised,
+            "{}",
+            case.key()
+        );
+    }
+}
+
+#[test]
 fn jace_wielder_loyalty_abilities_have_complete_fixtures() {
     for ability in 0..2 {
         let case = Case {

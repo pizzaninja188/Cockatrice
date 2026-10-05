@@ -45,6 +45,9 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
     if card == "kuldotha_forgemaster" && ability == Some(0) {
         cards.push("sol_ring");
     }
+    if card == "metalwork_colossus" && ability == Some(0) {
+        cards.push("sol_ring");
+    }
     if card == "trading_post" && ability == Some(2) {
         // This ability targets an artifact already in the graveyard before paying its cost.
         cards.push("sol_ring");
@@ -71,6 +74,10 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
     for player in 0..e.state.players.len() {
         super::relocate_to_battlefield(&mut e, player, "grizzly_bears", false);
         super::relocate_to_battlefield(&mut e, player, "explosive_apparatus", false);
+        if card == "metalwork_colossus" && ability == Some(0) && player == 0 {
+            // The graveyard source is not a battlefield sacrifice candidate. Supply both costs.
+            super::relocate_to_battlefield(&mut e, player, "sol_ring", false);
+        }
         if card == "kuldotha_forgemaster" && ability == Some(0) && player == 0 {
             // The source and Explosive Apparatus supply two of the three artifacts.
             // Complete this exact activation fixture without changing the baseline.
@@ -103,6 +110,11 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
             e.state.objects.get_mut(&dead).unwrap().zone = tricerules_core::Zone::Graveyard;
         }
         super::grant_pool(&mut e, player);
+        if card == "metalwork_colossus" && ability.is_none() && player == 0 {
+            // Generic payment uses colorless for generic costs. Nine is insufficient for
+            // this eleven-mana creature's ten-mana cost with the one-MV Apparatus fixture.
+            e.state.players[player].mana_pool.colorless = 11;
+        }
     }
     if card == "fanatic_of_rhonas" && ability == Some(1) {
         // Ferocious needs a controlled creature with current power at least four.
@@ -139,7 +151,9 @@ pub(crate) fn ability_source(
     let oid = if card == "boseiju,_who_endures" && ability == 1 {
         // Channel discards its hand source; its target/search use the existing fixture resources.
         super::relocate_to_hand(e, player, card)
-    } else if card == "fanatic_of_rhonas" && ability == 2 {
+    } else if (card == "fanatic_of_rhonas" && ability == 2)
+        || (card == "metalwork_colossus" && ability == 0)
+    {
         let oid = super::take_oid_from_library_or_hand(e, player, card);
         e.state.players[player].graveyard.push(oid);
         e.state.objects.get_mut(&oid).unwrap().zone = Zone::Graveyard;

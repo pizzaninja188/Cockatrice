@@ -1,0 +1,20 @@
+{
+  "format_version": 1,
+  "oracle_id": "64ffe529-ba53-48ec-8af1-b046fbd1f0cc",
+  "complete_definition_review_confirmed": true,
+  "tokens": [],
+  "spans": [
+    {"face_id":"metalwork_colossus","start_line":1,"end_line":1,"typed_paths":["/faces/0/cost_modifiers/0"]},
+    {"face_id":"metalwork_colossus","start_line":2,"end_line":2,"typed_paths":["/faces/0/activated_abilities/0"]}
+  ],
+  "semantic_fixtures": [
+    {"test":"deck_coverage_metalwork_colossus::metalwork_registers_exact_single_face_and_both_clauses","covers":"Exact colorless single face, printed eleven, Artifact Creature Construct ten/ten and both complete clauses with graveyard source and second Oracle line"},
+    {"test":"scenario deck_coverage_metalwork_colossus::metalwork_sums_mana_values_excludes_creatures_opponents_and_floors_at_zero","covers":"Actual announcement sums one and four mana values, excludes artifact creatures, opposing artifacts and nonartifacts, includes tapped objects and floors eleven or larger sums at zero"},
+    {"test":"scenario deck_coverage_metalwork_colossus::metalwork_uses_derived_types_control_copy_and_battlefield_x_mana_value","covers":"Current derived control and types, ordinary token zero and copied token mana value four, actual Astral Cornucopia battlefield X zero despite seven charge counters"},
+    {"test":"scenario deck_coverage_metalwork_colossus::metalwork_locked_real_ironworks_payment_paid_cast_and_serialized_replay","covers":"Actual Ironworks sacrifice after announcement retains five mana cost, pays generated mana, resolves ten/ten MV eleven and serialized replay; wrong actor, nonzero X, incomplete mana and nonmana interference rejected atomically"},
+    {"test":"scenario deck_coverage_metalwork_colossus::metalwork_graveyard_exact_cost_offers_reject_invalid_atomic_and_return_only_source","covers":"Public exact source/generation/presentation and two-artifact candidates, fewer than two unpayable, malformed and stale costs atomic; tapped artifact creature with different owner sacrificed immediately, only source returned on resolution"},
+    {"test":"scenario deck_coverage_metalwork_colossus::metalwork_departed_or_reentered_source_does_not_return_old_incarnation","covers":"Logged source exile or leave-and-return before resolution invalidates the exact source incarnation"},
+    {"test":"scenario deck_coverage_metalwork_colossus::metalwork_second_activation_and_serialized_return_replay_retrieve_only_once","covers":"Two activations while source remains in graveyard pay four artifacts, resolve to one retrieval and replay identical events/full diagnostics"},
+    {"test":"scenario deck_coverage_metalwork_colossus::metalwork_simultaneous_cost_departing_observer_and_exile_replacement","covers":"Departing observer sees both simultaneous selected artifacts; sacrifice replaced by exile still pays and leaves source on the graveyard ability stack"}
+  ]
+}

@@ -1,0 +1,21 @@
+// Exact Oracle and five WotC rulings verified 2026-10-04.
+(
+  id: "metalwork_colossus",
+  name: "Metalwork Colossus",
+  face_id: "metalwork_colossus",
+  mana_cost: "{11}",
+  types: ["Artifact", "Creature", "Construct"],
+  power: 10,
+  toughness: 10,
+  cost_modifiers: [GenericReduction(amount: Count(ControlledNoncreatureArtifactManaValueSum))],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    source_zone: Graveyard,
+    costs: [SacrificePermanent(
+      filter: (kind: AnyPermanent, controller: You, permanent_types: [Artifact]),
+      count: 2,
+    )],
+    effect: [ReturnToOwnersHand(subject: Source)],
+  )],
+)
