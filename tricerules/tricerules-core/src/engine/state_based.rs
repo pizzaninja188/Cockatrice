@@ -339,13 +339,13 @@ impl GameEngine {
                         self.characteristics(eq.id).is_some_and(|value| {
                             if value.has_type("Equipment") {
                                 match recipient {
-                        AttachmentRecipient::Player(_) => true,
-                        AttachmentRecipient::Object(target_id) => {
+                                    AttachmentRecipient::Player(_) => true,
+                                    AttachmentRecipient::Object(target_id) => {
                                         !super::targeting::equipment_attachment_legal(
                                             self, eq.id, target_id,
                                         )
                                     }
-                        }
+                                }
                             } else {
                                 !value.is_aura() && !value.has_type("Fortification")
                             }

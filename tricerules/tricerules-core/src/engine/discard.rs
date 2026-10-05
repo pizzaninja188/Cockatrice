@@ -130,14 +130,14 @@ impl GameEngine {
             .any(|oid| {
                 self.controller_of(oid).is_some_and(|controller| {
                     super::characteristics::printed_static_source_is_available(
-                            &self.state,
+                        &self.state,
                         self.registry,
-                            oid,
+                        oid,
                     ) && self.effective_face(oid).is_some_and(|face| {
-                            face.static_abilities
-                                .iter()
-                                .any(|a| predicate(&a.definition, controller))
-                        })
+                        face.static_abilities
+                            .iter()
+                            .any(|a| predicate(&a.definition, controller))
+                    })
                 })
             })
     }

@@ -39,6 +39,12 @@ draft schemas and packet generation are unnecessary when existing evidence suppl
    Check remaining card prerequisites; a primitive-only mapping is not a complete card. Compare
    the closest existing primitive. Generalize only for demonstrated uses; justify specialized
    behavior if only one use fits.
+   Use existing analogue, candidate and dependency reports to inspect several representative
+   remaining cards before choosing a capability family. Compare shared semantics and differences
+   in ordering, replacements, layers, identity and private choice/resume behavior against current
+   code, then select the smallest complete shared primitive. Reports route this comparison; they
+   do not prove semantic compatibility. Avoid speculative extensions, unrelated audits or extra
+   dossiers, and deliver a stable verified batch before expanding it.
 2. Before substantial implementation, obtain bounded independent design review: intended behavior,
    exact sources/rulings, existing APIs/analogue, affected producers/consumers, choice/resume,
    identity, relevant checklist risks and proposed regressions. One concise record suffices.
