@@ -1,0 +1,19 @@
+{
+  "format_version": 1,
+  "oracle_id": "c1d6cce8-085f-42cb-8b0c-b6fbbf88b16a",
+  "spans": [
+    {"face_id": "goblin_engineer", "start_line": 1, "end_line": 1, "typed_paths": ["/faces/0/triggered_abilities/0"]},
+    {"face_id": "goblin_engineer", "start_line": 2, "end_line": 2, "typed_paths": ["/faces/0/activated_abilities/0"]}
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {"test": "scenario deck_coverage_goblin_engineer::engineer_actual_paid_cast_has_exact_characteristics_and_optional_etb", "covers": "Actual 1R cast, exact 1/2 creature characteristics and its actual ETB trigger."},
+    {"test": "scenario deck_coverage_goblin_engineer::engineer_actual_etb_selects_exact_duplicate_into_graveyard", "covers": "Actual optional ETB, private artifact-only candidates without a mana-value bound, exact duplicate identity into public graveyard with a new generation, one shuffle and no extra reveal. Wrong actor, nonartifact, foreign library and excess choices reject unchanged."},
+    {"test": "scenario deck_coverage_goblin_engineer::engineer_declining_search_differs_from_accepting_and_finding_zero", "covers": "Decline leaves library order unchanged and does not shuffle; accepted qualified failure to find shuffles once."},
+    {"test": "scenario deck_coverage_goblin_engineer::engineer_return_pays_costs_after_valid_target_and_enters_untapped", "covers": "Own graveyard artifact mana value 3 or X=0 returns untapped after R, tap and a distinct controlled artifact sacrifice. Nonartifact, MV4, opponent graveyard and future-sacrifice targets reject before costs."},
+    {"test": "scenario deck_coverage_goblin_engineer::engineer_unpayable_and_stale_activation_reject_without_mutation", "covers": "Unavailable red mana, tapped source, nonartifact or uncontrolled sacrifice, stale source and duplicate cost selections reject without mutation."},
+    {"test": "scenario deck_coverage_goblin_engineer::engineer_fresh_cast_cannot_tap_and_stale_return_target_keeps_paid_costs", "covers": "Newly cast creature cannot pay tap cost; a target incarnation change after payment fizzles with mana and sacrifice retained."},
+    {"test": "scenario deck_coverage_goblin_engineer::engineer_sacrifices_controlled_foreign_artifact_or_artifact_self", "covers": "A controlled opponent-owned artifact is sacrificed to its owner's graveyard; Engineer made an artifact with actual Liquimetal Torque may sacrifice itself and its stacked ability still returns its target."}
+  ],
+  "complete_definition_review_confirmed": true
+}

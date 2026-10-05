@@ -2088,6 +2088,8 @@ pub enum SearchDestination {
     /// The card goes to the searching player's hand (Demonic Tutor).
     #[default]
     Hand,
+    /// The card goes to its owner's graveyard (Goblin Engineer, Entomb).
+    Graveyard,
     /// The card is placed on top of the searching player's library (Mystical Tutor).
     TopOfLibrary,
     /// The card enters the battlefield under the searching player's control. Entry replacement

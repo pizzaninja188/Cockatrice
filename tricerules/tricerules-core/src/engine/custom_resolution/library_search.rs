@@ -693,6 +693,40 @@ impl GameEngine {
             }
         } else {
             match destination {
+                SearchDestination::Graveyard => {
+                    for &oid in chosen {
+                        let owner = self.state.objects[&oid].owner;
+                        if self.state.objects[&oid].zone != Zone::Graveyard {
+                            self.commit_observed_zone_move(oid, Zone::Graveyard, None, &mut ev)?;
+                            ev.push(permanent_moved_event(
+                                &self.state,
+                                oid,
+                                owner,
+                                rv1::permanent_moved::Destination::Graveyard,
+                            ));
+                        }
+                        let card_name = object_display_name(&self.state, self.registry, oid);
+                        let destination_name = match self.state.objects[&oid].zone {
+                            Zone::Graveyard => "their graveyard",
+                            Zone::Exile => "exile",
+                            _ => {
+                                return Err(EngineError::Illegal(
+                                    "searched card destination unavailable",
+                                ))
+                            }
+                        };
+                        ev.push(ev_log(format!(
+                            "P{controller} puts {card_name} into {destination_name}."
+                        )));
+                    }
+                    if shuffle {
+                        crate::engine::shuffle_player_library_for_current_command(
+                            &mut self.state,
+                            controller,
+                        );
+                        ev.push(ev_log(format!("P{controller} shuffles their library.")));
+                    }
+                }
                 SearchDestination::Hand => {
                     for &oid in chosen {
                         let card_name = object_display_name(&self.state, self.registry, oid);
@@ -955,6 +989,209 @@ mod tests {
             resolution_branch_choices: Default::default(),
             blight_receipts: Vec::new(),
             trigger_context: Default::default(),
+        }
+    }
+
+    #[test]
+    fn graveyard_search_preserves_duplicate_identity_tail_and_one_search_completion() {
+        // Deserialization keeps the intended red executable before the destination exists.
+        let destination: SearchDestination = serde_json::from_str("\"Graveyard\"")
+            .expect("library searches must support a graveyard destination");
+        for find in [true, false] {
+            let mut engine = GameEngine::new(90_030, &[0, 1, 2], 20, None, true).unwrap();
+            engine.state.turn_step = TurnStep::Main1;
+            let wan = battlefield_card(&mut engine, "wan_shi_tong,_librarian");
+            engine.state.players[0].battlefield.retain(|id| *id != wan);
+            engine.state.players[1].battlefield.push(wan);
+            let observer = engine.state.objects.get_mut(&wan).unwrap();
+            observer.owner = 1;
+            observer.controller = 1;
+            observer.base_controller = 1;
+            let unselected = library_card(&mut engine, "sol_ring");
+            let selected = library_card(&mut engine, "sol_ring");
+            let invalid = library_card(&mut engine, "lightning_bolt");
+            let generation = engine
+                .state
+                .zone_change_generation
+                .get(&selected)
+                .copied()
+                .unwrap_or(0);
+            let mut item = test_stack_item();
+            item.card_id = "myriad_landscape".into();
+            item.ability_text = Some("graveyard search plus sentinel".into());
+            let mut ability = engine
+                .registry
+                .get("myriad_landscape")
+                .unwrap()
+                .primary_face()
+                .activated_abilities[1]
+                .clone();
+            // Search instruction is already parked; the saved tail must run once on completion.
+            ability.effect.push(SpellEffectKind::GainLife {
+                amount: Amount::Fixed(3),
+            });
+            item.activated_ability = Some(ability);
+            let mut events = Vec::new();
+            resolution::zones::park_zone_search_choice(
+                &mut engine,
+                &mut events,
+                &item,
+                0,
+                resolution::zones::ZoneSearchRequest {
+                    count: 1,
+                    filter: Some(ZoneCardFilter {
+                        card_type: Some(CardTypeFilter::Artifact),
+                        ..Default::default()
+                    }),
+                    selection_constraint: None,
+                    slots: Vec::new(),
+                    zones: vec![CardSearchZone::Library],
+                    destination,
+                    conditional_destination: None,
+                    shuffle: true,
+                    reveal: false,
+                    result_id: None,
+                },
+            )
+            .unwrap();
+            engine
+                .state
+                .pending_resolution
+                .as_mut()
+                .unwrap()
+                .continuation
+                .stack_mut()
+                .unwrap()
+                .resume_effect_index = Some(1);
+            let candidates = engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .candidates
+                .clone();
+            assert!(candidates.contains(&selected) && candidates.contains(&unselected));
+            assert!(!candidates.contains(&invalid));
+            assert!(
+                engine
+                    .submit_resolution_choice(
+                        1,
+                        &rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![selected],
+                            ..Default::default()
+                        }
+                    )
+                    .is_err(),
+                "opponent cannot answer the private search"
+            );
+            assert!(
+                engine
+                    .submit_resolution_choice(
+                        0,
+                        &rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![invalid],
+                            ..Default::default()
+                        }
+                    )
+                    .is_err(),
+                "nonartifact is not a candidate"
+            );
+            assert_eq!(engine.state.objects[&selected].zone, Zone::Library);
+            engine
+                .state
+                .zone_change_generation
+                .insert(selected, generation + 1);
+            let before = format!("{:?}", engine.state);
+            assert!(
+                engine
+                    .submit_resolution_choice(
+                        0,
+                        &rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![selected],
+                            ..Default::default()
+                        }
+                    )
+                    .is_err(),
+                "a candidate receipt cannot select a later incarnation"
+            );
+            assert_eq!(format!("{:?}", engine.state), before);
+            engine
+                .state
+                .zone_change_generation
+                .insert(selected, generation);
+            assert_eq!(engine.state.players[0].life, 20);
+            assert_eq!(
+                engine
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .unwrap()
+                    .presentation
+                    .candidates,
+                candidates
+            );
+            let batch = engine
+                .submit_resolution_choice(
+                    0,
+                    &rv1::SubmitResolutionChoice {
+                        chosen_object_ids: if find { vec![selected] } else { Vec::new() },
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            assert!(engine.state.pending_resolution.is_none());
+            assert_eq!(engine.state.players[0].life, 23);
+            assert_eq!(engine.state.objects[&unselected].zone, Zone::Library);
+            assert_eq!(engine.state.objects[&invalid].zone, Zone::Library);
+            assert_eq!(
+                engine.state.objects[&selected].zone,
+                if find { Zone::Graveyard } else { Zone::Library }
+            );
+            assert_eq!(
+                engine
+                    .state
+                    .zone_change_generation
+                    .get(&selected)
+                    .copied()
+                    .unwrap_or(0),
+                generation + u64::from(find)
+            );
+            let moves: Vec<_> = batch
+                .events
+                .iter()
+                .filter_map(|event| match &event.ev {
+                    Some(rv1::ruled_event::Ev::PermanentMoved(moved)) => Some(moved),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(moves.len(), usize::from(find));
+            if find {
+                assert_eq!(moves[0].object_id, selected);
+                assert_eq!(
+                    moves[0].destination(),
+                    rv1::permanent_moved::Destination::Graveyard
+                );
+                assert_eq!(moves[0].card_id, "sol_ring");
+                assert!(engine.state.players[0].graveyard.contains(&selected));
+                assert!(!engine.state.players[0].library.contains(&selected));
+            }
+            assert_eq!(
+                batch
+                    .events
+                    .iter()
+                    .filter(|event| matches!(&event.ev,
+                Some(rv1::ruled_event::Ev::Log(log)) if log.text == "P0 shuffles their library."))
+                    .count(),
+                1
+            );
+            engine.flush_staged_triggers(&mut Vec::new());
+            assert_eq!(
+                engine.state.stack.len(),
+                1,
+                "one search observer even on qualified fail-to-find"
+            );
+            assert_eq!(engine.state.stack[0].source_permanent_id, Some(wan));
         }
     }
 

@@ -1,0 +1,41 @@
+// Oracle c1d6cce8-085f-42cb-8b0c-b6fbbf88b16a and rulings verified 2026-10-05.
+// CR 701.23/701.24 govern search/shuffle; 602.2b and 601.2c/h choose targets before costs.
+(
+  id: "goblin_engineer",
+  name: "Goblin Engineer",
+  face_id: "goblin_engineer",
+  mana_cost: "{1}{R}",
+  types: ["Creature", "Goblin", "Artificer"],
+  power: 1,
+  toughness: 2,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [SearchLibrary(
+      filter: Some((card_type: Some(Artifact))),
+      optional: true,
+      destination: Graveyard,
+      shuffle: true,
+      reveal: false,
+    )],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([2]),
+    costs: [Mana("{R}"), Tap, SacrificePermanent(
+      filter: (kind: AnyPermanent, controller: You, permanent_types: [Artifact]),
+      count: 1,
+    )],
+    effect: [MoveGraveyardCards(
+      filter: (owner: Controller, card: Some((card_type: Some(Artifact), max_mana_value: Some(3)))),
+      destination: Battlefield(tapped: false),
+    )],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target artifact card with mana value 3 or less from your graveyard",
+      effect_indices: [0],
+    )])),
+  )],
+)

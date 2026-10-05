@@ -246,6 +246,8 @@ mod deck_coverage_everflowing_chalice;
 mod deck_coverage_fire_lit_thicket;
 #[path = "scenario/deck_coverage_garruks_packleader.rs"]
 mod deck_coverage_garruks_packleader;
+#[path = "scenario/deck_coverage_goblin_engineer.rs"]
+mod deck_coverage_goblin_engineer;
 #[path = "scenario/deck_coverage_gruul_war_chant.rs"]
 mod deck_coverage_gruul_war_chant;
 #[path = "scenario/deck_coverage_hand_size_mana.rs"]

@@ -19,6 +19,10 @@ pub(crate) fn library_top(engine: &mut GameEngine, player: usize, card_ids: &[&s
 }
 
 pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize>) -> GameEngine {
+    let artifact_return_fixture = matches!(
+        (card, ability),
+        ("trading_post", Some(2)) | ("goblin_engineer", Some(0))
+    );
     let mut cards = vec![
         card,
         "grizzly_bears",
@@ -51,7 +55,7 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
     if card == "metalwork_colossus" && ability == Some(0) {
         cards.push("sol_ring");
     }
-    if card == "trading_post" && ability == Some(2) {
+    if artifact_return_fixture {
         // This ability targets an artifact already in the graveyard before paying its cost.
         cards.push("sol_ring");
     }
@@ -115,7 +119,7 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
             e.state.players[player].graveyard.push(dead);
             e.state.objects.get_mut(&dead).unwrap().zone = tricerules_core::Zone::Graveyard;
         }
-        if card == "trading_post" && ability == Some(2) && player == 0 {
+        if artifact_return_fixture && player == 0 {
             let dead = super::take_oid_from_library_or_hand(&mut e, player, "sol_ring");
             e.state.players[player].graveyard.push(dead);
             e.state.objects.get_mut(&dead).unwrap().zone = tricerules_core::Zone::Graveyard;
