@@ -486,7 +486,7 @@ pub(super) fn myr_battlesphere_attack(cx: &mut EffectCx<'_>) -> Result<EffectOut
     let selected: Vec<_> = cohort.iter().map(|member| member.object_id).collect();
     let count = selected.len() as u32;
     let tap_events = cx.engine.tap_permanents(cx.controller, &selected);
-    cx.engine.fire_triggers(&tap_events);
+    cx.engine.fire_triggers(&tap_events, cx.events);
     cx.events
         .push(ev_log(format!("{} taps {count} Myr", cx.spell_label)));
     if cx.engine.source_is_current_object(cx.top) {

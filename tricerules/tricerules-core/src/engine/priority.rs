@@ -638,10 +638,13 @@ impl GameEngine {
                 }
                 self.state.passes_since_stack_change = 0;
                 ev.push(ev_phase(self, rv1::PhaseId::Upkeep));
-                self.fire_triggers(&[GameEvent::PhaseBegan {
-                    phase: rv1::PhaseId::Upkeep,
-                    active_player: ap,
-                }]);
+                self.fire_triggers(
+                    &[GameEvent::PhaseBegan {
+                        phase: rv1::PhaseId::Upkeep,
+                        active_player: ap,
+                    }],
+                    ev,
+                );
                 self.flush_staged_triggers(ev);
                 if self.state.blocking_choice().is_none() {
                     ev.push(ev_priority_changed(self));
@@ -691,7 +694,7 @@ impl GameEngine {
                 }
                 self.state.passes_since_stack_change = 0;
                 ev.push(ev_phase(self, rv1::PhaseId::Main1));
-                self.perform_precombat_saga_lore_action();
+                self.perform_precombat_saga_lore_action(ev);
                 self.apply_sbas(ev)?;
                 self.flush_staged_triggers(ev);
                 if self.state.blocking_choice().is_none() {
@@ -705,10 +708,13 @@ impl GameEngine {
                     self.state.priority_idx = i;
                 }
                 ev.push(ev_phase(self, rv1::PhaseId::BeginCombat));
-                self.fire_triggers(&[GameEvent::PhaseBegan {
-                    phase: rv1::PhaseId::BeginCombat,
-                    active_player: ap,
-                }]);
+                self.fire_triggers(
+                    &[GameEvent::PhaseBegan {
+                        phase: rv1::PhaseId::BeginCombat,
+                        active_player: ap,
+                    }],
+                    ev,
+                );
                 self.flush_staged_triggers(ev);
                 if self.state.blocking_choice().is_none() {
                     ev.push(ev_priority_changed(self));
@@ -873,10 +879,13 @@ impl GameEngine {
                     self.state.priority_idx = i;
                 }
                 ev.push(ev_phase(self, rv1::PhaseId::Main2));
-                self.fire_triggers(&[GameEvent::PhaseBegan {
-                    phase: rv1::PhaseId::Main2,
-                    active_player: ap,
-                }]);
+                self.fire_triggers(
+                    &[GameEvent::PhaseBegan {
+                        phase: rv1::PhaseId::Main2,
+                        active_player: ap,
+                    }],
+                    ev,
+                );
                 self.flush_staged_triggers(ev);
                 if self.state.blocking_choice().is_none() {
                     ev.push(ev_priority_changed(self));
@@ -890,10 +899,13 @@ impl GameEngine {
                 self.state.turn_step = EndStep;
                 self.state.passes_since_stack_change = 0;
                 ev.push(ev_phase(self, rv1::PhaseId::EndStep));
-                self.fire_triggers(&[GameEvent::PhaseBegan {
-                    phase: rv1::PhaseId::EndStep,
-                    active_player: ap,
-                }]);
+                self.fire_triggers(
+                    &[GameEvent::PhaseBegan {
+                        phase: rv1::PhaseId::EndStep,
+                        active_player: ap,
+                    }],
+                    ev,
+                );
                 self.flush_staged_triggers(ev);
                 if self.state.blocking_choice().is_none() {
                     ev.push(ev_priority_changed(self));
@@ -1018,7 +1030,7 @@ impl GameEngine {
             ev.push(moved);
             discard_receipts.push(discard_receipt);
         }
-        self.fire_discard_batches(vec![(player, discard_receipts)]);
+        self.fire_discard_batches(vec![(player, discard_receipts)], &mut ev);
         self.apply_sbas(&mut ev)?;
         if self.state.players[idx].hand.len() > self.maximum_hand_size(player) {
             ev.push(ev_priority_changed(self));
@@ -1172,10 +1184,13 @@ impl GameEngine {
         // walks Untap -> Upkeep inline above rather than giving anyone priority in the untap step
         // (CR 502.1, which has no priority). The `Untap` arm of `adv_on_empty_stack` fires the
         // same event for the paths that do stop there, and is unreachable from here.
-        self.fire_triggers(&[GameEvent::PhaseBegan {
-            phase: rv1::PhaseId::Upkeep,
-            active_player: ap,
-        }]);
+        self.fire_triggers(
+            &[GameEvent::PhaseBegan {
+                phase: rv1::PhaseId::Upkeep,
+                active_player: ap,
+            }],
+            &mut ev,
+        );
         // The second of the two flush points: this path returns before `dispatch_command`'s tail,
         // so without it the first upkeep's triggers would sit staged until the next command.
         // Priority is withheld while an ordering or target choice is outstanding — CR 603.3b/603.3d

@@ -1029,6 +1029,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
         }
         if let StaticAbilityDef::ConditionalSelfModifier {
             condition,
+            remove_creature,
             set_types,
             add_types,
             base_power,
@@ -1050,6 +1051,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             if *delta_power == 0
                 && *delta_toughness == 0
                 && set_types.is_none()
+                && !remove_creature
                 && add_types.is_empty()
                 && base_power.is_none()
                 && base_toughness.is_none()

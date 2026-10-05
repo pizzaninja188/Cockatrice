@@ -310,7 +310,7 @@ impl GameEngine {
                     controller_at_event: request.player,
                 });
                 request.drawn += 1;
-                self.fire_card_drawn(request.player);
+                self.fire_card_drawn(request.player, events);
             } else {
                 self.state.players[index].pending_library_loss = true;
                 request.failed = true;
@@ -575,10 +575,13 @@ impl GameEngine {
                 .any(|player| player.id == active_player && !player.has_lost)
         {
             self.state.passes_since_stack_change = 0;
-            self.fire_triggers(&[GameEvent::PhaseBegan {
-                phase: rv1::PhaseId::Draw,
-                active_player,
-            }]);
+            self.fire_triggers(
+                &[GameEvent::PhaseBegan {
+                    phase: rv1::PhaseId::Draw,
+                    active_player,
+                }],
+                events,
+            );
             self.flush_staged_triggers(events);
             if self.state.blocking_choice().is_none() {
                 events.push(ev_priority_changed(self));

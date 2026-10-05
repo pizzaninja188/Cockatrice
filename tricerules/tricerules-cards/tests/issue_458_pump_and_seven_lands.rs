@@ -118,6 +118,7 @@ fn seven_lands_condition() -> GameCondition {
 fn seven_lands_definition(delta_power: i32, delta_toughness: i32) -> StaticAbilityDef {
     StaticAbilityDef::ConditionalSelfModifier {
         condition: seven_lands_condition(),
+        remove_creature: false,
         set_types: None,
         add_types: TypeLineAddition::default(),
         base_power: None,

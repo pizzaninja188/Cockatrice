@@ -1,0 +1,88 @@
+{
+  "format_version": 1,
+  "oracle_id": "43674fdf-496f-42dc-8a0a-5c42a7c7d910",
+  "spans": [
+    {
+      "face_id": "nylea_god_of_the_hunt",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "nylea_god_of_the_hunt",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "nylea_god_of_the_hunt",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/static_abilities/1"
+      ]
+    },
+    {
+      "face_id": "nylea_god_of_the_hunt",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Indestructible",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "StaticAbilityDef::ConditionalSelfModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "GameCondition::Devotion",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/condition"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpTarget",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "StaticAbilityDef::AnthemKeyword",
+      "typed_path": "/faces/0/static_abilities/1/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "deck_coverage_devotion_gods::devotion_gods_register_exact_faces_costs_types_keywords_and_oracle_lines",
+      "covers": "Exact complete face, cost, legendary God types, Indestructible, all abilities, recipient filters, amounts and Oracle presentation spans"
+    },
+    {
+      "test": "scenario deck_coverage_devotion_gods::nylea_threshold_own_pip_other_creature_trample_and_counters_survive_type_changes",
+      "covers": "nylea threshold own pip other creature trample and counters survive type changes"
+    },
+    {
+      "test": "scenario deck_coverage_devotion_gods::nylea_noncreature_paid_pump_accepts_opponent_and_rejects_illegal_stale_and_unpaid_commands",
+      "covers": "nylea noncreature paid pump accepts opponent and rejects illegal stale and unpaid commands"
+    },
+    {
+      "test": "scenario deck_coverage_devotion_gods::nylea_paid_pump_does_not_rebind_a_target_that_leaves_and_returns",
+      "covers": "nylea paid pump does not rebind a target that leaves and returns"
+    },
+    {
+      "test": "scenario deck_coverage_devotion_gods::devotion_gods_cast_as_creature_spells_with_exact_paid_costs_then_enter_as_noncreatures",
+      "covers": "Paid ordinary cast is a creature spell outside the battlefield; battlefield devotion condition, physical incarnation and self-trigger exclusion"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

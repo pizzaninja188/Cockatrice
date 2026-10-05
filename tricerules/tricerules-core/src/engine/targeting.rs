@@ -2985,7 +2985,7 @@ mod tests {
             1,
         );
         event.source.zone_change_generation = Some(generation);
-        engine.fire_triggers(&[GameEvent::DamageDealt { event }]);
+        engine.fire_triggers(&[GameEvent::DamageDealt { event }], &mut Vec::new());
         engine.state.players[0]
             .battlefield
             .retain(|object_id| *object_id != damaged_permanent);

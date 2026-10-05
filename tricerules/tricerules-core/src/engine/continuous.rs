@@ -1001,6 +1001,7 @@ impl GameEngine {
                 }
                 StaticAbilityDef::ConditionalSelfModifier {
                     condition,
+                    remove_creature: _,
                     set_types: _,
                     add_types: _,
                     base_power,

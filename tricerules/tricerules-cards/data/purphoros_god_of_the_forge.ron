@@ -1,0 +1,34 @@
+(
+    id: "purphoros,_god_of_the_forge",
+    name: "Purphoros, God of the Forge",
+    face_id: "purphoros_god_of_the_forge",
+    mana_cost: "{3}{R}",
+    types: ["Enchantment", "Creature", "God"],
+    supertypes: ["Legendary"],
+    power: Some(6),
+    toughness: Some(5),
+    keywords: [Indestructible],
+    static_abilities: [(
+        ability_id: "static_01",
+        presentation: OracleLines([2]),
+        definition: ConditionalSelfModifier(
+            condition: Devotion(color: Red, max: Some(4)),
+            remove_creature: true,
+        ),
+    )],
+    triggered_abilities: [(
+        ability_id: "triggered_01",
+        presentation: OracleLines([3]),
+        trigger: WheneverPermanentEntersBattlefield(
+            controller: Controller,
+            filter: (permanent_type: Some(Creature), exclude_source: true),
+        ),
+        effect: [DamagePlayer(amount: 2, who: EachOpponent)],
+    )],
+    activated_abilities: [(
+        ability_id: "activated_01",
+        presentation: OracleLines([4]),
+        costs: [Mana("{2}{R}")],
+        effect: [PumpAll(filter: (controller: Some(YouControl)), power: 1, toughness: 0)],
+    )],
+)

@@ -46,6 +46,7 @@ impl GameEngine {
         self.fire_zone_triggers(
             zone_snapshot,
             sacrifice_events(source, was_creature, pending.deciding_player, died),
+            &mut ev,
         );
         let _ = self.apply_sbas(&mut ev);
         let result = CardResultCohort {
@@ -100,7 +101,7 @@ impl GameEngine {
                 }
             }
         }
-        self.fire_zone_triggers(zone_snapshot, trigger_events);
+        self.fire_zone_triggers(zone_snapshot, trigger_events, &mut ev);
         // Re-run SBAs: triggered abilities may have caused further state changes, and
         // multiple legend conflicts are resolved one at a time.
         if self.state.pending_resolution.is_none() {

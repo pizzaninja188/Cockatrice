@@ -1,0 +1,92 @@
+{
+  "format_version": 1,
+  "oracle_id": "4fdbbec2-e921-4b63-958d-f9ba1e417197",
+  "spans": [
+    {
+      "face_id": "purphoros_god_of_the_forge",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/keywords"
+      ]
+    },
+    {
+      "face_id": "purphoros_god_of_the_forge",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "purphoros_god_of_the_forge",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "purphoros_god_of_the_forge",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Indestructible",
+      "typed_path": "/faces/0/keywords"
+    },
+    {
+      "symbol": "StaticAbilityDef::ConditionalSelfModifier",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    },
+    {
+      "symbol": "GameCondition::Devotion",
+      "typed_path": "/faces/0/static_abilities/0/definition/ConditionalSelfModifier/condition"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PumpAll",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::DamagePlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "deck_coverage_devotion_gods::devotion_gods_register_exact_faces_costs_types_keywords_and_oracle_lines",
+      "covers": "Exact complete face, cost, legendary God types, Indestructible, all abilities, recipient filters, amounts and Oracle presentation spans"
+    },
+    {
+      "test": "scenario deck_coverage_devotion_gods::purphoros_noncreature_triggers_only_other_controlled_creatures_and_damages_each_opponent",
+      "covers": "purphoros noncreature triggers only other controlled creatures and damages each opponent"
+    },
+    {
+      "test": "scenario deck_coverage_devotion_gods::purphoros_noncreature_paid_team_pump_snapshots_only_own_creatures",
+      "covers": "purphoros noncreature paid team pump snapshots only own creatures"
+    },
+    {
+      "test": "scenario deck_coverage_devotion_gods::purphoros_five_devotion_team_pump_includes_source_and_excludes_later_entrants",
+      "covers": "purphoros five devotion team pump includes source and excludes later entrants"
+    },
+    {
+      "test": "scenario deck_coverage_devotion_gods::devotion_gods_cast_as_creature_spells_with_exact_paid_costs_then_enter_as_noncreatures",
+      "covers": "Paid ordinary cast is a creature spell outside the battlefield; battlefield devotion condition, physical incarnation and self-trigger exclusion"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1993,6 +1993,7 @@ void RuledEventDispatcher::applyRemovedFromCombat(const ruled::v1::CreaturesRemo
     for (const auto rawOid : rfc.object_ids()) {
         const auto oid = static_cast<quint32>(rawOid);
         state->currentAttackerOids.remove(oid);
+        state->currentAttackAssignments.remove(oid);
         // Clean up attacker-side of blocker groups.
         state->committedBlockerGroups.remove(oid);
         // Clean up blocker-side: remove this blocker from any group.

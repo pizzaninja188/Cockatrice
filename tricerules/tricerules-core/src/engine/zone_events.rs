@@ -264,7 +264,7 @@ impl GameEngine {
                 )));
             }
         }
-        self.fire_zone_triggers(snapshot, triggers);
+        self.fire_zone_triggers(snapshot, triggers, events);
         if let Some(crate::state::ZoneEntryCompletion::LibrarySearch(completion)) = completion {
             if completion.shuffle {
                 crate::engine::shuffle_player_library_for_current_command(
@@ -277,10 +277,13 @@ impl GameEngine {
                 )));
             }
             if completion.searched_library {
-                self.fire_triggers(&[GameEvent::LibrarySearched {
-                    searcher: completion.searcher,
-                    library_owner: completion.searcher,
-                }]);
+                self.fire_triggers(
+                    &[GameEvent::LibrarySearched {
+                        searcher: completion.searcher,
+                        library_owner: completion.searcher,
+                    }],
+                    events,
+                );
             }
         } else if let Some(crate::state::ZoneEntryCompletion::DeployRandomBottom {
             library_owner,
@@ -316,10 +319,11 @@ impl GameEngine {
         oid: ObjectId,
         destination: Zone,
         controller: Option<PlayerId>,
+        out: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         let snapshot = self.snapshot_zone_event();
         move_object_to_zone(&mut self.state, self.registry, oid, destination, controller)?;
-        self.fire_zone_triggers(snapshot, vec![]);
+        self.fire_zone_triggers(snapshot, vec![], out);
         Ok(())
     }
 
@@ -436,11 +440,12 @@ impl GameEngine {
         &mut self,
         snapshot: ZoneEventSnapshot,
         mut events: Vec<GameEvent>,
+        out: &mut Vec<rv1::RuledEvent>,
     ) {
         let zone = self.finish_zone_event(snapshot);
         // One collection retains the existing history/delayed-event handling and APNAP group.
         events.push(zone);
-        self.fire_triggers(&events);
+        self.fire_triggers(&events, out);
     }
 
     pub(super) fn collect_zone_triggers(

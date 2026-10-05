@@ -2286,6 +2286,10 @@ pub enum StaticAbilityDef {
     /// Tapestry Warden exercise threshold types, base P/T, keywords, and granted abilities.
     ConditionalSelfModifier {
         condition: GameCondition,
+        /// CR 205.1a: Nylea and Purphoros lose only Creature below their devotion threshold.
+        /// Unrelated card types remain; creature subtypes remain only when Kindred remains.
+        #[serde(default, skip_serializing_if = "is_false")]
+        remove_creature: bool,
         /// CR 205.1a: replace the ordinary type line while the condition holds. Kaito and
         /// Gideon Blackblade use this instead of layering an additive Creature type over their
         /// planeswalker type.

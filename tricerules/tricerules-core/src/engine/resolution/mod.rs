@@ -1089,7 +1089,7 @@ impl GameEngine {
                                     .map(|object| object.owner),
                             })),
                         });
-                        self.commit_battlefield_entry(entry, attached_to)?;
+                        self.commit_battlefield_entry(entry, attached_to, events)?;
                         self.finish_permanent_spell_entry(&top, events);
                     }
                 }
@@ -2151,6 +2151,7 @@ impl GameEngine {
                 );
             }
             if outcome == EffectOutcome::ChaosWarpCommanderChoice {
+                self.reconcile_combat_characteristics(events);
                 if let Some(stack) = self
                     .state
                     .pending_resolution
@@ -2238,6 +2239,7 @@ impl GameEngine {
         resume_stack: Option<ParkedStackResolution>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<bool, EngineError> {
+        self.reconcile_combat_characteristics(events);
         // CR 404.3 completes the simultaneous departure's owner ordering before a CR 610.3
         // return may park another choice. Never overwrite its frozen event continuation.
         if self
@@ -2550,7 +2552,7 @@ impl GameEngine {
                 entry.label
             )));
         }
-        self.fire_triggers(&trigger_events);
+        self.fire_triggers(&trigger_events, events);
         Ok(())
     }
 
@@ -3058,9 +3060,10 @@ pub(crate) fn perform_discard(
     affected_player: PlayerId,
     object_id: ObjectId,
     cause: crate::state::DiscardCause,
+    out: &mut Vec<rv1::RuledEvent>,
 ) -> Result<(String, rv1::RuledEvent), EngineError> {
     let (name, moved, receipt) = engine.commit_discard(affected_player, object_id, cause, false)?;
-    engine.fire_discard_batches(vec![(affected_player, vec![receipt])]);
+    engine.fire_discard_batches(vec![(affected_player, vec![receipt])], out);
     Ok((name, moved))
 }
 
@@ -3796,27 +3799,7 @@ pub(super) fn consume_regen_shield(
         o.damage = 0;
         o.deathtouch_damage = false;
     }
-    // CR 701.19a: remove from combat (attacker/blocker lists). This mirrors what happens when
-    // a creature is removed from combat by a tap effect.
-    if let Some(combat) = state.combat.as_mut() {
-        let was_in_combat = combat.attacking.contains(&oid)
-            || combat.blockers.contains_key(&oid)
-            || combat.blockers.values().any(|v| v.contains(&oid));
-        combat.attacking.retain(|&id| id != oid);
-        combat.blockers.remove(&oid);
-        for v in combat.blockers.values_mut() {
-            v.retain(|&id| id != oid);
-        }
-        if was_in_combat {
-            events.push(rv1::RuledEvent {
-                ev: Some(rv1::ruled_event::Ev::RemovedFromCombat(
-                    rv1::CreaturesRemovedFromCombat {
-                        object_ids: vec![oid],
-                    },
-                )),
-            });
-        }
-    }
+    engine.remove_combat_participants(&[oid], events);
     (true, tap_event)
 }
 
@@ -5232,7 +5215,14 @@ mod attached_subject_tests {
             2
         );
         let discard = engine.state.players[0].hand[0];
-        perform_discard(&mut engine, 0, discard, crate::state::DiscardCause::Effect).unwrap();
+        perform_discard(
+            &mut engine,
+            0,
+            discard,
+            crate::state::DiscardCause::Effect,
+            &mut Vec::new(),
+        )
+        .unwrap();
         assert_eq!(
             engine
                 .state
@@ -5243,9 +5233,14 @@ mod attached_subject_tests {
             3
         );
         let history = engine.state.turn_history.clone();
-        assert!(
-            perform_discard(&mut engine, 0, discard, crate::state::DiscardCause::Effect).is_err()
-        );
+        assert!(perform_discard(
+            &mut engine,
+            0,
+            discard,
+            crate::state::DiscardCause::Effect,
+            &mut Vec::new()
+        )
+        .is_err());
         assert_eq!(engine.state.turn_history, history);
         for (card, face, method, count) in [
             ("grizzly_bears", 0, SpellCastMethod::Normal, 4),

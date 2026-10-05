@@ -92,7 +92,7 @@ pub(super) fn destroy(
         }
     }
 
-    engine.fire_zone_triggers(zone_snapshot, trigger_events);
+    engine.fire_zone_triggers(zone_snapshot, trigger_events, events);
     Ok(EffectOutcome::Continue)
 }
 
@@ -158,7 +158,8 @@ pub(super) fn sacrifice(
             .push(ev_log(format!("{} sacrifices {name}", cx.spell_label)));
         committed.extend(sacrifice_events(source, was_creature, cx.controller, died));
     }
-    cx.engine.fire_zone_triggers(zone_snapshot, committed);
+    cx.engine
+        .fire_zone_triggers(zone_snapshot, committed, cx.events);
     Ok(EffectOutcome::Continue)
 }
 
@@ -200,7 +201,7 @@ fn set_target_tapped(cx: &mut EffectCx<'_>, tapped: bool) -> Result<EffectOutcom
             events.push(ev_log(format!("{spell_label} {verb} {tgt}")));
         }
     }
-    engine.fire_triggers(&tap_events);
+    engine.fire_triggers(&tap_events, events);
 
     Ok(EffectOutcome::Continue)
 }
@@ -229,7 +230,7 @@ pub(super) fn tap(
     if on_battlefield {
         let tap_events = cx.engine.tap_permanents(cx.controller, &[tid]);
         if !tap_events.is_empty() {
-            cx.engine.fire_triggers(&tap_events);
+            cx.engine.fire_triggers(&tap_events, cx.events);
             cx.events
                 .push(ev_log(format!("{} taps {subject_name}", cx.spell_label)));
         }

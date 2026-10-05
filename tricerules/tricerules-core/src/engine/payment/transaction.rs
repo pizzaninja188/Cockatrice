@@ -355,11 +355,12 @@ impl GameEngine {
         &mut self,
         events: Vec<GameEvent>,
         snapshots: Vec<SacrificeSnapshot>,
+        out: &mut Vec<rv1::RuledEvent>,
     ) {
         let events = payment_sacrifice_events(snapshots)
             .chain(events)
             .collect::<Vec<_>>();
-        self.fire_triggers(&events);
+        self.fire_triggers(&events, out);
     }
 
     pub(in crate::engine) fn plan_resolution_object_costs(
@@ -1818,6 +1819,7 @@ impl GameEngine {
                             delta as u32,
                             super::super::continuous::CounterPlacementOrigin::Cost,
                         );
+                        self.reconcile_combat_characteristics(&mut payment.move_events);
                         continue;
                     }
                     let object = self
@@ -1904,6 +1906,7 @@ impl GameEngine {
                         owner,
                         oid,
                         crate::state::DiscardCause::Cost,
+                        &mut payment.move_events,
                     )
                     .expect("prevalidated discard cost must commit");
                     payment.move_events.push(moved);
@@ -2016,24 +2019,13 @@ impl GameEngine {
                     let returned_name = object_display_name(&self.state, self.registry, oid);
                     move_object_to_zone(&mut self.state, self.registry, oid, Zone::Hand, None)
                         .expect("prevalidated returned-attacker cost must commit");
-                    if let Some(combat) = self.state.combat.as_mut() {
-                        combat.attacking.retain(|candidate| *candidate != oid);
-                        combat.attack_assignments.remove(&oid);
-                        combat.blockers.remove(&oid);
-                    }
                     payment.move_events.push(permanent_moved_event(
                         &self.state,
                         oid,
                         owner,
                         rv1::permanent_moved::Destination::Hand,
                     ));
-                    payment.move_events.push(rv1::RuledEvent {
-                        ev: Some(rv1::ruled_event::Ev::RemovedFromCombat(
-                            rv1::CreaturesRemovedFromCombat {
-                                object_ids: vec![oid],
-                            },
-                        )),
-                    });
+                    self.remove_combat_participants(&[oid], &mut payment.move_events);
                     payment.returned_attacker_assignment = Some(assignment);
                     payment.sneak_returned_name = Some(returned_name);
                 }
@@ -2042,6 +2034,7 @@ impl GameEngine {
             if let Some(zones) = zones {
                 payment.trigger_events.push(self.finish_zone_event(zones));
             }
+            self.reconcile_combat_characteristics(&mut payment.move_events);
         }
         Ok(payment)
     }
@@ -3122,7 +3115,11 @@ mod convoke_transaction_tests {
         assert_eq!(receipt.sacrificed[0].source.controller, 19);
         assert!(matches!(&receipt.move_events[0].ev,
             Some(rv1::ruled_event::Ev::PermanentMoved(moved)) if moved.owner_player_id == 0));
-        engine.fire_resolution_cost_triggers(receipt.trigger_events, receipt.sacrificed);
+        engine.fire_resolution_cost_triggers(
+            receipt.trigger_events,
+            receipt.sacrificed,
+            &mut Vec::new(),
+        );
         assert_eq!(
             engine.state.turn_history.current.permanents_sacrificed[0].player,
             19

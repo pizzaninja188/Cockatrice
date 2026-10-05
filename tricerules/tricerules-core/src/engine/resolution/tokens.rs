@@ -497,7 +497,7 @@ pub(super) fn sacrifice_observed_objects(
         }
         sacrificed += 1;
     }
-    cx.engine.fire_zone_triggers(zone_snapshot, dies);
+    cx.engine.fire_zone_triggers(zone_snapshot, dies, cx.events);
     cx.events.push(ev_log(format!(
         "P{} sacrifices {sacrificed} delayed token(s).",
         cx.controller

@@ -96,7 +96,7 @@ impl GameEngine {
             }
             super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
                 let entry = *entry;
-                self.commit_battlefield_entry(entry, None)?;
+                self.commit_battlefield_entry(entry, None, &mut events)?;
                 events.push(permanent_moved_event_with_library_position(
                     &self.state,
                     chosen,

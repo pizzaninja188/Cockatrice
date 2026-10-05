@@ -8,6 +8,117 @@ use super::legal_actions::fill_legal;
 use super::*;
 
 impl GameEngine {
+    /// CR 506.4: removal is permanent for this combat, even if a later instruction restores
+    /// Creature. Keep empty blocker groups: their attackers remain blocked (CR 509.1h).
+    pub(super) fn remove_combat_participants(
+        &mut self,
+        ids: &[ObjectId],
+        out: &mut Vec<rv1::RuledEvent>,
+    ) {
+        let Some(combat) = self.state.combat.as_mut() else {
+            return;
+        };
+        let removed: BTreeSet<_> = ids
+            .iter()
+            .copied()
+            .filter(|id| {
+                combat.attacking.contains(id)
+                    || combat
+                        .blockers
+                        .values()
+                        .any(|blockers| blockers.contains(id))
+            })
+            .collect();
+        if removed.is_empty() {
+            return;
+        }
+        combat.attacking.retain(|id| !removed.contains(id));
+        combat
+            .attack_assignments
+            .retain(|id, _| !removed.contains(id));
+        combat.blockers.retain(|id, _| !removed.contains(id));
+        let mut invalidated = removed.clone();
+        for (attacker, blockers) in &mut combat.blockers {
+            let prior = blockers.len();
+            blockers.retain(|id| !removed.contains(id));
+            if blockers.len() != prior {
+                invalidated.insert(*attacker);
+            }
+        }
+        combat
+            .damage_assignments
+            .retain(|id, _| !invalidated.contains(id));
+        combat
+            .trample_player_damage
+            .retain(|id, _| !invalidated.contains(id));
+        combat
+            .first_strike_attackers
+            .retain(|id| !removed.contains(id));
+        combat.first_strike_blockers.retain(|id, blockers| {
+            blockers.retain(|blocker| !removed.contains(blocker));
+            !removed.contains(id)
+        });
+        let assignments: Vec<_> = combat
+            .blockers
+            .iter()
+            .map(|(id, blockers)| {
+                (
+                    *id,
+                    blockers.len(),
+                    combat.damage_assignments.contains_key(id),
+                )
+            })
+            .collect();
+        let declared = combat.blockers_declared;
+        let needed = declared
+            && assignments.into_iter().any(|(id, count, assigned)| {
+                !assigned && self.attacker_needs_explicit_damage_assignment(id, count)
+            });
+        self.state.combat.as_mut().unwrap().damage_assignment_needed = needed;
+        out.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::RemovedFromCombat(
+                rv1::CreaturesRemovedFromCombat {
+                    object_ids: removed.into_iter().collect(),
+                },
+            )),
+        });
+    }
+
+    /// Run at committed instruction/cohort boundaries, never while projecting an entry.
+    pub(super) fn reconcile_combat_characteristics(&mut self, out: &mut Vec<rv1::RuledEvent>) {
+        let Some(combat) = self.state.combat.as_ref() else {
+            return;
+        };
+        let participants: BTreeSet<_> = combat
+            .attacking
+            .iter()
+            .chain(combat.blockers.values().flatten())
+            .copied()
+            .collect();
+        let removed: Vec<_> = participants
+            .into_iter()
+            .filter(|id| {
+                self.state
+                    .objects
+                    .get(id)
+                    .is_none_or(|object| object.zone != Zone::Battlefield)
+                    || self
+                        .characteristics(*id)
+                        .is_none_or(|value| !value.is_creature())
+                    || combat.attack_assignments.get(id).is_some_and(|assignment| {
+                        assignment.attacker.zone_change_generation
+                            != self
+                                .state
+                                .zone_change_generation
+                                .get(id)
+                                .copied()
+                                .unwrap_or(0)
+                    })
+            })
+            .collect();
+        self.remove_combat_participants(&removed, out);
+    }
+
     fn return_unblocked_attacker_assignment(
         &self,
         player: PlayerId,
@@ -1018,7 +1129,7 @@ impl GameEngine {
             attacking_player: ap,
             attacks,
         });
-        self.fire_triggers(&tap_events);
+        self.fire_triggers(&tap_events, &mut b.events);
         b.events.push(ev_priority_changed(self));
         Ok(b)
     }
@@ -1221,7 +1332,10 @@ impl GameEngine {
                 },
             )),
         });
-        self.fire_triggers(&[GameEvent::BlockersDeclared { edges: block_edges }]);
+        self.fire_triggers(
+            &[GameEvent::BlockersDeclared { edges: block_edges }],
+            events,
+        );
         Ok(())
     }
 
@@ -1934,7 +2048,7 @@ impl GameEngine {
                 .copied();
             GameEvent::DamageDealt { event }
         }));
-        self.fire_triggers(&trigger_events);
+        self.fire_triggers(&trigger_events, events);
         Ok(())
     }
 }

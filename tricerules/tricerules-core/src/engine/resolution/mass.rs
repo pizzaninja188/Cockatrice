@@ -100,7 +100,7 @@ pub(super) fn destroy_attached(
 
     let mut trigger_events = tap_events;
     trigger_events.extend(destroyed);
-    engine.fire_zone_triggers(zone_snapshot, trigger_events);
+    engine.fire_zone_triggers(zone_snapshot, trigger_events, events);
 
     Ok(EffectOutcome::Continue)
 }
@@ -151,7 +151,7 @@ pub(super) fn exile_all(
         ));
         leave_events.extend(leave_event);
     }
-    engine.fire_zone_triggers(zone_snapshot, leave_events);
+    engine.fire_zone_triggers(zone_snapshot, leave_events, cx.events);
     Ok(EffectOutcome::Continue)
 }
 
@@ -211,7 +211,7 @@ pub(super) fn destroy_all(
     }
     let mut trigger_events = tap_events;
     trigger_events.extend(destroyed);
-    engine.fire_zone_triggers(zone_snapshot, trigger_events);
+    engine.fire_zone_triggers(zone_snapshot, trigger_events, events);
 
     Ok(EffectOutcome::Continue)
 }
@@ -334,7 +334,7 @@ pub(super) fn tap_all(
     );
     let tap_events = cx.engine.tap_permanents(cx.controller, &affected);
     let tapped = tap_events.len();
-    cx.engine.fire_triggers(&tap_events);
+    cx.engine.fire_triggers(&tap_events, cx.events);
     cx.events.push(ev_log(format!(
         "{} taps {tapped} affected permanent(s)",
         cx.spell_label

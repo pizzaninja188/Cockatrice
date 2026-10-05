@@ -109,6 +109,16 @@ pub(super) fn apply_type_line_replacement(
     );
 }
 
+pub(super) fn apply_creature_type_removal(characteristics: &mut Characteristics) {
+    characteristics.types.retain(|value| value != "Creature");
+    if !characteristics.has_type("Kindred") {
+        characteristics.all_creature_types = false;
+        characteristics
+            .types
+            .retain(|value| !is_creature_type(value));
+    }
+}
+
 pub(super) fn apply_type_line_addition(
     characteristics: &mut Characteristics,
     addition: &tricerules_cards::TypeLineAddition,
@@ -145,6 +155,58 @@ use early_layers::EarlyLayerView;
 struct CharacteristicsEvaluator<'a> {
     state: &'a GameState,
     registry: &'static CardRegistry,
+}
+
+/// CR 700.5a: devotion reads only copy/face-down mana costs and layer-2 control. Calling the
+/// full characteristics evaluator here would recurse through the God's own type condition.
+pub(super) fn devotion_value(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    controller: PlayerId,
+    color: Color,
+    excluded_entrant: Option<ObjectId>,
+) -> u32 {
+    use tricerules_cards::ManaSymbol;
+    let evaluator = CharacteristicsEvaluator { state, registry };
+    state
+        .objects
+        .iter()
+        .filter(|(oid, object)| {
+            object.zone == Zone::Battlefield
+                && excluded_entrant != Some(**oid)
+                && !object.face_down
+                && evaluator.layer_2_controller(**oid, &mut Vec::new()) == controller
+        })
+        .filter_map(|(&oid, object)| {
+            let face = effective_face_from(state, registry, oid)?;
+            let retained_flip_cost = (object.copiable_values.is_none()
+                && object.token_origin.is_none())
+            .then(|| registry.get(&object.card_id))
+            .flatten()
+            .filter(|definition| definition.layout == Layout::Flip)
+            .map(|definition| &definition.primary_face().mana_cost);
+            let cost = retained_flip_cost.unwrap_or(&face.mana_cost);
+            Some(
+                cost.pips
+                    .iter()
+                    .filter(|pip| match pip {
+                        ManaSymbol::W => color == Color::White,
+                        ManaSymbol::U => color == Color::Blue,
+                        ManaSymbol::B => color == Color::Black,
+                        ManaSymbol::R => color == Color::Red,
+                        ManaSymbol::G => color == Color::Green,
+                        ManaSymbol::Hybrid(first, second) => {
+                            first.color() == color || second.color() == color
+                        }
+                        ManaSymbol::MonoHybrid(_, pip) | ManaSymbol::Phyrexian(pip) => {
+                            pip.color() == color
+                        }
+                        ManaSymbol::C | ManaSymbol::Generic(_) | ManaSymbol::X => false,
+                    })
+                    .count() as u32,
+            )
+        })
+        .fold(0, u32::saturating_add)
 }
 
 pub(super) fn characteristics_from(
@@ -561,6 +623,7 @@ impl CharacteristicsEvaluator<'_> {
                 matches!(
                     effect.kind,
                     ContinuousEffectKind::Layer4AddTypes(_)
+                        | ContinuousEffectKind::Layer4RemoveCreature
                         | ContinuousEffectKind::Layer4SetTypeLine(_)
                         | ContinuousEffectKind::Layer4SetBasicLandType(_)
                         | ContinuousEffectKind::Layer4SetCreatureTypes(_)
@@ -585,6 +648,9 @@ impl CharacteristicsEvaluator<'_> {
             match &effect.kind {
                 ContinuousEffectKind::Layer4AddTypes(addition) => {
                     apply_type_line_addition(result, addition);
+                }
+                ContinuousEffectKind::Layer4RemoveCreature => {
+                    apply_creature_type_removal(result);
                 }
                 ContinuousEffectKind::Layer4SetTypeLine(replacement) => {
                     apply_type_line_replacement(result, replacement);
@@ -1295,6 +1361,13 @@ impl CharacteristicsEvaluator<'_> {
                     })
             }
             GameCondition::BattlefieldAggregate { .. } => false,
+            GameCondition::Devotion { color, .. } => condition.matches_value(devotion_value(
+                self.state,
+                self.registry,
+                controller,
+                *color,
+                view.and_then(|view| view.projected_entrant),
+            )),
             GameCondition::UnlockedRoomDoorCount { controllers, .. } => {
                 let count = self
                     .state
@@ -1580,6 +1653,7 @@ fn is_earlier_characteristic_component(kind: &ContinuousEffectKind) -> bool {
         kind,
         ContinuousEffectKind::Layer3SetName(_)
             | ContinuousEffectKind::Layer4AddTypes(_)
+            | ContinuousEffectKind::Layer4RemoveCreature
             | ContinuousEffectKind::Layer4SetTypeLine(_)
             | ContinuousEffectKind::Layer4SetBasicLandType(_)
             | ContinuousEffectKind::Layer4SetCreatureTypes(_)
@@ -2331,6 +2405,8 @@ impl GameEngine {
 mod tests {
     use super::*;
     use tricerules_cards::{CharacteristicDefiningAbility, TypeLineAddition};
+
+    mod devotion_tests;
 
     fn early_layer_type_effect(
         affected: AffectedScope,

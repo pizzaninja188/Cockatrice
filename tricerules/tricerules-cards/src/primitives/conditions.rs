@@ -239,6 +239,15 @@ pub enum GameCondition {
         #[serde(default)]
         max: Option<u32>,
     },
+    /// CR 700.5: count matching mana-cost symbols on permanents controlled by the source's
+    /// current controller. Nylea and Purphoros use this dependency-free layer-4 threshold.
+    Devotion {
+        color: Color,
+        #[serde(default)]
+        min: Option<u32>,
+        #[serde(default)]
+        max: Option<u32>,
+    },
     /// Count public unlocked door designations among Rooms controlled by the selected players.
     /// This is a door count, not a Room count: a fully unlocked Room contributes two.
     UnlockedRoomDoorCount {
@@ -486,6 +495,9 @@ impl GameCondition {
                 filter.validate()?;
                 validate_optional_bounds(min.as_ref(), max.as_ref(), "BattlefieldAggregate")
             }
+            GameCondition::Devotion { min, max, .. } => {
+                validate_optional_bounds(min.as_ref(), max.as_ref(), "Devotion")
+            }
             GameCondition::UnlockedRoomDoorCount { min, max, .. } => {
                 validate_optional_bounds(min.as_ref(), max.as_ref(), "UnlockedRoomDoorCount")
             }
@@ -531,6 +543,7 @@ impl GameCondition {
             | GameCondition::ObjectManaValue { min, max, .. }
             | GameCondition::BattlefieldCreatureCount { min, max, .. }
             | GameCondition::BattlefieldAggregate { min, max, .. }
+            | GameCondition::Devotion { min, max, .. }
             | GameCondition::UnlockedRoomDoorCount { min, max, .. }
             | GameCondition::GraveyardAggregate { min, max, .. } => {
                 matches_optional_bounds(value, *min, *max)

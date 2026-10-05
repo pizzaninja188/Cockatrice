@@ -267,10 +267,10 @@ impl GameEngine {
         stack: ParkedStackResolution,
         controller: PlayerId,
         kind: PendingLibraryPartitionKind,
-        ev: Vec<rv1::RuledEvent>,
+        mut ev: Vec<rv1::RuledEvent>,
     ) -> Result<RuledEventBatch, EngineError> {
         if kind == PendingLibraryPartitionKind::Surveil {
-            self.fire_triggers(&[GameEvent::Surveilled { player: controller }]);
+            self.fire_triggers(&[GameEvent::Surveilled { player: controller }], &mut ev);
         }
         self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev)
     }

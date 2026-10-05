@@ -7053,6 +7053,7 @@ fn issue_313_station_assembly(text: &str, context: &RecipeContext) -> Option<Rec
                     min: Some(variant.threshold),
                     max: None,
                 },
+                remove_creature: false,
                 set_types: None,
                 add_types: TypeLineAddition {
                     land_types: Vec::new(),
@@ -7227,6 +7228,7 @@ pub(super) fn match_station_6_7_flying_assembly(
                     min: Some(variant.threshold),
                     max: None,
                 },
+                remove_creature: false,
                 set_types: None,
                 add_types: TypeLineAddition {
                     land_types: Vec::new(),
@@ -7392,6 +7394,7 @@ pub(super) fn match_station_3_or_9_keyword_assembly(
                     min: Some(variant.threshold),
                     max: None,
                 },
+                remove_creature: false,
                 set_types: None,
                 add_types: TypeLineAddition {
                     land_types: Vec::new(),
@@ -7508,6 +7511,7 @@ pub(super) fn match_station_8_flying_assembly(
                     min: Some(8),
                     max: None,
                 },
+                remove_creature: false,
                 set_types: None,
                 add_types: TypeLineAddition {
                     land_types: Vec::new(),
@@ -7817,6 +7821,7 @@ fn issue_423_conditional_static(
                 min: Some(threshold),
                 max: None,
             },
+            remove_creature: false,
             set_types: None,
             add_types,
             base_power,
@@ -8405,6 +8410,7 @@ fn match_station_static_damage_100_attack(
                         min: Some(10),
                         max: None,
                     },
+                    remove_creature: false,
                     set_types: None,
                     add_types: TypeLineAddition {
                         land_types: Vec::new(),
@@ -8483,6 +8489,7 @@ fn match_station_static_combat_animation(
                         min: Some(2),
                         max: None,
                     },
+                    remove_creature: false,
                     set_types: None,
                     add_types: TypeLineAddition {
                         land_types: Vec::new(),
@@ -9465,6 +9472,7 @@ fn match_controller_turn_self_first_strike(
                 presentation: context.presentation.clone(),
                 definition: StaticAbilityDef::ConditionalSelfModifier {
                     condition: controller_turn_condition(),
+                    remove_creature: false,
                     set_types: None,
                     add_types: TypeLineAddition::default(),
                     base_power: None,
@@ -12917,6 +12925,7 @@ fn match_static_control_artifact_plus_one_zero_deathtouch(
                         min: Some(1),
                         max: None,
                     },
+                    remove_creature: false,
                     set_types: None,
                     add_types: TypeLineAddition::default(),
                     base_power: None,
@@ -12980,6 +12989,7 @@ fn match_static_seven_lands_plus_p_plus_t(
                 min: Some(7),
                 max: None,
             },
+            remove_creature: false,
             set_types: None,
             add_types: TypeLineAddition::default(),
             base_power: None,
@@ -14852,6 +14862,7 @@ fn issue_377_conditional_self_modifier(
 ) -> StaticAbilityDef {
     StaticAbilityDef::ConditionalSelfModifier {
         condition,
+        remove_creature: false,
         set_types: None,
         add_types: TypeLineAddition::default(),
         base_power: None,
@@ -15228,6 +15239,7 @@ fn match_static_graveyard_eight_self_base_pt_8_8(
                         Some(8),
                         None,
                     ),
+                    remove_creature: false,
                     set_types: None,
                     add_types: TypeLineAddition::default(),
                     base_power: Some(8),
@@ -15740,6 +15752,7 @@ fn match_control_another_villain_hexproof(
                         min: Some(1),
                         max: None,
                     },
+                    remove_creature: false,
                     set_types: None,
                     add_types: TypeLineAddition::default(),
                     base_power: None,
@@ -32636,6 +32649,7 @@ mod tests {
                     min: Some(8),
                     max: None,
                 },
+                remove_creature: false,
                 set_types: None,
                 add_types: TypeLineAddition {
                     land_types: Vec::new(),
@@ -32789,6 +32803,7 @@ mod tests {
                         min: Some(expected.0),
                         max: None,
                     },
+                    remove_creature: false,
                     set_types: None,
                     add_types: TypeLineAddition {
                         land_types: Vec::new(),
@@ -33133,6 +33148,7 @@ mod tests {
                         min: Some(threshold),
                         max: None,
                     },
+                    remove_creature: false,
                     set_types: None,
                     add_types: TypeLineAddition {
                         land_types: Vec::new(),
@@ -33548,6 +33564,7 @@ mod tests {
                         min: Some(threshold),
                         max: None,
                     },
+                    remove_creature: false,
                     set_types: None,
                     add_types: TypeLineAddition {
                         land_types: Vec::new(),
@@ -41016,6 +41033,7 @@ mod tests {
                     min: Some(1),
                     max: None,
                 },
+                remove_creature: false,
                 set_types: None,
                 add_types: TypeLineAddition::default(),
                 base_power: None,
@@ -48552,6 +48570,7 @@ mod tests {
                     min: Some(8),
                     max: None,
                 },
+                remove_creature: false,
                 set_types: None,
                 add_types: TypeLineAddition {
                     land_types: Vec::new(),
@@ -48588,6 +48607,7 @@ mod tests {
                     min: Some(20),
                     max: None,
                 },
+                remove_creature: false,
                 set_types: None,
                 add_types: TypeLineAddition {
                     land_types: Vec::new(),
@@ -53096,6 +53116,7 @@ mod tests {
     fn issue_458_seven_lands_definition(power: i32, toughness: i32) -> StaticAbilityDef {
         StaticAbilityDef::ConditionalSelfModifier {
             condition: issue_458_seven_lands_condition(),
+            remove_creature: false,
             set_types: None,
             add_types: TypeLineAddition::default(),
             base_power: None,

@@ -144,6 +144,7 @@ fn issue_310_cards_preserve_exact_faces_abilities_and_presentation_fingerprints(
                     min: Some(threshold),
                     max: None,
                 },
+                remove_creature: false,
                 set_types: None,
                 add_types: TypeLineAddition {
                     land_types: Vec::new(),

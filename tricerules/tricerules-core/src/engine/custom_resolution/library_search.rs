@@ -89,7 +89,7 @@ impl GameEngine {
                 }
                 super::replacement::BattlefieldEntryProgress::Ready(entry) => {
                     let entry = *entry;
-                    self.commit_battlefield_entry(entry, None)?;
+                    self.commit_battlefield_entry(entry, None, &mut events)?;
                 }
                 super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
                     self.restore_skipped_battlefield_entry(&entry)?;
@@ -135,7 +135,7 @@ impl GameEngine {
                 .get(&oid)
                 .map(|object| object.owner)
                 .ok_or(EngineError::Illegal("searched card is stale"))?;
-            self.commit_observed_zone_move(oid, Zone::Hand, None)?;
+            self.commit_observed_zone_move(oid, Zone::Hand, None, &mut events)?;
             events.push(permanent_moved_event(
                 &self.state,
                 oid,
@@ -151,10 +151,13 @@ impl GameEngine {
             events.push(ev_log(format!("P{controller} shuffles their library.")));
         }
         if progress.searched_library {
-            self.fire_triggers(&[GameEvent::LibrarySearched {
-                searcher: controller,
-                library_owner: controller,
-            }]);
+            self.fire_triggers(
+                &[GameEvent::LibrarySearched {
+                    searcher: controller,
+                    library_owner: controller,
+                }],
+                &mut events,
+            );
         }
         self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
     }
@@ -454,7 +457,7 @@ impl GameEngine {
         let card_label = object_display_name(&self.state, self.registry, oid);
         match destination {
             tricerules_cards::primitives::GraveyardDestination::Hand => {
-                self.commit_observed_zone_move(oid, Zone::Hand, None)?;
+                self.commit_observed_zone_move(oid, Zone::Hand, None, &mut events)?;
                 events.push(ev_log(format!(
                     "{spell_label} returns {card_label} from graveyard to hand."
                 )));
@@ -507,7 +510,7 @@ impl GameEngine {
                     }
                     super::replacement::BattlefieldEntryProgress::Ready(entry) => {
                         let entry = *entry;
-                        self.commit_battlefield_entry(entry, None)?;
+                        self.commit_battlefield_entry(entry, None, &mut events)?;
                     }
                     super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
                         self.restore_skipped_battlefield_entry(&entry)?;
@@ -527,7 +530,7 @@ impl GameEngine {
                 ));
             }
             tricerules_cards::primitives::GraveyardDestination::Exile => {
-                self.commit_observed_zone_move(oid, Zone::Exile, None)?;
+                self.commit_observed_zone_move(oid, Zone::Exile, None, &mut events)?;
                 events.push(ev_log(format!(
                     "{spell_label} exiles {card_label} from the graveyard."
                 )));
@@ -542,7 +545,7 @@ impl GameEngine {
             | tricerules_cards::primitives::GraveyardDestination::LibraryBottom => {
                 let top =
                     destination == tricerules_cards::primitives::GraveyardDestination::LibraryTop;
-                self.commit_observed_zone_move(oid, Zone::Library, None)?;
+                self.commit_observed_zone_move(oid, Zone::Library, None, &mut events)?;
                 if top {
                     let player_idx = self
                         .state
@@ -696,7 +699,7 @@ impl GameEngine {
                         let owner = self.state.objects.get(&oid).map(|object| object.owner);
                         let origin = self.state.objects.get(&oid).map(|object| object.zone);
                         if origin != Some(Zone::Hand) {
-                            self.commit_observed_zone_move(oid, Zone::Hand, None)?;
+                            self.commit_observed_zone_move(oid, Zone::Hand, None, &mut ev)?;
                             if let Some(owner) = owner {
                                 ev.push(permanent_moved_event(
                                     &self.state,
@@ -737,7 +740,7 @@ impl GameEngine {
                     let owner = self.state.objects.get(&oid).map(|object| object.owner);
                     if self.state.objects.get(&oid).map(|object| object.zone) != Some(Zone::Library)
                     {
-                        self.commit_observed_zone_move(oid, Zone::Library, None)?;
+                        self.commit_observed_zone_move(oid, Zone::Library, None, &mut ev)?;
                         if let Some(owner) = owner {
                             ev.push(permanent_moved_event(
                                 &self.state,
@@ -869,10 +872,13 @@ impl GameEngine {
         }
 
         if searched_library {
-            self.fire_triggers(&[GameEvent::LibrarySearched {
-                searcher: controller,
-                library_owner: controller,
-            }]);
+            self.fire_triggers(
+                &[GameEvent::LibrarySearched {
+                    searcher: controller,
+                    library_owner: controller,
+                }],
+                &mut ev,
+            );
         }
         self.complete_parked_resolution_with_previous(
             stack.item,

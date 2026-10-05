@@ -1739,6 +1739,7 @@ mod tests {
             presentation: AbilityPresentation::Fallback,
             definition: StaticAbilityDef::ConditionalSelfModifier {
                 condition: GameCondition::Void,
+                remove_creature: false,
                 set_types: None,
                 add_types: Default::default(),
                 base_power: None,

@@ -1,0 +1,35 @@
+(
+    id: "nylea,_god_of_the_hunt",
+    name: "Nylea, God of the Hunt",
+    face_id: "nylea_god_of_the_hunt",
+    mana_cost: "{3}{G}",
+    types: ["Enchantment", "Creature", "God"],
+    supertypes: ["Legendary"],
+    power: Some(6),
+    toughness: Some(6),
+    keywords: [Indestructible],
+    static_abilities: [
+        (
+            ability_id: "static_01",
+            presentation: OracleLines([2]),
+            definition: ConditionalSelfModifier(
+                condition: Devotion(color: Green, max: Some(4)),
+                remove_creature: true,
+            ),
+        ),
+        (
+            ability_id: "static_02",
+            presentation: OracleLines([3]),
+            definition: AnthemKeyword(
+                filter: (controller: Some(YouControl), exclude_self: true),
+                keyword: Trample,
+            ),
+        ),
+    ],
+    activated_abilities: [(
+        ability_id: "activated_01",
+        presentation: OracleLines([4]),
+        costs: [Mana("{3}{G}")],
+        effect: [PumpTarget(power: 2, toughness: 2, subject: Chosen((kind: Creature)))],
+    )],
+)

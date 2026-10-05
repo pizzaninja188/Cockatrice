@@ -113,7 +113,7 @@ impl GameEngine {
             owner,
             rv1::permanent_moved::Destination::Exile,
         ));
-        self.fire_zone_triggers(snapshot, vec![]);
+        self.fire_zone_triggers(snapshot, vec![], events);
         if !is_token
             && self
                 .state
@@ -468,7 +468,7 @@ mod tests {
         .unwrap();
         let snapshot = engine.snapshot_zone_event();
         move_object_to_zone(&mut engine.state, engine.registry, land, Zone::Hand, None).unwrap();
-        engine.fire_zone_triggers(snapshot, vec![]);
+        engine.fire_zone_triggers(snapshot, vec![], &mut Vec::new());
         assert!(!void(&engine), "a land departure does not satisfy Void");
         let creature = add(&mut engine, 1, "warp_test");
         move_object_to_zone(
@@ -488,7 +488,7 @@ mod tests {
             None,
         )
         .unwrap();
-        engine.fire_zone_triggers(snapshot, vec![]);
+        engine.fire_zone_triggers(snapshot, vec![], &mut Vec::new());
         assert!(
             void(&engine),
             "any player's nonland departure qualifies, without a watcher"

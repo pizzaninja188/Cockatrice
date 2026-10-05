@@ -1013,7 +1013,7 @@ pub(super) fn double_counters(
             counter_events.push(event);
         }
     }
-    cx.engine.fire_triggers(&counter_events);
+    cx.engine.fire_triggers(&counter_events, cx.events);
     Ok(EffectOutcome::Continue)
 }
 
@@ -1084,7 +1084,7 @@ pub(super) fn put_counters(
         // Annihilation / toughness-0 death are checked by the SBA pass that
         // runs after this resolution (CR 122.3, CR 704.5f).
     }
-    engine.fire_triggers(&counter_events);
+    engine.fire_triggers(&counter_events, events);
 
     Ok(EffectOutcome::Continue)
 }
@@ -1156,7 +1156,7 @@ pub(super) fn put_counters_all(
             if count == 1 { "" } else { "s" },
         )));
     }
-    engine.fire_triggers(&counter_events);
+    engine.fire_triggers(&counter_events, events);
 
     Ok(EffectOutcome::Continue)
 }
@@ -1253,7 +1253,7 @@ pub(super) fn put_counters_all_planeswalkers(
             if count == 1 { "" } else { "s" },
         )));
     }
-    engine.fire_triggers(&counter_events);
+    engine.fire_triggers(&counter_events, events);
 
     Ok(EffectOutcome::Continue)
 }
@@ -1392,10 +1392,13 @@ mod growth_tests {
         }
         // Negative-toughness pairs deliberately exercise the private instruction before SBA.
         // This is not a claim that such creatures survive an ordinary priority boundary.
-        engine.fire_triggers(&[GameEvent::PhaseBegan {
-            phase: rv1::PhaseId::BeginCombat,
-            active_player: 0,
-        }]);
+        engine.fire_triggers(
+            &[GameEvent::PhaseBegan {
+                phase: rv1::PhaseId::BeginCombat,
+                active_player: 0,
+            }],
+            &mut Vec::new(),
+        );
         engine.flush_staged_triggers(&mut Vec::new());
         assert_eq!(engine.state.stack.len(), 1);
         (engine, creatures)
@@ -1471,10 +1474,13 @@ mod growth_tests {
         let c = engine.characteristics(creatures[0]).unwrap();
         assert_eq!((c.signed_power, c.signed_toughness), (Some(-4), Some(6)));
         let turn = engine.state.turn;
-        engine.fire_triggers(&[GameEvent::PhaseBegan {
-            phase: rv1::PhaseId::BeginCombat,
-            active_player: 1,
-        }]);
+        engine.fire_triggers(
+            &[GameEvent::PhaseBegan {
+                phase: rv1::PhaseId::BeginCombat,
+                active_player: 1,
+            }],
+            &mut Vec::new(),
+        );
         engine.flush_staged_triggers(&mut Vec::new());
         for _ in 0..2 {
             let actor = engine.state.priority_player_id();

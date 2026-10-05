@@ -201,7 +201,7 @@ impl GameEngine {
             let snapshot = self.snapshot_zone_event();
             let leave = self.battlefield_leave_event(target);
             move_object_to_zone(&mut self.state, self.registry, target, Zone::Command, None)?;
-            self.fire_zone_triggers(snapshot, leave.into_iter().collect());
+            self.fire_zone_triggers(snapshot, leave.into_iter().collect(), &mut events);
             events.push(permanent_moved_event(
                 &self.state,
                 target,

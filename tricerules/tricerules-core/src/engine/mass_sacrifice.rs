@@ -64,11 +64,12 @@ impl GameEngine {
         mut sacrifice: PendingMassSacrifice,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> bool {
+        self.reconcile_combat_characteristics(events);
         sacrifice
             .remaining
             .retain(|(_, candidates)| candidates.len() > 1);
         let Some((owner, candidates)) = sacrifice.remaining.pop_front() else {
-            self.finish_mass_sacrifice_events(sacrifice);
+            self.finish_mass_sacrifice_events(sacrifice, events);
             return false;
         };
         let count = candidates.len() as u32;
@@ -123,7 +124,11 @@ impl GameEngine {
         true
     }
 
-    fn finish_mass_sacrifice_events(&mut self, sacrifice: PendingMassSacrifice) {
+    fn finish_mass_sacrifice_events(
+        &mut self,
+        sacrifice: PendingMassSacrifice,
+        out: &mut Vec<rv1::RuledEvent>,
+    ) {
         let mut triggers = sacrifice
             .departures
             .into_iter()
@@ -138,7 +143,7 @@ impl GameEngine {
             })
             .collect::<Vec<_>>();
         triggers.push(GameEvent::ZoneChanges(sacrifice.zone));
-        self.fire_triggers(&triggers);
+        self.fire_triggers(&triggers, out);
     }
 
     pub(super) fn finish_mass_sacrifice_graveyard_order(
@@ -263,7 +268,7 @@ impl GameEngine {
             let stack = stack.clone();
             let sacrifice = *sacrifice.clone();
             self.state.pending_resolution = None;
-            self.finish_mass_sacrifice_events(sacrifice);
+            self.finish_mass_sacrifice_events(sacrifice, events);
             return self.abandon_participating_resolution(stack, events);
         }
         if live_owners.contains(&pending.deciding_player) {

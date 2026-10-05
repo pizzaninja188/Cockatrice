@@ -2052,6 +2052,7 @@ impl GameEngine {
                 face_down: false,
             })),
         });
+        self.reconcile_combat_characteristics(events);
         Ok(true)
     }
 
@@ -2145,7 +2146,7 @@ impl GameEngine {
             .ok_or(EngineError::Illegal(
                 "manifested card is not a creature with a payable mana cost",
             ))?;
-        self.commit_cost_transaction(plan)?;
+        let payment = self.commit_cost_transaction(plan)?;
         self.state
             .objects
             .get_mut(&command.object_id)
@@ -2161,14 +2162,16 @@ impl GameEngine {
             .entry(command.object_id)
             .or_insert(0) += 1;
         self.emit_static_abilities_on_enter(command.object_id);
-        let events = vec![rv1::RuledEvent {
+        let mut events = payment.move_events;
+        events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::FaceChanged(rv1::FaceChanged {
                 object_id: command.object_id,
                 controller_player_id: player,
                 face_up_index: 0,
                 face_down: false,
             })),
-        }];
+        });
+        self.reconcile_combat_characteristics(&mut events);
         Ok(events::finish_with_events(self, events))
     }
 
@@ -2229,11 +2232,12 @@ impl GameEngine {
             .room_faces(command.object_id)
             .and_then(|faces| faces.get(face_index))
             .ok_or(EngineError::Illegal("invalid Room door face"))?;
-        self.commit_cost_transaction(plan)?;
+        let payment = self.commit_cost_transaction(plan)?;
 
+        let mut out = payment.move_events;
         let unlock_event = self.transition_room_door(command.object_id, face_index)?;
-        self.fire_triggers(&[unlock_event]);
-        Ok(events::finish_with_events(self, Vec::new()))
+        self.fire_triggers(&[unlock_event], &mut out);
+        Ok(events::finish_with_events(self, out))
     }
 
     fn transition_room_door(
@@ -3006,6 +3010,7 @@ impl GameEngine {
         if self.state.is_terminal() {
             return Ok(self.finish_terminal_batch(b));
         }
+        self.reconcile_combat_characteristics(&mut b.events);
         self.publish_settled_combat_priority(&mut b.events);
         self.reconcile_activated_ability_slots();
         b.events.push(self.ev_zone_view_sync_tracked());

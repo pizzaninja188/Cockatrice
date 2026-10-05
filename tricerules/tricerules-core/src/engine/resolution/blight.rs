@@ -9,7 +9,8 @@ pub(super) fn blight(cx: &mut EffectCx<'_>, count: u32) -> Result<EffectOutcome,
             None,
             super::super::continuous::CounterPlacementOrigin::Effect,
         );
-        cx.engine.fire_triggers(&[GameEvent::Blighted(receipt)]);
+        cx.engine
+            .fire_triggers(&[GameEvent::Blighted(receipt)], cx.events);
         cx.events.push(ev_log(format!(
             "P{} blights {count}; no creature can receive counters.",
             cx.controller
@@ -104,13 +105,13 @@ impl GameEngine {
             Some(chosen),
             super::super::continuous::CounterPlacementOrigin::Effect,
         );
-        self.fire_triggers(&[GameEvent::Blighted(receipt)]);
         stack.item.blight_receipts.push(receipt);
         let name = object_display_name(&self.state, self.registry, chosen);
-        let events = vec![ev_log(format!(
+        let mut events = vec![ev_log(format!(
             "P{} blights {count} using {name}.",
             pending.deciding_player
         ))];
+        self.fire_triggers(&[GameEvent::Blighted(receipt)], &mut events);
         self.complete_parked_resolution_with_previous(
             stack.item,
             stack.resume_effect_index,

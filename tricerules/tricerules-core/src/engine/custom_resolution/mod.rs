@@ -59,10 +59,13 @@ impl GameEngine {
             (r, ctx.scratch, library_searches)
         };
         for (searcher, library_owner) in library_searches {
-            self.fire_triggers(&[GameEvent::LibrarySearched {
-                searcher,
-                library_owner,
-            }]);
+            self.fire_triggers(
+                &[GameEvent::LibrarySearched {
+                    searcher,
+                    library_owner,
+                }],
+                events,
+            );
         }
         self.park_or_finish(item, custom_key, 0, scratch, step, events)
     }
@@ -428,10 +431,13 @@ impl GameEngine {
             (r, ctx.scratch, library_searches)
         };
         for (searcher, library_owner) in library_searches {
-            self.fire_triggers(&[GameEvent::LibrarySearched {
-                searcher,
-                library_owner,
-            }]);
+            self.fire_triggers(
+                &[GameEvent::LibrarySearched {
+                    searcher,
+                    library_owner,
+                }],
+                &mut ev,
+            );
         }
         self.park_or_finish(item, key, step_no, scratch, step, &mut ev)?;
 

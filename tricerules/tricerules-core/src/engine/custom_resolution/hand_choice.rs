@@ -95,7 +95,10 @@ impl GameEngine {
             discard_receipts.extend(discard_receipt);
         }
         if !discard_receipts.is_empty() {
-            self.fire_discard_batches(vec![(hand_choice.affected_player, discard_receipts)]);
+            self.fire_discard_batches(
+                vec![(hand_choice.affected_player, discard_receipts)],
+                &mut events,
+            );
         }
         if hand_choice.draw_after > 0 && (!hand_choice.draw_only_if_discarded || !chosen.is_empty())
         {
@@ -332,7 +335,7 @@ impl GameEngine {
                 }
             }
         }
-        self.fire_discard_batches(discard_receipts);
+        self.fire_discard_batches(discard_receipts, events);
         Ok(Some(result))
     }
 }

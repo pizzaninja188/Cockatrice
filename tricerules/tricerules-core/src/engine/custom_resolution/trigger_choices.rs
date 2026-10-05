@@ -246,7 +246,7 @@ impl GameEngine {
             targets: stack_targets,
         }];
         committed_events.extend(self.crime_event(controller, &public_targets));
-        self.fire_triggers(&committed_events);
+        self.fire_triggers(&committed_events, &mut batch.events);
 
         self.resume_trigger_placement(&mut batch);
         fill_legal(&mut batch, self);

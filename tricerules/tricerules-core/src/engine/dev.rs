@@ -121,7 +121,7 @@ impl GameEngine {
         if zone != Zone::Battlefield {
             let zone_snapshot = self.snapshot_zone_event();
             move_object_to_zone(&mut self.state, self.registry, oid, zone, Some(target))?;
-            self.fire_zone_triggers(zone_snapshot, vec![]);
+            self.fire_zone_triggers(zone_snapshot, vec![], ev);
             ev.push(permanent_moved_event(
                 &self.state,
                 oid,
@@ -258,7 +258,7 @@ impl GameEngine {
     ) -> Result<(), EngineError> {
         ev.append(&mut deferred_events);
         let oid = entry.object_id;
-        self.commit_battlefield_entry(entry, None)?;
+        self.commit_battlefield_entry(entry, None, ev)?;
         if announce_move {
             ev.push(permanent_moved_event(
                 &self.state,

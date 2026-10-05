@@ -51,8 +51,11 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
     ));
     cx.events
         .push(ev_log(format!("{label} is defeated and exiled.")));
-    cx.engine
-        .fire_zone_triggers(zone_snapshot, leave_event.into_iter().collect::<Vec<_>>());
+    cx.engine.fire_zone_triggers(
+        zone_snapshot,
+        leave_event.into_iter().collect::<Vec<_>>(),
+        cx.events,
+    );
 
     let Some(definition) = cx.engine.registry.get(&card_id) else {
         return Ok(EffectOutcome::Continue);
@@ -225,8 +228,11 @@ pub(super) fn exile_until_source_leaves(
         Zone::Exile,
         None,
     )?;
-    cx.engine
-        .fire_zone_triggers(zone_snapshot, leave_event.into_iter().collect::<Vec<_>>());
+    cx.engine.fire_zone_triggers(
+        zone_snapshot,
+        leave_event.into_iter().collect::<Vec<_>>(),
+        cx.events,
+    );
     let exiled = TriggerObjectRef {
         object_id: target_id,
         zone_change_generation: cx
@@ -701,7 +707,11 @@ pub(super) fn exile(
         let zone_snapshot = engine.snapshot_zone_event();
         let leave_event = engine.battlefield_leave_event(tid);
         move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Exile, None)?;
-        engine.fire_zone_triggers(zone_snapshot, leave_event.into_iter().collect::<Vec<_>>());
+        engine.fire_zone_triggers(
+            zone_snapshot,
+            leave_event.into_iter().collect::<Vec<_>>(),
+            events,
+        );
         if let Some(controller_at_event) = controller {
             cx.effect_result.produced_objects.push(TriggerObjectRef {
                 object_id: tid,
@@ -762,8 +772,11 @@ pub(super) fn exile_with_owner_cast_permission(
         Zone::Exile,
         None,
     )?;
-    cx.engine
-        .fire_zone_triggers(zone_snapshot, leave_event.into_iter().collect::<Vec<_>>());
+    cx.engine.fire_zone_triggers(
+        zone_snapshot,
+        leave_event.into_iter().collect::<Vec<_>>(),
+        cx.events,
+    );
     cx.events
         .push(ev_log(format!("{} exiles {label}", cx.spell_label)));
     cx.events.push(permanent_moved_event(
@@ -861,7 +874,11 @@ pub(super) fn exile_target_gain_life_equal_to_power(
         let zone_snapshot = engine.snapshot_zone_event();
         let leave_event = engine.battlefield_leave_event(tid);
         move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Exile, None)?;
-        engine.fire_zone_triggers(zone_snapshot, leave_event.into_iter().collect::<Vec<_>>());
+        engine.fire_zone_triggers(
+            zone_snapshot,
+            leave_event.into_iter().collect::<Vec<_>>(),
+            events,
+        );
         events.push(ev_log(format!("{spell_label} exiles {tgt}")));
         if let Some(owner_id) = owner {
             events.push(permanent_moved_event(
@@ -925,7 +942,7 @@ pub(super) fn return_to_owners_hand(
             ));
         }
     }
-    engine.fire_zone_triggers(zone_snapshot, leave_events);
+    engine.fire_zone_triggers(zone_snapshot, leave_events, events);
 
     Ok(EffectOutcome::Continue)
 }
@@ -949,7 +966,11 @@ pub(in crate::engine) fn move_permanent_to_owners_library(
 
     let leave_event = engine.battlefield_leave_event(tid);
     move_object_to_zone(&mut engine.state, engine.registry, tid, Zone::Library, None)?;
-    engine.fire_zone_triggers(zone_snapshot, leave_event.into_iter().collect::<Vec<_>>());
+    engine.fire_zone_triggers(
+        zone_snapshot,
+        leave_event.into_iter().collect::<Vec<_>>(),
+        events,
+    );
     let owner_idx = engine
         .state
         .player_idx(owner)
@@ -1232,7 +1253,8 @@ pub(super) fn shuffle_permanents_into_owners_libraries(
             cx.spell_label
         )));
     }
-    cx.engine.fire_zone_triggers(zone_snapshot, leave_events);
+    cx.engine
+        .fire_zone_triggers(zone_snapshot, leave_events, cx.events);
 
     // GameState player order is stable, so it provides deterministic shuffle ordering even when
     // subjects name permanents controlled or owned in a different order.
@@ -1530,7 +1552,7 @@ fn choose_hand_cards_for_player(
                 discard_receipts.extend(discard_receipt);
             }
             if !discard_receipts.is_empty() {
-                engine.fire_discard_batches(vec![(affected_player, discard_receipts)]);
+                engine.fire_discard_batches(vec![(affected_player, discard_receipts)], events);
             }
         }
         return Ok(EffectOutcome::Continue);
@@ -2398,7 +2420,7 @@ fn exile_graveyard_cohort(
             rv1::permanent_moved::Destination::Exile,
         ));
     }
-    engine.fire_zone_triggers(snapshot, vec![]);
+    engine.fire_zone_triggers(snapshot, vec![], cx.events);
     Ok(EffectOutcome::Continue)
 }
 
@@ -2529,7 +2551,7 @@ pub(super) fn move_graveyard_cards(
         cx.events
             .push(permanent_moved_event(&engine.state, tid, owner, proto));
     }
-    engine.fire_zone_triggers(snapshot, vec![]);
+    engine.fire_zone_triggers(snapshot, vec![], cx.events);
     Ok(EffectOutcome::Continue)
 }
 
@@ -2702,7 +2724,7 @@ pub(super) fn return_triggered_card(
             owner,
             rv1::permanent_moved::Destination::Hand,
         ));
-        cx.engine.fire_zone_triggers(snapshot, vec![]);
+        cx.engine.fire_zone_triggers(snapshot, vec![], cx.events);
         return Ok(EffectOutcome::Continue);
     }
     let destination_controller = match controller {
@@ -2761,7 +2783,7 @@ pub(super) fn return_triggered_card(
         }
         super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
             let entry = *entry;
-            cx.engine.commit_battlefield_entry(entry, None)?;
+            cx.engine.commit_battlefield_entry(entry, None, cx.events)?;
             cx.events.push(ev_log(format!(
                 "{} returns {object_label} to the battlefield.",
                 cx.spell_label
@@ -2851,7 +2873,7 @@ pub(super) fn put_ability_source_onto_battlefield_tapped_and_attacking(
         }
         super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
             let entry = *entry;
-            cx.engine.commit_battlefield_entry(entry, None)?;
+            cx.engine.commit_battlefield_entry(entry, None, cx.events)?;
             cx.events.push(ev_log(format!(
                 "{} puts {object_label} onto the battlefield tapped and attacking.",
                 cx.spell_label
@@ -2930,8 +2952,11 @@ pub(super) fn exile_source_then_return_transformed(
         Zone::Exile,
         None,
     )?;
-    cx.engine
-        .fire_zone_triggers(zone_snapshot, leave_event.into_iter().collect::<Vec<_>>());
+    cx.engine.fire_zone_triggers(
+        zone_snapshot,
+        leave_event.into_iter().collect::<Vec<_>>(),
+        cx.events,
+    );
     cx.events.push(permanent_moved_event(
         &cx.engine.state,
         source_id,
@@ -3002,7 +3027,7 @@ pub(super) fn exile_source_then_return_transformed(
         }
         super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
             let entry = *entry;
-            cx.engine.commit_battlefield_entry(entry, None)?;
+            cx.engine.commit_battlefield_entry(entry, None, cx.events)?;
             cx.events.push(ev_log(format!(
                 "{} returns {object_label} transformed from exile to the battlefield.",
                 cx.spell_label
@@ -3159,13 +3184,13 @@ pub(super) fn explore(
     let revealed_id = cx.engine.state.players[player_idx].library.front().copied();
 
     if revealed_id.is_none() {
-        place_explore_counter(cx.engine, explorer);
+        place_explore_counter(cx.engine, explorer, cx.events);
         cx.events.push(ev_log(format!(
             "P{controller} explores with an empty library ({}).",
             cx.spell_label
         )));
         cx.engine
-            .fire_triggers(&[GameEvent::Explored { object: explorer }]);
+            .fire_triggers(&[GameEvent::Explored { object: explorer }], cx.events);
         return Ok(EffectOutcome::Continue);
     }
 
@@ -3230,11 +3255,11 @@ pub(super) fn explore(
             "P{controller} puts {revealed_name} into their hand."
         )));
         cx.engine
-            .fire_triggers(&[GameEvent::Explored { object: explorer }]);
+            .fire_triggers(&[GameEvent::Explored { object: explorer }], cx.events);
         return Ok(EffectOutcome::Continue);
     }
 
-    place_explore_counter(cx.engine, explorer);
+    place_explore_counter(cx.engine, explorer, cx.events);
     let prompt = format!(
         "{revealed_name} was revealed while exploring. Click it to put it into your graveyard, or submit without selecting it to leave it on top of your library."
     );
@@ -3297,7 +3322,11 @@ pub(super) fn explore(
     Ok(EffectOutcome::Suspended)
 }
 
-fn place_explore_counter(engine: &mut GameEngine, explorer: TriggerObjectRef) {
+fn place_explore_counter(
+    engine: &mut GameEngine,
+    explorer: TriggerObjectRef,
+    out: &mut Vec<rv1::RuledEvent>,
+) {
     let is_current = engine
         .state
         .zone_change_generation
@@ -3318,7 +3347,7 @@ fn place_explore_counter(engine: &mut GameEngine, explorer: TriggerObjectRef) {
             false,
             super::super::continuous::CounterPlacementOrigin::Effect,
         ) {
-            engine.fire_triggers(&[event]);
+            engine.fire_triggers(&[event], out);
         }
     }
 }
@@ -3382,7 +3411,7 @@ fn begin_library_partition(
         // CR 701.25d: the surveil event happens after the process is complete even when every
         // action was impossible because the library was empty.
         if kind == PendingLibraryPartitionKind::Surveil {
-            engine.fire_triggers(&[GameEvent::Surveilled { player: controller }]);
+            engine.fire_triggers(&[GameEvent::Surveilled { player: controller }], events);
         }
         return Ok(EffectOutcome::Continue);
     }
@@ -3578,7 +3607,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
             }
             super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
                 let entry = *entry;
-                engine.commit_battlefield_entry(entry, None)?;
+                engine.commit_battlefield_entry(entry, None, cx.events)?;
                 cx.events.push(permanent_moved_event_with_library_position(
                     &engine.state,
                     object_id,

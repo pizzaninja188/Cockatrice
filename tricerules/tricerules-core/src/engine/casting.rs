@@ -3062,7 +3062,7 @@ impl GameEngine {
             }
             super::replacement::BattlefieldEntryProgress::Ready(entry) => {
                 let entry = *entry;
-                self.commit_battlefield_entry(entry, None)?;
+                self.commit_battlefield_entry(entry, None, &mut batch.events)?;
                 batch.events.push(permanent_moved_event(
                     &self.state,
                     oid,
@@ -4142,14 +4142,17 @@ mod cast_snapshot_tests {
             1,
         );
         only_received.source.zone_change_generation = Some(opponent_generation);
-        e.fire_triggers(&[
-            GameEvent::DamageDealt {
-                event: dealt_to_player,
-            },
-            GameEvent::DamageDealt {
-                event: only_received,
-            },
-        ]);
+        e.fire_triggers(
+            &[
+                GameEvent::DamageDealt {
+                    event: dealt_to_player,
+                },
+                GameEvent::DamageDealt {
+                    event: only_received,
+                },
+            ],
+            &mut Vec::new(),
+        );
         e.state.players[1].has_lost = true;
         assert!(e.state.turn_history.current.damaged_objects.contains(&(
             no_damage,
@@ -4216,10 +4219,13 @@ mod cast_snapshot_tests {
             ],
         );
         let permanent = add(&mut e, 0, "history_static", Zone::Battlefield);
-        e.fire_triggers(&[GameEvent::EntersBattlefield {
-            object_id: permanent,
-            chosen_x: 0,
-        }]);
+        e.fire_triggers(
+            &[GameEvent::EntersBattlefield {
+                object_id: permanent,
+                chosen_x: 0,
+            }],
+            &mut Vec::new(),
+        );
         let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
         e.state.players[0].mana_pool.black = 2;
         e.apply_command(0, &command(&e, spell)).unwrap();

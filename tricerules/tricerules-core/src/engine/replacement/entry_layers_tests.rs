@@ -1,5 +1,115 @@
 use super::*;
 
+#[test]
+fn devotion_actual_nylea_and_supporter_simultaneous_entry_use_complete_committed_cohort() {
+    let mut engine = engine();
+    object(&mut engine, "aggressive_mammoth", Zone::Battlefield, 0);
+    let observer = object(&mut engine, "soul_warden", Zone::Battlefield, 0);
+    let god = object(&mut engine, "nylea,_god_of_the_hunt", Zone::Stack, 0);
+    let support = object(&mut engine, "grizzly_bears", Zone::Stack, 0);
+    let god_entry = event(&engine, god);
+    let support_entry = event(&engine, support);
+    assert!(!engine
+        .battlefield_entry_characteristics_through_layer_5(&god_entry)
+        .unwrap()
+        .is_creature());
+    let mut triggers = engine
+        .commit_battlefield_entry_state(god_entry, None)
+        .unwrap();
+    triggers.extend(
+        engine
+            .commit_battlefield_entry_state(support_entry, None)
+            .unwrap(),
+    );
+    triggers.extend([
+        GameEvent::EntersBattlefield {
+            object_id: god,
+            chosen_x: 0,
+        },
+        GameEvent::EntersBattlefield {
+            object_id: support,
+            chosen_x: 0,
+        },
+    ]);
+    let mut events = vec![];
+    engine.fire_triggers(&triggers, &mut events);
+    assert!(engine.characteristics(god).unwrap().is_creature());
+    let collected: Vec<_> = engine
+        .state
+        .staged_trigger_groups
+        .iter()
+        .flat_map(|group| &group.triggers)
+        .collect();
+    assert_eq!(
+        collected.len(),
+        2,
+        "Soul Warden sees both creatures after the complete cohort commits"
+    );
+    assert!(collected
+        .iter()
+        .all(|trigger| trigger.source_permanent_id == observer));
+}
+
+#[test]
+fn devotion_actual_nylea_excludes_own_pip_for_entry_replacement_and_includes_it_for_etb() {
+    let mut engine = engine();
+    object(&mut engine, "aggressive_mammoth", Zone::Battlefield, 0);
+    object(&mut engine, "llanowar_elves", Zone::Battlefield, 0);
+    let observer = object(&mut engine, "soul_warden", Zone::Battlefield, 0);
+    engine.emit_static_abilities_on_enter(observer);
+    let counters = object(&mut engine, "mind_stone", Zone::Battlefield, 0);
+    copy_face(
+        &mut engine,
+        counters,
+        r#"(
+        id: "entry_creature_counters", name: "Entry Creature Counters", face_id: "entry_creature_counters",
+        types: ["Artifact"], static_abilities: [(ability_id: "static_01", presentation: Fallback,
+            definition: EntersWithCounters(affected: Creatures((controller: Some(YouControl))),
+                counter: PlusOnePlusOne, amount: 1))])"#,
+        "entry_creature_counters",
+    );
+    engine.emit_static_abilities_on_enter(counters);
+    let god = object(&mut engine, "nylea,_god_of_the_hunt", Zone::Stack, 0);
+    let entry = event(&engine, god);
+    assert!(!engine
+        .battlefield_entry_characteristics_through_layer_5(&entry)
+        .unwrap()
+        .is_creature());
+    assert!(
+        engine.battlefield_entry_candidates(&entry).is_empty(),
+        "four existing green pips do not receive a creature-entry counter replacement"
+    );
+    let mut events = vec![];
+    let item = engine.observer_return_item(god, 0);
+    let progress = engine.advance_or_park_battlefield_entry(
+        item,
+        entry,
+        BattlefieldEntryCompletion::PermanentSpell { attached_to: None },
+        &mut events,
+    );
+    let BattlefieldEntryProgress::Ready(entry) = progress else {
+        panic!("entry has no replacement choice");
+    };
+    engine
+        .commit_battlefield_entry(*entry, None, &mut events)
+        .unwrap();
+    assert_eq!(
+        engine.state.objects[&god].counter_count(CounterKind::PlusOnePlusOne),
+        0
+    );
+    assert!(
+        engine.characteristics(god).unwrap().is_creature(),
+        "committed own pip makes five"
+    );
+    engine.flush_staged_triggers(&mut events);
+    assert_eq!(
+        engine.state.stack.len(),
+        1,
+        "Soul Warden sees the committed creature entrant"
+    );
+    assert_eq!(engine.state.stack[0].source_permanent_id, Some(observer));
+}
+
 fn engine() -> GameEngine {
     let mut engine = GameEngine::new_with_default_decks(305_030, &[0, 1], 20).unwrap();
     engine.state.opening = None;
@@ -979,7 +1089,9 @@ fn entry_early_layers_land_making_precedes_existing_land_scope_in_both_forms() {
             preview.has_type("Forest"),
             "new land scope must see the projected entrant"
         );
-        engine.commit_battlefield_entry(entry, None).unwrap();
+        engine
+            .commit_battlefield_entry(entry, None, &mut Vec::new())
+            .unwrap();
         assert_eq!(
             engine.characteristics_through_layer_5(oid).unwrap(),
             preview
@@ -1005,7 +1117,9 @@ fn entry_early_layers_destination_controller_is_visible_to_land_scope() {
         .battlefield_entry_characteristics_through_layer_5(&entry)
         .unwrap();
     assert!(preview.has_type("Artifact"));
-    engine.commit_battlefield_entry(entry, None).unwrap();
+    engine
+        .commit_battlefield_entry(entry, None, &mut Vec::new())
+        .unwrap();
     assert_eq!(
         engine.characteristics_through_layer_5(oid).unwrap(),
         preview
@@ -1030,7 +1144,9 @@ fn entry_early_layers_face_down_values_precede_type_and_color_effects() {
     assert!(preview.names.is_empty());
     assert_eq!(preview.colors, [Color::Blue]);
     assert_eq!(preview.power, Some(2));
-    engine.commit_battlefield_entry(entry, None).unwrap();
+    engine
+        .commit_battlefield_entry(entry, None, &mut Vec::new())
+        .unwrap();
     assert_eq!(
         engine.characteristics_through_layer_5(oid).unwrap(),
         preview
@@ -1051,7 +1167,9 @@ fn entry_early_layers_old_single_effect_is_not_carried_to_new_incarnation() {
         .battlefield_entry_characteristics_through_layer_5(&entry)
         .unwrap();
     assert!(preview.colors.is_empty());
-    engine.commit_battlefield_entry(entry, None).unwrap();
+    engine
+        .commit_battlefield_entry(entry, None, &mut Vec::new())
+        .unwrap();
     assert_eq!(
         engine.characteristics_through_layer_5(oid).unwrap(),
         preview
@@ -1104,7 +1222,9 @@ fn entry_early_layers_selected_face_and_copied_own_static_are_used() {
         .battlefield_entry_characteristics_through_layer_5(&entry)
         .unwrap();
     assert!(!preview.has_type("Artifact"));
-    engine.commit_battlefield_entry(entry, None).unwrap();
+    engine
+        .commit_battlefield_entry(entry, None, &mut Vec::new())
+        .unwrap();
     assert_eq!(
         engine.characteristics_through_layer_5(oid).unwrap(),
         preview
@@ -1121,7 +1241,9 @@ fn entry_early_layers_chosen_basic_and_type_override_have_commit_order() {
     let preview = engine
         .battlefield_entry_characteristics_through_layer_5(&entry)
         .unwrap();
-    engine.commit_battlefield_entry(entry, None).unwrap();
+    engine
+        .commit_battlefield_entry(entry, None, &mut Vec::new())
+        .unwrap();
     assert_eq!(
         engine.characteristics_through_layer_5(oid).unwrap(),
         preview
@@ -1229,7 +1351,9 @@ fn entry_early_layers_own_global_static_is_restricted_to_entrant_during_preview(
         .characteristics(existing)
         .unwrap()
         .has_type("Artifact"));
-    engine.commit_battlefield_entry(entry, None).unwrap();
+    engine
+        .commit_battlefield_entry(entry, None, &mut Vec::new())
+        .unwrap();
     assert!(engine
         .characteristics(existing)
         .unwrap()
@@ -1254,7 +1378,9 @@ fn entry_early_layers_own_conditions_use_projected_counters_and_tapped_status() 
         .battlefield_entry_characteristics_through_layer_5(&entry)
         .unwrap();
     assert!(preview.has_type("Artifact"));
-    engine.commit_battlefield_entry(entry, None).unwrap();
+    engine
+        .commit_battlefield_entry(entry, None, &mut Vec::new())
+        .unwrap();
     assert_eq!(
         engine.characteristics_through_layer_5(oid).unwrap(),
         preview
@@ -1287,7 +1413,9 @@ fn entry_early_layers_room_door_statics_and_locked_copy_match_commitment() {
         .battlefield_entry_characteristics_through_layer_5(&entry)
         .unwrap();
     assert!(!preview.has_type("Artifact"));
-    engine.commit_battlefield_entry(entry, None).unwrap();
+    engine
+        .commit_battlefield_entry(entry, None, &mut Vec::new())
+        .unwrap();
     assert_eq!(
         engine.characteristics_through_layer_5(oid).unwrap(),
         preview
@@ -1329,7 +1457,9 @@ fn entry_early_layers_room_door_statics_and_locked_copy_match_commitment() {
     assert!(preview.names.is_empty() && preview.colors.is_empty());
     assert_eq!(preview.mana_value, 0);
     assert!(!preview.has_type("Artifact"));
-    engine.commit_battlefield_entry(entry, None).unwrap();
+    engine
+        .commit_battlefield_entry(entry, None, &mut Vec::new())
+        .unwrap();
     assert_eq!(
         engine.characteristics_through_layer_5(copy).unwrap(),
         preview
@@ -1356,7 +1486,9 @@ fn entry_early_layers_kaito_uses_entry_loyalty_before_commitment() {
         .unwrap();
     assert!(preview.is_creature() && preview.has_type("Ninja"));
     assert!(!preview.has_type("Planeswalker"));
-    engine.commit_battlefield_entry(entry, None).unwrap();
+    engine
+        .commit_battlefield_entry(entry, None, &mut Vec::new())
+        .unwrap();
     assert_eq!(
         engine.characteristics_through_layer_5(oid).unwrap(),
         preview

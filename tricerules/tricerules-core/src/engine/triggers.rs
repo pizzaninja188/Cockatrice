@@ -306,7 +306,7 @@ impl GameEngine {
 
     /// Collect one simultaneous event set and enqueue all matching triggered abilities as one
     /// CR 603.3b group.
-    pub(super) fn fire_triggers(&mut self, events: &[GameEvent]) {
+    pub(super) fn fire_triggers(&mut self, events: &[GameEvent], out: &mut Vec<rv1::RuledEvent>) {
         if events.is_empty() {
             return;
         }
@@ -327,6 +327,8 @@ impl GameEngine {
         // CR 702.195c: designation-dependent continuous effects are reapplied before checking
         // whether the event set matched any trigger conditions.
         self.refresh_enduring_story_designations();
+
+        self.reconcile_combat_characteristics(out);
 
         self.record_committed_events(events);
 
@@ -3377,6 +3379,7 @@ mod tests {
                 condition: GameCondition::ActivePlayer {
                     players: RelativePlayerSet::Controller,
                 },
+                remove_creature: false,
                 set_types: None,
                 add_types: tricerules_cards::primitives::TypeLineAddition::default(),
                 base_power: None,
@@ -3472,9 +3475,9 @@ mod tests {
             source: snapshot,
             was_creature: true,
         };
-        engine.fire_triggers(std::slice::from_ref(&event));
+        engine.fire_triggers(std::slice::from_ref(&event), &mut Vec::new());
         assert_eq!(take_staged_count(&mut engine), 1);
-        engine.fire_triggers(&[event]);
+        engine.fire_triggers(&[event], &mut Vec::new());
         assert_eq!(
             take_staged_count(&mut engine),
             0,
@@ -4076,29 +4079,32 @@ mod tests {
             .expect("put Bonecrusher Giant onto battlefield");
         }
 
-        engine.fire_triggers(&[GameEvent::TargetsChosen {
-            controller: 1,
-            source: TargetingSourceKind::SpellCast,
-            stack_object: StackObjectRef {
-                object_id: 999_001,
-                zone_change_generation: None,
-            },
-            targets: vec![giants[0], giants[0], giants[1]]
-                .into_iter()
-                .map(|object_id| StackTarget {
-                    object_id,
-                    required_controller: None,
-                    group_index: 0,
-                    damage_amount: 0,
-                    kind: rv1::TargetRefKind::Permanent as i32,
-                    zone_change_generation: engine
-                        .state
-                        .zone_change_generation
-                        .get(&object_id)
-                        .copied(),
-                })
-                .collect(),
-        }]);
+        engine.fire_triggers(
+            &[GameEvent::TargetsChosen {
+                controller: 1,
+                source: TargetingSourceKind::SpellCast,
+                stack_object: StackObjectRef {
+                    object_id: 999_001,
+                    zone_change_generation: None,
+                },
+                targets: vec![giants[0], giants[0], giants[1]]
+                    .into_iter()
+                    .map(|object_id| StackTarget {
+                        object_id,
+                        required_controller: None,
+                        group_index: 0,
+                        damage_amount: 0,
+                        kind: rv1::TargetRefKind::Permanent as i32,
+                        zone_change_generation: engine
+                            .state
+                            .zone_change_generation
+                            .get(&object_id)
+                            .copied(),
+                    })
+                    .collect(),
+            }],
+            &mut Vec::new(),
+        );
 
         let group = engine
             .state
@@ -4243,16 +4249,19 @@ mod tests {
             .expect("put Soul Warden onto battlefield");
         }
 
-        engine.fire_triggers(&[
-            GameEvent::EntersBattlefield {
-                object_id: wardens[0],
-                chosen_x: 0,
-            },
-            GameEvent::EntersBattlefield {
-                object_id: wardens[1],
-                chosen_x: 0,
-            },
-        ]);
+        engine.fire_triggers(
+            &[
+                GameEvent::EntersBattlefield {
+                    object_id: wardens[0],
+                    chosen_x: 0,
+                },
+                GameEvent::EntersBattlefield {
+                    object_id: wardens[1],
+                    chosen_x: 0,
+                },
+            ],
+            &mut Vec::new(),
+        );
 
         let group = engine
             .state

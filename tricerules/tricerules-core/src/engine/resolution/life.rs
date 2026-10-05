@@ -22,7 +22,7 @@ pub(in crate::engine) fn apply_life_gain(
     reason: &str,
 ) -> Result<(), EngineError> {
     if let Some(event) = apply_life_gain_without_triggers(engine, events, player, amount, reason)? {
-        engine.fire_triggers(&[event]);
+        engine.fire_triggers(&[event], events);
     }
     Ok(())
 }
@@ -492,7 +492,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(engine.state.turn_history.current.player(10).life_gained, 2);
-        engine.fire_triggers(&[gained]);
+        engine.fire_triggers(&[gained], &mut Vec::new());
         assert_eq!(engine.state.turn_history.current.player(10).life_gained, 2);
         assert_eq!(engine.state.turn_history.current.player(10).life_lost, 0);
         engine.state.turn_history.finish_turn();

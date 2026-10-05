@@ -97,7 +97,11 @@ impl GameEngine {
     /// triggers "one or more cards" exactly once (CR 603.2c) while per-card observers see every
     /// card. Cards replaced to a hidden zone still count; the count is never re-derived from a
     /// destination zone's contents.
-    pub(super) fn fire_discard_batches(&mut self, receipts: Vec<(PlayerId, Vec<DiscardReceipt>)>) {
+    pub(super) fn fire_discard_batches(
+        &mut self,
+        receipts: Vec<(PlayerId, Vec<DiscardReceipt>)>,
+        out: &mut Vec<rv1::RuledEvent>,
+    ) {
         let events = receipts
             .into_iter()
             .filter_map(|(player, cards)| {
@@ -105,7 +109,7 @@ impl GameEngine {
             })
             .collect::<Vec<_>>();
         if !events.is_empty() {
-            self.fire_triggers(&events);
+            self.fire_triggers(&events, out);
         }
     }
 }
@@ -409,7 +413,7 @@ impl GameEngine {
                 format!("P{} discards {name}.", card.player)
             }));
         }
-        self.fire_discard_batches(discard_receipts);
+        self.fire_discard_batches(discard_receipts, &mut events);
         // Moves use the normal zone funnel, then apply the owner's explicit top-first order.
         for card in &batch.cards {
             if card.destination == Some(Zone::Library) {
@@ -701,7 +705,7 @@ mod tests {
         e.state.active_player_idx = 0;
         e.state.priority_idx = 0;
         let oid = e.state.players[0].hand[0];
-        resolution::perform_discard(&mut e, 0, oid, DiscardCause::Cost).unwrap();
+        resolution::perform_discard(&mut e, 0, oid, DiscardCause::Cost, &mut Vec::new()).unwrap();
         let receipt = super::super::payment::card_result_entry(
             &e.state,
             e.registry,
@@ -765,7 +769,8 @@ mod tests {
             e.state.active_player_idx = 0;
             e.state.priority_idx = 0;
             let oid = e.state.players[0].hand[0];
-            resolution::perform_discard(&mut e, 0, oid, DiscardCause::Effect).unwrap();
+            resolution::perform_discard(&mut e, 0, oid, DiscardCause::Effect, &mut Vec::new())
+                .unwrap();
             e.flush_staged_triggers(&mut vec![]);
             assert_eq!(e.state.stack.len(), 1);
             let trigger = e.state.stack[0].id;

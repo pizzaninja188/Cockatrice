@@ -70,7 +70,7 @@ impl GameEngine {
                 "P{controller} puts {revealed_name} into their graveyard."
             )));
         }
-        self.fire_triggers(&[GameEvent::Explored { object: explorer }]);
+        self.fire_triggers(&[GameEvent::Explored { object: explorer }], &mut events);
         self.complete_parked_resolution(stack.item, stack.resume_effect_index, events)
     }
 }

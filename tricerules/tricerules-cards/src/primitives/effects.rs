@@ -5880,6 +5880,8 @@ pub enum ContinuousEffectKind {
     Layer4AddTypes(TypeLineAddition),
     /// CR 205.1a / 613.1d layer 4 — replace all card types and subtypes, preserving supertypes.
     Layer4SetTypeLine(TypeLineReplacement),
+    /// CR 205.1a / 613.1d: remove only Creature and its unshared correlated subtypes.
+    Layer4RemoveCreature,
     /// CR 305.7 / 613.1d: retain card types, supertypes, and non-land subtypes; replace all land
     /// subtypes with one basic land type. The same rules operation suppresses printed/copiable
     /// abilities and supplies the type's intrinsic mana ability.

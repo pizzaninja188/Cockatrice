@@ -131,7 +131,11 @@ impl GameEngine {
                         return Err(error);
                     }
                 };
-                self.fire_resolution_cost_triggers(receipt.trigger_events, receipt.sacrificed);
+                self.fire_resolution_cost_triggers(
+                    receipt.trigger_events,
+                    receipt.sacrificed,
+                    &mut events,
+                );
                 events.extend(receipt.move_events);
                 let cost_label = if payment.mana_cost.pips.is_empty() {
                     format!("{{{}}}", payment.generic_mana_cost)
@@ -639,8 +643,8 @@ impl GameEngine {
                 return Err(error);
             }
         };
-        self.fire_resolution_cost_triggers(receipt.trigger_events, receipt.sacrificed);
         let mut ev = receipt.move_events;
+        self.fire_resolution_cost_triggers(receipt.trigger_events, receipt.sacrificed, &mut ev);
         if let ResolutionCost::Blight { count } = branch.cost {
             // Blight does not move its creature; the public name remains available here.
             let name = object_display_name(&self.state, self.registry, chosen[0]);

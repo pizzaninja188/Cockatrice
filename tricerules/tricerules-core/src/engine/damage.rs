@@ -1623,7 +1623,7 @@ impl GameEngine {
                 trigger_events.push(event);
             }
         }
-        self.fire_triggers(&trigger_events);
+        self.fire_triggers(&trigger_events, events);
         Ok(())
     }
 

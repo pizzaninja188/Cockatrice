@@ -324,7 +324,7 @@ impl GameEngine {
                     sacrifice_events(source, was_creature, controller, died)
                 },
             ));
-            self.fire_zone_triggers(zone_snapshot, trigger_events);
+            self.fire_zone_triggers(zone_snapshot, trigger_events, out);
         }
 
         // CR 704.5n/p: illegal Equipment and permanents that are no longer an Aura, Equipment,
@@ -488,7 +488,7 @@ impl GameEngine {
             }
         }
 
-        self.fire_zone_triggers(aura_zones, aura_events);
+        self.fire_zone_triggers(aura_zones, aura_events, out);
         if self.apply_legend_sbas(out)? {
             changed = true;
         }
@@ -545,6 +545,7 @@ impl GameEngine {
             }
         }
         if changed_ids.is_empty() {
+            self.reconcile_combat_characteristics(out);
             return false;
         }
 
@@ -557,34 +558,8 @@ impl GameEngine {
             }
         }
 
-        if let Some(combat) = self.state.combat.as_mut() {
-            let mut removed = Vec::new();
-            for &oid in &changed_ids {
-                let was_in_combat = combat.attacking.contains(&oid)
-                    || combat.blockers.contains_key(&oid)
-                    || combat
-                        .blockers
-                        .values()
-                        .any(|blockers| blockers.contains(&oid));
-                combat.attacking.retain(|&candidate| candidate != oid);
-                combat.blockers.remove(&oid);
-                for blockers in combat.blockers.values_mut() {
-                    blockers.retain(|&candidate| candidate != oid);
-                }
-                if was_in_combat {
-                    removed.push(oid);
-                }
-            }
-            if !removed.is_empty() {
-                out.push(rv1::RuledEvent {
-                    ev: Some(rv1::ruled_event::Ev::RemovedFromCombat(
-                        rv1::CreaturesRemovedFromCombat {
-                            object_ids: removed,
-                        },
-                    )),
-                });
-            }
-        }
+        self.remove_combat_participants(&changed_ids, out);
+        self.reconcile_combat_characteristics(out);
         for (object_id, old_controller, new_controller) in control_transitions {
             let object = TriggerObjectRef {
                 object_id,

@@ -74,12 +74,20 @@ pub(in crate::engine) fn materialize_early_static_components(
             }
         }
         StaticAbilityDef::ConditionalSelfModifier {
+            remove_creature,
             set_types,
             add_types,
             condition,
             ..
         } => {
             let affected = AffectedScope::Single(source);
+            if *remove_creature {
+                emit(
+                    affected.clone(),
+                    ContinuousEffectKind::Layer4RemoveCreature,
+                    Some(condition.clone()),
+                );
+            }
             if let Some(types) = set_types {
                 emit(
                     affected.clone(),

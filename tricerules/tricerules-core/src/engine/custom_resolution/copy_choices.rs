@@ -439,15 +439,18 @@ impl GameEngine {
         if has_remaining {
             self.begin_copy_target_choices(remaining, copy_source_object_id, &mut ev)?;
         }
-        self.fire_triggers(&[GameEvent::TargetsChosen {
-            controller,
-            source: TargetingSourceKind::SpellCopy,
-            stack_object: StackObjectRef {
-                object_id: copy_id,
-                zone_change_generation: None,
-            },
-            targets: event_targets,
-        }]);
+        self.fire_triggers(
+            &[GameEvent::TargetsChosen {
+                controller,
+                source: TargetingSourceKind::SpellCopy,
+                stack_object: StackObjectRef {
+                    object_id: copy_id,
+                    zone_change_generation: None,
+                },
+                targets: event_targets,
+            }],
+            &mut ev,
+        );
 
         if !has_remaining {
             if let Some(i) = self.state.player_idx(self.state.active_player_id()) {

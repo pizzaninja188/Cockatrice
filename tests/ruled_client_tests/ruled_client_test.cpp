@@ -4363,6 +4363,7 @@ TEST_F(RuledClientTest, RemovedFromCombatPrunesAttackersAndBlockPairs)
     pair->set_blocker_id(200);
     apply(setup);
     ASSERT_TRUE(state->isCurrentAttacker(100));
+    ASSERT_TRUE(state->getCurrentAttackAssignments().contains(101));
     ASSERT_EQ(state->getCommittedBlocks().value(200), 100u);
 
     // CR 701.19a: regeneration removes the blocker from combat.
@@ -4377,6 +4378,9 @@ TEST_F(RuledClientTest, RemovedFromCombatPrunesAttackersAndBlockPairs)
     removedAttacker.add_events()->mutable_removed_from_combat()->add_object_ids(101);
     apply(removedAttacker);
     EXPECT_FALSE(state->isCurrentAttacker(101));
+    // Arrow rendering consumes assignments, so removal must prune both mirrors.
+    EXPECT_FALSE(state->getCurrentAttackAssignments().contains(101));
+    EXPECT_TRUE(state->getCurrentAttackAssignments().contains(100));
 }
 
 TEST_F(RuledClientTest, StalePairsArePrunedWhenPermanentsLeaveTheBattlefield)

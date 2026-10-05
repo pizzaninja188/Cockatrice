@@ -124,7 +124,6 @@ impl GameEngine {
         counter_events.push(GameEvent::Proliferated {
             player: pending.deciding_player,
         });
-        self.fire_triggers(&counter_events);
 
         let mut logs = vec![ev_log(format!(
             "P{} proliferates.",
@@ -142,6 +141,7 @@ impl GameEngine {
             )));
         }
 
+        self.fire_triggers(&counter_events, &mut logs);
         self.complete_parked_resolution_with_previous(
             stack.item.clone(),
             stack.resume_effect_index,

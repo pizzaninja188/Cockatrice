@@ -998,7 +998,7 @@ impl GameEngine {
         }
     }
 
-    pub(super) fn fire_card_drawn(&mut self, drawer: PlayerId) {
+    pub(super) fn fire_card_drawn(&mut self, drawer: PlayerId, out: &mut Vec<rv1::RuledEvent>) {
         let ordinal = self
             .state
             .turn_history
@@ -1006,7 +1006,7 @@ impl GameEngine {
             .player(drawer)
             .cards_drawn
             .saturating_add(1);
-        self.fire_triggers(&[GameEvent::CardDrawn { drawer, ordinal }]);
+        self.fire_triggers(&[GameEvent::CardDrawn { drawer, ordinal }], out);
     }
 
     /// Read the original battlefield incarnation, including pre-departure/pre-SBA LKI.
@@ -1497,6 +1497,15 @@ impl GameEngine {
                 filter, aggregate, ..
             } => condition
                 .matches_value(self.battlefield_aggregate_value(filter, *aggregate, context)),
+            GameCondition::Devotion { color, .. } => {
+                condition.matches_value(super::characteristics::devotion_value(
+                    &self.state,
+                    self.registry,
+                    context.controller,
+                    *color,
+                    None,
+                ))
+            }
             GameCondition::UnlockedRoomDoorCount { controllers, .. } => condition
                 .matches_value(self.unlocked_room_door_count(*controllers, context.controller)),
             GameCondition::GraveyardAggregate {
@@ -2107,7 +2116,7 @@ mod tests {
         assert!(!holds(&engine, RelativePlayerSet::All));
         let land = move_to_battlefield(&mut engine, 0, "forest");
         engine
-            .commit_observed_zone_move(land, Zone::Hand, None)
+            .commit_observed_zone_move(land, Zone::Hand, None, &mut Vec::new())
             .unwrap();
         assert!(holds(&engine, RelativePlayerSet::Controller));
         assert!(!holds(&engine, RelativePlayerSet::Opponents));
@@ -2148,7 +2157,7 @@ mod tests {
                 zone_change_generation: 0,
             });
         engine
-            .commit_observed_zone_move(token, Zone::Graveyard, None)
+            .commit_observed_zone_move(token, Zone::Graveyard, None, &mut Vec::new())
             .unwrap();
         assert_eq!(engine.state.objects[&token].zone, Zone::Exile);
         assert!(!holds(&engine, RelativePlayerSet::Controller));
@@ -2159,7 +2168,7 @@ mod tests {
         nontoken_object.base_controller = 2;
         nontoken_object.controller = 2;
         engine
-            .commit_observed_zone_move(nontoken, Zone::Graveyard, None)
+            .commit_observed_zone_move(nontoken, Zone::Graveyard, None, &mut Vec::new())
             .unwrap();
         assert!(
             engine
@@ -2328,7 +2337,7 @@ mod tests {
         let died =
             super::super::resolution::sacrifice_permanent(&mut engine.state, engine.registry, bear)
                 .unwrap();
-        engine.fire_triggers(&sacrifice_events(source, true, 2, died));
+        engine.fire_triggers(&sacrifice_events(source, true, 2, died), &mut Vec::new());
         let kind = "PermanentsSacrificedThisTurn";
         assert!(issue_167_holds(&engine, kind, "Controller", "None", 0));
         assert!(issue_167_holds(
@@ -2402,7 +2411,7 @@ mod tests {
                     bear,
                 )
                 .unwrap();
-                engine.fire_triggers(&sacrifice_events(source, true, 0, died));
+                engine.fire_triggers(&sacrifice_events(source, true, 0, died), &mut Vec::new());
                 assert!(issue_167_holds(
                     &engine,
                     "PermanentsSacrificedThisTurn",
@@ -2463,7 +2472,7 @@ mod tests {
         let died =
             super::super::resolution::sacrifice_permanent(&mut engine.state, engine.registry, land)
                 .unwrap();
-        engine.fire_triggers(&sacrifice_events(source, true, 0, died));
+        engine.fire_triggers(&sacrifice_events(source, true, 0, died), &mut Vec::new());
         assert!(issue_167_holds(
             &engine,
             "PermanentsSacrificedThisTurn",
@@ -2503,7 +2512,7 @@ mod tests {
         let died =
             super::super::resolution::sacrifice_permanent(&mut engine.state, engine.registry, bear)
                 .unwrap();
-        engine.fire_triggers(&sacrifice_events(source, false, 0, died));
+        engine.fire_triggers(&sacrifice_events(source, false, 0, died), &mut Vec::new());
         assert!(issue_167_holds(
             &engine,
             "PermanentsSacrificedThisTurn",
@@ -2548,7 +2557,7 @@ mod tests {
         let died =
             super::super::resolution::sacrifice_permanent(&mut engine.state, engine.registry, land)
                 .unwrap();
-        engine.fire_triggers(&sacrifice_events(source, false, 0, died));
+        engine.fire_triggers(&sacrifice_events(source, false, 0, died), &mut Vec::new());
         assert_eq!(engine.effective_power(bear), Some(4));
         engine.state.turn_history.finish_turn();
         assert_eq!(engine.effective_power(bear), Some(2));
@@ -3653,10 +3662,13 @@ mod tests {
             commit_life_change(&mut e.state, 1, 2);
             commit_life_change(&mut e.state, 1, -1);
             let source = move_to_battlefield(&mut e, 0, "flamecache_gecko");
-            e.fire_triggers(&[GameEvent::EntersBattlefield {
-                object_id: source,
-                chosen_x: 0,
-            }]);
+            e.fire_triggers(
+                &[GameEvent::EntersBattlefield {
+                    object_id: source,
+                    chosen_x: 0,
+                }],
+                &mut Vec::new(),
+            );
             let mut events = Vec::new();
             e.flush_staged_triggers(&mut events);
             assert_eq!(e.state.stack.len(), 1);

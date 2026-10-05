@@ -31,9 +31,12 @@ pub(super) fn proliferate(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engine
         .collect::<Vec<_>>();
 
     if candidate_objects.is_empty() && candidate_player_ids.is_empty() {
-        cx.engine.fire_triggers(&[GameEvent::Proliferated {
-            player: cx.controller,
-        }]);
+        cx.engine.fire_triggers(
+            &[GameEvent::Proliferated {
+                player: cx.controller,
+            }],
+            cx.events,
+        );
         cx.events.push(super::super::events::ev_log(format!(
             "P{} proliferates.",
             cx.controller

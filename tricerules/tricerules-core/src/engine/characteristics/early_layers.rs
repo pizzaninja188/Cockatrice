@@ -29,6 +29,7 @@ struct EarlyLayerInputs<'a> {
 
 #[derive(Clone, PartialEq, Eq)]
 enum TypeInstruction {
+    RemoveCreature,
     Add(tricerules_cards::TypeLineAddition),
     Set(tricerules_cards::TypeLineReplacement),
     Basic(BasicLandType),
@@ -46,6 +47,7 @@ fn is_type_effect(kind: &ContinuousEffectKind) -> bool {
     matches!(
         kind,
         ContinuousEffectKind::Layer4AddTypes(_)
+            | ContinuousEffectKind::Layer4RemoveCreature
             | ContinuousEffectKind::Layer4SetTypeLine(_)
             | ContinuousEffectKind::Layer4SetBasicLandType(_)
             | ContinuousEffectKind::Layer4SetCreatureTypes(_)
@@ -480,6 +482,7 @@ impl CharacteristicsEvaluator<'_> {
                 }
                 let result = &object.characteristics;
                 let instruction = match &effect.kind {
+                    ContinuousEffectKind::Layer4RemoveCreature => TypeInstruction::RemoveCreature,
                     ContinuousEffectKind::Layer4AddTypes(addition) => {
                         // Compare effective instructions, not whether an addition is redundant.
                         let mut addition = addition.clone();
@@ -550,6 +553,10 @@ impl CharacteristicsEvaluator<'_> {
             let object = view.objects.get_mut(oid).expect("probed recipient");
             let result = &mut object.characteristics;
             let removes_text = match instruction {
+                TypeInstruction::RemoveCreature => {
+                    apply_creature_type_removal(result);
+                    false
+                }
                 TypeInstruction::Add(addition) => {
                     apply_type_line_addition(result, addition);
                     false

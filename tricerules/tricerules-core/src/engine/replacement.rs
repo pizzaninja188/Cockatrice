@@ -2955,6 +2955,7 @@ impl GameEngine {
         &mut self,
         event: BattlefieldEntryEvent,
         attached_to: Option<AttachmentRecipient>,
+        out: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
         let attached_to = attached_to.or(event.attached_to);
         let object_id = event.object_id;
@@ -2965,7 +2966,7 @@ impl GameEngine {
             chosen_x,
         }];
         trigger_events.extend(door_event);
-        self.fire_triggers(&trigger_events);
+        self.fire_triggers(&trigger_events, out);
         Ok(())
     }
 
@@ -3457,7 +3458,7 @@ impl GameEngine {
                 });
             }
         }
-        self.fire_triggers(&trigger_events);
+        self.fire_triggers(&trigger_events, events);
         events.extend(logs.into_iter().map(ev_log));
         Ok(())
     }
@@ -3482,7 +3483,7 @@ impl GameEngine {
         match completion {
             BattlefieldEntryCompletion::LandPlay { player, land_name } => {
                 let object_id = event.object_id;
-                self.commit_battlefield_entry(event, None)?;
+                self.commit_battlefield_entry(event, None, &mut events)?;
                 events.push(permanent_moved_event(
                     &self.state,
                     object_id,
@@ -3505,7 +3506,7 @@ impl GameEngine {
                             .map(|object| object.owner),
                     })),
                 });
-                self.commit_battlefield_entry(event, attached_to)?;
+                self.commit_battlefield_entry(event, attached_to, &mut events)?;
                 self.finish_permanent_spell_entry(&stack.item, &mut events);
                 self.complete_parked_resolution(stack.item, Some(0), events)
             }
@@ -3516,7 +3517,7 @@ impl GameEngine {
                 from_zone,
             } => {
                 let object_id = event.object_id;
-                self.commit_battlefield_entry(event, None)?;
+                self.commit_battlefield_entry(event, None, &mut events)?;
                 events.push(ev_log(format!(
                     "{spell_label} returns {object_label} from {} to battlefield.",
                     match from_zone {
@@ -3543,7 +3544,7 @@ impl GameEngine {
                 assignment,
             } => {
                 let object_id = event.object_id;
-                self.commit_battlefield_entry(event, None)?;
+                self.commit_battlefield_entry(event, None, &mut events)?;
                 events.push(ev_log(format!(
                     "{} puts {object_label} onto the battlefield tapped and attacking.",
                     stack.item.ability_text.as_deref().unwrap_or("Ninjutsu")
@@ -3610,7 +3611,7 @@ impl GameEngine {
             } => {
                 let object_id = event.object_id;
                 let controller = event.destination_controller;
-                self.commit_battlefield_entry(event, None)?;
+                self.commit_battlefield_entry(event, None, &mut events)?;
                 events.push(ev_log(format!(
                     "P{controller} puts {card_label} onto the battlefield."
                 )));
@@ -3643,7 +3644,7 @@ impl GameEngine {
                 chosen_library_position,
             } => {
                 let object_id = event.object_id;
-                self.commit_battlefield_entry(event, None)?;
+                self.commit_battlefield_entry(event, None, &mut events)?;
                 events.push(permanent_moved_event_with_library_position(
                     &self.state,
                     object_id,
@@ -4967,7 +4968,9 @@ mod tests {
             accepted_aura_recipient: None,
             applied_effects: Vec::new(),
         };
-        engine.commit_battlefield_entry(event, None).unwrap();
+        engine
+            .commit_battlefield_entry(event, None, &mut Vec::new())
+            .unwrap();
         assert_eq!(engine.state.objects[&object_id].zone, Zone::Battlefield);
         assert!(engine.state.objects[&object_id].counters.is_empty());
     }

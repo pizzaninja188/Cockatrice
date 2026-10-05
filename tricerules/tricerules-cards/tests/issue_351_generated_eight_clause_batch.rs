@@ -351,6 +351,7 @@ fn issue_351_gravblade_heavy_keeps_the_artifact_condition() {
                 min: Some(1),
                 max: None,
             },
+            remove_creature: false,
             set_types: None,
             add_types: TypeLineAddition::default(),
             base_power: None,

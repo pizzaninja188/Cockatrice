@@ -213,7 +213,7 @@ fn sharae_grouping_cap_and_control_changes_have_independent_identities() {
     engine.state.continuous_effects.clear();
     engine.state.objects.get_mut(&source).unwrap().card_id = "sharae_of_numbing_depths".into();
     let taps = engine.tap_permanents(7, &[first, second]);
-    engine.fire_triggers(&taps);
+    engine.fire_triggers(&taps, &mut Vec::new());
     assert_eq!(engine.state.staged_trigger_groups.len(), 1);
     assert_eq!(engine.state.staged_trigger_groups[0].triggers.len(), 1);
     engine.state.staged_trigger_groups.clear(); // countering/removing the trigger does not refund
@@ -230,7 +230,7 @@ fn sharae_grouping_cap_and_control_changes_have_independent_identities() {
     engine.state.objects.get_mut(&source).unwrap().controller = 19;
     set_tapped(&mut engine.state, second, false);
     let taps = engine.tap_permanents(19, &[second]);
-    engine.fire_triggers(&taps);
+    engine.fire_triggers(&taps, &mut Vec::new());
     assert!(
         engine.state.staged_trigger_groups.is_empty(),
         "control does not refresh a cap"
@@ -238,7 +238,7 @@ fn sharae_grouping_cap_and_control_changes_have_independent_identities() {
     engine.state.turn_instance += 1; // same active player: an extra turn is still a new instance
     set_tapped(&mut engine.state, second, false);
     let taps = engine.tap_permanents(19, &[second]);
-    engine.fire_triggers(&taps);
+    engine.fire_triggers(&taps, &mut Vec::new());
     assert_eq!(engine.state.staged_trigger_groups.len(), 1);
     assert_eq!(
         engine.state.staged_trigger_groups[0].triggers[0].controller,

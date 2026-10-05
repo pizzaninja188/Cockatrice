@@ -24,7 +24,7 @@ impl GameEngine {
 
     /// CR 714.3b: after the active player's draw step, add one lore counter to every Saga they
     /// control simultaneously. The resulting counter edges form one trigger-collection batch.
-    pub(super) fn perform_precombat_saga_lore_action(&mut self) {
+    pub(super) fn perform_precombat_saga_lore_action(&mut self, out: &mut Vec<rv1::RuledEvent>) {
         let active = self.state.active_player_id();
         let Some(index) = self.state.player_idx(active) else {
             return;
@@ -52,7 +52,7 @@ impl GameEngine {
                 counter_events.push(event);
             }
         }
-        self.fire_triggers(&counter_events);
+        self.fire_triggers(&counter_events, out);
     }
 }
 
@@ -98,7 +98,7 @@ mod tests {
             trigger_grant_origin: None,
         });
         assert_eq!(engine.saga_final_chapter(saga), None);
-        engine.perform_precombat_saga_lore_action();
+        engine.perform_precombat_saga_lore_action(&mut Vec::new());
         assert_eq!(
             engine.state.objects[&saga].counter_count(CounterKind::Lore),
             1,
@@ -118,7 +118,7 @@ mod tests {
             .types
             .retain(|card_type| card_type != "Saga");
         assert_eq!(engine.saga_final_chapter(saga), None);
-        engine.perform_precombat_saga_lore_action();
+        engine.perform_precombat_saga_lore_action(&mut Vec::new());
         assert_eq!(
             engine.state.objects[&saga].counter_count(CounterKind::Lore),
             1,

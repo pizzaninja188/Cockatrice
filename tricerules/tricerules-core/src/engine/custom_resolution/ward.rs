@@ -53,6 +53,7 @@ impl GameEngine {
                 pending.deciding_player,
                 card,
                 crate::state::DiscardCause::Cost,
+                &mut events,
             )?;
             events.push(moved);
             events.push(ev_log(format!(

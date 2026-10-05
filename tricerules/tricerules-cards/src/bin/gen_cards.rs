@@ -5791,6 +5791,7 @@ mod tests {
                         min: Some(8),
                         max: None,
                     },
+                    remove_creature: false,
                     set_types: None,
                     add_types: TypeLineAddition {
                         land_types: Vec::new(),
@@ -6258,6 +6259,7 @@ mod tests {
                         min: Some(expected.0),
                         max: None,
                     },
+                    remove_creature: false,
                     set_types: None,
                     add_types: TypeLineAddition {
                         land_types: Vec::new(),
