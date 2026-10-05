@@ -1063,5 +1063,7 @@ mod deck_coverage_arena;
 #[path = "scenario/deck_coverage_unnatural_growth.rs"]
 mod deck_coverage_unnatural_growth;
 
+#[path = "scenario/deck_coverage_chasm_skulker.rs"]
+mod deck_coverage_chasm_skulker;
 #[path = "scenario/deck_coverage_metalwork_colossus.rs"]
 mod deck_coverage_metalwork_colossus;

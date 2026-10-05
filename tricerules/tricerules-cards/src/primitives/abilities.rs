@@ -513,6 +513,14 @@ impl ActivatedAbilityDef {
         {
             return Err("source token copies require a battlefield ability source".into());
         }
+        if self.source_zone != AbilitySourceZone::Battlefield
+            && self
+                .effect
+                .iter()
+                .any(SpellEffectKind::requires_source_counters)
+        {
+            return Err("source counter quantities require a battlefield ability source".into());
+        }
         for effect in &self.effect {
             effect.validate(EffectContext::Ability)?;
         }

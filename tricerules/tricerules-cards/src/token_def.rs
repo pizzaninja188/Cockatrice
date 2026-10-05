@@ -10,7 +10,7 @@
 //! token-ness for a characteristic lookup.
 
 use crate::card_def::{CardDefinition, CardFace, IdentifiedStaticAbility};
-use crate::primitives::{ActivatedAbilityDef, Color, Keyword, TriggeredAbilityDef};
+use crate::primitives::{ActivatedAbilityDef, Color, Evasion, Keyword, TriggeredAbilityDef};
 use crate::CardFaceId;
 use serde::{Deserialize, Serialize};
 
@@ -45,6 +45,9 @@ pub struct TokenDefinition {
     /// Static keyword abilities printed on the token (e.g. Flying for a Spirit token).
     #[serde(default)]
     pub keywords: Vec<Keyword>,
+    /// Parameterized evasion, such as a Squid token's islandwalk.
+    #[serde(default)]
+    pub evasions: Vec<Evasion>,
     /// Ordinary static abilities, including evasion and restrictions on what a token can block.
     #[serde(default)]
     pub static_abilities: Vec<IdentifiedStaticAbility>,
@@ -74,6 +77,7 @@ impl TokenDefinition {
                 power: self.power,
                 toughness: self.toughness,
                 keywords: self.keywords.clone(),
+                evasions: self.evasions.clone(),
                 static_abilities: self.static_abilities.clone(),
                 triggered_abilities: self.triggered_abilities.clone(),
                 activated_abilities: self.activated_abilities.clone(),

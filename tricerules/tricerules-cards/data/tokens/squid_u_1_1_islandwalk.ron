@@ -1,0 +1,10 @@
+(
+  id: "squid_u_1_1_islandwalk",
+  name: "Squid",
+  face_id: "squid",
+  types: ["Creature", "Squid"],
+  colors: [Blue],
+  power: 1,
+  toughness: 1,
+  evasions: [Landwalk(land_subtype: "Island")],
+)

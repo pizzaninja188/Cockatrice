@@ -1,0 +1,23 @@
+(
+  id: "chasm_skulker",
+  name: "Chasm Skulker",
+  face_id: "chasm_skulker",
+  mana_cost: "{2}{U}",
+  types: ["Creature", "Squid", "Horror"],
+  power: 1,
+  toughness: 1,
+  triggered_abilities: [
+    (
+      ability_id: "triggered_01",
+      presentation: OracleLines([1]),
+      trigger: WheneverPlayerDrawsCard(drawer: Controller),
+      effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+    ),
+    (
+      ability_id: "triggered_02",
+      presentation: OracleLines([2]),
+      trigger: WhenSelfDies,
+      effect: [CreateTokens(token: "squid_u_1_1_islandwalk", count: Count(SourceCounterCount(counter: PlusOnePlusOne)))],
+    ),
+  ],
+)

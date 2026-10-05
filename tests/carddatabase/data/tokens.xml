@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <cockatrice_carddatabase version="4">
     <cards>
+        <card><name>Squid Token</name><text>Islandwalk (This creature can't be blocked as long as defending player controls an Island.)</text><token>1</token><tablerow>0</tablerow>
+            <prop><colors>U</colors><type>Token Creature — Squid</type><maintype>Creature</maintype><pt>1/1</pt></prop></card>
         <card><name>Myr Token</name><text></text><token>1</token><tablerow>0</tablerow>
             <prop><type>Token Artifact Creature — Myr</type><maintype>Creature</maintype><pt>1/1</pt></prop></card>
         <card><name>Golem Token</name><text>Flying</text><token>1</token><tablerow>0</tablerow>

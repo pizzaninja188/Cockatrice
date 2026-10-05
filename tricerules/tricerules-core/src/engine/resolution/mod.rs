@@ -339,6 +339,13 @@ pub(super) fn token_identity(values: &CopiableValues) -> rv1::TokenIdentity {
             .keywords
             .iter()
             .map(|keyword| keyword.as_str().to_string())
+            // Parameterized evasion is a printed keyword too. Project its MTG label into
+            // display identity without changing the engine's typed combat authority.
+            .chain(face.evasions.iter().map(|evasion| match evasion {
+                tricerules_cards::Evasion::Landwalk { land_subtype } => {
+                    format!("{land_subtype}walk")
+                }
+            }))
             .collect(),
         ability_texts: face
             .activated_abilities

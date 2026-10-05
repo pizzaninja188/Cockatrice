@@ -3537,6 +3537,9 @@ impl SpellEffectKind {
     /// `context` distinguishes spells from abilities so source-bound subjects are
     /// rejected where they make no sense.
     pub fn validate(&self, context: EffectContext) -> Result<(), String> {
+        if context == EffectContext::Spell && self.requires_source_counters() {
+            return Err("source counter quantities require a battlefield ability source".into());
+        }
         if matches!(self, Self::MyrBattlesphereAttack) && context != EffectContext::Ability {
             return Err("MyrBattlesphereAttack requires an attack ability source".into());
         }
@@ -3992,6 +3995,7 @@ impl SpellEffectKind {
             | SpellEffectKind::TargetPlayerGainsLife { amount, .. }
             | SpellEffectKind::Mill { count: amount, .. }
             | SpellEffectKind::PutCounters { count: amount, .. }
+            | SpellEffectKind::PutCountersAll { count: amount, .. }
             | SpellEffectKind::PutCountersAllPlaneswalkers { count: amount, .. }
             | SpellEffectKind::Amass { count: amount, .. }
             | SpellEffectKind::CreateTokens { count: amount, .. }
@@ -5547,6 +5551,70 @@ impl SpellEffectKind {
                 .flat_map(Self::referenced_token_ids)
                 .collect(),
             _ => Vec::new(),
+        }
+    }
+
+    /// Counter quantities retain the outer battlefield source through nested effects and
+    /// created triggers. Granted abilities instead bind to their recipient permanent.
+    pub(crate) fn requires_source_counters(&self) -> bool {
+        match self {
+            Self::DamageTarget { amount, .. }
+            | Self::DamageAll { amount, .. }
+            | Self::Scry { count: amount }
+            | Self::Earthbend { count: amount }
+            | Self::CounterTargetSpell {
+                unless_controller_pays: Some(amount),
+                ..
+            }
+            | Self::DamageTargets { amount, .. }
+            | Self::DamagePlayer { amount, .. }
+            | Self::DamageAttackedPlayerOrPlaneswalker { amount }
+            | Self::Draw { count: amount, .. }
+            | Self::TargetPlayerDraws { count: amount, .. }
+            | Self::GainLife { amount }
+            | Self::TargetPlayerGainsLife { amount, .. }
+            | Self::Mill { count: amount, .. }
+            | Self::PutCounters { count: amount, .. }
+            | Self::PutCountersAll { count: amount, .. }
+            | Self::PutCountersAllPlaneswalkers { count: amount, .. }
+            | Self::Amass { count: amount, .. }
+            | Self::CreateTokens { count: amount, .. }
+            | Self::CreateTokenCopies { count: amount, .. }
+            | Self::CreateAttackingTokens { count: amount, .. } => {
+                amount.requires_source_counters()
+            }
+            Self::PumpTarget {
+                scale: Some(scale), ..
+            } => scale.amount().is_some_and(Amount::requires_source_counters),
+            Self::ChooseResolutionBranch {
+                branches,
+                otherwise,
+                ..
+            } => {
+                branches
+                    .iter()
+                    .any(|branch| branch.effects.iter().any(Self::requires_source_counters))
+                    || otherwise.iter().any(Self::requires_source_counters)
+            }
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.requires_source_counters()
+            }
+            Self::MayBehold { if_beheld, .. } => {
+                if_beheld.iter().any(Self::requires_source_counters)
+            }
+            Self::CreateReflexiveTrigger { ability, .. } => {
+                ability.effect.iter().any(Self::requires_source_counters)
+            }
+            Self::CreateDelayedTrigger { ability, .. } => {
+                ability.effect.iter().any(Self::requires_source_counters)
+                    || ability
+                        .modal
+                        .iter()
+                        .flat_map(|modal| &modal.modes)
+                        .flat_map(|mode| &mode.effects)
+                        .any(Self::requires_source_counters)
+            }
+            _ => false,
         }
     }
 

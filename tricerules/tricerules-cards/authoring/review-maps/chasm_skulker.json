@@ -1,0 +1,28 @@
+{
+  "format_version": 1,
+  "oracle_id": "69facbc7-3859-4716-b627-5199571fb3cf",
+  "complete_definition_review_confirmed": true,
+  "tokens": ["squid_u_1_1_islandwalk"],
+  "spans": [
+    {"face_id":"chasm_skulker","start_line":1,"end_line":1,"typed_paths":["/faces/0/triggered_abilities/0"]},
+    {"face_id":"chasm_skulker","start_line":2,"end_line":2,"typed_paths":["/faces/0/triggered_abilities/1"]}
+  ],
+  "semantic_fixtures": [
+    {"test":"deck_coverage_chasm_skulker::chasm_registers_exact_card_and_both_clauses","covers":"Exact single blue two-and-blue 1/1 Squid Horror, both complete Oracle clauses and primary blue 1/1 Squid islandwalk token"},
+    {"test":"deck_coverage_chasm_skulker::chasm_token_evasion_roundtrips_and_projects_without_changing_old_tokens","covers":"Explicit token evasion survives serialization and registry projection, omitted field remains empty"},
+    {"test":"deck_coverage_chasm_skulker::chasm_counter_quantity_rejects_missing_and_nonbattlefield_source_contexts","covers":"Direct affine and divided source-counter quantities roundtrip; spells entry cost modifiers static scaling and nonbattlefield source contexts fail closed; invalid keyword counter rejected"},
+    {"test":"deck_coverage_chasm_skulker::chasm_counter_quantity_cannot_escape_through_mass_counters_or_delayed_spell","covers":"Mass counter consumer and created reflexive delayed and delayed modal triggers retain source restrictions"},
+    {"test":"deck_coverage_chasm_skulker::chasm_counter_quantity_granted_abilities_bind_to_battlefield_recipient","covers":"Independently granted triggered and activated abilities bind to battlefield recipient rather than spell or hand/graveyard parent"},
+    {"test":"scenario deck_coverage_chasm_skulker::chasm_paid_cast_draws_individually_and_only_for_current_controller","covers":"Actual paid cast and Vision Skeins draws two for each of three seats; only two controller triggers, counters appear individually on resolution and grow to 3/3"},
+    {"test":"scenario deck_coverage_chasm_skulker::chasm_draw_and_death_use_derived_controller_while_owner_keeps_card","covers":"Three nonconsecutive seats, stolen source draw and death controller receives two Squids while source enters owner graveyard"},
+    {"test":"scenario deck_coverage_chasm_skulker::chasm_death_counts_only_plus_counters_including_zero","covers":"Zero or two plus counters, seven charge counters ignored; no tokens before resolution, counters cease on departure"},
+    {"test":"scenario deck_coverage_chasm_skulker::chasm_lethal_simultaneous_cancellation_uses_pre_sba_counters","covers":"Exact WotC ruling: two plus and three minus counters cause simultaneous lethal/cancellation SBA but death yields two Squids"},
+    {"test":"scenario deck_coverage_chasm_skulker::chasm_nonlethal_cancellation_changes_later_death_count","covers":"Nonlethal cancellation leaves one plus counter; later death creates one Squid"},
+    {"test":"scenario deck_coverage_chasm_skulker::chasm_death_trigger_reads_old_generation_after_source_reentry","covers":"Actual lethal SBA death followed by logged dev battlefield reentry; old trigger reads two rather than seven new-incarnation counters"},
+    {"test":"scenario deck_coverage_chasm_skulker::chasm_old_draw_triggers_do_not_add_counters_to_reentered_source","covers":"Pending actual draw triggers followed by logged dev leave/reentry do not place counters on new generation"},
+    {"test":"scenario deck_coverage_chasm_skulker::chasm_token_copy_death_retains_counter_lki_after_cessation","covers":"Actual Cackling Counterpart copy dies and is deleted before its saved trigger creates two Squids"},
+    {"test":"scenario deck_coverage_chasm_skulker::chasm_exile_replacement_suppresses_death_trigger","covers":"Generation-bound existing exile replacement prevents death and Squid creation"},
+    {"test":"scenario deck_coverage_chasm_skulker::chasm_squids_islandwalk_uses_actual_defender_and_rejects_block_atomically","covers":"Actual created Squid combat: third opponent Island does not prevent block, actual defender Island rejects Squid block atomically and permits vanilla block"},
+    {"test":"scenario deck_coverage_chasm_skulker::chasm_actual_draw_death_tokens_and_serialized_commands_replay_identically","covers":"Paid Chasm and Vision Skeins casts, actual lethal Lightning Bolt, trigger order and simultaneous Squid entry-order choices replay identically; public proposal creation and full-state resync identities retain Islandwalk for exact artwork lookup"}
+  ]
+}

@@ -9,6 +9,46 @@
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 #include <libcockatrice/protocol/pb/serverinfo_card.pb.h>
 
+TEST(RuledTokenDisplayTest, IslandwalkSquidUsesExactArtworkAndPreservesEngineIdentity)
+{
+    auto db = std::make_unique<CardDatabase>(nullptr, new NoopCardPreferenceProvider(),
+        new TestCardDatabasePathProvider(), new NoopCardSetPriorityController());
+    db->loadCardDatabases();
+    ASSERT_EQ(db->getLoadStatus(), Ok);
+    const CardRef art = RuledTokenDisplay::resolve(db->query(), "Squid", "1/1", "u", {"Islandwalk"}, {});
+    ASSERT_EQ(art.name, QStringLiteral("Squid Token"));
+    const auto info = db->query()->getCardInfo(art.name);
+    ASSERT_TRUE(info);
+    EXPECT_EQ(info->getPowTough(), QStringLiteral("1/1"));
+    EXPECT_EQ(info->getColors(), QStringLiteral("U"));
+    EXPECT_TRUE(info->getText().startsWith(QStringLiteral("Islandwalk")));
+    EXPECT_TRUE(RuledTokenDisplay::resolve(db->query(), "Squid", "1/1", "u", {}, {}).name.isEmpty());
+    EXPECT_TRUE(RuledTokenDisplay::resolve(db->query(), "Squid", "1/1", "u", {"Forestwalk"}, {}).name.isEmpty());
+    EXPECT_TRUE(RuledTokenDisplay::resolve(db->query(), "Squid", "2/2", "u", {"Islandwalk"}, {}).name.isEmpty());
+    EXPECT_TRUE(RuledTokenDisplay::resolve(db->query(), "Squid", "1/1", "g", {"Islandwalk"}, {}).name.isEmpty());
+    ruled::v1::TokenIdentity identity;
+    identity.set_name("Squid");
+    identity.set_pt("1/1");
+    identity.set_color("u");
+    identity.set_is_creature(true);
+    identity.add_types("Creature");
+    identity.add_types("Squid");
+    identity.add_keywords("Islandwalk");
+    ServerInfo_Card proposal;
+    proposal.set_id(47);
+    RuledTokenDisplay::applyProposal(proposal, identity, db->query());
+    EXPECT_EQ(proposal.id(), 47);
+    EXPECT_EQ(proposal.name(), "Squid Token");
+    EXPECT_EQ(proposal.pt(), "1/1");
+    EXPECT_EQ(proposal.color(), "u");
+    EXPECT_EQ(proposal.annotation(), "Squid | 1/1 | u | Creature Squid | Islandwalk");
+    ServerInfo_Card missingArt;
+    RuledTokenDisplay::applyProposal(missingArt, identity, nullptr);
+    EXPECT_EQ(missingArt.name(), "Squid");
+    EXPECT_EQ(missingArt.annotation(), proposal.annotation());
+    EXPECT_EQ(identity.name(), "Squid");
+}
+
 TEST(RuledTokenDisplayTest, QualifiedMyrRulesNameResolvesExactTokenArtwork)
 {
     auto db = std::make_unique<CardDatabase>(nullptr, new NoopCardPreferenceProvider(),

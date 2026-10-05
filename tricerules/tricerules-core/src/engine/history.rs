@@ -1009,6 +1009,32 @@ impl GameEngine {
         self.fire_triggers(&[GameEvent::CardDrawn { drawer, ordinal }]);
     }
 
+    /// Read the original battlefield incarnation, including pre-departure/pre-SBA LKI.
+    fn source_counter_count(&self, source: u32, generation: u64, counter: CounterKind) -> u32 {
+        let live = self
+            .state
+            .objects
+            .get(&source)
+            .filter(|object| object.zone == Zone::Battlefield)
+            .filter(|_| {
+                self.state
+                    .zone_change_generation
+                    .get(&source)
+                    .copied()
+                    .unwrap_or(0)
+                    == generation
+            })
+            .map(|object| &object.counters);
+        live.or_else(|| {
+            self.state
+                .last_known_counters_by_generation
+                .get(&(source, generation))
+        })
+        .and_then(|bag| bag.get(&counter))
+        .copied()
+        .unwrap_or(0)
+    }
+
     pub(super) fn condition_holds(
         &self,
         condition: &GameCondition,
@@ -1346,30 +1372,11 @@ impl GameEngine {
                 condition.matches_value(clamp_public_count(count))
             }
             GameCondition::SourceCounterCount { counter, .. } => {
-                let live = self
-                    .state
-                    .objects
-                    .get(&context.source_object_id)
-                    .filter(|object| object.zone == Zone::Battlefield)
-                    .filter(|_| {
-                        self.state
-                            .zone_change_generation
-                            .get(&context.source_object_id)
-                            .copied()
-                            .unwrap_or(0)
-                            == context.source_zone_change
-                    })
-                    .map(|object| &object.counters);
-                let counters = live.or_else(|| {
-                    self.state
-                        .last_known_counters_by_generation
-                        .get(&(context.source_object_id, context.source_zone_change))
-                });
-                let count = counters
-                    .and_then(|bag| bag.get(counter))
-                    .copied()
-                    .unwrap_or(0);
-                condition.matches_value(count)
+                condition.matches_value(self.source_counter_count(
+                    context.source_object_id,
+                    context.source_zone_change,
+                    *counter,
+                ))
             }
             GameCondition::SourceTotalCounterCount { .. } => {
                 let live = self
@@ -1878,6 +1885,13 @@ impl GameEngine {
                     .fold(0_u32, |total, c| total.saturating_add(c.mana_value)),
             ),
             CountExpression::SourcePower => self.source_power_toughness(context).0,
+            CountExpression::SourceCounterCount { counter } => {
+                i64::from(self.source_counter_count(
+                    context.source_object_id,
+                    context.source_zone_change,
+                    *counter,
+                ))
+            }
             CountExpression::DeclaredAttackers { players, filter } => self
                 .state
                 .turn_history

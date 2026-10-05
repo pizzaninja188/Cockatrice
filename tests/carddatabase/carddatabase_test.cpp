@@ -63,7 +63,7 @@ TEST(CardDatabaseTest, LoadXml)
 
     // load dummy cards and test result
     db->loadCardDatabases();
-    ASSERT_EQ(20, db->getCardList().size()) << "Wrong card count after load";
+    ASSERT_EQ(21, db->getCardList().size()) << "Wrong card count after load";
     ASSERT_EQ(6, db->getSetList().size()) << "Wrong sets count after load";
     ASSERT_EQ(4, db->query()->getAllMainCardTypes().size()) << "Wrong types count after load";
     ASSERT_EQ(Ok, db->getLoadStatus()) << "Wrong status after load";

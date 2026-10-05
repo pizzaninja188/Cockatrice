@@ -58,6 +58,10 @@ pub enum CountExpression {
     ControlledNoncreatureArtifactManaValueSum,
     /// Brambleguard Captain and Boulderbranch Golem use the original source's power.
     SourcePower,
+    /// Chasm Skulker reads one counter kind on the original battlefield incarnation, using
+    /// last-known counters if it has departed. Other counter-based source quantities share
+    /// this vocabulary without changing specialized immediate mana-output semantics.
+    SourceCounterCount { counter: CounterKind },
     /// Witchstalker Frenzy and Search Party Captain count distinct declared creatures.
     DeclaredAttackers {
         players: RelativePlayerSet,
@@ -132,12 +136,21 @@ pub struct QuantityTerm {
 }
 
 impl CountExpression {
-    fn requires_source_power(&self) -> bool {
+    fn requires_source_context(&self) -> bool {
         match self {
-            Self::SourcePower => true,
+            Self::SourcePower | Self::SourceCounterCount { .. } => true,
             Self::Affine { terms, .. } => terms
                 .iter()
-                .any(|term| term.quantity.requires_source_power()),
+                .any(|term| term.quantity.requires_source_context()),
+            _ => false,
+        }
+    }
+    fn requires_source_counters(&self) -> bool {
+        match self {
+            Self::SourceCounterCount { .. } => true,
+            Self::Affine { terms, .. } => terms
+                .iter()
+                .any(|term| term.quantity.requires_source_counters()),
             _ => false,
         }
     }
@@ -173,6 +186,7 @@ impl CountExpression {
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
             Self::CastCostPaymentCount { cost } => cost.validate(),
+            Self::SourceCounterCount { counter } => counter.validate(),
             Self::SpellsCastThisTurn { filter, .. } => filter.validate(),
             Self::BattlefieldPermanents { filter }
             | Self::BattlefieldMaximum { filter, .. }
@@ -322,16 +336,23 @@ impl Amount {
     }
 
     pub(crate) fn validate_source_context(&self, has_source: bool) -> Result<(), String> {
-        if !has_source && self.requires_source_power() {
-            return Err("source power requires an ability bound to a battlefield source".into());
+        if !has_source && self.requires_source_context() {
+            return Err("source quantity requires an ability bound to a battlefield source".into());
         }
         Ok(())
     }
 
-    fn requires_source_power(&self) -> bool {
+    fn requires_source_context(&self) -> bool {
         match self {
-            Self::Count(expression) => expression.requires_source_power(),
-            Self::DivideRoundedDown { amount, .. } => amount.requires_source_power(),
+            Self::Count(expression) => expression.requires_source_context(),
+            Self::DivideRoundedDown { amount, .. } => amount.requires_source_context(),
+            _ => false,
+        }
+    }
+    pub(crate) fn requires_source_counters(&self) -> bool {
+        match self {
+            Self::Count(expression) => expression.requires_source_counters(),
+            Self::DivideRoundedDown { amount, .. } => amount.requires_source_counters(),
             _ => false,
         }
     }
