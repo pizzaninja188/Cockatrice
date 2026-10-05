@@ -646,9 +646,7 @@ impl GameEngine {
             }
         };
         let battle_id = entry.event.object_id;
-        if !self
-            .state
-            .are_opponents(entry.event.destination_controller, protector)
+        if !self.entry_battle_protector_is_live(&entry.event, protector)
             || !self
                 .characteristics(battle_id)
                 .is_some_and(|value| value.has_type("Battle"))

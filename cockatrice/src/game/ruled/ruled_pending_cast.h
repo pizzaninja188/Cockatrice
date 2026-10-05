@@ -637,6 +637,33 @@ ruledTargetRefKind(const RuledTargetGroupData &data, quint32 oid, int localPlaye
     return ruled::v1::TARGET_REF_KIND_UNSPECIFIED;
 }
 
+[[nodiscard]] inline QVector<ruled::v1::TargetRef>
+ruledSelectedTargetRefs(const RuledSpellTargetData &data,
+                        const QVector<QVector<quint32>> &selectedByGroup,
+                        int localPlayerId)
+{
+    QVector<ruled::v1::TargetRef> result;
+    for (int position = 0; position < data.groups.size(); ++position) {
+        const auto &group = data.groups.at(position);
+        for (const auto oid : selectedByGroup.value(position)) {
+            auto &target = result.emplaceBack();
+            target.set_group_index(static_cast<quint32>(group.groupIndex));
+            target.set_object_id(oid);
+            target.set_kind(ruledTargetRefKind(group, oid, localPlayerId));
+        }
+    }
+    return result;
+}
+
+[[nodiscard]] inline QVector<ruled::v1::TargetRef> ruledSelectedTargetRefs(const PendingActivatedAbility &ability)
+{
+    QVector<ruled::v1::TargetRef> result;
+    for (const auto &target : ability.selectedTargets) {
+        result.append(target.ref);
+    }
+    return result;
+}
+
 inline void ruledAccumulateTargetingCosts(const RuledSpellTargetData &data,
                                           const QVector<QVector<quint32>> &selectedByGroup,
                                           const QVector<quint32> &fallbackSelected,
@@ -875,13 +902,19 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
         const auto data = state.abilityTargetData(ability.permanentOid, ability.abilityIndex);
         const auto group = data.groups.isEmpty() ? static_cast<const RuledTargetGroupData &>(data)
                                                  : data.groups.value(ability.activeTargetGroupPosition);
-        return !group.chosenByOpponent && ruledTargetDataContains(group, kind, oid, localPlayerId)
+        return !group.chosenByOpponent && ruledTargetDataContains(group, kind, oid, localPlayerId) &&
+                       ruledTargetPairCompatible(group, ruledTargetRefKind(group, oid, localPlayerId), oid,
+                                                  ruledSelectedTargetRefs(ability))
                    ? RuledTargetClickEligibility::Legal
                    : RuledTargetClickEligibility::Illegal;
     }
     if (spell.valid && spell.waitingForTarget) {
         const auto data = currentRuledSpellTargetGroup(spell, state);
-        return data.has_value() && ruledTargetDataContains(*data, kind, oid, localPlayerId)
+        const auto allGroups = currentRuledSpellTargetData(spell, state);
+        return data.has_value() && allGroups.has_value() && ruledTargetDataContains(*data, kind, oid, localPlayerId) &&
+                       ruledTargetPairCompatible(*data, ruledTargetRefKind(*data, oid, localPlayerId), oid,
+                                                  ruledSelectedTargetRefs(*allGroups, spell.selectedTargetOidsByGroup,
+                                                                           localPlayerId))
                    ? RuledTargetClickEligibility::Legal
                    : RuledTargetClickEligibility::Illegal;
     }
@@ -905,9 +938,10 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
 {
     bool changed = false;
     const auto prune = [&](QVector<quint32> &oids, QVector<quint32> &damages, QVector<int> *allocations,
-                           const RuledTargetGroupData &data) {
+                           const RuledTargetGroupData &data, const QVector<ruled::v1::TargetRef> &selected) {
         for (int i = oids.size() - 1; i >= 0; --i) {
-            if (ruledTargetDataContainsOid(data, oids.at(i), localPlayerId)) {
+            if (ruledTargetDataContainsOid(data, oids.at(i), localPlayerId) &&
+                ruledTargetPairCompatible(data, ruledTargetRefKind(data, oids.at(i), localPlayerId), oids.at(i), selected)) {
                 continue;
             }
             oids.remove(i);
@@ -939,7 +973,8 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
                 QVector<int> *const allocations =
                     groupIndex == spell.activeTargetGroupPosition ? &spell.targetDamageAllocations : nullptr;
                 prune(spell.selectedTargetOidsByGroup[groupIndex], spell.selectedTargetDamagesByGroup[groupIndex],
-                      allocations, data.groups.at(groupIndex));
+                      allocations, data.groups.at(groupIndex),
+                      ruledSelectedTargetRefs(data, spell.selectedTargetOidsByGroup, localPlayerId));
             }
             if (spell.activeTargetGroupPosition >= 0 &&
                 spell.activeTargetGroupPosition < spell.selectedTargetOidsByGroup.size()) {
@@ -979,7 +1014,8 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
                 }
                 for (int groupIndex = 0; groupIndex < data->groups.size(); ++groupIndex) {
                     prune(mode.selectedTargetOidsByGroup[groupIndex], mode.selectedTargetDamagesByGroup[groupIndex],
-                          nullptr, data->groups.at(groupIndex));
+                          nullptr, data->groups.at(groupIndex),
+                          ruledSelectedTargetRefs(*data, mode.selectedTargetOidsByGroup, localPlayerId));
                     if (modePosition == spell.activeModePosition && groupIndex == spell.activeTargetGroupPosition) {
                         spell.selectedTargetOids = mode.selectedTargetOidsByGroup.at(groupIndex);
                         spell.selectedTargetDamages = mode.selectedTargetDamagesByGroup.at(groupIndex);
@@ -1011,7 +1047,9 @@ currentRuledSpellTargetGroup(const PendingRuledSpellCast &spell, const RuledClie
             });
             const auto &candidates =
                 group == data.groups.cend() ? static_cast<const RuledTargetGroupData &>(data) : *group;
-            if (!ruledTargetDataContainsOid(candidates, target.ref.object_id(), localPlayerId)) {
+            if (!ruledTargetDataContainsOid(candidates, target.ref.object_id(), localPlayerId) ||
+                !ruledTargetPairCompatible(candidates, target.ref.kind(), target.ref.object_id(),
+                                           ruledSelectedTargetRefs(ability))) {
                 const int position =
                     group == data.groups.cend() ? 0 : static_cast<int>(std::distance(data.groups.cbegin(), group));
                 ability.selectedTargets.resize(index);

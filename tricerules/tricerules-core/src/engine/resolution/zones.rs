@@ -2346,6 +2346,60 @@ fn plain_return_entry(
     }
 }
 
+pub(super) fn exchange_artifact_with_graveyard(
+    cx: &mut EffectCx<'_>,
+) -> Result<EffectOutcome, EngineError> {
+    let (Some(&departure), Some(&incoming)) = (
+        cx.targets_by_role
+            .first()
+            .and_then(|targets| targets.first()),
+        cx.targets_by_role
+            .get(1)
+            .and_then(|targets| targets.first()),
+    ) else {
+        // Welder requires both legal targets even when normal partial-target resolution proceeds.
+        return Ok(EffectOutcome::Continue);
+    };
+    let Some(player) = targeting::artifact_exchange_player(cx.engine, departure, incoming) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let reference = |object_id| TriggerObjectRef {
+        object_id,
+        zone_change_generation: cx
+            .engine
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0),
+        controller_at_event: player,
+    };
+    let completion = crate::state::ZoneEntryCompletion::PairedArtifactExchange {
+        departure: reference(departure),
+        incoming: reference(incoming),
+        player,
+    };
+    let entry = plain_return_entry(cx.engine, incoming, player);
+    Ok(
+        if cx
+            .engine
+            .begin_zone_entry_batch(
+                ParkedStackResolution::new(cx.top.clone()),
+                vec![entry],
+                Zone::Graveyard,
+                cx.spell_label,
+                Some(completion),
+                cx.events,
+            )?
+            .is_none()
+        {
+            EffectOutcome::Suspended
+        } else {
+            EffectOutcome::Continue
+        },
+    )
+}
+
 /// Selection is caller-owned: targeted moves have already revalidated their targets;
 /// mass exile selects current graveyards. Both commit one generation-bound zone event.
 fn exile_graveyard_cohort(

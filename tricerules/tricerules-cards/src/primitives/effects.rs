@@ -1096,6 +1096,10 @@ pub enum SpellEffectKind {
     DeployTheGatewatch,
     /// Chaos Warp's inseparable target-owner shuffle, public reveal and ordinary entry.
     ChaosWarp,
+    /// Goblin Welder's inseparable same-player artifact sacrifice and graveyard return.
+    /// Both targets must remain legal; the two zone changes form one simultaneous event.
+    /// Specialized because sequential sacrifice/reanimation cannot express this contract.
+    ExchangeArtifactWithGraveyard,
     /// Look at the top `count` cards, choose `min..=max` matching cards for the controller's
     /// hand, and put the rest on the bottom. Omit `filter` for any card; selection bounds clamp
     /// to available matches (CR 609.3). This puts cards into hand without drawing (CR 121.5).
@@ -2536,6 +2540,27 @@ pub fn chaos_warp_target_filter() -> &'static TargetFilter {
     &FILTER
 }
 
+fn artifact_exchange_permanent_filter() -> &'static TargetFilter {
+    static FILTER: LazyLock<TargetFilter> = LazyLock::new(|| TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        permanent_types: vec![PermanentTypeFilter::Artifact],
+        ..Default::default()
+    });
+    &FILTER
+}
+
+fn artifact_exchange_graveyard_filter() -> &'static GraveyardFilter {
+    static FILTER: LazyLock<GraveyardFilter> = LazyLock::new(|| GraveyardFilter {
+        owner: super::GraveyardOwner::AnyPlayer,
+        card: Some(super::ZoneCardFilter {
+            card_type: Some(CardTypeFilter::Artifact),
+            ..Default::default()
+        }),
+        ..Default::default()
+    });
+    &FILTER
+}
+
 impl SpellEffectKind {
     pub(crate) fn targeted_mass_scope(&self) -> Option<(u32, TargetKind)> {
         match self {
@@ -2799,6 +2824,10 @@ impl SpellEffectKind {
                 vec![TargetRole::Filtered(earthbend_target_filter())]
             }
             SpellEffectKind::ChaosWarp => vec![TargetRole::Filtered(chaos_warp_target_filter())],
+            SpellEffectKind::ExchangeArtifactWithGraveyard => vec![
+                TargetRole::Filtered(artifact_exchange_permanent_filter()),
+                TargetRole::GraveyardCard(artifact_exchange_graveyard_filter()),
+            ],
             SpellEffectKind::CreatureDealsDamageEqualToPower { source, target } => {
                 vec![TargetRole::Filtered(source), TargetRole::Filtered(target)]
             }
@@ -5264,6 +5293,7 @@ impl SpellEffectKind {
             SpellEffectKind::IntoTheWilds => Ok(()),
             SpellEffectKind::DeployTheGatewatch => Ok(()),
             SpellEffectKind::ChaosWarp => Ok(()),
+            SpellEffectKind::ExchangeArtifactWithGraveyard => Ok(()),
             SpellEffectKind::LookChooseToHand {
                 count,
                 filter,

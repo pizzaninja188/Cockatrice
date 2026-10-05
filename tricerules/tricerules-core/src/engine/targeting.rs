@@ -1072,6 +1072,7 @@ fn validate_effect_targets(
         SpellEffectKind::CreatureDealsDamageEqualToPower { .. }
         | SpellEffectKind::Fight { .. }
         | SpellEffectKind::AttachEquipment { .. }
+        | SpellEffectKind::ExchangeArtifactWithGraveyard
         | SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { .. } => {
             return Err(EngineError::Illegal(
                 "multi-subject targets require grouped target-role validation",
@@ -1748,7 +1749,39 @@ fn validate_grouped_targets(
             }
         }
     }
+    for (effect_index, effect) in effects.iter().enumerate() {
+        if matches!(effect, SpellEffectKind::ExchangeArtifactWithGraveyard) {
+            let (first, second) = schema
+                .artifact_exchange_groups(effect_index)
+                .expect("registry validated artifact exchange roles");
+            let departure = grouped[first][0].object_id;
+            let incoming = grouped[second][0].object_id;
+            if artifact_exchange_player(engine, departure, incoming).is_none() {
+                return Err(EngineError::Illegal(
+                    "artifact targets must belong to the same player",
+                ));
+            }
+        }
+    }
     Ok(())
+}
+
+/// Welder's matched player is the current battlefield controller and graveyard owner.
+/// Role legality and generation checks are separately required at each caller boundary.
+pub(super) fn artifact_exchange_player(
+    engine: &GameEngine,
+    departure: ObjectId,
+    incoming: ObjectId,
+) -> Option<PlayerId> {
+    if engine.state.objects.get(&departure)?.zone != Zone::Battlefield
+        || engine.state.objects.get(&incoming)?.zone != Zone::Graveyard
+    {
+        return None;
+    }
+    let controller = engine.characteristics(departure)?.controller;
+    (engine.state.objects[&incoming].owner == controller
+        && !engine.state.players[engine.state.player_idx(controller)?].has_lost)
+        .then_some(controller)
 }
 
 fn target_ref_domain_exists(engine: &GameEngine, target: &rv1::TargetRef) -> bool {
@@ -2217,7 +2250,7 @@ fn compute_targets_with_context(
     }
 
     let schema = target_schema(effects, targeting);
-    let groups = schema
+    let mut groups = schema
         .groups
         .iter()
         .enumerate()
@@ -2288,9 +2321,54 @@ fn compute_targets_with_context(
                 valid_graveyard_ids: graveyard_ids,
                 distinct_from_group_indices: group.distinct_from.to_vec(),
                 same_graveyard: group.same_graveyard,
+                pair_constraint: None,
             }
         })
         .collect::<Vec<_>>();
+
+    for (effect_index, effect) in effects.iter().enumerate() {
+        if !matches!(effect, SpellEffectKind::ExchangeArtifactWithGraveyard) {
+            continue;
+        }
+        let (first, second) = schema
+            .artifact_exchange_groups(effect_index)
+            .expect("registry validated artifact exchange roles");
+        let mut pairs = Vec::new();
+        for &departure in &groups[first].valid_permanent_ids {
+            for &incoming in &groups[second].valid_graveyard_ids {
+                if artifact_exchange_player(engine, departure, incoming).is_some() {
+                    pairs.push(rv1::TargetPairChoice {
+                        prior_target: Some(rv1::TargetCandidateRef {
+                            kind: rv1::TargetRefKind::Permanent as i32,
+                            object_id: departure,
+                        }),
+                        candidate: Some(rv1::TargetCandidateRef {
+                            kind: rv1::TargetRefKind::Graveyard as i32,
+                            object_id: incoming,
+                        }),
+                    });
+                }
+            }
+        }
+        groups[first].valid_permanent_ids.retain(|oid| {
+            pairs.iter().any(|pair| {
+                pair.prior_target
+                    .as_ref()
+                    .is_some_and(|target| target.object_id == *oid)
+            })
+        });
+        groups[second].valid_graveyard_ids.retain(|oid| {
+            pairs.iter().any(|pair| {
+                pair.candidate
+                    .as_ref()
+                    .is_some_and(|target| target.object_id == *oid)
+            })
+        });
+        groups[second].pair_constraint = Some(rv1::TargetPairConstraint {
+            prior_group_index: first as u32,
+            compatible_pairs: pairs,
+        });
+    }
 
     let targeting_cost_applications = targeting_cost_action
         .map(|action| engine.targeting_cost_applications(caster, action, &groups))
@@ -3165,6 +3243,161 @@ mod tests {
     }
     use super::*;
     use tricerules_cards::{primitives::TargetGroupDef, CounterKind};
+
+    #[test]
+    fn artifact_exchange_targets_require_a_current_same_player_pair() {
+        let effect: SpellEffectKind = serde_json::from_str("\"ExchangeArtifactWithGraveyard\"")
+            .expect("Welder requires an inseparable two-target exchange contract");
+        let effects = vec![effect];
+        let targeting: TargetingDef = serde_json::from_value(serde_json::json!({"groups": [
+            {"min":1,"max":1,"prompt":"Choose battlefield artifact","effect_indices":[0]},
+            {"min":1,"max":1,"prompt":"Choose artifact in that player's graveyard","effect_indices":[0]}
+        ]})).unwrap();
+        let mut engine = GameEngine::new(2026100510, &[10, 20, 30], 20, None, true).unwrap();
+        let mut battlefield = Vec::new();
+        let mut graveyard = Vec::new();
+        for index in 0..3 {
+            let player = engine.state.players[index].id;
+            let ids = engine.state.players[index].hand[..2].to_vec();
+            for &oid in &ids {
+                engine.state.objects.get_mut(&oid).unwrap().card_id = "sol_ring".into();
+            }
+            super::super::resolution::move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                ids[0],
+                Zone::Battlefield,
+                Some(player),
+            )
+            .unwrap();
+            super::super::resolution::move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                ids[1],
+                Zone::Graveyard,
+                None,
+            )
+            .unwrap();
+            battlefield.push(ids[0]);
+            graveyard.push(ids[1]);
+        }
+        let source = TargetSourceIdentity::current(&engine, u32::MAX);
+        let refs = |first, second| {
+            vec![
+                rv1::TargetRef {
+                    object_id: first,
+                    group_index: 0,
+                    kind: rv1::TargetRefKind::Permanent as i32,
+                    ..Default::default()
+                },
+                rv1::TargetRef {
+                    object_id: second,
+                    group_index: 1,
+                    kind: rv1::TargetRefKind::Graveyard as i32,
+                    ..Default::default()
+                },
+            ]
+        };
+        for index in 0..3 {
+            validate_spell_targets(
+                &engine,
+                10,
+                source,
+                &effects,
+                Some(&targeting),
+                &refs(battlefield[index], graveyard[index]),
+            )
+            .unwrap();
+        }
+        let published = compute_spell_targets(&engine, 10, source, &effects, Some(&targeting), &[]);
+        assert!(published.groups[0].pair_constraint.is_none());
+        let constraint = published.groups[1]
+            .pair_constraint
+            .as_ref()
+            .expect("matched target pairs are engine-published");
+        assert_eq!(constraint.prior_group_index, 0);
+        assert_eq!(constraint.compatible_pairs.len(), 3);
+        for index in 0..3 {
+            assert!(constraint.compatible_pairs.iter().any(|pair| {
+                pair.prior_target.as_ref().is_some_and(|target| {
+                    target.object_id == battlefield[index]
+                        && target.kind == rv1::TargetRefKind::Permanent as i32
+                }) && pair.candidate.as_ref().is_some_and(|target| {
+                    target.object_id == graveyard[index]
+                        && target.kind == rv1::TargetRefKind::Graveyard as i32
+                })
+            }));
+        }
+        assert!(validate_spell_targets(
+            &engine,
+            10,
+            source,
+            &effects,
+            Some(&targeting),
+            &refs(battlefield[1], graveyard[2])
+        )
+        .is_err());
+        let mut malformed = targeting.clone();
+        malformed.groups[1].max = 2;
+        assert!(
+            TargetSchema::compile(&effects, Some(&malformed)).is_err(),
+            "a paired role must be singleton"
+        );
+        malformed = targeting.clone();
+        malformed.groups[0].chooser = tricerules_cards::primitives::TargetChooser::ChosenOpponent;
+        assert!(
+            TargetSchema::compile(&effects, Some(&malformed)).is_err(),
+            "the ability controller chooses both targets"
+        );
+        // Current control, not physical ownership, selects the matching graveyard.
+        engine.state.players[1]
+            .battlefield
+            .retain(|oid| *oid != battlefield[1]);
+        engine.state.players[2].battlefield.push(battlefield[1]);
+        let artifact = engine.state.objects.get_mut(&battlefield[1]).unwrap();
+        artifact.controller = 30;
+        artifact.base_controller = 30;
+        validate_spell_targets(
+            &engine,
+            10,
+            source,
+            &effects,
+            Some(&targeting),
+            &refs(battlefield[1], graveyard[2]),
+        )
+        .unwrap();
+        assert!(validate_spell_targets(
+            &engine,
+            10,
+            source,
+            &effects,
+            Some(&targeting),
+            &refs(battlefield[1], graveyard[1])
+        )
+        .is_err());
+        for &oid in &graveyard {
+            engine.state.objects.get_mut(&oid).unwrap().card_id = "grizzly_bears".into();
+        }
+        let empty = compute_spell_targets(&engine, 10, source, &effects, Some(&targeting), &[]);
+        assert!(
+            empty.groups[0].valid_permanent_ids.is_empty(),
+            "unmatched first choices are not offered"
+        );
+        assert!(empty.groups[1].valid_graveyard_ids.is_empty());
+        assert!(
+            empty.groups[1]
+                .pair_constraint
+                .as_ref()
+                .unwrap()
+                .compatible_pairs
+                .is_empty(),
+            "constrained-empty is retained"
+        );
+        assert!(!legal_target_group_has_minimum(
+            &engine.state,
+            &empty.groups[0]
+        ));
+    }
 
     #[test]
     fn grouped_targets_publish_independent_candidates_and_validate_distinctness_atomically() {

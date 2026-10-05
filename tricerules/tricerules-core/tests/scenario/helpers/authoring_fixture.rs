@@ -21,7 +21,7 @@ pub(crate) fn library_top(engine: &mut GameEngine, player: usize, card_ids: &[&s
 pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize>) -> GameEngine {
     let artifact_return_fixture = matches!(
         (card, ability),
-        ("trading_post", Some(2)) | ("goblin_engineer", Some(0))
+        ("trading_post", Some(2)) | ("goblin_engineer", Some(0)) | ("goblin_welder", Some(0))
     );
     let mut cards = vec![
         card,

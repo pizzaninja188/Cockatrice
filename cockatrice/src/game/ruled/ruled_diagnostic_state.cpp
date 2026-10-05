@@ -246,6 +246,7 @@ QJsonValue value(const RuledTargetGroupData &v)
     result.insert("promptText", value(v.promptText));
     result.insert("distinctFromGroupIndices", value(v.distinctFromGroupIndices));
     result.insert("sameGraveyard", value(v.sameGraveyard));
+    result.insert("pairConstraint", value(v.pairConstraint));
     return result;
 }
 QJsonValue value(const RuledTargetingCostCandidate &v)

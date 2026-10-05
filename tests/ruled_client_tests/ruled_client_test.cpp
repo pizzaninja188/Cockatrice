@@ -4383,6 +4383,131 @@ TEST_F(RuledClientTest, RemovedFromCombatPrunesAttackersAndBlockPairs)
     EXPECT_TRUE(state->getCurrentAttackAssignments().contains(100));
 }
 
+TEST(RuledPendingTargetTest, PairedAbilityTargetsReconcileChangedEdgesWithoutObjectRemoval)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    RuledSpellTargetData data;
+    data.groups.resize(2);
+    data.groups[0].validPermanentIds = {40, 41};
+    auto &second = data.groups[1];
+    second.groupIndex = 1;
+    second.validGraveyardIds = {50, 51};
+    auto &constraint = second.pairConstraint.emplace();
+    constraint.set_prior_group_index(0);
+    auto *pair = constraint.add_compatible_pairs();
+    pair->mutable_prior_target()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    pair->mutable_prior_target()->set_object_id(40);
+    pair->mutable_candidate()->set_kind(ruled::v1::TARGET_REF_KIND_GRAVEYARD);
+    pair->mutable_candidate()->set_object_id(50);
+    state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(30, 1), data);
+    PendingActivatedAbility ability;
+    ability.valid = true;
+    ability.waitingForTarget = true;
+    ability.permanentOid = 30;
+    ability.abilityIndex = 1;
+    ability.activeTargetGroupPosition = 1;
+    auto &prior = ability.selectedTargets.emplaceBack();
+    prior.ref.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    prior.ref.set_object_id(40);
+    EXPECT_EQ(ruledTargetClickEligibility({}, ability, state, RuledTargetCandidateKind::Graveyard, 50, kLocalPlayer),
+              RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(ruledTargetClickEligibility({}, ability, state, RuledTargetCandidateKind::Graveyard, 51, kLocalPlayer),
+              RuledTargetClickEligibility::Illegal);
+    auto &candidate = ability.selectedTargets.emplaceBack();
+    candidate.ref.set_kind(ruled::v1::TARGET_REF_KIND_GRAVEYARD);
+    candidate.ref.set_object_id(50);
+    candidate.ref.set_group_index(1);
+    ability.waitingForTarget = false;
+    ability.waitingForMana = true;
+    // Both objects remain candidates; the authoritative relation changed.
+    data.groups[1].pairConstraint->mutable_compatible_pairs(0)->mutable_prior_target()->set_object_id(41);
+    state.validTargetsByAbility.insert(RuledClientState::abilityTargetKey(30, 1), data);
+    PendingRuledSpellCast spell;
+    EXPECT_TRUE(reconcileRuledPendingTargets(spell, ability, state, kLocalPlayer));
+    ASSERT_EQ(ability.selectedTargets.size(), 1);
+    EXPECT_EQ(ability.selectedTargets.first().ref.object_id(), 40u);
+    EXPECT_EQ(ability.activeTargetGroupPosition, 1);
+    EXPECT_TRUE(ability.waitingForTarget);
+    EXPECT_FALSE(ability.waitingForMana);
+    EXPECT_EQ(ruledTargetClickEligibility({}, ability, state, RuledTargetCandidateKind::Graveyard, 50, kLocalPlayer),
+              RuledTargetClickEligibility::Illegal);
+}
+
+TEST(RuledPendingTargetTest, PairCompatibilityRequiresOneEarlierTypedSelection)
+{
+    RuledTargetGroupData group;
+    group.groupIndex = 7;
+    auto &constraint = group.pairConstraint.emplace();
+    constraint.set_prior_group_index(3);
+    auto *pair = constraint.add_compatible_pairs();
+    pair->mutable_prior_target()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    pair->mutable_prior_target()->set_object_id(40);
+    pair->mutable_candidate()->set_kind(ruled::v1::TARGET_REF_KIND_GRAVEYARD);
+    pair->mutable_candidate()->set_object_id(50);
+    QVector<ruled::v1::TargetRef> selected;
+    EXPECT_FALSE(ruledTargetPairCompatible(group, ruled::v1::TARGET_REF_KIND_GRAVEYARD, 50, selected));
+    auto &target = selected.emplaceBack();
+    target.set_group_index(3);
+    target.set_object_id(40);
+    target.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    EXPECT_TRUE(ruledTargetPairCompatible(group, ruled::v1::TARGET_REF_KIND_GRAVEYARD, 50, selected));
+    EXPECT_FALSE(ruledTargetPairCompatible(group, ruled::v1::TARGET_REF_KIND_PERMANENT, 50, selected));
+    target.set_kind(ruled::v1::TARGET_REF_KIND_STACK);
+    EXPECT_FALSE(ruledTargetPairCompatible(group, ruled::v1::TARGET_REF_KIND_GRAVEYARD, 50, selected));
+    target.set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    selected.append(target);
+    EXPECT_FALSE(ruledTargetPairCompatible(group, ruled::v1::TARGET_REF_KIND_GRAVEYARD, 50, selected));
+    selected.removeLast();
+    constraint.set_prior_group_index(7);
+    EXPECT_FALSE(ruledTargetPairCompatible(group, ruled::v1::TARGET_REF_KIND_GRAVEYARD, 50, selected));
+}
+
+TEST(RuledPendingTargetTest, PairedSpellTargetsPruneChangedEdgesAndReopenTheDependentGroup)
+{
+    FakeHost host;
+    RuledClientState state(&host);
+    RuledSpellTargetData data;
+    data.groups.resize(2);
+    data.groups[0].validPermanentIds = {40};
+    auto &second = data.groups[1];
+    second.groupIndex = 1;
+    second.validGraveyardIds = {50, 51};
+    auto &constraint = second.pairConstraint.emplace();
+    auto *pair = constraint.add_compatible_pairs();
+    pair->mutable_prior_target()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+    pair->mutable_prior_target()->set_object_id(40);
+    pair->mutable_candidate()->set_kind(ruled::v1::TARGET_REF_KIND_GRAVEYARD);
+    pair->mutable_candidate()->set_object_id(50);
+    state.validTargetsByHandSlot.insert(RuledClientState::spellTargetKey(6, 0), data);
+    PendingRuledSpellCast spell;
+    spell.valid = true;
+    spell.waitingForTarget = true;
+    spell.handIndex = 6;
+    spell.activeTargetGroupPosition = 1;
+    spell.selectedTargetOidsByGroup = {{40}, {}};
+    EXPECT_EQ(ruledTargetClickEligibility(spell, {}, state, RuledTargetCandidateKind::Graveyard, 50, kLocalPlayer),
+              RuledTargetClickEligibility::Legal);
+    EXPECT_EQ(ruledTargetClickEligibility(spell, {}, state, RuledTargetCandidateKind::Graveyard, 51, kLocalPlayer),
+              RuledTargetClickEligibility::Illegal);
+    spell.selectedTargetOids = {50};
+    spell.selectedTargetOidsByGroup[1] = {50};
+    spell.selectedTargetDamages = {3};
+    spell.selectedTargetDamagesByGroup = {{0}, {3}};
+    spell.targetDamageAllocations = {3};
+    data.groups[1].pairConstraint->clear_compatible_pairs();
+    state.validTargetsByHandSlot.insert(RuledClientState::spellTargetKey(6, 0), data);
+    PendingActivatedAbility ability;
+    EXPECT_TRUE(reconcileRuledPendingTargets(spell, ability, state, kLocalPlayer));
+    EXPECT_EQ(spell.selectedTargetOidsByGroup[0], QVector<quint32>({40}));
+    EXPECT_TRUE(spell.selectedTargetOidsByGroup[1].isEmpty());
+    EXPECT_TRUE(spell.selectedTargetOids.isEmpty());
+    EXPECT_TRUE(spell.selectedTargetDamages.isEmpty());
+    EXPECT_TRUE(spell.targetDamageAllocations.isEmpty());
+    EXPECT_EQ(spell.activeTargetGroupPosition, 1);
+    EXPECT_TRUE(spell.waitingForTarget);
+}
+
 TEST_F(RuledClientTest, StalePairsArePrunedWhenPermanentsLeaveTheBattlefield)
 {
     ruled::v1::RuledEventBatch setup;
@@ -6212,6 +6337,48 @@ TEST_F(RuledClientTest, TriggerTargetPromptAdvancesSequentialGroupGuidance)
     EXPECT_EQ(state->pendingTriggerTargetPrompt(),
               QString::fromUtf8("Choose targets for “Choose one artifact and one creature.”\n"
                                 "Target 2 of 2: Choose target creature."));
+}
+
+TEST_F(RuledClientTest, TargetPairsUseEngineCompatibilityAndConstrainedEmptyFailsClosed)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *trigger = batch.add_events()->mutable_trigger_needs_target();
+    trigger->set_source_permanent_id(100);
+    trigger->set_controller_player_id(kLocalPlayer);
+    auto *first = trigger->mutable_targets()->add_groups();
+    first->set_group_index(0);
+    first->set_min(1);
+    first->set_max(1);
+    first->add_valid_permanent_ids(701);
+    first->add_valid_permanent_ids(702);
+    auto *second = trigger->mutable_targets()->add_groups();
+    second->set_group_index(1);
+    second->set_min(1);
+    second->set_max(1);
+    second->add_valid_graveyard_ids(801);
+    second->add_valid_graveyard_ids(802);
+    auto *constraint = second->mutable_pair_constraint();
+    constraint->set_prior_group_index(0);
+    for (const auto &[prior, candidate] : {std::pair{701u, 801u}, std::pair{702u, 802u}}) {
+        auto *pair = constraint->add_compatible_pairs();
+        pair->mutable_prior_target()->set_kind(ruled::v1::TARGET_REF_KIND_PERMANENT);
+        pair->mutable_prior_target()->set_object_id(prior);
+        pair->mutable_candidate()->set_kind(ruled::v1::TARGET_REF_KIND_GRAVEYARD);
+        pair->mutable_candidate()->set_object_id(candidate);
+    }
+    apply(batch);
+    ASSERT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 701, kLocalPlayer));
+    EXPECT_FALSE(state->isPendingTriggerTargetCandidate(ruled::v1::TARGET_REF_KIND_GRAVEYARD, 802, kLocalPlayer));
+    EXPECT_TRUE(state->isPendingTriggerTargetCandidate(ruled::v1::TARGET_REF_KIND_GRAVEYARD, 801, kLocalPlayer));
+    EXPECT_TRUE(host.sentCommands.empty());
+    constraint->clear_compatible_pairs();
+    apply(batch);
+    ASSERT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 701, kLocalPlayer));
+    EXPECT_FALSE(state->isPendingTriggerTargetCandidate(ruled::v1::TARGET_REF_KIND_GRAVEYARD, 801, kLocalPlayer));
+    second->clear_pair_constraint();
+    apply(batch);
+    ASSERT_TRUE(state->stagePendingTriggerTarget(ruled::v1::TARGET_REF_KIND_PERMANENT, 701, kLocalPlayer));
+    EXPECT_TRUE(state->isPendingTriggerTargetCandidate(ruled::v1::TARGET_REF_KIND_GRAVEYARD, 802, kLocalPlayer));
 }
 
 TEST_F(RuledClientTest, ResolutionBranchesSubmitOpaqueIndexWithoutOpeningADialog)

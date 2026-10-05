@@ -641,6 +641,23 @@ fn goblin_engineer_cast_and_activation_have_complete_fixtures() {
 }
 
 #[test]
+fn goblin_welder_cast_and_activation_have_complete_fixtures() {
+    for ability in [None, Some(0)] {
+        let case = Case {
+            card: "goblin_welder".into(),
+            face: 0,
+            ability,
+        };
+        assert_eq!(
+            evaluate(&case).expect("Welder conformance fixture"),
+            Outcome::Exercised,
+            "{}",
+            case.key()
+        );
+    }
+}
+
+#[test]
 fn drain_rejects_exhaustion_and_rejected_progression() {
     let case = Case {
         card: "grizzly_bears".into(),

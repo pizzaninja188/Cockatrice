@@ -1574,7 +1574,8 @@ pub struct BattlefieldEntryEvent {
     pub entry_modifiers: Vec<ResolvingPermanentModifier>,
     pub applied_effects: Vec<EntryReplacementEffectId>,
     /// Copy values installed provisionally while other entry replacements are processed, before
-    /// an Aura's required attachment recipient is chosen and the permanent is committed.
+    /// further choices finish and the permanent is committed. Retains rollback identity for
+    /// copied Aura, Battle and entry-cost continuations that can be abandoned.
     pub(crate) pending_copy_candidate: Option<PendingCopyCandidate>,
     /// Legal recipient selection for any copy entering as an Aura, including copied tokens.
     pub(crate) pending_aura_recipient: Option<PendingAuraEntryRecipient>,
@@ -1674,6 +1675,12 @@ pub(crate) struct PendingZoneEntryBatch {
 /// Instructions that finish after the entire simultaneous entry cohort commits.
 #[derive(serde::Serialize, Debug, Clone)]
 pub(crate) enum ZoneEntryCompletion {
+    /// Both incarnations survive parked entry reconciliation; neither instruction is a cost.
+    PairedArtifactExchange {
+        departure: TriggerObjectRef,
+        incoming: TriggerObjectRef,
+        player: PlayerId,
+    },
     LibrarySearch(LibrarySearchCompletion),
     ChaosWarpRevealedTop {
         library_owner: PlayerId,
@@ -1774,6 +1781,8 @@ pub(crate) struct PendingCopyCandidate {
     pub source_filter: TargetFilter,
     pub entering_zone_generation: u64,
     pub entering_copy_revision: u64,
+    /// Original pre-entry baseline; entering_copy_revision guards the latest installation.
+    pub rollback_copy_revision: u64,
     pub entering_copiable_values: Option<CopiableValues>,
     pub entering_must_attack_if_able: bool,
     pub entering_must_block_if_able: bool,

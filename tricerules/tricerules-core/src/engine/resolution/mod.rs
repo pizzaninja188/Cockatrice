@@ -1815,6 +1815,11 @@ impl GameEngine {
                     SpellEffectKind::IntoTheWilds => zones::into_the_wilds(&mut cx)?,
                     SpellEffectKind::DeployTheGatewatch => zones::deploy_the_gatewatch(&mut cx)?,
                     SpellEffectKind::ChaosWarp => chaos_warp::chaos_warp(&mut cx)?,
+                    // No card admits this instruction until its simultaneous movement and
+                    // end-to-end pair publication have passed the remaining capability gates.
+                    SpellEffectKind::ExchangeArtifactWithGraveyard => {
+                        zones::exchange_artifact_with_graveyard(&mut cx)?
+                    }
                     effect @ SpellEffectKind::LookChooseToHand { .. } => {
                         zones::look_choose_to_hand(&mut cx, effect)?
                     }

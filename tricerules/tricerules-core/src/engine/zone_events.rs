@@ -82,6 +82,26 @@ impl GameEngine {
         &self,
         batch: &crate::state::PendingZoneEntryBatch,
     ) -> bool {
+        if let Some(crate::state::ZoneEntryCompletion::PairedArtifactExchange {
+            departure,
+            incoming,
+            player,
+        }) = &batch.completion
+        {
+            if targeting::artifact_exchange_player(self, departure.object_id, incoming.object_id)
+                != Some(*player)
+                || [departure, incoming].iter().any(|reference| {
+                    self.state
+                        .zone_change_generation
+                        .get(&reference.object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        != reference.zone_change_generation
+                })
+            {
+                return false;
+            }
+        }
         if let Some(crate::state::ZoneEntryCompletion::ChaosWarpRevealedTop {
             library_owner,
             object_id,
@@ -207,6 +227,56 @@ impl GameEngine {
         let mut committed = HashSet::new();
         let snapshot = self.snapshot_zone_event();
         let mut triggers = Vec::new();
+        if let Some(crate::state::ZoneEntryCompletion::PairedArtifactExchange {
+            departure, ..
+        }) = &completion
+        {
+            // Every fallible entry condition is checked against the original battlefield.
+            // Replacement and Aura choices have already finished, with neither member moved.
+            for entry in &batch.ready {
+                self.validate_battlefield_entry_commit(entry)?;
+                if entry.unlock_room_door.is_some() {
+                    return Err(EngineError::Illegal(
+                        "artifact exchange cannot carry a Room unlock",
+                    ));
+                }
+            }
+            let source = snapshot
+                .source(departure.object_id)
+                .ok_or(EngineError::Illegal("exchange departure source missing"))?;
+            let was_creature = self
+                .characteristics(departure.object_id)
+                .is_some_and(|value| value.has_type("Creature"));
+            let owner = self.state.objects[&departure.object_id].owner;
+            let died = resolution::sacrifice_permanents(
+                &mut self.state,
+                self.registry,
+                &[departure.object_id],
+            )?[0];
+            triggers.extend(sacrifice_events(
+                source,
+                was_creature,
+                departure.controller_at_event,
+                died,
+            ));
+            events.push(permanent_moved_event(
+                &self.state,
+                departure.object_id,
+                owner,
+                if died {
+                    rv1::permanent_moved::Destination::Graveyard
+                } else {
+                    rv1::permanent_moved::Destination::Exile
+                },
+            ));
+            // CR 400.7: a pre-entry Aura choice of the departing incarnation cannot attach
+            // to the card it became. It still enters; ordinary post-resolution SBAs follow.
+            for entry in &mut batch.ready {
+                if entry.attached_to == Some(AttachmentRecipient::Object(departure.object_id)) {
+                    entry.attached_to = None;
+                }
+            }
+        }
         for entry in batch.ready {
             let oid = entry.object_id;
             let chosen_x = entry.chosen_x;
@@ -547,6 +617,82 @@ fn destination_matches(filter: &ZoneEventDestination, zone: Zone) -> bool {
 #[cfg(test)]
 mod timestamp_order_tests {
     use super::*;
+
+    #[test]
+    fn paired_artifact_exchange_commits_both_generations_and_preserves_entry_replacement() {
+        let mut engine = GameEngine::new(2026100520, &[10, 20, 30], 20, None, true).unwrap();
+        let ids = engine.state.players[1].hand[..2].to_vec();
+        for (&oid, card) in ids.iter().zip(["orb_of_dreams", "sol_ring"]) {
+            engine.state.objects.get_mut(&oid).unwrap().card_id = card.into();
+        }
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            ids[0],
+            Zone::Battlefield,
+            Some(20),
+        )
+        .unwrap();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            ids[1],
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        let frozen = |oid| TriggerObjectRef {
+            object_id: oid,
+            zone_change_generation: engine.state.zone_change_generation[&oid],
+            controller_at_event: 20,
+        };
+        let departure = frozen(ids[0]);
+        let incoming = frozen(ids[1]);
+        let snapshot = engine.snapshot_zone_event();
+        let stack = engine.observer_return_item(ids[0], 10);
+        let entry = entry_for(&engine, ids[1], 20);
+        let mut events = Vec::new();
+        assert!(engine
+            .begin_zone_entry_batch(
+                ParkedStackResolution::new(stack),
+                vec![entry],
+                Zone::Graveyard,
+                "exchange",
+                Some(crate::state::ZoneEntryCompletion::PairedArtifactExchange {
+                    departure,
+                    incoming,
+                    player: 20,
+                }),
+                &mut events
+            )
+            .unwrap()
+            .is_some());
+        assert_eq!(engine.state.objects[&ids[0]].zone, Zone::Graveyard);
+        assert_eq!(engine.state.objects[&ids[1]].zone, Zone::Battlefield);
+        assert_eq!(engine.state.objects[&ids[1]].controller, 20);
+        assert!(
+            engine.state.objects[&ids[1]].tapped,
+            "the outgoing Orb applies before the simultaneous event"
+        );
+        assert_eq!(
+            engine.state.zone_change_generation[&ids[0]],
+            departure.zone_change_generation + 1
+        );
+        assert_eq!(
+            engine.state.zone_change_generation[&ids[1]],
+            incoming.zone_change_generation + 1
+        );
+        let GameEvent::ZoneChanges(receipts) = engine.finish_zone_event(snapshot) else {
+            unreachable!()
+        };
+        assert_eq!(receipts.moves.len(), 2);
+        assert!(receipts.moves.iter().any(|r| r.before.object_id == ids[0]
+            && r.origin == Zone::Battlefield
+            && r.destination == Zone::Graveyard));
+        assert!(receipts.moves.iter().any(|r| r.before.object_id == ids[1]
+            && r.origin == Zone::Graveyard
+            && r.destination == Zone::Battlefield));
+    }
 
     fn entry_for(
         engine: &GameEngine,

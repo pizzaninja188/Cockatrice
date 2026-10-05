@@ -5716,6 +5716,52 @@ TEST_F(RuledBatchTest, PermanentSpellCopyResolutionMintsTokenWithoutMovingOrigin
     EXPECT_FALSE(hasSyntheticStackBookkeeping(901u));
 }
 
+TEST_F(RuledBatchTest, GraveyardCopyEntryKeepsExactPhysicalBindingAfterDisplayChanges)
+{
+    seedCardCatalog({"Sculpting Steel", "Sol Ring"});
+    auto *grave = p1->getZones().value(ZoneNames::GRAVE);
+    auto *steel = new Server_Card({"Sculpting Steel", "sculpting_steel"}, p1->newCardId(), 0, 0);
+    grave->insertCard(steel, 0, 0);
+    const int steelId = steel->getId();
+
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *initialZones = seed.mutable_batch()->add_events()->mutable_zone_view();
+    auto initial = buildPerPlayerView(p1, {}, {});
+    initial.add_graveyard_object_ids(745u);
+    *initialZones->add_per_player() = initial;
+    *initialZones->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(seed);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *moved = response.mutable_batch()->add_events()->mutable_permanent_moved();
+    moved->set_object_id(745u);
+    moved->set_owner_player_id(p1->getPlayerId());
+    moved->set_controller_player_id(p1->getPlayerId());
+    moved->set_card_id("sculpting_steel");
+    moved->set_destination(ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD);
+    auto *zones = response.mutable_batch()->add_events()->mutable_zone_view();
+    auto final = buildPerPlayerView(p1, {}, {});
+    auto *object = final.add_battlefield_objects();
+    object->set_object_id(745u);
+    object->set_card_id("sculpting_steel");
+    object->set_effective_display_name("Sol Ring");
+    object->set_copy_annotation("Copy: Sculpting Steel");
+    object->set_zone_change_generation(2u);
+    object->set_tapped(false);
+    *zones->add_per_player() = final;
+    *zones->add_per_player() = buildPerPlayerView(p2, {}, {});
+    callBatchApply(response);
+
+    EXPECT_TRUE(grave->getCards().isEmpty());
+    EXPECT_EQ(p1->getZones().value(ZoneNames::TABLE)->getCards(), QList<Server_Card *>({steel}));
+    EXPECT_EQ(steel->getId(), steelId);
+    EXPECT_EQ(steel->getName(), QStringLiteral("Sol Ring"));
+    EXPECT_EQ(findCardByEngineOid(p1, 745u), steel);
+    EXPECT_TRUE(steel->getAnnotation().contains(QStringLiteral("Copy: Sculpting Steel")));
+}
+
 TEST_F(RuledBatchTest, CopiedPermanentLeavesAsItsPhysicalCardWithoutMovingTheSource)
 {
     seedCardCatalog({"Clone", "Serra Angel"});

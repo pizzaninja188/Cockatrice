@@ -1,0 +1,21 @@
+// Oracle 9fc28e1f-f4ea-4bf8-9442-a36dba3b3b29 and WotC rulings verified 2026-10-05.
+// CR 602.2b/608.2b-c and 701.21a: two legal targets, one simultaneous instruction.
+(
+  id: "goblin_welder",
+  name: "Goblin Welder",
+  face_id: "goblin_welder",
+  mana_cost: "{R}",
+  types: ["Creature", "Goblin", "Artificer"],
+  power: 1,
+  toughness: 1,
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Tap],
+    effect: [ExchangeArtifactWithGraveyard],
+    targeting: Some((groups: [
+      (min: 1, max: 1, prompt: "Choose target artifact a player controls", effect_indices: [0]),
+      (min: 1, max: 1, prompt: "Choose target artifact card in that player's graveyard", effect_indices: [0]),
+    ])),
+  )],
+)

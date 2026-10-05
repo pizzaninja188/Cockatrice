@@ -859,6 +859,10 @@ impl GameEngine {
             .ok_or(EngineError::Illegal("entry continuation missing"))?;
         if let BattlefieldEntryCompletion::ZoneEntryBatch(batch) = &entry.completion {
             if !self.zone_entry_batch_current(batch) {
+                self.restore_abandoned_battlefield_entry(&entry.event)?;
+                for ready in &batch.ready {
+                    self.restore_abandoned_battlefield_entry(ready)?;
+                }
                 self.state.pending_resolution = None;
                 self.state.pending_replacement_event = None;
                 return self.abandon_participating_resolution(Some(stack), events);
@@ -997,6 +1001,8 @@ impl GameEngine {
             }
         }
         let affected_application = match &pending.continuation {
+            ResolutionContinuation::BattleProtector { .. } => pending.presentation.candidates.iter()
+                .any(|&player| !self.entry_battle_protector_is_live(&entry.event, player as PlayerId)),
             ResolutionContinuation::EntryReplacement { .. } => entry.applications.iter().any(|application|
                 matches!(application.effect_id, EntryReplacementEffectId::Battlefield { source_id, .. } if !self.state.objects.contains_key(&source_id))),
             ResolutionContinuation::EntryCost { effect_id, .. } | ResolutionContinuation::EntryReveal { effect_id, .. } =>
@@ -1677,22 +1683,20 @@ impl GameEngine {
         format!("{article} {noun}")
     }
 
-    fn copied_aura_attachment_filter(values: &CopiableValues) -> Option<TargetFilter> {
-        values
-            .face
-            .spell_effect
-            .iter()
-            .find_map(|effect| match effect {
-                SpellEffectKind::AuraAttach { target } => Some(target.clone()),
-                _ => None,
-            })
-    }
-
     pub(super) fn restore_skipped_battlefield_entry(
         &mut self,
         event: &BattlefieldEntryEvent,
     ) -> Result<(), EngineError> {
-        if let Some(candidate) = event
+        if let Some(candidate) = Self::entry_copy_rollback_candidate(event) {
+            self.restore_entry_copy_candidate(event.object_id, candidate)?;
+        }
+        Ok(())
+    }
+
+    fn entry_copy_rollback_candidate(
+        event: &BattlefieldEntryEvent,
+    ) -> Option<&PendingCopyCandidate> {
+        event
             .pending_copy_candidate
             .as_ref()
             .or_else(|| {
@@ -1707,8 +1711,33 @@ impl GameEngine {
                     .as_ref()
                     .and_then(|receipt| receipt.copy_candidate.as_ref())
             })
-        {
-            self.restore_entry_copy_candidate(event.object_id, candidate)?;
+    }
+
+    fn restore_abandoned_battlefield_entry(
+        &mut self,
+        event: &BattlefieldEntryEvent,
+    ) -> Result<(), EngineError> {
+        let candidate = Self::entry_copy_rollback_candidate(event);
+        if let Some(candidate) = candidate {
+            // Concession can remove the entrant or replace another member. Only restore the
+            // still-present incarnation carrying precisely this provisional installation.
+            if self
+                .state
+                .zone_change_generation
+                .get(&event.object_id)
+                .copied()
+                .unwrap_or(0)
+                == candidate.entering_zone_generation
+                && self
+                    .state
+                    .objects
+                    .get(&event.object_id)
+                    .is_some_and(|object| {
+                        object.copy_revision == candidate.entering_copy_revision.saturating_add(1)
+                    })
+            {
+                self.restore_entry_copy_candidate(event.object_id, candidate)?;
+            }
         }
         Ok(())
     }
@@ -2686,10 +2715,7 @@ impl GameEngine {
                             .state
                             .players
                             .iter()
-                            .filter(|player| {
-                                self.state
-                                    .are_opponents(event.destination_controller, player.id)
-                            })
+                            .filter(|player| self.entry_battle_protector_is_live(&event, player.id))
                             .map(|player| player.id)
                             .collect();
                         if !protectors.is_empty() {
@@ -2970,11 +2996,63 @@ impl GameEngine {
         Ok(())
     }
 
+    pub(super) fn entry_battle_protector_is_live(
+        &self,
+        event: &BattlefieldEntryEvent,
+        protector: PlayerId,
+    ) -> bool {
+        self.state
+            .are_opponents(event.destination_controller, protector)
+            && [event.destination_controller, protector]
+                .iter()
+                .all(|&player| {
+                    self.state
+                        .player_idx(player)
+                        .is_some_and(|index| !self.state.players[index].has_lost)
+                })
+    }
+
+    pub(super) fn validate_battlefield_entry_commit(
+        &self,
+        event: &BattlefieldEntryEvent,
+    ) -> Result<(), EngineError> {
+        let object = self
+            .state
+            .objects
+            .get(&event.object_id)
+            .ok_or(EngineError::Illegal("no object"))?;
+        if self.state.player_idx(object.owner).is_none()
+            || self
+                .state
+                .player_idx(event.destination_controller)
+                .is_none()
+        {
+            return Err(EngineError::Illegal("no such entry player"));
+        }
+        let is_battle = self.battlefield_entry_is_battle(event);
+        if is_battle
+            && !event
+                .battle_protector
+                .is_some_and(|protector| self.entry_battle_protector_is_live(event, protector))
+        {
+            return Err(EngineError::Illegal(
+                "Battle entry requires a valid protector",
+            ));
+        }
+        if !is_battle && event.battle_protector.is_some() {
+            return Err(EngineError::Illegal(
+                "non-Battle entry cannot carry a protector",
+            ));
+        }
+        Ok(())
+    }
+
     pub(super) fn commit_battlefield_entry_state(
         &mut self,
         event: BattlefieldEntryEvent,
         attached_to: Option<AttachmentRecipient>,
     ) -> Result<Vec<GameEvent>, EngineError> {
+        self.validate_battlefield_entry_commit(&event)?;
         // CR 400.7a: the marked characteristic-changing mana effects on a permanent spell
         // continue to apply to the permanent it becomes. Do not carry unrelated stack effects.
         let carries_spell_effects = self
@@ -3000,22 +3078,6 @@ impl GameEngine {
             Vec::new()
         };
         let zone_snapshot = self.snapshot_zone_event();
-        let is_battle = self.battlefield_entry_is_battle(&event);
-        if is_battle
-            && !event.battle_protector.is_some_and(|protector| {
-                self.state
-                    .are_opponents(event.destination_controller, protector)
-            })
-        {
-            return Err(EngineError::Illegal(
-                "Battle entry requires a valid protector",
-            ));
-        }
-        if !is_battle && event.battle_protector.is_some() {
-            return Err(EngineError::Illegal(
-                "non-Battle entry cannot carry a protector",
-            ));
-        }
         let battle_protector = event.battle_protector;
         let read_ahead_entry = event
             .applied_effects
@@ -3870,6 +3932,16 @@ impl GameEngine {
                 self.state.pending_resolution = Some(pending);
                 return Err(EngineError::Illegal("entering copy object is stale"));
             };
+            let previous_copy = Self::entry_copy_rollback_candidate(&entry.event);
+            if previous_copy.is_some_and(|candidate| {
+                candidate.entering_copy_revision.saturating_add(1) != entering.copy_revision
+            }) {
+                entry.copy_source_effect = Some(effect_id);
+                self.state.pending_replacement_event =
+                    Some(PendingReplacementEvent::BattlefieldEntry(Box::new(entry)));
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("provisional copy chain became stale"));
+            }
             let candidate = PendingCopyCandidate {
                 source_id,
                 source_generation,
@@ -3881,16 +3953,25 @@ impl GameEngine {
                     .copied()
                     .unwrap_or(0),
                 entering_copy_revision: entering.copy_revision,
-                entering_copiable_values: entering.copiable_values.clone(),
-                entering_must_attack_if_able: entering.must_attack_if_able,
-                entering_must_block_if_able: entering.must_block_if_able,
+                rollback_copy_revision: previous_copy.map_or(entering.copy_revision, |candidate| {
+                    candidate.rollback_copy_revision
+                }),
+                entering_copiable_values: previous_copy.map_or_else(
+                    || entering.copiable_values.clone(),
+                    |candidate| candidate.entering_copiable_values.clone(),
+                ),
+                entering_must_attack_if_able: previous_copy
+                    .map_or(entering.must_attack_if_able, |candidate| {
+                        candidate.entering_must_attack_if_able
+                    }),
+                entering_must_block_if_able: previous_copy
+                    .map_or(entering.must_block_if_able, |candidate| {
+                        candidate.entering_must_block_if_able
+                    }),
                 values,
             };
-            let copied_aura = Self::copied_aura_attachment_filter(&candidate.values).is_some();
             self.install_entry_copy_candidate(entry.event.object_id, &candidate)?;
-            if copied_aura {
-                entry.event.pending_copy_candidate = Some(candidate);
-            }
+            entry.event.pending_copy_candidate = Some(candidate);
             if let BattlefieldEntryCompletion::PermanentSpell { attached_to }
             | BattlefieldEntryCompletion::ObserverReturn { attached_to, .. } =
                 &mut entry.completion
@@ -3984,7 +4065,7 @@ impl GameEngine {
             return Err(EngineError::Illegal("provisional copy state is stale"));
         }
         object.copiable_values = candidate.entering_copiable_values.clone();
-        object.copy_revision = candidate.entering_copy_revision;
+        object.copy_revision = candidate.rollback_copy_revision;
         object.must_attack_if_able = candidate.entering_must_attack_if_able;
         object.must_block_if_able = candidate.entering_must_block_if_able;
         Ok(())

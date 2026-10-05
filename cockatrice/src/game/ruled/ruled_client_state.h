@@ -156,7 +156,15 @@ struct RuledTargetGroupData
     QVector<int> distinctFromGroupIndices;
     bool sameGraveyard = false;
     bool chosenByOpponent = false;
+    /// Presence matters: a present constraint with no edges permits no pair.
+    std::optional<ruled::v1::TargetPairConstraint> pairConstraint;
 };
+
+/// Compare opaque typed identities published by the engine, without reconstructing ownership.
+[[nodiscard]] bool ruledTargetPairCompatible(const RuledTargetGroupData &group,
+                                              ruled::v1::TargetRefKind kind,
+                                              quint32 oid,
+                                              const QVector<ruled::v1::TargetRef> &selected);
 
 /// Builds the common ruled target prompt from engine-authored source and group presentation data.
 /// `groupPosition` is zero-based; `groupCount` is the number of sequential groups in the active

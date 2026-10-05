@@ -199,11 +199,13 @@ bool RuledTargetUi::tryHandleRuledSpellTargetClick(PlayerActions *actions, CardI
     }
     const auto activeGroup = currentRuledSpellTargetGroup(actions->pendingRuledSpellCast, *handler);
     const bool valid =
-        activeGroup.has_value() && ruledTargetDataContains(*activeGroup,
+        activeGroup.has_value() && ruledTargetClickEligibility(actions->pendingRuledSpellCast,
+                                                           actions->pendingActivatedAbility, *handler,
                                                            isOnBattlefield ? RuledTargetCandidateKind::Battlefield
                                                            : isOnGraveyard ? RuledTargetCandidateKind::Graveyard
                                                                            : RuledTargetCandidateKind::Stack,
-                                                           targetOid, actions->player->getPlayerInfo()->getId());
+                                                           targetOid, actions->player->getPlayerInfo()->getId()) ==
+                                      RuledTargetClickEligibility::Legal;
     if (!valid) {
         actions->player->getGame()->getGameEventHandler()->ruled()->emitLocalLog(
             PlayerActions::tr("That is not a legal target for %1.").arg(actions->pendingRuledSpellCast.cardName));
@@ -337,6 +339,11 @@ bool RuledTargetUi::tryHandleRuledSpellTargetPlayerClick(PlayerActions *actions,
     }
 
     const quint32 targetOid = static_cast<quint32>(targetPlayerId);
+    if (ruledTargetClickEligibility(actions->pendingRuledSpellCast, actions->pendingActivatedAbility, *handler,
+                                    RuledTargetCandidateKind::Player, targetOid,
+                                    actions->player->getPlayerInfo()->getId()) != RuledTargetClickEligibility::Legal) {
+        return true;
+    }
     for (const int otherGroup : activeGroup->distinctFromGroupIndices) {
         if (actions->pendingRuledSpellCast.selectedTargetOidsByGroup.value(otherGroup).contains(targetOid)) {
             handler->emitLocalLog(PlayerActions::tr("That player is already selected in a distinct target group."));
@@ -729,7 +736,9 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetClick(PlayerActions *actions, Car
                                                        actions->pendingActivatedAbility.abilityIndex);
     const auto group = targetData.groups.isEmpty() ? static_cast<const RuledTargetGroupData &>(targetData)
                                                  : targetData.groups.value(actions->pendingActivatedAbility.activeTargetGroupPosition);
-    if (group.chosenByOpponent || !ruledTargetDataContains(group, kind, targetOid, actions->player->getPlayerInfo()->getId())) {
+    if (ruledTargetClickEligibility(actions->pendingRuledSpellCast, actions->pendingActivatedAbility, *handler,
+                                    kind, targetOid, actions->player->getPlayerInfo()->getId()) !=
+        RuledTargetClickEligibility::Legal) {
         return true;
     }
 
@@ -849,8 +858,9 @@ bool RuledTargetUi::tryHandleRuledAbilityTargetPlayerClick(PlayerActions *action
     const auto data = handler->abilityTargetData(permOid, abilityIdx);
     const auto group = data.groups.isEmpty() ? static_cast<const RuledTargetGroupData &>(data)
                                           : data.groups.value(actions->pendingActivatedAbility.activeTargetGroupPosition);
-    if (group.chosenByOpponent || !ruledTargetDataContains(group, RuledTargetCandidateKind::Player,
-                                 targetOid, actions->player->getPlayerInfo()->getId())) {
+    if (ruledTargetClickEligibility(actions->pendingRuledSpellCast, actions->pendingActivatedAbility, *handler,
+                                    RuledTargetCandidateKind::Player, targetOid,
+                                    actions->player->getPlayerInfo()->getId()) != RuledTargetClickEligibility::Legal) {
         return true;
     }
     PendingActivatedAbility::Target selected;

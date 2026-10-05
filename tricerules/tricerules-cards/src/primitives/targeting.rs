@@ -257,6 +257,26 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
             effect_role_counts,
         };
         for (effect_index, effect) in effects.iter().enumerate() {
+            if matches!(effect, SpellEffectKind::ExchangeArtifactWithGraveyard) {
+                let pair = schema.artifact_exchange_groups(effect_index);
+                if pair.is_none_or(|(first, second)| {
+                    first >= second
+                        || [first, second].iter().any(|&index| {
+                            let group = &schema.groups[index];
+                            group.min != 1
+                                || group.max != 1
+                                || group.bindings.len() != 1
+                                || group.chooser != TargetChooser::Controller
+                        })
+                }) {
+                    return Err(
+                        "artifact exchange requires two singleton controller-chosen target groups"
+                            .into(),
+                    );
+                }
+            }
+        }
+        for (effect_index, effect) in effects.iter().enumerate() {
             let Some((group_index, kind)) = effect.targeted_mass_scope() else {
                 continue;
             };
@@ -290,6 +310,18 @@ impl<'effects, 'targeting> TargetSchema<'effects, 'targeting> {
             }
         }
         Ok(schema)
+    }
+
+    /// Bound role groups of the specialized artifact exchange instruction.
+    pub fn artifact_exchange_groups(&self, effect_index: usize) -> Option<(usize, usize)> {
+        let group_for = |role_index| {
+            self.groups.iter().position(|group| {
+                group.bindings.iter().any(|binding| {
+                    binding.effect_index == effect_index && binding.role_index == role_index
+                })
+            })
+        };
+        Some((group_for(0)?, group_for(1)?))
     }
 
     pub fn has_targets(&self) -> bool {

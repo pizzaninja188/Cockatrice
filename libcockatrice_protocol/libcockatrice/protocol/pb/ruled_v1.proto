@@ -714,6 +714,21 @@ message LegalTargetGroup {
   repeated uint32 distinct_from_group_indices = 10 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   bool same_graveyard = 11 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   bool chosen_by_opponent = 12 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  // Presence requires an engine-published compatible pair with an earlier selected group.
+  // Present with no pairs means no legal selection; absent means no pair constraint.
+  TargetPairConstraint pair_constraint = 13 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+// Opaque engine-authored compatibility for Goblin Welder's two target roles. Consumers
+// compare typed identities only; they must not derive the owner/controller relation.
+message TargetPairConstraint {
+  uint32 prior_group_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated TargetPairChoice compatible_pairs = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message TargetPairChoice {
+  TargetCandidateRef prior_target = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  TargetCandidateRef candidate = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 message TargetedCostReductionApplication {

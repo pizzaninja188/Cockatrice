@@ -184,6 +184,9 @@ RuledClientState::SpellTargetData parseSpellTargets(const ruled::v1::SpellTarget
         parsed.promptText = QString::fromStdString(group.prompt_text());
         parsed.sameGraveyard = group.same_graveyard();
         parsed.chosenByOpponent = group.chosen_by_opponent();
+        if (group.has_pair_constraint()) {
+            parsed.pairConstraint = group.pair_constraint();
+        }
         for (const quint32 other : group.distinct_from_group_indices()) {
             parsed.distinctFromGroupIndices.append(static_cast<int>(other));
         }

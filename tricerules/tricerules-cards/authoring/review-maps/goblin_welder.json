@@ -1,0 +1,86 @@
+{
+  "format_version": 1,
+  "oracle_id": "9fc28e1f-f4ea-4bf8-9442-a36dba3b3b29",
+  "spans": [
+    {
+      "face_id": "goblin_welder",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_goblin_welder::welder_actual_paid_cast_and_tap_cost_preserve_both_targets_until_resolution",
+      "covers": "Actual R cast and 1/1 characteristics; fresh creature and wrong actor reject unchanged. Paid tap leaves both targets unmoved until resolution; return enters untapped."
+    },
+    {
+      "test": "scenario deck_coverage_goblin_welder::welder_own_and_opponent_pairs_reject_crossed_targets_without_paying",
+      "covers": "Own and both opponent pairs in a three-player game; current matched player controls return. Crossed graveyard, nonartifact, wrong-zone and tapped-source activations reject without paying."
+    },
+    {
+      "test": "scenario deck_coverage_goblin_welder::welder_either_illegal_target_or_changed_controller_keeps_both_objects_and_paid_tap",
+      "covers": "Either or both stale incarnations, changed artifact types and changed battlefield controller prevent both movements, retaining paid tap. Synthetic mutations isolate each resolution check."
+    },
+    {
+      "test": "scenario deck_coverage_goblin_welder::welder_foreign_owned_departure_and_artifact_source_follow_current_controller",
+      "covers": "Controlled foreign-owned artifact goes to its owner's graveyard while own card returns; actual Liquimetal Torque permits Welder to exchange itself and its stacked ability survives."
+    },
+    {
+      "test": "scenario deck_coverage_goblin_welder::welder_outgoing_orb_applies_before_departure_and_finality_does_not_prevent_return",
+      "covers": "Outgoing Orb of Dreams applies to the simultaneous incoming artifact through logged replacement ordering; finality replacement exiles departure while return still occurs. Astral Cornucopia returns with X=0."
+    },
+    {
+      "test": "scenario deck_coverage_goblin_welder::welder_aborted_aura_choice_restores_surviving_provisional_copy",
+      "covers": "Foreign departure owner's concession during Steel copying Coating-artifact Confiscate restores the surviving graveyard Steel's original copy state/revision and generation; a later real exchange still offers and completes Steel's own copy choice."
+    },
+    {
+      "test": "scenario deck_coverage_goblin_welder::welder_aborted_entry_cost_restores_surviving_provisional_copy",
+      "covers": "Foreign departure owner's concession during Steel copying Coating-artifact Steam Vents entry cost restores the surviving graveyard Steel's original copy state/revision and generation; a later real exchange still offers and completes Steel's own copy choice."
+    },
+    {
+      "test": "scenario deck_coverage_goblin_welder::welder_aborted_copy_chain_restores_original_graveyard_identity",
+      "covers": "Actual Steel copies Anthem-sustained Metamorph, then Coating-artifact Steam Vents and parks for its entry cost. Foreign departure owner's concession restores Steel's original graveyard identity, copy revision and generation; a later real exchange still completes its original copy replacement."
+    },
+    {
+      "test": "scenario deck_coverage_goblin_welder::welder_copied_battle_rejects_departed_protector_then_commits_with_live_opponent",
+      "covers": "Steel copies actual Torque-artifact Invasion of Ulgrotha; third-seat concession removes protector candidate, stale answer rejects with both artifacts unmoved, and live opponent selection commits with five defense counters."
+    },
+    {
+      "test": "scenario deck_coverage_goblin_welder::welder_outgoing_copy_source_remains_unmoved_through_logged_choice",
+      "covers": "Opponent's Sculpting Steel chooses outgoing Orb before either moves; wrong actor and nonartifact copy source reject unchanged, then copy enters tapped under the matched opponent."
+    },
+    {
+      "test": "scenario deck_coverage_goblin_welder::welder_copy_choice_stale_member_and_player_concession_never_sacrifice_a_survivor",
+      "covers": "Frozen departure staleness rejects a parked choice without either move; matched-player concession removes that player's members and clears pending resolution without sacrificing the activator's source."
+    },
+    {
+      "test": "scenario deck_coverage_goblin_welder::welder_copied_aura_chooses_departing_incarnation_then_enters_before_separate_sba",
+      "covers": "Steel copies actual Torque-artifact Confiscate and selects departing Sol Ring before either moves. It enters once, then normal Aura SBA sends it to graveyard in a separate move and generation, following the explicitly documented rules-derived inference."
+    },
+    {
+      "test": "scenario deck_coverage_goblin_welder::welder_copied_aura_keeps_a_surviving_recipient_attached",
+      "covers": "Actual Steel copies Torque-artifact Confiscate and chooses surviving Torque; both targets remain unmoved through the choice, then sacrifice and one incoming entry leave the copy attached to that surviving recipient."
+    },
+    {
+      "test": "scenario deck_coverage_goblin_welder::welder_copied_aura_without_a_recipient_still_sacrifices_the_legal_departure",
+      "covers": "Actual Steel copies Coating-artifact Gift of Paradise after the sole land owner's logged concession during copy parking. No legal land recipient skips entry but still sacrifices the legal artifact; Steel remains in graveyard at its original generation, copy values and revision, with paid tap retained and no move event."
+    },
+    {
+      "test": "scenario deck_coverage_goblin_welder::welder_return_keeps_intrinsic_entry_counters_and_departing_warden_does_not_see_entry",
+      "covers": "Actual Torque-artifact outgoing Soul Warden does not see simultaneous Solemn entry; surviving Warden and Solemn trigger exactly once and finish. Later Pentavus returns with five counters before SBAs."
+    },
+    {
+      "test": "scenario deck_coverage_goblin_welder::welder_real_zone_change_invalidates_target_but_source_departure_preserves_ability",
+      "covers": "Accepted logged dev zone move of a target invalidates the pair; accepted source departure preserves the already stacked ability and both target movements. Dev setup is distinguished from normal game interaction."
+    },
+    {
+      "test": "scenario deck_coverage_goblin_welder::welder_accepted_copy_commands_replay_identical_batches_and_incarnations",
+      "covers": "Accepted activation, three priority passes and opponent copy selection survive protobuf roundtrip and reproduce exact batches plus final diagnostic identity from the same explicit fixture; injection is not a native journal."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

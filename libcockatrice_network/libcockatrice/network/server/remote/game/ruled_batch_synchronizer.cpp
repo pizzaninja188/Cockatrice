@@ -1122,20 +1122,13 @@ void RuledBatchSynchronizer::applyPermanentMoves(const ruled::v1::RuledEventBatc
                     binding.exileEngineOidToServerCardId.insert(oid, card->getId());
                 } else if (pm.destination() == ruled::v1::PermanentMoved::DESTINATION_COMMAND) {
                     binding.commandZoneEngineOidToServerCardId.insert(oid, card->getId());
-                } else if (pm.destination() == ruled::v1::PermanentMoved::DESTINATION_HAND) {
-                    // Library identities use a separate reverse map. Once this exact card is
-                    // in hand, bind it in the destination map before the private-zone reconcile;
-                    // otherwise name matching can exchange it with an unselected duplicate.
+                } else if (pm.destination() == ruled::v1::PermanentMoved::DESTINATION_HAND ||
+                           pm.destination() == ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD) {
+                    // Bind the exact post-move card before reconciliation. Entry replacements
+                    // can change its display name before battlefield matching, and cross-player
+                    // moves can reissue its id. Name fallback cannot preserve either identity.
                     binding.registerEngineOid(oid, card->getId());
                 }
-            }
-            // A cross-player move reissues Server_Card::id from the destination player's space
-            // (server_abstract_player.cpp), and the engine oid is absent from the destination
-            // seat's binding until the next zone-view sync. Register it now: otherwise
-            // applyRuledEngineZoneView falls back to matching by card_id, which can silently
-            // swap the oid<->Server_Card pairing between two identical permanents.
-            if (destPlayer != mover && pm.destination() == ruled::v1::PermanentMoved::DESTINATION_BATTLEFIELD) {
-                playerBinding(destPlayer->getPlayerId()).registerEngineOid(oid, card->getId());
             }
         }
     }

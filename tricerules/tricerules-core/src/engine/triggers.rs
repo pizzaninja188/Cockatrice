@@ -421,7 +421,8 @@ impl GameEngine {
     /// snapshot becomes-the-target triggers at target selection, then commit them only after every
     /// cost has been paid and the spell or ability has successfully reached the stack.
     pub(super) fn collect_event_triggers(&self, events: &[GameEvent]) -> Vec<CollectedTrigger> {
-        let mut sources = self.battlefield_sources_apnap();
+        let post_event_sources = self.battlefield_sources_apnap();
+        let mut sources = post_event_sources.clone();
         // Zone-leaving sources are no longer in the battlefield index. Their event-local snapshot
         // supplies the identity/controller needed for LKI trigger matching (CR 603.6/603.10).
         for source in events.iter().filter_map(|event| match event {
@@ -443,6 +444,9 @@ impl GameEngine {
         for event in events {
             let trigger_player = Self::trigger_player_for(event);
             let event_sources = match event {
+                // CR 603.6a: an entrant is observed by the battlefield after this event,
+                // never by permanents that departed in the same simultaneous instruction.
+                GameEvent::EntersBattlefield { .. } => &post_event_sources,
                 GameEvent::BecameTapped { action, .. } => &action.sources,
                 GameEvent::LeavesBattlefield { source }
                 | GameEvent::Dies { source, .. }
@@ -4279,6 +4283,76 @@ mod tests {
             "each entering Soul Warden observes the other"
         );
     }
+    #[test]
+    fn mixed_zone_event_uses_post_entry_and_pre_departure_trigger_sources() {
+        let (mut engine, departing) = trigger_limit_source();
+        engine.state.objects.get_mut(&departing).unwrap().card_id = "soul_warden".into();
+        let surviving = issue_168_fixture_object(&mut engine, 0, "soul_warden", Zone::Battlefield);
+        let incoming = issue_168_fixture_object(&mut engine, 0, "myr_retriever", Zone::Graveyard);
+        add_limited_grant(
+            &mut engine,
+            departing,
+            TriggerCondition::WhenSelfLeavesBattlefield,
+        );
+        let snapshot = engine.snapshot_zone_event();
+        let old_source = engine.trigger_source_snapshot(departing).unwrap();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            departing,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            incoming,
+            Zone::Battlefield,
+            Some(0),
+        )
+        .unwrap();
+        // An incoming departure observer must not look back and see this same event.
+        add_limited_grant(
+            &mut engine,
+            incoming,
+            TriggerCondition::WheneverPermanentLeavesBattlefield {
+                controller: CastTriggerPlayer::AnyPlayer,
+                filter: Default::default(),
+                destination: Default::default(),
+                cardinality: Default::default(),
+            },
+        );
+        let triggers = engine.collect_event_triggers(&[
+            GameEvent::LeavesBattlefield { source: old_source },
+            GameEvent::EntersBattlefield {
+                object_id: incoming,
+                chosen_x: 0,
+            },
+            engine.finish_zone_event(snapshot),
+        ]);
+        assert_eq!(
+            triggers.len(),
+            2,
+            "only pre-event LTB and post-event ETB observers trigger"
+        );
+        assert!(triggers.iter().any(|trigger| trigger.source_id == departing
+            && trigger.ability.trigger == TriggerCondition::WhenSelfLeavesBattlefield));
+        assert!(triggers.iter().any(|trigger| trigger.source_id == surviving
+            && matches!(
+                trigger.ability.trigger,
+                TriggerCondition::WheneverPermanentEntersBattlefield { .. }
+            )));
+        assert!(!triggers.iter().any(|trigger| trigger.source_id == incoming));
+        assert!(
+            !triggers.iter().any(|trigger| trigger.source_id == departing
+                && matches!(
+                    trigger.ability.trigger,
+                    TriggerCondition::WheneverPermanentEntersBattlefield { .. }
+                ))
+        );
+    }
+
     #[test]
     fn issue_168_group_observer_has_no_arbitrary_trigger_object() {
         use tricerules_cards::primitives::ZoneEventCardinality;
