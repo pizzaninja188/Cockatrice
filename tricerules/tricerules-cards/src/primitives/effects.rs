@@ -1551,6 +1551,11 @@ pub enum SpellEffectKind {
     ReturnExiledCohortToOwnersBattlefield {
         cohort_id: ExiledCohortId,
     },
+    /// Primevals' Glorious Rebirth / Triumphant Reckoning: mandatory targetless simultaneous
+    /// return of all matching permanent cards in the spell controller's current graveyard.
+    ReturnAllGraveyardPermanents {
+        filter: ZoneCardFilter,
+    },
     /// Choose a card from the controller's graveyard when this instruction resolves rather than
     /// targeting it while casting. Say Its Name mills first, then optionally chooses the current
     /// creature-or-land cohort; Corpse Churn shares the same post-mill timing.
@@ -2952,6 +2957,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ExileWarpedObject
             | SpellEffectKind::ReturnLinkedExiledCards { .. }
             | SpellEffectKind::ReturnExiledCohortToOwnersBattlefield { .. }
+            | SpellEffectKind::ReturnAllGraveyardPermanents { .. }
             | SpellEffectKind::ChooseGraveyardCard { .. }
             | SpellEffectKind::GrantKeywordsAllPermanents { .. }
             | SpellEffectKind::GainLife { .. }
@@ -3754,6 +3760,12 @@ impl SpellEffectKind {
             cohort_id.validate()?;
             if context != EffectContext::Spell {
                 return Err("retained exile cohorts require a spell instruction".into());
+            }
+        }
+        if let SpellEffectKind::ReturnAllGraveyardPermanents { filter } = self {
+            filter.validate()?;
+            if context != EffectContext::Spell {
+                return Err("all-graveyard permanent return requires a spell instruction".into());
             }
         }
         if let SpellEffectKind::PutCounters { counter, .. }

@@ -76,39 +76,6 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
         "Cast {} transformed without paying its mana cost?",
         back.name
     );
-    cx.events.push(rv1::RuledEvent {
-        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
-            rv1::ResolutionChoiceRequired {
-                candidate_token_identities: Vec::new(),
-                candidate_player_ids: Vec::new(),
-                deciding_player_id: controller,
-                source_object_id: source_id,
-                prompt_text: prompt.clone(),
-                choice_kind: rv1::ChoiceKind::SpecialCast as i32,
-                candidate_object_ids: vec![source_id],
-                candidate_card_ids: vec![card_id],
-                min: 0,
-                max: 1,
-                ordered: false,
-                candidate_names: vec![back.name.clone()],
-                candidate_server_card_ids: Vec::new(),
-                unique_names: false,
-                generic_mana_cost: 0,
-                payment_currently_legal: true,
-                resolution_branches: Vec::new(),
-                mana_cost: String::new(),
-                candidate_selectable: vec![true],
-                public_reveal: None,
-                candidate_source_zones: Vec::new(),
-                combat_defender_options: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
-            },
-        )),
-    });
-    cx.events.push(ev_log(prompt.clone()));
     let mut stack = ParkedStackResolution::new(cx.top.clone());
     stack.resume_effect_index = Some(cx.effect_index + 1);
     cx.engine.state.pending_resolution = Some(PendingResolution {
@@ -119,7 +86,7 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
             min: 0,
             max: 1,
             ordered: false,
-            prompt,
+            prompt: prompt.clone(),
             choice_kind: rv1::ChoiceKind::SpecialCast,
             unique_names: false,
         },
@@ -132,6 +99,12 @@ pub(super) fn siege_defeat(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engin
             undo_history_start: cx.engine.state.undoable_mana_abilities.len(),
         },
     });
+    cx.events.push(
+        cx.engine
+            .resolution_payment_choice_event()
+            .expect("special cast offer"),
+    );
+    cx.events.push(ev_log(prompt));
     Ok(EffectOutcome::Suspended)
 }
 
@@ -2254,6 +2227,70 @@ pub(super) fn return_exiled_cohort_to_owners_battlefield(
     )
 }
 
+pub(super) fn return_all_graveyard_permanents(
+    cx: &mut EffectCx<'_>,
+    filter: &ZoneCardFilter,
+) -> Result<EffectOutcome, EngineError> {
+    let player_index = cx
+        .engine
+        .state
+        .player_idx(cx.controller)
+        .ok_or(EngineError::UnknownPlayer(cx.controller))?;
+    let permanent_filter = ZoneCardFilter {
+        any_of: Some(vec![
+            ZoneCardFilter {
+                card_type: Some(CardTypeFilter::Land),
+                ..Default::default()
+            },
+            ZoneCardFilter {
+                card_type: Some(CardTypeFilter::NonlandPermanent),
+                ..Default::default()
+            },
+        ]),
+        ..Default::default()
+    };
+    let entries = cx.engine.state.players[player_index]
+        .graveyard
+        .iter()
+        .copied()
+        .filter(|oid| {
+            cx.engine.state.objects.get(oid).is_some_and(|object| {
+                object.zone == Zone::Graveyard && object.owner == cx.controller
+            })
+        })
+        .filter(|oid| {
+            zone_card_matches_filter(
+                &cx.engine.state,
+                cx.engine.registry,
+                *oid,
+                Some(&permanent_filter),
+            )
+        })
+        .filter(|oid| {
+            zone_card_matches_filter(&cx.engine.state, cx.engine.registry, *oid, Some(filter))
+        })
+        .map(|oid| plain_return_entry(cx.engine, oid, cx.controller))
+        .collect();
+    Ok(
+        if cx
+            .engine
+            .begin_zone_entry_batch(
+                ParkedStackResolution::new(cx.top.clone()),
+                entries,
+                Zone::Graveyard,
+                cx.spell_label,
+                None,
+                cx.events,
+            )?
+            .is_none()
+        {
+            EffectOutcome::Suspended
+        } else {
+            EffectOutcome::Continue
+        },
+    )
+}
+
 fn plain_return_entry(
     engine: &GameEngine,
     object_id: ObjectId,
@@ -2282,6 +2319,7 @@ fn plain_return_entry(
         attached_to: None,
         pending_copy_candidate: None,
         pending_aura_recipient: None,
+        accepted_aura_recipient: None,
         applied_effects: Vec::new(),
     }
 }
@@ -2433,6 +2471,7 @@ pub(super) fn move_graveyard_cards(
                 attached_to: None,
                 pending_copy_candidate: None,
                 pending_aura_recipient: None,
+                accepted_aura_recipient: None,
                 applied_effects: vec![],
             })
             .collect();
@@ -2700,6 +2739,7 @@ pub(super) fn return_triggered_card(
             attached_to: None,
             pending_copy_candidate: None,
             pending_aura_recipient: None,
+            accepted_aura_recipient: None,
             applied_effects: Vec::new(),
         },
         BattlefieldEntryCompletion::ResolutionEffect {
@@ -2794,6 +2834,7 @@ pub(super) fn put_ability_source_onto_battlefield_tapped_and_attacking(
             attached_to: None,
             pending_copy_candidate: None,
             pending_aura_recipient: None,
+            accepted_aura_recipient: None,
             applied_effects: Vec::new(),
         },
         BattlefieldEntryCompletion::Ninjutsu {
@@ -2943,6 +2984,7 @@ pub(super) fn exile_source_then_return_transformed(
             attached_to: None,
             pending_copy_candidate: None,
             pending_aura_recipient: None,
+            accepted_aura_recipient: None,
             applied_effects: Vec::new(),
         },
         BattlefieldEntryCompletion::ResolutionEffect {
@@ -3514,6 +3556,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
                 attached_to: None,
                 pending_copy_candidate: None,
                 pending_aura_recipient: None,
+                accepted_aura_recipient: None,
                 applied_effects: Vec::new(),
             },
             BattlefieldEntryCompletion::ManifestDread {

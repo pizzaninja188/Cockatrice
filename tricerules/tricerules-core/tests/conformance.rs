@@ -440,6 +440,25 @@ fn evaluate(case: &Case) -> Result<Outcome, String> {
 }
 
 #[test]
+fn primevals_glorious_rebirth_has_a_qualified_nonempty_return_fixture() {
+    let case = Case {
+        card: "primevals_glorious_rebirth".into(),
+        face: 0,
+        ability: None,
+    };
+    assert_eq!(evaluate(&case).unwrap(), Outcome::Exercised);
+    let engine = fixture(&case);
+    assert!(engine.state.players[0]
+        .battlefield
+        .iter()
+        .any(|oid| { engine.state.objects[oid].card_id == "ghalta,_primal_hunger" }));
+    assert!(engine.state.players[0]
+        .graveyard
+        .iter()
+        .any(|oid| { engine.state.objects[oid].card_id == "alhammarrets_archive" }));
+}
+
+#[test]
 fn registry_execution_matches_reviewed_baseline() {
     let mut rows = vec![];
     for case in cases() {

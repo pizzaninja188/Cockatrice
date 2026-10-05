@@ -1557,6 +1557,7 @@ fn validate_effect_targets(
         | SpellEffectKind::ReturnTriggeredCard { .. }
         | SpellEffectKind::ReturnLinkedExiledCards { .. }
         | SpellEffectKind::ReturnExiledCohortToOwnersBattlefield { .. }
+        | SpellEffectKind::ReturnAllGraveyardPermanents { .. }
         | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
         | SpellEffectKind::CastMadness { .. }
         | SpellEffectKind::SiegeDefeat

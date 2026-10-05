@@ -838,11 +838,18 @@ impl GameEngine {
             .state
             .player_idx(pending.deciding_player)
             .is_some_and(|index| !self.state.players[index].has_lost);
+        let spell_label = pending
+            .continuation
+            .stack()
+            .map_or("entry", |stack| stack.item.card_id.as_str());
         match &mut entry.completion {
             BattlefieldEntryCompletion::ZoneEntryBatch(batch) => {
                 self.reconcile_departed_zone_entry_members(batch, departed_objects)
             }
             BattlefieldEntryCompletion::ObserverReturn { .. } => {}
+            BattlefieldEntryCompletion::TokenBatch(batch) => {
+                self.reconcile_departed_token_entry_members(batch, departed_objects, spell_label);
+            }
             _ => return Ok(()),
         }
         let stack = pending
@@ -874,6 +881,7 @@ impl GameEngine {
                 // This exemption does not cover a stale surviving incarnation.
                 entry.event.pending_copy_candidate = None;
                 entry.event.pending_aura_recipient = None;
+                entry.event.accepted_aura_recipient = None;
             }
             let resumed = self.finish_entry_copy_without_recipient(
                 stack,
@@ -1684,13 +1692,215 @@ impl GameEngine {
         &mut self,
         event: &BattlefieldEntryEvent,
     ) -> Result<(), EngineError> {
-        if let Some(candidate) = event.pending_copy_candidate.as_ref().or_else(|| {
-            event
-                .pending_aura_recipient
-                .as_ref()
-                .and_then(|choice| choice.copy_candidate.as_ref())
-        }) {
+        if let Some(candidate) = event
+            .pending_copy_candidate
+            .as_ref()
+            .or_else(|| {
+                event
+                    .pending_aura_recipient
+                    .as_ref()
+                    .and_then(|choice| choice.copy_candidate.as_ref())
+            })
+            .or_else(|| {
+                event
+                    .accepted_aura_recipient
+                    .as_ref()
+                    .and_then(|receipt| receipt.copy_candidate.as_ref())
+            })
+        {
             self.restore_entry_copy_candidate(event.object_id, candidate)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn accepted_entry_aura_entrant_current(
+        &self,
+        event: &BattlefieldEntryEvent,
+    ) -> bool {
+        event
+            .accepted_aura_recipient
+            .as_ref()
+            .is_none_or(|receipt| {
+                self.state
+                    .zone_change_generation
+                    .get(&event.object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == receipt.entering_zone_generation
+                    && self
+                        .state
+                        .objects
+                        .get(&event.object_id)
+                        .is_some_and(|object| {
+                            object.copy_revision == receipt.entering_copy_revision
+                        })
+            })
+    }
+
+    pub(super) fn accepted_entry_aura_recipient_current(
+        &mut self,
+        event: &BattlefieldEntryEvent,
+    ) -> Result<bool, EngineError> {
+        let Some(receipt) = &event.accepted_aura_recipient else {
+            return Ok(true);
+        };
+        if !self.accepted_entry_aura_entrant_current(event) {
+            return Err(EngineError::Illegal("accepted Aura entry became stale"));
+        }
+        let Some(recipient) = event.attached_to else {
+            return Err(EngineError::Illegal("accepted Aura entry has no recipient"));
+        };
+        if let AttachmentRecipient::Object(oid) = recipient {
+            if self
+                .state
+                .objects
+                .get(&oid)
+                .is_none_or(|object| object.zone != Zone::Battlefield)
+                || receipt.recipient_generation
+                    != Some(
+                        self.state
+                            .zone_change_generation
+                            .get(&oid)
+                            .copied()
+                            .unwrap_or(0),
+                    )
+            {
+                return Ok(false);
+            }
+        }
+        let Some(face) = self.battlefield_entry_face(event).map(Cow::into_owned) else {
+            return Err(EngineError::Illegal("accepted Aura entry face disappeared"));
+        };
+        let Some(mut values) = self.copiable_values_for(event.object_id) else {
+            return Err(EngineError::Illegal(
+                "accepted Aura entry values disappeared",
+            ));
+        };
+        values.face = face;
+        let recipient_id = match recipient {
+            AttachmentRecipient::Object(oid) => oid,
+            AttachmentRecipient::Player(pid) => pid as ObjectId,
+        };
+        Ok(self
+            .entry_copy_aura_candidates(
+                event.object_id,
+                event.destination_controller,
+                &values,
+                &receipt.filter,
+            )
+            .contains(&recipient_id))
+    }
+
+    pub(super) fn prune_invalid_zone_entry_auras(
+        &mut self,
+        batch: &mut crate::state::PendingZoneEntryBatch,
+    ) -> Result<(), EngineError> {
+        let mut skipped = HashSet::new();
+        for event in &batch.ready {
+            if !self.accepted_entry_aura_recipient_current(event)? {
+                skipped.insert(event.object_id);
+            }
+        }
+        for event in batch
+            .ready
+            .iter()
+            .filter(|event| skipped.contains(&event.object_id))
+        {
+            self.restore_skipped_battlefield_entry(event)?;
+        }
+        batch
+            .ready
+            .retain(|event| !skipped.contains(&event.object_id));
+        Ok(())
+    }
+
+    pub(super) fn prune_invalid_observer_entry_auras(
+        &mut self,
+        entries: &mut Vec<ObserverReturnEntry>,
+    ) -> Result<(), EngineError> {
+        let mut skipped = HashSet::new();
+        for entry in entries.iter() {
+            if !self.accepted_entry_aura_recipient_current(&entry.event)? {
+                skipped.insert(entry.event.object_id);
+            }
+        }
+        for entry in entries
+            .iter()
+            .filter(|entry| skipped.contains(&entry.event.object_id))
+        {
+            self.restore_skipped_battlefield_entry(&entry.event)?;
+        }
+        entries.retain(|entry| !skipped.contains(&entry.event.object_id));
+        Ok(())
+    }
+
+    pub(super) fn prune_invalid_token_entry_auras(
+        &mut self,
+        entries: &mut Vec<TokenBattlefieldEntry>,
+    ) -> Result<HashSet<ObjectId>, EngineError> {
+        let mut skipped = HashSet::new();
+        for entry in entries.iter() {
+            if !self.accepted_entry_aura_recipient_current(&entry.event)? {
+                skipped.insert(entry.event.object_id);
+            }
+        }
+        for entry in entries
+            .iter()
+            .filter(|entry| skipped.contains(&entry.event.object_id))
+        {
+            self.restore_skipped_battlefield_entry(&entry.event)?;
+            self.state.objects.remove(&entry.event.object_id);
+        }
+        entries.retain(|entry| !skipped.contains(&entry.event.object_id));
+        Ok(skipped)
+    }
+
+    pub(super) fn reconcile_departed_token_entry_members(
+        &self,
+        batch: &mut PendingTokenEntryBatch,
+        departed_objects: &HashSet<ObjectId>,
+        spell_label: &str,
+    ) {
+        let prior_count = batch.ready.len() + batch.remaining.len();
+        batch
+            .ready
+            .retain(|entry| !departed_objects.contains(&entry.event.object_id));
+        batch
+            .remaining
+            .retain(|entry| !departed_objects.contains(&entry.event.object_id));
+        batch
+            .result_object_ids
+            .retain(|oid| !departed_objects.contains(oid));
+        if prior_count != batch.ready.len() + batch.remaining.len() {
+            batch.logs = Self::token_creation_logs(
+                batch.ready.iter().chain(batch.remaining.iter()),
+                &batch.logs,
+                spell_label,
+            );
+        }
+    }
+
+    pub(super) fn prune_invalid_simultaneous_entry_auras(
+        &mut self,
+        batch: &mut SimultaneousEntryBatch,
+        spell_label: &str,
+    ) -> Result<(), EngineError> {
+        match batch {
+            SimultaneousEntryBatch::Zone(batch) => self.prune_invalid_zone_entry_auras(batch)?,
+            SimultaneousEntryBatch::Observer(batch) => {
+                self.prune_invalid_observer_entry_auras(&mut batch.ready)?
+            }
+            SimultaneousEntryBatch::Token(batch) => {
+                let skipped = self.prune_invalid_token_entry_auras(&mut batch.ready)?;
+                if !skipped.is_empty() {
+                    batch.result_object_ids.retain(|oid| !skipped.contains(oid));
+                    batch.logs = Self::token_creation_logs(
+                        batch.ready.iter().chain(batch.remaining.iter()),
+                        &batch.logs,
+                        spell_label,
+                    );
+                }
+            }
         }
         Ok(())
     }
@@ -3100,12 +3310,18 @@ impl GameEngine {
     pub(super) fn commit_token_entry_batch(
         &mut self,
         item: &StackItem,
-        entries: Vec<TokenBattlefieldEntry>,
-        logs: Vec<String>,
+        mut entries: Vec<TokenBattlefieldEntry>,
+        mut logs: Vec<String>,
         attacking: Option<AttackingTokenBatch>,
         delayed_sacrifice: Option<DelayedTokenSacrificeTiming>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
+        if !self
+            .prune_invalid_token_entry_auras(&mut entries)?
+            .is_empty()
+        {
+            logs = Self::token_creation_logs(entries.iter(), &logs, &item.card_id);
+        }
         let object_ids = entries
             .iter()
             .map(|entry| entry.event.object_id)
@@ -3260,6 +3476,9 @@ impl GameEngine {
                 "battlefield-entry continuation missing",
             ))?
             .clone();
+        if !self.accepted_entry_aura_recipient_current(&event)? {
+            return self.finish_entry_copy_without_recipient(stack, event, completion, events);
+        }
         match completion {
             BattlefieldEntryCompletion::LandPlay { player, land_name } => {
                 let object_id = event.object_id;
@@ -3671,7 +3890,8 @@ impl GameEngine {
             if copied_aura {
                 entry.event.pending_copy_candidate = Some(candidate);
             }
-            if let BattlefieldEntryCompletion::PermanentSpell { attached_to } =
+            if let BattlefieldEntryCompletion::PermanentSpell { attached_to }
+            | BattlefieldEntryCompletion::ObserverReturn { attached_to, .. } =
                 &mut entry.completion
             {
                 // The target chosen to cast an Aura spell applies only if its printed Aura
@@ -3679,6 +3899,8 @@ impl GameEngine {
                 // may cease to be an Aura entirely), so the original target cannot be reused.
                 *attached_to = None;
             }
+            entry.event.attached_to = None;
+            entry.event.accepted_aura_recipient = None;
         }
         entry.event.applied_effects.push(effect_id);
         let event = match self.advance_or_park_battlefield_entry(
@@ -3879,7 +4101,22 @@ impl GameEngine {
             }
         }
         entry.event.attached_to = Some(recipient);
-        entry.event.pending_aura_recipient = None;
+        entry.event.accepted_aura_recipient = Some(crate::state::AcceptedAuraEntryRecipient {
+            filter: aura_choice.filter,
+            entering_zone_generation: aura_choice.entering_zone_generation,
+            entering_copy_revision: aura_choice.entering_copy_revision,
+            recipient_generation: match recipient {
+                AttachmentRecipient::Object(oid) => Some(
+                    self.state
+                        .zone_change_generation
+                        .get(&oid)
+                        .copied()
+                        .unwrap_or(0),
+                ),
+                AttachmentRecipient::Player(_) => None,
+            },
+            copy_candidate: aura_choice.copy_candidate,
+        });
         let mut events = Vec::new();
         let event = match self.advance_or_park_battlefield_entry(
             stack.item.clone(),
@@ -4727,6 +4964,7 @@ mod tests {
             attached_to: None,
             pending_copy_candidate: None,
             pending_aura_recipient: None,
+            accepted_aura_recipient: None,
             applied_effects: Vec::new(),
         };
         engine.commit_battlefield_entry(event, None).unwrap();
@@ -4773,6 +5011,7 @@ mod tests {
             attached_to: None,
             pending_copy_candidate: None,
             pending_aura_recipient: None,
+            accepted_aura_recipient: None,
             applied_effects: Vec::new(),
         };
         let condition = GameCondition::PlayerLifeAggregate {
@@ -4850,6 +5089,7 @@ mod tests {
             attached_to: None,
             pending_copy_candidate: None,
             pending_aura_recipient: None,
+            accepted_aura_recipient: None,
             applied_effects: Vec::new(),
         };
 
@@ -4918,6 +5158,7 @@ mod tests {
             attached_to: None,
             pending_copy_candidate: None,
             pending_aura_recipient: None,
+            accepted_aura_recipient: None,
             applied_effects: Vec::new(),
         };
 

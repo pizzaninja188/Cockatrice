@@ -1578,6 +1578,8 @@ pub struct BattlefieldEntryEvent {
     pub(crate) pending_copy_candidate: Option<PendingCopyCandidate>,
     /// Legal recipient selection for any copy entering as an Aura, including copied tokens.
     pub(crate) pending_aura_recipient: Option<PendingAuraEntryRecipient>,
+    /// Accepted untargeted attachment, retained through later entry choices until commitment.
+    pub(crate) accepted_aura_recipient: Option<AcceptedAuraEntryRecipient>,
     /// Recipient chosen for an Aura revealed by an `EntersAsCopy` replacement. This remains
     /// provisional until the ordinary battlefield-entry commit.
     pub attached_to: Option<AttachmentRecipient>,
@@ -1784,6 +1786,15 @@ pub(crate) struct PendingAuraEntryRecipient {
     pub entering_zone_generation: u64,
     pub entering_copy_revision: u64,
     pub recipient_generations: Vec<(ObjectId, u64)>,
+    pub copy_candidate: Option<PendingCopyCandidate>,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+pub(crate) struct AcceptedAuraEntryRecipient {
+    pub filter: TargetFilter,
+    pub entering_zone_generation: u64,
+    pub entering_copy_revision: u64,
+    pub recipient_generation: Option<u64>,
     pub copy_candidate: Option<PendingCopyCandidate>,
 }
 

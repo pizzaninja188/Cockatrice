@@ -195,13 +195,14 @@ impl GameEngine {
     pub(super) fn commit_zone_entry_batch_ready(
         &mut self,
         mut stack: ParkedStackResolution,
-        batch: crate::state::PendingZoneEntryBatch,
+        mut batch: crate::state::PendingZoneEntryBatch,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<ParkedStackResolution, EngineError> {
         // A looked remainder is frozen too: reject before committing even the first entrant.
         if !self.zone_entry_batch_current(&batch) {
             return Err(EngineError::Illegal("zone entry cohort became stale"));
         }
+        self.prune_invalid_zone_entry_auras(&mut batch)?;
         let mut completion = batch.completion;
         let mut committed = HashSet::new();
         let snapshot = self.snapshot_zone_event();
@@ -570,6 +571,7 @@ mod timestamp_order_tests {
             attached_to: None,
             pending_copy_candidate: None,
             pending_aura_recipient: None,
+            accepted_aura_recipient: None,
             applied_effects: vec![],
         }
     }

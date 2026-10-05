@@ -1,0 +1,92 @@
+{
+  "oracle_id": "0d3e0b38-a9ff-489b-8c00-4ca89deb4869",
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnAllGraveyardPermanents",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "spans": [
+    {
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ],
+      "end_line": 1,
+      "face_id": "triumphant_reckoning",
+      "start_line": 1
+    }
+  ],
+  "complete_definition_review_confirmed": true,
+  "semantic_fixtures": [
+    {
+      "covers": "Exact single face, Oracle name, mana cost, Sorcery/Legendary type, complete targetless filter and no additional abilities",
+      "test": "deck_coverage_graveyard_return::graveyard_return_registers_exact_single_faces_costs_types_and_filters"
+    },
+    {
+      "covers": "Filter validation and spell-only context fail closed",
+      "test": "deck_coverage_graveyard_return::all_graveyard_return_rejects_invalid_filter_and_ability_context"
+    },
+    {
+      "covers": "graveyard return empty cohort finishes and extra targets reject atomically",
+      "test": "scenario deck_coverage_graveyard_return::graveyard_return_empty_cohort_finishes_and_extra_targets_reject_atomically"
+    },
+    {
+      "covers": "triumphant reckoning aura entry is untargeted but respects enchantment protection",
+      "test": "scenario deck_coverage_graveyard_return::triumphant_reckoning_aura_entry_is_untargeted_but_respects_enchantment_protection"
+    },
+    {
+      "covers": "graveyard return entrants observe the whole simultaneous cohort",
+      "test": "scenario deck_coverage_graveyard_return::graveyard_return_entrants_observe_the_whole_simultaneous_cohort"
+    },
+    {
+      "covers": "triumphant reckoning cannot attach aura to another simultaneous entrant",
+      "test": "scenario deck_coverage_graveyard_return::triumphant_reckoning_cannot_attach_aura_to_another_simultaneous_entrant"
+    },
+    {
+      "covers": "triumphant reckoning refreshes unanswered aura while skipping prior accepted choice",
+      "test": "scenario deck_coverage_graveyard_return::triumphant_reckoning_refreshes_unanswered_aura_while_skipping_prior_accepted_choice"
+    },
+    {
+      "covers": "triumphant reckoning restores skipped aura copy but keeps accepted values if copy source leaves",
+      "test": "scenario deck_coverage_graveyard_return::triumphant_reckoning_restores_skipped_aura_copy_but_keeps_accepted_values_if_copy_source_leaves"
+    },
+    {
+      "covers": "triumphant reckoning does not rebind accepted recipient to a new incarnation fixture",
+      "test": "scenario deck_coverage_graveyard_return::triumphant_reckoning_does_not_rebind_accepted_recipient_to_a_new_incarnation_fixture"
+    },
+    {
+      "covers": "triumphant reckoning copied planeswalker gets printed loyalty once",
+      "test": "scenario deck_coverage_graveyard_return::triumphant_reckoning_copied_planeswalker_gets_printed_loyalty_once"
+    },
+    {
+      "covers": "triumphant reckoning logged aura choice and concession replay identically",
+      "test": "scenario deck_coverage_graveyard_return::triumphant_reckoning_logged_aura_choice_and_concession_replay_identically"
+    },
+    {
+      "covers": "graveyard return twincast uses copy controller and original selects fresh cohort",
+      "test": "scenario deck_coverage_graveyard_return::graveyard_return_twincast_uses_copy_controller_and_original_selects_fresh_cohort"
+    },
+    {
+      "covers": "triumphant reckoning returned kaito applies intrinsic loyalty before animation",
+      "test": "scenario deck_coverage_graveyard_return::triumphant_reckoning_returned_kaito_applies_intrinsic_loyalty_before_animation"
+    },
+    {
+      "covers": "triumphant reckoning returns all three types once and only own current graveyard",
+      "test": "scenario deck_coverage_graveyard_return::triumphant_reckoning_returns_all_three_types_once_and_only_own_current_graveyard"
+    },
+    {
+      "covers": "triumphant reckoning skips accepted aura if recipient owner concedes before entry",
+      "test": "scenario deck_coverage_graveyard_return::triumphant_reckoning_skips_accepted_aura_if_recipient_owner_concedes_before_entry"
+    },
+    {
+      "covers": "Stale accepted Aura generation or copy revision abandons the proposed batch without refusing unrelated-player concession or resuming its tail",
+      "test": "scenario deck_coverage_graveyard_return::triumphant_reckoning_stale_accepted_aura_entrant_does_not_refuse_concession"
+    },
+    {
+      "covers": "Whole-cohort cancellation restores still-current provisional Mirrormade Aura copy identity while preserving a stale changed incarnation and cleaning up the spell once",
+      "test": "scenario deck_coverage_graveyard_return::triumphant_reckoning_abandoned_cohort_restores_only_current_provisional_aura_copies"
+    }
+  ],
+  "format_version": 1,
+  "tokens": []
+}

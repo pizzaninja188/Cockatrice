@@ -6299,6 +6299,7 @@ TEST_F(RuledClientTest, MadnessPaymentDoesNotTreatItsOwnOfferAsABlockingChoice)
         choice->set_deciding_player_id(kLocalPlayer);
         choice->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
         choice->add_candidate_object_ids(700);
+        choice->add_candidate_selectable(true);
         auto *offer = (*batch.mutable_legal_by_player())[kLocalPlayer].add_zone_cast_actions();
         offer->set_object_id(700);
         offer->set_source_zone(ruled::v1::CAST_SOURCE_ZONE_EXILE);
@@ -6346,6 +6347,7 @@ TEST_F(RuledClientTest, SpecialCastKeepsOfferWhileStagingAndOnlyDeclinesExplicit
     choice->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
     choice->set_prompt_text("Cast Grandmother Ravi Sengir transformed?");
     choice->add_candidate_object_ids(700);
+    choice->add_candidate_selectable(true);
     apply(batch);
 
     ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast));
@@ -6366,6 +6368,34 @@ TEST_F(RuledClientTest, SpecialCastKeepsOfferWhileStagingAndOnlyDeclinesExplicit
     EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().decision(),
               ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
     EXPECT_FALSE(host.sentCommands[0].submit_resolution_choice().has_cast_spell());
+}
+
+TEST_F(RuledClientTest, SpecialCastUsesEngineSelectabilityAndAlwaysAllowsDecline)
+{
+    for (const int flagCount : {0, 1, 2}) {
+        ruled::v1::RuledEventBatch batch;
+        auto *choice = batch.add_events()->mutable_resolution_choice_required();
+        choice->set_deciding_player_id(kLocalPlayer);
+        choice->set_choice_kind(ruled::v1::CHOICE_KIND_SPECIAL_CAST);
+        choice->add_candidate_object_ids(700);
+        for (int i = 0; i < flagCount; ++i)
+            choice->add_candidate_selectable(false);
+        apply(batch);
+        ASSERT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast));
+        ASSERT_EQ(state->pendingChoiceOptions().size(), 2);
+        EXPECT_TRUE(state->pendingChoiceOptions()[0].enabled);
+        EXPECT_FALSE(state->pendingChoiceOptions()[1].enabled);
+        QSignalSpy castRequested(state, &RuledClientState::specialCastRequested);
+        host.sentCommands.clear();
+        state->submitPendingChoiceOption(1);
+        EXPECT_EQ(castRequested.count(), 0);
+        EXPECT_TRUE(host.sentCommands.empty());
+        EXPECT_TRUE(state->hasPendingChoiceOfKind(RuledClientState::ChoiceKind::SpecialCast));
+        state->submitPendingChoiceOption(0);
+        ASSERT_EQ(host.sentCommands.size(), 1);
+        EXPECT_EQ(host.sentCommands[0].submit_resolution_choice().decision(),
+                  ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
+    }
 }
 
 TEST_F(RuledClientTest, VariableTriggerTargetsStageOneGraveyardCohortAndRestoreOnRejection)

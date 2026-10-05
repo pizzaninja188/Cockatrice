@@ -36,6 +36,9 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
     if card == "decimate" {
         cards.push("ominous_seas");
     }
+    if card == "primevals_glorious_rebirth" {
+        cards.extend(["ghalta,_primal_hunger", "alhammarrets_archive"]);
+    }
     if card == "inventors_fair" {
         cards.extend(["sol_ring", "sol_ring"]);
     }
@@ -72,6 +75,14 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
     };
     super::advance_to_main1_from_game_start(&mut e);
     for player in 0..e.state.players.len() {
+        if card == "primevals_glorious_rebirth" && player == 0 {
+            // This exact legendary sorcery needs a controlled legendary creature before casting.
+            // A separate legendary graveyard permanent exercises a nonempty return.
+            super::relocate_to_battlefield(&mut e, player, "ghalta,_primal_hunger", false);
+            let dead = super::take_oid_from_library_or_hand(&mut e, player, "alhammarrets_archive");
+            e.state.players[player].graveyard.push(dead);
+            e.state.objects.get_mut(&dead).unwrap().zone = Zone::Graveyard;
+        }
         super::relocate_to_battlefield(&mut e, player, "grizzly_bears", false);
         super::relocate_to_battlefield(&mut e, player, "explosive_apparatus", false);
         if card == "metalwork_colossus" && ability == Some(0) && player == 0 {

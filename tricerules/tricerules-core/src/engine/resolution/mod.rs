@@ -1049,6 +1049,7 @@ impl GameEngine {
                         attached_to: None,
                         pending_copy_candidate: None,
                         pending_aura_recipient: None,
+                        accepted_aura_recipient: None,
                         applied_effects: Vec::new(),
                     },
                     BattlefieldEntryCompletion::PermanentSpell { attached_to },
@@ -2063,6 +2064,9 @@ impl GameEngine {
                     SpellEffectKind::ReturnExiledCohortToOwnersBattlefield { cohort_id } => {
                         zones::return_exiled_cohort_to_owners_battlefield(&mut cx, &cohort_id)?
                     }
+                    SpellEffectKind::ReturnAllGraveyardPermanents { filter } => {
+                        zones::return_all_graveyard_permanents(&mut cx, &filter)?
+                    }
                     effect @ SpellEffectKind::ChooseGraveyardCard { .. } => {
                         zones::choose_graveyard_card(&mut cx, effect)?
                     }
@@ -2441,6 +2445,7 @@ impl GameEngine {
                 attached_to: None,
                 pending_copy_candidate: None,
                 pending_aura_recipient: None,
+                accepted_aura_recipient: None,
                 applied_effects: Vec::new(),
             };
             let resume_original_stack = resume_stack.is_some();
@@ -2508,9 +2513,10 @@ impl GameEngine {
 
     pub(super) fn commit_observer_return_batch(
         &mut self,
-        entries: Vec<ObserverReturnEntry>,
+        mut entries: Vec<ObserverReturnEntry>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
+        self.prune_invalid_observer_entry_auras(&mut entries)?;
         let mut trigger_events = Vec::new();
         for entry in entries {
             let object_id = entry.event.object_id;
@@ -2518,7 +2524,8 @@ impl GameEngine {
             // Observer returns are independent one-shot effects. Entry replacement ordering is
             // added in the Aura/choice increment; the base path still uses the canonical commit
             // reset and static-registration machinery.
-            let door_event = self.commit_battlefield_entry_state(entry.event, entry.attached_to)?;
+            let recipient = entry.event.attached_to.or(entry.attached_to);
+            let door_event = self.commit_battlefield_entry_state(entry.event, recipient)?;
             trigger_events.push(GameEvent::EntersBattlefield {
                 object_id,
                 chosen_x,
@@ -2530,7 +2537,7 @@ impl GameEngine {
                 entry.owner,
                 rv1::permanent_moved::Destination::Battlefield,
             ));
-            if let Some(recipient) = entry.attached_to {
+            if let Some(recipient) = recipient {
                 events.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::AuraAttached(rv1::AuraAttached {
                         aura_object_id: object_id,
@@ -2826,6 +2833,7 @@ impl GameEngine {
                         attached_to: None,
                         pending_copy_candidate: None,
                         pending_aura_recipient: None,
+                        accepted_aura_recipient: None,
                         applied_effects: Vec::new(),
                     },
                     created,

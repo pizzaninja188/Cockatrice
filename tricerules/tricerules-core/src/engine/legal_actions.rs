@@ -2190,14 +2190,16 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
                 continue;
             }
             let cost_choices = legal_spell_cost_choices(eng, pid, oid, card_id, face, None);
-            let cast_ok = face_cast_timing_available(face, &cost_choices, instant_ok, sorcery_ok);
+            let cast_ok = eng.legendary_spell_cast_allowed(pid, face)
+                && face_cast_timing_available(face, &cost_choices, instant_ok, sorcery_ok);
             let sneak_candidates = eng.sneak_return_candidates(pid);
             let sneak_cost_choices = face.sneak_cost.as_ref().map(|_| {
                 legal_spell_cost_choices(eng, pid, oid, card_id, face, Some(&sneak_candidates))
             });
             let sneak_ok = sneak_cost_choices
                 .as_ref()
-                .is_some_and(|choices| choices.non_mana_costs_payable);
+                .is_some_and(|choices| choices.non_mana_costs_payable)
+                && eng.legendary_spell_cast_allowed(pid, face);
             if cast_ok || sneak_ok {
                 let mut action = hand_action(
                     rv1::HandActionKind::HandActionCastSpell,
@@ -2309,7 +2311,10 @@ fn legal_hand_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalHandActi
     actions
 }
 
-fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZoneCastAction> {
+pub(super) fn legal_zone_cast_actions(
+    eng: &GameEngine,
+    pid: PlayerId,
+) -> Vec<rv1::LegalZoneCastAction> {
     let special_permission = eng.special_cast_permission(pid);
     let special = special_permission.is_some();
     if !special
@@ -2365,8 +2370,8 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
                             face.cast_cost_groups.len(),
                         ));
                 }
-                let cast_ok =
-                    face_cast_timing_available(face, &cost_choices, instant_ok, sorcery_ok);
+                let cast_ok = eng.legendary_spell_cast_allowed(pid, face)
+                    && face_cast_timing_available(face, &cost_choices, instant_ok, sorcery_ok);
                 if !cast_ok {
                     continue;
                 }
@@ -2523,7 +2528,8 @@ fn legal_zone_cast_actions(eng: &GameEngine, pid: PlayerId) -> Vec<rv1::LegalZon
             }
             let cost_choices =
                 legal_spell_cost_choices(eng, pid, object.id, &object.card_id, face, None);
-            let cast_ok = face_cast_timing_available(face, &cost_choices, instant_ok, sorcery_ok);
+            let cast_ok = eng.legendary_spell_cast_allowed(pid, face)
+                && face_cast_timing_available(face, &cost_choices, instant_ok, sorcery_ok);
             if !cast_ok {
                 continue;
             }
@@ -2956,7 +2962,8 @@ fn legal_labels(eng: &GameEngine, pid: PlayerId) -> Vec<String> {
                     }
                 } else if !combat_decl_lock {
                     let costs = legal_spell_cost_choices(eng, pid, oid, cid, face, None);
-                    let cast_ok = face_cast_timing_available(face, &costs, instant_ok, sorcery_ok);
+                    let cast_ok = eng.legendary_spell_cast_allowed(pid, face)
+                        && face_cast_timing_available(face, &costs, instant_ok, sorcery_ok);
                     if cast_ok {
                         let needs_target =
                             target_schema(&face.spell_effect, face.targeting.as_ref())

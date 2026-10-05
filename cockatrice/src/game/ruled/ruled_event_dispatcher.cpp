@@ -1459,7 +1459,8 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         choice.promptText = QString::fromStdString(rcr.prompt_text());
         choice.candidateOids.append(rcr.candidate_object_ids(0));
         choice.choiceOptions.append({0, tr("Decline"), true});
-        choice.choiceOptions.append({1, tr("Cast"), true});
+        choice.choiceOptions.append({1, tr("Cast"),
+                                    rcr.candidate_selectable_size() == 1 && rcr.candidate_selectable(0)});
         state->setPendingChoice(std::move(choice));
         emit state->combatStateChanged();
         return;

@@ -69,6 +69,7 @@ impl GameEngine {
             attached_to: None,
             pending_copy_candidate: None,
             pending_aura_recipient: None,
+            accepted_aura_recipient: None,
             applied_effects: Vec::new(),
         };
         let completion = BattlefieldEntryCompletion::ManifestDread {

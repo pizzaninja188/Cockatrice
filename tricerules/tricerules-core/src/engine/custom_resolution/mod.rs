@@ -517,9 +517,25 @@ impl GameEngine {
             chosen_opponents: Vec::new(),
             entry_counters: BTreeMap::new(),
             entry_modifiers: Vec::new(),
-            attached_to: None,
+            attached_to: Some(recipient),
             pending_copy_candidate: None,
             pending_aura_recipient: None,
+            accepted_aura_recipient: Some(crate::state::AcceptedAuraEntryRecipient {
+                filter,
+                entering_zone_generation: generation,
+                entering_copy_revision: object.copy_revision,
+                recipient_generation: match recipient {
+                    AttachmentRecipient::Object(oid) => Some(
+                        self.state
+                            .zone_change_generation
+                            .get(&oid)
+                            .copied()
+                            .unwrap_or(0),
+                    ),
+                    AttachmentRecipient::Player(_) => None,
+                },
+                copy_candidate: None,
+            }),
             applied_effects: Vec::new(),
         };
         let resume_original_stack = stack.is_some();

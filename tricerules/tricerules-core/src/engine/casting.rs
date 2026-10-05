@@ -236,6 +236,28 @@ pub(in crate::engine) fn announcement_from_cast(
 }
 
 impl GameEngine {
+    /// CR 205.4e is checked when casting begins, before costs can remove a qualifier.
+    pub(super) fn legendary_spell_cast_allowed(
+        &self,
+        player: PlayerId,
+        face: &tricerules_cards::CardFace,
+    ) -> bool {
+        if !face.is_legendary || !(face.is_instant || face.is_sorcery) {
+            return true;
+        }
+        self.state.objects.values().any(|object| {
+            object.zone == Zone::Battlefield
+                && self
+                    .characteristics(object.id)
+                    .is_some_and(|characteristics| {
+                        characteristics.controller == player
+                            && characteristics.is_legendary()
+                            && (characteristics.is_creature()
+                                || characteristics.has_type("Planeswalker"))
+                    })
+        })
+    }
+
     /// One resolver for activation legality, published labels and atomic payment planning.
     /// None denotes an undefined commander cost or overflow, never a zero-life payment.
     pub(super) fn activated_life_cost(
@@ -802,6 +824,11 @@ impl GameEngine {
         let face = def
             .face(face_index)
             .ok_or(EngineError::Illegal("bad face index"))?;
+        if !self.legendary_spell_cast_allowed(player, face) {
+            return Err(EngineError::Illegal(
+                "legendary spell requires a legendary creature or planeswalker",
+            ));
+        }
         let needs_face_annotation =
             super::legal_actions::cast_face_count_for_source(self, player, source) > 1
                 || def
@@ -3020,6 +3047,7 @@ impl GameEngine {
                 attached_to: None,
                 pending_copy_candidate: None,
                 pending_aura_recipient: None,
+                accepted_aura_recipient: None,
                 applied_effects: Vec::new(),
             },
             BattlefieldEntryCompletion::LandPlay {
@@ -3055,6 +3083,370 @@ impl GameEngine {
 #[cfg(test)]
 mod cast_snapshot_tests {
     use super::*;
+
+    fn legendary_cast_fixture() -> GameEngine {
+        engine_with_extra(
+            "spell_effect: [GainLife(amount: 1)]",
+            &[
+                r#"(id: "legendary_spell", name: "Legendary Spell", face_id: "legendary_spell", mana_cost: "{B}", types: ["Sorcery"], supertypes: ["Legendary"], spell_effect: [GainLife(amount: 1)])"#,
+                r#"(id: "legendary_creature", name: "Legendary Creature", face_id: "legendary_creature", types: ["Creature"], supertypes: ["Legendary"], power: 2, toughness: 2)"#,
+                r#"(id: "legendary_walker", name: "Legendary Walker", face_id: "legendary_walker", types: ["Planeswalker"], supertypes: ["Legendary"], loyalty: 4)"#,
+            ],
+        )
+    }
+
+    #[test]
+    fn legendary_spell_qualification_uses_derived_types_and_control_not_printed_values() {
+        let mut e = legendary_cast_fixture();
+        let qualifier = add(&mut e, 1, "legendary_creature", Zone::Battlefield);
+        let face = e.registry.get("legendary_spell").unwrap().primary_face();
+        assert!(!e.legendary_spell_cast_allowed(0, face));
+        e.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            trigger_grant_origin: None,
+            affected: AffectedScope::Single(qualifier),
+            kind: ContinuousEffectKind::Layer2Control {
+                controller: tricerules_cards::ControllerReference::Fixed(0),
+            },
+            condition: None,
+            duration: EffectDuration::Indefinite,
+            timestamp: 1,
+        });
+        assert!(e.legendary_spell_cast_allowed(0, face));
+        e.state.continuous_effects.push(ContinuousEffect {
+            source_id: None,
+            trigger_grant_origin: None,
+            affected: AffectedScope::Single(qualifier),
+            kind: ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
+                card_types: vec![tricerules_cards::PermanentTypeFilter::Artifact],
+                creature_types: vec![],
+                land_types: vec![],
+            }),
+            condition: None,
+            duration: EffectDuration::Indefinite,
+            timestamp: 2,
+        });
+        assert!(!e.legendary_spell_cast_allowed(0, face));
+        assert!(
+            e.registry
+                .get("legendary_creature")
+                .unwrap()
+                .primary_face()
+                .is_creature
+        );
+    }
+
+    #[test]
+    fn legendary_spell_special_resolution_cast_permission_cannot_bypass_restriction() {
+        let mut e = engine_with_extra(
+            "spell_effect: [GainLife(amount: 1)]",
+            &[
+                r#"(id: "legendary_siege_reverse", name: "Legendary Siege // Reverse", layout: Transform, faces: [
+                (name: "Legendary Siege", face_id: "legendary_siege", types: ["Battle", "Siege"], defense: 3),
+                (name: "Reverse", face_id: "reverse", types: ["Sorcery"], supertypes: ["Legendary"], spell_effect: [GainLife(amount: 1)]),
+            ])"#,
+                r#"(id: "special_cast_qualifier", name: "Special Cast Qualifier", face_id: "special_cast_qualifier", types: ["Creature"], supertypes: ["Legendary"], power: 2, toughness: 2)"#,
+            ],
+        );
+        let siege = add(&mut e, 0, "legendary_siege_reverse", Zone::Battlefield);
+        e.state.objects.get_mut(&siege).unwrap().counters.clear();
+        e.stage_siege_defeat_trigger(siege);
+        e.flush_staged_triggers(&mut vec![]);
+        let mut initial_offer = None;
+        while e.state.pending_resolution.is_none() {
+            let batch = e
+                .apply_command(
+                    e.state.priority_player_id(),
+                    &RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::PassPriority(rv1::PassPriority {})),
+                    },
+                )
+                .unwrap();
+            for event in batch.events {
+                if let Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) = event.ev {
+                    initial_offer = Some(choice);
+                }
+            }
+        }
+        let special_choice = |event: rv1::RuledEvent| {
+            let Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) = event.ev else {
+                panic!("special cast prompt");
+            };
+            choice
+        };
+        assert_eq!(
+            special_choice(e.resolution_payment_choice_event().unwrap()).candidate_selectable,
+            vec![false]
+        );
+        assert_eq!(initial_offer.unwrap().candidate_selectable, vec![false]);
+        let permission = e
+            .special_cast_permission(0)
+            .expect("special resolution permission");
+        let cast = rv1::CastSpell {
+            cast_method: rv1::CastMethod::SiegeDefeat as i32,
+            casting_permission_id: Some(permission.group_id),
+            source: Some(rv1::CastSource {
+                expected_zone_change_generation: Some(e.state.zone_change_generation[&siege]),
+                location: Some(rv1::cast_source::Location::ExileObjectId(siege)),
+            }),
+            face_index: 1,
+            ..Default::default()
+        };
+        let before = e.diagnostic_snapshot().unwrap();
+        let result = e.apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                    rv1::SubmitResolutionChoice {
+                        decision: rv1::ResolutionChoiceDecision::CastSpell as i32,
+                        cast_spell: Some(cast),
+                        ..Default::default()
+                    },
+                )),
+            },
+        );
+        assert!(matches!(result, Err(EngineError::Illegal(_))));
+        assert_eq!(e.diagnostic_snapshot().unwrap(), before);
+        assert!(e.initial_response_batch().legal_by_player[&0]
+            .zone_cast_actions
+            .is_empty());
+        let qualifier = add(&mut e, 0, "special_cast_qualifier", Zone::Battlefield);
+        let refreshed = special_choice(e.resolution_payment_choice_event().unwrap());
+        assert_eq!(refreshed.candidate_selectable, vec![true]);
+        assert_eq!(refreshed.candidate_names, vec!["Reverse"]);
+        assert_eq!(
+            e.initial_response_batch().legal_by_player[&0]
+                .zone_cast_actions
+                .len(),
+            1
+        );
+        move_object_to_zone(&mut e.state, e.registry, qualifier, Zone::Graveyard, None).unwrap();
+        assert_eq!(
+            special_choice(e.resolution_payment_choice_event().unwrap()).candidate_selectable,
+            vec![false]
+        );
+        e.apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                    rv1::SubmitResolutionChoice {
+                        decision: rv1::ResolutionChoiceDecision::Decline as i32,
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .unwrap();
+        assert!(e.state.pending_resolution.is_none());
+        assert!(e.state.stack.is_empty());
+        assert_eq!(e.state.objects[&siege].zone, Zone::Exile);
+    }
+
+    #[test]
+    fn all_graveyard_return_printed_permanent_guard_includes_battle_and_deduplicates_or_overlap() {
+        let cards = [
+            r#"(id: "return_land", name: "Return Land", face_id: "return_land", types: ["Land"], supertypes: ["Legendary"])"#,
+            r#"(id: "return_battle", name: "Return Battle", face_id: "return_battle", types: ["Battle"], supertypes: ["Legendary"], defense: 3)"#,
+            r#"(id: "return_overlap", name: "Return Overlap", face_id: "return_overlap", types: ["Artifact", "Enchantment"], supertypes: ["Legendary"])"#,
+            r#"(id: "return_instant", name: "Return Instant", face_id: "return_instant", types: ["Instant"], supertypes: ["Legendary"], spell_effect: [GainLife(amount: 1)])"#,
+        ];
+        for filter in [
+            r#"(required_supertypes: ["Legendary"])"#,
+            r#"(any_of: Some([(card_type: Some(Artifact)), (card_type: Some(Enchantment))]))"#,
+        ] {
+            let mut e = engine_with_extra(
+                &format!("spell_effect: [ReturnAllGraveyardPermanents(filter: {filter})]"),
+                &cards,
+            );
+            let ids: Vec<_> = [
+                "return_land",
+                "return_battle",
+                "return_overlap",
+                "return_instant",
+            ]
+            .iter()
+            .map(|card| add(&mut e, 0, card, Zone::Graveyard))
+            .collect();
+            let opponent = add(&mut e, 1, "return_overlap", Zone::Graveyard);
+            let spell = add(&mut e, 0, "snapshot_spell", Zone::Hand);
+            e.state.players[0].mana_pool.black = 1;
+            e.apply_command(0, &command(&e, spell)).unwrap();
+            resolve(&mut e);
+            for _ in 0..4 {
+                let Some(pending) = e.state.pending_resolution.clone() else {
+                    break;
+                };
+                assert!(matches!(
+                    pending.presentation.choice_kind,
+                    rv1::ChoiceKind::BattleProtector | rv1::ChoiceKind::SimultaneousEntryOrder
+                ));
+                assert!(ids
+                    .iter()
+                    .all(|oid| e.state.objects[oid].zone == Zone::Graveyard));
+                e.apply_command(
+                    0,
+                    &RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                            rv1::SubmitResolutionChoice {
+                                chosen_object_ids: if pending.presentation.choice_kind
+                                    == rv1::ChoiceKind::BattleProtector
+                                {
+                                    vec![pending.presentation.candidates[0]]
+                                } else {
+                                    pending.presentation.candidates
+                                },
+                                ..Default::default()
+                            },
+                        )),
+                    },
+                )
+                .unwrap();
+            }
+            let legendary = filter.contains("Legendary");
+            for (index, oid) in ids.iter().enumerate() {
+                let enters = index == 2 || (legendary && index < 2);
+                assert_eq!(
+                    e.state.objects[oid].zone,
+                    if enters {
+                        Zone::Battlefield
+                    } else {
+                        Zone::Graveyard
+                    }
+                );
+                assert_eq!(
+                    e.state
+                        .zone_change_generation
+                        .get(oid)
+                        .copied()
+                        .unwrap_or(0),
+                    u64::from(enters)
+                );
+            }
+            assert_eq!(
+                e.state.players[0]
+                    .battlefield
+                    .iter()
+                    .filter(|oid| **oid == ids[2])
+                    .count(),
+                1
+            );
+            assert_eq!(e.state.objects[&opponent].zone, Zone::Graveyard);
+            if legendary {
+                assert_eq!(
+                    e.state.objects[&ids[1]].counter_count(CounterKind::Defense),
+                    3
+                );
+            }
+            assert!(e.state.stack.is_empty());
+        }
+    }
+
+    #[test]
+    fn legendary_spell_uses_current_controller_and_commits_after_qualifier_leaves() {
+        for card in ["legendary_creature", "legendary_walker"] {
+            let mut e = legendary_cast_fixture();
+            // Opponent owns the qualifier; caster controls it. Ownership is irrelevant.
+            let qualifier = add(&mut e, 1, card, Zone::Battlefield);
+            e.state.objects.get_mut(&qualifier).unwrap().base_controller = 0;
+            let spell = add(&mut e, 0, "legendary_spell", Zone::Hand);
+            e.state.players[0].mana_pool.black = 1;
+            assert!(e.initial_response_batch().legal_by_player[&0]
+                .hand_actions
+                .iter()
+                .any(|action| action.hand_index as usize == e.state.players[0].hand.len() - 1));
+            let cast = command(&e, spell);
+            let Some(rv1::ruled_command::Cmd::CastSpell(cast)) = cast.cmd else {
+                unreachable!()
+            };
+            let begin = RuledCommand {
+                cmd: Some(rv1::ruled_command::Cmd::BeginSpellCast(
+                    rv1::BeginSpellCast {
+                        announcement: Some(announcement_from_cast(&cast)),
+                    },
+                )),
+            };
+            e.apply_command(0, &begin)
+                .expect("controlled legendary qualifier allows Begin");
+            let transaction_id = e.state.pending_spell_cast.as_ref().unwrap().transaction_id;
+            // Model its loss while paying costs after the lawful announcement.
+            super::super::resolution::move_object_to_zone(
+                &mut e.state,
+                e.registry,
+                qualifier,
+                Zone::Graveyard,
+                None,
+            )
+            .unwrap();
+            assert!(!e.legendary_spell_cast_allowed(
+                0,
+                e.registry.get("legendary_spell").unwrap().primary_face()
+            ));
+            e.apply_command(
+                0,
+                &RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::CommitSpellCast(
+                        rv1::CommitSpellCast {
+                            transaction_id,
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .expect("commit does not recheck the announced casting restriction");
+            assert_eq!(e.state.objects[&spell].zone, Zone::Stack);
+            assert_eq!(e.state.players[0].mana_pool.black, 0);
+            resolve(&mut e);
+            assert_eq!(e.state.players[0].life, 21);
+        }
+    }
+
+    #[test]
+    fn legendary_spell_requires_own_legendary_creature_or_planeswalker_before_begin() {
+        for spell_type in ["Instant", "Sorcery"] {
+            for qualifier in [
+                None,
+                Some((0, "legendary_artifact")),
+                Some((1, "legendary_creature")),
+            ] {
+                let definition = format!(
+                    r#"(id: "legendary_spell", name: "Legendary Spell", face_id: "legendary_spell", mana_cost: "{{B}}", types: ["{spell_type}"], supertypes: ["Legendary"], spell_effect: [GainLife(amount: 1)])"#
+                );
+                let mut e = engine_with_extra(
+                    "spell_effect: [GainLife(amount: 1)]",
+                    &[
+                        &definition,
+                        r#"(id: "legendary_artifact", name: "Legendary Artifact", face_id: "legendary_artifact", types: ["Artifact"], supertypes: ["Legendary"])"#,
+                        r#"(id: "legendary_creature", name: "Legendary Creature", face_id: "legendary_creature", types: ["Creature"], supertypes: ["Legendary"], power: 2, toughness: 2)"#,
+                    ],
+                );
+                if let Some((player, card)) = qualifier {
+                    add(&mut e, player, card, Zone::Battlefield);
+                }
+                let spell = add(&mut e, 0, "legendary_spell", Zone::Hand);
+                e.state.players[0].mana_pool.black = 1;
+                let before_index = e.state.command_index;
+                let before_hand = e.state.players[0].hand.clone();
+                let cast = command(&e, spell);
+                assert!(
+                    matches!(e.apply_command(0, &cast), Err(EngineError::Illegal(_))),
+                    "{spell_type} with {qualifier:?} must be rejected"
+                );
+                assert_eq!(e.state.command_index, before_index);
+                assert_eq!(e.state.players[0].hand, before_hand);
+                assert_eq!(e.state.objects[&spell].zone, Zone::Hand);
+                assert_eq!(e.state.players[0].mana_pool.black, 1);
+                assert!(e.state.pending_spell_cast.is_none());
+                assert!(e.state.stack.is_empty());
+                assert!(
+                    !e.initial_response_batch().legal_by_player[&0]
+                        .hand_actions
+                        .iter()
+                        .any(|action| action.hand_index as usize == before_hand.len() - 1),
+                    "illegal legendary spell must not be offered"
+                );
+            }
+        }
+    }
 
     #[test]
     fn issue_166_only_successful_casts_record_generation_bound_facts() {
@@ -4033,6 +4425,7 @@ mod cast_snapshot_tests {
         match zone {
             Zone::Hand => e.state.players[player].hand.push(id),
             Zone::Battlefield => e.state.players[player].battlefield.push(id),
+            Zone::Graveyard => e.state.players[player].graveyard.push(id),
             _ => panic!("unsupported fixture zone"),
         }
         id

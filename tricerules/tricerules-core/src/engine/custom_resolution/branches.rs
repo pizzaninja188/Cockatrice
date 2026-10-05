@@ -4,7 +4,20 @@ use super::*;
 impl GameEngine {
     pub(in crate::engine) fn resolution_payment_choice_event(&self) -> Option<rv1::RuledEvent> {
         if let Some(pending) = self.state.pending_resolution.as_ref() {
-            if let ResolutionContinuation::SpecialCast { exiled, .. } = &pending.continuation {
+            if let ResolutionContinuation::SpecialCast {
+                exiled, face_index, ..
+            } = &pending.continuation
+            {
+                let selectable = super::super::legal_actions::legal_zone_cast_actions(
+                    self,
+                    pending.deciding_player,
+                )
+                .iter()
+                .any(|action| {
+                    action.object_id == exiled.object_id && action.face_index == *face_index as u32
+                });
+                let object = self.state.objects.get(&exiled.object_id)?;
+                let face = self.registry.get(&object.card_id)?.face(*face_index)?;
                 return Some(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                         rv1::ResolutionChoiceRequired {
@@ -16,12 +29,9 @@ impl GameEngine {
                             candidate_object_ids: vec![exiled.object_id],
                             min: 0,
                             max: 1,
-                            candidate_names: vec![object_display_name(
-                                &self.state,
-                                self.registry,
-                                exiled.object_id,
-                            )],
-                            candidate_selectable: vec![true],
+                            candidate_card_ids: vec![object.card_id.clone()],
+                            candidate_names: vec![face.name.clone()],
+                            candidate_selectable: vec![selectable],
                             ..Default::default()
                         },
                     )),

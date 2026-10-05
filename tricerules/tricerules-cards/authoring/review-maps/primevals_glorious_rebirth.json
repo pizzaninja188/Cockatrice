@@ -1,0 +1,60 @@
+{
+  "oracle_id": "8de8027b-072a-474b-b76b-dc49c417cc55",
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnAllGraveyardPermanents",
+      "typed_path": "/faces/0/spell_effect/0"
+    }
+  ],
+  "spans": [
+    {
+      "typed_paths": [
+        "/faces/0/supertypes"
+      ],
+      "end_line": 1,
+      "face_id": "primevals_glorious_rebirth",
+      "start_line": 1
+    },
+    {
+      "typed_paths": [
+        "/faces/0/spell_effect/0"
+      ],
+      "end_line": 2,
+      "face_id": "primevals_glorious_rebirth",
+      "start_line": 2
+    }
+  ],
+  "complete_definition_review_confirmed": true,
+  "semantic_fixtures": [
+    {
+      "covers": "Exact single face, Oracle name, mana cost, Sorcery/Legendary type, complete targetless filter and no additional abilities",
+      "test": "deck_coverage_graveyard_return::graveyard_return_registers_exact_single_faces_costs_types_and_filters"
+    },
+    {
+      "covers": "Filter validation and spell-only context fail closed",
+      "test": "deck_coverage_graveyard_return::all_graveyard_return_rejects_invalid_filter_and_ability_context"
+    },
+    {
+      "covers": "graveyard return empty cohort finishes and extra targets reject atomically",
+      "test": "scenario deck_coverage_graveyard_return::graveyard_return_empty_cohort_finishes_and_extra_targets_reject_atomically"
+    },
+    {
+      "covers": "graveyard return entrants observe the whole simultaneous cohort",
+      "test": "scenario deck_coverage_graveyard_return::graveyard_return_entrants_observe_the_whole_simultaneous_cohort"
+    },
+    {
+      "covers": "primevals glorious rebirth requires a controlled legendary creature or planeswalker",
+      "test": "scenario deck_coverage_graveyard_return::primevals_glorious_rebirth_requires_a_controlled_legendary_creature_or_planeswalker"
+    },
+    {
+      "covers": "primevals glorious rebirth returns legendary permanent cards including land",
+      "test": "scenario deck_coverage_graveyard_return::primevals_glorious_rebirth_returns_legendary_permanent_cards_including_land"
+    },
+    {
+      "covers": "graveyard return twincast uses copy controller and original selects fresh cohort",
+      "test": "scenario deck_coverage_graveyard_return::graveyard_return_twincast_uses_copy_controller_and_original_selects_fresh_cohort"
+    }
+  ],
+  "format_version": 1,
+  "tokens": []
+}

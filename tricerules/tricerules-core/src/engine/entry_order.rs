@@ -24,6 +24,23 @@ impl GameEngine {
     }
 
     fn entry_timestamp_cohort_current(&self, order: &PendingEntryTimestampOrder) -> bool {
+        let accepted_entrants_current = match &order.batch {
+            SimultaneousEntryBatch::Zone(batch) => batch
+                .ready
+                .iter()
+                .all(|event| self.accepted_entry_aura_entrant_current(event)),
+            SimultaneousEntryBatch::Token(batch) => batch
+                .ready
+                .iter()
+                .all(|entry| self.accepted_entry_aura_entrant_current(&entry.event)),
+            SimultaneousEntryBatch::Observer(batch) => batch
+                .ready
+                .iter()
+                .all(|entry| self.accepted_entry_aura_entrant_current(&entry.event)),
+        };
+        if !accepted_entrants_current {
+            return false;
+        }
         if let SimultaneousEntryBatch::Zone(batch) = &order.batch {
             if !self.zone_entry_batch_current(batch) {
                 return false;
@@ -166,10 +183,16 @@ impl GameEngine {
 
     pub(super) fn begin_entry_timestamp_order(
         &mut self,
-        batch: SimultaneousEntryBatch,
+        mut batch: SimultaneousEntryBatch,
         stack: Option<ParkedStackResolution>,
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<Option<SimultaneousEntryBatch>, EngineError> {
+        self.prune_invalid_simultaneous_entry_auras(
+            &mut batch,
+            stack
+                .as_ref()
+                .map_or("entry", |stack| stack.item.card_id.as_str()),
+        )?;
         let entrants = Self::simultaneous_entry_ids(&batch);
         let original_generations = entrants
             .iter()
@@ -317,7 +340,15 @@ impl GameEngine {
                     .ready
                     .retain(|entry| !departed_objects.contains(&entry.event.object_id));
             }
-            SimultaneousEntryBatch::Token(_) => return Ok(()),
+            SimultaneousEntryBatch::Token(batch) => {
+                self.reconcile_departed_token_entry_members(
+                    batch,
+                    departed_objects,
+                    stack
+                        .as_ref()
+                        .map_or("entry", |stack| stack.item.card_id.as_str()),
+                );
+            }
         }
         // Remove only departed entries before validating every surviving frozen incarnation.
         let members: HashSet<_> = Self::simultaneous_entry_ids(&order.batch)
@@ -329,7 +360,34 @@ impl GameEngine {
             .retain(|(oid, _, _)| members.contains(oid));
         if !self.entry_timestamp_cohort_current(order) {
             match &mut order.batch {
-                SimultaneousEntryBatch::Zone(_) => {
+                SimultaneousEntryBatch::Zone(batch) => {
+                    for event in &batch.ready {
+                        let frozen_current =
+                            order
+                                .original_generations
+                                .iter()
+                                .any(|(oid, generation, zone)| {
+                                    *oid == event.object_id
+                                        && self
+                                            .state
+                                            .objects
+                                            .get(oid)
+                                            .is_some_and(|object| object.zone == *zone)
+                                        && self
+                                            .state
+                                            .zone_change_generation
+                                            .get(oid)
+                                            .copied()
+                                            .unwrap_or(0)
+                                            == *generation
+                                });
+                        if frozen_current
+                            && event.accepted_aura_recipient.is_some()
+                            && self.accepted_entry_aura_entrant_current(event)
+                        {
+                            self.restore_skipped_battlefield_entry(event)?;
+                        }
+                    }
                     let stack = stack.clone();
                     self.state.pending_resolution = None;
                     return self.abandon_participating_resolution(stack, events);
@@ -354,9 +412,10 @@ impl GameEngine {
                                 .then_some(*oid)
                         })
                         .collect();
-                    batch
-                        .ready
-                        .retain(|entry| valid.contains(&entry.event.object_id));
+                    batch.ready.retain(|entry| {
+                        valid.contains(&entry.event.object_id)
+                            && self.accepted_entry_aura_entrant_current(&entry.event)
+                    });
                     order
                         .original_generations
                         .retain(|(oid, _, _)| valid.contains(oid));
@@ -367,9 +426,43 @@ impl GameEngine {
                     *stack = batch.resume_stack.clone();
                     events.push(events::ev_log("Interrupted return batch discarded stale incarnations; valid independent returns remain owed.".into()));
                 }
-                SimultaneousEntryBatch::Token(_) => unreachable!(),
+                SimultaneousEntryBatch::Token(batch) => {
+                    for entry in &batch.ready {
+                        let oid = entry.event.object_id;
+                        let frozen_current = order.original_generations.iter().any(
+                            |(original, generation, zone)| {
+                                *original == oid
+                                    && self
+                                        .state
+                                        .objects
+                                        .get(&oid)
+                                        .is_some_and(|object| object.zone == *zone)
+                                    && self
+                                        .state
+                                        .zone_change_generation
+                                        .get(&oid)
+                                        .copied()
+                                        .unwrap_or(0)
+                                        == *generation
+                            },
+                        );
+                        if frozen_current && self.accepted_entry_aura_entrant_current(&entry.event)
+                        {
+                            self.state.objects.remove(&oid);
+                        }
+                    }
+                    let stack = stack.clone();
+                    self.state.pending_resolution = None;
+                    return self.abandon_participating_resolution(stack, events);
+                }
             }
         }
+        self.prune_invalid_simultaneous_entry_auras(
+            &mut order.batch,
+            stack
+                .as_ref()
+                .map_or("entry", |stack| stack.item.card_id.as_str()),
+        )?;
         let survivors: HashSet<_> = Self::simultaneous_entry_ids(&order.batch)
             .into_iter()
             .map(|(oid, _)| oid)
@@ -420,6 +513,338 @@ impl GameEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn accepted_aura_timestamp_fixture(tokens: bool) -> (GameEngine, Vec<ObjectId>) {
+        let mut engine = GameEngine::new(
+            613_709,
+            &[0, 1, 2],
+            20,
+            Some(vec![vec!["forest".into(); 20]; 3]),
+            true,
+        )
+        .unwrap();
+        let host = engine.state.players[1].hand[0];
+        engine.state.objects.get_mut(&host).unwrap().card_id = "grizzly_bears".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            host,
+            Zone::Battlefield,
+            Some(1),
+        )
+        .unwrap();
+        let mut item = engine.observer_return_item(engine.state.players[0].hand[3], 0);
+        item.card_id = "opt".into();
+        item.ability_text = None;
+        let mut stack = ParkedStackResolution::new(item.clone());
+        stack.resume_effect_index = Some(0);
+        let ids = if tokens {
+            let source = engine.state.players[1].hand[0];
+            engine.state.objects.get_mut(&source).unwrap().card_id = "pacifism".into();
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                source,
+                Zone::Battlefield,
+                Some(1),
+            )
+            .unwrap();
+            engine.state.objects.get_mut(&source).unwrap().attached_to =
+                Some(AttachmentRecipient::Object(host));
+            let snapshot =
+                copying::token_copy_snapshot_from(&engine.state, engine.registry, source).unwrap();
+            let (entries, logs) = engine
+                .prepare_token_entries(
+                    resolution::TokenCreationRequest {
+                        token_id: &snapshot.token_id,
+                        copy: Some(&snapshot),
+                        count: 2,
+                        recipients: vec![0],
+                        spell_label: "stale fixture",
+                        item: &item,
+                    },
+                    false,
+                )
+                .unwrap();
+            let ids = entries
+                .iter()
+                .map(|entry| entry.event.object_id)
+                .collect::<Vec<_>>();
+            assert!(engine
+                .begin_token_entry_batch(
+                    item,
+                    entries,
+                    logs,
+                    TokenEntryBatchOptions::default(),
+                    &mut vec![]
+                )
+                .unwrap());
+            engine.transfer_entry_choice_resume(&stack);
+            ids
+        } else {
+            let ids = engine.state.players[0]
+                .hand
+                .iter()
+                .copied()
+                .take(3)
+                .collect::<Vec<_>>();
+            for (index, &oid) in ids.iter().enumerate() {
+                if index < 2 {
+                    engine.state.objects.get_mut(&oid).unwrap().card_id = "pacifism".into();
+                }
+                move_object_to_zone(&mut engine.state, engine.registry, oid, Zone::Exile, None)
+                    .unwrap();
+                engine.state.pending_immediate_observer_actions.push(
+                    ImmediateObserverAction::ReturnExiledObject {
+                        exiled: TriggerObjectRef {
+                            object_id: oid,
+                            zone_change_generation: engine.state.zone_change_generation[&oid],
+                            controller_at_event: 0,
+                        },
+                    },
+                );
+            }
+            assert!(engine
+                .drain_immediate_observer_actions(Some(stack), &mut vec![])
+                .unwrap());
+            ids
+        };
+        engine.apply_command(0, &choice(vec![host])).unwrap();
+        engine.apply_command(0, &choice(vec![host])).unwrap();
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .choice_kind,
+            rv1::ChoiceKind::SimultaneousEntryOrder
+        );
+        (engine, ids)
+    }
+
+    #[test]
+    fn stale_accepted_observer_aura_preserves_current_returns_and_cancels_tail_on_concession() {
+        for revision_stale in [false, true] {
+            let (mut engine, ids) = accepted_aura_timestamp_fixture(false);
+            if revision_stale {
+                engine.state.objects.get_mut(&ids[0]).unwrap().copy_revision += 1;
+            } else {
+                *engine
+                    .state
+                    .zone_change_generation
+                    .entry(ids[0])
+                    .or_default() += 1;
+            }
+            let generation = engine.state.zone_change_generation[&ids[0]];
+            let revision = engine.state.objects[&ids[0]].copy_revision;
+            let before = engine.diagnostic_snapshot().unwrap();
+            assert!(engine.apply_command(0, &choice(ids.clone())).is_err());
+            assert_eq!(
+                engine.diagnostic_snapshot().unwrap(),
+                before,
+                "stale ordinary answer must be atomic"
+            );
+            engine
+                .apply_command(
+                    2,
+                    &rv1::RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                    },
+                )
+                .unwrap();
+            let pending = engine.state.pending_resolution.as_ref().unwrap();
+            let order = pending.presentation.candidates.clone();
+            assert_eq!(order.len(), 2);
+            assert!(!order.contains(&ids[0]));
+            engine.apply_command(0, &choice(order)).unwrap();
+            assert_eq!(engine.state.objects[&ids[0]].zone, Zone::Exile);
+            assert_eq!(engine.state.zone_change_generation[&ids[0]], generation);
+            assert_eq!(engine.state.objects[&ids[0]].copy_revision, revision);
+            assert!(ids[1..]
+                .iter()
+                .all(|id| engine.state.objects[id].zone == Zone::Battlefield));
+            assert!(
+                engine.state.pending_resolution.is_none(),
+                "outer Opt tail must be cancelled"
+            );
+            assert!(engine.state.players[2].has_lost);
+        }
+    }
+
+    #[test]
+    fn stale_accepted_token_aura_cancels_batch_without_deleting_changed_incarnation() {
+        for (revision_stale, on_battlefield) in [(false, true), (true, true), (true, false)] {
+            let (mut engine, ids) = accepted_aura_timestamp_fixture(true);
+            if on_battlefield {
+                let host = engine.state.players[1].battlefield[0];
+                let object = engine.state.objects.get_mut(&ids[0]).unwrap();
+                object.zone = Zone::Battlefield;
+                object.attached_to = Some(AttachmentRecipient::Object(host));
+                engine.state.players[0].battlefield.push(ids[0]);
+            }
+            if revision_stale {
+                engine.state.objects.get_mut(&ids[0]).unwrap().copy_revision += 1;
+            } else {
+                *engine
+                    .state
+                    .zone_change_generation
+                    .entry(ids[0])
+                    .or_default() += 1;
+            }
+            let generation = engine
+                .state
+                .zone_change_generation
+                .get(&ids[0])
+                .copied()
+                .unwrap_or(0);
+            let revision = engine.state.objects[&ids[0]].copy_revision;
+            let before = engine.diagnostic_snapshot().unwrap();
+            assert!(engine.apply_command(0, &choice(ids.clone())).is_err());
+            assert_eq!(engine.diagnostic_snapshot().unwrap(), before);
+            let batch = engine
+                .apply_command(
+                    2,
+                    &rv1::RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                    },
+                )
+                .unwrap();
+            assert_eq!(
+                engine
+                    .state
+                    .zone_change_generation
+                    .get(&ids[0])
+                    .copied()
+                    .unwrap_or(0),
+                generation
+            );
+            assert!(!engine.state.objects.contains_key(&ids[1]));
+            if on_battlefield {
+                assert_eq!(
+                    engine.state.objects[&ids[0]].copy_revision, revision,
+                    "cancellation must preserve a changed valid incarnation"
+                );
+                assert_eq!(engine.state.objects[&ids[0]].zone, Zone::Battlefield);
+            } else {
+                assert!(
+                    !engine.state.objects.contains_key(&ids[0]),
+                    "ordinary token SBAs still apply"
+                );
+            }
+            assert!(!batch
+                .events
+                .iter()
+                .any(|event| matches!(event.ev, Some(rv1::ruled_event::Ev::TokenCreated(_)))));
+            assert!(engine.state.pending_resolution.is_none());
+            assert!(engine.state.players[2].has_lost);
+        }
+    }
+
+    #[test]
+    fn accepted_aura_token_batch_skips_after_recipient_departure_during_second_choice_and_resumes_tail(
+    ) {
+        let mut engine = GameEngine::new(
+            613_707,
+            &[0, 1, 2],
+            20,
+            Some(vec![vec!["forest".into(); 20]; 3]),
+            true,
+        )
+        .unwrap();
+        let host = engine.state.players[1].hand[0];
+        engine.state.objects.get_mut(&host).unwrap().card_id = "grizzly_bears".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            host,
+            Zone::Battlefield,
+            Some(1),
+        )
+        .unwrap();
+        let source = engine.state.players[2].hand[0];
+        engine.state.objects.get_mut(&source).unwrap().card_id = "pacifism".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            Some(2),
+        )
+        .unwrap();
+        engine.state.objects.get_mut(&source).unwrap().attached_to =
+            Some(AttachmentRecipient::Object(host));
+        let snapshot =
+            copying::token_copy_snapshot_from(&engine.state, engine.registry, source).unwrap();
+        let mut item = engine.observer_return_item(engine.state.players[0].hand[0], 0);
+        item.card_id = "opt".into();
+        item.ability_text = None;
+        let (entries, logs) = engine
+            .prepare_token_entries(
+                resolution::TokenCreationRequest {
+                    token_id: &snapshot.token_id,
+                    copy: Some(&snapshot),
+                    count: 2,
+                    recipients: vec![0],
+                    spell_label: "fixture copies",
+                    item: &item,
+                },
+                false,
+            )
+            .unwrap();
+        let ids: Vec<_> = entries.iter().map(|entry| entry.event.object_id).collect();
+        let mut stack = ParkedStackResolution::new(item.clone());
+        stack.resume_effect_index = Some(0);
+        assert!(engine
+            .begin_token_entry_batch(
+                item,
+                entries,
+                logs,
+                TokenEntryBatchOptions::default(),
+                &mut Vec::new()
+            )
+            .unwrap());
+        engine.transfer_entry_choice_resume(&stack);
+        engine.apply_command(0, &choice(vec![host])).unwrap();
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .choice_kind,
+            rv1::ChoiceKind::AuraPermanent
+        );
+        let batch = engine
+            .apply_command(
+                1,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                },
+            )
+            .unwrap();
+        let pending = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .expect("Opt tail must remain owed");
+        assert_eq!(
+            pending.presentation.choice_kind,
+            rv1::ChoiceKind::LibraryTop,
+            "both impossible Aura copies must skip, not leave the second choice parked"
+        );
+        assert!(ids.iter().all(|id| !engine.state.objects.contains_key(id)));
+        assert!(!batch
+            .events
+            .iter()
+            .any(|event| matches!(event.ev, Some(rv1::ruled_event::Ev::TokenCreated(_)))));
+        let hand_before = engine.state.players[0].hand.len();
+        engine.apply_command(0, &choice(vec![])).unwrap();
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(engine.state.players[0].hand.len(), hand_before + 1);
+    }
 
     fn choice(ids: Vec<ObjectId>) -> rv1::RuledCommand {
         rv1::RuledCommand {
@@ -500,6 +925,101 @@ mod tests {
                 < engine.state.battlefield_entry_timestamps[&ids[0]]
         );
         assert_eq!(engine.token_entry_object_refs(&ids)[0].object_id, ids[0]);
+    }
+
+    #[test]
+    fn accepted_observer_auras_skip_after_recipient_departure_and_resume_tail_once() {
+        let mut engine = GameEngine::new(
+            613_708,
+            &[0, 1, 2],
+            20,
+            Some(vec![vec!["island".into(); 20]; 3]),
+            true,
+        )
+        .unwrap();
+        let ids: Vec<_> = engine.state.players[0]
+            .hand
+            .iter()
+            .copied()
+            .take(3)
+            .collect();
+        let host = engine.state.players[1].hand[0];
+        engine.state.objects.get_mut(&host).unwrap().card_id = "grizzly_bears".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            host,
+            Zone::Battlefield,
+            Some(1),
+        )
+        .unwrap();
+        for (index, &oid) in ids.iter().enumerate() {
+            if index < 2 {
+                engine.state.objects.get_mut(&oid).unwrap().card_id = "pacifism".into();
+            }
+            move_object_to_zone(&mut engine.state, engine.registry, oid, Zone::Exile, None)
+                .unwrap();
+            engine.state.pending_immediate_observer_actions.push(
+                ImmediateObserverAction::ReturnExiledObject {
+                    exiled: TriggerObjectRef {
+                        object_id: oid,
+                        zone_change_generation: engine.state.zone_change_generation[&oid],
+                        controller_at_event: 0,
+                    },
+                },
+            );
+        }
+        let mut item = engine.observer_return_item(ids[2], 0);
+        item.card_id = "opt".into();
+        item.ability_text = None;
+        let mut stack = ParkedStackResolution::new(item);
+        stack.resume_effect_index = Some(0);
+        assert!(engine
+            .drain_immediate_observer_actions(Some(stack), &mut Vec::new())
+            .unwrap());
+        engine.apply_command(0, &choice(vec![host])).unwrap();
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .choice_kind,
+            rv1::ChoiceKind::AuraPermanent
+        );
+        let batch = engine
+            .apply_command(
+                1,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::Concede(rv1::Concede {})),
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .choice_kind,
+            rv1::ChoiceKind::LibraryTop
+        );
+        for &oid in &ids[..2] {
+            assert_eq!(engine.state.objects[&oid].zone, Zone::Exile);
+            assert_eq!(engine.state.zone_change_generation[&oid], 1);
+            assert_eq!(engine.state.objects[&oid].attached_to, None);
+        }
+        assert_eq!(engine.state.objects[&ids[2]].zone, Zone::Battlefield);
+        assert_eq!(engine.state.zone_change_generation[&ids[2]], 2);
+        assert!(!batch.events.iter().any(|event| matches!(&event.ev,
+            Some(rv1::ruled_event::Ev::AuraAttached(attachment)) if ids[..2].contains(&attachment.aura_object_id))));
+        let hand_before = engine.state.players[0].hand.len();
+        engine.apply_command(0, &choice(vec![])).unwrap();
+        assert_eq!(engine.state.players[0].hand.len(), hand_before + 1);
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_observer_return_batch.is_none());
     }
 
     #[test]
