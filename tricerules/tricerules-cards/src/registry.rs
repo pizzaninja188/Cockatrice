@@ -1294,6 +1294,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
             set_toughness,
             remove_all_abilities,
             keywords,
+            protections,
             triggered_abilities,
             activated_abilities,
             restriction,
@@ -1318,6 +1319,7 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 && set_name.is_none()
                 && set_colors.is_none()
                 && keywords.is_empty()
+                && protections.is_empty()
                 && triggered_abilities.is_empty()
                 && activated_abilities.is_empty()
                 && restriction.is_empty()
@@ -1412,7 +1414,8 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                     || count.is_some()
                     || set_power.is_some()
                     || *remove_all_abilities
-                    || !keywords.is_empty())
+                    || !keywords.is_empty()
+                    || !protections.is_empty())
                     && condition.any_node_matches(|node| {
                         matches!(
                             node,

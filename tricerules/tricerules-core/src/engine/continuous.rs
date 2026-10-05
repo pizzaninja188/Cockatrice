@@ -716,6 +716,7 @@ impl GameEngine {
                     set_toughness,
                     remove_all_abilities,
                     keywords,
+                    protections,
                     activated_abilities,
                     triggered_abilities,
                     restriction,
@@ -789,6 +790,17 @@ impl GameEngine {
                             source_id: Some(object_id),
                             affected: affected.clone(),
                             kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                            condition: condition.clone(),
+                            duration: EffectDuration::WhileSourceOnBattlefield,
+                            timestamp,
+                        });
+                    }
+                    for protection in protections {
+                        self.state.continuous_effects.push(ContinuousEffect {
+                            trigger_grant_origin: None,
+                            source_id: Some(object_id),
+                            affected: affected.clone(),
+                            kind: ContinuousEffectKind::Layer6AddProtection(protection),
                             condition: condition.clone(),
                             duration: EffectDuration::WhileSourceOnBattlefield,
                             timestamp,
@@ -1781,6 +1793,44 @@ mod static_permanent_keyword_grant_tests {
             .characteristics(id)
             .unwrap()
             .has_keyword(Keyword::Indestructible)
+    }
+
+    #[test]
+    fn sword_condition_groups_attached_protection_with_pt() {
+        let mut engine = GameEngine::new(49940, &[0, 1], 20, None, true).unwrap();
+        let host = fixture(&mut engine, "grizzly_bears");
+        let sword = fixture(&mut engine, "sword_of_war_and_peace");
+        engine.state.objects.get_mut(&sword).unwrap().attached_to =
+            Some(AttachmentRecipient::Object(host));
+        for (players, applies) in [
+            (RelativePlayerSet::Opponents, false),
+            (RelativePlayerSet::Controller, true),
+        ] {
+            let mut values = engine.copiable_values_for(sword).unwrap();
+            let StaticAbilityDef::AttachedModifier { condition, .. } =
+                &mut values.face.static_abilities[0].definition
+            else {
+                panic!("Sword modifier")
+            };
+            *condition = Some(GameCondition::ActivePlayer { players });
+            engine
+                .state
+                .objects
+                .get_mut(&sword)
+                .unwrap()
+                .copiable_values = Some(values);
+            engine.refresh_source_static_abilities(sword);
+            let c = engine.characteristics(host).unwrap();
+            assert_eq!(
+                (c.power, c.toughness),
+                if applies {
+                    (Some(4), Some(4))
+                } else {
+                    (Some(2), Some(2))
+                }
+            );
+            assert_eq!(c.protections.len(), if applies { 2 } else { 0 });
+        }
     }
 
     fn witness_with_sibling(engine: &mut GameEngine, host: ObjectId) -> ObjectId {

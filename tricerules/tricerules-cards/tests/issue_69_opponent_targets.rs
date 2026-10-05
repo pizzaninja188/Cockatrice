@@ -54,6 +54,7 @@ fn glaring_aegis_has_complete_oracle_behavior() {
             toughness_per_match: 0,
             remove_all_abilities: false,
             keywords: vec![],
+            protections: Box::default(),
             activated_abilities: vec![],
             triggered_abilities: vec![],
             restriction: Default::default(),

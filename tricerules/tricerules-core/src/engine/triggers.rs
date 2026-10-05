@@ -493,6 +493,9 @@ impl GameEngine {
                     {
                         Some(action.actor)
                     }
+                    // Damage handlers bind the specific damaged player. Their context
+                    // must survive this generic event-player projection (damage has none).
+                    GameEvent::DamageDealt { .. } => trigger.trigger_context.affected_player,
                     _ => trigger_player,
                 };
                 if let GameEvent::SpellCast { fact } = event {
@@ -1578,6 +1581,7 @@ impl GameEngine {
                             });
                             for trigger in &mut matching {
                                 trigger.trigger_context.observed_object = Some(source_ref);
+                                trigger.trigger_context.affected_player = Some(defender_id);
                             }
                             out.extend(matching);
                         }

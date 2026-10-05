@@ -251,6 +251,7 @@ fn issue_372_song_payload_and_presentation_are_exact() {
             set_toughness: None,
             remove_all_abilities: false,
             keywords: Vec::new(),
+            protections: Box::default(),
             triggered_abilities: Vec::new(),
             activated_abilities: Vec::new(),
             restriction: Default::default(),

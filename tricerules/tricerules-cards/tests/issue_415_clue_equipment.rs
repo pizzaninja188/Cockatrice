@@ -158,6 +158,7 @@ fn issue_415_candlestick_static_grants_the_attack_surveil_trigger() {
         set_toughness,
         remove_all_abilities,
         keywords,
+        protections,
         triggered_abilities,
         activated_abilities,
         restriction,
@@ -178,6 +179,7 @@ fn issue_415_candlestick_static_grants_the_attack_surveil_trigger() {
     assert!(set_power.is_none() && set_toughness.is_none());
     assert!(!remove_all_abilities);
     assert!(keywords.is_empty());
+    assert!(protections.is_empty());
     assert!(activated_abilities.is_empty());
     assert_eq!(restriction, &CombatRestriction::default());
     assert!(!doesnt_untap_during_untap_step);
@@ -271,6 +273,7 @@ fn issue_415_lead_pipe_static_and_death_trigger_are_exact() {
             set_toughness: None,
             remove_all_abilities: false,
             keywords: Vec::new(),
+            protections: Box::default(),
             triggered_abilities: Vec::new(),
             activated_abilities: Vec::new(),
             restriction: CombatRestriction::default(),

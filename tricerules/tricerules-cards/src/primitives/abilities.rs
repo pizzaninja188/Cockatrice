@@ -2161,6 +2161,10 @@ pub enum StaticAbilityDef {
         remove_all_abilities: bool,
         #[serde(default)]
         keywords: Vec<Keyword>,
+        /// CR 702.16 / 613.1f: attached protection for Sword of War and Peace and
+        /// Shield of Duty and Reason; moves with the same attachment scope as P/T.
+        #[serde(default)]
+        protections: Box<[super::ProtectionQuality]>,
         /// Triggered abilities the attached permanent has while this static ability applies.
         /// Infernal Scarring and similar Auras use the enchanted permanent's controller and
         /// last-known identity when the granted ability triggers.

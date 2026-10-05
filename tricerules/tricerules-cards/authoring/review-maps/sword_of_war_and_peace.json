@@ -1,0 +1,102 @@
+{
+  "format_version": 1,
+  "oracle_id": "b10ad415-0aae-4d70-82e6-a4055a40cbe4",
+  "complete_definition_review_confirmed": true,
+  "tokens": [],
+  "spans": [
+    {
+      "face_id": "sword_of_war_and_peace",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/static_abilities/0"
+      ]
+    },
+    {
+      "face_id": "sword_of_war_and_peace",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0"
+      ]
+    },
+    {
+      "face_id": "sword_of_war_and_peace",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "deck_coverage_sword_of_war_and_peace::sword_registers_exact_single_face_and_three_clauses",
+      "covers": "registers exact single face and three clauses"
+    },
+    {
+      "test": "deck_coverage_sword_of_war_and_peace::sword_attached_protection_defaults_roundtrips_and_validates_conditions",
+      "covers": "attached protection defaults roundtrips and validates conditions"
+    },
+    {
+      "test": "scenario deck_coverage_sword_of_war_and_peace::sword_paid_cast_equip_reequip_and_departure_move_all_grants",
+      "covers": "paid cast equip reequip and departure move all grants"
+    },
+    {
+      "test": "scenario deck_coverage_sword_of_war_and_peace::sword_equip_rejections_preserve_mana_stack_and_attachment",
+      "covers": "equip rejections preserve mana stack and attachment"
+    },
+    {
+      "test": "scenario deck_coverage_sword_of_war_and_peace::sword_recipient_ability_removal_keeps_pt_and_later_equip_restores_protection",
+      "covers": "recipient ability removal keeps pt and later equip restores protection"
+    },
+    {
+      "test": "scenario deck_coverage_sword_of_war_and_peace::sword_source_ability_removal_suppresses_grants_and_combat_trigger",
+      "covers": "source ability removal suppresses grants and combat trigger"
+    },
+    {
+      "test": "scenario deck_coverage_sword_of_war_and_peace::sword_red_white_targets_rejected_and_nontargeted_red_damage_prevented",
+      "covers": "red white targets rejected and nontargeted red damage prevented"
+    },
+    {
+      "test": "scenario deck_coverage_sword_of_war_and_peace::sword_red_white_blocks_rejected_but_green_block_is_legal",
+      "covers": "red white blocks rejected but green block is legal"
+    },
+    {
+      "test": "scenario deck_coverage_sword_of_war_and_peace::sword_turning_red_detaches_and_host_death_detaches",
+      "covers": "turning red detaches and host death detaches"
+    },
+    {
+      "test": "scenario deck_coverage_sword_of_war_and_peace::sword_counts_actual_damaged_player_and_controller_hands_at_resolution",
+      "covers": "counts actual damaged player and controller hands at resolution"
+    },
+    {
+      "test": "scenario deck_coverage_sword_of_war_and_peace::sword_damage_lifelink_uses_current_controller_but_explicit_gain_uses_trigger_controller",
+      "covers": "damage lifelink uses current controller but explicit gain uses trigger controller"
+    },
+    {
+      "test": "scenario deck_coverage_sword_of_war_and_peace::sword_zero_hand_or_prevented_trigger_damage_still_gains_life",
+      "covers": "zero hand or prevented trigger damage still gains life"
+    },
+    {
+      "test": "scenario deck_coverage_sword_of_war_and_peace::sword_prevented_combat_and_noncombat_host_damage_do_not_trigger",
+      "covers": "prevented combat and noncombat host damage do not trigger"
+    },
+    {
+      "test": "scenario deck_coverage_sword_of_war_and_peace::sword_host_control_differs_from_equipment_control",
+      "covers": "host control differs from equipment control"
+    },
+    {
+      "test": "scenario deck_coverage_sword_of_war_and_peace::sword_host_stops_being_creature_and_stale_equip_cannot_attach",
+      "covers": "host stops being creature and stale equip cannot attach"
+    },
+    {
+      "test": "scenario deck_coverage_sword_of_war_and_peace::sword_paid_cast_equip_combat_and_trigger_commands_replay_identically",
+      "covers": "paid cast equip combat and trigger commands replay identically"
+    },
+    {
+      "test": "scenario deck_coverage_sword_of_war_and_peace::sword_combat_damage_to_planeswalker_does_not_trigger",
+      "covers": "Actual combat against Jace removes four loyalty while player life stays 20 and no Sword trigger is created"
+    }
+  ]
+}

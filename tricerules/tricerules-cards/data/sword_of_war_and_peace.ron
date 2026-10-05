@@ -1,0 +1,27 @@
+(
+  id: "sword_of_war_and_peace",
+  name: "Sword of War and Peace",
+  face_id: "sword_of_war_and_peace",
+  mana_cost: "{3}",
+  types: ["Artifact", "Equipment"],
+  static_abilities: [(
+    ability_id: "static_01",
+    presentation: OracleLines([1]),
+    definition: AttachedModifier(delta_power: 2, delta_toughness: 2, protections: [Color(Red), Color(White)]),
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WheneverAttachedObjectDealsCombatDamageToPlayer,
+    effect: [
+      DamagePlayer(amount: Count(CardsInHand(players: AffectedPlayer)), who: AffectedPlayer),
+      GainLife(amount: Count(CardsInHand(players: Relative(Controller)))),
+    ],
+  )],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([3]),
+    costs: [Mana("{2}")],
+    effect: [Equip(target: (kind: Creature, controller: You))],
+  )],
+)

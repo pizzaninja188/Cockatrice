@@ -352,12 +352,15 @@ pub(super) fn damage_player(
     // CR 101.4: APNAP for the multi-player recipients, so the log and the life-loss order are
     // reproducible in a replay.
     let recipients = player_recipients(cx, who);
+    // CR 113.7a / 120.3f: damage and lifelink belong to the source's current
+    // controller (or its incarnation's LKI), independently of the trigger controller.
+    let damage_controller = source_controller(cx.engine, cx.top).unwrap_or(cx.controller);
     let damage: Vec<_> = recipients
         .into_iter()
         .map(|player| DamageSpec {
             event: DamageEvent::noncombat(
                 resolving_damage_source_id(cx.top),
-                cx.controller,
+                damage_controller,
                 cx.spell_label,
                 DamageRecipient::Player(player),
                 amount,

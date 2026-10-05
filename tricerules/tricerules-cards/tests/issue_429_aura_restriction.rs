@@ -385,6 +385,7 @@ fn issue_429_new_horizons_counters_and_grants_two_mana_of_one_color() {
             set_toughness: None,
             remove_all_abilities: false,
             keywords: Vec::new(),
+            protections: Box::default(),
             triggered_abilities: Vec::new(),
             activated_abilities: vec![ActivatedAbilityDef {
                 intrinsic_land_mana: false,
@@ -455,6 +456,7 @@ fn issue_429_friendly_neighborhood_creates_citizens_and_pumps_per_creature() {
             set_toughness: None,
             remove_all_abilities: false,
             keywords: Vec::new(),
+            protections: Box::default(),
             triggered_abilities: Vec::new(),
             activated_abilities: vec![ActivatedAbilityDef {
                 intrinsic_land_mana: false,
@@ -542,6 +544,7 @@ fn issue_429_flood_the_engine_and_stop_cold_remove_abilities_and_lock_untap() {
         set_toughness: None,
         remove_all_abilities: true,
         keywords: Vec::new(),
+        protections: Box::default(),
         triggered_abilities: Vec::new(),
         activated_abilities: Vec::new(),
         restriction: Default::default(),
