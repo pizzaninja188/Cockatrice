@@ -1,0 +1,16 @@
+// Pinned Oracle 1de1b591-a73f-4974-b507-8c63e07a0868; release notes checked 2026-10-06.
+(
+  id: "thassas_oracle",
+  name: "Thassa's Oracle",
+  face_id: "thassas_oracle",
+  mana_cost: "{U}{U}",
+  types: ["Creature", "Merfolk", "Wizard"],
+  power: 1,
+  toughness: 3,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [ThassaOracle],
+  )],
+)

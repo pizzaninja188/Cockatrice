@@ -30,6 +30,8 @@ mod deck_coverage_mutational_advantage;
 mod deck_coverage_myr_battlesphere;
 #[path = "scenario/deck_coverage_standstill.rs"]
 mod deck_coverage_standstill;
+#[path = "scenario/deck_coverage_thassa_oracle.rs"]
+mod deck_coverage_thassa_oracle;
 #[path = "scenario/myr_damage_prerequisites.rs"]
 mod myr_damage_prerequisites;
 #[path = "scenario/myriad_search_prerequisites.rs"]

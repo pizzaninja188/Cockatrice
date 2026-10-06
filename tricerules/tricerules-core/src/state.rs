@@ -1040,6 +1040,10 @@ pub enum PendingLibraryPartitionKind {
 pub enum PendingLibraryLookStage {
     IntoTheWilds,
     DeployTheGatewatch,
+    /// Thassa's Oracle retains the devotion value captured when its trigger began resolving.
+    ThassaOracle {
+        devotion_x: u32,
+    },
     ChooseToHand {
         looked_at: Vec<ObjectId>,
         bottom_order: LibraryBottomOrder,

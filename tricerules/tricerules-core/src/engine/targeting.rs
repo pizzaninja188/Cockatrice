@@ -1592,6 +1592,7 @@ fn validate_effect_targets(
         | SpellEffectKind::ReturnExiledCohortToOwnersBattlefield { .. }
         | SpellEffectKind::ReturnAllGraveyardPermanents { .. }
         | SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess { .. }
+        | SpellEffectKind::ThassaOracle
         | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
         | SpellEffectKind::CastMadness { .. }
         | SpellEffectKind::SiegeDefeat

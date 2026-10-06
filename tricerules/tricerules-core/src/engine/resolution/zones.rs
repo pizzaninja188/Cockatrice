@@ -3531,6 +3531,105 @@ pub(super) fn library_partition(
     begin_library_partition(cx, count, top_min, top_max, pending_kind)
 }
 
+/// Resolve Thassa's Oracle's coupled library look and devotion win condition (WotC Theros Beyond
+/// Death release notes; CR 608.2c). X is read once as the trigger resolves and carried through the
+/// private choice continuation. The unchosen looked-at cohort is randomized onto the bottom;
+/// cards that were not looked at retain their relative position above it.
+pub(super) fn thassa_oracle(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
+    let controller = cx.controller;
+    let top = cx.top.clone();
+    let engine = &mut *cx.engine;
+    let events = &mut *cx.events;
+    let Some(player_idx) = engine.state.player_idx(controller) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let devotion_x = super::super::characteristics::devotion_value(
+        &engine.state,
+        engine.registry,
+        controller,
+        tricerules_cards::primitives::Color::Blue,
+        None,
+    );
+    let library_len = engine.state.players[player_idx].library.len();
+    let look_count = (devotion_x as usize).min(library_len);
+    if look_count == 0 {
+        if devotion_x as usize >= library_len {
+            engine.state.outcome = Some(crate::state::GameOutcome::Winner(controller));
+            return Ok(EffectOutcome::GameEnded);
+        }
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let looked: Vec<ObjectId> = engine.state.players[player_idx]
+        .library
+        .iter()
+        .take(look_count)
+        .copied()
+        .collect();
+    let (candidate_card_ids, candidate_names) = candidate_identities(engine, &looked);
+    let prompt = format!(
+        "Look at the top {look_count} cards. Choose up to one to put on top; put the rest on the bottom in a random order."
+    );
+    events.push(ev_log(format!(
+        "P{controller} looks at the top {look_count} cards for Thassa's Oracle."
+    )));
+    events.push(ev_log_private(
+        format!("P{controller} looks at {}.", candidate_names.join(", ")),
+        controller,
+    ));
+    events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                candidate_token_identities: Vec::new(),
+                candidate_player_ids: Vec::new(),
+                deciding_player_id: controller,
+                source_object_id: top.id,
+                prompt_text: prompt.clone(),
+                choice_kind: rv1::ChoiceKind::LibraryLook as i32,
+                candidate_object_ids: looked.clone(),
+                candidate_card_ids,
+                candidate_names,
+                min: 0,
+                max: 1,
+                ordered: false,
+                unique_names: false,
+                candidate_server_card_ids: Vec::new(),
+                candidate_selectable: vec![true; looked.len()],
+                resolution_branches: Vec::new(),
+                mana_cost: String::new(),
+                generic_mana_cost: 0,
+                payment_currently_legal: false,
+                public_reveal: None,
+                candidate_source_zones: Vec::new(),
+                combat_defender_options: Vec::new(),
+                waterbend: false,
+                selection_slots: Vec::new(),
+                replacement_options: Vec::new(),
+                selection_alternatives: Vec::new(),
+            },
+        )),
+    });
+    engine.state.pending_resolution = Some(PendingResolution {
+        deciding_player: controller,
+        presentation: PendingResolutionPresentation {
+            source_object_id: top.id,
+            candidates: looked.clone(),
+            min: 0,
+            max: 1,
+            ordered: false,
+            prompt,
+            choice_kind: rv1::ChoiceKind::LibraryLook,
+            unique_names: false,
+        },
+        continuation: ResolutionContinuation::LibraryLook {
+            stack: ParkedStackResolution::new(top),
+            stage: PendingLibraryLookStage::ThassaOracle { devotion_x },
+            candidates: super::super::library_choices::capture(engine, &looked),
+        },
+    });
+    Ok(EffectOutcome::Suspended)
+}
+
 fn begin_library_partition(
     cx: &mut EffectCx<'_>,
     count: u32,

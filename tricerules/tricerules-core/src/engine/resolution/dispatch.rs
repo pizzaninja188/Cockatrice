@@ -21,6 +21,7 @@ pub(super) fn execute_effect(
                 EffectOutcome::Continue
             }
         }
+        SpellEffectKind::ThassaOracle => zones::thassa_oracle(cx)?,
         SpellEffectKind::MillEachOpponentByHandSize => zones::mill_each_opponent_by_hand_size(cx)?,
         SpellEffectKind::Conditional { condition, effect } => {
             if !cx.engine.condition_holds(

@@ -873,6 +873,11 @@ pub enum SpellEffectKind {
     WinGameIf {
         condition: GameCondition,
     },
+    /// Thassa's Oracle's coupled private library look and devotion win check. The resolving
+    /// trigger captures devotion before parking, keeps the selected card on top, randomizes only
+    /// the other looked-at cards to the bottom, then checks the captured value against library
+    /// size. Kept card-specific because no other admitted card needs this exact combination.
+    ThassaOracle,
     /// Apply one allowlisted instruction only when a current engine-side condition holds. The
     /// instruction may suspend for its existing library choice (Scry or Surveil), whose ordinary
     /// stack-resolution continuation resumes the effect list after the choice. Target roles come
@@ -3129,6 +3134,7 @@ impl SpellEffectKind {
             | SpellEffectKind::Mill { .. }
             | SpellEffectKind::MillEachOpponentByHandSize
             | SpellEffectKind::WinGameIf { .. }
+            | SpellEffectKind::ThassaOracle
             | SpellEffectKind::DestroyAll { .. }
             | SpellEffectKind::ExileAll { .. }
             | SpellEffectKind::SacrificeAll { .. }
@@ -3758,6 +3764,9 @@ impl SpellEffectKind {
         ) && context != EffectContext::Ability
         {
             return Err("PuPu UFO source effects require an activated ability".into());
+        }
+        if matches!(self, Self::ThassaOracle) && context != EffectContext::Ability {
+            return Err("ThassaOracle is only valid in a triggered or activated ability".into());
         }
         if matches!(
             self,

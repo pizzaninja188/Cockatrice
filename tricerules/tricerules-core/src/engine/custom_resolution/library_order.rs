@@ -304,6 +304,66 @@ impl GameEngine {
             _ => return Err(EngineError::Illegal("library-look continuation missing")),
         };
 
+        if let PendingLibraryLookStage::ThassaOracle { devotion_x } = stage {
+            let ResolutionContinuation::LibraryLook { candidates, .. } = &pending.continuation
+            else {
+                unreachable!("validated library-look continuation")
+            };
+            let looked: Vec<_> = candidates.iter().map(|(oid, _)| *oid).collect();
+            let current_top = self.state.players[idx]
+                .library
+                .iter()
+                .take(looked.len())
+                .copied()
+                .eq(looked.iter().copied());
+            if !current_top
+                || chosen.len() > 1
+                || chosen.iter().any(|object_id| !looked.contains(object_id))
+            {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "stale Thassa's Oracle library look or choice",
+                ));
+            }
+
+            let mut bottom: Vec<_> = looked
+                .iter()
+                .copied()
+                .filter(|object_id| !chosen.contains(object_id))
+                .collect();
+            shuffle_object_ids_for_current_command(&self.state, controller, &mut bottom);
+            let mut reordered = Vec::with_capacity(self.state.players[idx].library.len());
+            reordered.extend_from_slice(chosen);
+            reordered.extend(
+                self.state.players[idx]
+                    .library
+                    .iter()
+                    .skip(looked.len())
+                    .copied(),
+            );
+            reordered.extend(bottom.iter().copied());
+            self.state.players[idx].library = reordered.into();
+
+            let selected_name = chosen
+                .first()
+                .map(|object_id| object_display_name(&self.state, self.registry, *object_id));
+            ev.push(ev_log(format!(
+                "P{controller} completes a Thassa's Oracle look."
+            )));
+            ev.push(ev_log_private(
+                format!(
+                    "P{controller} puts {} on top and randomly bottoms {}.",
+                    selected_name.unwrap_or_else(|| "no card".into()),
+                    self.object_names(&bottom).join(", ")
+                ),
+                controller,
+            ));
+            if devotion_x as usize >= self.state.players[idx].library.len() {
+                self.state.outcome = Some(crate::state::GameOutcome::Winner(controller));
+            }
+            return self.complete_parked_resolution(stack.item, stack.resume_effect_index, ev);
+        }
+
         if matches!(
             stage,
             PendingLibraryLookStage::IntoTheWilds | PendingLibraryLookStage::DeployTheGatewatch

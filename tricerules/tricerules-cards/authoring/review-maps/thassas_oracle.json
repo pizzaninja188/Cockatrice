@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "1de1b591-a73f-4974-b507-8c63e07a0868",
+  "spans": [
+    {
+      "face_id": "thassas_oracle",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ThassaOracle",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_thassa_oracle::thassa_oracle_has_a_complete_card_definition",
+      "covers": "exact card identity, face count, blue mana cost, creature subtypes, and one triggered ability"
+    },
+    {
+      "test": "scenario deck_coverage_thassa_oracle::trigger_uses_blue_devotion_and_randomizes_only_the_unselected_looked_cards",
+      "covers": "blue devotion snapshot of four, private zero-to-one library choice, rejected actor/forged/stale answers, chosen card on top, untouched cards above randomized unchosen looked cards, and deterministic seeded replay"
+    },
+    {
+      "test": "scenario deck_coverage_thassa_oracle::choosing_no_card_keeps_untouched_cards_above_randomized_bottom_cards",
+      "covers": "declining the optional top-card selection bottoms all looked cards while preserving the unlooked prefix"
+    },
+    {
+      "test": "scenario deck_coverage_thassa_oracle::captured_devotion_at_least_library_size_wins_after_the_private_choice",
+      "covers": "the captured devotion value wins after the private choice when it meets the library size"
+    },
+    {
+      "test": "scenario deck_coverage_thassa_oracle::library_shorter_than_devotion_looks_at_all_remaining_cards_then_wins",
+      "covers": "the look count is capped by a shorter library and the captured devotion still wins after the choice"
+    },
+    {
+      "test": "scenario deck_coverage_thassa_oracle::zero_devotion_skips_the_look_but_wins_if_the_library_is_empty",
+      "covers": "the source leaving before trigger resolution removes its blue pips; zero devotion causes no look or movement and wins only with an empty library"
+    },
+    {
+      "test": "scenario deck_coverage_thassa_oracle::positive_devotion_and_an_empty_library_win_without_a_choice",
+      "covers": "positive devotion with an empty library wins without opening a choice"
+    },
+    {
+      "test": "scenario deck_coverage_thassa_oracle::trigger_controller_keeps_its_library_after_source_changes_controller",
+      "covers": "source control change after triggering does not transfer the triggered ability, its devotion check, or library choice"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
