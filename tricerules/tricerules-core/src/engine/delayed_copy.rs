@@ -61,11 +61,12 @@ impl GameEngine {
             format!("{label} — copy the next instant or sorcery"),
         );
         self.state.active_event_observers.push(ActiveEventObserver {
-            watched: source,
+            watched: Some(source),
             matcher: EventObserverMatcher::NextInstantOrSorceryThisTurn { controller },
             payload: EventObserverPayload::StageDelayedTrigger(Box::new(DelayedTriggerPayload {
                 source,
                 controller,
+                affected_player: None,
                 card_id: top.card_id.clone(),
                 card_name: label.into(),
                 source_face_index: top.face_index,

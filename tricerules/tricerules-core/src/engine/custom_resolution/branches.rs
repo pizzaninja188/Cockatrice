@@ -283,11 +283,23 @@ impl GameEngine {
         answer: &rv1::SubmitResolutionChoice,
         decision: rv1::ResolutionChoiceDecision,
     ) -> Result<RuledEventBatch, EngineError> {
-        if !answer.chosen_object_ids.is_empty() {
+        if !answer.chosen_object_ids.is_empty() || !answer.chosen_player_ids.is_empty() {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal(
-                "resolution branch selection cannot include object ids",
+                "resolution branch selection cannot include object or player ids",
             ));
+        }
+        if matches!(
+            pending.continuation,
+            ResolutionContinuation::AuthoredBranch {
+                branch: PendingResolutionBranch {
+                    stage: PendingResolutionBranchStage::ChoosingDelegate { .. },
+                    ..
+                },
+                ..
+            }
+        ) {
+            return self.select_resolution_branch_delegate(pending, answer, decision);
         }
         let (stack, branch_state) = match &pending.continuation {
             ResolutionContinuation::AuthoredBranch { stack, branch }
@@ -337,11 +349,12 @@ impl GameEngine {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal("bad resolution branch index"));
         };
-        if !resolution::resolution_branch_is_live(
+        if !resolution::resolution_branch_is_selectable(
             self,
             &stack.item,
             &stack.previous_result,
             pending.deciding_player,
+            branch_state.original_chooser,
             &branch,
         ) {
             self.state.pending_resolution = Some(pending);
@@ -550,6 +563,323 @@ impl GameEngine {
             }
         }
         Ok(finish_with_events(self, ev))
+    }
+
+    fn select_resolution_branch_delegate(
+        &mut self,
+        mut pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        if decision != rv1::ResolutionChoiceDecision::SelectBranch {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "a departed chooser's replacement must be selected",
+            ));
+        }
+        let (controller, original_chooser, candidates) = match &pending.continuation {
+            ResolutionContinuation::AuthoredBranch {
+                stack,
+                branch:
+                    PendingResolutionBranch {
+                        original_chooser,
+                        stage: PendingResolutionBranchStage::ChoosingDelegate { candidates },
+                        ..
+                    },
+            } => (stack.item.controller, *original_chooser, candidates.clone()),
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "resolution branch delegate continuation missing",
+                ));
+            }
+        };
+        let delegate = candidates
+            .get(answer.selected_branch_index as usize)
+            .copied()
+            .flatten();
+        let eligible = resolution::resolution_choice_delegate_candidates(
+            &self.state,
+            controller,
+            original_chooser,
+        );
+        let Some(delegate) = delegate.filter(|delegate| eligible.contains(delegate)) else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "that replacement chooser is no longer available",
+            ));
+        };
+        let Some(index) = self.state.player_idx(delegate) else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "that replacement chooser is no longer available",
+            ));
+        };
+        if self.state.players[index].has_lost {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "that replacement chooser is no longer available",
+            ));
+        }
+        let ResolutionContinuation::AuthoredBranch { branch, .. } = &mut pending.continuation
+        else {
+            unreachable!("validated authored branch continuation")
+        };
+        branch.stage = PendingResolutionBranchStage::Selecting;
+        pending.deciding_player = delegate;
+        pending.presentation.min = u32::from(!branch.optional);
+        pending.presentation.max = 1;
+        pending.presentation.prompt = if branch.optional {
+            "Choose a resolution option, or decline.".into()
+        } else {
+            "Choose a resolution option.".into()
+        };
+        self.state.pending_resolution = Some(pending);
+        let assigned_log = ev_log(format!(
+            "P{controller} chooses P{delegate} to make P{original_chooser}'s resolution choice."
+        ));
+        if !resolution::authored_resolution_branch_has_selectable_option(self) {
+            let pending = self
+                .state
+                .pending_resolution
+                .take()
+                .expect("delegated branch choice remains parked");
+            let mut completed = self.complete_authored_branch_without_selection(
+                pending,
+                "No cost-free resolution branch remains for the departed chooser.".into(),
+            )?;
+            completed.events.insert(0, assigned_log);
+            return Ok(completed);
+        }
+        let event = resolution::authored_resolution_branch_choice_event(self)
+            .expect("delegated branch choice remains parked");
+        Ok(finish_with_events(self, vec![assigned_log, event]))
+    }
+
+    fn complete_authored_branch_without_selection(
+        &mut self,
+        pending: PendingResolution,
+        log: String,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let stack = pending
+            .continuation
+            .stack()
+            .cloned()
+            .ok_or(EngineError::Illegal(
+                "resolution branch stack continuation missing",
+            ))?;
+        let effect_index = stack
+            .resume_effect_index
+            .and_then(|next| next.checked_sub(1))
+            .ok_or(EngineError::Illegal(
+                "resolution branch effect index missing",
+            ))?;
+        let mut item = stack.item;
+        item.resolution_branch_choices.insert(effect_index, None);
+        self.complete_parked_resolution_with_previous(
+            item,
+            Some(effect_index),
+            stack.previous_result,
+            vec![ev_log(log)],
+        )
+    }
+
+    /// Reassign an authored branch choice when its current decider leaves. CR 800.4g directs the
+    /// object controller to select another player; the candidate vector preserves old indices so
+    /// a stale answer cannot silently select a different delegate.
+    pub(in crate::engine) fn refresh_authored_branch_departure(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(mut pending) = self.state.pending_resolution.take() else {
+            return Ok(());
+        };
+        let (stack, branch) = match &pending.continuation {
+            ResolutionContinuation::AuthoredBranch { stack, branch } => {
+                (stack.clone(), branch.clone())
+            }
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Ok(());
+            }
+        };
+        let controller = stack.item.controller;
+        let controller_live = self
+            .state
+            .player_idx(controller)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        if !controller_live {
+            // A departed object controller's outer resolution has already been detached by
+            // `detach_departed_outer_resolution`; retain any state that was not detached.
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        }
+        let chooser_live = self
+            .state
+            .player_idx(pending.deciding_player)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        let original_chooser_live = self
+            .state
+            .player_idx(branch.original_chooser)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        let is_delegate_prompt = matches!(
+            branch.stage,
+            PendingResolutionBranchStage::ChoosingDelegate { .. }
+        );
+        let is_payment_prompt = matches!(
+            branch.stage,
+            PendingResolutionBranchStage::PayingMana { .. }
+                | PendingResolutionBranchStage::PayingObjects { .. }
+        );
+        if is_payment_prompt {
+            if chooser_live && original_chooser_live {
+                self.state.pending_resolution = Some(pending);
+                return Ok(());
+            }
+            let completed = self.complete_authored_branch_without_selection(
+                pending,
+                "The departed chooser cannot complete the selected branch payment.".into(),
+            )?;
+            events.extend(completed.events);
+            return Ok(());
+        }
+        if !is_delegate_prompt && chooser_live && original_chooser_live {
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        }
+
+        let eligible = resolution::resolution_choice_delegate_candidates(
+            &self.state,
+            controller,
+            branch.original_chooser,
+        );
+        if !original_chooser_live {
+            let has_selectable_option = eligible.iter().any(|delegate| {
+                branch.branches.iter().any(|option| {
+                    resolution::resolution_branch_is_selectable(
+                        self,
+                        &stack.item,
+                        &stack.previous_result,
+                        *delegate,
+                        branch.original_chooser,
+                        option,
+                    )
+                })
+            });
+            if !has_selectable_option {
+                let completed = self.complete_authored_branch_without_selection(
+                    pending,
+                    "No cost-free resolution branch remains for the departed chooser.".into(),
+                )?;
+                events.extend(completed.events);
+                return Ok(());
+            }
+        }
+        let mut candidate_slots = match branch.stage {
+            PendingResolutionBranchStage::ChoosingDelegate { candidates } => candidates,
+            _ => Vec::new(),
+        };
+        for slot in &mut candidate_slots {
+            if slot.is_some_and(|candidate| !eligible.contains(&candidate)) {
+                *slot = None;
+            }
+        }
+        for candidate in eligible.iter().copied() {
+            if !candidate_slots.contains(&Some(candidate)) {
+                candidate_slots.push(Some(candidate));
+            }
+        }
+
+        match eligible.as_slice() {
+            [] => {
+                let completed = self.complete_authored_branch_without_selection(
+                    pending,
+                    "No other player can make the departed player's resolution choice.".into(),
+                )?;
+                events.extend(completed.events);
+                Ok(())
+            }
+            [_] if is_delegate_prompt => {
+                // Keep the controller's choice parked when a candidate disappears mid-prompt.
+                // The surviving option stays at its original index; stale clients cannot turn a
+                // removed index into a different player's selection.
+                pending.deciding_player = controller;
+                pending.presentation.min = 1;
+                pending.presentation.max = 1;
+                pending.presentation.prompt = format!(
+                    "P{controller}: choose a player to make P{}'s resolution choice.",
+                    branch.original_chooser
+                );
+                let ResolutionContinuation::AuthoredBranch { branch, .. } =
+                    &mut pending.continuation
+                else {
+                    unreachable!("validated authored branch continuation")
+                };
+                branch.stage = PendingResolutionBranchStage::ChoosingDelegate {
+                    candidates: candidate_slots,
+                };
+                self.state.pending_resolution = Some(pending);
+                events.push(ev_log(format!(
+                    "P{controller}'s replacement chooser options have changed."
+                )));
+                events.push(
+                    resolution::authored_resolution_branch_choice_event(self)
+                        .expect("replacement chooser selection remains parked"),
+                );
+                Ok(())
+            }
+            [delegate] => {
+                pending.deciding_player = *delegate;
+                pending.presentation.min = u32::from(!branch.optional);
+                pending.presentation.max = 1;
+                pending.presentation.prompt = if branch.optional {
+                    "Choose a resolution option, or decline.".into()
+                } else {
+                    "Choose a resolution option.".into()
+                };
+                let ResolutionContinuation::AuthoredBranch { branch, .. } =
+                    &mut pending.continuation
+                else {
+                    unreachable!("validated authored branch continuation")
+                };
+                branch.stage = PendingResolutionBranchStage::Selecting;
+                self.state.pending_resolution = Some(pending);
+                events.push(ev_log(format!(
+                    "P{controller} assigns P{delegate} to make the departed player's resolution choice."
+                )));
+                events.push(
+                    resolution::authored_resolution_branch_choice_event(self)
+                        .expect("reassigned branch choice remains parked"),
+                );
+                Ok(())
+            }
+            _ => {
+                pending.deciding_player = controller;
+                pending.presentation.min = 1;
+                pending.presentation.max = 1;
+                pending.presentation.prompt = format!(
+                    "P{controller}: choose a player to make P{}'s resolution choice.",
+                    branch.original_chooser
+                );
+                let ResolutionContinuation::AuthoredBranch { branch, .. } =
+                    &mut pending.continuation
+                else {
+                    unreachable!("validated authored branch continuation")
+                };
+                branch.stage = PendingResolutionBranchStage::ChoosingDelegate {
+                    candidates: candidate_slots,
+                };
+                self.state.pending_resolution = Some(pending);
+                events.push(ev_log(format!(
+                    "P{controller} must choose a replacement for the departed resolution chooser."
+                )));
+                events.push(
+                    resolution::authored_resolution_branch_choice_event(self)
+                        .expect("replacement chooser selection remains parked"),
+                );
+                Ok(())
+            }
+        }
     }
 
     pub(super) fn finish_resolution_branch_object(

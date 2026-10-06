@@ -1,0 +1,133 @@
+{
+  "format_version": 1,
+  "oracle_id": "ab1cc360-b9de-48d9-9983-4dfe4a7d2a37",
+  "spans": [
+    {
+      "face_id": "arcane_denial",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/affected_player",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/trigger",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0/ChooseResolutionBranch/chooser",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0/ChooseResolutionBranch/branches/0",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0/ChooseResolutionBranch/branches/1",
+        "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0/ChooseResolutionBranch/branches/2",
+        "/faces/0/targeting"
+      ]
+    },
+    {
+      "face_id": "arcane_denial",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/spell_effect/2",
+        "/faces/0/spell_effect/2/CreateDelayedTrigger/ability",
+        "/faces/0/spell_effect/2/CreateDelayedTrigger/ability/trigger",
+        "/faces/0/spell_effect/2/CreateDelayedTrigger/ability/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::CounterTargetSpell",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/targeting"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateDelayedTrigger",
+      "typed_path": "/faces/0/spell_effect/1"
+    },
+    {
+      "symbol": "PlayerRecipient::PreviousTargetedSpellController",
+      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/affected_player"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfNextTurnUpkeep",
+      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseResolutionBranch",
+      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0"
+    },
+    {
+      "symbol": "PlayerRecipient::AffectedPlayer",
+      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0/ChooseResolutionBranch/chooser"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0/ChooseResolutionBranch/branches/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0/ChooseResolutionBranch/branches/1/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1/CreateDelayedTrigger/ability/effect/0/ChooseResolutionBranch/branches/2/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateDelayedTrigger",
+      "typed_path": "/faces/0/spell_effect/2"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfNextTurnUpkeep",
+      "typed_path": "/faces/0/spell_effect/2/CreateDelayedTrigger/ability/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/2/CreateDelayedTrigger/ability/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_arcane_denial::arcane_denial_is_admitted_with_both_delayed_effects_and_exact_choice_ownership",
+      "covers": "exact card identity, counter effect, captured previous target controller, next-upkeep timing, both branches, and single stack-spell targeting"
+    },
+    {
+      "test": "scenario deck_coverage_arcane_denial::arcane_denial_orders_both_triggers_and_the_target_chooses_zero_one_or_two",
+      "covers": "three-player casting resolves both simultaneous upkeep triggers in either caster-chosen order; original target chooses 0, 1, or 2 cards"
+    },
+    {
+      "test": "scenario deck_coverage_arcane_denial::arcane_denial_delegate_choice_replays_accepted_commands_from_identical_state",
+      "covers": "serialized accepted trigger-order, priority-pass, delegate-selection, and draw-branch commands replay to identical batches and state"
+    },
+    {
+      "test": "scenario deck_coverage_arcane_denial::arcane_denial_still_uses_an_uncounterable_targets_controller_for_the_delayed_draw",
+      "covers": "uncounterable target remains on the stack and its controller remains the later draw recipient"
+    },
+    {
+      "test": "scenario deck_coverage_arcane_denial::arcane_denial_with_all_targets_illegal_creates_no_delayed_triggers",
+      "covers": "the spell does not resolve or create delayed triggers after its sole target leaves the stack"
+    },
+    {
+      "test": "scenario deck_coverage_arcane_denial::arcane_denial_discards_delayed_triggers_when_the_caster_leaves_before_upkeep",
+      "covers": "both delayed abilities controlled by a departed caster are removed before the next upkeep and no trigger ordering or stack placement occurs"
+    },
+    {
+      "test": "scenario deck_coverage_arcane_denial::arcane_denial_discards_staged_triggers_when_the_caster_leaves_before_placement",
+      "covers": "the caster's already-triggered abilities are removed from the pending APNAP-order block when the caster leaves before placing them"
+    },
+    {
+      "test": "scenario deck_coverage_arcane_denial::arcane_denials_target_player_leaving_before_upkeep_does_not_stall_the_controllers_draw",
+      "covers": "a surviving opponent makes the departed target's 0, 1, or 2 draw choice and the caster still draws"
+    },
+    {
+      "test": "scenario deck_coverage_arcane_denial::arcane_denial_refreshes_delegate_candidates_without_reusing_stale_indices",
+      "covers": "in four players the controller selects among delegates, a leaving candidate keeps its index disabled, stale and wrong-actor commands fail, and the target remains the draw recipient"
+    },
+    {
+      "test": "scenario deck_coverage_arcane_denial::arcane_denial_reassigns_when_the_selected_delegate_leaves_during_their_choice",
+      "covers": "a delegate that leaves during the branch prompt is replaced and a fresh prompt reaches the surviving player"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

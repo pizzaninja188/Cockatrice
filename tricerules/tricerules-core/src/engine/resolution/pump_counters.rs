@@ -713,7 +713,8 @@ pub(super) fn earthbend(
     super::misc::create_delayed_trigger(
         cx,
         SpellEffectKind::CreateDelayedTrigger {
-            subject: EffectSubject::Chosen(Box::new(filter.clone())),
+            subject: Some(EffectSubject::Chosen(Box::new(filter.clone()))),
+            affected_player: None,
             ability: Box::new(TriggeredAbilityDef {
                 ability_id: tricerules_cards::AbilityId::new("earthbend_return")
                     .expect("intrinsic ability id"),

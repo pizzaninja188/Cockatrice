@@ -12,7 +12,7 @@
       keywords: [Haste],
     ),
     CreateDelayedTrigger(
-      subject: Chosen((kind: Creature)),
+      subject: Some(Chosen((kind: Creature))),
       ability: (
         ability_id: "triggered_01",
         presentation: Fallback,

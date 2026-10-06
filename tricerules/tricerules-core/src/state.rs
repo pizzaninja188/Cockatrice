@@ -956,12 +956,20 @@ pub enum PendingWardPaymentStage {
 pub struct PendingResolutionBranch {
     pub optional: bool,
     pub chooser: PlayerRecipient,
+    /// The player who would have made this choice before leaving the game. When that player has
+    /// left, CR 800.4g requires the object controller to select a surviving replacement chooser.
+    pub original_chooser: PlayerId,
     pub branches: Vec<ResolutionBranchDef>,
     pub stage: PendingResolutionBranchStage,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
 pub enum PendingResolutionBranchStage {
+    /// The object controller is selecting a player to make the original chooser's choice. `None`
+    /// entries preserve candidate indices when a candidate leaves while the prompt is parked.
+    ChoosingDelegate {
+        candidates: Vec<Option<PlayerId>>,
+    },
     Selecting,
     PayingMana {
         selected_branch: usize,
@@ -2126,6 +2134,9 @@ pub struct DelayedTriggerPayload {
     /// Creating source, distinct from the watched object (Earthbend, delayed token sacrifice).
     pub source: TriggerObjectRef,
     pub controller: PlayerId,
+    /// A player captured from the creating effect when a delayed ability addresses someone other
+    /// than its controller.
+    pub affected_player: Option<PlayerId>,
     pub card_id: String,
     pub card_name: String,
     pub source_face_index: usize,
@@ -2147,6 +2158,10 @@ pub enum EventObserverMatcher {
         created_turn_instance: u64,
         target_turn_instance: Option<u64>,
     },
+    AtBeginningOfNextTurnUpkeep {
+        created_turn_instance: u64,
+        target_turn_instance: Option<u64>,
+    },
     WhenWatchedObjectDiesThisTurn,
     WhenWatchedObjectDiesOrIsExiled,
     WhenWatchedObjectLeavesBattlefield,
@@ -2164,7 +2179,8 @@ pub enum EventObserverPayload {
 
 #[derive(serde::Serialize, Debug, Clone)]
 pub struct ActiveEventObserver {
-    pub watched: TriggerObjectRef,
+    /// Object-bound observers capture an exact generation; temporal observers need no object.
+    pub watched: Option<TriggerObjectRef>,
     pub matcher: EventObserverMatcher,
     pub payload: EventObserverPayload,
 }
@@ -2181,6 +2197,9 @@ pub(crate) enum ObservedGameEvent {
     },
     BeginningOfEndStep {
         active_player: PlayerId,
+        turn_instance: u64,
+    },
+    BeginningOfUpkeep {
         turn_instance: u64,
     },
     TurnEnded {
@@ -2797,14 +2816,16 @@ impl GameState {
     pub(crate) fn dispatch_event_observers(
         &mut self,
         event: ObservedGameEvent,
-    ) -> Vec<(TriggerObjectRef, DelayedTriggerPayload)> {
+    ) -> Vec<(Option<TriggerObjectRef>, DelayedTriggerPayload)> {
         let mut waiting = std::mem::take(&mut self.active_event_observers);
         let mut delayed = Vec::new();
         for mut observer in waiting.drain(..) {
             let watched = observer.watched;
             let identity_matches = |observed: TriggerObjectRef| {
-                observed.object_id == watched.object_id
-                    && observed.zone_change_generation == watched.zone_change_generation
+                watched.is_some_and(|watched| {
+                    observed.object_id == watched.object_id
+                        && observed.zone_change_generation == watched.zone_change_generation
+                })
             };
             let mut expired = false;
             let matched = match (&mut observer.matcher, event) {
@@ -2849,6 +2870,33 @@ impl GameState {
                     false
                 }
                 (
+                    EventObserverMatcher::AtBeginningOfNextTurnUpkeep {
+                        created_turn_instance,
+                        target_turn_instance,
+                    },
+                    ObservedGameEvent::TurnBegan { turn_instance, .. },
+                ) if turn_instance > *created_turn_instance && target_turn_instance.is_none() => {
+                    *target_turn_instance = Some(turn_instance);
+                    false
+                }
+                (
+                    EventObserverMatcher::AtBeginningOfNextTurnUpkeep {
+                        target_turn_instance: Some(target_turn_instance),
+                        ..
+                    },
+                    ObservedGameEvent::BeginningOfUpkeep { turn_instance },
+                ) if turn_instance == *target_turn_instance => true,
+                (
+                    EventObserverMatcher::AtBeginningOfNextTurnUpkeep {
+                        target_turn_instance: Some(target_turn_instance),
+                        ..
+                    },
+                    ObservedGameEvent::TurnEnded { turn_instance, .. },
+                ) if turn_instance == *target_turn_instance => {
+                    expired = true;
+                    false
+                }
+                (
                     EventObserverMatcher::AtBeginningOfControllerNextTurnEndStep {
                         controller,
                         target_turn_instance: Some(target_turn_instance),
@@ -2884,11 +2932,11 @@ impl GameState {
                         old_controller,
                         new_controller,
                     },
-                ) => {
+                ) => observer.watched.is_some_and(|watched| {
                     identity_matches(object)
-                        && old_controller == observer.watched.controller_at_event
-                        && new_controller != Some(observer.watched.controller_at_event)
-                }
+                        && old_controller == watched.controller_at_event
+                        && new_controller != Some(watched.controller_at_event)
+                }),
                 _ => false,
             };
             if expired {
@@ -2913,7 +2961,7 @@ impl GameState {
 
     pub(crate) fn stage_delayed_batch(
         &mut self,
-        delayed: Vec<(TriggerObjectRef, DelayedTriggerPayload)>,
+        delayed: Vec<(Option<TriggerObjectRef>, DelayedTriggerPayload)>,
     ) {
         let mut triggers = delayed
             .into_iter()
@@ -2939,7 +2987,8 @@ impl GameState {
                     ability_text,
                     presentation: delayed.presentation,
                     trigger_context: TriggerContext {
-                        observed_object: Some(watched),
+                        observed_object: watched,
+                        affected_player: delayed.affected_player,
                         ..TriggerContext::default()
                     },
                     may: delayed.ability.may,
@@ -3068,7 +3117,7 @@ mod event_observer_tests {
 
     fn controller_next_turn_observer(created_turn_instance: u64) -> ActiveEventObserver {
         ActiveEventObserver {
-            watched: watched(),
+            watched: Some(watched()),
             matcher: EventObserverMatcher::AtBeginningOfControllerNextTurnEndStep {
                 controller: 0,
                 created_turn_instance,
@@ -3076,6 +3125,86 @@ mod event_observer_tests {
             },
             payload: EventObserverPayload::ReturnExiledObject { exiled: watched() },
         }
+    }
+
+    fn next_turn_upkeep_observer(created_turn_instance: u64) -> ActiveEventObserver {
+        ActiveEventObserver {
+            watched: None,
+            matcher: EventObserverMatcher::AtBeginningOfNextTurnUpkeep {
+                created_turn_instance,
+                target_turn_instance: None,
+            },
+            payload: EventObserverPayload::ReturnExiledObject { exiled: watched() },
+        }
+    }
+
+    #[test]
+    fn next_turn_upkeep_observer_arms_for_first_later_turn_and_fires_at_its_upkeep() {
+        let mut engine = GameEngine::new(161_012, &[0, 1], 20, None, true).expect("new");
+        engine
+            .state
+            .active_event_observers
+            .push(next_turn_upkeep_observer(7));
+
+        engine
+            .state
+            .dispatch_event_observers(ObservedGameEvent::BeginningOfUpkeep { turn_instance: 7 });
+        assert!(matches!(
+            engine.state.active_event_observers[0].matcher,
+            EventObserverMatcher::AtBeginningOfNextTurnUpkeep {
+                target_turn_instance: None,
+                ..
+            }
+        ));
+
+        // A fully skipped would-be turn has no TurnBegan event; the first actual later turn is
+        // the next turn for this delayed trigger.
+        engine
+            .state
+            .dispatch_event_observers(ObservedGameEvent::TurnBegan {
+                active_player: 1,
+                turn_instance: 9,
+            });
+        assert!(matches!(
+            engine.state.active_event_observers[0].matcher,
+            EventObserverMatcher::AtBeginningOfNextTurnUpkeep {
+                target_turn_instance: Some(9),
+                ..
+            }
+        ));
+
+        engine
+            .state
+            .dispatch_event_observers(ObservedGameEvent::BeginningOfUpkeep { turn_instance: 9 });
+        assert!(engine.state.active_event_observers.is_empty());
+        assert_eq!(engine.state.pending_immediate_observer_actions.len(), 1);
+    }
+
+    #[test]
+    fn next_turn_upkeep_observer_expires_when_armed_turn_ends_without_upkeep() {
+        let mut engine = GameEngine::new(161_013, &[0, 1], 20, None, true).expect("new");
+        engine
+            .state
+            .active_event_observers
+            .push(next_turn_upkeep_observer(11));
+        engine
+            .state
+            .dispatch_event_observers(ObservedGameEvent::TurnBegan {
+                active_player: 1,
+                turn_instance: 12,
+            });
+        engine
+            .state
+            .dispatch_event_observers(ObservedGameEvent::TurnEnded {
+                active_player: 1,
+                turn_instance: 12,
+            });
+        engine
+            .state
+            .dispatch_event_observers(ObservedGameEvent::BeginningOfUpkeep { turn_instance: 13 });
+
+        assert!(engine.state.active_event_observers.is_empty());
+        assert!(engine.state.pending_immediate_observer_actions.is_empty());
     }
 
     #[test]

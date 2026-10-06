@@ -8,7 +8,7 @@
   spell_effect: [
     PumpTarget(power: 3, toughness: 0, subject: Chosen((kind: Creature))),
     CreateDelayedTrigger(
-      subject: Chosen((kind: Creature)),
+      subject: Some(Chosen((kind: Creature))),
       ability: (
         ability_id: "triggered_01",
         presentation: Fallback,

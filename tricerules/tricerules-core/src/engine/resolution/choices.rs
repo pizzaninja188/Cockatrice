@@ -69,10 +69,11 @@ pub(super) fn choose_resolution_branch(
         .iter()
         .enumerate()
         .filter(|(_, branch)| {
-            resolution_branch_is_live(
+            resolution_branch_is_selectable(
                 cx.engine,
                 cx.top,
                 cx.previous_effect_result,
+                *deciding_player,
                 *deciding_player,
                 branch,
             )
@@ -80,6 +81,17 @@ pub(super) fn choose_resolution_branch(
         .collect::<Vec<_>>();
     if selection == ResolutionBranchSelection::FirstApplicable {
         let Some((branch_index, branch)) = legal.first() else {
+            let chooser_live = cx
+                .engine
+                .state
+                .player_idx(*deciding_player)
+                .is_some_and(|index| !cx.engine.state.players[index].has_lost);
+            if !chooser_live {
+                cx.events.push(ev_log(
+                    "No cost-free resolution branch remains for the departed chooser.".into(),
+                ));
+                return Ok(EffectOutcome::RestartResolutionBranch(None));
+            }
             return Err(EngineError::Illegal(
                 "automatic resolution branch has no applicable fallback",
             ));
@@ -490,6 +502,25 @@ pub(in crate::engine) fn resolution_branch_is_live(
             >= required_candidates
 }
 
+/// A replacement player may make the departed player's non-cost choice, but this engine couples
+/// a costed branch and its payment in one choice contract. CR 800.4f means that payment is not
+/// transferred to the replacement player, so only cost-free branches remain selectable.
+pub(in crate::engine) fn resolution_branch_is_selectable(
+    engine: &crate::engine::GameEngine,
+    top: &StackItem,
+    previous_result: &crate::state::EffectResult,
+    deciding_player: i32,
+    original_chooser: i32,
+    branch: &ResolutionBranchDef,
+) -> bool {
+    let original_chooser_live = engine
+        .state
+        .player_idx(original_chooser)
+        .is_some_and(|index| !engine.state.players[index].has_lost);
+    (original_chooser_live || branch.cost == ResolutionCost::None)
+        && resolution_branch_is_live(engine, top, previous_result, deciding_player, branch)
+}
+
 fn previous_result_receipt_matches(
     engine: &crate::engine::GameEngine,
     top: &StackItem,
@@ -677,125 +708,62 @@ fn park_resolution_branches_for(
             "resolution choice requires exactly one deciding player",
         ));
     };
-    let deciding_player = *deciding_player;
-    let options = branches
-        .iter()
-        .enumerate()
-        .filter(|(_, branch)| {
-            resolution_branch_is_live(
-                cx.engine,
-                cx.top,
-                cx.previous_effect_result,
-                deciding_player,
-                branch,
-            )
-        })
-        .map(|(index, branch)| {
-            let (kind, cost_text) = match &branch.cost {
-                ResolutionCost::None => (rv1::ResolutionBranchCostKind::Unspecified, String::new()),
-                ResolutionCost::Blight { count } => (
-                    rv1::ResolutionBranchCostKind::Blight,
-                    format!("Blight {count}"),
-                ),
-                ResolutionCost::Waterbend(cost) => (
-                    rv1::ResolutionBranchCostKind::Waterbend,
-                    format!("Waterbend {cost}"),
-                ),
-                ResolutionCost::Mana(cost) => {
-                    (rv1::ResolutionBranchCostKind::Mana, cost.to_string())
-                }
-                ResolutionCost::DiscardCard { .. } => (
-                    rv1::ResolutionBranchCostKind::DiscardCard,
-                    "discard a matching card".into(),
-                ),
-                ResolutionCost::ExileGraveyardCard { .. } => (
-                    rv1::ResolutionBranchCostKind::ExileGraveyardCard,
-                    "exile a matching card from your graveyard".into(),
-                ),
-                ResolutionCost::PutHandCardOnLibraryBottom => (
-                    rv1::ResolutionBranchCostKind::PutHandCardOnLibraryBottom,
-                    "put a card from your hand on the bottom of your library".into(),
-                ),
-                ResolutionCost::SacrificePermanent { .. } => (
-                    rv1::ResolutionBranchCostKind::SacrificePermanent,
-                    "sacrifice a matching permanent".into(),
-                ),
-                ResolutionCost::TapPermanents { count, .. } => (
-                    rv1::ResolutionBranchCostKind::TapPermanents,
-                    format!("tap {count} matching permanents"),
-                ),
-            };
-            rv1::ResolutionBranchOption {
-                branch_index: index as u32,
-                label: branch.fallback_label(),
-                cost_kind: kind as i32,
-                cost_text,
-                selectable: true,
-                search_zones: Vec::new(),
-                presentation: stack_child_presentation_ref(
-                    cx.engine.registry,
-                    &cx.top.card_id,
-                    cx.top.face_index,
-                    StackPresentationSource::for_stack(
-                        cx.engine
-                            .state
-                            .stack_presentations
-                            .get(&cx.top.id)
-                            .and_then(|stack| stack.primary.as_ref()),
-                        cx.top.ability_text.is_none(),
-                    ),
-                    PresentationPath::ResolutionBranch(&branch.branch_id),
-                    &branch.presentation,
-                    branch.fallback_label(),
-                ),
-            }
-        })
-        .collect();
-    let prompt = if optional {
-        "Choose a resolution option, or decline."
+    let original_chooser = *deciding_player;
+    let controller = cx.top.controller;
+    let is_live = |player| {
+        cx.engine
+            .state
+            .player_idx(player)
+            .is_some_and(|index| !cx.engine.state.players[index].has_lost)
+    };
+    let (deciding_player, stage, prompt) = if is_live(original_chooser) {
+        let prompt = if optional {
+            "Choose a resolution option, or decline.".to_string()
+        } else {
+            "Choose a resolution option.".to_string()
+        };
+        (
+            original_chooser,
+            PendingResolutionBranchStage::Selecting,
+            prompt,
+        )
     } else {
-        "Choose a resolution option."
-    }
-    .to_string();
-    cx.events.push(rv1::RuledEvent {
-        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
-            rv1::ResolutionChoiceRequired {
-                candidate_token_identities: Vec::new(),
-                candidate_player_ids: Vec::new(),
-                deciding_player_id: deciding_player,
-                source_object_id: cx.top.id,
-                prompt_text: prompt.clone(),
-                choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
-                candidate_object_ids: Vec::new(),
-                candidate_card_ids: Vec::new(),
-                min: u32::from(!optional),
-                max: 1,
-                ordered: false,
-                candidate_names: Vec::new(),
-                candidate_server_card_ids: Vec::new(),
-                candidate_selectable: Vec::new(),
-                unique_names: false,
-                generic_mana_cost: 0,
-                payment_currently_legal: false,
-                resolution_branches: options,
-                mana_cost: String::new(),
-                public_reveal: None,
-                candidate_source_zones: Vec::new(),
-                combat_defender_options: Vec::new(),
-                waterbend: false,
-                selection_slots: Vec::new(),
-                replacement_options: Vec::new(),
-                selection_alternatives: Vec::new(),
-            },
-        )),
-    });
-    cx.events.push(ev_log(prompt.clone()));
+        let candidates =
+            resolution_choice_delegate_candidates(&cx.engine.state, controller, original_chooser);
+        match candidates.as_slice() {
+            [] => return Ok(EffectOutcome::Continue),
+            [delegate] => {
+                let prompt = if optional {
+                    "Choose a resolution option, or decline.".to_string()
+                } else {
+                    "Choose a resolution option.".to_string()
+                };
+                (*delegate, PendingResolutionBranchStage::Selecting, prompt)
+            }
+            _ => (
+                controller,
+                PendingResolutionBranchStage::ChoosingDelegate {
+                    candidates: candidates.into_iter().map(Some).collect(),
+                },
+                format!(
+                    "P{controller}: choose a player to make P{original_chooser}'s resolution choice."
+                ),
+            ),
+        }
+    };
     cx.engine.state.pending_resolution = Some(PendingResolution {
         deciding_player,
         presentation: PendingResolutionPresentation {
             source_object_id: cx.top.id,
             candidates: Vec::new(),
-            min: u32::from(!optional),
+            min: if matches!(
+                &stage,
+                PendingResolutionBranchStage::ChoosingDelegate { .. }
+            ) {
+                1
+            } else {
+                u32::from(!optional)
+            },
             max: 1,
             ordered: false,
             prompt,
@@ -808,12 +776,212 @@ fn park_resolution_branches_for(
             branch: PendingResolutionBranch {
                 optional,
                 chooser,
+                original_chooser,
                 branches,
-                stage: PendingResolutionBranchStage::Selecting,
+                stage,
             },
         },
     });
+    let event = authored_resolution_branch_choice_event(cx.engine)
+        .expect("parked resolution branch produces a choice event");
+    let prompt = match &event.ev {
+        Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => choice.prompt_text.clone(),
+        _ => unreachable!("authored branch choice helper emits a choice event"),
+    };
+    cx.events.push(event);
+    cx.events.push(ev_log(prompt));
     Ok(EffectOutcome::Suspended)
+}
+
+/// Surviving players eligible to take over a departed resolution chooser (CR 800.4g).
+/// The controller of the object creating the effect must choose another player. If the departed
+/// chooser was that controller's opponent, prefer another live opponent whenever one exists.
+pub(in crate::engine) fn resolution_choice_delegate_candidates(
+    state: &crate::state::GameState,
+    controller: i32,
+    original_chooser: i32,
+) -> Vec<i32> {
+    let other_live_players = state
+        .players
+        .iter()
+        .filter(|player| !player.has_lost && player.id != original_chooser)
+        .map(|player| player.id)
+        .collect::<Vec<_>>();
+    if state.are_opponents(controller, original_chooser) {
+        let other_opponents = other_live_players
+            .iter()
+            .copied()
+            .filter(|player| state.are_opponents(controller, *player))
+            .collect::<Vec<_>>();
+        if !other_opponents.is_empty() {
+            return other_opponents;
+        }
+    }
+    other_live_players
+}
+
+/// Rebuild the current authored-branch prompt from its serialized continuation. This is also used
+/// after a player leaves, so a stale client prompt cannot retain a departed delegate.
+pub(in crate::engine) fn authored_resolution_branch_choice_event(
+    engine: &crate::engine::GameEngine,
+) -> Option<rv1::RuledEvent> {
+    let pending = engine.state.pending_resolution.as_ref()?;
+    let ResolutionContinuation::AuthoredBranch { stack, branch } = &pending.continuation else {
+        return None;
+    };
+    let options = match &branch.stage {
+        PendingResolutionBranchStage::ChoosingDelegate { candidates } => {
+            let eligible = resolution_choice_delegate_candidates(
+                &engine.state,
+                stack.item.controller,
+                branch.original_chooser,
+            );
+            candidates
+                .iter()
+                .enumerate()
+                .map(|(index, candidate)| {
+                    let valid = candidate.is_some_and(|candidate| {
+                        eligible.contains(&candidate)
+                            && engine
+                                .state
+                                .player_idx(candidate)
+                                .is_some_and(|idx| !engine.state.players[idx].has_lost)
+                    });
+                    let label = candidate.map_or_else(
+                        || "Unavailable player".into(),
+                        |candidate| format!("P{candidate} makes the choice"),
+                    );
+                    rv1::ResolutionBranchOption {
+                        branch_index: index as u32,
+                        label: label.clone(),
+                        cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                        cost_text: String::new(),
+                        selectable: valid,
+                        search_zones: Vec::new(),
+                        presentation: Some(rv1::PresentationRef {
+                            fallback_text: label,
+                            ..Default::default()
+                        }),
+                    }
+                })
+                .collect()
+        }
+        PendingResolutionBranchStage::Selecting => branch
+            .branches
+            .iter()
+            .enumerate()
+            .filter(|(_, option)| {
+                resolution_branch_is_selectable(
+                    engine,
+                    &stack.item,
+                    &stack.previous_result,
+                    pending.deciding_player,
+                    branch.original_chooser,
+                    option,
+                )
+            })
+            .map(|(index, option)| {
+                let (kind, cost_text) = match &option.cost {
+                    ResolutionCost::None => {
+                        (rv1::ResolutionBranchCostKind::Unspecified, String::new())
+                    }
+                    ResolutionCost::Blight { count } => (
+                        rv1::ResolutionBranchCostKind::Blight,
+                        format!("Blight {count}"),
+                    ),
+                    ResolutionCost::Waterbend(cost) => (
+                        rv1::ResolutionBranchCostKind::Waterbend,
+                        format!("Waterbend {cost}"),
+                    ),
+                    ResolutionCost::Mana(cost) => {
+                        (rv1::ResolutionBranchCostKind::Mana, cost.to_string())
+                    }
+                    ResolutionCost::DiscardCard { .. } => (
+                        rv1::ResolutionBranchCostKind::DiscardCard,
+                        "discard a matching card".into(),
+                    ),
+                    ResolutionCost::ExileGraveyardCard { .. } => (
+                        rv1::ResolutionBranchCostKind::ExileGraveyardCard,
+                        "exile a matching card from your graveyard".into(),
+                    ),
+                    ResolutionCost::PutHandCardOnLibraryBottom => (
+                        rv1::ResolutionBranchCostKind::PutHandCardOnLibraryBottom,
+                        "put a card from your hand on the bottom of your library".into(),
+                    ),
+                    ResolutionCost::SacrificePermanent { .. } => (
+                        rv1::ResolutionBranchCostKind::SacrificePermanent,
+                        "sacrifice a matching permanent".into(),
+                    ),
+                    ResolutionCost::TapPermanents { count, .. } => (
+                        rv1::ResolutionBranchCostKind::TapPermanents,
+                        format!("tap {count} matching permanents"),
+                    ),
+                };
+                rv1::ResolutionBranchOption {
+                    branch_index: index as u32,
+                    label: option.fallback_label(),
+                    cost_kind: kind as i32,
+                    cost_text,
+                    selectable: true,
+                    search_zones: Vec::new(),
+                    presentation: stack_child_presentation_ref(
+                        engine.registry,
+                        &stack.item.card_id,
+                        stack.item.face_index,
+                        StackPresentationSource::for_stack(
+                            engine
+                                .state
+                                .stack_presentations
+                                .get(&stack.item.id)
+                                .and_then(|presentation| presentation.primary.as_ref()),
+                            stack.item.ability_text.is_none(),
+                        ),
+                        PresentationPath::ResolutionBranch(&option.branch_id),
+                        &option.presentation,
+                        option.fallback_label(),
+                    ),
+                }
+            })
+            .collect(),
+        PendingResolutionBranchStage::PayingMana { .. }
+        | PendingResolutionBranchStage::PayingObjects { .. } => return None,
+    };
+    Some(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                deciding_player_id: pending.deciding_player,
+                source_object_id: pending.presentation.source_object_id,
+                prompt_text: pending.presentation.prompt.clone(),
+                choice_kind: rv1::ChoiceKind::ResolutionBranch as i32,
+                min: pending.presentation.min,
+                max: pending.presentation.max,
+                resolution_branches: options,
+                ..Default::default()
+            },
+        )),
+    })
+}
+
+pub(in crate::engine) fn authored_resolution_branch_has_selectable_option(
+    engine: &crate::engine::GameEngine,
+) -> bool {
+    let Some(pending) = engine.state.pending_resolution.as_ref() else {
+        return false;
+    };
+    let ResolutionContinuation::AuthoredBranch { stack, branch } = &pending.continuation else {
+        return false;
+    };
+    matches!(branch.stage, PendingResolutionBranchStage::Selecting)
+        && branch.branches.iter().any(|option| {
+            resolution_branch_is_selectable(
+                engine,
+                &stack.item,
+                &stack.previous_result,
+                pending.deciding_player,
+                branch.original_chooser,
+                option,
+            )
+        })
 }
 
 pub(super) fn create_reflexive_trigger(

@@ -436,6 +436,9 @@ fn drain(e: &mut GameEngine, mut batch: RuledEventBatch, budget: usize) -> Resul
 }
 fn fixture(case: &Case) -> GameEngine {
     let stack_fixture = match case.card.as_str() {
+        // Arcane Denial's target group requires a genuine stack spell. Its card scenario separately
+        // verifies the opposite player's cast and delayed-choice ownership.
+        "arcane_denial" => Some("opt"),
         "annul" => Some("short_sword"),
         "flashfreeze" => Some("hill_giant"),
         "flusterstorm" => Some("divination"),

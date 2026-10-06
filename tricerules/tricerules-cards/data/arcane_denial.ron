@@ -1,0 +1,45 @@
+// Pinned Oracle/ruling verified from Scryfall on 2026-10-06. CR 503.1, 603.3b, 603.7a-b/d,
+// 121.2 govern the next-upkeep trigger, its controller, simultaneous ordering, and the draw choice.
+(
+  id: "arcane_denial",
+  name: "Arcane Denial",
+  face_id: "arcane_denial",
+  mana_cost: "{1}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    CounterTargetSpell(spell_filter: (), unless_controller_pays: None),
+    CreateDelayedTrigger(
+      subject: None,
+      affected_player: Some(PreviousTargetedSpellController),
+      ability: (
+        ability_id: "delayed_01",
+        presentation: OracleLines([1]),
+        trigger: AtBeginningOfNextTurnUpkeep,
+        effect: [ChooseResolutionBranch(
+          chooser: AffectedPlayer,
+          optional: false,
+          branches: [
+            (branch_id: "draw_zero", presentation: OracleLines([1]), cost: None, effects: [Draw(count: 0, who: AffectedPlayer)]),
+            (branch_id: "draw_one", presentation: OracleLines([1]), cost: None, effects: [Draw(count: 1, who: AffectedPlayer)]),
+            (branch_id: "draw_two", presentation: OracleLines([1]), cost: None, effects: [Draw(count: 2, who: AffectedPlayer)]),
+          ],
+        )],
+      ),
+    ),
+    CreateDelayedTrigger(
+      subject: None,
+      ability: (
+        ability_id: "delayed_02",
+        presentation: OracleLines([2]),
+        trigger: AtBeginningOfNextTurnUpkeep,
+        effect: [Draw(count: 1)],
+      ),
+    ),
+  ],
+  targeting: Some((groups: [(
+    min: 1,
+    max: 1,
+    prompt: "Choose target spell",
+    effect_indices: [0],
+  )])),
+)

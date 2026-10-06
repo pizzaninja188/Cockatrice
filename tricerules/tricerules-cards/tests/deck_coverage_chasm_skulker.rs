@@ -121,13 +121,13 @@ fn chasm_counter_quantity_cannot_escape_through_mass_counters_or_delayed_spell()
     for text in [
         format!("PutCountersAll(counter: PlusOnePlusOne, count: {amount})"),
         format!(
-            r#"CreateDelayedTrigger(subject: Chosen((kind: Creature)), ability: (ability_id: "triggered_01", presentation: Fallback, trigger: WhenWatchedObjectDiesThisTurn, effect: [GainLife(amount: {amount})]))"#
+            r#"CreateDelayedTrigger(subject: Some(Chosen((kind: Creature))), ability: (ability_id: "triggered_01", presentation: Fallback, trigger: WhenWatchedObjectDiesThisTurn, effect: [GainLife(amount: {amount})]))"#
         ),
         format!(
             r#"CreateReflexiveTrigger(ability: (ability_id: "triggered_01", presentation: Fallback, effect: [GainLife(amount: {amount})]))"#
         ),
         format!(
-            r#"CreateDelayedTrigger(subject: Chosen((kind: Creature)), ability: (ability_id: "triggered_01", presentation: Fallback, trigger: AtBeginningOfNextEndStep, modal: Some((min_modes: 1, max_modes: 1, modes: [(mode_id: "gain", presentation: Fallback, effects: [GainLife(amount: {amount})])]))))"#
+            r#"CreateDelayedTrigger(subject: Some(Chosen((kind: Creature))), ability: (ability_id: "triggered_01", presentation: Fallback, trigger: AtBeginningOfNextEndStep, modal: Some((min_modes: 1, max_modes: 1, modes: [(mode_id: "gain", presentation: Fallback, effects: [GainLife(amount: {amount})])]))))"#
         ),
     ] {
         let effect: tricerules_cards::SpellEffectKind = ron::from_str(&text).unwrap();

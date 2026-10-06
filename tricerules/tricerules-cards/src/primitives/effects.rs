@@ -298,6 +298,10 @@ impl Default for EffectSubject {
     }
 }
 
+fn default_delayed_trigger_subject() -> Option<EffectSubject> {
+    Some(EffectSubject::default())
+}
+
 /// CR 509.1b: cumulative rule-changing restrictions, shared by Argothian Sprite, Verdant
 /// Outrider, Rampaging Ceratops and the Faerie created by Into the Fae Court. Filters describe
 /// creatures, not targets; shroud and hexproof do not participate in blocking legality.
@@ -1401,10 +1405,15 @@ pub enum SpellEffectKind {
         entry_counters: Vec<CounterPlacement>,
     },
     /// CR 603.7: create a one-shot delayed triggered ability that observes `subject`. The
-    /// definition must use a delayed-only trigger condition.
+    /// definition must use a delayed-only trigger condition. `subject: None` is reserved for a
+    /// subjectless temporal observer. `affected_player` captures the exact player context needed
+    /// by the delayed ability; PreviousTargetedSpellController is valid only immediately after a
+    /// CounterTargetSpell instruction.
     CreateDelayedTrigger {
+        #[serde(default = "default_delayed_trigger_subject")]
+        subject: Option<EffectSubject>,
         #[serde(default)]
-        subject: EffectSubject,
+        affected_player: Option<PlayerRecipient>,
         ability: Box<TriggeredAbilityDef>,
     },
     /// Sacrifice the exact generation-bound cohort captured by an engine-created delayed
@@ -2721,7 +2730,7 @@ impl SpellEffectKind {
                 subject: EffectSubject::AttachedObject,
                 ..
             } | SpellEffectKind::CreateDelayedTrigger {
-                subject: EffectSubject::AttachedObject,
+                subject: Some(EffectSubject::AttachedObject),
                 ..
             } | SpellEffectKind::AddTypes {
                 subject: EffectSubject::AttachedObject,
@@ -2790,7 +2799,7 @@ impl SpellEffectKind {
                 subject: EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::CreateDelayedTrigger {
-                subject: EffectSubject::TriggerObject,
+                subject: Some(EffectSubject::TriggerObject),
                 ..
             } | SpellEffectKind::AddTypes {
                 subject: EffectSubject::TriggerObject,
@@ -2958,7 +2967,6 @@ impl SpellEffectKind {
             | SpellEffectKind::GrantKeywordChoice { subject, .. }
             | SpellEffectKind::GrantProtection { subject, .. }
             | SpellEffectKind::GrantTriggeredAbility { subject, .. }
-            | SpellEffectKind::CreateDelayedTrigger { subject, .. }
             | SpellEffectKind::AddTypes { subject, .. }
             | SpellEffectKind::ReturnToOwnersHand { subject }
             | SpellEffectKind::Exile { subject }
@@ -2976,6 +2984,17 @@ impl SpellEffectKind {
                 | EffectSubject::TriggerObject
                 | EffectSubject::PreviousEffectObject
                 | EffectSubject::SearchedObject(_) => Vec::new(),
+            },
+            SpellEffectKind::CreateDelayedTrigger { subject, .. } => match subject {
+                Some(EffectSubject::Chosen(target)) => vec![TargetRole::Filtered(target)],
+                Some(
+                    EffectSubject::Source
+                    | EffectSubject::AttachedObject
+                    | EffectSubject::TriggerObject
+                    | EffectSubject::PreviousEffectObject
+                    | EffectSubject::SearchedObject(_),
+                )
+                | None => Vec::new(),
             },
             SpellEffectKind::ApplyCombatRestriction { scope, .. } => match scope {
                 CombatRestrictionScope::Chosen(target) => vec![TargetRole::Filtered(target)],
@@ -3325,7 +3344,7 @@ impl SpellEffectKind {
                     ..
                 }
                 | SpellEffectKind::CreateDelayedTrigger {
-                    subject: EffectSubject::PreviousEffectObject,
+                    subject: Some(EffectSubject::PreviousEffectObject),
                     ..
                 } => Some(false),
                 _ => None,
@@ -3373,7 +3392,6 @@ impl SpellEffectKind {
                 | SpellEffectKind::GrantKeywordChoice { subject: value, .. }
                 | SpellEffectKind::GrantProtection { subject: value, .. }
                 | SpellEffectKind::GrantTriggeredAbility { subject: value, .. }
-                | SpellEffectKind::CreateDelayedTrigger { subject: value, .. }
                 | SpellEffectKind::AddTypes { subject: value, .. }
                 | SpellEffectKind::ReturnToOwnersHand { subject: value }
                 | SpellEffectKind::Exile { subject: value }
@@ -3385,6 +3403,10 @@ impl SpellEffectKind {
                 | SpellEffectKind::RemoveCounters { subject: value, .. }
                 | SpellEffectKind::RemoveAllCounters { subject: value, .. }
                 | SpellEffectKind::PutCounterSnapshot { subject: value, .. } => subject(value),
+                SpellEffectKind::CreateDelayedTrigger {
+                    subject: Some(value),
+                    ..
+                } => subject(value),
                 _ => {}
             }
         }
@@ -3521,6 +3543,16 @@ impl SpellEffectKind {
                 effect,
                 SpellEffectKind::CreateTokens {
                     who: PlayerRecipient::PreviousTargetedSpellController,
+                    ..
+                }
+            ) && !matches!(previous, Some(SpellEffectKind::CounterTargetSpell { .. }))
+            {
+                return Err("PreviousTargetedSpellController requires an immediately preceding CounterTargetSpell".into());
+            }
+            if matches!(
+                effect,
+                SpellEffectKind::CreateDelayedTrigger {
+                    affected_player: Some(PlayerRecipient::PreviousTargetedSpellController),
                     ..
                 }
             ) && !matches!(previous, Some(SpellEffectKind::CounterTargetSpell { .. }))
@@ -4619,9 +4651,11 @@ impl SpellEffectKind {
                     | EffectSubject::TriggerObject,
                 ..
             } | SpellEffectKind::CreateDelayedTrigger {
-                subject: EffectSubject::Source
-                    | EffectSubject::AttachedObject
-                    | EffectSubject::TriggerObject,
+                subject: Some(
+                    EffectSubject::Source
+                        | EffectSubject::AttachedObject
+                        | EffectSubject::TriggerObject,
+                ),
                 ..
             } | SpellEffectKind::AddTypes {
                 subject: EffectSubject::Source
@@ -4964,8 +4998,12 @@ impl SpellEffectKind {
                 }
                 ability.validate_shape()
             }
-            SpellEffectKind::CreateDelayedTrigger { subject, ability } => {
-                if let EffectSubject::Chosen(target) = subject {
+            SpellEffectKind::CreateDelayedTrigger {
+                subject,
+                affected_player,
+                ability,
+            } => {
+                if let Some(EffectSubject::Chosen(target)) = subject {
                     if !target.all_terminal_filters_match(|leaf| {
                         matches!(leaf.kind, TargetKind::Creature | TargetKind::AnyPermanent)
                     }) {
@@ -4974,6 +5012,24 @@ impl SpellEffectKind {
                             target.kind
                         ));
                     }
+                }
+                if subject.is_none()
+                    && !matches!(
+                        ability.trigger,
+                        TriggerCondition::AtBeginningOfNextTurnUpkeep
+                    )
+                {
+                    return Err(
+                        "subjectless CreateDelayedTrigger requires a next-turn upkeep condition"
+                            .into(),
+                    );
+                }
+                if affected_player.is_some_and(|recipient| {
+                    recipient != PlayerRecipient::PreviousTargetedSpellController
+                }) {
+                    return Err(
+                        "CreateDelayedTrigger only captures PreviousTargetedSpellController".into(),
+                    );
                 }
                 if !ability.trigger.is_delayed_only() {
                     return Err("CreateDelayedTrigger requires a delayed trigger condition".into());

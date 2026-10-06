@@ -394,13 +394,14 @@ fn next_end_step_delayed_trigger_is_one_shot_and_keeps_object_identity() {
         ..Default::default()
     };
     e.state.active_event_observers.push(ActiveEventObserver {
-        watched: TriggerObjectRef {
+        watched: Some(TriggerObjectRef {
             object_id: creature,
             zone_change_generation: generation,
             controller_at_event: 0,
-        },
+        }),
         matcher: EventObserverMatcher::AtBeginningOfNextEndStep,
         payload: EventObserverPayload::StageDelayedTrigger(Box::new(DelayedTriggerPayload {
+            affected_player: None,
             source: TriggerObjectRef {
                 object_id: creature,
                 zone_change_generation: generation,

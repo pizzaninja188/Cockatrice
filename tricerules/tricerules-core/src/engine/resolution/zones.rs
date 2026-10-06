@@ -248,7 +248,7 @@ pub(super) fn exile_until_source_leaves(
         .state
         .active_event_observers
         .push(ActiveEventObserver {
-            watched: source_ref,
+            watched: Some(source_ref),
             matcher: EventObserverMatcher::WhenWatchedObjectLeavesBattlefield,
             payload: EventObserverPayload::ReturnExiledObject { exiled },
         });

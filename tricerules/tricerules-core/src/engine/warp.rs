@@ -61,11 +61,12 @@ impl GameEngine {
             ability_text,
         );
         self.state.active_event_observers.push(ActiveEventObserver {
-            watched,
+            watched: Some(watched),
             matcher: EventObserverMatcher::AtBeginningOfNextEndStep,
             payload: EventObserverPayload::StageDelayedTrigger(Box::new(DelayedTriggerPayload {
                 source: watched,
                 controller: item.controller,
+                affected_player: None,
                 card_id: item.card_id.clone(),
                 card_name,
                 source_face_index: item.face_index,

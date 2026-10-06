@@ -1198,8 +1198,12 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         for (const auto &branch : rcr.resolution_branches()) {
             RuledChoiceOption option;
             option.index = static_cast<int>(branch.branch_index());
-            option.label = branch.has_presentation() ? presentationResolver.resolve(branch.presentation())
-                                                     : QString::fromStdString(branch.label());
+            const QString branchLabel = QString::fromStdString(branch.label());
+            const bool hasGenericFallback = branchLabel.startsWith(QStringLiteral("Choice ("));
+            // Engine summaries keep sibling branches distinct when they share one Oracle line.
+            option.label = branch.has_presentation() && (branchLabel.isEmpty() || hasGenericFallback)
+                               ? presentationResolver.resolve(branch.presentation())
+                               : branchLabel;
             option.enabled = branch.selectable();
             for (const int rawZone : branch.search_zones()) {
                 if (rawZone != ruled::v1::CHOICE_CANDIDATE_SOURCE_ZONE_HAND &&

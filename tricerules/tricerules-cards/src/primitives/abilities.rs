@@ -606,6 +606,9 @@ pub enum TriggerCondition {
     /// turn. Extra turns count; a skipped turn does not. If that turn has no end step, the
     /// delayed trigger expires without waiting for a later turn.
     AtBeginningOfControllerNextTurnEndStep,
+    /// Delayed-trigger-only condition: the upkeep of the first actual turn that begins after
+    /// creation. If that turn's upkeep is skipped, the delayed trigger expires at that turn's end.
+    AtBeginningOfNextTurnUpkeep,
     /// Delayed-trigger-only condition: the controller that created the delayed trigger stops
     /// controlling the observed permanent.
     WhenControllerLosesControlOf,
@@ -928,6 +931,7 @@ impl TriggerCondition {
             self,
             Self::AtBeginningOfNextEndStep
                 | Self::AtBeginningOfControllerNextTurnEndStep
+                | Self::AtBeginningOfNextTurnUpkeep
                 | Self::WhenControllerLosesControlOf
                 | Self::WhenWatchedObjectDiesThisTurn
                 | Self::WhenWatchedObjectDiesOrIsExiled
@@ -1043,6 +1047,7 @@ impl TriggerCondition {
                 }
                 | Self::AtBeginningOfNextEndStep
                 | Self::AtBeginningOfControllerNextTurnEndStep
+                | Self::AtBeginningOfNextTurnUpkeep
                 | Self::WhenControllerLosesControlOf
                 | Self::WhenWatchedObjectDiesThisTurn
                 | Self::WhenWatchedObjectDiesOrIsExiled

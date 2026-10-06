@@ -277,6 +277,55 @@ impl GameEngine {
         Ok(())
     }
 
+    /// CR 800.4d: a triggered ability controlled by a player who has left the game is not put on
+    /// the stack. Delayed observers, collected triggers, ordering prompts, and target prompts all
+    /// represent abilities that have not yet reached the stack, so remove the departed
+    /// controller's abilities from each queue before trigger placement resumes.
+    fn discard_departed_triggered_abilities(&mut self) {
+        let live_players: HashSet<_> = self
+            .state
+            .players
+            .iter()
+            .filter(|player| !player.has_lost)
+            .map(|player| player.id)
+            .collect();
+        self.state
+            .active_event_observers
+            .retain(|observer| match &observer.payload {
+                EventObserverPayload::StageDelayedTrigger(trigger) => {
+                    live_players.contains(&trigger.controller)
+                }
+                EventObserverPayload::ReturnExiledObject { .. } => true,
+            });
+        for group in &mut self.state.staged_trigger_groups {
+            group
+                .triggers
+                .retain(|trigger| live_players.contains(&trigger.controller));
+        }
+        self.state
+            .staged_trigger_groups
+            .retain(|group| !group.triggers.is_empty());
+        if let Some(order) = self.state.pending_trigger_order.as_mut() {
+            let previous_len = order.candidates.len();
+            order
+                .candidates
+                .retain(|trigger| live_players.contains(&trigger.controller));
+            if previous_len != order.candidates.len() {
+                order.prompt_emitted = false;
+            }
+            if let Some(next_controller) =
+                order.candidates.first().map(|trigger| trigger.controller)
+            {
+                order.deciding_player = next_controller;
+            } else {
+                self.state.pending_trigger_order = None;
+            }
+        }
+        self.state
+            .pending_triggers
+            .retain(|trigger| live_players.contains(&trigger.controller));
+    }
+
     pub(super) fn reconcile_departed_players(
         &mut self,
         events: &mut Vec<rv1::RuledEvent>,
@@ -339,6 +388,7 @@ impl GameEngine {
                 } if controller == player)
             });
         }
+        self.discard_departed_triggered_abilities();
         self.reindex_battlefield_control(events);
         let stranded: Vec<_> = self
             .state
@@ -400,6 +450,8 @@ impl GameEngine {
         self.refresh_observer_aura_departure(events)?;
         self.refresh_participating_entry_departure(&departed_objects, events)?;
         self.refresh_entry_opponent_departure(&departed_objects, events)?;
+        self.refresh_authored_branch_departure(events)?;
+        self.flush_staged_triggers(events);
         Ok(())
     }
 

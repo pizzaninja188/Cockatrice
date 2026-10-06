@@ -144,11 +144,11 @@ fn token_with_owed_return(engine: &mut GameEngine, returning_card: &str) -> (u32
         .state
         .active_event_observers
         .push(ActiveEventObserver {
-            watched: TriggerObjectRef {
+            watched: Some(TriggerObjectRef {
                 object_id: source,
                 zone_change_generation: 0,
                 controller_at_event: 4,
-            },
+            }),
             matcher: EventObserverMatcher::WhenWatchedObjectLeavesBattlefield,
             payload: EventObserverPayload::ReturnExiledObject {
                 exiled: TriggerObjectRef {

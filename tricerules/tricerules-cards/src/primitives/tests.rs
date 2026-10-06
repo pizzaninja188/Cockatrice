@@ -243,6 +243,20 @@ fn structured_choice_metadata_is_stable_nonmechanical_and_unique() {
     assert_eq!(branch.fallback_label(), "Draw a card.");
     assert_eq!(branch.fallback_label(), externally_mapped.fallback_label());
 
+    let affected_draw_labels = [
+        (0, "The affected player draws no cards."),
+        (1, "The affected player draws a card."),
+        (2, "The affected player draws 2 cards."),
+    ];
+    for (count, expected) in affected_draw_labels {
+        let branch: super::ResolutionBranchDef = ron::from_str(&format!(
+            r#"(branch_id: "draw_{count}", presentation: OracleLines([1]), cost: None,
+                effects: [Draw(count: {count}, who: AffectedPlayer)])"#
+        ))
+        .expect("affected-player draw branch");
+        assert_eq!(branch.fallback_label(), expected);
+    }
+
     let duplicate_slots: super::SpellEffectKind = ron::from_str(
         r#"SearchLibrary(
             slots: [
@@ -1849,7 +1863,7 @@ fn issue_241_pay_or_otherwise_supports_exact_delayed_objects() {
         r#"[
           Exile(subject: Chosen((kind: Creature))),
           CreateDelayedTrigger(
-            subject: PreviousEffectObject,
+            subject: Some(PreviousEffectObject),
             ability: (
               ability_id: "delayed_01",
               presentation: Fallback,
@@ -1900,6 +1914,30 @@ fn issue_241_otherwise_requires_an_optional_resolution_choice() {
     .expect("otherwise is typed authoring vocabulary");
 
     assert!(effect.validate(EffectContext::Ability).is_err());
+}
+
+#[test]
+fn delayed_trigger_player_capture_requires_the_immediately_preceding_counter() {
+    let counter: super::SpellEffectKind =
+        ron::from_str("CounterTargetSpell(spell_filter: (), unless_controller_pays: None)")
+            .expect("counter target spell effect");
+    let delayed: super::SpellEffectKind = ron::from_str(
+        r#"CreateDelayedTrigger(
+          subject: None,
+          affected_player: Some(PreviousTargetedSpellController),
+          ability: (
+            ability_id: "delayed_01",
+            presentation: Fallback,
+            trigger: AtBeginningOfNextTurnUpkeep,
+            effect: [Draw(count: 1)],
+          ),
+        )"#,
+    )
+    .expect("delayed trigger captures the target spell controller");
+    assert!(super::SpellEffectKind::validate_list(&[counter, delayed.clone()]).is_ok());
+
+    let unrelated: super::SpellEffectKind = ron::from_str("Draw(count: 1)").unwrap();
+    assert!(super::SpellEffectKind::validate_list(&[unrelated, delayed]).is_err());
 }
 
 #[test]

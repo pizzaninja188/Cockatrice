@@ -333,7 +333,7 @@ fn watch_return(engine: &mut GameEngine, watched: u32, returned: u32) {
         .state
         .active_event_observers
         .push(ActiveEventObserver {
-            watched: watched_ref,
+            watched: Some(watched_ref),
             matcher: EventObserverMatcher::WhenWatchedObjectLeavesBattlefield,
             payload: EventObserverPayload::ReturnExiledObject {
                 exiled: returned_ref,

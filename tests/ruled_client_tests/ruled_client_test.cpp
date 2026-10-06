@@ -6404,6 +6404,57 @@ TEST_F(RuledClientTest, ResolutionBranchesSubmitOpaqueIndexWithoutOpeningADialog
     EXPECT_EQ(submission.selected_branch_index(), 0u);
 }
 
+TEST_F(RuledClientTest, ResolutionBranchesKeepDistinctEngineLabelsWhenOracleTextIsShared)
+{
+    const QString oracleText = QStringLiteral(
+        "Counter target spell. Its controller may draw up to two cards at the beginning of the next turn's upkeep.");
+    auto card = CardInfo::newInstance("Arcane Denial");
+    card->ruled().addFace("Arcane Denial", "Arcane Denial", oracleText);
+    host.presentationCards.insert("Arcane Denial", card);
+
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_RESOLUTION_BRANCH);
+    choice->set_prompt_text("Choose how many cards the affected player draws.");
+    choice->set_min(1);
+    choice->set_max(1);
+    const QStringList labels = {QStringLiteral("The affected player draws no cards."),
+                                QStringLiteral("The affected player draws a card."),
+                                QStringLiteral("The affected player draws 2 cards.")};
+    for (int index = 0; index < labels.size(); ++index) {
+        auto *branch = choice->add_resolution_branches();
+        branch->set_branch_index(static_cast<quint32>(index));
+        branch->set_label(labels[index].toStdString());
+        branch->set_selectable(true);
+        auto *presentation = branch->mutable_presentation();
+        presentation->set_external_card_name("Arcane Denial");
+        presentation->set_external_face_name("Arcane Denial");
+        presentation->set_oracle_text_sha256(RuledOracleText::textSha256(oracleText).toStdString());
+        presentation->add_oracle_line_indices(1);
+        presentation->set_fallback_text(labels[index].toStdString());
+    }
+    auto *unresolvedBranch = choice->add_resolution_branches();
+    unresolvedBranch->set_branch_index(static_cast<quint32>(labels.size()));
+    unresolvedBranch->set_label("Choice (unresolved_branch)");
+    unresolvedBranch->set_selectable(true);
+    auto *unresolvedPresentation = unresolvedBranch->mutable_presentation();
+    unresolvedPresentation->set_external_card_name("Arcane Denial");
+    unresolvedPresentation->set_external_face_name("Arcane Denial");
+    unresolvedPresentation->set_oracle_text_sha256(RuledOracleText::textSha256(oracleText).toStdString());
+    unresolvedPresentation->add_oracle_line_indices(1);
+    unresolvedPresentation->set_fallback_text("Choice (unresolved_branch)");
+
+    apply(batch);
+
+    const auto options = state->pendingChoiceOptions();
+    ASSERT_EQ(options.size(), labels.size() + 1);
+    for (int index = 0; index < labels.size(); ++index) {
+        EXPECT_EQ(options[index].label, labels[index]);
+    }
+    EXPECT_EQ(options.last().label, oracleText);
+}
+
 TEST_F(RuledClientTest, PrivateDiscardDestinationUsesPromptOptionsWithOpaqueIds)
 {
     ruled::v1::RuledEventBatch batch;

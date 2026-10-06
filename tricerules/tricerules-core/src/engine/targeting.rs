@@ -1242,7 +1242,6 @@ fn validate_effect_targets(
         | SpellEffectKind::GrantKeywordChoice { subject, .. }
         | SpellEffectKind::GrantProtection { subject, .. }
         | SpellEffectKind::GrantTriggeredAbility { subject, .. }
-        | SpellEffectKind::CreateDelayedTrigger { subject, .. }
         | SpellEffectKind::AddTypes { subject, .. }
         | SpellEffectKind::Regenerate { subject }
         | SpellEffectKind::Destroy { subject }
@@ -1272,6 +1271,35 @@ fn validate_effect_targets(
                     return Err(EngineError::Illegal(
                         "target must be a creature on the battlefield",
                     ));
+                }
+            }
+        },
+        SpellEffectKind::CreateDelayedTrigger { subject, .. } => match subject {
+            Some(EffectSubject::Chosen(filter)) => {
+                if targets.len() != 1 {
+                    return Err(EngineError::Illegal("requires exactly one target"));
+                }
+                if !target_filter_legal_with_context(
+                    engine,
+                    filter,
+                    targets[0].object_id,
+                    caster,
+                    source,
+                    trigger_context,
+                ) {
+                    return Err(EngineError::Illegal("illegal delayed-trigger target"));
+                }
+            }
+            Some(
+                EffectSubject::Source
+                | EffectSubject::AttachedObject
+                | EffectSubject::TriggerObject
+                | EffectSubject::PreviousEffectObject
+                | EffectSubject::SearchedObject(_),
+            )
+            | None => {
+                if !targets.is_empty() {
+                    return Err(EngineError::Illegal("this effect takes no targets"));
                 }
             }
         },
@@ -1927,7 +1955,7 @@ fn spell_target_legality_error_with_context(
             ..
         }
         | SpellEffectKind::CreateDelayedTrigger {
-            subject: EffectSubject::Chosen(_),
+            subject: Some(EffectSubject::Chosen(_)),
             ..
         }
         | SpellEffectKind::AddTypes {
@@ -2010,7 +2038,7 @@ fn spell_target_legality_error_with_context(
             ..
         }
         | SpellEffectKind::CreateDelayedTrigger {
-            subject: EffectSubject::Source | EffectSubject::AttachedObject,
+            subject: Some(EffectSubject::Source | EffectSubject::AttachedObject),
             ..
         }
         | SpellEffectKind::Tap {

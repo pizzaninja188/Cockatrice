@@ -20,7 +20,10 @@ use tricerules_cards::{AbilityPresentation, ChoiceId};
 
 mod chaos_warp;
 mod choices;
-pub(super) use choices::resolution_branch_is_live;
+pub(super) use choices::{
+    authored_resolution_branch_choice_event, authored_resolution_branch_has_selectable_option,
+    resolution_branch_is_selectable, resolution_choice_delegate_candidates,
+};
 pub(in crate::engine) use choices::{
     card_result_characteristic_sum, card_result_count, card_result_count_for_player,
     card_result_maximum,
@@ -6561,6 +6564,293 @@ mod attached_subject_tests {
         assert_eq!(engine.state.players[0].life, before + 3);
     }
 
+    mod departed_chooser_cost_tests {
+        use super::*;
+
+        fn branch(branch_id: &str, cost: ResolutionCost, life: u32) -> ResolutionBranchDef {
+            ResolutionBranchDef {
+                branch_id: tricerules_cards::ChoiceId::new(branch_id).unwrap(),
+                presentation: tricerules_cards::AbilityPresentation::Fallback,
+                runtime_fallback: None,
+                cost,
+                requirement: tricerules_cards::primitives::ResolutionBranchRequirement::Always,
+                effects: vec![SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(life),
+                }],
+            }
+        }
+
+        fn engine_with_pending_choice(branches: Vec<ResolutionBranchDef>) -> GameEngine {
+            let mut engine = GameEngine::new_with_default_decks(800_401, &[0, 1], 20).unwrap();
+            engine.state.players.push(PlayerState::new(2, 20));
+            engine.state.opening = None;
+            engine.state.turn_step = TurnStep::Main1;
+            let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+            let mut item = quantity_item(
+                source,
+                vec![
+                    SpellEffectKind::ChooseResolutionBranch {
+                        chooser: PlayerRecipient::AffectedPlayer,
+                        optional: false,
+                        selection:
+                            tricerules_cards::primitives::ResolutionBranchSelection::PlayerChoice,
+                        branches,
+                        otherwise: vec![SpellEffectKind::GainLife {
+                            amount: Amount::Fixed(4),
+                        }],
+                    },
+                    SpellEffectKind::GainLife {
+                        amount: Amount::Fixed(2),
+                    },
+                ],
+            );
+            item.trigger_context.affected_player = Some(1);
+            let (effects, label) = engine.build_resolution_effects(&item);
+            engine
+                .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+                .unwrap();
+            assert_eq!(
+                engine
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .unwrap()
+                    .deciding_player,
+                1
+            );
+            engine
+        }
+
+        fn depart_original_chooser(engine: &mut GameEngine) -> Vec<rv1::RuledEvent> {
+            engine.state.players[1].has_lost = true;
+            let mut events = Vec::new();
+            engine
+                .refresh_authored_branch_departure(&mut events)
+                .unwrap();
+            events
+        }
+
+        #[test]
+        fn controller_is_a_fallback_replacement_when_no_other_opponent_survives() {
+            let mut engine = GameEngine::new_with_default_decks(800_403, &[0, 1], 20).unwrap();
+            engine.state.players.push(PlayerState::new(2, 20));
+            engine.state.players[1].has_lost = true;
+            engine.state.players[2].has_lost = true;
+
+            assert_eq!(
+                resolution_choice_delegate_candidates(&engine.state, 0, 1),
+                [0],
+                "CR 800.4g falls back to another living player, including the object controller"
+            );
+        }
+
+        #[test]
+        fn replacement_chooser_cannot_select_a_costed_branch_or_pay_its_cost() {
+            let mut engine = engine_with_pending_choice(vec![
+                branch(
+                    "costed",
+                    ResolutionCost::Mana(tricerules_cards::ManaCost::parse("{1}").unwrap()),
+                    10,
+                ),
+                branch("free", ResolutionCost::None, 1),
+            ]);
+
+            let events = depart_original_chooser(&mut engine);
+            let choice = events
+                .iter()
+                .find_map(|event| match &event.ev {
+                    Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) => Some(choice),
+                    _ => None,
+                })
+                .expect("replacement chooser prompt");
+            assert_eq!(choice.deciding_player_id, 2);
+            assert_eq!(
+                choice
+                    .resolution_branches
+                    .iter()
+                    .map(|branch| branch.branch_index)
+                    .collect::<Vec<_>>(),
+                [1],
+                "a replacement chooser only receives cost-free branches"
+            );
+
+            let before = format!("{:?}", engine.state);
+            assert!(engine
+                .submit_resolution_choice(
+                    2,
+                    &rv1::SubmitResolutionChoice {
+                        decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                        selected_branch_index: 0,
+                        ..Default::default()
+                    },
+                )
+                .is_err());
+            assert_eq!(format!("{:?}", engine.state), before);
+
+            engine
+                .submit_resolution_choice(
+                    2,
+                    &rv1::SubmitResolutionChoice {
+                        decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                        selected_branch_index: 1,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            assert!(engine.state.pending_resolution.is_none());
+            assert_eq!(engine.state.players[0].life, 23);
+            assert_eq!(engine.state.players[2].life, 20);
+        }
+
+        #[test]
+        fn no_cost_free_branch_runs_the_authored_otherwise_and_tail() {
+            let mut engine = engine_with_pending_choice(vec![branch(
+                "costed",
+                ResolutionCost::Mana(tricerules_cards::ManaCost::parse("{1}").unwrap()),
+                10,
+            )]);
+
+            let events = depart_original_chooser(&mut engine);
+            assert!(
+                engine.state.pending_resolution.is_none(),
+                "there is no replacement-choice prompt when all branches require the departed player's payment"
+            );
+            assert!(events.iter().all(|event| !matches!(
+                event.ev,
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+            )));
+            assert_eq!(engine.state.players[0].life, 26);
+            assert_eq!(engine.state.players[2].life, 20);
+        }
+
+        fn select_pending_branch(engine: &mut GameEngine) {
+            engine
+                .submit_resolution_choice(
+                    1,
+                    &rv1::SubmitResolutionChoice {
+                        decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                        selected_branch_index: 0,
+                        ..Default::default()
+                    },
+                )
+                .expect("the live chooser selects the costed branch");
+        }
+
+        #[test]
+        fn departing_chooser_abandons_an_unpaid_mana_branch_and_resumes_otherwise_and_tail() {
+            let mut engine = engine_with_pending_choice(vec![branch(
+                "costed_mana",
+                ResolutionCost::Mana(tricerules_cards::ManaCost::parse("{1}").unwrap()),
+                10,
+            )]);
+            select_pending_branch(&mut engine);
+            assert!(matches!(
+                engine
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .unwrap()
+                    .continuation,
+                ResolutionContinuation::AuthoredBranch {
+                    branch: PendingResolutionBranch {
+                        stage: PendingResolutionBranchStage::PayingMana { .. },
+                        ..
+                    },
+                    ..
+                }
+            ));
+
+            let events = depart_original_chooser(&mut engine);
+
+            assert!(engine.state.pending_resolution.is_none());
+            assert!(events.iter().all(|event| !matches!(
+                event.ev,
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+            )));
+            assert_eq!(engine.state.players[0].life, 26);
+            assert_eq!(engine.state.players[2].life, 20);
+        }
+
+        #[test]
+        fn departing_chooser_abandons_an_unpaid_object_branch_and_resumes_otherwise_and_tail() {
+            let mut engine = engine_with_pending_choice(vec![branch(
+                "costed_discard",
+                ResolutionCost::DiscardCard { filter: None },
+                10,
+            )]);
+            let hand_before = engine.state.players[1].hand.clone();
+            select_pending_branch(&mut engine);
+            assert!(matches!(
+                engine
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .unwrap()
+                    .continuation,
+                ResolutionContinuation::AuthoredBranch {
+                    branch: PendingResolutionBranch {
+                        stage: PendingResolutionBranchStage::PayingObjects { .. },
+                        ..
+                    },
+                    ..
+                }
+            ));
+
+            let events = depart_original_chooser(&mut engine);
+
+            assert!(engine.state.pending_resolution.is_none());
+            assert!(events.iter().all(|event| !matches!(
+                event.ev,
+                Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+            )));
+            assert_eq!(engine.state.players[1].hand, hand_before);
+            assert_eq!(engine.state.players[0].life, 26);
+            assert_eq!(engine.state.players[2].life, 20);
+        }
+
+        #[test]
+        fn first_applicable_skips_a_costed_branch_for_an_already_departed_chooser() {
+            let mut engine = GameEngine::new_with_default_decks(800_402, &[0, 1], 20).unwrap();
+            engine.state.players.push(PlayerState::new(2, 20));
+            engine.state.opening = None;
+            engine.state.turn_step = TurnStep::Main1;
+            let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+            let mut item = quantity_item(
+                source,
+                vec![
+                    SpellEffectKind::ChooseResolutionBranch {
+                        chooser: PlayerRecipient::AffectedPlayer,
+                        optional: false,
+                        selection:
+                            tricerules_cards::primitives::ResolutionBranchSelection::FirstApplicable,
+                        branches: vec![branch(
+                            "costed",
+                            ResolutionCost::Mana(tricerules_cards::ManaCost::parse("{1}").unwrap()),
+                            10,
+                        )],
+                        otherwise: vec![SpellEffectKind::GainLife {
+                            amount: Amount::Fixed(4),
+                        }],
+                    },
+                    SpellEffectKind::GainLife {
+                        amount: Amount::Fixed(2),
+                    },
+                ],
+            );
+            item.trigger_context.affected_player = Some(1);
+            engine.state.players[1].has_lost = true;
+            let (effects, label) = engine.build_resolution_effects(&item);
+
+            engine
+                .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+                .unwrap();
+
+            assert!(engine.state.pending_resolution.is_none());
+            assert_eq!(engine.state.players[0].life, 26);
+            assert_eq!(engine.state.players[2].life, 20);
+        }
+    }
+
     fn payment_branch_fixture(
         cost: ResolutionCost,
     ) -> (GameEngine, Vec<ObjectId>, rv1::RuledEventBatch) {
@@ -6779,7 +7069,8 @@ mod attached_subject_tests {
         let delayed = quantity_item(
             chosen[0],
             vec![SpellEffectKind::CreateDelayedTrigger {
-                subject: EffectSubject::Source,
+                subject: Some(EffectSubject::Source),
+                affected_player: None,
                 ability: Box::new(ability),
             }],
         );

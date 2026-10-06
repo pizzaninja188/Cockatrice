@@ -1083,3 +1083,6 @@ mod deck_coverage_unnatural_growth;
 mod deck_coverage_chasm_skulker;
 #[path = "scenario/deck_coverage_metalwork_colossus.rs"]
 mod deck_coverage_metalwork_colossus;
+
+#[path = "scenario/deck_coverage_arcane_denial.rs"]
+mod deck_coverage_arcane_denial;

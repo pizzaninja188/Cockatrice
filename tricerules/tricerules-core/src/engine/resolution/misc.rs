@@ -387,54 +387,87 @@ pub(super) fn create_delayed_trigger(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
-    let SpellEffectKind::CreateDelayedTrigger { subject, ability } = effect else {
+    let SpellEffectKind::CreateDelayedTrigger {
+        subject,
+        affected_player,
+        ability,
+    } = effect
+    else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let exact_previous = matches!(subject, EffectSubject::PreviousEffectObject)
+    let affected_player = match affected_player {
+        Some(PlayerRecipient::PreviousTargetedSpellController) => {
+            let Some(player) = cx.previous_effect_result.targeted_spell_controller else {
+                // A missing typed capture must not silently bind the delayed ability to its
+                // controller. A resolving counter effect publishes this only for a legal target.
+                return Ok(EffectOutcome::Continue);
+            };
+            Some(player)
+        }
+        Some(_) => {
+            return Err(EngineError::Illegal(
+                "delayed trigger affected_player requires a single captured player",
+            ))
+        }
+        None => None,
+    };
+    let exact_previous = matches!(subject, Some(EffectSubject::PreviousEffectObject))
         .then(|| cx.previous_effect_result.produced_objects.first().copied())
         .flatten();
-    let watched_id = match &subject {
-        EffectSubject::Source
-        | EffectSubject::AttachedObject
-        | EffectSubject::TriggerObject
-        | EffectSubject::SearchedObject(_) => {
-            resolve_effect_subject(cx.engine, cx.top, cx.targets, &subject)
-        }
-        EffectSubject::PreviousEffectObject => exact_previous.map(|object| object.object_id),
-        EffectSubject::Chosen(target) => cx.targets.first().copied().filter(|object_id| {
-            target_filter_legal_at_resolution(
-                cx.engine,
-                target,
-                *object_id,
-                cx.controller,
-                TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
-                cx.top.trigger_context,
-            )
-        }),
-    };
-    let Some(watched_id) = watched_id else {
-        return Ok(EffectOutcome::Continue);
-    };
-    let watched = if let Some(previous) = exact_previous {
-        previous
-    } else {
-        let Some(watched_object) = cx.engine.state.objects.get(&watched_id) else {
+    let watched = if let Some(subject) = subject.as_ref() {
+        let watched_id = match subject {
+            EffectSubject::Source
+            | EffectSubject::AttachedObject
+            | EffectSubject::TriggerObject
+            | EffectSubject::SearchedObject(_) => {
+                resolve_effect_subject(cx.engine, cx.top, cx.targets, subject)
+            }
+            EffectSubject::PreviousEffectObject => exact_previous.map(|object| object.object_id),
+            EffectSubject::Chosen(target) => cx.targets.first().copied().filter(|object_id| {
+                target_filter_legal_at_resolution(
+                    cx.engine,
+                    target,
+                    *object_id,
+                    cx.controller,
+                    TargetSourceIdentity::for_stack_item(cx.engine, cx.top),
+                    cx.top.trigger_context,
+                )
+            }),
+        };
+        let Some(watched_id) = watched_id else {
             return Ok(EffectOutcome::Continue);
         };
-        if watched_object.zone != Zone::Battlefield {
-            return Ok(EffectOutcome::Continue);
-        }
-        TriggerObjectRef {
-            object_id: watched_id,
-            zone_change_generation: cx
-                .engine
-                .state
-                .zone_change_generation
-                .get(&watched_id)
-                .copied()
-                .unwrap_or(0),
-            controller_at_event: watched_object.controller,
-        }
+        let watched = if let Some(previous) = exact_previous {
+            previous
+        } else {
+            let Some(watched_object) = cx.engine.state.objects.get(&watched_id) else {
+                return Ok(EffectOutcome::Continue);
+            };
+            if watched_object.zone != Zone::Battlefield {
+                return Ok(EffectOutcome::Continue);
+            }
+            TriggerObjectRef {
+                object_id: watched_id,
+                zone_change_generation: cx
+                    .engine
+                    .state
+                    .zone_change_generation
+                    .get(&watched_id)
+                    .copied()
+                    .unwrap_or(0),
+                controller_at_event: watched_object.controller,
+            }
+        };
+        Some(watched)
+    } else if matches!(
+        ability.trigger,
+        TriggerCondition::AtBeginningOfNextTurnUpkeep
+    ) {
+        None
+    } else {
+        return Err(EngineError::Illegal(
+            "subjectless delayed trigger requires a temporal trigger condition",
+        ));
     };
     let card_name = cx.spell_label.to_owned();
     let matcher = match ability.trigger {
@@ -444,6 +477,12 @@ pub(super) fn create_delayed_trigger(
         TriggerCondition::AtBeginningOfControllerNextTurnEndStep => {
             EventObserverMatcher::AtBeginningOfControllerNextTurnEndStep {
                 controller: cx.controller,
+                created_turn_instance: cx.engine.state.turn_instance,
+                target_turn_instance: None,
+            }
+        }
+        TriggerCondition::AtBeginningOfNextTurnUpkeep => {
+            EventObserverMatcher::AtBeginningOfNextTurnUpkeep {
                 created_turn_instance: cx.engine.state.turn_instance,
                 target_turn_instance: None,
             }
@@ -496,6 +535,7 @@ pub(super) fn create_delayed_trigger(
                     controller_at_event: cx.controller,
                 },
                 controller: cx.controller,
+                affected_player,
                 card_id: cx.top.card_id.clone(),
                 card_name,
                 source_face_index: cx.top.face_index,

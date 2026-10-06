@@ -155,7 +155,7 @@ fn caster_complement_context_validation_descends_wrappers_and_modal_modes() {
         );
     }
     for effect in [
-        format!("CreateDelayedTrigger(subject:Source,ability:(ability_id:\"delayed\",presentation:Fallback,trigger:AtBeginningOfNextEndStep,effect:[{draw}]))"),
+        format!("CreateDelayedTrigger(subject:Some(Source),ability:(ability_id:\"delayed\",presentation:Fallback,trigger:AtBeginningOfNextEndStep,effect:[{draw}]))"),
         format!("CreateReflexiveTrigger(ability:(ability_id:\"reflexive\",presentation:Fallback,effect:[{draw}]))"),
     ] {
         let body=format!("triggered_abilities:[(ability_id:\"trigger\",presentation:Fallback,trigger:WheneverPlayerCastsSpell(caster:AnyPlayer),effect:[{effect}])] ");

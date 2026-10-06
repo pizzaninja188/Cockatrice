@@ -21,7 +21,7 @@
     effect: [
       Exile(subject: Chosen((kind: Creature, excluded_objects: [Source]))),
       CreateDelayedTrigger(
-        subject: PreviousEffectObject,
+        subject: Some(PreviousEffectObject),
         ability: (
           ability_id: "delayed_01",
           presentation: OracleLines([2]),

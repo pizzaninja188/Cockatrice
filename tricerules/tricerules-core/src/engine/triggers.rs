@@ -377,6 +377,14 @@ impl GameEngine {
                         turn_instance: self.state.turn_instance,
                     },
                 )),
+                GameEvent::PhaseBegan {
+                    phase: rv1::PhaseId::Upkeep,
+                    ..
+                } => delayed.extend(self.state.dispatch_event_observers(
+                    ObservedGameEvent::BeginningOfUpkeep {
+                        turn_instance: self.state.turn_instance,
+                    },
+                )),
                 GameEvent::Dies { source, .. } => {
                     delayed.extend(self.state.dispatch_event_observers(ObservedGameEvent::Dies(
                         TriggerObjectRef {
@@ -408,7 +416,8 @@ impl GameEngine {
                 presentation: delayed.presentation,
                 ability_text,
                 trigger_context: TriggerContext {
-                    observed_object: Some(watched),
+                    observed_object: watched,
+                    affected_player: delayed.affected_player,
                     ..TriggerContext::default()
                 },
                 ability: delayed.ability,

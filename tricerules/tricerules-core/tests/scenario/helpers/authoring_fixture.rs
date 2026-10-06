@@ -32,6 +32,7 @@ pub(crate) fn game(seed: u64, players: &[i32], card: &str, ability: Option<usize
         "explosive_apparatus",
     ];
     cards.extend(match card {
+        "arcane_denial" => Some("opt"),
         "annul" => Some("short_sword"),
         "flashfreeze" => Some("hill_giant"),
         "flusterstorm" => Some("divination"),

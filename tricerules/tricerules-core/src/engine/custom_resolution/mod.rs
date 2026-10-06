@@ -153,7 +153,8 @@ impl GameEngine {
             pending.continuation,
             ResolutionContinuation::AuthoredBranch {
                 branch: PendingResolutionBranch {
-                    stage: PendingResolutionBranchStage::Selecting,
+                    stage: PendingResolutionBranchStage::Selecting
+                        | PendingResolutionBranchStage::ChoosingDelegate { .. },
                     ..
                 },
                 ..

@@ -529,7 +529,7 @@ fn immediate_aura_fixture() -> (GameEngine, u32, u32, u32, u32, Vec<u32>) {
         .state
         .active_event_observers
         .push(ActiveEventObserver {
-            watched,
+            watched: Some(watched),
             matcher: EventObserverMatcher::WhenWatchedObjectLeavesBattlefield,
             payload: EventObserverPayload::ReturnExiledObject { exiled },
         });

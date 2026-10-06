@@ -172,6 +172,18 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
                     who: PlayerRecipient::Controller,
                     count: Amount::Fixed(count),
                 } => format!("Draw {count} cards."),
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::AffectedPlayer,
+                    count: Amount::Fixed(0),
+                } => "The affected player draws no cards.".into(),
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::AffectedPlayer,
+                    count: Amount::Fixed(1),
+                } => "The affected player draws a card.".into(),
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::AffectedPlayer,
+                    count: Amount::Fixed(count),
+                } => format!("The affected player draws {count} cards."),
                 SpellEffectKind::GainLife {
                     amount: Amount::Fixed(amount),
                 } => format!("You gain {amount} life."),
