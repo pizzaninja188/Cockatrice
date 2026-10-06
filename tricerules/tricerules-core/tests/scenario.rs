@@ -8,6 +8,9 @@
 #[path = "scenario/deck_coverage_devotion_gods.rs"]
 mod deck_coverage_devotion_gods;
 
+#[path = "scenario/deck_coverage_flux_abundance.rs"]
+mod deck_coverage_flux_abundance;
+
 #[path = "scenario/deck_coverage_graveyard_return.rs"]
 mod deck_coverage_graveyard_return;
 

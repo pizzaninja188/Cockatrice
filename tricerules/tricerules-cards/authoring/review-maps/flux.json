@@ -1,0 +1,34 @@
+{
+  "format_version": 1,
+  "spans": [
+    {
+      "face_id": "flux",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/spell_effect/0", "/faces/0/spell_effect/1"]
+    },
+    {
+      "face_id": "flux",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/spell_effect/2"]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_flux_abundance::flux_has_its_complete_oracle_effect_sequence",
+      "covers": "each player may discard any number, draws their own committed count, then the spell controller draws one"
+    },
+    {
+      "test": "scenario deck_coverage_flux_abundance::flux_uses_each_players_committed_discard_count",
+      "covers": "three-player resolution with different discard counts including zero"
+    },
+    {
+      "test": "scenario deck_coverage_flux_abundance::flux_draws_interact_with_abundance_one_draw_at_a_time",
+      "covers": "two separate Flux draws, Abundance replacement, revealed prefix, private bottom ordering, and normal draw after declining"
+    }
+  ],
+  "complete_definition_review_confirmed": true,
+  "oracle_id": "b8cff5f1-6871-49d2-89a7-24870308aadb"
+}

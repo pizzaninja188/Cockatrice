@@ -1,0 +1,18 @@
+// Exact Oracle b8cff5f1-6871-49d2-89a7-24870308aadb; source/rulings checked 2026-10-06.
+(
+  id: "flux",
+  name: "Flux",
+  face_id: "flux",
+  mana_cost: "{2}{U}",
+  types: ["Sorcery"],
+  spell_effect: [
+    Discard(who: EachPlayer, quantity: AnyNumber),
+    Draw(who: EachPlayer, count: Count(CardsMatchingResultForAffectedPlayer(filter: (
+      source: PreviousEffect,
+      action: Discard,
+      players: All,
+      card_type: None,
+    )))),
+    Draw(who: Controller, count: 1),
+  ],
+)
