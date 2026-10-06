@@ -553,6 +553,7 @@ impl GameEngine {
                 | StaticAbilityDef::DoubleControllerDraws { .. }
                 | StaticAbilityDef::DoubleControllerLifeGain
                 | StaticAbilityDef::WinControllerInsteadOfEmptyLibraryDraw
+                | StaticAbilityDef::ReplaceControllerDrawWithLibraryChoice { .. }
                 | StaticAbilityDef::NoMaximumHandSize { .. }
                 | StaticAbilityDef::MaximumHandSizeTwenty
                 | StaticAbilityDef::SpellCannotBeCountered

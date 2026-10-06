@@ -277,21 +277,23 @@ pub(super) fn draw(
     let spell_label = cx.spell_label;
 
     // Blue Sun's Zenith / Braingeyser: `count` may be the cast-time X.
-    let count = engine.resolve_amount(
-        &count,
-        AmountContext::for_stack_item(top, cx.controller)
-            .with_previous_effect_result(cx.previous_effect_result),
-    );
+    let requests = drawers
+        .into_iter()
+        .map(|drawer| {
+            let value = engine.resolve_amount(
+                &count,
+                AmountContext::for_stack_item(top, cx.controller)
+                    .with_affected_player(drawer)
+                    .with_previous_effect_result(cx.previous_effect_result),
+            );
+            (drawer, value)
+        })
+        .collect();
     let completion = super::super::draw::DrawCompletion::ResumeEffects {
         stack: ParkedStackResolution::new(top.clone()),
         result: cx.effect_result.clone(),
     };
-    match engine.start_draw_transaction(
-        drawers.into_iter().map(|drawer| (drawer, count)).collect(),
-        completion,
-        spell_label,
-        events,
-    )? {
+    match engine.start_draw_transaction(requests, completion, spell_label, events)? {
         super::super::draw::DrawProgress::Complete(done) => {
             cx.effect_result.produced_objects.extend(done.receipts);
             Ok(EffectOutcome::Continue)
@@ -315,6 +317,7 @@ pub(super) fn target_player_draws(
         let count = cx.engine.resolve_amount(
             &count,
             AmountContext::for_stack_item(cx.top, cx.controller)
+                .with_affected_player(player)
                 .with_previous_effect_result(cx.previous_effect_result),
         );
         let completion = super::super::draw::DrawCompletion::ResumeEffects {
@@ -401,10 +404,12 @@ pub(super) fn discard(
         let hand = cx.engine.state.players[player_index].hand.clone();
         let required = match &quantity {
             tricerules_cards::primitives::DiscardQuantity::Exact(count)
+            | tricerules_cards::primitives::DiscardQuantity::UpTo(count)
             | tricerules_cards::primitives::DiscardQuantity::UnlessOne { count, .. } => {
                 (*count).min(hand.len() as u32)
             }
-            tricerules_cards::primitives::DiscardQuantity::All => hand.len() as u32,
+            tricerules_cards::primitives::DiscardQuantity::All
+            | tricerules_cards::primitives::DiscardQuantity::AnyNumber => hand.len() as u32,
         };
         if required == 0 {
             cx.events.push(ev_log(format!(
@@ -452,6 +457,11 @@ pub(super) fn discard(
                 })
                 .collect(),
             required,
+            variable: matches!(
+                quantity,
+                tricerules_cards::primitives::DiscardQuantity::UpTo(_)
+                    | tricerules_cards::primitives::DiscardQuantity::AnyNumber
+            ),
             alternative_filter,
             alternative_candidates,
         });
@@ -537,7 +547,12 @@ pub(in crate::engine) fn park_player_set_discard_choice(
             });
         }
     }
-    let prompt = if choice.minimum() < choice.required {
+    let prompt = if choice.variable {
+        format!(
+            "P{}: choose zero to {} cards to discard.",
+            choice.player, choice.required
+        )
+    } else if choice.minimum() < choice.required {
         let matching = match choice
             .alternative_filter
             .as_ref()

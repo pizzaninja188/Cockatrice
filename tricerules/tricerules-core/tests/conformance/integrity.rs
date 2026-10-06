@@ -373,7 +373,6 @@ fn exercise_face_in_fresh_game(card_id: &str, face_index: u32) -> bool {
 }
 
 pub(super) fn observed_completed_cases() -> std::collections::BTreeSet<String> {
-    let mut completed = std::collections::BTreeSet::new();
     let registry = CardRegistry::global();
     // Deterministic order so a failure is reproducible.
     let mut card_ids: Vec<&str> = registry
@@ -383,7 +382,9 @@ pub(super) fn observed_completed_cases() -> std::collections::BTreeSet<String> {
         .collect();
     card_ids.sort_unstable();
 
-    for card_id in card_ids {
+    super::ordered_map(&card_ids, super::coverage_workers(), |card_id| {
+        let card_id = *card_id;
+        let mut completed = std::collections::BTreeSet::new();
         let def = registry.get(card_id).expect("definition");
 
         // P0 deck: 20 copies of the card under test padded with basics for castability targets;
@@ -428,7 +429,7 @@ pub(super) fn observed_completed_cases() -> std::collections::BTreeSet<String> {
                 completed.insert(format!("{card_id}\t0\t{}", super::play_kind(card_id, 0)));
             }
             assert_zone_integrity(&e, baseline, &format!("{card_id} (land)"));
-            continue;
+            return completed;
         }
 
         // Spell: try the empty target set, then each candidate, taking the first the engine
@@ -493,6 +494,9 @@ pub(super) fn observed_completed_cases() -> std::collections::BTreeSet<String> {
             }
             assert_zone_integrity(&ae, base, &format!("{card_id} (ability)"));
         }
-    }
-    completed
+        completed
+    })
+    .into_iter()
+    .flatten()
+    .collect()
 }

@@ -114,6 +114,7 @@ pub(super) fn active_reveals(eng: &GameEngine) -> Vec<rv1::CardsRevealed> {
         return Vec::new();
     }
     let mut reveals = Vec::new();
+    reveals.extend(eng.draw_action_reveal());
     if let Some(super::replacement::PendingReplacementEvent::BattlefieldEntry(entry)) =
         &eng.state.pending_replacement_event
     {

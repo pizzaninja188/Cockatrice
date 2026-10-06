@@ -230,6 +230,14 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
                     who: PlayerRecipient::Controller,
                     quantity: super::DiscardQuantity::All,
                 } => "Discard your hand.".into(),
+                SpellEffectKind::Discard {
+                    who: PlayerRecipient::Controller,
+                    quantity: super::DiscardQuantity::UpTo(count),
+                } => format!("Discard up to {count} cards."),
+                SpellEffectKind::Discard {
+                    who: PlayerRecipient::Controller,
+                    quantity: super::DiscardQuantity::AnyNumber,
+                } => "Discard any number of cards.".into(),
                 SpellEffectKind::Blight { count } => format!("Blight {count}."),
                 SpellEffectKind::ReturnAllToOwnersHand { kind } => {
                     let color = kind.is_color?;

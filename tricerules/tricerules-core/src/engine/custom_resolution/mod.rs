@@ -226,6 +226,22 @@ impl GameEngine {
                 "object resolution choice must leave decision unspecified",
             ));
         }
+        if matches!(
+            pending.continuation,
+            ResolutionContinuation::PlayerSetDiscard { .. }
+        ) && (!answer.chosen_player_ids.is_empty()
+            || answer.selected_branch_index != 0
+            || answer.cast_spell.is_some()
+            || answer.chosen_combat_defender.is_some()
+            || answer.payment.is_some()
+            || !answer.restricted_mana.is_empty()
+            || answer.spell_cast_announcement.is_some())
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "discard choice contains unrelated answer fields",
+            ));
+        }
         let chosen = answer.chosen_object_ids.as_slice();
         let n = chosen.len() as u32;
         if n < pending.presentation.min || n > pending.presentation.max {

@@ -2602,6 +2602,7 @@ impl GameEngine {
                         let count = self.resolve_amount(
                             amount,
                             AmountContext {
+                                affected_player: None,
                                 entry_cast_cost_receipts: &event.cast_cost_receipts,
                                 entry_cast_cost_origin: origin.as_ref(),
                                 entry_mana_colors_spent: event.mana_colors_spent_to_cast,
@@ -2664,6 +2665,7 @@ impl GameEngine {
                         let count = self.resolve_amount(
                             amount,
                             AmountContext {
+                                affected_player: None,
                                 entry_cast_cost_receipts: &[],
                                 entry_cast_cost_origin: None,
                                 entry_mana_colors_spent: Default::default(),

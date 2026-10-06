@@ -1959,6 +1959,14 @@ pub enum DrawReplacementCondition {
     ExceptFirstSuccessfulDrawInOwnDrawStep,
 }
 
+/// Bounded library actions replacing a draw. These are distinct from draw instructions:
+/// Abundance reveals until the selected kind; Tomorrow privately selects from its top three.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LibraryDrawReplacement {
+    RevealUntilLandOrNonland,
+    LookAtTopThree,
+}
+
 /// One static ability on a permanent (CR 604). Most entries generate a continuous effect while
 /// its source is on the battlefield. An ability that modifies how its own object enters is the
 /// CR 113.6h/614.12 exception and is inspected during the proposed entry event. Static abilities
@@ -1969,18 +1977,27 @@ pub enum StaticAbilityDef {
     /// individual incoming life-gain events with twice that amount (CR 119 / 614.5).
     DoubleControllerLifeGain,
     /// Thought Reflection and Teferi's Ageless Insight replace individual draw events.
-    DoubleControllerDraws { condition: DrawReplacementCondition },
+    DoubleControllerDraws {
+        condition: DrawReplacementCondition,
+    },
     /// Laboratory Maniac and Jace, Wielder of Mysteries replace an empty-library draw.
     WinControllerInsteadOfEmptyLibraryDraw,
+    ReplaceControllerDrawWithLibraryChoice {
+        kind: LibraryDrawReplacement,
+    },
     /// CR 722.3: Infirmary Healer and Elite Interceptor enter with a prepared designation.
     EntersPrepared,
     /// Hand-active replacement and exile trigger, used by Fiery Temper and Arrogant Wurm.
-    Madness { cost: super::super::ManaCost },
+    Madness {
+        cost: super::super::ManaCost,
+    },
     /// Library of Leng: optional replacement for effect-caused discards only.
     DiscardToLibrary,
     /// Spellbook, Decanter of Endless Water, Thought Vessel, Reliquary Tower, and Library of
     /// Leng use the controller scope; Anvil of Bogardan and Folio of Fancies use all players.
-    NoMaximumHandSize { players: NoMaximumHandSizeScope },
+    NoMaximumHandSize {
+        players: NoMaximumHandSizeScope,
+    },
     /// Twenty-Toed Toad fixes its controller's maximum hand size at twenty (CR 613.11).
     MaximumHandSizeTwenty,
 
@@ -2015,11 +2032,15 @@ pub enum StaticAbilityDef {
     DoubleEffectCountersPlacedOnPermanentsYouControl,
     /// CR 106.12: modify mana from a permanent tapped to activate a mana ability. The multiplier
     /// covers Mana Reflection and Nyxbloom Ancient's corresponding two- and three-fold effects.
-    MultiplyManaFromTappedPermanents { multiplier: u32 },
+    MultiplyManaFromTappedPermanents {
+        multiplier: u32,
+    },
     /// CR 119.7 / 614.17: selected players cannot gain life while this ability is active.
     /// Giant Cindermaw and Rampaging Ferocidon affect all players. This is a prohibition,
     /// not damage prevention or a replacement effect, and is queried at each attempted gain.
-    ProhibitLifeGain { players: RelativePlayerSet },
+    ProhibitLifeGain {
+        players: RelativePlayerSet,
+    },
     /// CR 614.12 / 707.5: as this permanent enters, its controller may replace its copiable
     /// values with those of a live battlefield permanent matching `filter`. This is a selection,
     /// not a target; Clone and Stunt Double therefore ignore hexproof and shroud.
@@ -2034,9 +2055,13 @@ pub enum StaticAbilityDef {
     /// CR 614.12 / 305.6-305.7: choose one basic land type as this land enters, then offer the
     /// linked optional cost. The type choice and cost are one replacement-effect application;
     /// no unrelated replacement effect may be interposed between them.
-    EntersWithChosenBasicLandType { untapped_cost: EntryCost },
+    EntersWithChosenBasicLandType {
+        untapped_cost: EntryCost,
+    },
     /// CR 614.12 / 607.2d: Black Vise and The Rack choose before committing entry.
-    AsEntersChooseOpponent { link_id: AbilityLinkId },
+    AsEntersChooseOpponent {
+        link_id: AbilityLinkId,
+    },
     /// CR 614.1d: modify a proposed battlefield-entry event rather than tapping the permanent
     /// after it enters. Intrinsic examples include Diregraf Ghoul and the gainland cycle;
     /// `Permanents` is the global Orb of Dreams form.
@@ -2226,7 +2251,9 @@ pub enum StaticAbilityDef {
     /// CR 502.3: exclude this permanent from the ordinary untap-step action while `condition`
     /// is false. Bombur, Gentle Dreamer and Deep-Slumber Titan exercise conditional exceptions
     /// to the same turn-based untap restriction.
-    SelfDoesntUntapDuringUntapStepUnless { condition: GameCondition },
+    SelfDoesntUntapDuringUntapStepUnless {
+        condition: GameCondition,
+    },
     /// CR 613.1b: the controller of this Aura controls the permanent it is attached to.
     /// Mind Control and Confiscate share this source-relative layer-2 ability.
     ControlsAttached,
@@ -2331,7 +2358,9 @@ pub enum StaticAbilityDef {
     },
     /// CR 305.2b / layer 5: controller may play `count` additional lands per turn while this
     /// permanent is on the battlefield. Exploration, Oracle of Mul Daya.
-    ExtraLandPlays { count: u32 },
+    ExtraLandPlays {
+        count: u32,
+    },
     /// CR 305.1 / 611.3: the controller may play lands from their own graveyard while this
     /// permanent is on the battlefield. Icetill Explorer, Crucible of Worlds.
     PlayLandsFromOwnGraveyard,

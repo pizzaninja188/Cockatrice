@@ -772,7 +772,7 @@ fn failed_replacement_leaves_count_only_success_and_finish_discard_and_authored_
 }
 
 #[test]
-fn caster_departure_cancels_foreign_drawer_fanout_without_replaying_prior_draws() {
+fn caster_departure_finishes_foreign_drawer_fanout_without_replaying_prior_draws() {
     let mut engine = setup(506_018);
     let jace = inject_permanent_on_battlefield(&mut engine, 0, "jace_beleren");
     inject_permanent_on_battlefield(&mut engine, 1, "thought_reflection");
@@ -786,22 +786,79 @@ fn caster_departure_cancels_foreign_drawer_fanout_without_replaying_prior_draws(
         .iter()
         .map(|player| player.hand.len())
         .collect::<Vec<_>>();
+    let libraries = engine
+        .state
+        .players
+        .iter()
+        .map(|player| player.library.iter().copied().collect::<Vec<_>>())
+        .collect::<Vec<_>>();
+    let prior_draws = [4, 9, 27].map(|id| engine.state.turn_history.current.player(id).cards_drawn);
     let choice = resolve_until_choice(&mut engine);
     assert_eq!(choice.deciding_player_id, 9);
     assert_eq!(engine.state.players[0].hand.len(), before[0] + 1);
-    engine.apply_command(4, &concede()).unwrap();
-    assert!(engine.state.pending_resolution.is_none());
+    let departure = engine.apply_command(4, &concede()).unwrap();
+    // CR 608.2m/800.4j: a legally started instruction finishes for surviving players.
+    assert!(engine.state.pending_resolution.is_some());
     assert!(engine.state.stack.is_empty());
     assert_eq!(engine.state.players[1].hand.len(), before[1]);
     assert_eq!(engine.state.players[2].hand.len(), before[2]);
     let snapshot = engine.diagnostic_snapshot().unwrap();
     assert!(engine
         .apply_command(
-            9,
+            27,
             &submit_resolution_choice(vec![choice.candidate_object_ids[0]])
         )
         .is_err());
     assert_eq!(engine.diagnostic_snapshot().unwrap(), snapshot);
+    assert!(
+        engine
+            .apply_command(
+                9,
+                &submit_resolution_choice(vec![choice.candidate_object_ids[0]])
+            )
+            .is_err(),
+        "the pre-concession option revision is stale"
+    );
+    assert_eq!(engine.diagnostic_snapshot().unwrap(), snapshot);
+    let resumed = find_resolution_choice(&departure)
+        .expect("republish the surviving drawer's replacement options")
+        .clone();
+    assert_eq!(resumed.deciding_player_id, 9);
+    assert!(answer_replacements(&mut engine, resumed.clone(), "Thought Reflection").is_none());
+    assert!(engine.state.pending_resolution.is_none());
+    assert!(engine.state.stack.is_empty());
+    assert!(
+        !engine.state.objects.contains_key(&jace),
+        "completion cannot resurrect the departed source"
+    );
+    assert_eq!(
+        &engine.state.players[1].hand[before[1]..],
+        &libraries[1][..4]
+    );
+    assert_eq!(
+        &engine.state.players[2].hand[before[2]..],
+        &libraries[2][..1]
+    );
+    assert_eq!(
+        engine.state.turn_history.current.player(4).cards_drawn,
+        prior_draws[0] + 1
+    );
+    assert_eq!(
+        engine.state.turn_history.current.player(9).cards_drawn,
+        prior_draws[1] + 4
+    );
+    assert_eq!(
+        engine.state.turn_history.current.player(27).cards_drawn,
+        prior_draws[2] + 1
+    );
+    let complete = engine.diagnostic_snapshot().unwrap();
+    assert!(engine
+        .apply_command(
+            9,
+            &submit_resolution_choice(vec![resumed.candidate_object_ids[0]])
+        )
+        .is_err());
+    assert_eq!(engine.diagnostic_snapshot().unwrap(), complete);
 }
 
 #[test]

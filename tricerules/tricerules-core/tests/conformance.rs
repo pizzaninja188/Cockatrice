@@ -7,12 +7,121 @@ mod integrity;
 use helpers::authoring_actions as offers;
 use ruled_command::Cmd;
 use ruled_event::Ev;
+use std::sync::{Mutex, OnceLock};
 use tricerules_cards::CardRegistry;
 use tricerules_core::GameEngine;
 use tricerules_proto::ruled::v1::*;
 
 const SEED: u64 = 221;
 const COMMAND_BUDGET: usize = 256;
+
+// Internal parallelism is opt-in so ordinary libtest concurrency keeps its existing CPU budget.
+// Set TRICERULES_CONFORMANCE_WORKERS=N with --test-threads=1 for a bounded coverage run.
+static COVERAGE_SWEEP: Mutex<()> = Mutex::new(());
+static STRICT_RESULTS: OnceLock<Vec<(Case, Result<Outcome, String>)>> = OnceLock::new();
+
+fn coverage_workers() -> usize {
+    std::env::var("TRICERULES_CONFORMANCE_WORKERS")
+        .ok()
+        .map(|value| {
+            value
+                .parse::<usize>()
+                .expect("invalid conformance worker count")
+        })
+        .unwrap_or(1)
+        .clamp(1, 64)
+}
+
+fn ordered_map<T: Sync, R: Send>(
+    items: &[T],
+    workers: usize,
+    f: impl Fn(&T) -> R + Sync,
+) -> Vec<R> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let next = AtomicUsize::new(0);
+    let mut results = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..workers.max(1).min(items.len()))
+            .map(|_| {
+                let next = &next;
+                let f = &f;
+                scope.spawn(move || {
+                    let mut rows = Vec::new();
+                    loop {
+                        let index = next.fetch_add(1, Ordering::Relaxed);
+                        let Some(item) = items.get(index) else { break };
+                        rows.push((index, f(item)));
+                    }
+                    rows
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|handle| handle.join().expect("coverage worker panicked"))
+            .collect::<Vec<_>>()
+    });
+    results.sort_by_key(|(index, _)| *index);
+    assert_eq!(results.len(), items.len(), "missing coverage rows");
+    assert!(
+        results
+            .iter()
+            .enumerate()
+            .all(|(index, row)| index == row.0),
+        "duplicate coverage rows"
+    );
+    results.into_iter().map(|(_, result)| result).collect()
+}
+
+fn strict_results() -> &'static [(Case, Result<Outcome, String>)] {
+    STRICT_RESULTS.get_or_init(|| {
+        let _guard = COVERAGE_SWEEP.lock().expect("coverage sweep panicked");
+        ordered_map(&cases(), coverage_workers(), |case| {
+            (case.clone(), evaluate(case))
+        })
+    })
+}
+
+#[test]
+fn coverage_scheduler_preserves_order_errors_and_short_batches() {
+    for length in [0, 1, 3, 11] {
+        let items: Vec<_> = (0..length).collect();
+        let evaluate = |value: &usize| {
+            if value.is_multiple_of(3) {
+                Err(*value)
+            } else {
+                Ok(*value)
+            }
+        };
+        assert_eq!(
+            ordered_map(&items, 1, evaluate),
+            ordered_map(&items, 4, evaluate)
+        );
+    }
+}
+
+#[test]
+fn coverage_scheduler_preserves_real_fixture_outcomes() {
+    let selected: Vec<_> = cases()
+        .into_iter()
+        .filter(|case| {
+            matches!(
+                case.card.as_str(),
+                "brainstorm" | "decimate" | "forest" | "boseiju,_who_endures"
+            )
+        })
+        .collect();
+    assert!(!selected.is_empty());
+    assert_eq!(
+        ordered_map(&selected, 1, evaluate),
+        ordered_map(&selected, 4, evaluate)
+    );
+}
+
+#[test]
+#[should_panic(expected = "coverage worker panicked")]
+fn coverage_scheduler_does_not_swallow_worker_panics() {
+    ordered_map(&[0], 4, |_| panic!("fixture failure"));
+}
 
 #[derive(Clone, Debug)]
 struct Case {
@@ -461,8 +570,9 @@ fn primevals_glorious_rebirth_has_a_qualified_nonempty_return_fixture() {
 #[test]
 fn registry_execution_matches_reviewed_baseline() {
     let mut rows = vec![];
-    for case in cases() {
-        let outcome = evaluate(&case)
+    for (case, result) in strict_results() {
+        let outcome = result
+            .as_ref()
             .unwrap_or_else(|err| panic!("{err}"))
             .label();
         rows.push(format!("{}\t{outcome}", case.key()));
@@ -706,8 +816,9 @@ fn shared_fixture_families_complete() {
 #[test]
 #[ignore = "prints candidate coverage for manual review; never writes the baseline"]
 fn report_registry_execution() {
-    for case in cases() {
-        let outcome = evaluate(&case)
+    for (case, result) in strict_results() {
+        let outcome = result
+            .as_ref()
             .unwrap_or_else(|err| panic!("{err}"))
             .label();
         println!("COVERAGE\t{}\t{outcome}", case.key());
@@ -716,14 +827,19 @@ fn report_registry_execution() {
 
 #[test]
 fn preserves_completed_legacy_cases_and_zone_integrity() {
-    let completed = integrity::observed_completed_cases();
+    let completed = {
+        let _guard = COVERAGE_SWEEP.lock().expect("coverage sweep panicked");
+        integrity::observed_completed_cases()
+    };
     let mut regressions = vec![];
-    for case in cases()
-        .into_iter()
-        .filter(|case| completed.contains(&case.key()))
+    for (case, result) in strict_results()
+        .iter()
+        .filter(|(case, _)| completed.contains(&case.key()))
     {
-        if let Err(reason) = exercise(&case) {
-            regressions.push(format!("{}: {reason}", case.key()));
+        match result {
+            Ok(Outcome::Exercised) => {}
+            Ok(other) => regressions.push(format!("{}: {}", case.key(), other.label())),
+            Err(reason) => regressions.push(format!("{}: {reason}", case.key())),
         }
     }
     assert!(

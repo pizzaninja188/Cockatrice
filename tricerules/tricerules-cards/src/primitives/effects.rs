@@ -571,6 +571,10 @@ pub enum HandChoiceVisibility {
 /// Untargeted discard quantity, shared by Stoke Genius and Dangerous Wager.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DiscardQuantity {
+    /// Tersa Lightshatter: choose zero through this maximum, clamped to the current hand.
+    UpTo(u32),
+    /// Flux / Steal the Show: every cardinality, including zero, is a legal choice.
+    AnyNumber,
     Exact(u32),
     All,
     /// Winternight Stories (creature) and Thirst for Knowledge (artifact), CR 118.12a.
@@ -2562,6 +2566,77 @@ fn artifact_exchange_graveyard_filter() -> &'static GraveyardFilter {
 }
 
 impl SpellEffectKind {
+    /// Inspect a conditional consumer without changing its outer result context.
+    pub(crate) fn result_consuming_amount(&self) -> Option<&Amount> {
+        match self {
+            SpellEffectKind::DamageTarget { amount, .. }
+            | SpellEffectKind::DamageAll { amount, .. }
+            | SpellEffectKind::Scry { count: amount }
+            | SpellEffectKind::Earthbend { count: amount }
+            | SpellEffectKind::CounterTargetSpell {
+                unless_controller_pays: Some(amount),
+                ..
+            }
+            | SpellEffectKind::DamagePlayer { amount, .. }
+            | SpellEffectKind::Draw { count: amount, .. }
+            | SpellEffectKind::TargetPlayerDraws { count: amount, .. }
+            | SpellEffectKind::GainLife { amount }
+            | SpellEffectKind::TargetPlayerGainsLife { amount, .. }
+            | SpellEffectKind::Mill { count: amount, .. }
+            | SpellEffectKind::PutCounters { count: amount, .. }
+            | SpellEffectKind::PutCountersAllPlaneswalkers { count: amount, .. }
+            | SpellEffectKind::Amass { count: amount, .. }
+            | SpellEffectKind::CreateTokens { count: amount, .. }
+            | SpellEffectKind::CreateTokenCopies { count: amount, .. }
+            | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),
+            SpellEffectKind::PumpTarget {
+                scale: Some(scale), ..
+            } => scale.amount(),
+            SpellEffectKind::Conditional { effect, .. }
+            | SpellEffectKind::ConditionalCastCost { effect, .. } => {
+                effect.result_consuming_amount()
+            }
+            _ => None,
+        }
+    }
+
+    /// Registry admission and runtime dispatch share this bounded conditional vocabulary.
+    pub fn supports_conditional_instruction(&self) -> bool {
+        matches!(
+            self,
+            SpellEffectKind::Destroy { .. }
+                | SpellEffectKind::DestroyPreventingRegeneration { .. }
+                | SpellEffectKind::GrantKeywords { .. }
+                | SpellEffectKind::ChoosePermanents { .. }
+                | SpellEffectKind::Draw { .. }
+                | SpellEffectKind::Discard { .. }
+                | SpellEffectKind::LookChooseToHand { .. }
+                | SpellEffectKind::CreateTokens { .. }
+                | SpellEffectKind::Scry { .. }
+                | SpellEffectKind::LibraryPartition {
+                    kind: LibraryPartitionKind::Surveil,
+                    ..
+                }
+                | SpellEffectKind::Untap { .. }
+                | SpellEffectKind::UntapAll { .. }
+                | SpellEffectKind::RemoveAllAbilities { .. }
+                | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
+        )
+    }
+
+    /// Cast-receipt conditionals retain their separately bounded instruction vocabulary.
+    pub fn supports_cast_cost_conditional_instruction(&self) -> bool {
+        matches!(
+            self,
+            SpellEffectKind::PumpTarget { .. }
+                | SpellEffectKind::GainLife { .. }
+                | SpellEffectKind::Destroy { .. }
+                | SpellEffectKind::DestroyPreventingRegeneration { .. }
+                | SpellEffectKind::DamageTarget { .. }
+                | SpellEffectKind::GrantKeywords { .. }
+        )
+    }
+
     pub(crate) fn targeted_mass_scope(&self) -> Option<(u32, TargetKind)> {
         match self {
             Self::DamageAll {
@@ -3315,6 +3390,11 @@ impl SpellEffectKind {
         }
 
         fn produces_card_result(effect: &SpellEffectKind, action: CardResultAction) -> bool {
+            if let SpellEffectKind::Conditional { effect, .. }
+            | SpellEffectKind::ConditionalCastCost { effect, .. } = effect
+            {
+                return produces_card_result(effect, action);
+            }
             match action {
                 CardResultAction::Discard => matches!(
                     effect,
@@ -3410,32 +3490,7 @@ impl SpellEffectKind {
                     return Err(format!("duplicate search result id '{}'", result_id));
                 }
             }
-            let amount = match effect {
-                SpellEffectKind::DamageTarget { amount, .. }
-                | SpellEffectKind::DamageAll { amount, .. }
-                | SpellEffectKind::Scry { count: amount }
-                | SpellEffectKind::Earthbend { count: amount }
-                | SpellEffectKind::CounterTargetSpell {
-                    unless_controller_pays: Some(amount),
-                    ..
-                }
-                | SpellEffectKind::DamagePlayer { amount, .. }
-                | SpellEffectKind::Draw { count: amount, .. }
-                | SpellEffectKind::TargetPlayerDraws { count: amount, .. }
-                | SpellEffectKind::GainLife { amount }
-                | SpellEffectKind::TargetPlayerGainsLife { amount, .. }
-                | SpellEffectKind::Mill { count: amount, .. }
-                | SpellEffectKind::PutCounters { count: amount, .. }
-                | SpellEffectKind::PutCountersAllPlaneswalkers { count: amount, .. }
-                | SpellEffectKind::Amass { count: amount, .. }
-                | SpellEffectKind::CreateTokens { count: amount, .. }
-                | SpellEffectKind::CreateTokenCopies { count: amount, .. }
-                | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),
-                SpellEffectKind::PumpTarget {
-                    scale: Some(scale), ..
-                } => scale.amount(),
-                _ => None,
-            };
+            let amount = effect.result_consuming_amount();
             let previous = index
                 .checked_sub(1)
                 .and_then(|previous| effects.get(previous));
@@ -3979,26 +4034,9 @@ impl SpellEffectKind {
                 if matches!(effect.as_ref(), SpellEffectKind::Conditional { .. }) {
                     return Err("Conditional effects cannot be nested".into());
                 }
-                if !matches!(
-                    effect.as_ref(),
-                    SpellEffectKind::Destroy { .. }
-                        | SpellEffectKind::DestroyPreventingRegeneration { .. }
-                        | SpellEffectKind::GrantKeywords { .. }
-                        | SpellEffectKind::ChoosePermanents { .. }
-                        | SpellEffectKind::Draw { .. }
-                        | SpellEffectKind::CreateTokens { .. }
-                        | SpellEffectKind::Scry { .. }
-                        | SpellEffectKind::LibraryPartition {
-                            kind: LibraryPartitionKind::Surveil,
-                            ..
-                        }
-                        | SpellEffectKind::Untap { .. }
-                        | SpellEffectKind::UntapAll { .. }
-                        | SpellEffectKind::RemoveAllAbilities { .. }
-                        | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
-                ) {
+                if !effect.supports_conditional_instruction() {
                     return Err(
-                        "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, Draw, CreateTokens, Scry, Surveil, Untap, UntapAll, and RemoveAllAbilities effects"
+                        "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, Draw, Discard, LookChooseToHand, CreateTokens, Scry, Surveil, Untap, UntapAll, and RemoveAllAbilities effects"
                             .into(),
                     );
                 }
@@ -4008,15 +4046,7 @@ impl SpellEffectKind {
                 if matches!(effect.as_ref(), SpellEffectKind::ConditionalCastCost { .. }) {
                     return Err("ConditionalCastCost effects cannot be nested".into());
                 }
-                if !matches!(
-                    effect.as_ref(),
-                    SpellEffectKind::PumpTarget { .. }
-                        | SpellEffectKind::GainLife { .. }
-                        | SpellEffectKind::Destroy { .. }
-                        | SpellEffectKind::DestroyPreventingRegeneration { .. }
-                        | SpellEffectKind::DamageTarget { .. }
-                        | SpellEffectKind::GrantKeywords { .. }
-                ) {
+                if !effect.supports_cast_cost_conditional_instruction() {
                     return Err(
                         "ConditionalCastCost currently supports PumpTarget, GainLife, Destroy, DamageTarget, and GrantKeywords effects".into(),
                     );
@@ -4044,7 +4074,11 @@ impl SpellEffectKind {
             | SpellEffectKind::CreateTokens { count: amount, .. }
             | SpellEffectKind::CreateTokenCopies { count: amount, .. }
             | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => {
-                amount.validate_effect(context)?
+                if matches!(self, Self::Draw { .. } | Self::TargetPlayerDraws { .. }) {
+                    amount.validate_player_effect(context)?;
+                } else {
+                    amount.validate_effect(context)?;
+                }
             }
             SpellEffectKind::PumpTarget {
                 scale: Some(scale), ..

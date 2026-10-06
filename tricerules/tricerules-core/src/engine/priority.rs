@@ -123,6 +123,13 @@ impl GameEngine {
         let mut preserve = false;
         if let Some(pending) = self.state.pending_resolution.as_mut() {
             match &mut pending.continuation {
+                ResolutionContinuation::DrawReplacement { .. } => {
+                    // CR 608.2m: this instruction has already begun resolving. Its frozen
+                    // parent survives the physical spell/controller leaving; surviving draws
+                    // and the remaining instructions still finish. Draw reconciliation retires
+                    // requests for departed drawers without resurrecting the departed source.
+                    preserve = true;
+                }
                 ResolutionContinuation::MassSacrificeGraveyardOrder { stack, .. }
                 | ResolutionContinuation::AuraReturn { stack, .. } => {
                     *stack = None;

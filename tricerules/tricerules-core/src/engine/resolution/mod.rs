@@ -1,6 +1,6 @@
 //! Stack resolution orchestration and exhaustive primitive dispatch.
 //!
-//! Adding a primitive requires one exhaustive `SpellEffectKind` arm below and one implementation
+//! Adding a primitive requires one exhaustive `SpellEffectKind` arm in `dispatch` and one implementation
 //! in the best-fit domain module. Dispatch arms contain delegation only, so variant coverage stays
 //! compiler-checked while resolution logic remains grouped by domain.
 
@@ -22,7 +22,8 @@ mod chaos_warp;
 mod choices;
 pub(super) use choices::resolution_branch_is_live;
 pub(in crate::engine) use choices::{
-    card_result_characteristic_sum, card_result_count, card_result_maximum,
+    card_result_characteristic_sum, card_result_count, card_result_count_for_player,
+    card_result_maximum,
 };
 mod amass;
 mod blight;
@@ -32,6 +33,7 @@ mod damage;
 mod destruction;
 #[cfg(test)]
 mod destruction_tests;
+mod dispatch;
 /// `pub(super)` so the combat damage step can reach `life::apply_life_gain` — lifelink is the one
 /// life-gain edge outside stack resolution, and it must go through the same funnel.
 pub(super) mod life;
@@ -1662,465 +1664,7 @@ impl GameEngine {
                     effect_result: &mut effect_result,
                     effect_index: index as u32,
                 };
-                match effect {
-                    SpellEffectKind::WinGameIf { condition } => {
-                        if !cx.engine.state.is_terminal()
-                            && cx.engine.condition_holds(
-                                &condition,
-                                ConditionContext::for_stack_item(cx.top)
-                                    .with_previous_effect_result(cx.previous_effect_result),
-                            )
-                        {
-                            cx.engine.state.outcome =
-                                Some(crate::state::GameOutcome::Winner(cx.controller));
-                            EffectOutcome::GameEnded
-                        } else {
-                            EffectOutcome::Continue
-                        }
-                    }
-                    SpellEffectKind::MillEachOpponentByHandSize => {
-                        zones::mill_each_opponent_by_hand_size(&mut cx)?
-                    }
-                    SpellEffectKind::Conditional { condition, effect } => {
-                        if !cx.engine.condition_holds(
-                            &condition,
-                            ConditionContext::for_stack_item(cx.top)
-                                .with_previous_effect_result(cx.previous_effect_result),
-                        ) {
-                            EffectOutcome::Continue
-                        } else {
-                            match *effect {
-                                effect @ (SpellEffectKind::Destroy { .. }
-                                | SpellEffectKind::DestroyPreventingRegeneration {
-                                    ..
-                                }) => misc::destroy(&mut cx, effect)?,
-                                effect @ SpellEffectKind::GrantKeywords { .. } => {
-                                    pump_counters::grant_keywords(&mut cx, effect)?
-                                }
-                                effect @ SpellEffectKind::ChoosePermanents { .. } => {
-                                    choices::choose_permanents(&mut cx, effect)?
-                                }
-                                effect @ SpellEffectKind::Draw { .. } => {
-                                    zones::draw(&mut cx, effect)?
-                                }
-                                effect @ SpellEffectKind::CreateTokens { .. } => {
-                                    tokens::create_tokens(&mut cx, effect)?
-                                }
-                                effect @ SpellEffectKind::Scry { .. } => {
-                                    zones::scry(&mut cx, effect)?
-                                }
-                                effect @ SpellEffectKind::LibraryPartition {
-                                    kind: LibraryPartitionKind::Surveil,
-                                    ..
-                                } => zones::library_partition(&mut cx, effect)?,
-                                effect @ SpellEffectKind::Untap { .. } => {
-                                    misc::untap(&mut cx, effect)?
-                                }
-                                effect @ SpellEffectKind::UntapAll { .. } => {
-                                    mass::untap_all(&mut cx, effect)?
-                                }
-                                effect @ SpellEffectKind::RemoveAllAbilities { .. } => {
-                                    pump_counters::remove_all_abilities(&mut cx, effect)?
-                                }
-                                effect @ SpellEffectKind::ExileSourceThenReturnTransformed {
-                                    ..
-                                } => zones::exile_source_then_return_transformed(&mut cx, effect)?,
-                                _ => {
-                                    return Err(EngineError::Illegal(
-                                        "unsupported conditional inner effect",
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                    SpellEffectKind::ConditionalCastCost { condition, effect } => {
-                        if !cx.top.cast_cost_condition_matches(&condition) {
-                            EffectOutcome::Continue
-                        } else {
-                            match *effect {
-                                effect @ SpellEffectKind::PumpTarget { .. } => {
-                                    pump_counters::pump_target(&mut cx, effect)?
-                                }
-                                effect @ SpellEffectKind::GainLife { .. } => {
-                                    life::gain_life(&mut cx, effect)?
-                                }
-                                effect @ (SpellEffectKind::Destroy { .. }
-                                | SpellEffectKind::DestroyPreventingRegeneration {
-                                    ..
-                                }) => misc::destroy(&mut cx, effect)?,
-                                effect @ SpellEffectKind::DamageTarget { .. } => {
-                                    damage::damage_target(&mut cx, effect)?
-                                }
-                                effect @ SpellEffectKind::GrantKeywords { .. } => {
-                                    pump_counters::grant_keywords(&mut cx, effect)?
-                                }
-                                _ => {
-                                    return Err(EngineError::Illegal(
-                                        "unsupported cast-cost conditional inner effect",
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                    effect @ SpellEffectKind::DamageTarget { .. } => {
-                        damage::damage_target(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking => {
-                        zones::put_ability_source_onto_battlefield_tapped_and_attacking(
-                            &mut cx, effect,
-                        )?
-                    }
-                    effect @ SpellEffectKind::CreateStaticEmblem { .. } => {
-                        pump_counters::create_static_emblem(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::ExileIfWouldDieThisTurn { .. } => {
-                        zones::exile_if_would_die_this_turn(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::CreatureDealsDamageEqualToPower { .. } => {
-                        damage::creature_deals_damage_equal_to_power(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::Fight { .. } => damage::fight(&mut cx, effect)?,
-                    effect @ SpellEffectKind::DamageTargets { .. } => {
-                        damage::damage_targets(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::DamagePlayer { .. } => {
-                        damage::damage_player(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. } => {
-                        damage::damage_attacked_player_or_planeswalker(&mut cx, effect)?
-                    }
-                    SpellEffectKind::MyrBattlesphereAttack => {
-                        damage::myr_battlesphere_attack(&mut cx)?
-                    }
-                    effect @ SpellEffectKind::Draw { .. } => zones::draw(&mut cx, effect)?,
-                    effect @ SpellEffectKind::TargetPlayerDraws { .. } => {
-                        zones::target_player_draws(&mut cx, effect)?
-                    }
-                    SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary => {
-                        zones::shuffle_resolving_spell_into_owners_library(&mut cx)?
-                    }
-                    effect @ SpellEffectKind::Discard { .. } => zones::discard(&mut cx, effect)?,
-                    effect @ SpellEffectKind::DrawDiscard { .. } => {
-                        zones::draw_discard(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::Scry { .. } => zones::scry(&mut cx, effect)?,
-                    effect @ SpellEffectKind::LibraryPartition { .. } => {
-                        zones::library_partition(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::RevealTopCardToHandIfMatches { .. } => {
-                        zones::reveal_top_card_to_hand_if_matches(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::Explore { .. } => zones::explore(&mut cx, effect)?,
-                    SpellEffectKind::ManifestDread => zones::manifest_dread(&mut cx)?,
-                    SpellEffectKind::IntoTheWilds => zones::into_the_wilds(&mut cx)?,
-                    SpellEffectKind::DeployTheGatewatch => zones::deploy_the_gatewatch(&mut cx)?,
-                    SpellEffectKind::ChaosWarp => chaos_warp::chaos_warp(&mut cx)?,
-                    // No card admits this instruction until its simultaneous movement and
-                    // end-to-end pair publication have passed the remaining capability gates.
-                    SpellEffectKind::ExchangeArtifactWithGraveyard => {
-                        zones::exchange_artifact_with_graveyard(&mut cx)?
-                    }
-                    effect @ SpellEffectKind::LookChooseToHand { .. } => {
-                        zones::look_choose_to_hand(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::PumpTarget { .. } => {
-                        pump_counters::pump_target(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::SetBasePowerToughness { .. } => {
-                        pump_counters::set_base_power_toughness(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::PumpAll { .. } => {
-                        pump_counters::pump_all(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::DoublePowerToughnessAll { .. } => {
-                        pump_counters::double_power_toughness_all(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::GrantKeywordsAll { .. } => {
-                        pump_counters::grant_keywords_all(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::RemoveAbilitiesAll { .. } => {
-                        pump_counters::remove_abilities_all(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::RemoveAllAbilities { .. } => {
-                        pump_counters::remove_all_abilities(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::ApplyPermanentModifier { .. } => {
-                        pump_counters::apply_permanent_modifier(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::GrantKeywords { .. } => {
-                        pump_counters::grant_keywords(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::GrantProtection { .. } => {
-                        pump_counters::grant_protection(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::GrantKeywordChoice { .. } => {
-                        pump_counters::grant_keyword_choice(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::GrantTriggeredAbility { .. } => {
-                        pump_counters::grant_triggered_ability(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::AddTypes { .. } => {
-                        pump_counters::add_types(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::GrantKeywordsAllPermanents { .. } => {
-                        pump_counters::grant_keywords_all_permanents(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::ApplyCombatRestriction { .. } => {
-                        restrictions::apply_combat_restriction(&mut cx, effect)?
-                    }
-                    SpellEffectKind::Blight { count } => blight::blight(&mut cx, count)?,
-                    effect @ (SpellEffectKind::RemoveCounters { .. }
-                    | SpellEffectKind::RemoveAllCounters { .. }
-                    | SpellEffectKind::PutCounterSnapshot { .. }) => {
-                        pump_counters::change_counters(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::PutCounters { .. } => {
-                        pump_counters::put_counters(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::DoubleCounters { .. } => {
-                        pump_counters::double_counters(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::PutCountersAll { .. } => {
-                        pump_counters::put_counters_all(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::PutCountersAllPlaneswalkers { .. } => {
-                        pump_counters::put_counters_all_planeswalkers(&mut cx, effect)?
-                    }
-                    SpellEffectKind::Proliferate => proliferate::proliferate(&mut cx)?,
-                    effect @ (SpellEffectKind::Destroy { .. }
-                    | SpellEffectKind::DestroyPreventingRegeneration { .. }) => {
-                        misc::destroy(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::Sacrifice { .. } => misc::sacrifice(&mut cx, effect)?,
-                    effect @ SpellEffectKind::SacrificeAll { .. } => {
-                        mass::sacrifice_all(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::DestroyAttached { .. } => {
-                        mass::destroy_attached(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::CounterTargetSpell { .. } => {
-                        stack_ops::counter_target_spell(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::CounterTargetAbility => {
-                        stack_ops::counter_target_ability(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::CounterTriggeringStackObjectUnlessPays { .. } => {
-                        stack_ops::counter_triggering_stack_object_unless_pays(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::CopyTargetSpell { .. } => {
-                        stack_ops::copy_target_spell(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::GainLife { .. } => life::gain_life(&mut cx, effect)?,
-                    effect @ SpellEffectKind::LoseLife { .. } => life::lose_life(&mut cx, effect)?,
-                    effect @ SpellEffectKind::TargetPlayerGainsLife { .. } => {
-                        life::target_player_gains_life(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::TargetPlayerLosesLife { .. } => {
-                        life::target_player_loses_life(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::EachOpponentLosesLifeYouGainEqual { .. } => {
-                        life::each_opponent_loses_life_you_gain_equal(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::DrainTarget { .. } => {
-                        life::drain_target(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::Exile { .. } => zones::exile(&mut cx, effect)?,
-                    effect @ SpellEffectKind::ExileWithOwnerCastPermission { .. } => {
-                        zones::exile_with_owner_cast_permission(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::ExileTargetGainLifeEqualToPower => {
-                        zones::exile_target_gain_life_equal_to_power(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::ExileTopWithPlayPermission { .. } => {
-                        zones::exile_top_with_play_permission(&mut cx, effect)?
-                    }
-                    effect @ (SpellEffectKind::ReturnToOwnersHand { .. }
-                    | SpellEffectKind::ReturnAllToOwnersHand { .. }) => {
-                        zones::return_to_owners_hand(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::PutInOwnersLibrary { .. } => {
-                        zones::put_in_owners_library(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { .. } => {
-                        zones::shuffle_permanents_into_owners_libraries(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::ChooseHandCards { .. } => {
-                        zones::choose_hand_cards(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::MillTargetPlayer { .. } => {
-                        zones::mill_target_player(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::Mill { .. } => zones::mill(&mut cx, effect)?,
-                    effect @ SpellEffectKind::TargetPlayerSacrifices { .. } => {
-                        zones::target_player_sacrifices(&mut cx, effect)?
-                    }
-                    SpellEffectKind::TapOrUntap { .. } => {
-                        use tricerules_cards::primitives::{ResolutionBranchDef, ResolutionCost};
-                        let branches = [("tap", "Tap"), ("untap", "Untap")]
-                            .into_iter()
-                            .map(|(id, label)| ResolutionBranchDef {
-                                branch_id: tricerules_cards::ChoiceId::new(id)
-                                    .expect("static branch id"),
-                                presentation: tricerules_cards::AbilityPresentation::Fallback,
-                                runtime_fallback: Some(label.into()),
-                                cost: ResolutionCost::None,
-                                requirement: Default::default(),
-                                effects: Vec::new(),
-                            })
-                            .collect();
-                        choices::park_resolution_branches(&mut cx, true, branches)?
-                    }
-                    effect @ SpellEffectKind::Tap { .. } => misc::tap(&mut cx, effect)?,
-                    effect @ SpellEffectKind::SkipNextUntap { .. } => {
-                        misc::skip_next_untap(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::Untap { .. } => misc::untap(&mut cx, effect)?,
-                    effect @ SpellEffectKind::SetPrepared { .. } => {
-                        misc::set_prepared(&mut cx, effect)?
-                    }
-                    SpellEffectKind::CopyNextSpellThisTurn => {
-                        cx.engine
-                            .register_next_spell_copy(cx.top, cx.controller, cx.spell_label);
-                        EffectOutcome::Continue
-                    }
-                    effect @ SpellEffectKind::CopyCapturedSpell { .. } => {
-                        stack_ops::copy_target_spell(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::GainControl { .. } => {
-                        misc::gain_control(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::CreateDelayedTrigger { .. } => {
-                        misc::create_delayed_trigger(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::ExileUntilSourceLeaves { .. } => {
-                        zones::exile_until_source_leaves(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::TapAll { .. } => mass::tap_all(&mut cx, effect)?,
-                    effect @ SpellEffectKind::UntapAll { .. } => mass::untap_all(&mut cx, effect)?,
-                    SpellEffectKind::UntapChosenPermanents => {
-                        mass::untap_chosen_permanents(&mut cx)?
-                    }
-                    effect @ SpellEffectKind::DestroyAll { .. } => {
-                        mass::destroy_all(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::ExileAll { .. } => mass::exile_all(&mut cx, effect)?,
-                    effect @ SpellEffectKind::DamageAll { .. } => {
-                        mass::damage_all(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::CreateTokens { .. } => {
-                        tokens::create_tokens(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::CreateTokenBatch { .. } => {
-                        tokens::create_token_batch(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::CreateTokenCopies { .. } => {
-                        tokens::create_token_copies(&mut cx, effect)?
-                    }
-                    SpellEffectKind::Populate => tokens::populate(&mut cx)?,
-                    effect @ SpellEffectKind::Amass { .. } => amass::amass(&mut cx, effect)?,
-                    effect @ SpellEffectKind::CreateAttackingTokens { .. } => {
-                        tokens::create_attacking_tokens(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::SacrificeObservedObjects => {
-                        tokens::sacrifice_observed_objects(&mut cx, effect)?
-                    }
-                    SpellEffectKind::ExileWarpedObject => {
-                        cx.engine.resolve_warp_exile(cx.top, cx.events)?;
-                        EffectOutcome::Continue
-                    }
-                    effect @ SpellEffectKind::AttachSource { .. } => {
-                        misc::attach_source(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::AttachEquipment { .. } => {
-                        misc::attach_equipment(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::Equip { .. } => misc::equip(&mut cx, effect)?,
-                    effect @ SpellEffectKind::PreventNextDamage { .. } => {
-                        misc::prevent_next_damage(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::PreventAllCombatDamageToTargetTurn { .. } => {
-                        misc::prevent_all_combat_damage_to_target_turn(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::PreventAllCombatDamageByTargetTurn { .. } => {
-                        misc::prevent_all_combat_damage_by_target_turn(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::PreventAllCombatDamageTurn => {
-                        misc::prevent_all_combat_damage_turn(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::DamageCantBePreventedThisTurn => {
-                        misc::damage_cant_be_prevented_this_turn(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::MoveGraveyardCards { .. } => {
-                        zones::move_graveyard_cards(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::ReturnLinkedExiledCards { .. } => {
-                        zones::return_linked_exiled_cards(&mut cx, effect)?
-                    }
-                    SpellEffectKind::ExileGraveyards {
-                        players,
-                        filter,
-                        capture_exile_cohort,
-                    } => zones::exile_graveyards(
-                        &mut cx,
-                        players,
-                        filter.as_ref(),
-                        capture_exile_cohort,
-                    )?,
-                    SpellEffectKind::ReturnExiledCohortToOwnersBattlefield { cohort_id } => {
-                        zones::return_exiled_cohort_to_owners_battlefield(&mut cx, &cohort_id)?
-                    }
-                    SpellEffectKind::ReturnAllGraveyardPermanents { filter } => {
-                        zones::return_all_graveyard_permanents(&mut cx, &filter)?
-                    }
-                    effect @ SpellEffectKind::ChooseGraveyardCard { .. } => {
-                        zones::choose_graveyard_card(&mut cx, effect)?
-                    }
-                    SpellEffectKind::Earthbend { count } => {
-                        pump_counters::earthbend(&mut cx, count)?
-                    }
-                    effect @ SpellEffectKind::AnimateSelf { .. } => {
-                        pump_counters::animate_self(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::ReturnTriggeredCard { .. } => {
-                        zones::return_triggered_card(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::ExileSourceThenReturnTransformed { .. } => {
-                        zones::exile_source_then_return_transformed(&mut cx, effect)?
-                    }
-                    effect @ (SpellEffectKind::ProduceMana { .. }
-                    | SpellEffectKind::ProduceManaPerSourceCounter { .. }
-                    | SpellEffectKind::ProduceSplitManaFromRemovedStorageCounters {
-                        ..
-                    }) => misc::produce_mana(&mut cx, effect)?,
-                    effect @ SpellEffectKind::AddMana { .. } => misc::add_mana(&mut cx, effect)?,
-                    effect @ SpellEffectKind::MayBehold { .. } => {
-                        choices::may_behold(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::SearchLibrary { .. } => {
-                        zones::search_library(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::Regenerate { .. } => {
-                        misc::regenerate(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::ChangeSourceFace { .. } => {
-                        misc::change_source_face(&mut cx, effect)?
-                    }
-                    SpellEffectKind::CastMadness { cost } => zones::madness_cast(&mut cx, cost)?,
-                    SpellEffectKind::SiegeDefeat => zones::siege_defeat(&mut cx)?,
-                    effect @ SpellEffectKind::None => misc::none(&mut cx, effect)?,
-                    effect @ SpellEffectKind::AuraAttach { .. } => {
-                        misc::aura_attach(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::ChooseResolutionBranch { .. } => {
-                        choices::choose_resolution_branch(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::ChoosePermanents { .. } => {
-                        choices::choose_permanents(&mut cx, effect)?
-                    }
-                    effect @ SpellEffectKind::CreateReflexiveTrigger { .. } => {
-                        choices::create_reflexive_trigger(&mut cx, effect)?
-                    }
-                }
+                dispatch::execute_effect(&mut cx, effect)?
             };
             if outcome == EffectOutcome::GameEnded {
                 return Ok(ResolutionProgress::GameEnded);
@@ -4152,6 +3696,751 @@ mod attached_subject_tests {
         ability.effect = effects;
         item.triggered_ability = Some(ability);
         item
+    }
+
+    #[test]
+    fn authoring_conditional_choices_freeze_and_resume_the_tail() {
+        for inner in [
+            SpellEffectKind::Discard {
+                who: PlayerRecipient::Controller,
+                quantity: tricerules_cards::primitives::DiscardQuantity::Exact(1),
+            },
+            SpellEffectKind::LookChooseToHand {
+                count: 1,
+                filter: None,
+                min: 1,
+                max: 1,
+                reveal: false,
+                bottom_order: LibraryBottomOrder::Chosen,
+            },
+        ] {
+            let mut engine = GameEngine::new(38101, &[0, 1], 20, None, true).unwrap();
+            let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+            let item = quantity_item(
+                source,
+                vec![
+                    SpellEffectKind::Conditional {
+                        condition: GameCondition::ActivePlayer {
+                            players: RelativePlayerSet::Controller,
+                        },
+                        effect: Box::new(inner),
+                    },
+                    SpellEffectKind::GainLife {
+                        amount: Amount::Fixed(2),
+                    },
+                ],
+            );
+            let (effects, label) = engine.build_resolution_effects(&item);
+            engine
+                .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+                .unwrap();
+            let pending = engine.state.pending_resolution.as_ref().unwrap().clone();
+            let chosen = pending.presentation.candidates[0];
+            let answer = rv1::SubmitResolutionChoice {
+                chosen_object_ids: vec![chosen],
+                ..Default::default()
+            };
+            let before = format!("{:?}", engine.state.pending_resolution);
+            let command_index = engine.state.command_index;
+            assert!(engine.submit_resolution_choice(1, &answer).is_err());
+            assert!(engine
+                .submit_resolution_choice(
+                    0,
+                    &rv1::SubmitResolutionChoice {
+                        chosen_object_ids: vec![chosen, chosen],
+                        ..Default::default()
+                    }
+                )
+                .is_err());
+            let generation = engine
+                .state
+                .zone_change_generation
+                .entry(chosen)
+                .or_default();
+            *generation += 1;
+            assert!(engine.submit_resolution_choice(0, &answer).is_err());
+            *engine
+                .state
+                .zone_change_generation
+                .get_mut(&chosen)
+                .unwrap() -= 1;
+            assert_eq!(format!("{:?}", engine.state.pending_resolution), before);
+            assert_eq!(engine.state.command_index, command_index);
+            engine.state.active_player_idx = 1; // the already-selected condition is now false
+            engine.submit_resolution_choice(0, &answer).unwrap();
+            assert!(engine.state.pending_resolution.is_none());
+            assert_eq!(engine.state.players[0].life, 22);
+            assert!(engine.submit_resolution_choice(0, &answer).is_err());
+            assert_eq!(engine.state.players[0].life, 22);
+        }
+    }
+
+    #[test]
+    fn authoring_false_conditional_does_not_inspect_private_library() {
+        let mut engine = GameEngine::new(38102, &[0, 1], 20, None, true).unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let library = engine.state.players[0].library.clone();
+        let item = quantity_item(
+            source,
+            vec![SpellEffectKind::Conditional {
+                condition: GameCondition::ActivePlayer {
+                    players: RelativePlayerSet::Opponents,
+                },
+                effect: Box::new(SpellEffectKind::LookChooseToHand {
+                    count: 3,
+                    filter: None,
+                    min: 1,
+                    max: 1,
+                    reveal: false,
+                    bottom_order: LibraryBottomOrder::Chosen,
+                }),
+            }],
+        );
+        let (effects, label) = engine.build_resolution_effects(&item);
+        let mut events = Vec::new();
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut events)
+            .unwrap();
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(engine.state.players[0].library, library);
+        assert!(!events.iter().any(|event| match &event.ev {
+            Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_)) => true,
+            Some(rv1::ruled_event::Ev::Log(log)) => log.text.contains("looks at"),
+            _ => false,
+        }));
+    }
+
+    #[test]
+    fn authoring_variable_discard_draws_each_players_committed_count() {
+        let registry = CardRegistry::from_chunks_and_tokens(&[
+            r#"(id: "forest", name: "Forest", face_id: "forest", types: ["Basic", "Land", "Forest"])"#,
+            r#"(id: "flux_fixture", name: "Flux fixture", face_id: "flux_fixture", mana_cost: "{2}{U}", types: ["Sorcery"], spell_effect: [Discard(who: EachPlayer, quantity: AnyNumber), Draw(who: EachPlayer, count: Count(CardsMatchingResultForAffectedPlayer(filter: (source: PreviousEffect, action: Discard, players: All)))), GainLife(amount: 2)])"#,
+        ], &[]).expect("admit the Flux instruction composition");
+        let mut engine = GameEngine::new(
+            38201,
+            &[0, 1, 2, 3],
+            20,
+            Some(vec![vec!["forest".into(); 24]; 4]),
+            true,
+        )
+        .unwrap();
+        engine.registry = Box::leak(Box::new(registry));
+        engine.state.active_player_idx = 2;
+        let source = add_battlefield_object(&mut engine, 0, "flux_fixture");
+        let item = quantity_item(
+            source,
+            engine
+                .registry
+                .get("flux_fixture")
+                .unwrap()
+                .primary_face()
+                .spell_effect
+                .clone(),
+        );
+        let hands: Vec<_> = engine
+            .state
+            .players
+            .iter()
+            .map(|p| p.hand.clone())
+            .collect();
+        let libraries: Vec<_> = engine
+            .state
+            .players
+            .iter()
+            .map(|p| p.library.len())
+            .collect();
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        for player in [2, 3, 0, 1] {
+            let count = if player == 3 {
+                hands[3].len()
+            } else {
+                player as usize
+            };
+            let chosen = hands[player as usize][..count].to_vec();
+            assert_eq!(
+                engine
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .unwrap()
+                    .deciding_player,
+                player
+            );
+            assert!(engine.state.players.iter().all(|p| p.graveyard.is_empty()));
+            let answer = rv1::SubmitResolutionChoice {
+                chosen_object_ids: chosen,
+                ..Default::default()
+            };
+            let before = format!("{:?}", engine.state.pending_resolution);
+            assert!(engine
+                .submit_resolution_choice((player + 1) % 4, &answer)
+                .is_err());
+            assert_eq!(format!("{:?}", engine.state.pending_resolution), before);
+            let batch = engine.submit_resolution_choice(player, &answer).unwrap();
+            assert!(batch.events.iter().any(|event| matches!(&event.ev,
+                Some(rv1::ruled_event::Ev::Log(log)) if log.text == format!("P{player} chooses {count} cards to discard."))));
+        }
+        assert!(engine.state.pending_resolution.is_none());
+        for player in 0..4 {
+            let count = if player == 3 { hands[3].len() } else { player };
+            assert_eq!(engine.state.players[player].hand.len(), hands[player].len());
+            assert_eq!(engine.state.players[player].graveyard.len(), count);
+            assert_eq!(
+                engine.state.players[player].library.len(),
+                libraries[player] - count
+            );
+        }
+        assert_eq!(engine.state.players[0].life, 22);
+    }
+
+    #[test]
+    fn authoring_draw_action_preserves_a_started_resolution_when_its_controller_leaves() {
+        let mut engine = GameEngine::new(
+            80004,
+            &[0, 1, 2],
+            20,
+            Some(vec![vec!["forest".into(); 24]; 3]),
+            true,
+        )
+        .unwrap();
+        engine.registry = Box::leak(Box::new(CardRegistry::from_chunks_and_tokens(&[
+            r#"(id: "forest", name: "Forest", face_id: "forest", types: ["Basic", "Land", "Forest"])"#,
+            r#"(id: "grizzly_bears", name: "Grizzly Bears", face_id: "grizzly_bears", types: ["Creature"], power: 2, toughness: 2)"#,
+            r#"(id: "replacement_fixture", name: "Replacement fixture", face_id: "replacement_fixture", types: ["Creature"], power: 2, toughness: 3, static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ReplaceControllerDrawWithLibraryChoice(kind: LookAtTopThree))])"#,
+        ], &[]).unwrap()));
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Main1;
+        let source = add_battlefield_object(&mut engine, 1, "grizzly_bears");
+        add_battlefield_object(&mut engine, 0, "replacement_fixture");
+        let mut item = quantity_item(
+            source,
+            vec![
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::AffectedPlayer,
+                    count: Amount::Fixed(1),
+                },
+                SpellEffectKind::Draw {
+                    who: PlayerRecipient::EachOpponent,
+                    count: Amount::Fixed(1),
+                },
+            ],
+        );
+        item.controller = 1;
+        item.source_owner = Some(1);
+        item.trigger_context.affected_player = Some(0);
+        let before: Vec<_> = engine.state.players.iter().map(|p| p.hand.len()).collect();
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        engine.concede_batch(1).unwrap();
+        assert!(
+            engine.state.pending_resolution.is_some(),
+            "the started replacement and resolution continue (CR 608.2m)"
+        );
+        for _ in 0..2 {
+            let cards = engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .candidates
+                .clone();
+            engine
+                .submit_resolution_choice(
+                    0,
+                    &rv1::SubmitResolutionChoice {
+                        chosen_object_ids: vec![cards[0]],
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            let rest = engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .candidates
+                .clone();
+            engine
+                .submit_resolution_choice(
+                    0,
+                    &rv1::SubmitResolutionChoice {
+                        chosen_object_ids: rest,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+        }
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(engine.state.players[0].hand.len(), before[0] + 2);
+        assert_eq!(engine.state.players[2].hand.len(), before[2] + 1);
+    }
+
+    #[test]
+    fn authoring_bounded_discard_preserves_actual_results_including_leng_destinations() {
+        use tricerules_cards::primitives::{CardResultFilter, CardResultSource, DiscardQuantity};
+        for (count, leng) in [(0, false), (1, false), (2, false), (0, true), (2, true)] {
+            let mut engine = GameEngine::new(
+                38202,
+                &[0, 1],
+                20,
+                Some(vec![vec!["forest".into(); 24]; 2]),
+                true,
+            )
+            .unwrap();
+            let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+            if leng {
+                add_battlefield_object(&mut engine, 0, "library_of_leng");
+            }
+            let hand = engine.state.players[0].hand.clone();
+            let library = engine.state.players[0].library.len();
+            let item = quantity_item(
+                source,
+                vec![
+                    SpellEffectKind::Discard {
+                        who: PlayerRecipient::Controller,
+                        quantity: DiscardQuantity::UpTo(2),
+                    },
+                    SpellEffectKind::Draw {
+                        who: PlayerRecipient::Controller,
+                        count: Amount::Count(
+                            CountExpression::CardsMatchingResultForAffectedPlayer {
+                                filter: CardResultFilter {
+                                    source: CardResultSource::PreviousEffect,
+                                    action: CardResultAction::Discard,
+                                    players: RelativePlayerSet::Controller,
+                                    card_type: None,
+                                },
+                            },
+                        ),
+                    },
+                ],
+            );
+            let (effects, label) = engine.build_resolution_effects(&item);
+            engine
+                .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+                .unwrap();
+            let pending = engine.state.pending_resolution.as_ref().unwrap();
+            assert_eq!((pending.presentation.min, pending.presentation.max), (0, 2));
+            let before = format!("{:?}", engine.state.pending_resolution);
+            assert!(
+                engine
+                    .submit_resolution_choice(
+                        0,
+                        &rv1::SubmitResolutionChoice {
+                            chosen_player_ids: vec![1],
+                            ..Default::default()
+                        }
+                    )
+                    .is_err(),
+                "a discard answer cannot carry unrelated player choices"
+            );
+            assert!(engine
+                .submit_resolution_choice(
+                    0,
+                    &rv1::SubmitResolutionChoice {
+                        chosen_object_ids: hand[..3].to_vec(),
+                        ..Default::default()
+                    }
+                )
+                .is_err());
+            assert_eq!(format!("{:?}", engine.state.pending_resolution), before);
+            engine
+                .submit_resolution_choice(
+                    0,
+                    &rv1::SubmitResolutionChoice {
+                        chosen_object_ids: hand[..count].to_vec(),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            if leng && count > 0 {
+                for _ in 0..count {
+                    engine
+                        .submit_resolution_choice(
+                            0,
+                            &rv1::SubmitResolutionChoice {
+                                chosen_object_ids: vec![1],
+                                ..Default::default()
+                            },
+                        )
+                        .unwrap();
+                }
+                engine
+                    .submit_resolution_choice(
+                        0,
+                        &rv1::SubmitResolutionChoice {
+                            chosen_object_ids: hand[..count].to_vec(),
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
+            }
+            assert!(engine.state.pending_resolution.is_none());
+            assert!(engine.state.pending_replacement_event.is_none());
+            assert_eq!(engine.state.players[0].hand.len(), hand.len());
+            assert_eq!(
+                engine.state.players[0].library.len(),
+                library - if leng { 0 } else { count }
+            );
+            assert_eq!(
+                engine.state.players[0].graveyard.len(),
+                if leng { 0 } else { count }
+            );
+        }
+    }
+
+    #[test]
+    fn authoring_scoped_result_keeps_you_and_opponents_relative_to_the_spell_controller() {
+        use tricerules_cards::primitives::{CardResultFilter, CardResultSource};
+        let mut engine = GameEngine::new(
+            38203,
+            &[0, 1],
+            20,
+            Some(vec![vec!["forest".into(); 24]; 2]),
+            true,
+        )
+        .unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        let item = quantity_item(source, Vec::new());
+        let mut previous = EffectResult::default();
+        for (player, count) in [(0, 1), (1, 2)] {
+            let cards = engine.state.players[player].hand[..count].to_vec();
+            for card in cards {
+                let (entry, _) = zones::perform_discard_action(
+                    &mut engine,
+                    &mut Vec::new(),
+                    player as i32,
+                    card,
+                    "fixture",
+                    crate::state::DiscardCause::Effect,
+                )
+                .unwrap();
+                previous.cards.push(entry);
+            }
+        }
+        for (players, recipient, expected) in [
+            (RelativePlayerSet::Controller, 1, 0),
+            (RelativePlayerSet::Opponents, 1, 2),
+            (RelativePlayerSet::All, 0, 1),
+            (RelativePlayerSet::Opponents, 0, 0),
+        ] {
+            let count = Amount::Count(CountExpression::CardsMatchingResultForAffectedPlayer {
+                filter: CardResultFilter {
+                    source: CardResultSource::PreviousEffect,
+                    action: CardResultAction::Discard,
+                    players,
+                    card_type: None,
+                },
+            });
+            assert_eq!(
+                engine.resolve_amount(
+                    &count,
+                    AmountContext::for_stack_item(&item, 0)
+                        .with_affected_player(recipient)
+                        .with_previous_effect_result(&previous)
+                ),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn authoring_conditional_discard_result_and_post_draw_threshold_are_live() {
+        use tricerules_cards::primitives::{CardResultFilter, CardResultSource, DiscardQuantity};
+        for threshold in [6, 7] {
+            let mut engine = GameEngine::new(
+                38103,
+                &[0, 1],
+                20,
+                Some(vec![vec!["forest".into(); 24]; 2]),
+                true,
+            )
+            .unwrap();
+            let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+            for _ in 0..threshold {
+                let oid = add_battlefield_object(&mut engine, 0, "forest");
+                move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    oid,
+                    Zone::Graveyard,
+                    None,
+                )
+                .unwrap();
+            }
+            let hand = engine.state.players[0].hand.len();
+            let library = engine.state.players[0].library.len();
+            let item = quantity_item(
+                source,
+                vec![
+                    SpellEffectKind::Draw {
+                        count: Amount::Fixed(1),
+                        who: PlayerRecipient::Controller,
+                    },
+                    SpellEffectKind::Conditional {
+                        condition: GameCondition::GraveyardAggregate {
+                            owners: RelativePlayerSet::Controller,
+                            aggregate: GraveyardAggregate::CardCount,
+                            filter: None,
+                            min: None,
+                            max: Some(6),
+                        },
+                        effect: Box::new(SpellEffectKind::Discard {
+                            who: PlayerRecipient::Controller,
+                            quantity: DiscardQuantity::Exact(1),
+                        }),
+                    },
+                    SpellEffectKind::Draw {
+                        who: PlayerRecipient::Controller,
+                        count: Amount::Count(CountExpression::CardsMatchingResult {
+                            filter: CardResultFilter {
+                                source: CardResultSource::PreviousEffect,
+                                action: CardResultAction::Discard,
+                                players: RelativePlayerSet::Controller,
+                                card_type: None,
+                            },
+                        }),
+                    },
+                ],
+            );
+            let (effects, label) = engine.build_resolution_effects(&item);
+            engine
+                .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+                .unwrap();
+            if threshold == 6 {
+                let chosen = engine
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .unwrap()
+                    .presentation
+                    .candidates[0];
+                engine
+                    .submit_resolution_choice(
+                        0,
+                        &rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![chosen],
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
+            }
+            assert!(engine.state.pending_resolution.is_none());
+            assert_eq!(engine.state.players[0].hand.len(), hand + 1);
+            assert_eq!(
+                engine.state.players[0].library.len(),
+                library - if threshold == 6 { 2 } else { 1 }
+            );
+        }
+    }
+
+    #[test]
+    fn authoring_accumulate_wisdom_selects_one_complete_library_operation() {
+        let registry = Box::leak(Box::new(CardRegistry::from_chunks_and_tokens(&[
+            r#"(id: "forest", name: "Forest", face_id: "forest", types: ["Basic", "Land", "Forest"])"#,
+            r#"(id: "lesson_fixture", name: "Lesson fixture", face_id: "lesson_fixture", mana_cost: "{U}", types: ["Sorcery", "Lesson"])"#,
+            r#"(id: "accumulate_fixture", name: "Accumulate fixture", face_id: "accumulate_fixture", mana_cost: "{U}", types: ["Sorcery", "Lesson"], spell_effect: [ChooseResolutionBranch(selection: FirstApplicable, branches: [(branch_id: "branch_01", presentation: Fallback, cost: None, requirement: GameCondition(GraveyardAggregate(owners: Controller, aggregate: CardCount, filter: Some((required_subtypes: ["Lesson"])), min: Some(3))), effects: [LookChooseToHand(count: 3, min: 3, max: 3, reveal: false, bottom_order: Chosen)]), (branch_id: "branch_02", presentation: Fallback, cost: None, requirement: Always, effects: [LookChooseToHand(count: 3, min: 1, max: 1, reveal: false, bottom_order: Chosen)])])])"#,
+        ], &[]).unwrap()));
+        for (lessons, owner) in [(2, 0), (3, 0), (3, 1)] {
+            for size in 0..=3 {
+                let mut engine = GameEngine::new(
+                    38104,
+                    &[0, 1],
+                    20,
+                    Some(vec![vec!["forest".into(); 24]; 2]),
+                    true,
+                )
+                .unwrap();
+                engine.registry = registry;
+                for _ in 0..lessons {
+                    let oid = add_battlefield_object(&mut engine, owner, "lesson_fixture");
+                    move_object_to_zone(
+                        &mut engine.state,
+                        engine.registry,
+                        oid,
+                        Zone::Graveyard,
+                        None,
+                    )
+                    .unwrap();
+                }
+                let source = add_battlefield_object(&mut engine, 0, "accumulate_fixture");
+                move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    source,
+                    Zone::Graveyard,
+                    None,
+                )
+                .unwrap();
+                let mut item = triggered_item(source, 0);
+                item.id = source;
+                item.card_id = "accumulate_fixture".into();
+                item.ability_text = None;
+                item.source_permanent_id = None;
+                item.ability_index = None;
+                item.is_triggered = false;
+                let excess: Vec<_> = engine.state.players[0]
+                    .library
+                    .iter()
+                    .skip(size)
+                    .copied()
+                    .collect();
+                for oid in excess {
+                    move_object_to_zone(&mut engine.state, engine.registry, oid, Zone::Exile, None)
+                        .unwrap();
+                }
+                let cards: Vec<_> = engine.state.players[0].library.iter().copied().collect();
+                let count = if lessons == 3 && owner == 0 {
+                    size
+                } else {
+                    size.min(1)
+                };
+                let (effects, label) = engine.build_resolution_effects(&item);
+                engine
+                    .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+                    .unwrap();
+                if size == 0 {
+                    assert!(engine.state.pending_resolution.is_none());
+                    assert!(engine.state.players[0].library.is_empty());
+                    continue;
+                }
+                let pending = engine.state.pending_resolution.as_ref().unwrap();
+                assert_eq!(pending.presentation.candidates, cards);
+                assert_eq!(
+                    (pending.presentation.min, pending.presentation.max),
+                    (count as u32, count as u32)
+                );
+                assert_eq!(
+                    pending.presentation.choice_kind,
+                    rv1::ChoiceKind::LibraryLook
+                );
+                // Flipping the threshold after parking cannot select another library operation.
+                let moved = add_battlefield_object(&mut engine, 0, "lesson_fixture");
+                move_object_to_zone(
+                    &mut engine.state,
+                    engine.registry,
+                    moved,
+                    Zone::Graveyard,
+                    None,
+                )
+                .unwrap();
+                engine
+                    .submit_resolution_choice(
+                        0,
+                        &rv1::SubmitResolutionChoice {
+                            chosen_object_ids: cards[..count].to_vec(),
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
+                if size - count > 1 {
+                    engine
+                        .submit_resolution_choice(
+                            0,
+                            &rv1::SubmitResolutionChoice {
+                                chosen_object_ids: cards[count..].iter().rev().copied().collect(),
+                                ..Default::default()
+                            },
+                        )
+                        .unwrap();
+                }
+                assert!(engine.state.pending_resolution.is_none());
+                assert_eq!(engine.state.players[0].library.len(), size - count);
+            }
+        }
+    }
+
+    #[test]
+    fn authoring_shoreline_threshold_is_evaluated_after_a_parked_draw_finishes() {
+        let mut engine = GameEngine::new(
+            38105,
+            &[0, 1],
+            20,
+            Some(vec![vec!["forest".into(); 24]; 2]),
+            true,
+        )
+        .unwrap();
+        let source = add_battlefield_object(&mut engine, 0, "grizzly_bears");
+        add_battlefield_object(&mut engine, 0, "thought_reflection");
+        add_battlefield_object(&mut engine, 0, "alhammarrets_archive");
+        for _ in 0..6 {
+            let oid = add_battlefield_object(&mut engine, 0, "forest");
+            move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                oid,
+                Zone::Graveyard,
+                None,
+            )
+            .unwrap();
+        }
+        let item = quantity_item(
+            source,
+            vec![
+                SpellEffectKind::Draw {
+                    count: Amount::Fixed(1),
+                    who: PlayerRecipient::Controller,
+                },
+                SpellEffectKind::Conditional {
+                    condition: GameCondition::GraveyardAggregate {
+                        owners: RelativePlayerSet::Controller,
+                        aggregate: GraveyardAggregate::CardCount,
+                        filter: None,
+                        min: None,
+                        max: Some(6),
+                    },
+                    effect: Box::new(SpellEffectKind::Discard {
+                        who: PlayerRecipient::Controller,
+                        quantity: tricerules_cards::primitives::DiscardQuantity::Exact(1),
+                    }),
+                },
+                SpellEffectKind::GainLife {
+                    amount: Amount::Fixed(2),
+                },
+            ],
+        );
+        let (effects, label) = engine.build_resolution_effects(&item);
+        engine
+            .run_effect_list(&item, &label, effects, 0, &mut Vec::new())
+            .unwrap();
+        let selected = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .candidates[0];
+        let seventh = engine.state.players[0].hand[0];
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            seventh,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![selected],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(
+            engine.state.pending_resolution.is_none(),
+            "threshold is read after draw replacement completion"
+        );
+        assert_eq!(engine.state.players[0].graveyard.len(), 7);
+        assert_eq!(engine.state.players[0].life, 24); // Archive doubles the single life-gain tail
     }
 
     #[test]

@@ -534,6 +534,24 @@ pub(in crate::engine) fn card_result_count(
     )
 }
 
+pub(in crate::engine) fn card_result_count_for_player(
+    engine: &crate::engine::GameEngine,
+    top: &StackItem,
+    previous_result: &crate::state::EffectResult,
+    filter: &tricerules_cards::primitives::CardResultFilter,
+    player: crate::state::PlayerId,
+) -> u32 {
+    matching_card_result_entries(
+        &engine.state,
+        top.controller,
+        &top.payment_result,
+        previous_result,
+        filter,
+    )
+    .filter(|entry| entry.affected_player == player)
+    .count() as u32
+}
+
 pub(in crate::engine) fn card_result_maximum(
     engine: &crate::engine::GameEngine,
     top: &StackItem,

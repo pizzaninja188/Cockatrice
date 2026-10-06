@@ -295,19 +295,7 @@ impl GameEngine {
                 stage,
                 candidates,
             } => {
-                if candidates.iter().any(|(oid, generation)| {
-                    !self.state.players[idx].library.contains(oid)
-                        || self.state.objects.get(oid).is_none_or(|object| {
-                            object.zone != Zone::Library || object.owner != controller
-                        })
-                        || self
-                            .state
-                            .zone_change_generation
-                            .get(oid)
-                            .copied()
-                            .unwrap_or(0)
-                            != *generation
-                }) {
+                if !super::super::library_choices::current(self, controller, candidates) {
                     self.state.pending_resolution = Some(pending);
                     return Err(EngineError::Illegal("stale library-look cohort"));
                 }
@@ -464,29 +452,7 @@ impl GameEngine {
                 &object_display_name(&self.state, self.registry, stack.item.id),
             ));
         }
-        for &oid in chosen {
-            let name = object_display_name(&self.state, self.registry, oid);
-            let owner = self.state.objects[&oid].owner;
-            move_object_to_zone(&mut self.state, self.registry, oid, Zone::Hand, None)?;
-            let message = format!("P{controller} puts {name} into their hand.");
-            ev.push(if reveal {
-                ev_log(message)
-            } else {
-                ev_log_private(message, controller)
-            });
-            ev.push(permanent_moved_event(
-                &self.state,
-                oid,
-                owner,
-                rv1::permanent_moved::Destination::Hand,
-            ));
-        }
-        if !reveal {
-            ev.push(ev_log(format!(
-                "P{controller} puts {} cards into their hand.",
-                chosen.len()
-            )));
-        }
+        super::super::library_choices::put_into_hand(self, controller, chosen, reveal, &mut ev)?;
 
         if bottom_order == LibraryBottomOrder::Random {
             shuffle_object_ids_for_current_command(&self.state, controller, &mut remaining);

@@ -550,30 +550,7 @@ fn validate_effect_payment_results(
     allowed: &[CardResultAction],
     effect: &SpellEffectKind,
 ) -> Result<(), String> {
-    let amount = match effect {
-        SpellEffectKind::DamageTarget { amount, .. }
-        | SpellEffectKind::DamageAll { amount, .. }
-        | SpellEffectKind::Scry { count: amount }
-        | SpellEffectKind::Earthbend { count: amount }
-        | SpellEffectKind::CounterTargetSpell {
-            unless_controller_pays: Some(amount),
-            ..
-        }
-        | SpellEffectKind::DamagePlayer { amount, .. }
-        | SpellEffectKind::Draw { count: amount, .. }
-        | SpellEffectKind::TargetPlayerDraws { count: amount, .. }
-        | SpellEffectKind::GainLife { amount }
-        | SpellEffectKind::Mill { count: amount, .. }
-        | SpellEffectKind::PutCounters { count: amount, .. }
-        | SpellEffectKind::Amass { count: amount, .. }
-        | SpellEffectKind::CreateTokens { count: amount, .. }
-        | SpellEffectKind::CreateTokenCopies { count: amount, .. }
-        | SpellEffectKind::CreateAttackingTokens { count: amount, .. } => Some(amount),
-        SpellEffectKind::PumpTarget {
-            scale: Some(scale), ..
-        } => scale.amount(),
-        _ => None,
-    };
+    let amount = effect.result_consuming_amount();
     if let Some(filter) = amount.and_then(Amount::card_result_filter) {
         if filter.source == CardResultSource::Payment && !allowed.contains(&filter.action) {
             return Err("Payment card result requires a compatible card cost".into());
@@ -3518,6 +3495,48 @@ mod tests {
             effect,
             SpellEffectKind::CreateTokens { tapped: true, .. }
         ));
+    }
+
+    #[test]
+    fn conditional_card_result_consumers_keep_outer_context_validation() {
+        let make = |prefix: &str, source: &str| {
+            format!(
+                r#"(
+            id: "conditional_result", name: "Conditional Result", face_id: "conditional_result",
+            mana_cost: "{{1}}", types: ["Sorcery"], spell_effect: [
+                {prefix}
+                Conditional(condition: ActivePlayer(players: Controller), effect: Draw(
+                    who: EachPlayer, count: Count(CardsMatchingResultForAffectedPlayer(filter: (
+                        source: {source}, action: Discard, players: All,
+                    )))
+                )),
+            ],
+        )"#
+            )
+        };
+        for prefix in ["", "GainLife(amount: 1),"] {
+            let card = make(prefix, "PreviousEffect");
+            let error =
+                CardRegistry::from_chunks(&[&card]).expect_err("missing compatible predecessor");
+            assert!(
+                error
+                    .to_string()
+                    .contains("immediately preceding compatible"),
+                "{error}"
+            );
+        }
+        let card = make(
+            "Discard(who: EachPlayer, quantity: AnyNumber),",
+            "PreviousEffect",
+        );
+        CardRegistry::from_chunks(&[&card])
+            .expect("outer discard result remains available inside the conditional");
+        let card = make("", "Payment");
+        let error = CardRegistry::from_chunks(&[&card]).expect_err("missing payment cost");
+        assert!(
+            error.to_string().contains("compatible card cost"),
+            "{error}"
+        );
     }
 
     #[test]

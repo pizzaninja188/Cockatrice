@@ -4,13 +4,533 @@ use super::events::{ev_log, ev_priority_changed, finish_with_events};
 use super::replacement::PendingReplacementEvent;
 use super::triggers::ability_definition_from;
 use super::*;
-use tricerules_cards::primitives::DrawReplacementCondition;
+use tricerules_cards::primitives::{DrawReplacementCondition, LibraryDrawReplacement};
+mod library_actions;
 
 #[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
 struct DrawReplacementIdentity {
     source: ObjectId,
     generation: u64,
     definition: AbilityDefinitionId,
+}
+
+#[cfg(test)]
+mod library_replacement_tests {
+    use super::*;
+
+    fn fixture(kind: &str, size: usize) -> GameEngine {
+        let source = format!(
+            r#"(id: "replacement_fixture", name: "Replacement fixture", face_id: "replacement_fixture", types: ["Creature"], power: 2, toughness: 3, static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: ReplaceControllerDrawWithLibraryChoice(kind: {kind}))])"#
+        );
+        let registry = CardRegistry::from_chunks_and_tokens(&[
+            r#"(id: "forest", name: "Forest", face_id: "forest", types: ["Basic", "Land", "Forest"])"#,
+            r#"(id: "nonland_fixture", name: "Nonland fixture", face_id: "nonland_fixture", types: ["Creature"], power: 1, toughness: 1)"#,
+            r#"(id: "double_fixture", name: "Double fixture", face_id: "double_fixture", types: ["Enchantment"], static_abilities: [(ability_id: "static_01", presentation: Fallback, definition: DoubleControllerDraws(condition: Always))])"#,
+            &source,
+        ], &[]).expect("admit the real draw replacement operation");
+        let mut engine = GameEngine::new(
+            12106,
+            &[0, 1, 2],
+            20,
+            Some(vec![vec!["forest".into(); 24]; 3]),
+            true,
+        )
+        .unwrap();
+        engine.registry = Box::leak(Box::new(registry));
+        engine.state.opening = None;
+        engine.state.turn_step = TurnStep::Draw;
+        engine.state.draw_step_progress = Some((0, 0, 0));
+        let source = engine.state.players[0].library[0];
+        resolution::move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        engine.state.objects.get_mut(&source).unwrap().card_id = "replacement_fixture".into();
+        let excess: Vec<_> = engine.state.players[0]
+            .library
+            .iter()
+            .skip(size)
+            .copied()
+            .collect();
+        for oid in excess {
+            resolution::move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                oid,
+                Zone::Exile,
+                None,
+            )
+            .unwrap();
+        }
+        engine
+    }
+
+    fn start(engine: &mut GameEngine) -> (DrawProgress, Vec<rv1::RuledEvent>) {
+        let mut events = Vec::new();
+        let progress = engine
+            .start_draw_transaction(
+                vec![(0, 1)],
+                DrawCompletion::FinishDrawStep {
+                    active_player: 0,
+                    occurrence: 0,
+                },
+                "fixture",
+                &mut events,
+            )
+            .unwrap();
+        (progress, events)
+    }
+
+    #[test]
+    fn authoring_tomorrow_replacement_handles_short_and_empty_libraries_without_drawing() {
+        for size in 0..=3 {
+            let mut engine = fixture("LookAtTopThree", size);
+            let hand = engine.state.players[0].hand.len();
+            let looked: Vec<_> = engine.state.players[0].library.iter().copied().collect();
+            let (progress, events) = start(&mut engine);
+            if size == 0 {
+                let DrawProgress::Complete(done) = progress else {
+                    panic!("empty replacement completes")
+                };
+                assert!(done.receipts.is_empty());
+                assert!(events.iter().all(|event| !matches!(
+                    event.ev,
+                    Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(_))
+                )));
+            } else {
+                assert!(matches!(progress, DrawProgress::Parked));
+                let pending = engine.state.pending_resolution.as_ref().unwrap();
+                assert_eq!((pending.presentation.min, pending.presentation.max), (1, 1));
+                assert_eq!(pending.presentation.candidates, looked);
+                assert!(pending.continuation.stack().is_none());
+                engine
+                    .submit_resolution_choice(
+                        0,
+                        &rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![looked[0]],
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
+                if size == 3 {
+                    engine
+                        .submit_resolution_choice(
+                            0,
+                            &rv1::SubmitResolutionChoice {
+                                chosen_object_ids: vec![looked[2], looked[1]],
+                                ..Default::default()
+                            },
+                        )
+                        .unwrap();
+                }
+                assert_eq!(engine.state.players[0].hand.len(), hand + 1);
+                assert_eq!(
+                    engine.state.players[0]
+                        .library
+                        .iter()
+                        .copied()
+                        .collect::<Vec<_>>(),
+                    if size == 3 {
+                        vec![looked[2], looked[1]]
+                    } else {
+                        looked[1..].to_vec()
+                    }
+                );
+            }
+            assert!(!engine.state.players[0].pending_library_loss);
+            assert_eq!(
+                engine.resolve_amount(
+                    &Amount::Count(CountExpression::CardsDrawnThisTurn {
+                        players: RelativePlayerSet::Controller,
+                    }),
+                    AmountContext::from_condition(ConditionContext {
+                        controller: 0,
+                        source_object_id: 0,
+                        source_zone_change: 0,
+                        resolving_spell_id: None,
+                        stack_item: None,
+                        previous_effect_result: None,
+                    })
+                ),
+                0
+            );
+        }
+    }
+
+    fn branch(engine: &mut GameEngine, index: u32) -> RuledEventBatch {
+        engine
+            .apply_command(
+                0,
+                &rv1::RuledCommand {
+                    cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                        rv1::SubmitResolutionChoice {
+                            selected_branch_index: index,
+                            decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                            ..Default::default()
+                        },
+                    )),
+                },
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn authoring_draw_branch_commands_reject_atomically_and_repeat_deterministically() {
+        let run = || {
+            let mut engine = fixture("RevealUntilLandOrNonland", 4);
+            let cards: Vec<_> = engine.state.players[0].library.iter().copied().collect();
+            for oid in &cards[..2] {
+                engine.state.objects.get_mut(oid).unwrap().card_id = "nonland_fixture".into();
+            }
+            let (_, initial) = start(&mut engine);
+            let mut batches = vec![format!("{initial:?}")];
+            for stage in 0..2 {
+                let before = serde_json::to_value(&engine.state).unwrap();
+                for answer in [
+                    rv1::SubmitResolutionChoice::default(),
+                    rv1::SubmitResolutionChoice {
+                        decision: rv1::ResolutionChoiceDecision::Decline as i32,
+                        ..Default::default()
+                    },
+                    rv1::SubmitResolutionChoice {
+                        decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                        chosen_object_ids: vec![cards[0]],
+                        ..Default::default()
+                    },
+                    rv1::SubmitResolutionChoice {
+                        decision: rv1::ResolutionChoiceDecision::SelectBranch as i32,
+                        selected_branch_index: 2,
+                        ..Default::default()
+                    },
+                ] {
+                    assert!(engine
+                        .apply_command(
+                            0,
+                            &rv1::RuledCommand {
+                                cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(answer)),
+                            }
+                        )
+                        .is_err());
+                    assert_eq!(
+                        serde_json::to_value(&engine.state).unwrap(),
+                        before,
+                        "stage {stage}: rejection changed continuation or command index"
+                    );
+                }
+                batches.push(format!("{:?}", branch(&mut engine, 0)));
+            }
+            assert!(engine.state.pending_resolution.is_some());
+            let done = engine
+                .apply_command(
+                    0,
+                    &rv1::RuledCommand {
+                        cmd: Some(rv1::ruled_command::Cmd::SubmitResolutionChoice(
+                            rv1::SubmitResolutionChoice {
+                                chosen_object_ids: vec![cards[1], cards[0]],
+                                ..Default::default()
+                            },
+                        )),
+                    },
+                )
+                .unwrap();
+            batches.push(format!("{done:?}"));
+            assert!(engine.state.pending_resolution.is_none());
+            (batches, serde_json::to_value(&engine.state).unwrap())
+        };
+        assert_eq!(
+            run(),
+            run(),
+            "same seed and stock commands must reproduce every event batch and final state"
+        );
+    }
+
+    #[test]
+    fn authoring_abundance_reveals_matching_prefix_and_keeps_bottom_order_private() {
+        let mut engine = fixture("RevealUntilLandOrNonland", 4);
+        let cards: Vec<_> = engine.state.players[0].library.iter().copied().collect();
+        for oid in &cards[..2] {
+            engine.state.objects.get_mut(oid).unwrap().card_id = "nonland_fixture".into();
+        }
+        let hand = engine.state.players[0].hand.len();
+        assert!(matches!(start(&mut engine).0, DrawProgress::Parked));
+        branch(&mut engine, 0); // replace
+        let batch = branch(&mut engine, 0); // land
+        let reveal = batch
+            .events
+            .iter()
+            .find_map(|event| match &event.ev {
+                Some(rv1::ruled_event::Ev::CardsRevealed(reveal)) => Some(reveal.clone()),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(
+            reveal
+                .cards
+                .iter()
+                .map(|card| card.object_id)
+                .collect::<Vec<_>>(),
+            cards[..3]
+        );
+        assert!(!reveal.reveal_id.is_empty());
+        assert_eq!(engine.state.players[0].hand.len(), hand + 1);
+        assert!(engine.state.players[0].hand.contains(&cards[2]));
+        let event = engine.draw_replacement_choice_event().unwrap();
+        let Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice)) = event.ev else {
+            panic!("ordering choice")
+        };
+        assert!(choice.public_reveal.is_none());
+        assert_eq!(choice.candidate_object_ids, cards[..2]);
+        assert!(choice.ordered);
+        assert_eq!(engine.draw_action_reveal(), Some(reveal.clone()));
+        assert_eq!(
+            engine.draw_replacement_choice_event(),
+            Some(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(choice))
+            })
+        );
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![cards[1], cards[0]],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            engine.state.players[0]
+                .library
+                .iter()
+                .copied()
+                .collect::<Vec<_>>(),
+            vec![cards[3], cards[1], cards[0]]
+        );
+        assert!(engine.draw_action_reveal().is_none());
+        assert_eq!(engine.state.draw_step_progress, Some((0, 0, 0)));
+    }
+
+    #[test]
+    fn authoring_abundance_decline_no_match_and_empty_do_not_restart_the_replacement() {
+        for size in [0, 1, 3] {
+            let mut engine = fixture("RevealUntilLandOrNonland", size);
+            let hand = engine.state.players[0].hand.len();
+            let cards: Vec<_> = engine.state.players[0].library.iter().copied().collect();
+            start(&mut engine);
+            branch(&mut engine, 0);
+            branch(&mut engine, 1); // no nonlands: consume the draw, order the entire revealed cohort
+            if size > 1 {
+                engine
+                    .submit_resolution_choice(
+                        0,
+                        &rv1::SubmitResolutionChoice {
+                            chosen_object_ids: cards.iter().rev().copied().collect(),
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
+            }
+            assert!(engine.state.pending_resolution.is_none());
+            assert_eq!(engine.state.players[0].hand.len(), hand);
+            assert!(!engine.state.players[0].pending_library_loss);
+            assert_eq!(engine.state.draw_step_progress, Some((0, 0, 0)));
+        }
+        let mut engine = fixture("RevealUntilLandOrNonland", 2);
+        let hand = engine.state.players[0].hand.len();
+        start(&mut engine);
+        branch(&mut engine, 1);
+        assert!(engine.state.pending_resolution.is_none());
+        assert_eq!(engine.state.players[0].hand.len(), hand + 1);
+        assert_eq!(engine.state.draw_step_progress, Some((0, 0, 1)));
+    }
+
+    #[test]
+    fn authoring_draw_action_rejects_bad_answers_atomically_and_survives_source_departure() {
+        let mut engine = fixture("LookAtTopThree", 3);
+        start(&mut engine);
+        let cards = engine
+            .state
+            .pending_resolution
+            .as_ref()
+            .unwrap()
+            .presentation
+            .candidates
+            .clone();
+        let answer = rv1::SubmitResolutionChoice {
+            chosen_object_ids: vec![cards[0]],
+            ..Default::default()
+        };
+        let before = format!("{:?}", engine.state.pending_resolution);
+        let work_before = format!("{:?}", engine.state.pending_replacement_event);
+        assert!(engine.submit_resolution_choice(1, &answer).is_err());
+        for bad in [
+            rv1::SubmitResolutionChoice {
+                chosen_object_ids: vec![],
+                ..Default::default()
+            },
+            rv1::SubmitResolutionChoice {
+                chosen_object_ids: vec![cards[0], cards[0]],
+                ..Default::default()
+            },
+            rv1::SubmitResolutionChoice {
+                chosen_player_ids: vec![1],
+                ..answer.clone()
+            },
+        ] {
+            assert!(engine.submit_resolution_choice(0, &bad).is_err());
+            assert_eq!(format!("{:?}", engine.state.pending_resolution), before);
+            assert_eq!(
+                format!("{:?}", engine.state.pending_replacement_event),
+                work_before
+            );
+        }
+        *engine
+            .state
+            .zone_change_generation
+            .entry(cards[0])
+            .or_default() += 1;
+        assert!(engine.submit_resolution_choice(0, &answer).is_err());
+        *engine
+            .state
+            .zone_change_generation
+            .get_mut(&cards[0])
+            .unwrap() -= 1;
+        let source = engine.state.players[0].battlefield[0];
+        engine.state.players[0]
+            .battlefield
+            .retain(|oid| *oid != source);
+        engine.state.players[1].battlefield.push(source);
+        engine.state.objects.get_mut(&source).unwrap().owner = 1;
+        engine.concede_batch(1).unwrap();
+        assert!(!engine.state.objects.contains_key(&source));
+        assert_eq!(
+            engine
+                .state
+                .pending_resolution
+                .as_ref()
+                .unwrap()
+                .presentation
+                .candidates,
+            cards
+        );
+        engine.submit_resolution_choice(0, &answer).unwrap();
+        engine
+            .submit_resolution_choice(
+                0,
+                &rv1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![cards[2], cards[1]],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(engine.state.pending_resolution.is_none());
+    }
+
+    #[test]
+    fn authoring_drawer_departure_retires_only_their_action_and_continues_other_requests() {
+        let mut engine = fixture("LookAtTopThree", 3);
+        let hand = engine.state.players[2].hand.len();
+        engine
+            .start_draw_transaction(
+                vec![(0, 1), (2, 1)],
+                DrawCompletion::FinishDrawStep {
+                    active_player: 0,
+                    occurrence: 0,
+                },
+                "fixture",
+                &mut Vec::new(),
+            )
+            .unwrap();
+        engine.concede_batch(0).unwrap();
+        assert!(engine.state.pending_resolution.is_none());
+        assert!(engine.state.pending_replacement_event.is_none());
+        assert_eq!(engine.state.players[2].hand.len(), hand + 1);
+    }
+
+    #[test]
+    fn authoring_doubling_and_library_replacement_finish_each_child_before_the_next() {
+        for double_first in [false, true] {
+            let mut engine = fixture("LookAtTopThree", 7);
+            let double = engine.state.players[0].library[6];
+            resolution::move_object_to_zone(
+                &mut engine.state,
+                engine.registry,
+                double,
+                Zone::Battlefield,
+                None,
+            )
+            .unwrap();
+            engine.state.objects.get_mut(&double).unwrap().card_id = "double_fixture".into();
+            let hand = engine.state.players[0].hand.len();
+            start(&mut engine);
+            let Some(PendingReplacementEvent::Draw(work)) = &engine.state.pending_replacement_event
+            else {
+                panic!("replacement order")
+            };
+            let selected = work
+                .applications
+                .iter()
+                .find(|application| {
+                    matches!(application.action, DrawReplacementAction::Double) == double_first
+                })
+                .unwrap()
+                .handle;
+            engine
+                .submit_resolution_choice(
+                    0,
+                    &rv1::SubmitResolutionChoice {
+                        chosen_object_ids: vec![selected],
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            for _ in 0..if double_first { 2 } else { 1 } {
+                let candidates = engine
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .unwrap()
+                    .presentation
+                    .candidates
+                    .clone();
+                engine
+                    .submit_resolution_choice(
+                        0,
+                        &rv1::SubmitResolutionChoice {
+                            chosen_object_ids: vec![candidates[0]],
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
+                let bottom = engine
+                    .state
+                    .pending_resolution
+                    .as_ref()
+                    .unwrap()
+                    .presentation
+                    .candidates
+                    .clone();
+                engine
+                    .submit_resolution_choice(
+                        0,
+                        &rv1::SubmitResolutionChoice {
+                            chosen_object_ids: bottom.into_iter().rev().collect(),
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
+            }
+            assert!(engine.state.pending_resolution.is_none());
+            assert_eq!(
+                engine.state.players[0].hand.len(),
+                hand + if double_first { 2 } else { 1 }
+            );
+            assert_eq!(engine.state.draw_step_progress, Some((0, 0, 0)));
+        }
+    }
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -25,6 +545,29 @@ struct DrawApplication {
 enum DrawReplacementAction {
     Double,
     WinInstead,
+    Library(LibraryDrawReplacement),
+}
+
+enum AppliedDrawProgress {
+    Continue,
+    Parked,
+    GameEnded,
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+enum DrawLibraryStage {
+    Optional,
+    ChooseKind,
+    ChooseToHand(Vec<(ObjectId, u64)>),
+    OrderBottom(Vec<(ObjectId, u64)>),
+}
+
+#[derive(serde::Serialize, Debug, Clone)]
+struct DrawLibraryAction {
+    source: ObjectId,
+    source_label: String,
+    stage: DrawLibraryStage,
+    reveal: Option<rv1::CardsRevealed>,
 }
 
 #[derive(serde::Serialize, Debug, Clone)]
@@ -92,6 +635,7 @@ pub(crate) struct PendingDrawTransaction {
     completion: DrawCompletion,
     label: String,
     receipts: Vec<TriggerObjectRef>,
+    action: Option<DrawLibraryAction>,
 }
 
 pub(super) struct CompletedDraw {
@@ -152,6 +696,9 @@ impl GameEngine {
                     {
                         DrawReplacementAction::WinInstead
                     }
+                    StaticAbilityDef::ReplaceControllerDrawWithLibraryChoice { kind } => {
+                        DrawReplacementAction::Library(kind)
+                    }
                     _ => continue,
                 };
                 let identity = DrawReplacementIdentity {
@@ -201,6 +748,7 @@ impl GameEngine {
                 completion,
                 label: label.to_string(),
                 receipts: Vec::new(),
+                action: None,
             },
             events,
         )
@@ -222,8 +770,12 @@ impl GameEngine {
             else {
                 work.requests.pop_front();
                 work.nodes.clear();
+                work.action = None;
                 continue;
             };
+            if work.action.is_some() {
+                return Ok(self.park_draw_library_action(work, events));
+            }
             if work.nodes.is_empty() {
                 if request.remaining == 0 {
                     events.push(ev_log(format!(
@@ -287,8 +839,12 @@ impl GameEngine {
                 return Ok(DrawProgress::Parked);
             }
             if let Some((identity, action)) = candidates.into_iter().next() {
-                if self.apply_draw_replacement(&mut work, identity, action) {
-                    return Ok(DrawProgress::GameEnded);
+                match self.apply_draw_replacement(&mut work, identity, action) {
+                    AppliedDrawProgress::GameEnded => return Ok(DrawProgress::GameEnded),
+                    AppliedDrawProgress::Parked => {
+                        return Ok(self.park_draw_library_action(work, events))
+                    }
+                    AppliedDrawProgress::Continue => {}
                 }
                 continue;
             }
@@ -327,15 +883,16 @@ impl GameEngine {
         work: &mut PendingDrawTransaction,
         identity: DrawReplacementIdentity,
         action: DrawReplacementAction,
-    ) -> bool {
+    ) -> AppliedDrawProgress {
         let mut node = work.nodes.pop().expect("current draw node");
+        let source = identity.source;
         node.applied.push(identity);
         match action {
             DrawReplacementAction::Double => {
                 // Children inherit ancestors; a subsequently modified sibling never changes them.
                 work.nodes.push(node.clone());
                 work.nodes.push(node);
-                false
+                AppliedDrawProgress::Continue
             }
             DrawReplacementAction::WinInstead => {
                 // CR 614.6: consume the draw before attempting the replacement's win. Even a
@@ -345,7 +902,43 @@ impl GameEngine {
                     .get_or_insert(crate::state::GameOutcome::Winner(
                         work.requests.front().expect("drawer").player,
                     ));
-                true
+                AppliedDrawProgress::GameEnded
+            }
+            DrawReplacementAction::Library(kind) => {
+                let player = work.requests.front().expect("drawer").player;
+                let stage = match kind {
+                    LibraryDrawReplacement::RevealUntilLandOrNonland => {
+                        // Declining leaves the modified node with this identity already applied.
+                        work.nodes.push(node);
+                        DrawLibraryStage::Optional
+                    }
+                    LibraryDrawReplacement::LookAtTopThree => {
+                        let index = self.state.player_idx(player).expect("drawer");
+                        let cards = self.state.players[index]
+                            .library
+                            .iter()
+                            .take(3)
+                            .copied()
+                            .collect::<Vec<_>>();
+                        if cards.is_empty() {
+                            return AppliedDrawProgress::Continue;
+                        }
+                        DrawLibraryStage::ChooseToHand(super::library_choices::capture(
+                            self, &cards,
+                        ))
+                    }
+                };
+                work.action = Some(DrawLibraryAction {
+                    source,
+                    source_label: super::events::object_display_name(
+                        &self.state,
+                        self.registry,
+                        source,
+                    ),
+                    stage,
+                    reveal: None,
+                });
+                AppliedDrawProgress::Parked
             }
         }
     }
@@ -356,6 +949,13 @@ impl GameEngine {
         else {
             return None;
         };
+        if work.action.is_some() {
+            return Some(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                    self.draw_library_choice(work),
+                )),
+            });
+        }
         Some(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
@@ -376,6 +976,8 @@ impl GameEngine {
                                 match value.action {
                                     DrawReplacementAction::Double => "Draw two cards instead.",
                                     DrawReplacementAction::WinInstead => "Win the game instead.",
+                                    DrawReplacementAction::Library(LibraryDrawReplacement::LookAtTopThree) => "Look at three cards and put one into your hand instead.",
+                                    DrawReplacementAction::Library(LibraryDrawReplacement::RevealUntilLandOrNonland) => "Choose whether to replace this draw with a land/nonland reveal.",
                                 }
                                 .to_string(),
                             )
@@ -398,6 +1000,9 @@ impl GameEngine {
             self.state.pending_resolution = Some(pending);
             return Err(EngineError::Illegal("draw replacement event missing"));
         };
+        if work.action.is_some() {
+            return self.finish_draw_library_choice(pending, answer, decision);
+        }
         let selected = (decision == rv1::ResolutionChoiceDecision::Unspecified
             && answer.chosen_object_ids.len() == 1
             && answer.chosen_player_ids.is_empty()
@@ -444,8 +1049,13 @@ impl GameEngine {
         };
         work.completion.transfer_stack(stack);
         let mut events = Vec::new();
-        if self.apply_draw_replacement(&mut work, identity, action) {
-            return Ok(finish_with_events(self, events));
+        match self.apply_draw_replacement(&mut work, identity, action) {
+            AppliedDrawProgress::GameEnded => return Ok(finish_with_events(self, events)),
+            AppliedDrawProgress::Parked => {
+                self.park_draw_library_action(work, &mut events);
+                return Ok(finish_with_events(self, events));
+            }
+            AppliedDrawProgress::Continue => {}
         }
         match self.advance_draw_transaction(work, &mut events)? {
             DrawProgress::GameEnded => Ok(finish_with_events(self, events)),

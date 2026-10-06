@@ -196,10 +196,17 @@ impl GameEngine {
             ));
         }
 
+        let mut events = Vec::new();
+        if choice.variable {
+            events.push(ev_log(format!(
+                "P{} chooses {} cards to discard.",
+                choice.player,
+                chosen.len()
+            )));
+        }
         discard.selections.push(chosen.to_vec());
         if discard.current + 1 < discard.choices.len() {
             discard.current += 1;
-            let mut events = Vec::new();
             resolution::zones::park_player_set_discard_choice(self, &mut events, stack, discard);
             return Ok(finish_with_events(self, events));
         }
@@ -257,7 +264,6 @@ impl GameEngine {
             ));
         }
 
-        let mut events = Vec::new();
         let Some(result) = self.apply_player_set_discard(stack.clone(), &discard, &mut events)?
         else {
             return Ok(finish_with_events(self, events));
@@ -281,7 +287,8 @@ impl GameEngine {
             .iter()
             .zip(&discard.selections)
             .any(|(choice, selection)| {
-                choice.selection_cause(selection) == Some(crate::state::DiscardCause::Effect)
+                !selection.is_empty()
+                    && choice.selection_cause(selection) == Some(crate::state::DiscardCause::Effect)
                     && self.has_discard_library_replacement(choice.player)
             })
         {

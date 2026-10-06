@@ -1948,6 +1948,16 @@ impl GameEngine {
                 .map_or(0, |(previous, top)| {
                     super::resolution::card_result_count(self, top, previous, filter)
                 }) as i64,
+            CountExpression::CardsMatchingResultForAffectedPlayer { filter } => context
+                .previous_effect_result
+                .zip(context.stack_item)
+                .zip(context.affected_player)
+                .map_or(0, |((previous, top), player)| {
+                    super::resolution::card_result_count_for_player(
+                        self, top, previous, filter, player,
+                    )
+                })
+                as i64,
             CountExpression::CardResultCharacteristicSum {
                 filter,
                 characteristic,
@@ -2565,6 +2575,7 @@ mod tests {
 
     fn quantity_context(source: ObjectId) -> AmountContext<'static> {
         AmountContext {
+            affected_player: None,
             entry_cast_cost_receipts: &[],
             entry_cast_cost_origin: None,
             entry_mana_colors_spent: Default::default(),
@@ -2634,6 +2645,7 @@ mod tests {
         ] {
             let receipts = [receipt.clone()];
             let context = AmountContext {
+                affected_player: None,
                 entry_cast_cost_receipts: &receipts,
                 entry_cast_cost_origin: Some(&effective_origin),
                 ..quantity_context(1)
@@ -2645,6 +2657,7 @@ mod tests {
             ..receipt
         }];
         let context = AmountContext {
+            affected_player: None,
             entry_cast_cost_receipts: &ordinary,
             entry_cast_cost_origin: Some(&origin),
             ..quantity_context(1)

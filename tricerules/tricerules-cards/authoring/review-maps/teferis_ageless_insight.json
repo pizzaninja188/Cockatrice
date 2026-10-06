@@ -64,8 +64,8 @@
                                   "covers":  "failed replacement leaves count only success and finish discard and authored tail before loss"
                               },
                               {
-                                  "test":  "scenario deck_coverage_draw_replacements::caster_departure_cancels_foreign_drawer_fanout_without_replaying_prior_draws",
-                                  "covers":  "caster departure cancels foreign drawer fanout without replaying prior draws"
+                                  "test":  "scenario deck_coverage_draw_replacements::caster_departure_finishes_foreign_drawer_fanout_without_replaying_prior_draws",
+                                  "covers":  "caster departure finishes foreign drawer fanout without replaying prior draws"
                               },
                               {
                                   "test":  "scenario deck_coverage_draw_replacements::stale_source_incarnation_rejects_then_new_incarnation_can_apply_to_child_event",

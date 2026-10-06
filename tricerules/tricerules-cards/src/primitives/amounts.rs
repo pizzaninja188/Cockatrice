@@ -94,6 +94,9 @@ pub enum CountExpression {
     /// Count cards in an engine-owned payment or immediately preceding effect cohort. Gerrard's
     /// Verdict and Gorging Vulture share this without re-examining an object's current zone.
     CardsMatchingResult { filter: CardResultFilter },
+    /// Flux / Steal the Show consume each recipient's own committed result, retaining the
+    /// resolving spell's controller as the reference for the filter's relative player set.
+    CardsMatchingResultForAffectedPlayer { filter: CardResultFilter },
     /// Windfall and Whispering Madness use the greatest completed cohort belonging to one
     /// affected player. Group receipts, never current zones or current hand sizes.
     MaximumCardsMatchingResult { filter: CardResultFilter },
@@ -213,6 +216,7 @@ impl CountExpression {
                                 | Self::CastCostPaymentCount { .. }
                                 | Self::ManaColorsSpentToCast
                                 | Self::CardsMatchingResult { .. }
+                                | Self::CardsMatchingResultForAffectedPlayer { .. }
                                 | Self::MaximumCardsMatchingResult { .. }
                                 | Self::CardResultCharacteristicSum { .. }
                         )
@@ -231,6 +235,7 @@ impl CountExpression {
             | CountExpression::CreatureDeathsThisTurn
             | CountExpression::CardsDrawnThisTurn { .. }
             | CountExpression::CardsMatchingResult { .. }
+            | CountExpression::CardsMatchingResultForAffectedPlayer { .. }
             | CountExpression::MaximumCardsMatchingResult { .. }
             | CountExpression::CardResultCharacteristicSum { .. } => Ok(()),
         }
@@ -239,6 +244,7 @@ impl CountExpression {
     fn card_result_filter(&self) -> Option<&CardResultFilter> {
         match self {
             Self::CardsMatchingResult { filter }
+            | Self::CardsMatchingResultForAffectedPlayer { filter }
             | Self::MaximumCardsMatchingResult { filter }
             | Self::CardResultCharacteristicSum { filter, .. } => Some(filter),
             Self::Affine { terms, .. } => terms
@@ -288,6 +294,13 @@ pub enum Amount {
 }
 
 impl Amount {
+    pub(crate) fn uses_affected_player_result(&self) -> bool {
+        match self {
+            Self::Count(CountExpression::CardsMatchingResultForAffectedPlayer { .. }) => true,
+            Self::DivideRoundedDown { amount, .. } => amount.uses_affected_player_result(),
+            _ => false,
+        }
+    }
     pub(crate) fn entry_cast_cost_reference(&self) -> Option<&CastCostOptionRef> {
         match self {
             Self::Count(CountExpression::CastCostPaymentCount { cost }) => Some(cost),
@@ -371,6 +384,13 @@ impl Amount {
     }
 
     pub(super) fn validate_effect(&self, context: EffectContext) -> Result<(), String> {
+        if self.uses_affected_player_result() {
+            return Err("affected-player result count requires a player draw instruction".into());
+        }
+        self.validate_player_effect(context)
+    }
+
+    pub(super) fn validate_player_effect(&self, context: EffectContext) -> Result<(), String> {
         self.validate()?;
         if self.uses_entry_cast_colors() || self.entry_cast_cost_reference().is_some() {
             return Err("cast-payment colors require an intrinsic entry replacement".into());
@@ -400,6 +420,11 @@ impl Amount {
     }
 
     pub(crate) fn validate_live(&self) -> Result<(), String> {
+        if self.uses_affected_player_result() {
+            return Err(
+                "affected-player result count requires a resolving player draw instruction".into(),
+            );
+        }
         if self.uses_entry_cast_colors() || self.entry_cast_cost_reference().is_some() {
             return Err("cast-payment colors require an intrinsic entry replacement".into());
         }
@@ -793,6 +818,22 @@ pub enum LifeAmount {
 #[cfg(test)]
 mod hand_size_count_tests {
     use super::*;
+
+    #[test]
+    fn affected_player_results_reject_cost_entry_static_and_unscoped_effect_contexts() {
+        let expression: CountExpression = ron::from_str(
+            "CardsMatchingResultForAffectedPlayer(filter:(source:PreviousEffect,action:Discard,players:All))"
+        ).unwrap();
+        let amount = Amount::Count(expression.clone());
+        assert!(expression.validate_static_count().is_err());
+        assert!(amount.validate_cost(true).is_err());
+        assert!(amount.validate_entry(true).is_err());
+        assert!(amount.validate_effect(EffectContext::Spell).is_err());
+        assert!(amount.validate_player_effect(EffectContext::Spell).is_ok());
+        assert!(ron::from_str::<CountExpression>(
+            "Affine(terms:[(coefficient:1,quantity:CardsMatchingResultForAffectedPlayer(filter:(source:PreviousEffect,action:Discard,players:All)))])"
+        ).unwrap().validate().is_err());
+    }
 
     #[test]
     fn ghalta_power_sum_schema_rejects_static_scaling_and_invalid_filters() {

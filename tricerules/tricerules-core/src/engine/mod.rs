@@ -96,6 +96,7 @@ fn attachment_recipient_proto(recipient: AttachmentRecipient) -> rv1::Attachment
 
 #[derive(Clone, Copy)]
 struct AmountContext<'a> {
+    affected_player: Option<PlayerId>,
     /// Borrowed only by the entering object's intrinsic replacement evaluator.
     entry_cast_cost_receipts: &'a [crate::state::CastCostReceipt],
     entry_cast_cost_origin: Option<&'a crate::state::CastCostAbilityOrigin>,
@@ -116,6 +117,7 @@ struct AmountContext<'a> {
 impl<'a> AmountContext<'a> {
     fn from_condition(context: ConditionContext<'a>) -> Self {
         Self {
+            affected_player: None,
             entry_cast_cost_receipts: &[],
             entry_cast_cost_origin: None,
             entry_mana_colors_spent: Default::default(),
@@ -130,6 +132,7 @@ impl<'a> AmountContext<'a> {
     }
     fn for_stack_item(item: &'a StackItem, controller: PlayerId) -> Self {
         Self {
+            affected_player: None,
             entry_cast_cost_receipts: &[],
             entry_cast_cost_origin: None,
             entry_mana_colors_spent: Default::default(),
@@ -141,6 +144,11 @@ impl<'a> AmountContext<'a> {
             chosen_x: item.chosen_x,
             previous_effect_result: None,
         }
+    }
+
+    fn with_affected_player(mut self, player: PlayerId) -> Self {
+        self.affected_player = Some(player);
+        self
     }
 
     fn with_previous_effect_result(mut self, result: &'a EffectResult) -> Self {
@@ -205,6 +213,7 @@ mod history;
 #[cfg(test)]
 mod issue_169_taps;
 mod legal_actions;
+mod library_choices;
 mod life_numeric;
 mod mass_sacrifice;
 #[cfg(test)]
