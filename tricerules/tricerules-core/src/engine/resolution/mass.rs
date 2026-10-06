@@ -174,28 +174,26 @@ pub(super) fn destroy_all(
     // then their "dies" triggers fire together. Indestructible permanents survive
     // (CR 702.12b). `prevent_regeneration` bypasses shields (Wrath of God).
     // Untargeted, so hexproof/shroud are irrelevant.
+    // Snapshot every destruction-relevant fact before the first permanent moves. In particular,
+    // an earlier Aura or other static-effect source may leave during this simultaneous event;
+    // its departure must not change whether a later member of the cohort is indestructible.
     let victims = battlefield_objects_matching(engine, &kind)
         .into_iter()
-        .map(|tid| {
-            let source = engine.trigger_source_snapshot(tid);
-            let was_creature = engine
+        .map(|tid| DestroySnapshot {
+            object_id: tid,
+            indestructible: engine.effective_has_keyword(tid, Keyword::Indestructible),
+            name: object_display_name(&engine.state, engine.registry, tid),
+            owner: engine.state.objects.get(&tid).map(|object| object.owner),
+            source: engine.trigger_source_snapshot(tid),
+            was_creature: engine
                 .characteristics(tid)
-                .is_some_and(|value| value.is_creature());
-            (tid, source, was_creature)
+                .is_some_and(|value| value.is_creature()),
         })
         .collect::<Vec<_>>();
     let zone_snapshot = engine.snapshot_zone_event();
     let mut destroyed = Vec::new();
     let mut tap_events = Vec::new();
-    for (tid, source, was_creature) in victims {
-        let snapshot = DestroySnapshot {
-            object_id: tid,
-            indestructible: engine.effective_has_keyword(tid, Keyword::Indestructible),
-            name: object_display_name(&engine.state, engine.registry, tid),
-            owner: engine.state.objects.get(&tid).map(|object| object.owner),
-            source,
-            was_creature,
-        };
+    for snapshot in victims {
         match attempt_destroy(
             engine,
             snapshot,

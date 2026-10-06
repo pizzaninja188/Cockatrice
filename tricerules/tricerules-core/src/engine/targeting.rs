@@ -1593,6 +1593,7 @@ fn validate_effect_targets(
         | SpellEffectKind::ReturnAllGraveyardPermanents { .. }
         | SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess { .. }
         | SpellEffectKind::ThassaOracle
+        | SpellEffectKind::BoompileFlipCoinAndDestroyNonlands
         | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
         | SpellEffectKind::CastMadness { .. }
         | SpellEffectKind::SiegeDefeat

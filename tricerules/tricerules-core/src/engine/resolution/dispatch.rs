@@ -22,6 +22,9 @@ pub(super) fn execute_effect(
             }
         }
         SpellEffectKind::ThassaOracle => zones::thassa_oracle(cx)?,
+        effect @ SpellEffectKind::BoompileFlipCoinAndDestroyNonlands => {
+            boompile::flip_coin_and_destroy_nonlands(cx, effect)?
+        }
         SpellEffectKind::MillEachOpponentByHandSize => zones::mill_each_opponent_by_hand_size(cx)?,
         SpellEffectKind::Conditional { condition, effect } => {
             if !cx.engine.condition_holds(

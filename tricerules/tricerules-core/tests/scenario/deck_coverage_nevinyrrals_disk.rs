@@ -141,3 +141,50 @@ fn nevinyrrals_disk_enters_tapped_rejects_tapped_activation_then_sweeps_matching
         "a planeswalker is outside the filter"
     );
 }
+
+#[test]
+fn simultaneous_destroy_keeps_indestructibility_granted_by_aura_that_leaves_in_the_sweep() {
+    let mut engine = disk_engine(20_261_006);
+    let creature = inject_creature_on_battlefield(&mut engine, 1, "grizzly_bears");
+    inject_card_into_hand(&mut engine, 0, "indestructibility");
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            w: 1,
+            c: 3,
+            ..Default::default()
+        },
+    );
+    let aura_slot = hand_index_for_card(&engine, 0, "indestructibility");
+    engine
+        .apply_command(0, &cast_spell(aura_slot, target_object(creature)))
+        .expect("cast Indestructibility on the opposing creature");
+    resolve_entire_stack_two_player(&mut engine);
+    let aura = battlefield_object_for_card(&engine, 0, "indestructibility");
+    assert!(engine.effective_has_keyword(creature, tricerules_cards::Keyword::Indestructible));
+
+    // The Aura belongs to player 0, so the shared mass-destruction selector visits it before
+    // player 1's creature. Both are part of the same simultaneous destruction event.
+    let disk = inject_permanent_on_battlefield(&mut engine, 0, DISK);
+    give_mana(
+        &mut engine,
+        0,
+        ManaGift {
+            c: 1,
+            ..Default::default()
+        },
+    );
+    engine
+        .apply_command(0, &activate_ability_for(&engine, disk, 0, vec![]))
+        .expect("activate the untapped Disk");
+    resolve_entire_stack_two_player(&mut engine);
+
+    assert_eq!(engine.state.objects[&aura].zone, Zone::Graveyard);
+    assert_eq!(engine.state.objects[&disk].zone, Zone::Graveyard);
+    assert_eq!(
+        engine.state.objects[&creature].zone,
+        Zone::Battlefield,
+        "indestructibility is determined for the whole sweep before the Aura leaves"
+    );
+}

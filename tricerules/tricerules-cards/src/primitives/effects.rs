@@ -878,6 +878,9 @@ pub enum SpellEffectKind {
     /// the other looked-at cards to the bottom, then checks the captured value against library
     /// size. Kept card-specific because no other admitted card needs this exact combination.
     ThassaOracle,
+    /// Boompile's fair coin flip and immediate nonland sweep. It is specialized because no other
+    /// currently admitted card needs a coin outcome; the winning branch reuses DestroyAll.
+    BoompileFlipCoinAndDestroyNonlands,
     /// Apply one allowlisted instruction only when a current engine-side condition holds. The
     /// instruction may suspend for its existing library choice (Scry or Surveil), whose ordinary
     /// stack-resolution continuation resumes the effect list after the choice. Target roles come
@@ -3135,6 +3138,7 @@ impl SpellEffectKind {
             | SpellEffectKind::MillEachOpponentByHandSize
             | SpellEffectKind::WinGameIf { .. }
             | SpellEffectKind::ThassaOracle
+            | SpellEffectKind::BoompileFlipCoinAndDestroyNonlands
             | SpellEffectKind::DestroyAll { .. }
             | SpellEffectKind::ExileAll { .. }
             | SpellEffectKind::SacrificeAll { .. }
@@ -3767,6 +3771,11 @@ impl SpellEffectKind {
         }
         if matches!(self, Self::ThassaOracle) && context != EffectContext::Ability {
             return Err("ThassaOracle is only valid in a triggered or activated ability".into());
+        }
+        if matches!(self, Self::BoompileFlipCoinAndDestroyNonlands)
+            && context != EffectContext::Ability
+        {
+            return Err("Boompile's coin flip requires an activated ability".into());
         }
         if matches!(
             self,

@@ -1,0 +1,16 @@
+// Scryfall Oracle ID 85b8902f-2515-4ded-b28a-a83334f089f1; exact card and rulings checked
+// 2026-10-06. CR 602.2, 608.2c, 701.8, 701.19, 702.12b, and 705.1–2 govern its resolution.
+(
+  id: "boompile",
+  name: "Boompile",
+  face_id: "boompile",
+  mana_cost: "{4}",
+  types: ["Artifact"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    source_zone: Battlefield,
+    costs: [Tap],
+    effect: [BoompileFlipCoinAndDestroyNonlands],
+  )],
+)

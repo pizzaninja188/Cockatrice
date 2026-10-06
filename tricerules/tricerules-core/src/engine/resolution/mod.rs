@@ -30,6 +30,7 @@ pub(in crate::engine) use choices::{
 };
 mod amass;
 mod blight;
+mod boompile;
 #[cfg(test)]
 mod chosen_untap_tests;
 mod damage;

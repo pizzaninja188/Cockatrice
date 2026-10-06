@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "oracle_id": "85b8902f-2515-4ded-b28a-a83334f089f1",
+  "spans": [
+    {
+      "face_id": "boompile",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::BoompileFlipCoinAndDestroyNonlands",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_boompile::boompile_has_a_complete_card_definition",
+      "covers": "exact artifact identity, four generic mana cost, one tap activated ability, and its specialized effect"
+    },
+    {
+      "test": "scenario deck_coverage_boompile::coin_result_is_fair_replay_stable_and_sweeps_only_nonlands_on_a_win",
+      "covers": "both seeded outcomes and deterministic replay, public result log, simultaneous all-type nonland sweep, Aura-granted indestructibility snapshot, regeneration, basic and artifact land survival, and indestructible survival"
+    },
+    {
+      "test": "scenario deck_coverage_boompile::tapped_boompile_rejects_activation_without_advancing_the_replay_index",
+      "covers": "tapped activation rejection, no stack item, and no replay-index advance"
+    },
+    {
+      "test": "scenario deck_coverage_boompile::boompile_ability_resolves_after_its_source_leaves_the_battlefield",
+      "covers": "the activated ability remains on the stack and resolves after Disenchant moves Boompile away, then performs its winning sweep"
+    },
+    {
+      "test": "scenario deck_coverage_nevinyrrals_disk::simultaneous_destroy_keeps_indestructibility_granted_by_aura_that_leaves_in_the_sweep",
+      "covers": "shared DestroyAll snapshots Aura-granted indestructibility before simultaneous permanent movement"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
