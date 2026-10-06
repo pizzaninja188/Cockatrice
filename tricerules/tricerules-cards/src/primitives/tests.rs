@@ -2351,6 +2351,59 @@ fn source_counter_scaled_mana_branch(effect: SpellEffectKind) -> SpellEffectKind
     }
 }
 
+fn opponent_land_mana_effect() -> SpellEffectKind {
+    SpellEffectKind::ProduceManaFromOpponentLands { options: vec![] }
+}
+
+#[test]
+fn opponent_land_mana_is_restricted_to_the_tap_activated_ability_shape() {
+    let ability = ActivatedAbilityDef {
+        intrinsic_land_mana: false,
+        ability_id: crate::AbilityId::new("activated_01").unwrap(),
+        presentation: crate::AbilityPresentation::Fallback,
+        source_zone: AbilitySourceZone::Battlefield,
+        costs: vec![AbilityCost::Tap],
+        cost_modifiers: vec![],
+        effect: vec![opponent_land_mana_effect()],
+        targeting: None,
+        timing: ActivationTiming::Normal,
+        conditions: vec![],
+        activation_limit: None,
+    };
+    ability
+        .validate_shape()
+        .expect("Orchard's dynamic output is a sole tap battlefield ability");
+    assert!(ability.is_mana_ability());
+    assert!(ability.opponent_land_mana_output());
+    assert!(ability.mana_options().unwrap().is_empty());
+
+    let mut extra_cost = ability.clone();
+    extra_cost
+        .costs
+        .push(AbilityCost::Mana(ManaCost::parse("{1}").unwrap()));
+    assert!(extra_cost.validate_shape().is_err());
+
+    let mut nested = ability.clone();
+    nested.effect = vec![source_counter_scaled_mana_branch(
+        opponent_land_mana_effect(),
+    )];
+    assert!(nested.validate_shape().is_err());
+
+    let triggered = TriggeredAbilityDef {
+        ability_id: crate::AbilityId::new("triggered_01").unwrap(),
+        presentation: crate::AbilityPresentation::Fallback,
+        trigger: TriggerCondition::WhenSelfEntersBattlefield,
+        effect: vec![opponent_land_mana_effect()],
+        modal: None,
+        targeting: None,
+        may: false,
+        intervening_if: None,
+        triggers_only_once: false,
+        max_triggers_per_turn: None,
+    };
+    assert!(triggered.validate_shape().is_err());
+}
+
 #[test]
 fn source_counter_scaled_mana_accepts_the_supported_activated_ability_shape() {
     let ability = ActivatedAbilityDef {

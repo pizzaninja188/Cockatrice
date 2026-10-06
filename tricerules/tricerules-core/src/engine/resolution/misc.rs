@@ -407,7 +407,7 @@ pub(super) fn create_delayed_trigger(
         Some(_) => {
             return Err(EngineError::Illegal(
                 "delayed trigger affected_player requires a single captured player",
-            ))
+            ));
         }
         None => None,
     };
@@ -499,7 +499,7 @@ pub(super) fn create_delayed_trigger(
         _ => {
             return Err(EngineError::Illegal(
                 "delayed trigger has a non-delayed condition",
-            ))
+            ));
         }
     };
     let ability_text = ability.fallback_text(&card_name);
@@ -832,6 +832,7 @@ pub(super) fn produce_mana(
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
     let (SpellEffectKind::ProduceMana { .. }
+    | SpellEffectKind::ProduceManaFromOpponentLands { .. }
     | SpellEffectKind::ProduceManaPerSourceCounter { .. }
     | SpellEffectKind::ProduceSplitManaFromRemovedStorageCounters { .. }) = effect
     else {

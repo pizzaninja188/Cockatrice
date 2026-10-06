@@ -312,6 +312,7 @@ pub(super) fn execute_effect(
             zones::exile_source_then_return_transformed(cx, effect)?
         }
         effect @ (SpellEffectKind::ProduceMana { .. }
+        | SpellEffectKind::ProduceManaFromOpponentLands { .. }
         | SpellEffectKind::ProduceManaPerSourceCounter { .. }
         | SpellEffectKind::ProduceSplitManaFromRemovedStorageCounters { .. }) => {
             misc::produce_mana(cx, effect)?

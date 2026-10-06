@@ -1558,6 +1558,7 @@ fn validate_effect_targets(
         | SpellEffectKind::DamageCantBePreventedThisTurn
         // CR 605.1a: a mana ability is untargeted by definition.
         | SpellEffectKind::ProduceMana { .. }
+        | SpellEffectKind::ProduceManaFromOpponentLands { .. }
         | SpellEffectKind::ProduceManaPerSourceCounter { .. }
         | SpellEffectKind::ProduceSplitManaFromRemovedStorageCounters { .. }
         | SpellEffectKind::AddMana { .. }
@@ -2981,7 +2982,9 @@ mod tests {
                 "{predicate}"
             );
         }
-        let filter = issue_176_target("(kind: Creature, token: Some(false), min_mana_value: Some(2), max_mana_value: Some(2))");
+        let filter = issue_176_target(
+            "(kind: Creature, token: Some(false), min_mana_value: Some(2), max_mana_value: Some(2))",
+        );
         assert!(filter_characteristics_match(&engine, &filter, bear));
         let damaged = issue_176_target("(kind: Creature, was_dealt_damage_this_turn: Some(true))");
         let generation = engine
@@ -3173,7 +3176,9 @@ mod tests {
                 "{predicate}"
             );
         }
-        let filter = issue_176_graveyard("(card: Some((min_mana_value: Some(2), max_mana_value: Some(2), required_subtypes: [\"Bear\"], has_adventure: Some(false))))");
+        let filter = issue_176_graveyard(
+            "(card: Some((min_mana_value: Some(2), max_mana_value: Some(2), required_subtypes: [\"Bear\"], has_adventure: Some(false))))",
+        );
         assert!(graveyard_target_legal(
             &engine,
             &filter,
@@ -3240,7 +3245,11 @@ mod tests {
                 TriggerContext::default(),
             )
         };
-        assert!(legal("(owner: Opponent, card: Some((has_adventure: Some(true), min_mana_value: Some(3), max_mana_value: Some(3), required_subtypes: [\"Giant\"])))", ids[0], 0));
+        assert!(legal(
+            "(owner: Opponent, card: Some((has_adventure: Some(true), min_mana_value: Some(3), max_mana_value: Some(3), required_subtypes: [\"Giant\"])))",
+            ids[0],
+            0
+        ));
         assert!(!legal(
             "(owner: Opponent, card: Some((has_adventure: Some(true))))",
             ids[0],
@@ -3267,7 +3276,11 @@ mod tests {
             ),
             "X is zero outside the stack"
         );
-        assert!(legal("(owner: AnyPlayer, card: Some((min_mana_value: Some(2), max_mana_value: Some(2), required_subtypes: [\"Human\"])))", ids[3], 0));
+        assert!(legal(
+            "(owner: AnyPlayer, card: Some((min_mana_value: Some(2), max_mana_value: Some(2), required_subtypes: [\"Human\"])))",
+            ids[3],
+            0
+        ));
     }
     use super::*;
     use tricerules_cards::{primitives::TargetGroupDef, CounterKind};

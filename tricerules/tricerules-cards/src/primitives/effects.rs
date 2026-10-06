@@ -1824,6 +1824,12 @@ pub enum SpellEffectKind {
         #[serde(default)]
         conditional: Option<ConditionalManaOutput>,
     },
+    /// CR 106.7 mana ability: Exotic Orchard and Fellwar Stone can produce one mana of a
+    /// color that an opponent-controlled land could produce. The engine derives the possible
+    /// colors from the current battlefield; the empty `options` field is only a typed marker.
+    ProduceManaFromOpponentLands {
+        options: Vec<ManaAmount>,
+    },
     /// CR 605 mana ability whose chosen mana option is produced once for each counter of
     /// `counter` on its source. The source remains on the battlefield while this activated
     /// ability resolves; its current counter count is read when the ability is activated.
@@ -3103,6 +3109,7 @@ impl SpellEffectKind {
             | SpellEffectKind::Populate
             | SpellEffectKind::CreateAttackingTokens { .. }
             | SpellEffectKind::ProduceMana { .. }
+            | SpellEffectKind::ProduceManaFromOpponentLands { .. }
             | SpellEffectKind::ProduceManaPerSourceCounter { .. }
             | SpellEffectKind::ProduceSplitManaFromRemovedStorageCounters { .. }
             | SpellEffectKind::AddMana { .. }
@@ -3163,6 +3170,52 @@ impl SpellEffectKind {
                 }) || otherwise
                     .iter()
                     .any(Self::contains_source_counter_scaled_mana)
+            }
+            _ => false,
+        }
+    }
+
+    /// Detect this dynamic source through effect wrappers so it remains restricted to the one
+    /// activated-ability contract that resolves it outside the stack.
+    pub(crate) fn contains_opponent_land_mana_output(&self) -> bool {
+        match self {
+            Self::ProduceManaFromOpponentLands { .. } => true,
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.contains_opponent_land_mana_output()
+            }
+            Self::MayBehold { if_beheld, .. } => if_beheld
+                .iter()
+                .any(Self::contains_opponent_land_mana_output),
+            Self::ChooseResolutionBranch {
+                branches,
+                otherwise,
+                ..
+            } => {
+                branches.iter().any(|branch| {
+                    branch
+                        .effects
+                        .iter()
+                        .any(Self::contains_opponent_land_mana_output)
+                }) || otherwise
+                    .iter()
+                    .any(Self::contains_opponent_land_mana_output)
+            }
+            Self::CreateReflexiveTrigger { ability, .. } => ability
+                .effect
+                .iter()
+                .any(Self::contains_opponent_land_mana_output),
+            Self::GrantTriggeredAbility { ability, .. }
+            | Self::CreateDelayedTrigger { ability, .. } => {
+                ability
+                    .effect
+                    .iter()
+                    .any(Self::contains_opponent_land_mana_output)
+                    || ability
+                        .modal
+                        .iter()
+                        .flat_map(|modal| &modal.modes)
+                        .flat_map(|mode| &mode.effects)
+                        .any(Self::contains_opponent_land_mana_output)
             }
             _ => false,
         }
@@ -5153,6 +5206,20 @@ impl SpellEffectKind {
                             "conditional ProduceMana requires at least one mana option".into()
                         );
                     }
+                }
+                Ok(())
+            }
+            SpellEffectKind::ProduceManaFromOpponentLands { options } => {
+                if context == EffectContext::Spell {
+                    return Err(
+                        "ProduceManaFromOpponentLands is only valid on a mana ability, not a spell"
+                            .into(),
+                    );
+                }
+                if !options.is_empty() {
+                    return Err(
+                        "ProduceManaFromOpponentLands does not accept authored options".into(),
+                    );
                 }
                 Ok(())
             }

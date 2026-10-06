@@ -245,6 +245,8 @@ mod deck_coverage_darksteel_plate;
 mod deck_coverage_devoid;
 #[path = "scenario/deck_coverage_everflowing_chalice.rs"]
 mod deck_coverage_everflowing_chalice;
+#[path = "scenario/deck_coverage_exotic_orchard.rs"]
+mod deck_coverage_exotic_orchard;
 #[path = "scenario/deck_coverage_fire_lit_thicket.rs"]
 mod deck_coverage_fire_lit_thicket;
 #[path = "scenario/deck_coverage_garruks_packleader.rs"]

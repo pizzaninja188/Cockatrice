@@ -88,6 +88,26 @@ fn mana_amount_for_color(
     }
 }
 
+fn color_for_index(index: usize) -> tricerules_cards::Color {
+    use tricerules_cards::Color;
+    match index {
+        0 => Color::White,
+        1 => Color::Blue,
+        2 => Color::Black,
+        3 => Color::Red,
+        4 => Color::Green,
+        _ => unreachable!("five-color mask index"),
+    }
+}
+
+fn mana_color_mask(amount: tricerules_cards::ManaAmount) -> u8 {
+    u8::from(amount.w > 0)
+        | (u8::from(amount.u > 0) << 1)
+        | (u8::from(amount.b > 0) << 2)
+        | (u8::from(amount.r > 0) << 3)
+        | (u8::from(amount.g > 0) << 4)
+}
+
 fn multiply_mana_amount(
     amount: tricerules_cards::ManaAmount,
     multiplier: u32,
@@ -576,7 +596,7 @@ impl GameEngine {
             _ => {
                 return Err(EngineError::Illegal(
                     "invalid spell origin for cancellation",
-                ))
+                ));
             }
         }
         self.state.objects.insert(oid, internal.original_object);
@@ -902,7 +922,7 @@ impl GameEngine {
                     _ => {
                         return Err(EngineError::Illegal(
                             "special cast requires active resolution offer",
-                        ))
+                        ));
                     }
                 }
             }
@@ -1540,8 +1560,125 @@ impl GameEngine {
         permanent_id: ObjectId,
         ability: &tricerules_cards::ActivatedAbilityDef,
     ) -> Option<Vec<tricerules_cards::ManaAmount>> {
+        if ability.opponent_land_mana_output() {
+            return Some(self.opponent_land_mana_options(permanent_id, ability));
+        }
+        self.active_mana_options_for_fixed_output(permanent_id, ability)
+    }
+
+    /// Evaluate one land's current set of producible colors without checking activation costs or
+    /// legality. Fixed and conditional mana abilities seed the set; opponent-land abilities then
+    /// propagate those colors until no land gains another. A least fixed point keeps Orchard-only
+    /// cycles empty.
+    fn opponent_land_mana_options(
+        &self,
+        source_id: ObjectId,
+        ability: &tricerules_cards::ActivatedAbilityDef,
+    ) -> Vec<tricerules_cards::ManaAmount> {
+        let mut lands = self
+            .state
+            .objects
+            .values()
+            .filter(|object| object.zone == Zone::Battlefield)
+            .filter_map(|object| {
+                let characteristics = self.characteristics(object.id)?;
+                characteristics
+                    .has_type("Land")
+                    .then_some((object.id, characteristics.controller))
+            })
+            .collect::<Vec<_>>();
+        lands.sort_by_key(|(object_id, _)| *object_id);
+
+        let mut colors_by_land = lands
+            .iter()
+            .map(|(object_id, _)| (*object_id, 0u8))
+            .collect::<std::collections::BTreeMap<_, _>>();
+        let mut dynamic_lands = Vec::new();
+
+        for (land_id, land_controller) in &lands {
+            for effective in self.effective_activated_abilities(*land_id) {
+                let ability = &effective.definition;
+                if ability.opponent_land_mana_output() {
+                    dynamic_lands.push((*land_id, *land_controller));
+                } else if let Some(options) =
+                    self.active_mana_options_for_fixed_output(*land_id, ability)
+                {
+                    for option in options {
+                        let colors = colors_by_land.entry(*land_id).or_default();
+                        *colors |= mana_color_mask(option);
+                    }
+                }
+            }
+        }
+        dynamic_lands.sort_by_key(|(land_id, _)| *land_id);
+        dynamic_lands.dedup_by_key(|(land_id, _)| *land_id);
+
+        loop {
+            let mut changed = false;
+            for (land_id, land_controller) in &dynamic_lands {
+                let mut opponent_colors = 0u8;
+                for (other_land_id, other_controller) in &lands {
+                    if self
+                        .state
+                        .are_opponents(*land_controller, *other_controller)
+                    {
+                        opponent_colors |= colors_by_land[other_land_id];
+                    }
+                }
+                let colors = colors_by_land
+                    .get_mut(land_id)
+                    .expect("every dynamic mana land has a color entry");
+                let next = *colors | opponent_colors;
+                if next != *colors {
+                    *colors = next;
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+
+        let Some(source_controller) = self
+            .characteristics(source_id)
+            .map(|characteristics| characteristics.controller)
+        else {
+            return vec![tricerules_cards::ManaAmount::default()];
+        };
+        let mut available_colors = 0u8;
+        for (land_id, land_controller) in &lands {
+            if self
+                .state
+                .are_opponents(source_controller, *land_controller)
+            {
+                available_colors |= colors_by_land[land_id];
+            }
+        }
+
+        let multiplier = self.tapped_permanent_mana_multiplier(source_id, ability);
+        let options = (0..5)
+            .filter(|index| available_colors & (1 << index) != 0)
+            .map(|index| {
+                multiply_mana_amount(mana_amount_for_color(color_for_index(index), 1), multiplier)
+            })
+            .collect::<Vec<_>>();
+        if options.is_empty() {
+            // CR 605.2: this remains an activatable mana ability that taps its source and adds 0.
+            vec![tricerules_cards::ManaAmount::default()]
+        } else {
+            options
+        }
+    }
+
+    fn active_mana_options_for_fixed_output(
+        &self,
+        permanent_id: ObjectId,
+        ability: &tricerules_cards::ActivatedAbilityDef,
+    ) -> Option<Vec<tricerules_cards::ManaAmount>> {
         let default_options = ability.mana_options()?;
-        let controller = self.state.objects.get(&permanent_id)?.controller;
+        let controller = self
+            .characteristics(permanent_id)
+            .map(|characteristics| characteristics.controller)?;
         let options = if ability.commander_color_identity_mana_output().is_some() {
             let identity = &self
                 .state

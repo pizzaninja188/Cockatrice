@@ -182,6 +182,7 @@ impl ActivatedAbilityDef {
                 commander_color_identity: false,
                 ..
             }] => Some(options),
+            [SpellEffectKind::ProduceManaFromOpponentLands { options }] => Some(options),
             [SpellEffectKind::ProduceManaPerSourceCounter { options, .. }] => Some(options),
             [SpellEffectKind::ProduceMana {
                 options,
@@ -215,6 +216,19 @@ impl ActivatedAbilityDef {
             }] => Some(options),
             _ => None,
         }
+    }
+
+    /// Exotic Orchard and Fellwar Stone's shared output rule. The printed abilities are tap
+    /// mana abilities on the battlefield; the engine supplies their possible color options.
+    pub fn opponent_land_mana_output(&self) -> bool {
+        self.source_zone == AbilitySourceZone::Battlefield
+            && self.costs.as_slice() == [AbilityCost::Tap]
+            && !self.is_loyalty_ability()
+            && self.targeting.is_none()
+            && matches!(
+                self.effect.as_slice(),
+                [SpellEffectKind::ProduceManaFromOpponentLands { options }] if options.is_empty()
+            )
     }
 
     /// The supported fixed damage that follows mana production, if this is the bounded
@@ -348,6 +362,17 @@ impl ActivatedAbilityDef {
         {
             return Err(
                 "commander color identity mana must be the sole direct effect of a battlefield activated ability whose only cost is tap"
+                    .into(),
+            );
+        }
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::contains_opponent_land_mana_output)
+            && !self.opponent_land_mana_output()
+        {
+            return Err(
+                "ProduceManaFromOpponentLands must be the sole effect of a battlefield activated ability whose only cost is tap"
                     .into(),
             );
         }
@@ -1481,6 +1506,14 @@ impl TriggeredAbilityDef {
         }
         if effects
             .iter()
+            .any(|effect| effect.contains_opponent_land_mana_output())
+        {
+            return Err(
+                "opponent-land mana output is supported only for tapped activated abilities".into(),
+            );
+        }
+        if effects
+            .iter()
             .any(|effect| effect.contains_storage_counter_split_mana())
         {
             return Err(
@@ -1628,6 +1661,15 @@ impl ReflexiveTriggeredAbilityDef {
             return Err(
                 "source-counter-scaled mana is supported only for tapped activated abilities"
                     .into(),
+            );
+        }
+        if self
+            .effect
+            .iter()
+            .any(SpellEffectKind::contains_opponent_land_mana_output)
+        {
+            return Err(
+                "opponent-land mana output is supported only for tapped activated abilities".into(),
             );
         }
         if self

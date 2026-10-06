@@ -1,7 +1,11 @@
 use super::*;
 
 fn ready_engine(seed: u64) -> GameEngine {
-    let mut engine = GameEngine::new_with_default_decks(seed, &[0, 1], 20).unwrap();
+    ready_engine_with_players(seed, &[0, 1])
+}
+
+fn ready_engine_with_players(seed: u64, players: &[PlayerId]) -> GameEngine {
+    let mut engine = GameEngine::new_with_default_decks(seed, players, 20).unwrap();
     engine.state.opening = None;
     engine.state.turn_step = TurnStep::Main1;
     engine.state.priority_idx = 0;
@@ -39,6 +43,26 @@ fn insert_permanent(engine: &mut GameEngine, card: &str, face_down: bool) -> Obj
     engine.state.players[0].battlefield.push(oid);
     engine.reconcile_activated_ability_slots();
     oid
+}
+
+fn give_control_to(engine: &mut GameEngine, object_id: ObjectId, player_index: usize) {
+    let player_id = engine.state.players[player_index].id;
+    let object = engine.state.objects.get_mut(&object_id).unwrap();
+    object.controller = player_id;
+    object.base_controller = player_id;
+    for player in &mut engine.state.players {
+        player
+            .battlefield
+            .retain(|candidate| *candidate != object_id);
+    }
+    engine
+        .state
+        .players
+        .iter_mut()
+        .find(|player| player.id == player_id)
+        .unwrap()
+        .battlefield
+        .push(object_id);
 }
 
 fn effect(engine: &mut GameEngine, source: ObjectId, kind: ContinuousEffectKind, timestamp: u64) {
@@ -85,6 +109,395 @@ fn activate(engine: &GameEngine, source: ObjectId, index: u32, option: u32) -> r
             },
         )),
     }
+}
+
+#[test]
+fn exotic_orchard_offers_colors_from_opponents_lands() {
+    let mut engine = ready_engine(305_099);
+    let orchard = permanent(&mut engine, "exotic_orchard");
+    let forest = permanent(&mut engine, "forest");
+    give_control_to(&mut engine, forest, 1);
+
+    let ability = &engine.effective_activated_abilities(orchard)[0].definition;
+    assert_eq!(
+        engine.active_mana_options(orchard, ability),
+        Some(vec![ManaAmount {
+            g: 1,
+            ..Default::default()
+        }])
+    );
+}
+
+#[test]
+fn exotic_orchard_activates_for_zero_when_opponents_lands_cannot_produce_colors() {
+    let mut engine = ready_engine(305_100);
+    let orchard = permanent(&mut engine, "exotic_orchard");
+    let colorless_land = permanent(&mut engine, "terrain_generator");
+    give_control_to(&mut engine, colorless_land, 1);
+    let catalog = engine.effective_activated_abilities(orchard);
+    let ability = &catalog[0].definition;
+    assert_eq!(
+        engine.active_mana_options(orchard, ability),
+        Some(vec![ManaAmount::default()])
+    );
+    let info = super::super::legal_actions::activated_ability_info(&engine, orchard, &catalog[0]);
+    assert!(info.is_mana_ability);
+    assert!(info.mana_produced.is_empty());
+
+    engine
+        .apply_command(0, &activate(&engine, orchard, 0, 0))
+        .unwrap();
+    assert!(engine.state.objects[&orchard].tapped);
+    assert_eq!(engine.state.players[0].mana_pool, Default::default());
+}
+
+#[test]
+fn exotic_orchard_cycles_need_an_independent_color_seed_and_propagate_it() {
+    let mut engine = ready_engine_with_players(305_101, &[0, 1, 2, 3]);
+    let source = permanent(&mut engine, "exotic_orchard");
+    let first = permanent(&mut engine, "exotic_orchard");
+    let second = permanent(&mut engine, "exotic_orchard");
+    give_control_to(&mut engine, first, 1);
+    give_control_to(&mut engine, second, 2);
+    let options = |engine: &GameEngine| {
+        let ability = &engine.effective_activated_abilities(source)[0].definition;
+        engine.active_mana_options(source, ability).unwrap()
+    };
+    assert_eq!(options(&engine), vec![ManaAmount::default()]);
+
+    let forest = permanent(&mut engine, "forest");
+    give_control_to(&mut engine, forest, 3);
+    assert_eq!(
+        options(&engine),
+        vec![ManaAmount {
+            g: 1,
+            ..Default::default()
+        }]
+    );
+}
+
+#[test]
+fn exotic_orchard_unions_opponents_colors_in_wubrg_order() {
+    let mut engine = ready_engine_with_players(305_102, &[0, 1, 2, 3]);
+    let source = permanent(&mut engine, "exotic_orchard");
+    let island = permanent(&mut engine, "island");
+    let mountain = permanent(&mut engine, "mountain");
+    let forest = permanent(&mut engine, "forest");
+    give_control_to(&mut engine, island, 1);
+    give_control_to(&mut engine, mountain, 2);
+    give_control_to(&mut engine, forest, 3);
+    let ability = &engine.effective_activated_abilities(source)[0].definition;
+
+    assert_eq!(
+        engine.active_mana_options(source, ability),
+        Some(vec![
+            ManaAmount {
+                u: 1,
+                ..Default::default()
+            },
+            ManaAmount {
+                r: 1,
+                ..Default::default()
+            },
+            ManaAmount {
+                g: 1,
+                ..Default::default()
+            },
+        ])
+    );
+}
+
+#[test]
+fn exotic_orchard_ignores_opponent_land_mana_costs_tapped_state_and_restrictions() {
+    let mut engine = ready_engine(305_103);
+    let source = permanent(&mut engine, "exotic_orchard");
+    let beacon = permanent(&mut engine, "interplanar_beacon");
+    give_control_to(&mut engine, beacon, 1);
+    engine.state.objects.get_mut(&beacon).unwrap().tapped = true;
+    let ability = &engine.effective_activated_abilities(source)[0].definition;
+
+    assert_eq!(
+        engine.active_mana_options(source, ability),
+        Some(vec![
+            ManaAmount {
+                w: 1,
+                ..Default::default()
+            },
+            ManaAmount {
+                u: 1,
+                ..Default::default()
+            },
+            ManaAmount {
+                b: 1,
+                ..Default::default()
+            },
+            ManaAmount {
+                r: 1,
+                ..Default::default()
+            },
+            ManaAmount {
+                g: 1,
+                ..Default::default()
+            },
+        ])
+    );
+}
+
+#[test]
+fn exotic_orchard_ignores_opponent_land_activation_conditions_and_limits() {
+    let mut engine = ready_engine(305_106);
+    let source = permanent(&mut engine, "exotic_orchard");
+    let conditional_land = permanent(&mut engine, "terrain_generator");
+    give_control_to(&mut engine, conditional_land, 1);
+
+    let mut face = CardRegistry::global()
+        .get("terrain_generator")
+        .unwrap()
+        .primary_face()
+        .clone();
+    let ability = &mut face.activated_abilities[0];
+    ability.conditions = vec![GameCondition::ActivePlayer {
+        players: RelativePlayerSet::Controller,
+    }];
+    ability.activation_limit =
+        Some(tricerules_cards::primitives::ActivationLimit::PerTurn { max_activations: 1 });
+    let SpellEffectKind::ProduceMana { options, .. } = &mut ability.effect[0] else {
+        panic!("fixture starts with a mana ability");
+    };
+    *options = vec![ManaAmount {
+        g: 1,
+        ..Default::default()
+    }];
+    let display_name = face.name.clone();
+    engine
+        .state
+        .objects
+        .get_mut(&conditional_land)
+        .unwrap()
+        .copiable_values = Some(crate::state::CopiableValues {
+        source_card_id: "terrain_generator".into(),
+        source_face_index: 0,
+        face,
+        room_faces: None,
+        display_name,
+    });
+    engine.reconcile_activated_ability_slots();
+
+    let orchard_ability = &engine.effective_activated_abilities(source)[0].definition;
+    assert_eq!(
+        engine.active_mana_options(source, orchard_ability),
+        Some(vec![ManaAmount {
+            g: 1,
+            ..Default::default()
+        }]),
+        "Orchard inspects the ability's output even when its activation condition is false"
+    );
+
+    engine.state.active_player_idx = 1;
+    assert_eq!(
+        engine.active_mana_options(source, orchard_ability),
+        Some(vec![ManaAmount {
+            g: 1,
+            ..Default::default()
+        }]),
+        "the same ability contributes its color when its condition becomes true"
+    );
+
+    engine.state.priority_idx = 1;
+    engine
+        .apply_command(1, &activate(&engine, conditional_land, 0, 0))
+        .unwrap();
+    assert_eq!(
+        engine.active_mana_options(source, orchard_ability),
+        Some(vec![ManaAmount {
+            g: 1,
+            ..Default::default()
+        }]),
+        "Orchard ignores a once-per-turn activation limit when computing output"
+    );
+}
+
+#[test]
+fn exotic_orchard_ignores_sorcery_speed_activation_legality() {
+    let mut engine = ready_engine(305_108);
+    let source = permanent(&mut engine, "exotic_orchard");
+    let conditional_land = permanent(&mut engine, "terrain_generator");
+    give_control_to(&mut engine, conditional_land, 1);
+
+    let mut face = CardRegistry::global()
+        .get("terrain_generator")
+        .unwrap()
+        .primary_face()
+        .clone();
+    face.activated_abilities[0].timing =
+        tricerules_cards::primitives::ActivationTiming::SorcerySpeed;
+    let SpellEffectKind::ProduceMana { options, .. } = &mut face.activated_abilities[0].effect[0]
+    else {
+        panic!("fixture starts with a mana ability");
+    };
+    *options = vec![ManaAmount {
+        g: 1,
+        ..Default::default()
+    }];
+    let display_name = face.name.clone();
+    engine
+        .state
+        .objects
+        .get_mut(&conditional_land)
+        .unwrap()
+        .copiable_values = Some(crate::state::CopiableValues {
+        source_card_id: "terrain_generator".into(),
+        source_face_index: 0,
+        face,
+        room_faces: None,
+        display_name,
+    });
+    engine.reconcile_activated_ability_slots();
+
+    let orchard_ability = &engine.effective_activated_abilities(source)[0].definition;
+    assert_eq!(
+        engine.active_mana_options(source, orchard_ability),
+        Some(vec![ManaAmount {
+            g: 1,
+            ..Default::default()
+        }]),
+        "Orchard inspects output even when the opponent cannot activate it right now"
+    );
+
+    engine.state.active_player_idx = 1;
+    engine.state.priority_idx = 1;
+    assert_eq!(
+        engine.active_mana_options(source, orchard_ability),
+        Some(vec![ManaAmount {
+            g: 1,
+            ..Default::default()
+        }]),
+        "the green output becomes available on its controller's turn"
+    );
+}
+
+#[test]
+fn exotic_orchard_ignores_creature_tap_legality_and_tap_cost_payment() {
+    let mut engine = ready_engine(305_107);
+    let source = permanent(&mut engine, "exotic_orchard");
+    let dryad_arbor = permanent(&mut engine, "dryad_arbor");
+    give_control_to(&mut engine, dryad_arbor, 1);
+    engine
+        .state
+        .objects
+        .get_mut(&dryad_arbor)
+        .unwrap()
+        .summoning_sick = true;
+
+    let orchard_ability = &engine.effective_activated_abilities(source)[0].definition;
+    assert_eq!(
+        engine.active_mana_options(source, orchard_ability),
+        Some(vec![ManaAmount {
+            g: 1,
+            ..Default::default()
+        }]),
+        "Orchard sees an animated land's output even when summoning sickness prohibits activation"
+    );
+
+    let dryad = engine.state.objects.get_mut(&dryad_arbor).unwrap();
+    dryad.summoning_sick = false;
+    dryad.tapped = true;
+    assert_eq!(
+        engine.active_mana_options(source, orchard_ability),
+        Some(vec![ManaAmount {
+            g: 1,
+            ..Default::default()
+        }]),
+        "the tap cost itself is ignored even while the creature land is already tapped"
+    );
+}
+
+#[test]
+fn exotic_orchard_uses_effective_land_types_and_ignores_absent_counters() {
+    let mut engine = ready_engine(305_104);
+    let source = permanent(&mut engine, "exotic_orchard");
+    let vivid_grove = permanent(&mut engine, "vivid_grove");
+    give_control_to(&mut engine, vivid_grove, 1);
+    engine.state.objects.get_mut(&vivid_grove).unwrap().tapped = true;
+    assert_eq!(
+        engine.state.objects[&vivid_grove].counter_count(CounterKind::Charge),
+        0,
+        "directly seeded fixture has no enters-with counters"
+    );
+    let ability = &engine.effective_activated_abilities(source)[0].definition;
+
+    assert_eq!(
+        engine.active_mana_options(source, ability),
+        Some(vec![
+            ManaAmount {
+                w: 1,
+                ..Default::default()
+            },
+            ManaAmount {
+                u: 1,
+                ..Default::default()
+            },
+            ManaAmount {
+                b: 1,
+                ..Default::default()
+            },
+            ManaAmount {
+                r: 1,
+                ..Default::default()
+            },
+            ManaAmount {
+                g: 1,
+                ..Default::default()
+            },
+        ])
+    );
+}
+
+#[test]
+fn exotic_orchard_tracks_live_land_types_and_its_current_controller() {
+    let mut engine = ready_engine_with_players(305_105, &[0, 1, 2]);
+    let source = permanent(&mut engine, "exotic_orchard");
+    let opponent_land = permanent(&mut engine, "terrain_generator");
+    let other_opponent_land = permanent(&mut engine, "island");
+    give_control_to(&mut engine, opponent_land, 1);
+    give_control_to(&mut engine, other_opponent_land, 2);
+
+    let options = |engine: &GameEngine| {
+        let ability = &engine.effective_activated_abilities(source)[0].definition;
+        engine.active_mana_options(source, ability).unwrap()
+    };
+    assert_eq!(
+        options(&engine),
+        vec![ManaAmount {
+            u: 1,
+            ..Default::default()
+        }]
+    );
+
+    effect(&mut engine, opponent_land, forest_setting(), 1);
+    assert_eq!(
+        options(&engine),
+        vec![
+            ManaAmount {
+                u: 1,
+                ..Default::default()
+            },
+            ManaAmount {
+                g: 1,
+                ..Default::default()
+            },
+        ]
+    );
+
+    give_control_to(&mut engine, source, 1);
+    assert_eq!(
+        options(&engine),
+        vec![ManaAmount {
+            u: 1,
+            ..Default::default()
+        }],
+        "the newly controlled Orchard no longer counts its controller's land"
+    );
 }
 
 #[test]

@@ -1,0 +1,48 @@
+{
+  "format_version": 1,
+  "oracle_id": "27b047e3-0d41-45e2-98e9-9391d7923a1e",
+  "spans": [
+    {
+      "face_id": "exotic_orchard",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ProduceManaFromOpponentLands",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_exotic_orchard::exotic_orchard_registers_exact_identity_and_dynamic_tap_mana_ability",
+      "covers": "exact card identity, land characteristics, Oracle line mapping, tap cost, dynamic opponent-land output marker and mana-ability classification"
+    },
+    {
+      "test": "scenario deck_coverage_exotic_orchard::exotic_orchard_can_tap_for_zero_when_opponents_have_only_colorless_lands",
+      "covers": "colorless is excluded, zero output remains a mana ability, and option index 0 taps the Orchard without adding mana or using the stack"
+    },
+    {
+      "test": "scenario deck_coverage_exotic_orchard::exotic_orchard_cycles_require_a_seed_and_follow_later_land_changes",
+      "covers": "unseeded Orchard cycle yields no colors; adding an opponent Forest seeds green, invalid option rejection is atomic, and accepted activation adds green without the stack"
+    },
+    {
+      "test": "scenario deck_coverage_exotic_orchard::exotic_orchard_uses_the_wubrg_union_of_opponents_lands_ignoring_costs_and_restrictions",
+      "covers": "four-player union is ordered WUBRG, and tapped Interplanar Beacon supplies colors despite its generic cost and planeswalker-only spending restriction"
+    },
+    {
+      "test": "scenario deck_coverage_exotic_orchard::mana_reflection_doubles_exotic_orchards_tap_output",
+      "covers": "Mana Reflection multiplies the selected Orchard mana amount to two green mana for the single offered color choice"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

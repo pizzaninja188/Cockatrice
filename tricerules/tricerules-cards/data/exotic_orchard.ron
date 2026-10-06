@@ -1,0 +1,15 @@
+(
+  id: "exotic_orchard",
+  name: "Exotic Orchard",
+  face_id: "exotic_orchard",
+  mana_cost: "",
+  types: ["Land"],
+  activated_abilities: [
+    (
+      ability_id: "produce_opponent_land_mana",
+      presentation: OracleLines([1]),
+      costs: [Tap],
+      effect: [ProduceManaFromOpponentLands(options: [])],
+    ),
+  ],
+)

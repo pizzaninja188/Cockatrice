@@ -105,6 +105,9 @@ pub(super) fn simple_effects(effects: &[SpellEffectKind]) -> Option<String> {
                     commander_color_identity: true,
                     ..
                 } => "Add one mana of any color in your commander's color identity.".into(),
+                SpellEffectKind::ProduceManaFromOpponentLands { .. } => {
+                    "Add one mana of any color a land an opponent controls could produce.".into()
+                }
                 SpellEffectKind::ProduceMana {
                     options,
                     commander_color_identity: false,
