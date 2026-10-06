@@ -1267,13 +1267,25 @@ impl GameEngine {
             && self.registry.get(&top.card_id).is_some_and(|definition| {
                 definition.layout == Layout::Adventure && top.face_index == 1
             });
+        // A resolving copy has no GameObject to move, but an explicit self-exile instruction
+        // still determines how its StackResolved event reports the copy leaving the stack.
+        let is_resolved_self_exiling_copy = exit == DeferredStackExit::Resolved
+            && top.is_copy
+            && self
+                .build_resolution_effects(top)
+                .0
+                .iter()
+                .any(|entry| matches!(entry.effect, SpellEffectKind::ExileResolvingSpell));
         let physical_owner = (!top.is_copy)
             .then(|| self.state.objects.get(&top.id).map(|object| object.owner))
             .flatten();
         let shuffle_player = physical_owner.unwrap_or(top.controller);
         let destination = if is_resolved_omen {
             rv1::StackResolveDestination::Library
-        } else if top.cast_method.exiles_on_leave_stack() || is_resolved_adventure {
+        } else if top.cast_method.exiles_on_leave_stack()
+            || is_resolved_adventure
+            || is_resolved_self_exiling_copy
+        {
             rv1::StackResolveDestination::Exile
         } else {
             rv1::StackResolveDestination::Graveyard

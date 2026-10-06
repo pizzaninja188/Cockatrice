@@ -1,0 +1,57 @@
+{
+  "format_version": 1,
+  "oracle_id": "451e8ece-7389-4d52-8bc9-450cb5e53e6a",
+  "spans": [
+    {
+      "face_id": "ascend_from_avernus",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ExileResolvingSpell",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_ascend_from_avernus::ascend_from_avernus_registers_its_exact_card_identity",
+      "covers": "single face, printed mana cost and type, creature-or-planeswalker filter, and ordered self-exile instruction"
+    },
+    {
+      "test": "scenario deck_coverage_ascend_from_avernus::ascend_is_untargeted_and_rejects_extra_targets_atomically",
+      "covers": "the card has no targets; a forged extra target is rejected without paying mana or changing game state"
+    },
+    {
+      "test": "scenario deck_coverage_ascend_from_avernus::ascend_returns_each_eligible_card_at_the_cast_x_then_exiles_the_spell",
+      "covers": "cast X bounds the controller's creature and planeswalker return, excludes over-bound, nonpermanent, and opponent-graveyard cards, pauses for shared simultaneous-entry ordering, then exiles the physical spell"
+    },
+    {
+      "test": "scenario deck_coverage_ascend_from_avernus::ascend_with_x_zero_returns_only_zero_mana_value_permanents_and_still_exiles",
+      "covers": "zero-mana-value permanent return, X-cost Endless One as mana value zero outside the stack, over-bound and nonpermanent exclusions, and its zero-toughness state-based action"
+    },
+    {
+      "test": "scenario deck_coverage_ascend_from_avernus::ascend_exiles_after_an_empty_x_bounded_return_cohort",
+      "covers": "the final self-exile instruction still runs when the first instruction returns no cards"
+    },
+    {
+      "test": "scenario deck_coverage_ascend_from_avernus::ascend_copy_uses_its_controllers_graveyard_and_exiles_only_the_copy",
+      "covers": "Twincast copies chosen X, uses the copy controller's graveyard, reports the copy's self-exile destination without a physical card, and leaves the original spell for its own resolution"
+    },
+    {
+      "test": "scenario deck_coverage_graveyard_return::graveyard_return_entrants_observe_the_whole_simultaneous_cohort",
+      "covers": "reused shared return-batch evidence for simultaneous zone change, entry replacements, and observers"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

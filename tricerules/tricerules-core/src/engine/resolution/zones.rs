@@ -388,6 +388,37 @@ pub(super) fn shuffle_resolving_spell_into_owners_library(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn exile_resolving_spell(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineError> {
+    // Spell copies have no physical object to move. Their successful exit reports this explicit
+    // self-exile instruction in finish_deferred_stack_exit, then the copy ceases to exist (CR 704.5e).
+    if cx.top.is_copy {
+        return Ok(EffectOutcome::Continue);
+    }
+    let Some(object) = cx.engine.state.objects.get(&cx.top.id) else {
+        return Ok(EffectOutcome::Continue);
+    };
+    if object.zone != Zone::Stack {
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let owner = object.owner;
+    move_object_to_zone(
+        &mut cx.engine.state,
+        cx.engine.registry,
+        cx.top.id,
+        Zone::Exile,
+        None,
+    )?;
+    cx.events.push(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::StackResolved(rv1::StackResolved {
+            object_id: cx.top.id,
+            destination: rv1::StackResolveDestination::Exile as i32,
+            owner_player_id: Some(owner),
+        })),
+    });
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn discard(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -2298,6 +2329,21 @@ pub(super) fn return_all_graveyard_permanents(
     cx: &mut EffectCx<'_>,
     filter: &ZoneCardFilter,
 ) -> Result<EffectOutcome, EngineError> {
+    return_matching_graveyard_permanents(cx, filter, None)
+}
+
+pub(super) fn return_all_graveyard_permanents_with_mana_value_x_or_less(
+    cx: &mut EffectCx<'_>,
+    filter: &ZoneCardFilter,
+) -> Result<EffectOutcome, EngineError> {
+    return_matching_graveyard_permanents(cx, filter, Some(cx.top.chosen_x))
+}
+
+fn return_matching_graveyard_permanents(
+    cx: &mut EffectCx<'_>,
+    filter: &ZoneCardFilter,
+    max_mana_value: Option<u32>,
+) -> Result<EffectOutcome, EngineError> {
     let player_index = cx
         .engine
         .state
@@ -2335,6 +2381,17 @@ pub(super) fn return_all_graveyard_permanents(
         })
         .filter(|oid| {
             zone_card_matches_filter(&cx.engine.state, cx.engine.registry, *oid, Some(filter))
+        })
+        .filter(|oid| {
+            max_mana_value.is_none_or(|maximum| {
+                let Some(object) = cx.engine.state.objects.get(oid) else {
+                    return false;
+                };
+                cx.engine
+                    .registry
+                    .get(&object.card_id)
+                    .is_some_and(|definition| definition.mana_value_outside_stack() <= maximum)
+            })
         })
         .map(|oid| plain_return_entry(cx.engine, oid, cx.controller))
         .collect();

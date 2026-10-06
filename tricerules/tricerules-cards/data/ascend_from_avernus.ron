@@ -1,0 +1,15 @@
+// Oracle text and card identity verified against the exact pinned Scryfall card record.
+(
+  id: "ascend_from_avernus",
+  name: "Ascend from Avernus",
+  face_id: "ascend_from_avernus",
+  mana_cost: "{X}{W}{W}{W}",
+  types: ["Sorcery"],
+  spell_effect: [
+    ReturnAllGraveyardPermanentsWithManaValueXOrLess(filter: (any_of: Some([
+      (card_type: Some(Creature)),
+      (card_type: Some(Planeswalker)),
+    ]))),
+    ExileResolvingSpell,
+  ],
+)

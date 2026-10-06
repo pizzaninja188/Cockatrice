@@ -1590,12 +1590,14 @@ fn validate_effect_targets(
         | SpellEffectKind::ReturnLinkedExiledCards { .. }
         | SpellEffectKind::ReturnExiledCohortToOwnersBattlefield { .. }
         | SpellEffectKind::ReturnAllGraveyardPermanents { .. }
+        | SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess { .. }
         | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
         | SpellEffectKind::CastMadness { .. }
         | SpellEffectKind::SiegeDefeat
         | SpellEffectKind::ExileGraveyards { .. }
         | SpellEffectKind::Proliferate
         | SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary
+        | SpellEffectKind::ExileResolvingSpell
         | SpellEffectKind::None => {
             if !targets.is_empty() {
                 return Err(EngineError::Illegal("this effect takes no targets"));

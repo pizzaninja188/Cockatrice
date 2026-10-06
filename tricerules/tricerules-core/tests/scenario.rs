@@ -1091,3 +1091,6 @@ mod deck_coverage_metalwork_colossus;
 
 #[path = "scenario/deck_coverage_arcane_denial.rs"]
 mod deck_coverage_arcane_denial;
+
+#[path = "scenario/deck_coverage_ascend_from_avernus.rs"]
+mod deck_coverage_ascend_from_avernus;

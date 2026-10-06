@@ -78,6 +78,7 @@ pub(super) fn execute_effect(
         SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary => {
             zones::shuffle_resolving_spell_into_owners_library(cx)?
         }
+        SpellEffectKind::ExileResolvingSpell => zones::exile_resolving_spell(cx)?,
         effect @ SpellEffectKind::Discard { .. } => zones::discard(cx, effect)?,
         effect @ SpellEffectKind::DrawDiscard { .. } => zones::draw_discard(cx, effect)?,
         effect @ SpellEffectKind::Scry { .. } => zones::scry(cx, effect)?,
@@ -305,6 +306,9 @@ pub(super) fn execute_effect(
         }
         SpellEffectKind::ReturnAllGraveyardPermanents { filter } => {
             zones::return_all_graveyard_permanents(cx, &filter)?
+        }
+        SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess { filter } => {
+            zones::return_all_graveyard_permanents_with_mana_value_x_or_less(cx, &filter)?
         }
         effect @ SpellEffectKind::ChooseGraveyardCard { .. } => {
             zones::choose_graveyard_card(cx, effect)?

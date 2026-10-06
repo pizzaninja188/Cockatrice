@@ -1016,6 +1016,9 @@ pub enum SpellEffectKind {
     /// Blue Sun's Zenith and Black Sun's Zenith: execute the resolving spell's self-shuffle
     /// instruction in printed order, independently of its target or caster (CR 701.24c).
     ShuffleResolvingSpellIntoOwnersLibrary,
+    /// Ascend from Avernus: its final self-reference exiles this resolving spell after the
+    /// graveyard return has completed (CR 201.5, 608.2c, 608.2m, 707.10a).
+    ExileResolvingSpell,
     /// CR 701.9: each affected player discards a fixed quantity or their entire hand without targeting.
     /// Player-set recipients make their hidden choices in APNAP order before the complete discard
     /// action is applied. Cards: Fanatic of the Harrowing, Burglar Rat, and Macabre Waltz.
@@ -1582,6 +1585,13 @@ pub enum SpellEffectKind {
     /// Primevals' Glorious Rebirth / Triumphant Reckoning: mandatory targetless simultaneous
     /// return of all matching permanent cards in the spell controller's current graveyard.
     ReturnAllGraveyardPermanents {
+        filter: ZoneCardFilter,
+    },
+    /// Ascend from Avernus: return matching permanent cards from the controller's graveyard
+    /// whose out-of-stack mana value is at most the cast spell's chosen X (CR 107.3a, 107.3i,
+    /// 107.3g, 202.3e). This is kept separate from the fixed-bound return for its one proven
+    /// X-bound cohort card rather than adding speculative expression support to every filter.
+    ReturnAllGraveyardPermanentsWithManaValueXOrLess {
         filter: ZoneCardFilter,
     },
     /// Choose a card from the controller's graveyard when this instruction resolves rather than
@@ -3069,6 +3079,7 @@ impl SpellEffectKind {
             | SpellEffectKind::MyrBattlesphereAttack
             | SpellEffectKind::Draw { .. }
             | SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary
+            | SpellEffectKind::ExileResolvingSpell
             | SpellEffectKind::Discard { .. }
             | SpellEffectKind::DrawDiscard { .. }
             | SpellEffectKind::Blight { .. }
@@ -3101,6 +3112,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ReturnLinkedExiledCards { .. }
             | SpellEffectKind::ReturnExiledCohortToOwnersBattlefield { .. }
             | SpellEffectKind::ReturnAllGraveyardPermanents { .. }
+            | SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess { .. }
             | SpellEffectKind::ChooseGraveyardCard { .. }
             | SpellEffectKind::GrantKeywordsAllPermanents { .. }
             | SpellEffectKind::GainLife { .. }
@@ -3801,10 +3813,12 @@ impl SpellEffectKind {
         if context == EffectContext::Spell && self.requires_triggering_spell_context() {
             return Err("spells cannot reference triggering-spell context".into());
         }
-        if matches!(self, Self::ShuffleResolvingSpellIntoOwnersLibrary)
-            && context != EffectContext::Spell
+        if matches!(
+            self,
+            Self::ShuffleResolvingSpellIntoOwnersLibrary | Self::ExileResolvingSpell
+        ) && context != EffectContext::Spell
         {
-            return Err("resolving-spell shuffle requires spell context".into());
+            return Err("resolving-spell zone movement requires spell context".into());
         }
         if context == EffectContext::Spell && self.uses_trigger_event_count() {
             return Err("spells cannot reference a trigger event's count".into());
@@ -3957,6 +3971,14 @@ impl SpellEffectKind {
             filter.validate()?;
             if context != EffectContext::Spell {
                 return Err("all-graveyard permanent return requires a spell instruction".into());
+            }
+        }
+        if let SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess { filter } = self {
+            filter.validate()?;
+            if context != EffectContext::Spell {
+                return Err(
+                    "X-bounded graveyard permanent return requires a spell instruction".into(),
+                );
             }
         }
         if let SpellEffectKind::PutCounters { counter, .. }
