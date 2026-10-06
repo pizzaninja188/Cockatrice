@@ -1370,6 +1370,11 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
 
     if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_HAND_CARDS &&
         rcr.candidate_server_card_ids_size() == rcr.candidate_object_ids_size()) {
+        if (rcr.candidate_selectable_size() != 0 &&
+            rcr.candidate_selectable_size() != rcr.candidate_object_ids_size()) {
+            qWarning() << "Rejecting malformed ruled hand-choice eligibility mask";
+            return;
+        }
         // HandCards with server card ids: use the hand-click UI.
         PendingChoice pick;
         pick.kind = ChoiceKind::ResolutionPick;
@@ -1378,6 +1383,7 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
         pick.max = static_cast<int>(rcr.max());
         pick.promptText = QString::fromStdString(rcr.prompt_text());
         pick.pickZone = PickZone::Hand;
+        pick.hasSelectableRestriction = rcr.candidate_selectable_size() > 0;
         for (int i = 0; i < rcr.candidate_object_ids_size(); ++i) {
             const quint32 oid = rcr.candidate_object_ids(i);
             const int scid = rcr.candidate_server_card_ids(i);
@@ -1388,6 +1394,9 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
             }
             if (scid >= 0) {
                 pick.serverCardIdToOid.insert(scid, oid);
+                if (pick.hasSelectableRestriction && rcr.candidate_selectable(i)) {
+                    pick.selectableServerCardIds.insert(scid);
+                }
                 if (i < rcr.candidate_names_size()) {
                     pick.candidateNames.append(QString::fromStdString(rcr.candidate_names(i)));
                 }

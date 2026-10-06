@@ -1,0 +1,74 @@
+{
+  "format_version": 1,
+  "oracle_id": "b1412eda-e3a4-41b2-932e-795a0ba0f7f8",
+  "spans": [
+    {
+      "face_id": "pupu_ufo",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/keywords"]
+    },
+    {
+      "face_id": "pupu_ufo",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    },
+    {
+      "face_id": "pupu_ufo",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1",
+        "/faces/0/activated_abilities/1/costs/0",
+        "/faces/0/activated_abilities/1/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "Keyword::Flying",
+      "typed_path": "/faces/0/keywords/0"
+    },
+    {
+      "symbol": "AbilityCost::Tap",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::PutLandFromHandOntoBattlefield",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Mana",
+      "typed_path": "/faces/0/activated_abilities/1/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::SetSourceBasePowerToTownCount",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_pupu_ufo::pupu_ufo_registers_its_complete_printed_identity",
+      "covers": "exact card identity, mana cost, artifact creature and subtype line, 0/4 stats, flying, both Oracle-line mappings, activation costs and ability source zone"
+    },
+    {
+      "test": "scenario deck_coverage_pupu_ufo::pupu_ufo_may_put_a_private_land_choice_onto_the_battlefield_without_playing_it",
+      "covers": "private optional land-only hand choice, nonland rejection, tap cost, ordinary land play limit unchanged, land enters tapped and its life-gain trigger resolves"
+    },
+    {
+      "test": "scenario deck_coverage_pupu_ufo::pupu_ufo_can_decline_its_land_choice_and_does_not_prompt_without_a_land",
+      "covers": "declining leaves hand cards untouched; no eligible land skips the choice and completes the ability"
+    },
+    {
+      "test": "scenario deck_coverage_pupu_ufo::pupu_ufo_snapshots_its_controllers_towns_as_base_power_until_cleanup",
+      "covers": "ability controller's Towns are counted on resolution, opposing Towns are excluded, the value is a snapshot until cleanup, counters remain applied, and toughness is preserved"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

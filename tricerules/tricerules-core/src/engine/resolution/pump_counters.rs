@@ -913,6 +913,65 @@ pub(super) fn set_base_power_toughness(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn set_source_base_power_to_town_count(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    if !matches!(effect, SpellEffectKind::SetSourceBasePowerToTownCount) {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    }
+    let Some(source_id) = cx.top.source_permanent_id else {
+        return Ok(EffectOutcome::Continue);
+    };
+    let source_is_current = cx
+        .engine
+        .state
+        .objects
+        .get(&source_id)
+        .is_some_and(|source| source.zone == Zone::Battlefield)
+        && cx
+            .engine
+            .state
+            .zone_change_generation
+            .get(&source_id)
+            .copied()
+            .unwrap_or(0)
+            == cx.top.source_zone_change;
+    if !source_is_current {
+        return Ok(EffectOutcome::Continue);
+    }
+
+    let town_count = cx
+        .engine
+        .state
+        .players
+        .iter()
+        .flat_map(|player| player.battlefield.iter().copied())
+        .filter_map(|object_id| cx.engine.characteristics(object_id))
+        .filter(|characteristics| {
+            characteristics.controller == cx.controller
+                && characteristics.has_type("Land")
+                && characteristics.has_type("Town")
+        })
+        .count();
+    let power = i64::try_from(town_count).unwrap_or(i64::MAX);
+    let source_name = object_display_name(&cx.engine.state, cx.engine.registry, source_id);
+    cx.engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: Some(source_id),
+        affected: AffectedScope::Single(source_id),
+        kind: ContinuousEffectKind::Layer7bSetPower { power },
+        condition: None,
+        duration: EffectDuration::UntilEndOfTurn,
+        timestamp: cx.engine.state.command_index,
+    });
+    cx.events.push(ev_log(format!(
+        "{} sets {source_name}'s base power to {power} until end of turn",
+        cx.spell_label
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn grant_keywords_all_permanents(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,

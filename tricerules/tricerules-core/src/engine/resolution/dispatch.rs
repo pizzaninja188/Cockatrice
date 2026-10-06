@@ -52,6 +52,9 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking => {
             zones::put_ability_source_onto_battlefield_tapped_and_attacking(cx, effect)?
         }
+        effect @ SpellEffectKind::PutLandFromHandOntoBattlefield => {
+            zones::put_land_from_hand_onto_battlefield(cx, effect)?
+        }
         effect @ SpellEffectKind::CreateStaticEmblem { .. } => {
             pump_counters::create_static_emblem(cx, effect)?
         }
@@ -98,6 +101,9 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::PumpTarget { .. } => pump_counters::pump_target(cx, effect)?,
         effect @ SpellEffectKind::SetBasePowerToughness { .. } => {
             pump_counters::set_base_power_toughness(cx, effect)?
+        }
+        effect @ SpellEffectKind::SetSourceBasePowerToTownCount => {
+            pump_counters::set_source_base_power_to_town_count(cx, effect)?
         }
         effect @ SpellEffectKind::PumpAll { .. } => pump_counters::pump_all(cx, effect)?,
         effect @ SpellEffectKind::DoublePowerToughnessAll { .. } => {

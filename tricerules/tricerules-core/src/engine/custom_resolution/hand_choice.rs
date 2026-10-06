@@ -80,6 +80,84 @@ impl GameEngine {
             .map(|face| face.name.to_string())
             .unwrap_or_else(|| stack.item.card_id.clone());
         let mut events = vec![];
+        if hand_choice.action == HandCardAction::PutOntoBattlefield {
+            let Some(&object_id) = chosen.first() else {
+                return self.complete_parked_resolution_with_previous(
+                    stack.item,
+                    stack.resume_effect_index,
+                    EffectResult::default(),
+                    events,
+                );
+            };
+            if chosen.len() != 1 {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "put-onto-battlefield hand choice selects at most one card",
+                ));
+            }
+            let object = self
+                .state
+                .objects
+                .get(&object_id)
+                .expect("validated hand-choice object");
+            let owner = object.owner;
+            let object_label = object_display_name(&self.state, self.registry, object_id);
+            let controller = hand_choice.affected_player;
+            let completion = BattlefieldEntryCompletion::ResolutionEffect {
+                owner,
+                spell_label: card_name,
+                object_label,
+                from_zone: Zone::Hand,
+            };
+            let entry = BattlefieldEntryEvent {
+                entry_reveal_receipts: Vec::new(),
+                mana_colors_spent_to_cast: Default::default(),
+                prepared: false,
+                object_id,
+                deciding_player: controller,
+                destination_controller: controller,
+                battle_protector: None,
+                face_index: 0,
+                unlock_room_door: None,
+                chosen_x: 0,
+                cast_by: None,
+                cast_cost_receipts: Vec::new(),
+                player_life_snapshot: self.player_life_snapshot(),
+                tapped: false,
+                set_types: None,
+                chosen_basic_land_type: None,
+                chosen_opponents: Vec::new(),
+                entry_counters: Default::default(),
+                entry_modifiers: Vec::new(),
+                attached_to: None,
+                pending_copy_candidate: None,
+                pending_aura_recipient: None,
+                accepted_aura_recipient: None,
+                applied_effects: Vec::new(),
+            };
+            return match self.begin_battlefield_entry(
+                stack.item.clone(),
+                entry,
+                completion.clone(),
+                &mut events,
+            ) {
+                super::super::replacement::BattlefieldEntryProgress::Parked => {
+                    Ok(finish_with_events(self, events))
+                }
+                super::super::replacement::BattlefieldEntryProgress::Skipped(entry) => {
+                    self.restore_skipped_battlefield_entry(&entry)?;
+                    self.complete_parked_resolution_with_previous(
+                        stack.item,
+                        stack.resume_effect_index,
+                        EffectResult::default(),
+                        events,
+                    )
+                }
+                super::super::replacement::BattlefieldEntryProgress::Ready(entry) => {
+                    self.complete_pending_battlefield_entry(pending, *entry, completion, events)
+                }
+            };
+        }
         let mut result = CardResultCohort::default();
         let mut discard_receipts = Vec::new();
         for &object_id in chosen {

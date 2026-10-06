@@ -8088,6 +8088,60 @@ TEST_F(RuledClientTest, HandCardsChoiceStartsAClickToPickAndSubmitsInClickOrder)
     EXPECT_FALSE(state->isResolutionHandPickActive());
 }
 
+TEST_F(RuledClientTest, HandCardsChoiceHonorsEngineAuthoredEligibility)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+    choice->set_prompt_text("You may put a land card from your hand onto the battlefield.");
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(21u);
+    choice->add_candidate_object_ids(22u);
+    choice->add_candidate_server_card_ids(201);
+    choice->add_candidate_server_card_ids(202);
+    choice->add_candidate_names("Forest");
+    choice->add_candidate_names("Ornithopter");
+    choice->add_candidate_selectable(true);
+    choice->add_candidate_selectable(false);
+    apply(batch);
+
+    ASSERT_TRUE(state->isResolutionHandPickActive());
+    EXPECT_TRUE(state->isResolutionHandPickCardSelectable(201));
+    EXPECT_FALSE(state->isResolutionHandPickCardSelectable(202));
+
+    state->toggleResolutionHandPickCard(202);
+    EXPECT_EQ(state->resolutionHandPickSelected(), 0);
+    state->toggleResolutionHandPickCard(201);
+    EXPECT_EQ(state->resolutionHandPickSelected(), 1);
+
+    host.sentCommands.clear();
+    state->submitResolutionHandPick();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &selected = host.sentCommands[0].submit_resolution_choice();
+    ASSERT_EQ(selected.chosen_object_ids_size(), 1);
+    EXPECT_EQ(selected.chosen_object_ids(0), 21u);
+}
+
+TEST_F(RuledClientTest, HandCardsChoiceRejectsMalformedEligibilityMask)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *choice = batch.add_events()->mutable_resolution_choice_required();
+    choice->set_deciding_player_id(kLocalPlayer);
+    choice->set_choice_kind(ruled::v1::CHOICE_KIND_HAND_CARDS);
+    choice->set_min(0);
+    choice->set_max(1);
+    choice->add_candidate_object_ids(21u);
+    choice->add_candidate_server_card_ids(201);
+    choice->add_candidate_selectable(true);
+    choice->add_candidate_selectable(false);
+    apply(batch);
+
+    EXPECT_FALSE(state->isResolutionHandPickActive());
+    EXPECT_EQ(host.dialogRequests, 0);
+}
+
 TEST_F(RuledClientTest, EntryRevealHandPickRejectedAckRestoresSelectionAndDecline)
 {
     for (const bool selectCard : {false, true}) {

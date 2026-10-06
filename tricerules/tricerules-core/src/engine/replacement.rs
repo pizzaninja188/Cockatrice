@@ -3582,19 +3582,27 @@ impl GameEngine {
                 from_zone,
             } => {
                 let object_id = event.object_id;
+                let entry_controller = event.destination_controller;
                 self.commit_battlefield_entry(event, None, &mut events)?;
-                events.push(ev_log(format!(
-                    "{spell_label} returns {object_label} from {} to battlefield.",
-                    match from_zone {
-                        Zone::Graveyard => "graveyard",
-                        Zone::Exile => "exile",
-                        Zone::Hand => "hand",
-                        Zone::Library => "library",
-                        Zone::Stack => "the stack",
-                        Zone::Battlefield => "the battlefield",
-                        Zone::Command => "the command zone",
-                    }
-                )));
+                if from_zone == Zone::Hand {
+                    events.push(ev_log(format!(
+                        "P{} puts {object_label} onto the battlefield ({spell_label}).",
+                        entry_controller
+                    )));
+                } else {
+                    events.push(ev_log(format!(
+                        "{spell_label} returns {object_label} from {} to battlefield.",
+                        match from_zone {
+                            Zone::Graveyard => "graveyard",
+                            Zone::Exile => "exile",
+                            Zone::Hand => unreachable!("hand entry is logged above"),
+                            Zone::Library => "library",
+                            Zone::Stack => "the stack",
+                            Zone::Battlefield => "the battlefield",
+                            Zone::Command => "the command zone",
+                        }
+                    )));
+                }
                 events.push(permanent_moved_event(
                     &self.state,
                     object_id,

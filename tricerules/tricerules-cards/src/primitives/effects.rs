@@ -545,6 +545,9 @@ pub enum LibraryPartitionKind {
 pub enum HandCardAction {
     Discard,
     Exile,
+    /// A private choice used only by an explicit ability that puts a card onto the battlefield.
+    /// Generic target-hand instructions must reject this action.
+    PutOntoBattlefield,
 }
 
 /// Who chooses cards for a hand instruction.
@@ -919,6 +922,10 @@ pub enum SpellEffectKind {
     /// attacking the defender inherited from its returned-attacker cost. Kaito and Ninja of the
     /// Deep Hours exercise the shared Ninjutsu resolution action.
     PutAbilitySourceOntoBattlefieldTappedAndAttacking,
+    /// PuPu UFO: optionally choose a land from the ability controller's hand and put it onto the
+    /// battlefield through the ordinary replacement and entry-trigger pipeline. This is a
+    /// dedicated action because it is neither playing a land nor an opponent-hand instruction.
+    PutLandFromHandOntoBattlefield,
     /// Create a persistent, nonpermanent emblem marker and its controller-scoped static effects.
     /// Effects remain active after the source planeswalker leaves.
     CreateStaticEmblem {
@@ -1171,6 +1178,10 @@ pub enum SpellEffectKind {
         power: BasePowerToughnessValue,
         toughness: BasePowerToughnessValue,
     },
+    /// PuPu UFO snapshots the controller's Town count as its own base power when this ability
+    /// resolves; toughness is intentionally untouched. Specialized because no other admitted
+    /// card in this cohort needs this resolution-time, source-only layer-7b setter.
+    SetSourceBasePowerToTownCount,
     /// CR 701.26: tap `subject`. `Chosen` preserves ordinary permanent targeting.
     Tap {
         #[serde(default)]
@@ -3071,6 +3082,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ManifestDread
             | SpellEffectKind::IntoTheWilds
             | SpellEffectKind::DeployTheGatewatch
+            | SpellEffectKind::PutLandFromHandOntoBattlefield
             | SpellEffectKind::LookChooseToHand { .. }
             | SpellEffectKind::TapAll { .. }
             | SpellEffectKind::UntapAll { .. }
@@ -3115,6 +3127,7 @@ impl SpellEffectKind {
             | SpellEffectKind::AddMana { .. }
             | SpellEffectKind::MayBehold { .. }
             | SpellEffectKind::SearchLibrary { .. }
+            | SpellEffectKind::SetSourceBasePowerToTownCount
             | SpellEffectKind::PreventAllCombatDamageTurn
             | SpellEffectKind::DamageCantBePreventedThisTurn
             | SpellEffectKind::ChangeSourceFace { .. }
@@ -3719,6 +3732,13 @@ impl SpellEffectKind {
         }
         if matches!(self, Self::MyrBattlesphereAttack) && context != EffectContext::Ability {
             return Err("MyrBattlesphereAttack requires an attack ability source".into());
+        }
+        if matches!(
+            self,
+            Self::PutLandFromHandOntoBattlefield | Self::SetSourceBasePowerToTownCount
+        ) && context != EffectContext::Ability
+        {
+            return Err("PuPu UFO source effects require an activated ability".into());
         }
         if matches!(
             self,
@@ -4798,6 +4818,10 @@ impl SpellEffectKind {
             );
         }
         match self {
+            SpellEffectKind::ChooseHandCards {
+                action: HandCardAction::PutOntoBattlefield,
+                ..
+            } => Err("ChooseHandCards supports only discard or exile actions".into()),
             SpellEffectKind::TargetPlayerGainsLife { target, .. }
             | SpellEffectKind::TargetPlayerLosesLife { target, .. }
             | SpellEffectKind::DrainTarget { target, .. }
@@ -6092,6 +6116,11 @@ pub enum ContinuousEffectKind {
         power: i64,
         toughness: i64,
     },
+    /// CR 613.4b: set only base power in layer 7b, preserving the current base toughness.
+    /// PuPu UFO and Symmetry Sage exercise the source-count and fixed-value forms respectively.
+    Layer7bSetPower {
+        power: i64,
+    },
     /// CR 101.2 / 116.2: prohibit a non-stack special action for affected permanents.
     ProhibitSpecialAction(SpecialActionKind),
     /// CR 602.5: affected permanents retain their activated abilities, but players can't begin
@@ -6165,6 +6194,39 @@ mod issue_187_base_pt_tests {
         assert_eq!(
             effect.validate(EffectContext::Spell),
             Err("source-relative base P/T values require a permanent ability source".into())
+        );
+    }
+}
+
+#[cfg(test)]
+mod pupu_ufo_effect_validation_tests {
+    use super::*;
+
+    #[test]
+    fn source_only_pupu_effects_cannot_be_authored_as_spells() {
+        for effect in [
+            SpellEffectKind::PutLandFromHandOntoBattlefield,
+            SpellEffectKind::SetSourceBasePowerToTownCount,
+        ] {
+            assert!(effect.validate(EffectContext::Ability).is_ok());
+            assert!(effect.validate(EffectContext::Spell).is_err());
+        }
+    }
+
+    #[test]
+    fn generic_hand_targeting_cannot_use_the_battlefield_entry_action() {
+        let effect = SpellEffectKind::ChooseHandCards {
+            action: HandCardAction::PutOntoBattlefield,
+            count: 1,
+            target: TargetFilter::default(),
+            chooser: HandCardChooser::AffectedPlayer,
+            card_filter: Some(CardTypeFilter::Land),
+            optional: true,
+            visibility: HandChoiceVisibility::PrivateLook,
+        };
+        assert_eq!(
+            effect.validate(EffectContext::Spell),
+            Err("ChooseHandCards supports only discard or exile actions".into())
         );
     }
 }

@@ -1,0 +1,26 @@
+(
+  id: "pupu_ufo",
+  name: "PuPu UFO",
+  face_id: "pupu_ufo",
+  mana_cost: "{2}",
+  types: ["Artifact", "Creature", "Construct", "Alien"],
+  power: 0,
+  toughness: 4,
+  keywords: [Flying],
+  activated_abilities: [
+    (
+      ability_id: "put_land_from_hand",
+      presentation: OracleLines([1]),
+      source_zone: Battlefield,
+      costs: [Tap],
+      effect: [PutLandFromHandOntoBattlefield],
+    ),
+    (
+      ability_id: "set_power_to_towns",
+      presentation: OracleLines([2]),
+      source_zone: Battlefield,
+      costs: [Mana("{3}")],
+      effect: [SetSourceBasePowerToTownCount],
+    ),
+  ],
+)

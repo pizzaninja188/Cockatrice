@@ -908,6 +908,7 @@ impl CharacteristicsEvaluator<'_> {
                 matches!(
                     effect.kind,
                     ContinuousEffectKind::Layer7bSetPt { .. }
+                        | ContinuousEffectKind::Layer7bSetPower { .. }
                         | ContinuousEffectKind::PtModify { .. }
                         | ContinuousEffectKind::PtModifyByCount { .. }
                 )
@@ -1672,6 +1673,7 @@ fn is_characteristic_component(kind: &ContinuousEffectKind) -> bool {
                 | ContinuousEffectKind::GrantActivatedAbility(_)
                 | ContinuousEffectKind::GrantTriggeredAbility(_)
                 | ContinuousEffectKind::Layer7bSetPt { .. }
+                | ContinuousEffectKind::Layer7bSetPower { .. }
                 | ContinuousEffectKind::PtModify { .. }
                 | ContinuousEffectKind::PtModifyByCount { .. }
         )
@@ -2274,13 +2276,18 @@ impl CharacteristicsEvaluator<'_> {
             }
         }
         for effect in effects {
-            if let ContinuousEffectKind::Layer7bSetPt {
-                power: set_power,
-                toughness: set_toughness,
-            } = effect.kind
-            {
-                power = Some(set_power);
-                toughness = Some(set_toughness);
+            match effect.kind {
+                ContinuousEffectKind::Layer7bSetPt {
+                    power: set_power,
+                    toughness: set_toughness,
+                } => {
+                    power = Some(set_power);
+                    toughness = Some(set_toughness);
+                }
+                ContinuousEffectKind::Layer7bSetPower { power: set_power } => {
+                    power = Some(set_power);
+                }
+                _ => {}
             }
         }
 

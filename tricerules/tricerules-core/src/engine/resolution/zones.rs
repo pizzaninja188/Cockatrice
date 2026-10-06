@@ -1325,6 +1325,28 @@ pub(super) fn choose_hand_cards(
     )
 }
 
+pub(super) fn put_land_from_hand_onto_battlefield(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    if !matches!(effect, SpellEffectKind::PutLandFromHandOntoBattlefield) {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    }
+    choose_hand_cards_for_player(
+        cx,
+        cx.controller,
+        HandCardChoiceSpec {
+            count: 1,
+            chooser: HandCardChooser::AffectedPlayer,
+            card_filter: Some(&CardTypeFilter::Land),
+            optional: true,
+            visibility: HandChoiceVisibility::PrivateLook,
+            draw_after: 0,
+            action: HandCardAction::PutOntoBattlefield,
+        },
+    )
+}
+
 pub(super) fn draw_discard(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
@@ -1617,7 +1639,11 @@ fn choose_hand_cards_for_player(
         .map(|object_id| eligible.contains(object_id))
         .collect();
     let verb = hand_action_verb(action);
-    let prompt = if optional {
+    let prompt = if action == HandCardAction::PutOntoBattlefield {
+        format!(
+            "P{deciding_player}: you may choose a land card from your hand to put onto the battlefield."
+        )
+    } else if optional {
         format!("P{deciding_player}: you may choose a card for P{affected_player} to {verb}.")
     } else {
         format!("P{deciding_player}: choose {n} card(s) for P{affected_player} to {verb}.")
@@ -1709,6 +1735,7 @@ fn hand_action_verb(action: HandCardAction) -> &'static str {
     match action {
         HandCardAction::Discard => "discard",
         HandCardAction::Exile => "exile",
+        HandCardAction::PutOntoBattlefield => "put onto the battlefield",
     }
 }
 
@@ -1795,6 +1822,9 @@ pub(crate) fn perform_hand_card_action(
             perform_exile_from_hand(engine, events, affected_player, object_id, spell_label)
                 .map(|entry| (entry, None))
         }
+        HandCardAction::PutOntoBattlefield => Err(EngineError::Illegal(
+            "putting a chosen hand card onto the battlefield requires the entry pipeline",
+        )),
     }
 }
 

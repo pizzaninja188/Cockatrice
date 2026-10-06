@@ -1553,6 +1553,8 @@ fn validate_effect_targets(
         | SpellEffectKind::ExileWarpedObject
         | SpellEffectKind::AnimateSelf { .. }
         | SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
+        | SpellEffectKind::PutLandFromHandOntoBattlefield
+        | SpellEffectKind::SetSourceBasePowerToTownCount
         | SpellEffectKind::CreateStaticEmblem { .. }
         | SpellEffectKind::PreventAllCombatDamageTurn
         | SpellEffectKind::DamageCantBePreventedThisTurn

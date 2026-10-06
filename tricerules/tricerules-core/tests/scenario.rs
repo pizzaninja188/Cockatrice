@@ -14,6 +14,9 @@ mod deck_coverage_flux_abundance;
 #[path = "scenario/deck_coverage_graveyard_return.rs"]
 mod deck_coverage_graveyard_return;
 
+#[path = "scenario/deck_coverage_pupu_ufo.rs"]
+mod deck_coverage_pupu_ufo;
+
 #[path = "scenario/deck_coverage_sword_of_war_and_peace.rs"]
 mod deck_coverage_sword_of_war_and_peace;
 
