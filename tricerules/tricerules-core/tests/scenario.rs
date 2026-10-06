@@ -24,6 +24,8 @@ mod deck_coverage_sword_of_war_and_peace;
 mod deck_coverage_alhammarrets_archive;
 #[path = "scenario/deck_coverage_maze_of_ith.rs"]
 mod deck_coverage_maze_of_ith;
+#[path = "scenario/deck_coverage_mutational_advantage.rs"]
+mod deck_coverage_mutational_advantage;
 #[path = "scenario/deck_coverage_myr_battlesphere.rs"]
 mod deck_coverage_myr_battlesphere;
 #[path = "scenario/deck_coverage_standstill.rs"]

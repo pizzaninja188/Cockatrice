@@ -1459,6 +1459,12 @@ pub enum SpellEffectKind {
         filter: TargetFilter,
         keywords: Vec<Keyword>,
     },
+    /// Mutational Advantage's counter-based protection. Capture the controller's current
+    /// counter-bearing permanents once, then grant those identities hexproof and indestructible
+    /// until end of turn and prevent all damage to them for that turn. This deliberately combines
+    /// two distinct mechanics over the card's same rules-defined set rather than adding a
+    /// speculative generic "has any counter" cohort filter.
+    ProtectAllPermanentsYouControlWithCounters,
     /// Apply attack/block rules through the shared combat-legality path until cleanup. Source and
     /// chosen scopes bind one physical object; matching scopes remain dynamic because these
     /// restrictions modify the rules of the game rather than creature characteristics.
@@ -3115,6 +3121,7 @@ impl SpellEffectKind {
             | SpellEffectKind::ReturnAllGraveyardPermanentsWithManaValueXOrLess { .. }
             | SpellEffectKind::ChooseGraveyardCard { .. }
             | SpellEffectKind::GrantKeywordsAllPermanents { .. }
+            | SpellEffectKind::ProtectAllPermanentsYouControlWithCounters
             | SpellEffectKind::GainLife { .. }
             | SpellEffectKind::LoseLife { .. }
             | SpellEffectKind::EachOpponentLosesLifeYouGainEqual { .. }
@@ -3819,6 +3826,11 @@ impl SpellEffectKind {
         ) && context != EffectContext::Spell
         {
             return Err("resolving-spell zone movement requires spell context".into());
+        }
+        if matches!(self, Self::ProtectAllPermanentsYouControlWithCounters)
+            && context != EffectContext::Spell
+        {
+            return Err("counter-based mass protection requires spell context".into());
         }
         if context == EffectContext::Spell && self.uses_trigger_event_count() {
             return Err("spells cannot reference a trigger event's count".into());

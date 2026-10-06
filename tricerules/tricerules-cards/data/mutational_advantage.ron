@@ -1,0 +1,12 @@
+// Oracle text and the affected-set ruling verified against Wizards' Fallout release notes.
+(
+  id: "mutational_advantage",
+  name: "Mutational Advantage",
+  face_id: "mutational_advantage",
+  mana_cost: "{1}{G}{U}",
+  types: ["Instant"],
+  spell_effect: [
+    ProtectAllPermanentsYouControlWithCounters,
+    Proliferate,
+  ],
+)

@@ -1,0 +1,37 @@
+{
+  "format_version": 1,
+  "oracle_id": "2daa5b89-e772-4a2b-ad52-bbbf148c7b2f",
+  "spans": [
+    {
+      "face_id": "mutational_advantage",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/spell_effect/0",
+        "/faces/0/spell_effect/1"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::ProtectAllPermanentsYouControlWithCounters",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Proliferate",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_mutational_advantage::mutational_advantage_has_a_complete_card_definition",
+      "covers": "one instant face, printed cost and type, and the ordered protection then proliferate instruction map"
+    },
+    {
+      "test": "scenario deck_coverage_mutational_advantage::protection_uses_one_resolution_snapshot_before_proliferate_then_prevents_later_damage",
+      "covers": "any counter kind on any controller-owned permanent including an opponent-owned permanent controlled by the caster, exclusion of a caster-owned permanent controlled by an opponent and an own permanent without counters, snapshot persistence after counter changes, later noncombat damage prevention, zone-change expiry when the same physical card returns with a new generation, end-of-turn expiry, and the existing proliferate choice"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

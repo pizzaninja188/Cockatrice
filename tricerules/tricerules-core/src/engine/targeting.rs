@@ -1544,6 +1544,7 @@ fn validate_effect_targets(
         | SpellEffectKind::GrantKeywordsAll { .. }
         | SpellEffectKind::RemoveAbilitiesAll { .. }
         | SpellEffectKind::GrantKeywordsAllPermanents { .. }
+        | SpellEffectKind::ProtectAllPermanentsYouControlWithCounters
         | SpellEffectKind::CreateTokens { .. }
         | SpellEffectKind::CreateTokenBatch { .. }
         | SpellEffectKind::Amass { .. }

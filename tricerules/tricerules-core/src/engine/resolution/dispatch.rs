@@ -138,6 +138,9 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::GrantKeywordsAllPermanents { .. } => {
             pump_counters::grant_keywords_all_permanents(cx, effect)?
         }
+        SpellEffectKind::ProtectAllPermanentsYouControlWithCounters => {
+            pump_counters::protect_all_permanents_you_control_with_counters(cx)?
+        }
         effect @ SpellEffectKind::ApplyCombatRestriction { .. } => {
             restrictions::apply_combat_restriction(cx, effect)?
         }

@@ -1012,6 +1012,57 @@ pub(super) fn grant_keywords_all_permanents(
     Ok(EffectOutcome::Continue)
 }
 
+pub(super) fn protect_all_permanents_you_control_with_counters(
+    cx: &mut EffectCx<'_>,
+) -> Result<EffectOutcome, EngineError> {
+    // Mutational Advantage's ruling makes the same permanent set govern both the keyword grant
+    // and the following "those permanents" damage prevention. Capture exact engine identities
+    // once before adding either continuous effect; later counter changes must not alter this set.
+    let affected = cx
+        .engine
+        .state
+        .players
+        .iter()
+        .find(|player| player.id == cx.controller)
+        .into_iter()
+        .flat_map(|player| player.battlefield.iter().copied())
+        .filter(|oid| {
+            cx.engine
+                .state
+                .objects
+                .get(oid)
+                .is_some_and(|object| object.counters.values().any(|count| *count > 0))
+        })
+        .collect::<Vec<_>>();
+
+    for &oid in &affected {
+        for keyword in [Keyword::Hexproof, Keyword::Indestructible] {
+            cx.engine.state.continuous_effects.push(ContinuousEffect {
+                trigger_grant_origin: None,
+                source_id: Some(cx.top.id),
+                affected: AffectedScope::Single(oid),
+                kind: ContinuousEffectKind::Layer6AddKeyword(keyword),
+                condition: None,
+                duration: EffectDuration::UntilEndOfTurn,
+                timestamp: cx.engine.state.command_index,
+            });
+        }
+        cx.engine.add_damage_prevention(
+            Some(cx.top),
+            cx.spell_label,
+            DamagePreventionScope::Recipient(oid),
+            DamagePreventionAmount::All,
+        );
+    }
+
+    cx.events.push(ev_log(format!(
+        "{} protects {} counter-bearing permanents until end of turn",
+        cx.spell_label,
+        affected.len()
+    )));
+    Ok(EffectOutcome::Continue)
+}
+
 pub(super) fn double_counters(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
