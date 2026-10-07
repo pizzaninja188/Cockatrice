@@ -1,0 +1,17 @@
+// Oracle and rulings checked 2026-10-06 against the exact Scryfall Weapons Manufacturing record.
+(
+  id: "weapons_manufacturing",
+  name: "Weapons Manufacturing",
+  face_id: "weapons_manufacturing",
+  mana_cost: "{1}{R}",
+  types: ["Enchantment"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (permanent_type: Some(Artifact), token: Some(false)),
+    ),
+    effect: [CreateTokens(token: "munitions", count: 1)],
+  )],
+)

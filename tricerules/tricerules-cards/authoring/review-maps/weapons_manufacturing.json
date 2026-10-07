@@ -1,0 +1,38 @@
+{
+  "format_version": 1,
+  "oracle_id": "e48a8160-cffe-4e00-a3e9-a59d7fc7b3a2",
+  "spans": [
+    {
+      "face_id": "weapons_manufacturing",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    }
+  ],
+  "tokens": ["munitions"],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_weapons_manufacturing::weapons_manufacturing_and_munitions_have_the_complete_printed_definitions",
+      "covers": "exact card identity and mana cost, enchantment face, Munitions token name and artifact type, and both triggered-ability definitions"
+    },
+    {
+      "test": "scenario deck_coverage_weapons_manufacturing::own_nontoken_artifacts_create_munitions_and_its_any_target_leaves_trigger_survives",
+      "covers": "only own nontoken artifact entries create a Munitions token; the token does not recurse; its LTB ability survives destruction and exile, rejects a noncreature artifact as any target, retains its exact source object, and deals two damage to a player"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}
