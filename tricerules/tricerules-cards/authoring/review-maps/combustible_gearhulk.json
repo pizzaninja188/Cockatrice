@@ -1,0 +1,81 @@
+{
+  "format_version": 1,
+  "oracle_id": "3494a575-f68e-4e78-9f6b-142cd8a0edea",
+  "spans": [
+    {
+      "face_id": "combustible_gearhulk",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/keywords"]
+    },
+    {
+      "face_id": "combustible_gearhulk",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0",
+        "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0",
+        "/faces/0/triggered_abilities/0/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseResolutionBranch",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "PlayerRecipient::TargetedPlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/chooser"
+    },
+    {
+      "symbol": "TargetingDef::groups",
+      "typed_path": "/faces/0/triggered_abilities/0/targeting"
+    },
+    {
+      "symbol": "TargetKind::OpponentPlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/chooser/TargetedPlayer/kind"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Mill",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/otherwise/0"
+    },
+    {
+      "symbol": "SpellEffectKind::DamagePlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/otherwise/1"
+    },
+    {
+      "symbol": "CountExpression::PreviousMillManaValueSum",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/otherwise/1/DamagePlayer/amount/Count"
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_combustible_gearhulk::targeted_opponent_can_decline_and_take_the_sum_of_exact_milled_card_mana_values",
+      "covers": "exact three-player target routing; rejects the controller as target and a wrong branch chooser; sums the exact mill receipts for Fireball with X equal to zero, Fire // Ice, and a Room; damage resolves after Gearhulk leaves using its source LKI"
+    },
+    {
+      "test": "scenario deck_coverage_combustible_gearhulk::targeted_opponent_may_choose_the_draw_branch_with_fewer_than_three_cards",
+      "covers": "the targeted opponent may choose the draw branch with one card in the controller's library, after which the controller loses for the failed three-card draw"
+    },
+    {
+      "test": "scenario deck_coverage_combustible_gearhulk::trigger_does_not_resolve_if_its_target_opponent_leaves_before_resolution",
+      "covers": "when the sole target leaves before resolution, the trigger does not offer a branch or mill cards"
+    },
+    {
+      "test": "deck_coverage_combustible_gearhulk::combustible_gearhulk_registers_its_exact_identity_and_etb_choice",
+      "covers": "exact Oracle identity, cost, types, stats, first strike, trigger presentation, target group, branch recipients, mill and damage order, and private result expression"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -108,6 +108,10 @@ pub enum CountExpression {
         filter: CardResultFilter,
         characteristic: PowerToughnessCharacteristic,
     },
+    /// Combustible Gearhulk sums printed mana values from the immediately preceding controller
+    /// Mill result. This is deliberately a fieldless result consumer: its valid source, action,
+    /// and player are fixed by the sibling-effect contract.
+    PreviousMillManaValueSum,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -219,6 +223,7 @@ impl CountExpression {
                                 | Self::CardsMatchingResultForAffectedPlayer { .. }
                                 | Self::MaximumCardsMatchingResult { .. }
                                 | Self::CardResultCharacteristicSum { .. }
+                                | Self::PreviousMillManaValueSum
                         )
                     {
                         return Err("affine quantity requires nonzero coefficients and public, non-affine leaves".into());
@@ -237,7 +242,18 @@ impl CountExpression {
             | CountExpression::CardsMatchingResult { .. }
             | CountExpression::CardsMatchingResultForAffectedPlayer { .. }
             | CountExpression::MaximumCardsMatchingResult { .. }
-            | CountExpression::CardResultCharacteristicSum { .. } => Ok(()),
+            | CountExpression::CardResultCharacteristicSum { .. }
+            | CountExpression::PreviousMillManaValueSum => Ok(()),
+        }
+    }
+
+    fn uses_previous_mill_mana_value_sum(&self) -> bool {
+        match self {
+            Self::PreviousMillManaValueSum => true,
+            Self::Affine { terms, .. } => terms
+                .iter()
+                .any(|term| term.quantity.uses_previous_mill_mana_value_sum()),
+            _ => false,
         }
     }
 
@@ -294,6 +310,14 @@ pub enum Amount {
 }
 
 impl Amount {
+    pub(crate) fn uses_previous_mill_mana_value_sum(&self) -> bool {
+        match self {
+            Self::Count(expression) => expression.uses_previous_mill_mana_value_sum(),
+            Self::DivideRoundedDown { amount, .. } => amount.uses_previous_mill_mana_value_sum(),
+            _ => false,
+        }
+    }
+
     pub(crate) fn uses_affected_player_result(&self) -> bool {
         match self {
             Self::Count(CountExpression::CardsMatchingResultForAffectedPlayer { .. }) => true,
@@ -321,6 +345,11 @@ impl Amount {
     }
 
     pub(crate) fn validate_entry(&self, intrinsic: bool) -> Result<(), String> {
+        if self.uses_previous_mill_mana_value_sum() {
+            return Err(
+                "PreviousMillManaValueSum requires an immediate controller Mill result".into(),
+            );
+        }
         if self.uses_entry_cast_colors() || self.entry_cast_cost_reference().is_some() {
             if !intrinsic {
                 return Err(
@@ -420,6 +449,11 @@ impl Amount {
     }
 
     pub(crate) fn validate_live(&self) -> Result<(), String> {
+        if self.uses_previous_mill_mana_value_sum() {
+            return Err(
+                "PreviousMillManaValueSum requires an immediate controller Mill result".into(),
+            );
+        }
         if self.uses_affected_player_result() {
             return Err(
                 "affected-player result count requires a resolving player draw instruction".into(),
@@ -833,6 +867,86 @@ mod hand_size_count_tests {
         assert!(ron::from_str::<CountExpression>(
             "Affine(terms:[(coefficient:1,quantity:CardsMatchingResultForAffectedPlayer(filter:(source:PreviousEffect,action:Discard,players:All)))])"
         ).unwrap().validate().is_err());
+    }
+
+    #[test]
+    fn previous_mill_mana_value_sum_is_private_to_an_immediate_result_consumer() {
+        let expression = CountExpression::PreviousMillManaValueSum;
+        let amount = Amount::Count(expression.clone());
+        assert!(expression.validate().is_ok());
+        assert!(expression.validate_static_count().is_err());
+        assert!(amount.validate_cost(false).is_err());
+        assert!(amount.validate_entry(false).is_err());
+        assert!(amount.validate_live().is_err());
+        assert!(amount.validate_effect(EffectContext::Ability).is_ok());
+        assert!(ron::from_str::<CountExpression>(
+            "Affine(terms:[(coefficient:1,quantity:PreviousMillManaValueSum)])"
+        )
+        .unwrap()
+        .validate()
+        .is_err());
+    }
+
+    #[test]
+    fn previous_mill_mana_value_sum_only_follows_a_controller_mill_into_damage() {
+        use crate::primitives::{PlayerRecipient, SpellEffectKind};
+
+        let amount = Amount::Count(CountExpression::PreviousMillManaValueSum);
+        let mill = SpellEffectKind::Mill {
+            count: Amount::Fixed(3),
+            who: PlayerRecipient::Controller,
+        };
+        let damage = SpellEffectKind::DamagePlayer {
+            amount: amount.clone(),
+            who: PlayerRecipient::Controller,
+        };
+        assert!(SpellEffectKind::validate_list(&[mill.clone(), damage.clone()]).is_ok());
+
+        let wrong_recipient = SpellEffectKind::Mill {
+            count: Amount::Fixed(3),
+            who: PlayerRecipient::EachOpponent,
+        };
+        assert!(SpellEffectKind::validate_list(&[wrong_recipient, damage.clone()]).is_err());
+        assert!(SpellEffectKind::validate_list(std::slice::from_ref(&damage)).is_err());
+        assert!(SpellEffectKind::validate_list(&[
+            mill.clone(),
+            SpellEffectKind::GainLife {
+                amount: Amount::Fixed(1),
+            },
+            damage.clone(),
+        ])
+        .is_err());
+
+        let wrapped = SpellEffectKind::DamagePlayer {
+            amount: Amount::DivideRoundedDown {
+                amount: Box::new(amount),
+                divisor: 2,
+            },
+            who: PlayerRecipient::Controller,
+        };
+        assert!(SpellEffectKind::validate_list(&[mill, wrapped]).is_err());
+    }
+
+    #[test]
+    fn previous_mill_mana_value_sum_is_rejected_by_mass_counter_effect() {
+        use crate::primitives::{CounterKind, SpellEffectKind};
+
+        let effect = SpellEffectKind::PutCountersAll {
+            counter: CounterKind::PlusOnePlusOne,
+            count: Amount::Count(CountExpression::PreviousMillManaValueSum),
+            filter: Default::default(),
+        };
+        assert!(SpellEffectKind::validate_list(&[effect]).is_err());
+    }
+
+    #[test]
+    fn previous_mill_mana_value_sum_is_rejected_by_attacked_recipient_damage() {
+        use crate::primitives::SpellEffectKind;
+
+        let effect = SpellEffectKind::DamageAttackedPlayerOrPlaneswalker {
+            amount: Amount::Count(CountExpression::PreviousMillManaValueSum),
+        };
+        assert!(SpellEffectKind::validate_list(&[effect]).is_err());
     }
 
     #[test]

@@ -1,0 +1,40 @@
+(
+  id: "combustible_gearhulk",
+  name: "Combustible Gearhulk",
+  face_id: "combustible_gearhulk",
+  mana_cost: "{4}{R}{R}",
+  types: ["Artifact", "Creature", "Construct"],
+  power: 6,
+  toughness: 6,
+  keywords: [FirstStrike],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [ChooseResolutionBranch(
+      chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
+      optional: true,
+      selection: PlayerChoice,
+      branches: [(
+        branch_id: "draw_three",
+        presentation: OracleLines([2]),
+        cost: None,
+        requirement: Always,
+        effects: [Draw(who: Controller, count: 3)],
+      )],
+      otherwise: [
+        Mill(who: Controller, count: 3),
+        DamagePlayer(
+          who: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
+          amount: Count(PreviousMillManaValueSum),
+        ),
+      ],
+    )],
+    targeting: Some((groups: [(
+      min: 1,
+      max: 1,
+      prompt: "Choose target opponent",
+      effect_indices: [0],
+    )])),
+  )],
+)

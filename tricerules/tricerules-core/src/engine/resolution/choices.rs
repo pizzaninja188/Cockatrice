@@ -761,6 +761,37 @@ pub(in crate::engine) fn card_result_characteristic_sum(
     })
 }
 
+pub(in crate::engine) fn card_result_mana_value_sum(
+    engine: &crate::engine::GameEngine,
+    top: &StackItem,
+    previous_result: &crate::state::EffectResult,
+) -> i64 {
+    let mut seen = std::collections::BTreeSet::new();
+    previous_result
+        .cards
+        .iter()
+        .filter(|entry| {
+            entry.action == tricerules_cards::primitives::CardResultAction::Mill
+                && entry.affected_player == top.controller
+                && seen.insert((entry.object_id, entry.zone_change_generation))
+        })
+        .filter_map(|entry| {
+            let current_generation = engine
+                .state
+                .zone_change_generation
+                .get(&entry.object_id)
+                .copied()
+                .unwrap_or(0);
+            if current_generation != entry.zone_change_generation {
+                return None;
+            }
+            let object = engine.state.objects.get(&entry.object_id)?;
+            let definition = engine.registry.get(&object.card_id)?;
+            Some(i64::from(definition.mana_value_outside_stack()))
+        })
+        .fold(0_i64, i64::saturating_add)
+}
+
 fn card_result_count_from_cohorts(
     state: &crate::state::GameState,
     controller: i32,

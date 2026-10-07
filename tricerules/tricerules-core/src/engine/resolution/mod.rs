@@ -27,7 +27,7 @@ pub(super) use choices::{
 };
 pub(in crate::engine) use choices::{
     card_result_characteristic_sum, card_result_count, card_result_count_for_player,
-    card_result_maximum,
+    card_result_mana_value_sum, card_result_maximum,
 };
 pub(in crate::engine) use choices::{
     current_targeted_player_control_cohort, current_targeted_player_permanent_candidates,

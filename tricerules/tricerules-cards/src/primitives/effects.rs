@@ -2671,12 +2671,14 @@ impl SpellEffectKind {
                 ..
             }
             | SpellEffectKind::DamagePlayer { amount, .. }
+            | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { amount }
             | SpellEffectKind::Draw { count: amount, .. }
             | SpellEffectKind::TargetPlayerDraws { count: amount, .. }
             | SpellEffectKind::GainLife { amount }
             | SpellEffectKind::TargetPlayerGainsLife { amount, .. }
             | SpellEffectKind::Mill { count: amount, .. }
             | SpellEffectKind::PutCounters { count: amount, .. }
+            | SpellEffectKind::PutCountersAll { count: amount, .. }
             | SpellEffectKind::PutCountersAllPlaneswalkers { count: amount, .. }
             | SpellEffectKind::Amass { count: amount, .. }
             | SpellEffectKind::CreateTokens { count: amount, .. }
@@ -3130,6 +3132,12 @@ impl SpellEffectKind {
             SpellEffectKind::MoveGraveyardCards { filter, .. } => {
                 vec![TargetRole::GraveyardCard(filter)]
             }
+            SpellEffectKind::ChooseResolutionBranch {
+                chooser: PlayerRecipient::TargetedPlayer { kind, .. },
+                ..
+            } => mass_player_target(*kind)
+                .map(|target| vec![TargetRole::Filtered(target)])
+                .unwrap_or_default(),
             SpellEffectKind::DamagePlayer { .. }
             | SpellEffectKind::CreateTokenCopies {
                 source: TokenCopySource::Source,
@@ -3665,6 +3673,29 @@ impl SpellEffectKind {
             let previous = index
                 .checked_sub(1)
                 .and_then(|previous| effects.get(previous));
+            if amount.is_some_and(Amount::uses_previous_mill_mana_value_sum) {
+                let exact_damage_consumer = matches!(
+                    effect,
+                    SpellEffectKind::DamagePlayer {
+                        amount: Amount::Count(CountExpression::PreviousMillManaValueSum),
+                        ..
+                    }
+                );
+                if !exact_damage_consumer
+                    || !matches!(
+                        previous,
+                        Some(SpellEffectKind::Mill {
+                            who: PlayerRecipient::Controller,
+                            ..
+                        })
+                    )
+                {
+                    return Err(
+                        "PreviousMillManaValueSum requires an immediately preceding controller Mill and direct DamagePlayer consumer"
+                            .into(),
+                    );
+                }
+            }
             if matches!(effect, SpellEffectKind::MyrBattlesphereAttack) {
                 let expected = TargetFilter {
                     kind: TargetKind::AnyPermanent,
@@ -3928,6 +3959,17 @@ impl SpellEffectKind {
             if mass_player_target(kind).is_none() {
                 return Err("targeted mass scope requires AnyPlayer or OpponentPlayer".into());
             }
+        }
+        if matches!(
+            self,
+            Self::ChooseResolutionBranch {
+                chooser: PlayerRecipient::TargetedPlayer { kind, .. },
+                ..
+            } if mass_player_target(*kind).is_none()
+        ) {
+            return Err(
+                "targeted resolution branch chooser requires AnyPlayer or OpponentPlayer".into(),
+            );
         }
         if context == EffectContext::Spell && self.requires_triggering_spell_context() {
             return Err("spells cannot reference triggering-spell context".into());
