@@ -23,10 +23,14 @@ mod choices;
 pub(super) use choices::{
     authored_resolution_branch_choice_event, authored_resolution_branch_has_selectable_option,
     resolution_branch_is_selectable, resolution_choice_delegate_candidates,
+    targeted_player_permanent_choice_event,
 };
 pub(in crate::engine) use choices::{
     card_result_characteristic_sum, card_result_count, card_result_count_for_player,
     card_result_maximum,
+};
+pub(in crate::engine) use choices::{
+    current_targeted_player_control_cohort, current_targeted_player_permanent_candidates,
 };
 mod amass;
 mod blight;
@@ -417,6 +421,7 @@ fn simple_player_recipients(
         PlayerRecipient::TriggerObjectController => trigger_object_controller.into_iter().collect(),
         PlayerRecipient::SourceController => source_controller.into_iter().collect(),
         PlayerRecipient::ControllerOfTargetGroup { .. }
+        | PlayerRecipient::TargetedPlayer { .. }
         | PlayerRecipient::PreviousTargetedSpellController
         | PlayerRecipient::DefendingPlayer
         | PlayerRecipient::EachOtherPlayerThanAffectedPlayer
@@ -478,10 +483,21 @@ mod player_recipient_order_tests {
             [30, 10]
         );
     }
+
+    #[test]
+    fn targeted_player_recipient_reads_only_its_authored_group() {
+        assert_eq!(target_player_from_group(&[30, 20], &[1, 0], 0), Some(20));
+        assert_eq!(target_player_from_group(&[30, 20], &[1, 0], 2), None);
+    }
 }
 
 fn player_recipients(cx: &EffectCx<'_>, who: PlayerRecipient) -> Vec<PlayerId> {
     match who {
+        PlayerRecipient::TargetedPlayer { group_index, .. } => {
+            target_player_from_group(cx.targets, cx.target_group_indices, group_index)
+                .into_iter()
+                .collect()
+        }
         PlayerRecipient::EachOtherPlayerThanAffectedPlayer => {
             let Some(caster) = cx.top.trigger_context.affected_player else {
                 return Vec::new();
@@ -603,6 +619,19 @@ fn player_recipients(cx: &EffectCx<'_>, who: PlayerRecipient) -> Vec<PlayerId> {
             who,
         ),
     }
+}
+
+/// The player id represented by one authored target group. Player targets share the engine's
+/// ObjectId wire slot, but their group index is typed separately from permanent targets.
+fn target_player_from_group(
+    targets: &[ObjectId],
+    target_group_indices: &[u32],
+    group_index: u32,
+) -> Option<PlayerId> {
+    targets
+        .iter()
+        .zip(target_group_indices)
+        .find_map(|(&id, &group)| (group == group_index).then_some(id as PlayerId))
 }
 
 fn source_controller(engine: &GameEngine, top: &StackItem) -> Option<PlayerId> {

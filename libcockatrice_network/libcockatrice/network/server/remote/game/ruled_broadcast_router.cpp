@@ -452,6 +452,17 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
             filtered.mutable_events()->DeleteSubrange(ei, 1);
         }
     }
+    QHash<quint32, int> faceDownControllerByObjectId;
+    for (int ei = batch.events_size() - 1; ei >= 0; --ei) {
+        const auto &event = batch.events(ei);
+        if (!event.has_face_down_object_map()) {
+            continue;
+        }
+        for (const auto &entry : event.face_down_object_map().entries()) {
+            faceDownControllerByObjectId.insert(entry.engine_object_id(), entry.controller_player_id());
+        }
+        break;
+    }
     {
         // Redact private candidates of a tier-3 resolution choice (CR 608) from everyone but the
         // deciding player, unless the engine explicitly authorizes a public reveal. Some private
@@ -630,6 +641,26 @@ ruled::v1::RuledEventBatch RuledBroadcastRouter::redactBatchForParticipant(const
                     for (int ci = 0; ci < rcr->candidate_names_size(); ++ci) {
                         rcr->add_candidate_server_card_ids(ci);
                     }
+                }
+
+                // Public permanent choices keep candidate OIDs visible so every client can
+                // render the pending selection. Face-down identity belongs to the permanent's
+                // current controller, not necessarily the target or delegated chooser, so mask
+                // every identity-bearing parallel field for all other recipients.
+                for (int ci = 0; ci < rcr->candidate_object_ids_size(); ++ci) {
+                    const auto faceDown = faceDownControllerByObjectId.constFind(rcr->candidate_object_ids(ci));
+                    if (faceDown == faceDownControllerByObjectId.constEnd() ||
+                        faceDown.value() == participant->getPlayerId()) {
+                        continue;
+                    }
+                    if (ci < rcr->candidate_card_ids_size())
+                        rcr->set_candidate_card_ids(ci, "");
+                    if (ci < rcr->candidate_names_size())
+                        rcr->set_candidate_names(ci, "Face-down permanent");
+                    if (ci < rcr->candidate_server_card_ids_size())
+                        rcr->set_candidate_server_card_ids(ci, -1);
+                    if (ci < rcr->candidate_token_identities_size())
+                        rcr->mutable_candidate_token_identities(ci)->Clear();
                 }
             }
         }

@@ -5490,6 +5490,59 @@ TEST_F(RuledBatchTest, FaceDownIdentityIsControllerOnlyAndFaceUpKeepsServerCard)
     EXPECT_EQ(findCardByEngineOid(p1, 9802u), card);
 }
 
+TEST_F(RuledBatchTest, FaceDownPermanentChoiceHidesIdentityFromANoncontrollingChooser)
+{
+    const auto runChoice = [&](Server_Player *decider, int controllerId) {
+        ruled::v1::RuledEventBatch batch;
+        auto *choice = batch.add_events()->mutable_resolution_choice_required();
+        choice->set_deciding_player_id(decider->getPlayerId());
+        choice->set_choice_kind(ruled::v1::CHOICE_KIND_PERMANENT_OBJECTS);
+        choice->set_prompt_text("Choose a permanent.");
+        choice->set_min(1);
+        choice->set_max(1);
+        choice->add_candidate_object_ids(9803u);
+        choice->add_candidate_card_ids("secret_face_down_card");
+        choice->add_candidate_names("Secret Face-Down Card");
+        choice->add_candidate_server_card_ids(4321);
+
+        auto *faceDown = batch.add_events()->mutable_face_down_object_map()->add_entries();
+        faceDown->set_controller_player_id(controllerId);
+        faceDown->set_engine_object_id(9803u);
+        faceDown->set_zone_change_generation(1);
+        faceDown->set_server_card_id(4321);
+        faceDown->set_card_name("Secret Face-Down Card");
+
+        for (auto *recipient : {p1, p2}) {
+            const auto redacted = redactFor(batch, recipient);
+            const auto choiceIt = std::find_if(redacted.events().begin(), redacted.events().end(),
+                                               [](const auto &event) { return event.has_resolution_choice_required(); });
+            ASSERT_NE(choiceIt, redacted.events().end());
+            const auto &received = choiceIt->resolution_choice_required();
+            ASSERT_EQ(received.candidate_object_ids_size(), 1);
+            ASSERT_EQ(received.candidate_card_ids_size(), 1);
+            ASSERT_EQ(received.candidate_names_size(), 1);
+            ASSERT_EQ(received.candidate_server_card_ids_size(), 1);
+            EXPECT_EQ(received.candidate_object_ids(0), 9803u);
+            if (recipient->getPlayerId() != controllerId) {
+                EXPECT_EQ(received.candidate_card_ids(0), "");
+                EXPECT_EQ(received.candidate_names(0), "Face-down permanent");
+                EXPECT_EQ(received.candidate_server_card_ids(0), -1);
+            } else {
+                EXPECT_EQ(received.candidate_card_ids(0), "secret_face_down_card");
+                EXPECT_EQ(received.candidate_names(0), "Secret Face-Down Card");
+                EXPECT_EQ(received.candidate_server_card_ids(0), 4321);
+            }
+        }
+    };
+
+    // A live target and an 800.4g replacement chooser can both be different from the
+    // face-down permanent's controller. Candidate OIDs remain selectable; only the controller
+    // receives the hidden physical identity, whether or not they are the current chooser.
+    runChoice(p2, p1->getPlayerId());
+    runChoice(p1, p2->getPlayerId());
+    runChoice(p1, p1->getPlayerId());
+}
+
 TEST_F(RuledBatchTest, GameEndingConcessionRevealsEveryRemainingFaceDownPermanent)
 {
     Server_Card *aliceCard = addCardToTable(p1, "Grizzly Bears");

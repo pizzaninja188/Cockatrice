@@ -1,0 +1,17 @@
+// Teferi, Temporal Pilgrim's blue Spirit token.
+(
+  id: "spirit_u_2_2_vigilance_draw_counter",
+  name: "Spirit",
+  face_id: "spirit",
+  types: ["Creature", "Spirit"],
+  colors: [Blue],
+  power: 2,
+  toughness: 2,
+  keywords: [Vigilance],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: Fallback,
+    trigger: WheneverPlayerDrawsCard(drawer: Controller),
+    effect: [PutCounters(counter: PlusOnePlusOne, count: 1, subject: Source)],
+  )],
+)

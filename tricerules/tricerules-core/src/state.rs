@@ -5,9 +5,9 @@ use tricerules_cards::primitives::{
     CounterKind, CreatureScopeFilter, DamagePreventionAdditionalEffect,
     DelayedTokenSacrificeTiming, EffectDuration, GameCondition, HandCardAction, Keyword,
     LibraryBottomOrder, LibraryPlacement, ManaAmount, ManaSpendingRestriction, ObjectCastCostKind,
-    PermanentTypeFilter, ResolvingPermanentModifier, SearchDestination, SearchSelectionConstraint,
-    SearchSelectionSlot, SearchZoneSelection, StaticEmblemEffect, TargetFilter,
-    TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
+    PermanentChoiceConstraint, PermanentTypeFilter, ResolvingPermanentModifier, SearchDestination,
+    SearchSelectionConstraint, SearchSelectionSlot, SearchZoneSelection, StaticEmblemEffect,
+    TargetFilter, TriggeredAbilityDef, TypeLineReplacement, ZoneCardFilter,
 };
 use tricerules_cards::primitives::{PlayerRecipient, ResolutionBranchDef};
 use tricerules_cards::{
@@ -149,6 +149,25 @@ pub(crate) struct EffectResult {
     pub counter_placements: Vec<CounterPlacementReceipt>,
     /// Controller of a legal stack target at the counter instruction, before any stack exit.
     pub targeted_spell_controller: Option<PlayerId>,
+    /// Teferi's choice retains a control-membership receipt for 800.4i LKI if the target leaves.
+    /// While the target remains in the game, later instructions read current battlefield state.
+    pub targeted_player_control_cohort: Option<TargetedPlayerControlCohort>,
+}
+
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TargetedPlayerPermanent {
+    pub object_id: ObjectId,
+    pub zone_change_generation: u64,
+    pub owner: PlayerId,
+}
+
+/// Private battlefield-membership receipt for current control information that becomes LKI if its
+/// player leaves during a parked resolution choice. It never freezes the live player's later set.
+#[derive(serde::Serialize, Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TargetedPlayerControlCohort {
+    /// Last-known player whose control information the object receipt represents.
+    pub player_id: PlayerId,
+    pub permanents: Vec<TargetedPlayerPermanent>,
 }
 
 /// Private generation-bound proof that one counter instruction actually changed its recipient.
@@ -173,6 +192,7 @@ impl From<CardResultCohort> for EffectResult {
             receipt: None,
             counter_placements: Vec::new(),
             targeted_spell_controller: None,
+            targeted_player_control_cohort: None,
         }
     }
 }
@@ -981,6 +1001,16 @@ pub enum PendingResolutionBranchStage {
     },
 }
 
+#[derive(serde::Serialize, Debug, Clone)]
+pub enum PendingTargetedPlayerChoiceStage {
+    ChoosingPermanent,
+    /// The effect controller chooses who will answer for the departed targeted player.
+    /// None entries retain slot indices after an eligible player leaves.
+    ChoosingDelegate {
+        candidates: Vec<Option<PlayerId>>,
+    },
+}
+
 /// Stack-resolution context shared only by continuation families that actually resume a stack
 /// item. Non-stack choices such as the legend rule therefore need no synthetic `StackItem`.
 #[derive(serde::Serialize, Debug, Clone)]
@@ -1055,6 +1085,7 @@ pub enum PendingLibraryLookStage {
 /// The exact work to resume after a resolution choice. Each variant owns only the metadata its
 /// handler consumes; engine-owned string sentinels and unrelated optional fields are forbidden.
 #[derive(serde::Serialize, Debug, Clone)]
+#[allow(private_interfaces)] // The Teferi cohort is engine-private even though continuations are inspectable.
 pub enum ResolutionContinuation {
     DrawReplacement {
         stack: Option<ParkedStackResolution>,
@@ -1083,6 +1114,15 @@ pub enum ResolutionContinuation {
     PermanentChoice {
         stack: ParkedStackResolution,
         candidate_generations: Vec<(ObjectId, u64)>,
+    },
+    TargetedPlayerPermanentChoice {
+        stack: ParkedStackResolution,
+        target_player: PlayerId,
+        cohort: TargetedPlayerControlCohort,
+        filter: TargetFilter,
+        constraints: Vec<PermanentChoiceConstraint>,
+        candidate_generations: Vec<(ObjectId, u64)>,
+        stage: PendingTargetedPlayerChoiceStage,
     },
     BeholdChoice {
         stack: ParkedStackResolution,
@@ -1311,6 +1351,7 @@ impl ResolutionContinuation {
             | Self::ManaPayment { stack, .. }
             | Self::AuthoredBranch { stack, .. }
             | Self::PermanentChoice { stack, .. }
+            | Self::TargetedPlayerPermanentChoice { stack, .. }
             | Self::BeholdChoice { stack, .. }
             | Self::Proliferate { stack, .. }
             | Self::AmassChoice { stack, .. }
@@ -1360,6 +1401,7 @@ impl ResolutionContinuation {
             | Self::ManaPayment { stack, .. }
             | Self::AuthoredBranch { stack, .. }
             | Self::PermanentChoice { stack, .. }
+            | Self::TargetedPlayerPermanentChoice { stack, .. }
             | Self::BeholdChoice { stack, .. }
             | Self::Proliferate { stack, .. }
             | Self::AmassChoice { stack, .. }

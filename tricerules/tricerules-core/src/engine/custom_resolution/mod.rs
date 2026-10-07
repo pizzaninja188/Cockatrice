@@ -19,6 +19,7 @@ use super::targeting::{
     validate_spell_targets, TargetSourceIdentity,
 };
 use super::*;
+use crate::state::PendingTargetedPlayerChoiceStage;
 
 mod attacking_tokens;
 mod branches;
@@ -101,6 +102,15 @@ impl GameEngine {
                 return Err(EngineError::Illegal("unknown resolution choice decision"));
             }
         };
+        if matches!(
+            &pending.continuation,
+            ResolutionContinuation::TargetedPlayerPermanentChoice {
+                stage: PendingTargetedPlayerChoiceStage::ChoosingDelegate { .. },
+                ..
+            }
+        ) {
+            return self.select_targeted_player_choice_delegate(pending, answer, decision);
+        }
         if matches!(
             pending.continuation,
             ResolutionContinuation::DrawReplacement { .. }
@@ -339,6 +349,9 @@ impl GameEngine {
             }
             ResolutionContinuation::PermanentChoice { .. } => {
                 return self.finish_permanent_choice(pending, chosen);
+            }
+            ResolutionContinuation::TargetedPlayerPermanentChoice { .. } => {
+                return self.finish_targeted_player_permanent_choice(pending, chosen);
             }
             ResolutionContinuation::BeholdChoice { .. } => {
                 return self.finish_behold_choice(pending, chosen);
@@ -912,6 +925,454 @@ impl GameEngine {
             },
             events,
         )
+    }
+
+    fn select_targeted_player_choice_delegate(
+        &mut self,
+        mut pending: PendingResolution,
+        answer: &rv1::SubmitResolutionChoice,
+        decision: rv1::ResolutionChoiceDecision,
+    ) -> Result<RuledEventBatch, EngineError> {
+        if decision != rv1::ResolutionChoiceDecision::SelectBranch
+            || !answer.chosen_object_ids.is_empty()
+            || !answer.chosen_player_ids.is_empty()
+            || answer.cast_spell.is_some()
+            || answer.chosen_combat_defender.is_some()
+            || answer.payment.is_some()
+            || !answer.restricted_mana.is_empty()
+            || answer.spell_cast_announcement.is_some()
+        {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "replacement chooser must select one available player",
+            ));
+        }
+        let (controller, target_player, candidate_slots) = match &pending.continuation {
+            ResolutionContinuation::TargetedPlayerPermanentChoice {
+                stack,
+                target_player,
+                stage: PendingTargetedPlayerChoiceStage::ChoosingDelegate { candidates },
+                ..
+            } => (stack.item.controller, *target_player, candidates.clone()),
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal(
+                    "targeted-player delegate continuation missing",
+                ));
+            }
+        };
+        let delegate = candidate_slots
+            .get(answer.selected_branch_index as usize)
+            .copied()
+            .flatten();
+        let eligible = resolution::resolution_choice_delegate_candidates(
+            &self.state,
+            controller,
+            target_player,
+        );
+        let Some(delegate) = delegate.filter(|delegate| eligible.contains(delegate)) else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "that replacement chooser is no longer available",
+            ));
+        };
+        let Some(index) = self.state.player_idx(delegate) else {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "that replacement chooser is no longer available",
+            ));
+        };
+        if self.state.players[index].has_lost {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "that replacement chooser is no longer available",
+            ));
+        }
+        let old_candidates = match &pending.continuation {
+            ResolutionContinuation::TargetedPlayerPermanentChoice {
+                candidate_generations,
+                ..
+            } => candidate_generations.clone(),
+            _ => unreachable!("validated targeted-player continuation"),
+        };
+        let candidates = old_candidates
+            .iter()
+            .copied()
+            .filter(|(object_id, generation)| {
+                self.state
+                    .zone_change_generation
+                    .get(object_id)
+                    .copied()
+                    .unwrap_or(0)
+                    == *generation
+                    && self
+                        .state
+                        .objects
+                        .get(object_id)
+                        .is_some_and(|object| object.zone == Zone::Battlefield)
+            })
+            .collect::<Vec<_>>();
+        if candidates.is_empty() {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "no legal permanent remains for the replacement chooser",
+            ));
+        }
+        let candidate_ids = candidates.iter().map(|(object_id, _)| *object_id).collect();
+        let ResolutionContinuation::TargetedPlayerPermanentChoice {
+            stage,
+            candidate_generations,
+            ..
+        } = &mut pending.continuation
+        else {
+            unreachable!("validated targeted-player continuation")
+        };
+        *stage = PendingTargetedPlayerChoiceStage::ChoosingPermanent;
+        *candidate_generations = candidates;
+        pending.deciding_player = delegate;
+        pending.presentation.candidates = candidate_ids;
+        pending.presentation.min = 1;
+        pending.presentation.max = 1;
+        pending.presentation.choice_kind = rv1::ChoiceKind::PermanentObjects;
+        pending.presentation.prompt = "Choose a permanent they control.".into();
+        self.state.pending_resolution = Some(pending);
+        let assigned = ev_log(format!(
+            "P{controller} chooses P{delegate} to make P{target_player}'s permanent choice."
+        ));
+        let event = resolution::targeted_player_permanent_choice_event(self)
+            .expect("delegated targeted-player choice remains parked");
+        Ok(finish_with_events(self, vec![assigned, event]))
+    }
+
+    fn finish_targeted_player_permanent_choice(
+        &mut self,
+        pending: PendingResolution,
+        chosen: &[ObjectId],
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, target_player, cohort, candidate_generations, stage) =
+            match &pending.continuation {
+                ResolutionContinuation::TargetedPlayerPermanentChoice {
+                    stack,
+                    target_player,
+                    cohort,
+                    candidate_generations,
+                    stage,
+                    ..
+                } => (
+                    stack.clone(),
+                    *target_player,
+                    cohort.clone(),
+                    candidate_generations.clone(),
+                    stage.clone(),
+                ),
+                _ => unreachable!("targeted-player permanent-choice continuation"),
+            };
+        if !matches!(stage, PendingTargetedPlayerChoiceStage::ChoosingPermanent) {
+            self.state.pending_resolution = Some(pending);
+            return Err(EngineError::Illegal(
+                "replacement chooser must select a player before choosing a permanent",
+            ));
+        }
+        let mut produced_objects = Vec::with_capacity(chosen.len());
+        for oid in chosen {
+            let Some(expected_generation) = candidate_generations
+                .iter()
+                .find_map(|(candidate, generation)| (candidate == oid).then_some(*generation))
+            else {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("invalid permanent choice"));
+            };
+            let current_generation = self
+                .state
+                .zone_change_generation
+                .get(oid)
+                .copied()
+                .unwrap_or(0);
+            if current_generation != expected_generation
+                || !self
+                    .state
+                    .objects
+                    .get(oid)
+                    .is_some_and(|object| object.zone == Zone::Battlefield)
+            {
+                self.state.pending_resolution = Some(pending);
+                return Err(EngineError::Illegal("stale permanent choice"));
+            }
+            produced_objects.push(TriggerObjectRef {
+                object_id: *oid,
+                zone_change_generation: expected_generation,
+                controller_at_event: self
+                    .characteristics(*oid)
+                    .map(|characteristics| characteristics.controller)
+                    .unwrap_or(target_player),
+            });
+        }
+        let names = chosen
+            .iter()
+            .map(|oid| object_display_name(&self.state, self.registry, *oid))
+            .collect::<Vec<_>>();
+        let events = if names.is_empty() {
+            Vec::new()
+        } else {
+            vec![ev_log(format!(
+                "P{} chooses {}.",
+                pending.deciding_player,
+                names.join(", ")
+            ))]
+        };
+        self.complete_parked_resolution_with_previous(
+            stack.item,
+            stack.resume_effect_index,
+            EffectResult {
+                produced_objects,
+                targeted_player_control_cohort: Some(cohort),
+                ..Default::default()
+            },
+            events,
+        )
+    }
+
+    fn complete_targeted_player_choice_without_selection(
+        &mut self,
+        pending: PendingResolution,
+        message: &str,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let (stack, cohort) = match &pending.continuation {
+            ResolutionContinuation::TargetedPlayerPermanentChoice { stack, cohort, .. } => {
+                (stack.clone(), cohort.clone())
+            }
+            _ => unreachable!("targeted-player permanent-choice continuation"),
+        };
+        self.complete_parked_resolution_with_previous(
+            stack.item,
+            stack.resume_effect_index,
+            EffectResult {
+                targeted_player_control_cohort: Some(cohort),
+                ..Default::default()
+            },
+            vec![ev_log(message.to_string())],
+        )
+    }
+
+    /// Refresh Teferi's parked permanent choice after a player leaves. A living target uses
+    /// current characteristics and control; a departed target uses its predeparture LKI cohort.
+    pub(in crate::engine) fn refresh_targeted_player_permanent_choice_departure(
+        &mut self,
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let Some(mut pending) = self.state.pending_resolution.take() else {
+            return Ok(());
+        };
+        let (
+            stack,
+            target_player,
+            cohort,
+            filter,
+            constraints,
+            old_candidate_generations,
+            old_stage,
+        ) = match &pending.continuation {
+            ResolutionContinuation::TargetedPlayerPermanentChoice {
+                stack,
+                target_player,
+                cohort,
+                filter,
+                constraints,
+                candidate_generations,
+                stage,
+            } => (
+                stack.clone(),
+                *target_player,
+                cohort.clone(),
+                filter.clone(),
+                constraints.clone(),
+                candidate_generations.clone(),
+                stage.clone(),
+            ),
+            _ => {
+                self.state.pending_resolution = Some(pending);
+                return Ok(());
+            }
+        };
+        let controller = stack.item.controller;
+        if self
+            .state
+            .player_idx(controller)
+            .is_none_or(|index| self.state.players[index].has_lost)
+        {
+            self.state.pending_resolution = Some(pending);
+            return Ok(());
+        }
+        let target_live = self
+            .state
+            .player_idx(target_player)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        let current_decider_live = self
+            .state
+            .player_idx(pending.deciding_player)
+            .is_some_and(|index| !self.state.players[index].has_lost);
+        let was_delegate_prompt = matches!(
+            old_stage,
+            PendingTargetedPlayerChoiceStage::ChoosingDelegate { .. }
+        );
+        let candidates = if target_live {
+            resolution::current_targeted_player_permanent_candidates(
+                self,
+                &stack.item,
+                target_player,
+                &filter,
+                &constraints,
+            )
+            .into_iter()
+            .map(|object_id| {
+                (
+                    object_id,
+                    self.state
+                        .zone_change_generation
+                        .get(&object_id)
+                        .copied()
+                        .unwrap_or(0),
+                )
+            })
+            .collect::<Vec<_>>()
+        } else {
+            cohort
+                .permanents
+                .iter()
+                .map(|member| (member.object_id, member.zone_change_generation))
+                .filter(|(object_id, generation)| {
+                    self.state
+                        .zone_change_generation
+                        .get(object_id)
+                        .copied()
+                        .unwrap_or(0)
+                        == *generation
+                        && self
+                            .state
+                            .objects
+                            .get(object_id)
+                            .is_some_and(|object| object.zone == Zone::Battlefield)
+                })
+                .collect::<Vec<_>>()
+        };
+        if candidates.len() < pending.presentation.min as usize {
+            let completed = self.complete_targeted_player_choice_without_selection(
+                pending,
+                "No legal permanent remained for the targeted player's choice.",
+            )?;
+            events.extend(completed.events);
+            return Ok(());
+        }
+        if !was_delegate_prompt && target_live && current_decider_live {
+            if candidates != old_candidate_generations {
+                let candidate_ids = candidates
+                    .iter()
+                    .map(|(object_id, _)| *object_id)
+                    .collect::<Vec<_>>();
+                let ResolutionContinuation::TargetedPlayerPermanentChoice {
+                    candidate_generations,
+                    ..
+                } = &mut pending.continuation
+                else {
+                    unreachable!("validated targeted-player continuation")
+                };
+                *candidate_generations = candidates;
+                pending.presentation.candidates = candidate_ids;
+                self.state.pending_resolution = Some(pending);
+                events.push(ev_log(format!(
+                    "P{target_player}'s permanent choice options have changed."
+                )));
+                events.push(
+                    resolution::targeted_player_permanent_choice_event(self)
+                        .expect("refreshed targeted-player choice remains parked"),
+                );
+            } else {
+                self.state.pending_resolution = Some(pending);
+            }
+            return Ok(());
+        }
+
+        let eligible = resolution::resolution_choice_delegate_candidates(
+            &self.state,
+            controller,
+            target_player,
+        );
+        let mut candidate_slots = match old_stage {
+            PendingTargetedPlayerChoiceStage::ChoosingDelegate { candidates } => candidates,
+            PendingTargetedPlayerChoiceStage::ChoosingPermanent => Vec::new(),
+        };
+        for slot in &mut candidate_slots {
+            if slot.is_some_and(|candidate| !eligible.contains(&candidate)) {
+                *slot = None;
+            }
+        }
+        for candidate in eligible.iter().copied() {
+            if !candidate_slots.contains(&Some(candidate)) {
+                candidate_slots.push(Some(candidate));
+            }
+        }
+        if eligible.is_empty() {
+            let completed = self.complete_targeted_player_choice_without_selection(
+                pending,
+                "No other player can make the targeted player's permanent choice.",
+            )?;
+            events.extend(completed.events);
+            return Ok(());
+        }
+
+        let retain_delegate_prompt = was_delegate_prompt;
+        let delegate = if eligible.len() == 1 && !retain_delegate_prompt {
+            eligible.first().copied()
+        } else {
+            None
+        };
+        let candidate_ids = candidates
+            .iter()
+            .map(|(object_id, _)| *object_id)
+            .collect::<Vec<_>>();
+        let ResolutionContinuation::TargetedPlayerPermanentChoice {
+            candidate_generations,
+            stage,
+            ..
+        } = &mut pending.continuation
+        else {
+            unreachable!("validated targeted-player continuation")
+        };
+        *candidate_generations = candidates;
+        if let Some(delegate) = delegate {
+            pending.deciding_player = delegate;
+            pending.presentation.candidates = candidate_ids;
+            pending.presentation.min = 1;
+            pending.presentation.max = 1;
+            pending.presentation.choice_kind = rv1::ChoiceKind::PermanentObjects;
+            pending.presentation.prompt = "Choose a permanent they control.".into();
+            *stage = PendingTargetedPlayerChoiceStage::ChoosingPermanent;
+            self.state.pending_resolution = Some(pending);
+            events.push(ev_log(format!(
+                "P{controller} assigns P{delegate} to make P{target_player}'s permanent choice."
+            )));
+        } else {
+            pending.deciding_player = controller;
+            pending.presentation.candidates.clear();
+            pending.presentation.min = 1;
+            pending.presentation.max = 1;
+            pending.presentation.choice_kind = rv1::ChoiceKind::ResolutionBranch;
+            pending.presentation.prompt = format!(
+                "P{controller}: choose a player to make P{target_player}'s permanent choice."
+            );
+            *stage = PendingTargetedPlayerChoiceStage::ChoosingDelegate {
+                candidates: candidate_slots,
+            };
+            self.state.pending_resolution = Some(pending);
+            events.push(ev_log(format!(
+                "P{controller}'s replacement chooser options have changed."
+            )));
+        }
+        events.push(
+            resolution::targeted_player_permanent_choice_event(self)
+                .expect("reassigned targeted-player choice remains parked"),
+        );
+        Ok(())
     }
 
     fn finish_behold_choice(

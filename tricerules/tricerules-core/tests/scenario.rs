@@ -125,6 +125,9 @@ mod deck_coverage_staff_of_compleation;
 #[path = "scenario/deck_coverage_beacon_chandra.rs"]
 mod deck_coverage_beacon_chandra;
 
+#[path = "scenario/deck_coverage_teferi_temporal_pilgrim.rs"]
+mod deck_coverage_teferi_temporal_pilgrim;
+
 #[path = "scenario/deck_coverage_garruks_uprising.rs"]
 mod deck_coverage_garruks_uprising;
 

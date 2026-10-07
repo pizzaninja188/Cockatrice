@@ -944,12 +944,26 @@ pub(super) fn return_to_owners_hand(
     cx: &mut EffectCx<'_>,
     effect: SpellEffectKind,
 ) -> Result<EffectOutcome, EngineError> {
+    if matches!(
+        &effect,
+        SpellEffectKind::ReturnToOwnersHand {
+            subject: EffectSubject::PreviousEffectObject
+        }
+    ) {
+        cx.effect_result.targeted_player_control_cohort = cx
+            .previous_effect_result
+            .targeted_player_control_cohort
+            .clone();
+    }
     let subjects = match effect {
         SpellEffectKind::ReturnAllToOwnersHand { kind } => {
             battlefield_objects_matching(cx.engine, &kind)
         }
         SpellEffectKind::ReturnToOwnersHand { subject } => {
-            if matches!(subject, EffectSubject::Chosen(_)) {
+            if matches!(
+                subject,
+                EffectSubject::Chosen(_) | EffectSubject::PreviousEffectObject
+            ) {
                 cx.resolve_battlefield_subjects(&subject)
             } else {
                 resolve_zone_effect_subject(cx.engine, cx.top, cx.targets, &subject)
@@ -1313,6 +1327,136 @@ pub(super) fn shuffle_permanents_into_owners_libraries(
         .collect::<Vec<_>>();
     for owner in player_order {
         if affected_owners.contains(&owner) {
+            crate::engine::shuffle_player_library_for_current_command(&mut cx.engine.state, owner);
+            cx.events
+                .push(ev_log(format!("P{owner} shuffles their library.")));
+        }
+    }
+
+    Ok(EffectOutcome::Continue)
+}
+
+pub(super) fn shuffle_nonland_permanents_into_owners_libraries(
+    cx: &mut EffectCx<'_>,
+    effect: SpellEffectKind,
+) -> Result<EffectOutcome, EngineError> {
+    let SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries { players } = effect else {
+        return Err(EngineError::Illegal("resolution dispatch mismatch"));
+    };
+    let RelativePlayerSet::TargetedPlayer { group_index, .. } = players else {
+        return Err(EngineError::Illegal(
+            "nonland library shuffle requires a targeted player",
+        ));
+    };
+    let target_player =
+        super::target_player_from_group(cx.targets, cx.target_group_indices, group_index).ok_or(
+            EngineError::Illegal("nonland library shuffle is missing its target player"),
+        )?;
+    let target_live = cx
+        .engine
+        .state
+        .player_idx(target_player)
+        .is_some_and(|index| !cx.engine.state.players[index].has_lost);
+    let cohort_permanents = if target_live {
+        super::current_targeted_player_control_cohort(cx.engine, target_player).permanents
+    } else {
+        cx.previous_effect_result
+            .targeted_player_control_cohort
+            .as_ref()
+            .filter(|cohort| cohort.player_id == target_player)
+            .ok_or(EngineError::Illegal(
+                "nonland library shuffle is missing its departed targeted-player cohort",
+            ))?
+            .permanents
+            .clone()
+    };
+
+    let mut affected_owners = Vec::new();
+    let mut moves = Vec::new();
+    for member in &cohort_permanents {
+        let current_generation = cx
+            .engine
+            .state
+            .zone_change_generation
+            .get(&member.object_id)
+            .copied()
+            .unwrap_or(0);
+        let current_battlefield_object = current_generation == member.zone_change_generation
+            && cx
+                .engine
+                .state
+                .objects
+                .get(&member.object_id)
+                .is_some_and(|object| object.zone == Zone::Battlefield);
+        let is_nonland = if current_battlefield_object {
+            cx.engine
+                .characteristics(member.object_id)
+                .is_some_and(|characteristics| !characteristics.has_type("Land"))
+        } else {
+            cx.engine
+                .state
+                .last_known_types_by_generation
+                .get(&(member.object_id, member.zone_change_generation))
+                .is_some_and(|types| !types.iter().any(|kind| kind == "Land"))
+        };
+        if !is_nonland {
+            continue;
+        }
+        if !affected_owners.contains(&member.owner) {
+            affected_owners.push(member.owner);
+        }
+        if !current_battlefield_object {
+            continue;
+        }
+
+        let movement = prepare_zone_move(
+            &cx.engine.state,
+            cx.engine.registry,
+            member.object_id,
+            Zone::Library,
+            None,
+        )?
+        .ok_or(EngineError::Illegal(
+            "targeted nonland permanent disappeared during library shuffle preparation",
+        ))?;
+        let name = object_display_name(&cx.engine.state, cx.engine.registry, member.object_id);
+        let leave_event = cx.engine.battlefield_leave_event(member.object_id);
+        moves.push((movement, member.object_id, member.owner, name, leave_event));
+    }
+
+    // All selected movements and LTB snapshots are prepared against one battlefield state,
+    // then committed as one instruction before any represented library is shuffled.
+    let zone_snapshot = cx.engine.snapshot_zone_event();
+    let mut leave_events = Vec::new();
+    for (movement, object_id, owner, name, leave_event) in moves {
+        commit_zone_move(&mut cx.engine.state, cx.engine.registry, movement)?;
+        leave_events.extend(leave_event);
+        cx.events.push(permanent_moved_event(
+            &cx.engine.state,
+            object_id,
+            owner,
+            rv1::permanent_moved::Destination::Library,
+        ));
+        cx.events.push(ev_log(format!(
+            "{} puts {name} into its owner's library.",
+            cx.spell_label
+        )));
+    }
+    cx.engine
+        .fire_zone_triggers(zone_snapshot, leave_events, cx.events);
+
+    let player_order = cx
+        .engine
+        .state
+        .players
+        .iter()
+        .map(|player| player.id)
+        .collect::<Vec<_>>();
+    for owner in player_order {
+        if affected_owners.contains(&owner) {
+            // CR 701.24c still requires this specific owner's library to shuffle when the
+            // departed target's LKI object was already moved by 800.4a or the prior return
+            // instruction. A live target instead contributed only its current battlefield set.
             crate::engine::shuffle_player_library_for_current_command(&mut cx.engine.state, owner);
             cx.events
                 .push(ev_log(format!("P{owner} shuffles their library.")));

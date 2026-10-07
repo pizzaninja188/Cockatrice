@@ -1,19 +1,103 @@
 use super::{EffectCx, EffectOutcome};
-use crate::engine::events::ev_log;
+use crate::engine::events::{ev_log, object_display_name};
 use crate::engine::presentation::{
     ability_presentation, stack_child_presentation_ref, PresentationPath, StackPresentationSource,
 };
+use crate::engine::targeting::TargetSourceIdentity;
 use crate::engine::{rv1, ConditionContext, EngineError};
 use crate::state::{
     ParkedStackResolution, PendingResolution, PendingResolutionBranch,
-    PendingResolutionBranchStage, PendingResolutionPresentation, ResolutionContinuation, StackItem,
-    StagedTrigger, StagedTriggerGroup, TriggerContext, TriggerObjectRef,
+    PendingResolutionBranchStage, PendingResolutionPresentation, PendingTargetedPlayerChoiceStage,
+    ResolutionContinuation, StackItem, StagedTrigger, StagedTriggerGroup, TriggerContext,
+    TriggerObjectRef,
 };
+use crate::Zone;
+use crate::{GameEngine, ObjectId, PlayerId};
 use tricerules_cards::primitives::{
     Amount, PermanentChoiceConstraint, PlayerRecipient, ResolutionBranchDef,
     ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost, SpellEffectKind,
     TargetController, TargetFilter, TargetKind, TriggerCondition, TriggeredAbilityDef,
 };
+
+/// Capture the current control set for a live targeted player. Teferi uses this as the player
+/// information to preserve if that player later leaves during its parked resolution choice.
+pub(in crate::engine) fn current_targeted_player_control_cohort(
+    engine: &GameEngine,
+    player_id: PlayerId,
+) -> crate::state::TargetedPlayerControlCohort {
+    let permanents = engine
+        .state
+        .players
+        .iter()
+        .flat_map(|player| player.battlefield.iter().copied())
+        .filter_map(|object_id| {
+            let characteristics = engine.characteristics(object_id)?;
+            (characteristics.controller == player_id).then(|| {
+                let object = engine.state.objects.get(&object_id)?;
+                Some(crate::state::TargetedPlayerPermanent {
+                    object_id,
+                    zone_change_generation: engine
+                        .state
+                        .zone_change_generation
+                        .get(&object_id)
+                        .copied()
+                        .unwrap_or(0),
+                    owner: object.owner,
+                })
+            })?
+        })
+        .collect();
+    crate::state::TargetedPlayerControlCohort {
+        player_id,
+        permanents,
+    }
+}
+
+/// Enumerate the current legal permanent choices for a living targeted player. A departed
+/// target instead uses the last-known control cohort captured by player-departure reconciliation.
+pub(in crate::engine) fn current_targeted_player_permanent_candidates(
+    engine: &GameEngine,
+    item: &StackItem,
+    target_player: PlayerId,
+    filter: &TargetFilter,
+    constraints: &[PermanentChoiceConstraint],
+) -> Vec<ObjectId> {
+    let source = TargetSourceIdentity::for_stack_item(engine, item);
+    let condition_context = ConditionContext::for_stack_item(item);
+    engine
+        .state
+        .players
+        .iter()
+        .flat_map(|player| player.battlefield.iter().copied())
+        .filter(|object_id| {
+            crate::engine::targeting::permanent_choice_filter_legal(
+                engine,
+                filter,
+                *object_id,
+                target_player,
+                source,
+                item.trigger_context,
+            ) && constraints.iter().all(|constraint| match constraint {
+                PermanentChoiceConstraint::EquipmentAttachableTo { recipient } => engine
+                    .condition_object_identity(*recipient, condition_context)
+                    .is_some_and(|(recipient_id, expected_generation)| {
+                        engine
+                            .state
+                            .zone_change_generation
+                            .get(&recipient_id)
+                            .copied()
+                            .unwrap_or(0)
+                            == expected_generation
+                            && crate::engine::targeting::equipment_attachment_legal(
+                                engine,
+                                *object_id,
+                                recipient_id,
+                            )
+                    }),
+            })
+        })
+        .collect()
+}
 
 fn permanent_choice_prompt(filter: &TargetFilter, min: u32, max: u32) -> String {
     let (singular, plural) = if filter.any_of.is_none() && filter.kind == TargetKind::Creature {
@@ -147,6 +231,15 @@ pub(super) fn choose_permanents(
     else {
         unreachable!();
     };
+    let targeted_player = match chooser {
+        PlayerRecipient::TargetedPlayer { group_index, .. } => Some(
+            super::target_player_from_group(cx.targets, cx.target_group_indices, group_index)
+                .ok_or(EngineError::Illegal(
+                    "permanent choice is missing its targeted player",
+                ))?,
+        ),
+        _ => None,
+    };
     let recipients = super::player_recipients(cx, chooser);
     let [deciding_player] = recipients.as_slice() else {
         return Err(EngineError::Illegal(
@@ -154,43 +247,56 @@ pub(super) fn choose_permanents(
         ));
     };
     let deciding_player = *deciding_player;
-    let source = crate::engine::targeting::TargetSourceIdentity::for_stack_item(cx.engine, cx.top);
-    let condition_context = ConditionContext::for_stack_item(cx.top);
-    let candidates = cx
-        .engine
-        .state
-        .players
-        .iter()
-        .flat_map(|player| player.battlefield.iter().copied())
-        .filter(|oid| {
-            crate::engine::targeting::permanent_choice_filter_legal(
-                cx.engine,
-                &filter,
-                *oid,
-                deciding_player,
-                source,
-                cx.top.trigger_context,
-            ) && constraints.iter().all(|constraint| match constraint {
-                PermanentChoiceConstraint::EquipmentAttachableTo { recipient } => cx
-                    .engine
-                    .condition_object_identity(*recipient, condition_context)
-                    .is_some_and(|(recipient_id, expected_generation)| {
-                        cx.engine
-                            .state
-                            .zone_change_generation
-                            .get(&recipient_id)
-                            .copied()
-                            .unwrap_or(0)
-                            == expected_generation
-                            && crate::engine::targeting::equipment_attachment_legal(
-                                cx.engine,
-                                *oid,
-                                recipient_id,
-                            )
-                    }),
+    let targeted_player_cohort = targeted_player
+        .map(|player_id| current_targeted_player_control_cohort(cx.engine, player_id));
+    cx.effect_result.targeted_player_control_cohort = targeted_player_cohort.clone();
+    let candidates = if targeted_player.is_some() {
+        current_targeted_player_permanent_candidates(
+            cx.engine,
+            cx.top,
+            deciding_player,
+            &filter,
+            &constraints,
+        )
+    } else {
+        let source =
+            crate::engine::targeting::TargetSourceIdentity::for_stack_item(cx.engine, cx.top);
+        let condition_context = ConditionContext::for_stack_item(cx.top);
+        cx.engine
+            .state
+            .players
+            .iter()
+            .flat_map(|player| player.battlefield.iter().copied())
+            .filter(|oid| {
+                crate::engine::targeting::permanent_choice_filter_legal(
+                    cx.engine,
+                    &filter,
+                    *oid,
+                    deciding_player,
+                    source,
+                    cx.top.trigger_context,
+                ) && constraints.iter().all(|constraint| match constraint {
+                    PermanentChoiceConstraint::EquipmentAttachableTo { recipient } => cx
+                        .engine
+                        .condition_object_identity(*recipient, condition_context)
+                        .is_some_and(|(recipient_id, expected_generation)| {
+                            cx.engine
+                                .state
+                                .zone_change_generation
+                                .get(&recipient_id)
+                                .copied()
+                                .unwrap_or(0)
+                                == expected_generation
+                                && crate::engine::targeting::equipment_attachment_legal(
+                                    cx.engine,
+                                    *oid,
+                                    recipient_id,
+                                )
+                        }),
+                })
             })
-        })
-        .collect::<Vec<_>>();
+            .collect::<Vec<_>>()
+    };
     if candidates.len() < min as usize {
         cx.events.push(ev_log(format!(
             "P{deciding_player} has no legal permanent to choose."
@@ -291,10 +397,25 @@ pub(super) fn choose_permanents(
             choice_kind: rv1::ChoiceKind::PermanentObjects,
             unique_names: false,
         },
-        continuation: ResolutionContinuation::PermanentChoice {
-            stack: ParkedStackResolution::new(cx.top.clone())
-                .with_previous_result(cx.previous_effect_result.clone()),
-            candidate_generations,
+        continuation: if let (Some(target_player), Some(cohort)) =
+            (targeted_player, targeted_player_cohort)
+        {
+            ResolutionContinuation::TargetedPlayerPermanentChoice {
+                stack: ParkedStackResolution::new(cx.top.clone())
+                    .with_previous_result(cx.previous_effect_result.clone()),
+                target_player,
+                cohort,
+                filter,
+                constraints,
+                candidate_generations,
+                stage: PendingTargetedPlayerChoiceStage::ChoosingPermanent,
+            }
+        } else {
+            ResolutionContinuation::PermanentChoice {
+                stack: ParkedStackResolution::new(cx.top.clone())
+                    .with_previous_result(cx.previous_effect_result.clone()),
+                candidate_generations,
+            }
         },
     });
     Ok(EffectOutcome::Suspended)
@@ -956,6 +1077,163 @@ pub(in crate::engine) fn authored_resolution_branch_choice_event(
                 min: pending.presentation.min,
                 max: pending.presentation.max,
                 resolution_branches: options,
+                ..Default::default()
+            },
+        )),
+    })
+}
+
+/// Rebuild the choice visible for Teferi's targeted-player ultimate. The controller's replacement
+/// chooser prompt uses stable branch indices; a live target uses current legal permanents while a
+/// departed target uses only survivors from its captured LKI cohort.
+pub(in crate::engine) fn targeted_player_permanent_choice_event(
+    engine: &crate::engine::GameEngine,
+) -> Option<rv1::RuledEvent> {
+    let pending = engine.state.pending_resolution.as_ref()?;
+    let ResolutionContinuation::TargetedPlayerPermanentChoice {
+        stack,
+        target_player,
+        cohort,
+        filter,
+        constraints,
+        candidate_generations,
+        stage,
+        ..
+    } = &pending.continuation
+    else {
+        return None;
+    };
+    let (choice_kind, candidate_player_ids, resolution_branches) = match stage {
+        PendingTargetedPlayerChoiceStage::ChoosingDelegate { candidates } => {
+            let eligible = resolution_choice_delegate_candidates(
+                &engine.state,
+                stack.item.controller,
+                *target_player,
+            );
+            let options = candidates
+                .iter()
+                .enumerate()
+                .map(|(index, candidate)| {
+                    let selectable = candidate.is_some_and(|candidate| {
+                        eligible.contains(&candidate)
+                            && engine
+                                .state
+                                .player_idx(candidate)
+                                .is_some_and(|idx| !engine.state.players[idx].has_lost)
+                    });
+                    let label = candidate.map_or_else(
+                        || "Unavailable player".into(),
+                        |candidate| format!("P{candidate} makes the choice"),
+                    );
+                    rv1::ResolutionBranchOption {
+                        branch_index: index as u32,
+                        label: label.clone(),
+                        cost_kind: rv1::ResolutionBranchCostKind::Unspecified as i32,
+                        cost_text: String::new(),
+                        selectable,
+                        search_zones: Vec::new(),
+                        presentation: Some(rv1::PresentationRef {
+                            fallback_text: label,
+                            ..Default::default()
+                        }),
+                    }
+                })
+                .collect();
+            (
+                rv1::ChoiceKind::ResolutionBranch,
+                Vec::<i32>::new(),
+                options,
+            )
+        }
+        PendingTargetedPlayerChoiceStage::ChoosingPermanent => {
+            let target_live = engine
+                .state
+                .player_idx(*target_player)
+                .is_some_and(|index| !engine.state.players[index].has_lost);
+            let eligible_objects = if target_live {
+                current_targeted_player_permanent_candidates(
+                    engine,
+                    &stack.item,
+                    *target_player,
+                    filter,
+                    constraints,
+                )
+            } else {
+                cohort
+                    .permanents
+                    .iter()
+                    .map(|member| member.object_id)
+                    .collect()
+            };
+            let candidates = pending
+                .presentation
+                .candidates
+                .iter()
+                .copied()
+                .filter(|object_id| {
+                    eligible_objects.contains(object_id)
+                        && candidate_generations.iter().any(|(candidate, generation)| {
+                            *candidate == *object_id
+                                && engine
+                                    .state
+                                    .zone_change_generation
+                                    .get(object_id)
+                                    .copied()
+                                    .unwrap_or(0)
+                                    == *generation
+                                && engine
+                                    .state
+                                    .objects
+                                    .get(object_id)
+                                    .is_some_and(|object| object.zone == Zone::Battlefield)
+                        })
+                })
+                .collect::<Vec<_>>();
+            let card_ids = candidates
+                .iter()
+                .map(|object_id| {
+                    engine
+                        .state
+                        .objects
+                        .get(object_id)
+                        .map(|object| object.card_id.clone())
+                        .unwrap_or_default()
+                })
+                .collect::<Vec<_>>();
+            let names = candidates
+                .iter()
+                .map(|object_id| object_display_name(&engine.state, engine.registry, *object_id))
+                .collect::<Vec<_>>();
+            return Some(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+                    rv1::ResolutionChoiceRequired {
+                        candidate_player_ids: Vec::new(),
+                        deciding_player_id: pending.deciding_player,
+                        source_object_id: pending.presentation.source_object_id,
+                        prompt_text: pending.presentation.prompt.clone(),
+                        choice_kind: rv1::ChoiceKind::PermanentObjects as i32,
+                        candidate_object_ids: candidates,
+                        candidate_card_ids: card_ids,
+                        candidate_names: names,
+                        min: pending.presentation.min,
+                        max: pending.presentation.max,
+                        ..Default::default()
+                    },
+                )),
+            });
+        }
+    };
+    Some(rv1::RuledEvent {
+        ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
+            rv1::ResolutionChoiceRequired {
+                candidate_player_ids,
+                deciding_player_id: pending.deciding_player,
+                source_object_id: stack.item.id,
+                prompt_text: pending.presentation.prompt.clone(),
+                choice_kind: choice_kind as i32,
+                resolution_branches,
+                min: pending.presentation.min,
+                max: pending.presentation.max,
                 ..Default::default()
             },
         )),

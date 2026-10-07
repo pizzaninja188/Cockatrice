@@ -1,0 +1,59 @@
+// Exact Oracle card fetched 2026-10-06:
+// https://scryfall.com/card/bro/66/teferi-temporal-pilgrim?utm_source=api
+// https://api.scryfall.com/cards/23a4f1ec-eadf-4f1e-8821-f22293ad2580/rulings
+(
+  id: "teferi,_temporal_pilgrim",
+  name: "Teferi, Temporal Pilgrim",
+  face_id: "teferi_temporal_pilgrim",
+  mana_cost: "{3}{U}{U}",
+  supertypes: ["Legendary"],
+  types: ["Planeswalker", "Teferi"],
+  loyalty: 4,
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPlayerDrawsCard(drawer: Controller),
+    effect: [PutCounters(counter: Loyalty, count: 1, subject: Source)],
+  )],
+  activated_abilities: [
+    (
+      ability_id: "activated_01",
+      presentation: OracleLines([2]),
+      costs: [Loyalty(0)],
+      effect: [Draw(count: 1)],
+    ),
+    (
+      ability_id: "activated_02",
+      presentation: OracleLines([3]),
+      costs: [Loyalty(-2)],
+      effect: [CreateTokens(token: "spirit_u_2_2_vigilance_draw_counter", count: 1)],
+    ),
+    (
+      ability_id: "activated_03",
+      presentation: OracleLines([4]),
+      costs: [Loyalty(-12)],
+      effect: [
+        ChoosePermanents(
+          chooser: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
+          filter: (kind: AnyPermanent, controller: You),
+          min: 1,
+          max: 1,
+          constraints: [],
+        ),
+        ReturnToOwnersHand(subject: PreviousEffectObject),
+        ShuffleNonlandPermanentsIntoOwnersLibraries(
+          players: TargetedPlayer(group_index: 0, kind: OpponentPlayer),
+        ),
+      ],
+      targeting: Some((groups: [(
+        min: 1,
+        max: 1,
+        prompt: "Choose target opponent",
+        effect_indices: [0, 2],
+        distinct_from: [],
+        same_graveyard: false,
+        cast_cost_expansion: None,
+      )])),
+    ),
+  ],
+)

@@ -351,9 +351,36 @@ impl GameEngine {
             .filter(|object| departed.contains(&object.owner))
             .map(|object| object.id)
             .collect();
-        // Capture the complete cohort before deleting any static-grant provider or ending
-        // control effects. A surviving foreign-controlled ability reads this exact source.
-        let source_snapshots: Vec<_> = departed_objects
+        let targeted_player_lki_cohort = self
+            .state
+            .pending_resolution
+            .as_ref()
+            .and_then(|pending| match &pending.continuation {
+                ResolutionContinuation::TargetedPlayerPermanentChoice { target_player, .. }
+                    if departed.contains(target_player) =>
+                {
+                    Some(*target_player)
+                }
+                _ => None,
+            })
+            .map(|target_player| {
+                (
+                    target_player,
+                    super::resolution::current_targeted_player_control_cohort(self, target_player),
+                )
+            });
+        // Capture actual owner removals and the targeted player's current control information
+        // before deleting objects or ending the effects that grant control.
+        let mut source_snapshot_objects = departed_objects.clone();
+        if let Some((_, cohort)) = &targeted_player_lki_cohort {
+            source_snapshot_objects.extend(
+                cohort
+                    .permanents
+                    .iter()
+                    .map(|permanent| permanent.object_id),
+            );
+        }
+        let source_snapshots: Vec<_> = source_snapshot_objects
             .iter()
             .filter_map(|&oid| {
                 self.state
@@ -377,6 +404,33 @@ impl GameEngine {
                 generation,
                 characteristics,
             );
+        }
+        if let Some((target_player, cohort)) = targeted_player_lki_cohort {
+            if let Some(PendingResolution {
+                presentation,
+                continuation:
+                    ResolutionContinuation::TargetedPlayerPermanentChoice {
+                        target_player: pending_target,
+                        cohort: saved_cohort,
+                        candidate_generations,
+                        ..
+                    },
+                ..
+            }) = self.state.pending_resolution.as_mut()
+            {
+                if *pending_target == target_player {
+                    *saved_cohort = cohort.clone();
+                    *candidate_generations = cohort
+                        .permanents
+                        .iter()
+                        .map(|permanent| (permanent.object_id, permanent.zone_change_generation))
+                        .collect();
+                    presentation.candidates = candidate_generations
+                        .iter()
+                        .map(|(object_id, _)| *object_id)
+                        .collect();
+                }
+            }
         }
         self.detach_departed_outer_resolution(&departed)?;
         for player in departed {
@@ -451,6 +505,7 @@ impl GameEngine {
         self.refresh_participating_entry_departure(&departed_objects, events)?;
         self.refresh_entry_opponent_departure(&departed_objects, events)?;
         self.refresh_authored_branch_departure(events)?;
+        self.refresh_targeted_player_permanent_choice_departure(events)?;
         self.flush_staged_triggers(events);
         Ok(())
     }

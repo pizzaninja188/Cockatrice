@@ -1403,7 +1403,9 @@ mod tests {
         }
     }
     use super::*;
-    use crate::primitives::{Amount, PermanentTypeFilter, PlayerRecipient};
+    use crate::primitives::{
+        Amount, EffectSubject, PermanentTypeFilter, PlayerRecipient, RelativePlayerSet,
+    };
 
     fn target_filter(ron: &str) -> TargetFilter {
         ron::from_str(ron).expect("deserialize target filter")
@@ -1469,6 +1471,59 @@ mod tests {
             };
             assert!(TargetingDef::validate_optional(Some(&targeting), &effects).is_err());
         }
+    }
+
+    #[test]
+    fn targeted_player_permanent_choice_and_teferi_shuffle_share_one_player_group() {
+        let effects = vec![
+            SpellEffectKind::ChoosePermanents {
+                chooser: PlayerRecipient::TargetedPlayer {
+                    group_index: 0,
+                    kind: TargetKind::OpponentPlayer,
+                },
+                filter: TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    controller: TargetController::You,
+                    ..Default::default()
+                },
+                min: 1,
+                max: 1,
+                constraints: Vec::new(),
+            },
+            SpellEffectKind::ReturnToOwnersHand {
+                subject: EffectSubject::PreviousEffectObject,
+            },
+            SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries {
+                players: RelativePlayerSet::TargetedPlayer {
+                    group_index: 0,
+                    kind: TargetKind::OpponentPlayer,
+                },
+            },
+        ];
+        let targeting = TargetingDef {
+            groups: vec![TargetGroupDef {
+                chooser: TargetChooser::Controller,
+                min: 1,
+                max: 1,
+                prompt: "Choose target opponent".into(),
+                effect_indices: vec![0, 2],
+                distinct_from: Vec::new(),
+                same_graveyard: false,
+                cast_cost_expansion: None,
+            }],
+        };
+        assert!(TargetingDef::validate_optional(Some(&targeting), &effects).is_ok());
+        assert!(SpellEffectKind::validate_list(&effects).is_ok());
+
+        let mut mismatched = effects.clone();
+        mismatched[2] = SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries {
+            players: RelativePlayerSet::TargetedPlayer {
+                group_index: 1,
+                kind: TargetKind::OpponentPlayer,
+            },
+        };
+        assert!(TargetingDef::validate_optional(Some(&targeting), &mismatched).is_err());
+        assert!(SpellEffectKind::validate_list(&mismatched).is_err());
     }
 
     #[test]

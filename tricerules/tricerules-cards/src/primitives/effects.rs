@@ -1557,6 +1557,13 @@ pub enum SpellEffectKind {
     ShufflePermanentsIntoOwnersLibraries {
         subjects: Vec<EffectSubject>,
     },
+    /// Teferi, Temporal Pilgrim's ultimate: move the targeted player's nonland permanents to
+    /// their owners' libraries as one simultaneous cohort, then shuffle each represented library.
+    /// A live target's current control set is read at this instruction; a departed target uses its
+    /// 800.4i last-known control receipt. The scope stays fixed to nonlands, with no generic filter.
+    ShuffleNonlandPermanentsIntoOwnersLibraries {
+        players: RelativePlayerSet,
+    },
     /// Move a card from a graveyard to hand or battlefield (CR 400.1: graveyard is public).
     /// Raise Dead / Disentomb (creature → hand); future reanimation (creature → battlefield).
     /// The `filter` selects which graveyard and which card types are legal targets; the engine
@@ -2556,6 +2563,10 @@ pub enum PlayerRecipient {
     /// Outrage and Searing Blaze-style effects evaluate this relationship at resolution rather
     /// than snapshotting the target's controller when the spell was cast.
     ControllerOfTargetGroup { group_index: u32 },
+    /// The live player named by an authored player target group. Teferi, Temporal Pilgrim and
+    /// targeted-opponent permanent-choice cards such as Imperial Edict and Wei Assassins use this
+    /// as the chooser for a resolution-time permanent choice.
+    TargetedPlayer { group_index: u32, kind: TargetKind },
     /// The controller of the legal stack spell selected by the immediately preceding
     /// `CounterTargetSpell`, captured before that instruction may remove the spell. This
     /// remains defined if the spell is legal but cannot be countered. An Offer You Can't
@@ -2689,6 +2700,13 @@ impl SpellEffectKind {
 
     pub(crate) fn targeted_mass_scope(&self) -> Option<(u32, TargetKind)> {
         match self {
+            Self::ChoosePermanents {
+                chooser: PlayerRecipient::TargetedPlayer { group_index, kind },
+                ..
+            }
+            | Self::ShuffleNonlandPermanentsIntoOwnersLibraries {
+                players: RelativePlayerSet::TargetedPlayer { group_index, kind },
+            } => Some((*group_index, *kind)),
             Self::DamageAll {
                 players: RelativePlayerSet::TargetedPlayer { group_index, kind },
                 ..
@@ -3093,6 +3111,7 @@ impl SpellEffectKind {
             | SpellEffectKind::MyrBattlesphereAttack
             | SpellEffectKind::Draw { .. }
             | SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary
+            | SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries { .. }
             | SpellEffectKind::ExileResolvingSpell
             | SpellEffectKind::Discard { .. }
             | SpellEffectKind::DrawDiscard { .. }
@@ -3434,6 +3453,9 @@ impl SpellEffectKind {
                     equipment: EffectSubject::PreviousEffectObject,
                     ..
                 }
+                | SpellEffectKind::ReturnToOwnersHand {
+                    subject: EffectSubject::PreviousEffectObject,
+                }
                 | SpellEffectKind::RemoveAllAbilities {
                     subject: EffectSubject::PreviousEffectObject,
                     ..
@@ -3633,6 +3655,46 @@ impl SpellEffectKind {
                     "UntapChosenPermanents requires an immediately preceding direct ChoosePermanents"
                         .into(),
                 );
+            }
+            if let SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries {
+                players: RelativePlayerSet::TargetedPlayer { group_index, kind },
+            } = effect
+            {
+                let previous_previous = index
+                    .checked_sub(2)
+                    .and_then(|previous| effects.get(previous));
+                let expected_filter = TargetFilter {
+                    kind: TargetKind::AnyPermanent,
+                    controller: TargetController::You,
+                    ..TargetFilter::default()
+                };
+                let has_teferi_sequence = matches!(
+                    (previous_previous, previous),
+                    (
+                        Some(SpellEffectKind::ChoosePermanents {
+                            chooser: PlayerRecipient::TargetedPlayer {
+                                group_index: chooser_group,
+                                kind: chooser_kind,
+                            },
+                            filter,
+                            min: 1,
+                            max: 1,
+                            constraints,
+                        }),
+                        Some(SpellEffectKind::ReturnToOwnersHand {
+                            subject: EffectSubject::PreviousEffectObject,
+                        })
+                    ) if chooser_group == group_index
+                        && chooser_kind == kind
+                        && filter == &expected_filter
+                        && constraints.is_empty()
+                );
+                if !has_teferi_sequence {
+                    return Err(
+                        "ShuffleNonlandPermanentsIntoOwnersLibraries requires the matching targeted-player single-permanent choice and immediate PreviousEffectObject return"
+                            .into(),
+                    );
+                }
             }
             if matches!(
                 effect,
@@ -4110,6 +4172,26 @@ impl SpellEffectKind {
                                 .into(),
                         );
                     }
+                }
+            }
+        }
+        if let SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries { players } = self {
+            match players {
+                RelativePlayerSet::TargetedPlayer {
+                    kind: TargetKind::AnyPlayer | TargetKind::OpponentPlayer,
+                    ..
+                } => {}
+                RelativePlayerSet::TargetedPlayer { .. } => {
+                    return Err(
+                        "ShuffleNonlandPermanentsIntoOwnersLibraries requires a player target"
+                            .into(),
+                    );
+                }
+                _ => {
+                    return Err(
+                        "ShuffleNonlandPermanentsIntoOwnersLibraries requires TargetedPlayer scope"
+                            .into(),
+                    );
                 }
             }
         }

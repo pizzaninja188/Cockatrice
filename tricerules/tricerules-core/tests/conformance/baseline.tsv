@@ -3147,6 +3147,8 @@ tcri_building	0	ability:0	exercised
 tcri_building	0	land	exercised
 teapot_slinger	0	cast	exercised
 teeming_dragonstorm	0	cast	exercised
+teferi,_temporal_pilgrim	0	ability:1	unsupported: nonmana costs need additional fixture resources
+teferi,_temporal_pilgrim	0	ability:2	unsupported: nonmana costs need additional fixture resources
 teferis_protege	0	ability:0	exercised
 teferis_protege	0	cast	exercised
 tempest_angler	0	cast	exercised

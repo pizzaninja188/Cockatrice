@@ -1073,7 +1073,8 @@ fn validate_effect_targets(
         | SpellEffectKind::Fight { .. }
         | SpellEffectKind::AttachEquipment { .. }
         | SpellEffectKind::ExchangeArtifactWithGraveyard
-        | SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { .. } => {
+        | SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { .. }
+        | SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries { .. } => {
             return Err(EngineError::Illegal(
                 "multi-subject targets require grouped target-role validation",
             ));

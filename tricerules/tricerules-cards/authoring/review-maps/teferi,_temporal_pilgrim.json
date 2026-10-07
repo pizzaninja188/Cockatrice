@@ -1,0 +1,131 @@
+{
+  "format_version": 1,
+  "oracle_id": "5f0fa785-37ab-46a8-9ec0-6f8b29576d93",
+  "spans": [
+    {
+      "face_id": "teferi_temporal_pilgrim",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0"
+      ]
+    },
+    {
+      "face_id": "teferi_temporal_pilgrim",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    },
+    {
+      "face_id": "teferi_temporal_pilgrim",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/1",
+        "/faces/0/activated_abilities/1/costs/0",
+        "/faces/0/activated_abilities/1/effect/0"
+      ]
+    },
+    {
+      "face_id": "teferi_temporal_pilgrim",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": [
+        "/faces/0/activated_abilities/2",
+        "/faces/0/activated_abilities/2/costs/0",
+        "/faces/0/activated_abilities/2/effect/0",
+        "/faces/0/activated_abilities/2/effect/1",
+        "/faces/0/activated_abilities/2/effect/2",
+        "/faces/0/activated_abilities/2/targeting"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerKind::WheneverPlayerDrawsCard",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::PutCounters",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::Loyalty",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/activated_abilities/1/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ChoosePermanents",
+      "typed_path": "/faces/0/activated_abilities/2/effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::ReturnToOwnersHand",
+      "typed_path": "/faces/0/activated_abilities/2/effect/1"
+    },
+    {
+      "symbol": "SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries",
+      "typed_path": "/faces/0/activated_abilities/2/effect/2"
+    },
+    {
+      "symbol": "TargetingDef",
+      "typed_path": "/faces/0/activated_abilities/2/targeting"
+    }
+  ],
+  "tokens": ["spirit_u_2_2_vigilance_draw_counter"],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_teferi_temporal_pilgrim::exact_card_identity_is_registered",
+      "covers": "Exact Teferi Oracle identity, planeswalker type, mana cost, starting loyalty, and all three loyalty abilities."
+    },
+    {
+      "test": "scenario deck_coverage_teferi_temporal_pilgrim::teferis_zero_draws_and_puts_a_loyalty_counter_on_each_draw",
+      "covers": "The zero loyalty ability draws one card and Teferi triggers for each card drawn."
+    },
+    {
+      "test": "scenario deck_coverage_teferi_temporal_pilgrim::teferis_minus_two_creates_a_vigilant_spirit_that_grows_on_each_draw",
+      "covers": "The minus-two creates the blue 2/2 vigilant Spirit token and its draw trigger adds a counter for each card drawn."
+    },
+    {
+      "test": "scenario deck_coverage_teferi_temporal_pilgrim::teferis_ultimate_returns_the_chosen_land_and_shuffles_each_remaining_nonland_by_owner",
+      "covers": "Four-player target scope, chosen land return, artifact-land exception, owner-based movement and shuffle events, token disappearance, and the ability resolving after its zero-loyalty cost removes Teferi."
+    },
+    {
+      "test": "scenario deck_coverage_teferi_temporal_pilgrim::ultimate_resolution_replays_identically_from_same_seed_and_accepted_commands",
+      "covers": "Same-seed accepted-command replay through Teferi leaving from its ultimate cost, the opponent's choice, and deterministic owner-library shuffling."
+    },
+    {
+      "test": "scenario deck_coverage_teferi_temporal_pilgrim::target_departure_assigns_a_replacement_chooser_and_limits_it_to_the_lki_control_cohort",
+      "covers": "Target departure during the parked choice, 800.4g delegate choice, same-generation last-known controller cohort, absent-object owner shuffle, and selected survivor return."
+    },
+    {
+      "test": "scenario deck_coverage_teferi_temporal_pilgrim::owner_departure_refreshes_the_target_choice_and_rejects_the_removed_candidate",
+      "covers": "A live target uses current control information after another owner's departure; an absent departed-owner permanent no longer causes a stale shuffle, and stale choices are rejected atomically."
+    },
+    {
+      "test": "scenario deck_coverage_teferi_temporal_pilgrim::live_target_choices_and_shuffle_use_current_control_after_another_player_leaves",
+      "covers": "A permanent that reverts to a living target becomes a legal choice and is included in that target's current nonland shuffle set."
+    },
+    {
+      "test": "scenario deck_coverage_teferi_temporal_pilgrim::a_target_who_leaves_before_resolution_makes_the_ultimate_fail_to_resolve",
+      "covers": "The target becoming illegal before resolution makes the ability fail while its loyalty cost remains paid."
+    },
+    {
+      "test": "scenario deck_coverage_teferi_temporal_pilgrim::an_empty_target_control_cohort_skips_the_choice_and_shuffles_no_libraries",
+      "covers": "An empty target battlefield skips the required choice without shuffling any library."
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

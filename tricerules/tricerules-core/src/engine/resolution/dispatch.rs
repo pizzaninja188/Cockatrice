@@ -214,6 +214,9 @@ pub(super) fn execute_effect(
         effect @ SpellEffectKind::ShufflePermanentsIntoOwnersLibraries { .. } => {
             zones::shuffle_permanents_into_owners_libraries(cx, effect)?
         }
+        effect @ SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries { .. } => {
+            zones::shuffle_nonland_permanents_into_owners_libraries(cx, effect)?
+        }
         effect @ SpellEffectKind::ChooseHandCards { .. } => zones::choose_hand_cards(cx, effect)?,
         effect @ SpellEffectKind::MillTargetPlayer { .. } => zones::mill_target_player(cx, effect)?,
         effect @ SpellEffectKind::Mill { .. } => zones::mill(cx, effect)?,
