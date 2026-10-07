@@ -26,6 +26,20 @@ pub(super) fn create_token_copies(
         }
         return Ok(EffectOutcome::Continue);
     }
+    if source == TokenCopySource::TriggerObject {
+        if let Some(snapshot) = cx.engine.trigger_object_token_copy_snapshot(cx.top) {
+            if cx.engine.create_tokens_from_copy(
+                &snapshot,
+                count,
+                cx.top,
+                cx.spell_label,
+                cx.events,
+            )? {
+                return Ok(EffectOutcome::Suspended);
+            }
+        }
+        return Ok(EffectOutcome::Continue);
+    }
     for source in cx.targets {
         if cx
             .engine

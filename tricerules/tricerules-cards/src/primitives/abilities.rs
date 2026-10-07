@@ -1714,6 +1714,13 @@ impl ReflexiveTriggeredAbilityDef {
         if self
             .effect
             .iter()
+            .any(SpellEffectKind::uses_trigger_object_reference)
+        {
+            return Err("reflexive triggered abilities cannot reference a trigger object".into());
+        }
+        if self
+            .effect
+            .iter()
             .any(SpellEffectKind::uses_trigger_event_count)
         {
             return Err(

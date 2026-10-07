@@ -1,0 +1,55 @@
+{
+  "format_version": 1,
+  "oracle_id": "fd9c4ebe-cc9c-427c-8105-adb1703c191b",
+  "spans": [
+    {
+      "face_id": "mirrorworks",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0",
+        "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Artifact",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverPermanentEntersBattlefield/filter/permanent_type"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseResolutionBranch",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "ResolutionCost::Mana",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/cost"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokenCopies",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0"
+    },
+    {
+      "symbol": "TokenCopySource::TriggerObject",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0/CreateTokenCopies/source"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_mirrorworks::mirrorworks_pays_per_trigger_and_copies_the_exact_entering_artifact_lki",
+      "covers": "two separate artifact-entry triggers each offer a controller-only optional {2} payment; the returned object triggers as a new generation, while the older trigger copies its exact prior-generation last-known copiable values after a decline of the new trigger"
+    },
+    {
+      "test": "deck_coverage_mirrorworks::mirrorworks_is_registered_as_a_complete_card",
+      "covers": "exact Oracle identity, cost, Artifact type, trigger filter, Oracle line presentation, optional resolution payment, and generation-bound trigger-object copy source"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

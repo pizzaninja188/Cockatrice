@@ -1080,6 +1080,7 @@ fn attack_declaration_limit_authoring_preserves_zero_and_scope_and_rejects_ambig
         );
     }
 }
+use crate::primitives::{AbilityCost, ActivatedAbilityDef};
 use crate::{AbilityId, AbilityPresentation, ManaCost};
 
 fn arena_opponent_chooser_ability() -> ActivatedAbilityDef {
@@ -1102,6 +1103,97 @@ fn arena_opponent_chooser_ability() -> ActivatedAbilityDef {
         )"#,
     )
     .expect("Arena's authored activation shape parses")
+}
+
+fn mirrorworks_event_object_copy_branch() -> SpellEffectKind {
+    SpellEffectKind::ChooseResolutionBranch {
+        chooser: PlayerRecipient::Controller,
+        optional: true,
+        selection: ResolutionBranchSelection::PlayerChoice,
+        branches: vec![ResolutionBranchDef {
+            branch_id: crate::ChoiceId::new("pay_to_copy").unwrap(),
+            presentation: AbilityPresentation::Fallback,
+            runtime_fallback: None,
+            cost: ResolutionCost::Mana(ManaCost::parse("{2}").unwrap()),
+            requirement: ResolutionBranchRequirement::Always,
+            effects: vec![SpellEffectKind::CreateTokenCopies {
+                count: Amount::Fixed(1),
+                source: TokenCopySource::TriggerObject,
+            }],
+        }],
+        otherwise: vec![],
+    }
+}
+
+#[test]
+fn trigger_object_copy_is_nested_trigger_context_scoped() {
+    let branch = mirrorworks_event_object_copy_branch();
+    assert!(branch.uses_trigger_object_reference());
+    assert!(branch
+        .validate(EffectContext::Spell)
+        .unwrap_err()
+        .contains("trigger object"));
+
+    let mut ability = TriggeredAbilityDef {
+        ability_id: AbilityId::new("triggered_01").unwrap(),
+        presentation: AbilityPresentation::Fallback,
+        trigger: TriggerCondition::WhenSelfEntersBattlefield,
+        effect: vec![branch.clone()],
+        modal: None,
+        targeting: None,
+        may: false,
+        intervening_if: None,
+        triggers_only_once: false,
+        max_triggers_per_turn: None,
+    };
+    assert!(ability
+        .validate_shape()
+        .unwrap_err()
+        .contains("trigger-object effect requires a trigger that supplies an observed object"));
+
+    let activated = ActivatedAbilityDef {
+        ability_id: AbilityId::new("activated_01").unwrap(),
+        presentation: AbilityPresentation::Fallback,
+        intrinsic_land_mana: false,
+        source_zone: Default::default(),
+        costs: vec![AbilityCost::Tap],
+        cost_modifiers: vec![],
+        effect: vec![branch.clone()],
+        targeting: None,
+        timing: Default::default(),
+        conditions: vec![],
+        activation_limit: None,
+    };
+    assert!(activated
+        .validate_shape()
+        .unwrap_err()
+        .contains("activated abilities cannot reference a trigger object"));
+
+    ability.trigger = TriggerCondition::WheneverPermanentEntersBattlefield {
+        controller: CastTriggerPlayer::Controller,
+        filter: PermanentEventFilter {
+            permanent_type: Some(PermanentTypeFilter::Artifact),
+            exclude_source: true,
+            token: Some(false),
+            ..Default::default()
+        },
+        creature_filter: None,
+    };
+    ability
+        .validate_shape()
+        .expect("Mirrorworks' permanent-entry trigger supplies one observed object");
+
+    let reflexive = ReflexiveTriggeredAbilityDef {
+        ability_id: AbilityId::new("reflexive_01").unwrap(),
+        presentation: AbilityPresentation::Fallback,
+        effect: vec![branch],
+        targeting: None,
+        intervening_if: None,
+    };
+    assert!(reflexive
+        .validate_shape()
+        .unwrap_err()
+        .contains("cannot reference a trigger object"));
 }
 
 #[test]

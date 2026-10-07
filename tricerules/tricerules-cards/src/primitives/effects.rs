@@ -175,11 +175,15 @@ pub enum EffectSubject {
     Chosen(Box<TargetFilter>),
 }
 
-/// CR 707: Colorstorm Stallion copies its untargeted source, while Cackling Counterpart
-/// copies one chosen permanent. Keep these distinct so source references never acquire targets.
+/// CR 707: Colorstorm Stallion copies its ability source, Cackling Counterpart copies one chosen
+/// permanent, and Mirrorworks copies the exact permanent observed by its entry trigger. Keep these
+/// distinct so event and source references never acquire targets.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TokenCopySource {
     Source,
+    /// The exact single permanent supplied by a compatible trigger event. Mirrorworks needs the
+    /// entering artifact, including its event-time generation if it later leaves or blinks.
+    TriggerObject,
     Chosen(Box<TargetFilter>),
 }
 
@@ -2862,6 +2866,22 @@ impl SpellEffectKind {
     }
 
     pub(crate) fn uses_trigger_object_reference(&self) -> bool {
+        if let Self::ChooseResolutionBranch {
+            branches,
+            otherwise,
+            ..
+        } = self
+        {
+            if branches.iter().any(|branch| {
+                branch
+                    .effects
+                    .iter()
+                    .any(Self::uses_trigger_object_reference)
+            }) || otherwise.iter().any(Self::uses_trigger_object_reference)
+            {
+                return true;
+            }
+        }
         matches!(
             self,
             SpellEffectKind::PutCounterSnapshot {
@@ -2934,6 +2954,9 @@ impl SpellEffectKind {
                 ..
             } | SpellEffectKind::CreateTokens {
                 who: PlayerRecipient::TriggerObjectController,
+                ..
+            } | SpellEffectKind::CreateTokenCopies {
+                source: TokenCopySource::TriggerObject,
                 ..
             } | SpellEffectKind::Mill {
                 who: PlayerRecipient::TriggerObjectController,
@@ -3140,7 +3163,7 @@ impl SpellEffectKind {
                 .unwrap_or_default(),
             SpellEffectKind::DamagePlayer { .. }
             | SpellEffectKind::CreateTokenCopies {
-                source: TokenCopySource::Source,
+                source: TokenCopySource::Source | TokenCopySource::TriggerObject,
                 ..
             }
             | SpellEffectKind::CopyNextSpellThisTurn
@@ -3973,6 +3996,9 @@ impl SpellEffectKind {
         }
         if context == EffectContext::Spell && self.requires_triggering_spell_context() {
             return Err("spells cannot reference triggering-spell context".into());
+        }
+        if context == EffectContext::Spell && self.uses_trigger_object_reference() {
+            return Err("spells cannot reference a trigger object".into());
         }
         if matches!(
             self,

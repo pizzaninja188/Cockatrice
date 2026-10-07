@@ -62,6 +62,32 @@ pub(super) fn token_copy_snapshot_from(
     })
 }
 
+/// Resolve the generation-bound object observed by a trigger, applying CR 608.2h to its expected
+/// battlefield zone. A later incarnation with the same relay-facing ObjectId is never substituted.
+pub(super) fn observed_token_copy_snapshot(
+    state: &GameState,
+    registry: &'static CardRegistry,
+    observed: crate::state::TriggerObjectRef,
+) -> Option<TokenCopySnapshot> {
+    let same_battlefield_incarnation = state
+        .objects
+        .get(&observed.object_id)
+        .is_some_and(|object| object.zone == Zone::Battlefield)
+        && state
+            .zone_change_generation
+            .get(&observed.object_id)
+            .copied()
+            .unwrap_or(0)
+            == observed.zone_change_generation;
+    if same_battlefield_incarnation {
+        return token_copy_snapshot_from(state, registry, observed.object_id);
+    }
+    state
+        .last_known_copy_by_generation
+        .get(&(observed.object_id, observed.zone_change_generation))
+        .cloned()
+}
+
 impl GameEngine {
     pub(super) fn source_token_copy_snapshot(&self, item: &StackItem) -> Option<TokenCopySnapshot> {
         let source = item.source_permanent_id?;
@@ -73,6 +99,14 @@ impl GameEngine {
                 .get(&(source, item.source_zone_change))
                 .cloned()
         }
+    }
+
+    pub(super) fn trigger_object_token_copy_snapshot(
+        &self,
+        item: &StackItem,
+    ) -> Option<TokenCopySnapshot> {
+        let observed = item.trigger_context.observed_object?;
+        observed_token_copy_snapshot(&self.state, self.registry, observed)
     }
 }
 
@@ -121,4 +155,91 @@ pub(super) fn copiable_values_from(
             .face_display_name(object.face_up_index)?
             .to_string(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::{CopiableValues, TokenCopySnapshot, TriggerObjectRef};
+
+    fn snapshot(card_id: &str) -> TokenCopySnapshot {
+        let definition = CardRegistry::global()
+            .get(card_id)
+            .expect("copy snapshot fixture is registered");
+        TokenCopySnapshot {
+            token_id: card_id.into(),
+            values: CopiableValues {
+                source_card_id: card_id.into(),
+                source_face_index: 0,
+                face: definition.primary_face().clone(),
+                room_faces: None,
+                display_name: definition.name.clone(),
+            },
+            faces: None,
+            face_up_index: 0,
+        }
+    }
+
+    #[test]
+    fn observed_copy_lookup_never_substitutes_a_later_object_generation() {
+        let mut engine = GameEngine::new(70_701, &[0, 1], 20, None, true).expect("new game");
+        let object_id = engine.state.players[0]
+            .library
+            .front()
+            .copied()
+            .expect("starting library has a card");
+        engine.state.players[0]
+            .library
+            .retain(|candidate| *candidate != object_id);
+        engine.state.players[0].battlefield.push(object_id);
+        let object = engine.state.objects.get_mut(&object_id).unwrap();
+        object.card_id = "mirrorworks".into();
+        object.zone = Zone::Battlefield;
+        engine.state.zone_change_generation.insert(object_id, 8);
+        engine
+            .state
+            .last_known_copy_by_generation
+            .insert((object_id, 7), snapshot("sol_ring"));
+
+        let old_incarnation = observed_token_copy_snapshot(
+            &engine.state,
+            engine.registry,
+            TriggerObjectRef {
+                object_id,
+                zone_change_generation: 7,
+                controller_at_event: 0,
+            },
+        )
+        .expect("the old public-zone incarnation has LKI");
+        assert_eq!(old_incarnation.token_id, "sol_ring");
+        assert_eq!(old_incarnation.values.source_card_id, "sol_ring");
+
+        let current_incarnation = observed_token_copy_snapshot(
+            &engine.state,
+            engine.registry,
+            TriggerObjectRef {
+                object_id,
+                zone_change_generation: 8,
+                controller_at_event: 0,
+            },
+        )
+        .expect("the matching current battlefield incarnation uses current values");
+        assert_eq!(current_incarnation.token_id, "mirrorworks");
+        assert_eq!(current_incarnation.values.source_card_id, "mirrorworks");
+
+        engine.state.last_known_copy_by_generation.clear();
+        assert!(
+            observed_token_copy_snapshot(
+                &engine.state,
+                engine.registry,
+                TriggerObjectRef {
+                    object_id,
+                    zone_change_generation: 7,
+                    controller_at_event: 0,
+                },
+            )
+            .is_none(),
+            "missing LKI fails closed instead of using the new incarnation"
+        );
+    }
 }

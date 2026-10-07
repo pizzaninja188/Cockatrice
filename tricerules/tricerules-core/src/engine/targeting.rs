@@ -1182,6 +1182,11 @@ fn validate_effect_targets(
                 return Err(EngineError::Illegal("source token copy does not target"));
             }
         }
+        SpellEffectKind::CreateTokenCopies { source: TokenCopySource::TriggerObject, .. } => {
+            if !targets.is_empty() {
+                return Err(EngineError::Illegal("trigger-object token copy does not target"));
+            }
+        }
         SpellEffectKind::ExileIfWouldDieThisTurn { target: filter } => {
             if targets.len() != 1 {
                 return Err(EngineError::Illegal("requires exactly one target"));

@@ -1,0 +1,34 @@
+// Oracle and all four WotC rulings checked 2026-10-07. The copy source is the exact artifact
+// observed by this entry trigger, with current or last-known copiable values at resolution.
+(
+  id: "mirrorworks",
+  name: "Mirrorworks",
+  face_id: "mirrorworks",
+  mana_cost: "{5}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (
+        permanent_type: Some(Artifact),
+        exclude_source: true,
+        token: Some(false),
+      ),
+    ),
+    effect: [ChooseResolutionBranch(
+      chooser: Controller,
+      optional: true,
+      selection: PlayerChoice,
+      branches: [(
+        branch_id: "pay_to_copy",
+        presentation: OracleLines([1]),
+        cost: Mana("{2}"),
+        requirement: Always,
+        effects: [CreateTokenCopies(count: 1, source: TriggerObject)],
+      )],
+      otherwise: [],
+    )],
+  )],
+)
