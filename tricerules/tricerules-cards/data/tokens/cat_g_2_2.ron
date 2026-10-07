@@ -1,0 +1,10 @@
+// Green 2/2 Cat creature token used by Esika's Chariot.
+(
+  id: "cat_g_2_2",
+  name: "Cat",
+  face_id: "cat",
+  types: ["Creature", "Cat"],
+  colors: [Green],
+  power: 2,
+  toughness: 2,
+)

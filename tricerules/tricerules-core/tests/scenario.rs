@@ -1106,3 +1106,6 @@ mod deck_coverage_ascend_from_avernus;
 
 #[path = "scenario/deck_coverage_weapons_manufacturing.rs"]
 mod deck_coverage_weapons_manufacturing;
+
+#[path = "scenario/deck_coverage_esikas_chariot.rs"]
+mod deck_coverage_esikas_chariot;

@@ -1,0 +1,75 @@
+{
+  "format_version": 1,
+  "oracle_id": "8e7b079d-9ede-421c-bd2b-f9a5126a8e6f",
+  "spans": [
+    {
+      "face_id": "esikas_chariot",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0"
+      ]
+    },
+    {
+      "face_id": "esikas_chariot",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/1",
+        "/faces/0/triggered_abilities/1/trigger",
+        "/faces/0/triggered_abilities/1/effect/0",
+        "/faces/0/triggered_abilities/1/targeting"
+      ]
+    },
+    {
+      "face_id": "esikas_chariot",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0",
+        "/faces/0/activated_abilities/0/costs/0",
+        "/faces/0/activated_abilities/0/effect/0"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WhenSelfEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokens",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TriggerCondition::WheneverSelfAttacks",
+      "typed_path": "/faces/0/triggered_abilities/1/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::CreateTokenCopies",
+      "typed_path": "/faces/0/triggered_abilities/1/effect/0"
+    },
+    {
+      "symbol": "AbilityCost::TapPermanents",
+      "typed_path": "/faces/0/activated_abilities/0/costs/0"
+    },
+    {
+      "symbol": "SpellEffectKind::AddTypes",
+      "typed_path": "/faces/0/activated_abilities/0/effect/0"
+    }
+  ],
+  "tokens": ["cat_g_2_2"],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_esikas_chariot::esikas_chariot_and_its_cat_token_have_the_complete_definitions",
+      "covers": "exact card identity, mana cost, legendary Vehicle type line, printed 4/4, three Oracle line mappings, and green 2/2 Cat token identity"
+    },
+    {
+      "test": "scenario deck_coverage_esikas_chariot::chariot_enters_crews_with_aggregate_power_then_copies_a_legal_token_on_attack",
+      "covers": "two Cat tokens enter; one insufficient Crew payment is rejected atomically; two summoning-sick Cats pay Crew 4; the Vehicle gains creature type until cleanup with printed power and toughness; its next-turn attack trigger rejects a controlled nontoken creature and an opponent's token; copying a tapped Cat creates an untapped 2/2 green Cat without its counter"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

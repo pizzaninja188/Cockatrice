@@ -963,6 +963,8 @@ erudite_wizard	0	cast	exercised
 escape_tunnel	0	ability:0	exercised
 escape_tunnel	0	ability:1	exercised
 escape_tunnel	0	land	exercised
+esikas_chariot	0	ability:0	unsupported: nonmana costs need additional fixture resources
+esikas_chariot	0	cast	exercised
 esper_cormorants	0	cast	exercised
 esper_origins_summon:_esper_maduin	0	cast	exercised
 esper_origins_summon:_esper_maduin	1	cast	intentional: face unavailable from hand
