@@ -3,7 +3,7 @@
 //! unregistered while #445 and #446 own their final printed bullets.
 
 use tricerules_cards::primitives::{
-    CreatureScopeController, RelativePlayerSet, SpellEffectKind, TargetKind,
+    CreatureScopeController, MassPlayerSet, SpellEffectKind, TargetKind,
 };
 use tricerules_cards::{AbilityPresentation, CardRegistry};
 
@@ -78,7 +78,7 @@ fn issue_444_mass_modes_bind_one_player_and_keep_ordered_instructions() {
             && keywords == &[tricerules_cards::Keyword::Lifelink])
     );
     assert!(
-        matches!(&trystan.modes[3].effects[..], [SpellEffectKind::PumpAll { filter, power: 3, toughness: 3 }, SpellEffectKind::UntapAll { players: RelativePlayerSet::TargetedPlayer { group_index: 0, kind: TargetKind::AnyPlayer }, .. }]
+        matches!(&trystan.modes[3].effects[..], [SpellEffectKind::PumpAll { filter, power: 3, toughness: 3 }, SpellEffectKind::UntapAll { players: MassPlayerSet::TargetedPlayer { group_index: 0, kind: TargetKind::AnyPlayer }, .. }]
         if matches!(filter.controller, Some(CreatureScopeController::TargetedPlayer { group_index: 0, kind: TargetKind::AnyPlayer })))
     );
     for mode in [&sygg.modes[1], &trystan.modes[3]] {

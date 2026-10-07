@@ -8,7 +8,7 @@
 //! CR 122.1d / 701.26 stun counters and tapping.
 
 use tricerules_cards::primitives::{
-    Amount, EffectSubject, PlayerRecipient, PowerComparison, RelativePlayerSet, TargetFilter,
+    Amount, EffectSubject, MassPlayerSet, PlayerRecipient, PowerComparison, TargetFilter,
     TargetKind,
 };
 use tricerules_cards::{
@@ -106,7 +106,7 @@ fn issue_413_fuel_the_flames_is_the_untargeted_two_damage_sweep() {
         face.spell_effect,
         [SpellEffectKind::DamageAll {
             amount: Amount::Fixed(2),
-            players: RelativePlayerSet::All,
+            players: MassPlayerSet::All,
             kind: TargetFilter::default_creature(),
         }]
     );

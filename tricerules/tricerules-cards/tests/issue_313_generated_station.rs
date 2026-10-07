@@ -10,9 +10,10 @@ use std::collections::BTreeSet;
 
 use tricerules_cards::primitives::{
     AbilityCost, AbilitySourceZone, ActivationTiming, Amount, CardTypeFilter, CountExpression,
-    EffectSubject, GameCondition, GraveyardDestination, ObjectPaymentConstraint, PlayerRecipient,
-    PowerToughnessCharacteristic, RelativePlayerSet, SpellEffectKind, StaticAbilityDef,
-    TargetController, TargetFilter, TargetKind, TriggerCondition, TypeLineAddition, ZoneCardFilter,
+    EffectSubject, GameCondition, GraveyardDestination, MassPlayerSet, ObjectPaymentConstraint,
+    PlayerRecipient, PowerToughnessCharacteristic, RelativePlayerSet, SpellEffectKind,
+    StaticAbilityDef, TargetController, TargetFilter, TargetKind, TriggerCondition,
+    TypeLineAddition, ZoneCardFilter,
 };
 use tricerules_cards::{AbilityPresentation, CardRegistry, CounterKind, Keyword};
 
@@ -219,7 +220,7 @@ fn issue_313_cards_preserve_exact_faces_abilities_and_presentation_fingerprints(
                     trigger.effect[1],
                     SpellEffectKind::DamageAll {
                         amount: Amount::Fixed(4),
-                        players: RelativePlayerSet::All,
+                        players: MassPlayerSet::All,
                         kind: TargetFilter::default_creature(),
                     }
                 );

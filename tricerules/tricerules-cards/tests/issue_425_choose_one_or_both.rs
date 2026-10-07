@@ -144,7 +144,7 @@ fn issue_425_avengers_disassembled_sweeps_and_searches_for_the_lands_controller(
         avengers.modes[0].effects,
         [SpellEffectKind::DamageAll {
             amount: Amount::Fixed(3),
-            players: tricerules_cards::primitives::RelativePlayerSet::All,
+            players: tricerules_cards::primitives::MassPlayerSet::All,
             kind: TargetFilter::default_creature(),
         }]
     );

@@ -217,16 +217,17 @@ pub(super) fn destroy_all(
 /// Shared selection for mass tap and untap (Cryptic Command / Vitalize). CR 115.10 / 608.2h:
 /// snapshot current characteristics at resolution without checking targetability. Preserve the
 /// selector's deterministic player-then-battlefield order; `players` alone owns controller scope.
-fn scoped_battlefield_objects(
+fn scoped_battlefield_objects_with_affected_player(
     engine: &GameEngine,
     controller: PlayerId,
-    players: RelativePlayerSet,
+    players: MassPlayerSet,
+    affected_player: PlayerId,
     filter: &TargetFilter,
     targets: &[ObjectId],
     target_group_indices: &[u32],
 ) -> Vec<ObjectId> {
     let targeted_player = match players {
-        RelativePlayerSet::TargetedPlayer { group_index, .. } => {
+        MassPlayerSet::TargetedPlayer { group_index, .. } => {
             scoped_player_target(engine, targets, target_group_indices, group_index)
         }
         _ => None,
@@ -237,17 +238,38 @@ fn scoped_battlefield_objects(
             engine
                 .characteristics(*oid)
                 .is_some_and(|characteristics| match players {
-                    RelativePlayerSet::Controller => characteristics.controller == controller,
-                    RelativePlayerSet::Opponents => engine
+                    MassPlayerSet::Controller => characteristics.controller == controller,
+                    MassPlayerSet::Opponents => engine
                         .state
                         .are_opponents(characteristics.controller, controller),
-                    RelativePlayerSet::All => true,
-                    RelativePlayerSet::TargetedPlayer { .. } => {
+                    MassPlayerSet::AffectedPlayer => characteristics.controller == affected_player,
+                    MassPlayerSet::All => true,
+                    MassPlayerSet::TargetedPlayer { .. } => {
                         targeted_player == Some(characteristics.controller)
                     }
                 })
         })
         .collect()
+}
+
+#[cfg(test)]
+fn scoped_battlefield_objects(
+    engine: &GameEngine,
+    controller: PlayerId,
+    players: impl Into<MassPlayerSet>,
+    filter: &TargetFilter,
+    targets: &[ObjectId],
+    target_group_indices: &[u32],
+) -> Vec<ObjectId> {
+    scoped_battlefield_objects_with_affected_player(
+        engine,
+        controller,
+        players.into(),
+        controller,
+        filter,
+        targets,
+        target_group_indices,
+    )
 }
 
 pub(super) fn sacrifice_all(
@@ -257,10 +279,11 @@ pub(super) fn sacrifice_all(
     let SpellEffectKind::SacrificeAll { players, filter } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let cohort = scoped_battlefield_objects(
+    let cohort = scoped_battlefield_objects_with_affected_player(
         cx.engine,
         cx.controller,
         players,
+        cx.affected_player,
         &filter,
         cx.targets,
         cx.target_group_indices,
@@ -322,10 +345,11 @@ pub(super) fn tap_all(
     let SpellEffectKind::TapAll { players, filter } = effect else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
-    let affected = scoped_battlefield_objects(
+    let affected = scoped_battlefield_objects_with_affected_player(
         cx.engine,
         cx.controller,
         players,
+        cx.affected_player,
         &filter,
         cx.targets,
         cx.target_group_indices,
@@ -348,10 +372,11 @@ pub(super) fn untap_all(
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
     let engine = &mut *cx.engine;
-    let affected = scoped_battlefield_objects(
+    let affected = scoped_battlefield_objects_with_affected_player(
         engine,
         cx.controller,
         players,
+        cx.affected_player,
         &filter,
         cx.targets,
         cx.target_group_indices,
@@ -436,10 +461,11 @@ pub(super) fn damage_all(
     // CR 119: deal damage to each matching permanent. Marking damage mirrors
     // DamageTarget; lethal-damage destruction is left to state-based actions
     // (CR 704.5g), which run immediately after this spell resolves.
-    let affected = scoped_battlefield_objects(
+    let affected = scoped_battlefield_objects_with_affected_player(
         engine,
         cx.controller,
         players,
+        cx.affected_player,
         &kind,
         cx.targets,
         cx.target_group_indices,

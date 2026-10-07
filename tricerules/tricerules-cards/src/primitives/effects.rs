@@ -1214,7 +1214,7 @@ pub enum SpellEffectKind {
     /// uses opponents' creatures; Blinding Light uses all nonwhite creatures. As with `UntapAll`,
     /// controller scope belongs in `players`, not in the filter's controller relationship.
     TapAll {
-        players: RelativePlayerSet,
+        players: MassPlayerSet,
         #[serde(default = "TargetFilter::default_creature")]
         filter: TargetFilter,
     },
@@ -1240,7 +1240,7 @@ pub enum SpellEffectKind {
     /// selection goes through `battlefield_objects_matching`, which has no activating player to
     /// compare against. Vitalize (`Controller` + creature) and mass tapping share this selection.
     UntapAll {
-        players: RelativePlayerSet,
+        players: MassPlayerSet,
         #[serde(default = "TargetFilter::default_creature")]
         filter: TargetFilter,
     },
@@ -1686,8 +1686,8 @@ pub enum SpellEffectKind {
     /// CR 701.21: each affected controller sacrifices the matching simultaneous cohort.
     /// All Is Dust selects colored permanents; Living Death selects every creature.
     SacrificeAll {
-        #[serde(default, skip_serializing_if = "relative_player_set_is_all")]
-        players: RelativePlayerSet,
+        #[serde(default, skip_serializing_if = "mass_player_set_is_all")]
+        players: MassPlayerSet,
         filter: TargetFilter,
     },
     /// CR 701.19: put a regeneration shield on target creature. The next time that creature would
@@ -1706,8 +1706,8 @@ pub enum SpellEffectKind {
         /// Relative controller scope for the affected permanents. The default `All` preserves
         /// legacy unqualified sweeps; opponent- and controller-scoped variants share the same
         /// mass-damage vocabulary without smuggling controller relationships into `kind`.
-        #[serde(default, skip_serializing_if = "relative_player_set_is_all")]
-        players: RelativePlayerSet,
+        #[serde(default, skip_serializing_if = "mass_player_set_is_all")]
+        players: MassPlayerSet,
         #[serde(default = "TargetFilter::default_creature")]
         kind: TargetFilter,
     },
@@ -2512,9 +2512,8 @@ pub struct ConditionalManaOutput {
     pub options: Vec<ManaAmount>,
 }
 
-/// Which players' permanents a mass one-shot effect affects, relative to the effect controller.
-/// Kept separate from target selection because these effects do not target. Covers Cryptic
-/// Command (`Opponents`), Vitalize (`Controller`), and Blinding Light (`All`).
+/// Relative set of players used by conditions, history, and other instructions that do not have
+/// a trigger event's affected-player context.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum RelativePlayerSet {
     Controller,
@@ -2528,8 +2527,41 @@ pub enum RelativePlayerSet {
     All,
 }
 
-fn relative_player_set_is_all(players: &RelativePlayerSet) -> bool {
-    *players == RelativePlayerSet::All
+/// Which players' permanents a mass one-shot effect affects. `AffectedPlayer` reads the current
+/// effect context; a trigger that records an event player (Nature's Will) uses that player, while
+/// other effects retain the engine's controller fallback. It cannot leak into conditions, history,
+/// or other instruction vocabularies. Kept separate from target selection because these effects
+/// do not target. Cryptic Command uses `Opponents`, Vitalize `Controller`, and Blinding Light `All`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum MassPlayerSet {
+    Controller,
+    Opponents,
+    /// The current effect's event-time affected player, when its context supplies one.
+    AffectedPlayer,
+    /// One legal player target from the authored group, resolved when the instruction runs.
+    TargetedPlayer {
+        group_index: u32,
+        kind: TargetKind,
+    },
+    #[default]
+    All,
+}
+
+fn mass_player_set_is_all(players: &MassPlayerSet) -> bool {
+    *players == MassPlayerSet::All
+}
+
+impl From<RelativePlayerSet> for MassPlayerSet {
+    fn from(players: RelativePlayerSet) -> Self {
+        match players {
+            RelativePlayerSet::Controller => Self::Controller,
+            RelativePlayerSet::Opponents => Self::Opponents,
+            RelativePlayerSet::TargetedPlayer { group_index, kind } => {
+                Self::TargetedPlayer { group_index, kind }
+            }
+            RelativePlayerSet::All => Self::All,
+        }
+    }
 }
 
 /// Which player an **untargeted** effect affects.
@@ -2708,19 +2740,19 @@ impl SpellEffectKind {
                 players: RelativePlayerSet::TargetedPlayer { group_index, kind },
             } => Some((*group_index, *kind)),
             Self::DamageAll {
-                players: RelativePlayerSet::TargetedPlayer { group_index, kind },
+                players: MassPlayerSet::TargetedPlayer { group_index, kind },
                 ..
             }
             | Self::SacrificeAll {
-                players: RelativePlayerSet::TargetedPlayer { group_index, kind },
+                players: MassPlayerSet::TargetedPlayer { group_index, kind },
                 ..
             }
             | Self::TapAll {
-                players: RelativePlayerSet::TargetedPlayer { group_index, kind },
+                players: MassPlayerSet::TargetedPlayer { group_index, kind },
                 ..
             }
             | Self::UntapAll {
-                players: RelativePlayerSet::TargetedPlayer { group_index, kind },
+                players: MassPlayerSet::TargetedPlayer { group_index, kind },
                 ..
             }
             | Self::PumpAll {
@@ -6063,7 +6095,7 @@ mod conditional_mass_untap_tests {
                 players: RelativePlayerSet::Opponents,
             },
             effect: Box::new(SpellEffectKind::UntapAll {
-                players: RelativePlayerSet::Controller,
+                players: MassPlayerSet::Controller,
                 filter: TargetFilter::default_creature(),
             }),
         };

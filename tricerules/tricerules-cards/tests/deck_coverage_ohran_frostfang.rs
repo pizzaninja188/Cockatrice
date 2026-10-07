@@ -65,6 +65,7 @@ fn ohran_frostfang_registers_its_exact_characteristics_and_typed_abilities() {
         TriggerCondition::WheneverCreatureDealsCombatDamageToPlayer {
             source_controller: CastTriggerPlayer::Controller,
             damaged_player: CastTriggerPlayer::AnyPlayer,
+            cardinality: tricerules_cards::CombatDamageTriggerCardinality::EachCreature,
         }
     );
     assert!(matches!(

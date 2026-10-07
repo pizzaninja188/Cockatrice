@@ -1,0 +1,28 @@
+(
+    id: "natures_will",
+    name: "Nature's Will",
+    face_id: "natures_will",
+    mana_cost: "{2}{G}{G}",
+    types: ["Enchantment"],
+    triggered_abilities: [
+        (
+            ability_id: "triggered_01",
+            presentation: OracleLines([1]),
+            trigger: WheneverCreatureDealsCombatDamageToPlayer(
+                source_controller: Controller,
+                damaged_player: AnyPlayer,
+                cardinality: OneOrMorePerDamagedPlayer,
+            ),
+            effect: [
+                TapAll(
+                    players: AffectedPlayer,
+                    filter: (kind: AnyPermanent, permanent_types: [Land]),
+                ),
+                UntapAll(
+                    players: Controller,
+                    filter: (kind: AnyPermanent, permanent_types: [Land]),
+                ),
+            ],
+        ),
+    ],
+)

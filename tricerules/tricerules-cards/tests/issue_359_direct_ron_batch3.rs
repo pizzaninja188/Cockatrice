@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use tricerules_cards::primitives::{
-    Amount, CastCostGroupDef, CastCostOptionDef, ManaCostChoiceKind, RelativePlayerSet,
+    Amount, CastCostGroupDef, CastCostOptionDef, ManaCostChoiceKind, MassPlayerSet,
     SpellEffectKind, TargetKind,
 };
 use tricerules_cards::{AbilityPresentation, CardRegistry, ChoiceId, Color, ModeId};
@@ -87,7 +87,7 @@ fn issue_359_caught_in_the_crossfire_maps_both_printed_clauses() {
         panic!("outlaw mode is one untargeted DamageAll effect");
     };
     assert_eq!(*amount, Amount::Fixed(2));
-    assert_eq!(*players, RelativePlayerSet::All);
+    assert_eq!(*players, MassPlayerSet::All);
     let branches = kind.any_of.as_ref().expect("outlaw subtype disjunction");
     assert_eq!(branches.len(), 5);
     let subtype_union: BTreeSet<&str> = branches
@@ -125,7 +125,7 @@ fn issue_359_caught_in_the_crossfire_maps_both_printed_clauses() {
         panic!("non-outlaw mode is one untargeted DamageAll effect");
     };
     assert_eq!(*amount, Amount::Fixed(2));
-    assert_eq!(*players, RelativePlayerSet::All);
+    assert_eq!(*players, MassPlayerSet::All);
     assert_eq!(kind.kind, TargetKind::Creature);
     assert_eq!(
         kind.excluded_subtypes

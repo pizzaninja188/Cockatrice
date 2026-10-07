@@ -152,7 +152,7 @@ fn issue_444_targeted_mass_damage_marks_only_chosen_players_creatures() {
         &mut engine,
         SpellEffectKind::DamageAll {
             amount: 1.into(),
-            players: RelativePlayerSet::TargetedPlayer {
+            players: MassPlayerSet::TargetedPlayer {
                 group_index: 0,
                 kind: TargetKind::AnyPlayer,
             },
@@ -322,7 +322,7 @@ fn issue_444_targeted_player_scope_uses_current_multiplayer_control() {
     let caster = deploy(&mut engine, 0, "grizzly_bears");
     let chosen = deploy(&mut engine, 1, "grizzly_bears");
     let other = deploy(&mut engine, 2, "grizzly_bears");
-    let scope = RelativePlayerSet::TargetedPlayer {
+    let scope = MassPlayerSet::TargetedPlayer {
         group_index: 0,
         kind: TargetKind::AnyPlayer,
     };
@@ -389,9 +389,9 @@ fn scopes_use_current_controllers_in_deterministic_battlefield_order() {
     );
     assert_eq!(engine.state.objects[&stolen].owner, 11);
     for (players, expected) in [
-        (RelativePlayerSet::Controller, vec![ours, stolen]),
-        (RelativePlayerSet::Opponents, vec![opponent]),
-        (RelativePlayerSet::All, vec![ours, stolen, opponent]),
+        (MassPlayerSet::Controller, vec![ours, stolen]),
+        (MassPlayerSet::Opponents, vec![opponent]),
+        (MassPlayerSet::All, vec![ours, stolen, opponent]),
     ] {
         assert_eq!(
             scoped_battlefield_objects(&engine, 3, players, &filter, &[], &[]),
@@ -418,6 +418,32 @@ fn scopes_use_current_controllers_in_deterministic_battlefield_order() {
             .iter()
             .all(|oid| !engine.state.objects[oid].tapped));
     }
+}
+
+#[test]
+fn affected_player_mass_scope_selects_only_the_event_player() {
+    let mut engine = setup();
+    let controller_land = deploy(&mut engine, 0, "forest");
+    let affected_land = deploy(&mut engine, 1, "forest");
+    let other_land = deploy(&mut engine, 2, "forest");
+    let filter = TargetFilter {
+        kind: TargetKind::AnyPermanent,
+        permanent_types: vec![PermanentTypeFilter::Land],
+        ..Default::default()
+    };
+
+    let selected = scoped_battlefield_objects_with_affected_player(
+        &engine,
+        3,
+        MassPlayerSet::AffectedPlayer,
+        11,
+        &filter,
+        &[],
+        &[],
+    );
+    assert_eq!(selected, [affected_land]);
+    assert!(!selected.contains(&controller_land));
+    assert!(!selected.contains(&other_land));
 }
 
 #[test]
@@ -464,7 +490,7 @@ fn current_types_colors_and_protection_drive_untargeted_selection() {
     resolve(
         &mut engine,
         SpellEffectKind::TapAll {
-            players: RelativePlayerSet::All,
+            players: MassPlayerSet::All,
             filter,
         },
     );
@@ -507,7 +533,7 @@ fn overlapping_filters_and_no_ops_preserve_one_tap_action() {
         resolve(
             &mut engine,
             SpellEffectKind::TapAll {
-                players: RelativePlayerSet::Opponents,
+                players: MassPlayerSet::Opponents,
                 filter: filter.clone(),
             },
         );
@@ -521,7 +547,7 @@ fn overlapping_filters_and_no_ops_preserve_one_tap_action() {
     resolve(
         &mut engine,
         SpellEffectKind::TapAll {
-            players: RelativePlayerSet::Controller,
+            players: MassPlayerSet::Controller,
             filter,
         },
     );
@@ -559,7 +585,7 @@ fn filtered_untap_keeps_prohibition_and_stun_execution() {
     resolve(
         &mut engine,
         SpellEffectKind::UntapAll {
-            players: RelativePlayerSet::All,
+            players: MassPlayerSet::All,
             filter: filter.clone(),
         },
     );
@@ -577,7 +603,7 @@ fn filtered_untap_keeps_prohibition_and_stun_execution() {
     resolve(
         &mut engine,
         SpellEffectKind::UntapAll {
-            players: RelativePlayerSet::All,
+            players: MassPlayerSet::All,
             filter,
         },
     );

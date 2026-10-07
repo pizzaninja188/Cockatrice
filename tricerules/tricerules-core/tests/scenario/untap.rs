@@ -4,6 +4,7 @@
 //! `spell_effects.rs`.
 
 use crate::helpers::*;
+use tricerules_cards::MassPlayerSet;
 
 fn target(oid: u32) -> Vec<TargetRef> {
     vec![TargetRef {
@@ -372,7 +373,7 @@ fn zealous_display_has_a_complete_registered_definition() {
             },
             effect,
         } if matches!(effect.as_ref(), SpellEffectKind::UntapAll {
-            players: RelativePlayerSet::Controller,
+            players: MassPlayerSet::Controller,
             filter,
         } if filter.kind == tricerules_cards::primitives::TargetKind::Creature)
     ));

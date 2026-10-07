@@ -8,11 +8,11 @@ use tricerules_cards::primitives::{
     EntersTappedAffected, EntersWithCountersAffected, EntryCost, EventZone, FaceChangeAction,
     GameCondition, GraveyardAggregate, GraveyardDestination, GraveyardFilter, GraveyardOwner,
     HandCardAction, HandCardChooser, HandChoiceVisibility, LibraryPlacement, LifeAmount,
-    LifeChangeKind, ManaCostChoiceKind, ManaRetention, ObjectCastCostKind, ObjectContributionKind,
-    ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter, PlayerLifeAggregate,
-    PlayerQuantifier, PlayerRecipient, PowerComparison, PowerToughnessCharacteristic, PtScale,
-    PtScaleBasis, QuantityTerm, RelativePlayerSet, ResolutionBranchDef,
-    ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost,
+    LifeChangeKind, ManaCostChoiceKind, ManaRetention, MassPlayerSet, ObjectCastCostKind,
+    ObjectContributionKind, ObjectPaymentConstraint, PermanentEventFilter, PermanentTypeFilter,
+    PlayerLifeAggregate, PlayerQuantifier, PlayerRecipient, PowerComparison,
+    PowerToughnessCharacteristic, PtScale, PtScaleBasis, QuantityTerm, RelativePlayerSet,
+    ResolutionBranchDef, ResolutionBranchRequirement, ResolutionBranchSelection, ResolutionCost,
     ResolvingEffectDuration, ResolvingPermanentModifier, SearchDestination, SearchZoneSelection,
     SpellCastFilter, SpellCostModifier, SpellManaSpentComparison, StackSpellFilter,
     StaticAbilityDef, TargetController, TargetFilter, TargetGroupDef, TargetKind,
@@ -943,7 +943,7 @@ fn match_spell_source_damage_each_creature_two(
     (text == format!("{} deals 2 damage to each creature.", context.source_name)).then(|| {
         RecipeEmission::SpellEffect(SpellEffectKind::DamageAll {
             amount: Amount::Fixed(2),
-            players: RelativePlayerSet::All,
+            players: MassPlayerSet::All,
             kind: TargetFilter::default_creature(),
         })
     })
@@ -3191,7 +3191,7 @@ fn match_modal_source_damage_each_opponent_one(
         modal_mode(
             vec![SpellEffectKind::DamageAll {
                 amount: Amount::Fixed(1),
-                players: RelativePlayerSet::Opponents,
+                players: MassPlayerSet::Opponents,
                 kind: TargetFilter::default_creature(),
             }],
             None,
@@ -4084,7 +4084,7 @@ fn match_modal_source_damage_each_creature_three(
         modal_mode(
             vec![SpellEffectKind::DamageAll {
                 amount: Amount::Fixed(3),
-                players: RelativePlayerSet::All,
+                players: MassPlayerSet::All,
                 kind: TargetFilter::default_creature(),
             }],
             None,
@@ -4388,8 +4388,8 @@ fn targeted_mass_controller() -> CreatureScopeFilter {
     }
 }
 
-fn targeted_mass_players() -> RelativePlayerSet {
-    RelativePlayerSet::TargetedPlayer {
+fn targeted_mass_players() -> MassPlayerSet {
+    MassPlayerSet::TargetedPlayer {
         group_index: 0,
         kind: TargetKind::AnyPlayer,
     }
@@ -7110,7 +7110,7 @@ fn match_extinguisher_etb_destroy_then_damage(
                     },
                     SpellEffectKind::DamageAll {
                         amount: Amount::Fixed(4),
-                        players: RelativePlayerSet::All,
+                        players: MassPlayerSet::All,
                         kind: TargetFilter::default_creature(),
                     },
                 ],

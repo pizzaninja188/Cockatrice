@@ -407,7 +407,7 @@ fn all_is_dust_freezes_membership_before_a_color_granting_source_departs() {
 #[test]
 fn all_is_dust_mass_sacrifice_effect_tail_runs_once_after_the_last_owner_order() {
     use tricerules_cards::primitives::{TargetFilter, TargetKind};
-    use tricerules_cards::{Amount, RelativePlayerSet, SpellEffectKind, TriggerCondition};
+    use tricerules_cards::{Amount, MassPlayerSet, SpellEffectKind, TriggerCondition};
     let mut engine = setup();
     let source = inject_permanent_on_battlefield(&mut engine, 0, "sol_ring");
     for seat in 0..3 {
@@ -426,7 +426,7 @@ fn all_is_dust_mass_sacrifice_effect_tail_runs_once_after_the_last_owner_order()
     };
     ability.effect = vec![
         SpellEffectKind::SacrificeAll {
-            players: RelativePlayerSet::All,
+            players: MassPlayerSet::All,
             filter: TargetFilter {
                 kind: TargetKind::Creature,
                 ..Default::default()
@@ -609,7 +609,7 @@ fn all_is_dust_owner_order_survives_immediate_returning_aura_choice() {
 #[test]
 fn all_is_dust_immediate_aura_return_preserves_following_effect_tail() {
     use tricerules_cards::primitives::{TargetFilter, TargetKind};
-    use tricerules_cards::{Amount, RelativePlayerSet, SpellEffectKind, TriggerCondition};
+    use tricerules_cards::{Amount, MassPlayerSet, SpellEffectKind, TriggerCondition};
     let (mut engine, light, bear, recipient, aura, other) = immediate_aura_fixture();
     let source = inject_permanent_on_battlefield(&mut engine, 0, "sol_ring");
     grant_observer(
@@ -624,7 +624,7 @@ fn all_is_dust_immediate_aura_return_preserves_following_effect_tail() {
     };
     ability.effect = vec![
         SpellEffectKind::SacrificeAll {
-            players: RelativePlayerSet::All,
+            players: MassPlayerSet::All,
             filter: TargetFilter {
                 any_of: Some(vec![
                     TargetFilter {

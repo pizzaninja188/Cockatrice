@@ -2624,7 +2624,7 @@ fn mass_effect_rejects_controller_relative_filter() {
     .is_err());
     assert!(SpellEffectKind::DamageAll {
         amount: Amount::Fixed(2),
-        players: RelativePlayerSet::All,
+        players: MassPlayerSet::All,
         kind: scoped,
     }
     .validate(EffectContext::Spell)

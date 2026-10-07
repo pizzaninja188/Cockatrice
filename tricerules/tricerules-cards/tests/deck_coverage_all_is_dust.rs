@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{EffectContext, TargetController, TargetFilter, TargetKind};
-use tricerules_cards::{CardRegistry, Color, RelativePlayerSet, SpellEffectKind};
+use tricerules_cards::{CardRegistry, Color, MassPlayerSet, SpellEffectKind};
 
 #[test]
 fn all_is_dust_exact_printed_kindred_eldrazi_definition_and_five_color_union() {
@@ -14,7 +14,7 @@ fn all_is_dust_exact_printed_kindred_eldrazi_definition_and_five_color_union() {
     let [SpellEffectKind::SacrificeAll { players, filter }] = face.spell_effect.as_slice() else {
         panic!("exact single mass-sacrifice instruction")
     };
-    assert_eq!(*players, RelativePlayerSet::All);
+    assert_eq!(*players, MassPlayerSet::All);
     let colors = filter.any_of.as_ref().unwrap();
     assert_eq!(colors.len(), 5);
     for (leaf, color) in colors.iter().zip([
@@ -47,14 +47,14 @@ fn mass_sacrifice_rejects_player_and_relative_controller_filters() {
         },
     ] {
         assert!(SpellEffectKind::SacrificeAll {
-            players: RelativePlayerSet::All,
+            players: MassPlayerSet::All,
             filter
         }
         .validate(EffectContext::Spell)
         .is_err());
     }
     assert!(SpellEffectKind::SacrificeAll {
-        players: RelativePlayerSet::TargetedPlayer {
+        players: MassPlayerSet::TargetedPlayer {
             group_index: 0,
             kind: TargetKind::AnyPlayer
         },
@@ -66,7 +66,7 @@ fn mass_sacrifice_rejects_player_and_relative_controller_filters() {
     .validate(EffectContext::Spell)
     .is_ok());
     assert!(SpellEffectKind::SacrificeAll {
-        players: RelativePlayerSet::TargetedPlayer {
+        players: MassPlayerSet::TargetedPlayer {
             group_index: 0,
             kind: TargetKind::Creature
         },

@@ -244,6 +244,7 @@ fn enduring_curiosity_uses_generic_damage_and_type_setting_primitives() {
         TriggerCondition::WheneverCreatureDealsCombatDamageToPlayer {
             source_controller: CastTriggerPlayer::Controller,
             damaged_player: CastTriggerPlayer::AnyPlayer,
+            cardinality: tricerules_cards::CombatDamageTriggerCardinality::EachCreature,
         }
     );
     assert!(matches!(

@@ -700,6 +700,11 @@ pub enum TriggerCondition {
         source_controller: CastTriggerPlayer,
         #[serde(default = "any_player_trigger")]
         damaged_player: CastTriggerPlayer,
+        /// Whether this observer triggers for each combat-damage creature event or once per
+        /// damaged player across one simultaneous damage-step batch. Enduring Curiosity uses the
+        /// default; Nature's Will uses the grouped form.
+        #[serde(default)]
+        cardinality: CombatDamageTriggerCardinality,
     },
     /// Whenever this creature deals damage to an opponent, combat or non-combat (e.g. Thieving Magpie).
     WheneverSelfDealsDamageToOpponent,
@@ -1053,7 +1058,10 @@ impl TriggerCondition {
                 }
                 | Self::WheneverAttachedObjectDies
                 | Self::WheneverAttachedObjectDealsCombatDamageToPlayer
-                | Self::WheneverCreatureDealsCombatDamageToPlayer { .. }
+                | Self::WheneverCreatureDealsCombatDamageToPlayer {
+                    cardinality: CombatDamageTriggerCardinality::EachCreature,
+                    ..
+                }
                 | Self::WheneverAttachedObjectIsDealtDamage
                 | Self::WheneverControllerAttacks {
                     min_attackers: Some(1),
@@ -1102,6 +1110,18 @@ impl TriggerCondition {
                 | Self::WheneverSpellBecomesTarget { .. }
         )
     }
+}
+
+/// Trigger cardinality for "one or more creatures you control deal combat damage to a player"
+/// abilities. The grouped form is deduplicated by damaged player within one damage-step event
+/// batch; a later first-strike or regular-damage batch can trigger again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum CombatDamageTriggerCardinality {
+    /// One trigger for each qualifying creature damage event (Enduring Curiosity, Ohran Frostfang).
+    #[default]
+    EachCreature,
+    /// One trigger for each damaged player per simultaneous damage batch (Nature's Will).
+    OneOrMorePerDamagedPlayer,
 }
 
 /// Derived creature characteristics captured by a discrete trigger event. Keyword and power
@@ -2445,5 +2465,47 @@ mod source_copy_tests {
                 "source copy needs battlefield identity"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod combat_damage_trigger_cardinality_tests {
+    use super::*;
+    use crate::primitives::EffectSubject;
+
+    #[test]
+    fn grouped_combat_damage_trigger_does_not_supply_a_singular_trigger_object() {
+        let grouped = TriggerCondition::WheneverCreatureDealsCombatDamageToPlayer {
+            source_controller: CastTriggerPlayer::Controller,
+            damaged_player: CastTriggerPlayer::AnyPlayer,
+            cardinality: CombatDamageTriggerCardinality::OneOrMorePerDamagedPlayer,
+        };
+        assert!(!grouped.supplies_trigger_object());
+
+        let each_creature = TriggerCondition::WheneverCreatureDealsCombatDamageToPlayer {
+            source_controller: CastTriggerPlayer::Controller,
+            damaged_player: CastTriggerPlayer::AnyPlayer,
+            cardinality: CombatDamageTriggerCardinality::EachCreature,
+        };
+        assert!(each_creature.supplies_trigger_object());
+
+        let ability = TriggeredAbilityDef {
+            ability_id: AbilityId::new("triggered_probe").unwrap(),
+            presentation: AbilityPresentation::Fallback,
+            trigger: grouped,
+            effect: vec![SpellEffectKind::Destroy {
+                subject: EffectSubject::TriggerObject,
+            }],
+            modal: None,
+            targeting: None,
+            may: false,
+            intervening_if: None,
+            triggers_only_once: false,
+            max_triggers_per_turn: None,
+        };
+        assert!(ability
+            .validate_shape()
+            .unwrap_err()
+            .contains("trigger-object effect"));
     }
 }

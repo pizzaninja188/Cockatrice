@@ -1,0 +1,50 @@
+{
+  "format_version": 1,
+  "oracle_id": "9837287b-d821-4655-8f01-93fc6c7f0ecc",
+  "spans": [
+    {
+      "face_id": "natures_will",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverCreatureDealsCombatDamageToPlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "CombatDamageTriggerCardinality::OneOrMorePerDamagedPlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverCreatureDealsCombatDamageToPlayer/cardinality"
+    },
+    {
+      "symbol": "MassPlayerSet::AffectedPlayer",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/TapAll/players"
+    },
+    {
+      "symbol": "SpellEffectKind::TapAll",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "MassPlayerSet::Controller",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1/UntapAll/players"
+    },
+    {
+      "symbol": "SpellEffectKind::UntapAll",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "deck_coverage_natures_will::nature_s_will_registers_its_grouped_combat_damage_ability",
+      "covers": "exact identity, printed characteristics, Oracle line mapping, grouped damaged-player trigger cardinality, and the ordered land tap/untap effects"
+    },
+    {
+      "test": "scenario deck_coverage_natures_will::groups_by_damaged_player_and_resets_between_first_and_regular_damage_steps",
+      "covers": "four-player combat groups two simultaneous creatures to one player into one Nature's Will trigger, preserves separate first-strike and regular-damage triggers, keeps Enduring Curiosity per creature, and applies land changes only to each affected player and the controller"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -1,6 +1,4 @@
-use tricerules_cards::primitives::{
-    EffectContext, RelativePlayerSet, SpellEffectKind, TargetFilter,
-};
+use tricerules_cards::primitives::{EffectContext, MassPlayerSet, SpellEffectKind, TargetFilter};
 
 #[test]
 fn filtered_mass_tap_loads_and_validates() {
@@ -22,7 +20,7 @@ fn mass_tap_defaults_to_creatures_without_retaining_the_old_variant() {
     assert_eq!(
         effect,
         SpellEffectKind::TapAll {
-            players: RelativePlayerSet::Controller,
+            players: MassPlayerSet::Controller,
             filter: TargetFilter::default_creature(),
         }
     );

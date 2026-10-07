@@ -1,5 +1,5 @@
 use tricerules_cards::primitives::{
-    BattlefieldPermanentFilter, CardTypeFilter, RelativePlayerSet, TargetFilter,
+    BattlefieldPermanentFilter, CardTypeFilter, MassPlayerSet, RelativePlayerSet, TargetFilter,
 };
 use tricerules_cards::{
     Amount, BattlefieldAggregate, CardRegistry, Color, Layout, SpellCostModifier, SpellEffectKind,
@@ -25,7 +25,7 @@ fn creature_board_wipe_cards_have_complete_typed_definitions() {
         face.spell_effect,
         [SpellEffectKind::DamageAll {
             amount: Amount::Fixed(13),
-            players: RelativePlayerSet::All,
+            players: MassPlayerSet::All,
             kind: TargetFilter::default_creature(),
         }]
     );

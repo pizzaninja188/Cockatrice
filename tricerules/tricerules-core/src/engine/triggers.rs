@@ -450,6 +450,7 @@ impl GameEngine {
 
         let mut collected = Vec::new();
         let mut grouped_taps = HashSet::new();
+        let mut grouped_combat_damage = HashSet::new();
         for event in events {
             let trigger_player = Self::trigger_player_for(event);
             let event_sources = match event {
@@ -565,6 +566,33 @@ impl GameEngine {
                         Some(trigger.source_zone_change),
                         Some(&trigger.trigger_context),
                     )
+            });
+            event_triggers.retain(|trigger| {
+                if !matches!(
+                    trigger.ability.trigger,
+                    TriggerCondition::WheneverCreatureDealsCombatDamageToPlayer {
+                        cardinality: CombatDamageTriggerCardinality::OneOrMorePerDamagedPlayer,
+                        ..
+                    }
+                ) {
+                    return true;
+                }
+                let affected_player = trigger
+                    .trigger_context
+                    .affected_player
+                    .expect("combat-damage trigger records its damaged player");
+                let ability_origin = trigger
+                    .ability_origin
+                    .clone()
+                    .expect("battlefield ability origin");
+                grouped_combat_damage.insert((
+                    TriggerUseKey {
+                        object_id: trigger.source_id,
+                        zone_change_generation: trigger.source_zone_change,
+                        ability_origin,
+                    },
+                    affected_player,
+                ))
             });
             collected.extend(event_triggers);
         }
@@ -1563,6 +1591,7 @@ impl GameEngine {
                                         let TriggerCondition::WheneverCreatureDealsCombatDamageToPlayer {
                                             source_controller,
                                             damaged_player,
+                                            ..
                                         } = condition
                                         else {
                                             return false;
@@ -1578,7 +1607,15 @@ impl GameEngine {
                                         )
                                     });
                                 for trigger in &mut matching {
-                                    trigger.trigger_context.observed_object = Some(source_ref);
+                                    if matches!(
+                                        trigger.ability.trigger,
+                                        TriggerCondition::WheneverCreatureDealsCombatDamageToPlayer {
+                                            cardinality: CombatDamageTriggerCardinality::EachCreature,
+                                            ..
+                                        }
+                                    ) {
+                                        trigger.trigger_context.observed_object = Some(source_ref);
+                                    }
                                     trigger.trigger_context.affected_player = Some(defender_id);
                                 }
                                 out.extend(matching);
@@ -3749,6 +3786,7 @@ mod tests {
             TriggerCondition::WheneverCreatureDealsCombatDamageToPlayer {
                 source_controller: CastTriggerPlayer::AnyPlayer,
                 damaged_player: CastTriggerPlayer::Opponent,
+                cardinality: CombatDamageTriggerCardinality::EachCreature,
             };
         for damaged_player in [0, 1, 2] {
             assert_eq!(
