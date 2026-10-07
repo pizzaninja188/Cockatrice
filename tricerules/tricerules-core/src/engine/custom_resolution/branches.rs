@@ -61,14 +61,18 @@ impl GameEngine {
                     resolution_branches: Vec::new(),
                     unique_names: false,
                     generic_mana_cost: payment.generic_mana_cost,
-                    payment_currently_legal: if payment.mana_cost.pips.is_empty() {
-                        self.can_pay_generic_mana(
-                            pending.deciding_player,
-                            payment.generic_mana_cost,
-                        )
-                    } else {
-                        self.can_pay_resolution_mana(pending.deciding_player, &payment.mana_cost)
-                    },
+                    payment_currently_legal: payment.variable_mana_contribution
+                        || if payment.mana_cost.pips.is_empty() {
+                            self.can_pay_generic_mana(
+                                pending.deciding_player,
+                                payment.generic_mana_cost,
+                            )
+                        } else {
+                            self.can_pay_resolution_mana(
+                                pending.deciding_player,
+                                &payment.mana_cost,
+                            )
+                        },
                     mana_cost: payment.mana_cost.to_string(),
                     public_reveal: None,
                     candidate_source_zones: Vec::new(),
@@ -77,6 +81,7 @@ impl GameEngine {
                     selection_slots: Vec::new(),
                     replacement_options: Vec::new(),
                     selection_alternatives: Vec::new(),
+                    variable_mana_contribution: payment.variable_mana_contribution,
                 },
             )),
         })
@@ -523,6 +528,7 @@ impl GameEngine {
                 ev.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                         rv1::ResolutionChoiceRequired {
+                            variable_mana_contribution: false,
                             candidate_token_identities: Vec::new(),
                             candidate_player_ids: Vec::new(),
                             deciding_player_id: pending.deciding_player,

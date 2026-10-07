@@ -638,6 +638,8 @@ public:
         quint32 paymentSourceOid = 0;
         bool paymentCurrentlyLegal = false;
         QString manaCost;
+        /// Variable Join Forces-style payment; zero is legal and the player explicitly confirms.
+        bool variableManaContribution = false;
 
         // --- Labeled prompt options ---------------------------------------------------
         QVector<RuledChoiceOption> choiceOptions;
@@ -1842,6 +1844,10 @@ public:
     {
         return isResolutionPaymentActive() && pendingChoice->waterbend;
     }
+    [[nodiscard]] bool isVariableManaContribution() const
+    {
+        return isResolutionPaymentActive() && pendingChoice->variableManaContribution;
+    }
     [[nodiscard]] int resolutionPaymentGenericCost() const
     {
         return isResolutionPaymentActive() ? pendingChoice->genericManaCost : 0;
@@ -1858,10 +1864,13 @@ public:
     }
     [[nodiscard]] bool resolutionPaymentCurrentlyLegal() const
     {
-        return isResolutionPaymentActive() &&
-               (pendingChoice->waterbend ? payment.active && !payment.pending && payment.view.valid() &&
-                                               payment.view.complete() && !payment.view.selection_changed()
-                                         : pendingChoice->paymentCurrentlyLegal);
+        if (!isResolutionPaymentActive())
+            return false;
+        if (pendingChoice->waterbend || pendingChoice->variableManaContribution) {
+            return payment.active && !payment.pending && payment.view.valid() && payment.view.complete() &&
+                   !payment.view.selection_changed();
+        }
+        return pendingChoice->paymentCurrentlyLegal;
     }
     [[nodiscard]] QString resolutionPaymentPromptText() const
     {

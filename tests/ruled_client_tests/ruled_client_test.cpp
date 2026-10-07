@@ -784,6 +784,49 @@ TEST_F(RuledClientTest, CompletingPaymentReleasesQueuedSurplusMana)
     EXPECT_TRUE(payment.takeRetiredOptimisticManaCounterIds().isEmpty());
 }
 
+TEST_F(RuledClientTest, VariableContributionDrainsClicksQueuedAcrossDelayedPreviews)
+{
+    RuledPayment payment;
+    payment.begin();
+    ASSERT_TRUE(payment.stageMana('U', 0, 11));
+    const auto firstRequest = payment.request({});
+    ASSERT_TRUE(payment.pending);
+    ASSERT_TRUE(payment.stageMana('G', 0, 12));
+    ASSERT_TRUE(payment.stageMana('R', 0, 13));
+    ASSERT_EQ(payment.queuedMana.size(), 2);
+
+    const auto previewFor = [](const ruled::v1::PreviewPayment &request) {
+        ruled::v1::PaymentPreview preview;
+        preview.set_transaction_id(request.transaction_id());
+        preview.set_revision(request.revision());
+        preview.set_valid(true);
+        preview.set_complete(true);
+        *preview.mutable_selection() = request.cast_spell().payment();
+        return preview;
+    };
+    ASSERT_TRUE(payment.apply(previewFor(firstRequest)));
+
+    EXPECT_EQ(payment.nextPreviewAction(false), RuledPayment::PreviewAction::DrainQueuedMana);
+    auto queued = payment.queuedMana.takeFirst();
+    ASSERT_TRUE(payment.payMana(queued.symbol, queued.groupId, queued.counterId));
+    const auto secondRequest = payment.request({});
+    ASSERT_EQ(payment.queuedMana.size(), 1);
+    ASSERT_TRUE(payment.apply(previewFor(secondRequest)));
+
+    EXPECT_EQ(payment.nextPreviewAction(false), RuledPayment::PreviewAction::DrainQueuedMana);
+    queued = payment.queuedMana.takeFirst();
+    ASSERT_TRUE(payment.payMana(queued.symbol, queued.groupId, queued.counterId));
+    const auto thirdRequest = payment.request({});
+    ASSERT_TRUE(payment.queuedMana.isEmpty());
+    ASSERT_TRUE(payment.apply(previewFor(thirdRequest)));
+
+    EXPECT_EQ(payment.nextPreviewAction(false), RuledPayment::PreviewAction::None);
+    EXPECT_FALSE(payment.submitting) << "variable contributions require explicit confirmation";
+    EXPECT_EQ(payment.selection.mana().u(), 1u);
+    EXPECT_EQ(payment.selection.mana().g(), 1u);
+    EXPECT_EQ(payment.selection.mana().r(), 1u);
+}
+
 TEST_F(RuledClientTest, ProducedManaWithoutAPaymentRecipientRemainsFloating)
 {
     RuledPayment payment;
@@ -5482,6 +5525,55 @@ TEST_F(RuledClientTest, ManaPaymentChoiceCreatesRefreshesAndSerializesDecisions)
     EXPECT_EQ(host.sentCommands.last().submit_resolution_choice().chosen_object_ids_size(), 0);
     EXPECT_FALSE(state->isResolutionPaymentActive());
     host.answerPendingAck(true);
+}
+
+TEST_F(RuledClientTest, VariableManaContributionWaitsForPreviewAndCanExplicitlyPayZero)
+{
+    ruled::v1::RuledEventBatch batch;
+    auto *rcr = batch.add_events()->mutable_resolution_choice_required();
+    rcr->set_deciding_player_id(kLocalPlayer);
+    rcr->set_choice_kind(ruled::v1::CHOICE_KIND_MANA_PAYMENT);
+    rcr->set_prompt_text("Choose any amount of mana to contribute.");
+    rcr->set_payment_currently_legal(true);
+    rcr->set_variable_mana_contribution(true);
+    apply(batch);
+
+    ASSERT_TRUE(state->isResolutionPaymentActive());
+    EXPECT_TRUE(state->isVariableManaContribution());
+    EXPECT_FALSE(state->resolutionPaymentCurrentlyLegal());
+    state->declineResolutionMana();
+    state->payResolutionMana();
+    EXPECT_TRUE(host.sentCommands.isEmpty());
+
+    state->payment.begin(true);
+    ruled::v1::RuledCommand requestCommand;
+    requestCommand.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+    const auto request = state->payment.requestAction(requestCommand);
+    ruled::v1::RuledEventBatch previewBatch;
+    auto *preview = previewBatch.mutable_payment_preview();
+    preview->set_transaction_id(request.transaction_id());
+    preview->set_revision(request.revision());
+    preview->set_valid(true);
+    preview->set_complete(true);
+    preview->set_total_cost("{0}");
+    preview->set_remaining_cost("{0}");
+    apply(previewBatch);
+
+    ASSERT_TRUE(state->resolutionPaymentCurrentlyLegal());
+    state->payResolutionMana();
+    ASSERT_EQ(host.sentCommands.size(), 1);
+    const auto &submitted = host.sentCommands.last().submit_resolution_choice();
+    EXPECT_EQ(submitted.decision(), ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+    EXPECT_EQ(submitted.payment().mana().w() + submitted.payment().mana().u() + submitted.payment().mana().b() +
+                  submitted.payment().mana().r() + submitted.payment().mana().g() + submitted.payment().mana().c(),
+              0u);
+    EXPECT_TRUE(state->payment.submitting);
+
+    host.answerPendingAck(false);
+    EXPECT_TRUE(state->isResolutionPaymentActive());
+    EXPECT_TRUE(state->isVariableManaContribution());
+    EXPECT_FALSE(state->payment.submitting);
+    EXPECT_TRUE(state->payment.pending);
 }
 
 TEST_F(RuledClientTest, RejectedManaPaymentRestoresThePrompt)

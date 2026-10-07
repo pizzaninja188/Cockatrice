@@ -76,6 +76,7 @@ pub(super) fn execute_effect(
         }
         SpellEffectKind::MyrBattlesphereAttack => damage::myr_battlesphere_attack(cx)?,
         effect @ SpellEffectKind::Draw { .. } => zones::draw(cx, effect)?,
+        SpellEffectKind::JoinForces => join_forces::begin(cx)?,
         effect @ SpellEffectKind::TargetPlayerDraws { .. } => {
             zones::target_player_draws(cx, effect)?
         }

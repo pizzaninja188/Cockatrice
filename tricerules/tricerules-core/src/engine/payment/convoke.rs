@@ -10,6 +10,27 @@ pub(in crate::engine) fn mana_counts(mana: Option<&rv1::PaymentMana>) -> [u32; 6
     mana.map_or([0; 6], |m| [m.w, m.u, m.b, m.r, m.g, m.c])
 }
 
+pub(in crate::engine) fn selected_mana_total(
+    mana: Option<&rv1::PaymentMana>,
+    restricted: &[rv1::ManaSpendSelection],
+) -> Result<u32, EngineError> {
+    let total = mana_counts(mana)
+        .into_iter()
+        .chain(restricted.iter().flat_map(|selection| {
+            [
+                selection.w,
+                selection.u,
+                selection.b,
+                selection.r,
+                selection.g,
+                selection.c,
+            ]
+        }))
+        .try_fold(0u64, |total, amount| total.checked_add(u64::from(amount)))
+        .ok_or(EngineError::Illegal("payment overflow"))?;
+    u32::try_from(total).map_err(|_| EngineError::Illegal("payment overflow"))
+}
+
 fn mana_message(v: [u32; 6]) -> rv1::PaymentMana {
     rv1::PaymentMana {
         w: v[0],
@@ -284,14 +305,39 @@ impl GameEngine {
             if pending.deciding_player != player
                 || command.decision != rv1::ResolutionChoiceDecision::PayMana as i32
                 || !command.chosen_object_ids.is_empty()
+                || !command.chosen_player_ids.is_empty()
+                || command.selected_branch_index != 0
                 || command.cast_spell.is_some()
                 || command.spell_cast_announcement.is_some()
                 || command.chosen_combat_defender.is_some()
             {
                 return Err(EngineError::Illegal("invalid resolution payment proposal"));
             }
+            if payment.variable_mana_contribution
+                && command.payment.as_ref().is_some_and(|selection| {
+                    !selection.convoke.is_empty() || !selection.waterbend.is_empty()
+                })
+            {
+                return Err(EngineError::Illegal(
+                    "Join Forces accepts mana contributions only",
+                ));
+            }
+            let mut prepared =
+                self.prepare_resolution_payment_costs(player, payment, &command.restricted_mana)?;
+            if payment.variable_mana_contribution {
+                let amount = selected_mana_total(
+                    command
+                        .payment
+                        .as_ref()
+                        .and_then(|selection| selection.mana.as_ref()),
+                    &command.restricted_mana,
+                )?;
+                prepared.mana = ManaCost {
+                    pips: vec![tricerules_cards::mana::ManaSymbol::Generic(amount)],
+                };
+            }
             (
-                self.prepare_resolution_payment_costs(player, payment, &command.restricted_mana)?,
+                prepared,
                 self.payment_object_ref(pending.presentation.source_object_id),
                 command.payment.clone().unwrap_or_default(),
                 false,

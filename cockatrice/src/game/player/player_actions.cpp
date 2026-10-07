@@ -306,6 +306,11 @@ void PlayerActions::declineRuledResolutionPayment()
     ruledPayment->declineRuledResolutionPayment();
 }
 
+void PlayerActions::clearVariableManaContributionSelection()
+{
+    ruledPayment->clearVariableManaContributionSelection();
+}
+
 void PlayerActions::finishRuledResolutionPaymentSubmission(bool accepted)
 {
     ruledPayment->finishRuledResolutionPaymentSubmission(accepted);

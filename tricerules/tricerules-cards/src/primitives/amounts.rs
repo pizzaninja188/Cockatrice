@@ -112,6 +112,9 @@ pub enum CountExpression {
     /// Mill result. This is deliberately a fieldless result consumer: its valid source, action,
     /// and player are fixed by the sibling-effect contract.
     PreviousMillManaValueSum,
+    /// Minds Aglow reads the checked total accepted by the immediately preceding Join Forces
+    /// contribution instruction. The total is captured from committed payment selections.
+    PreviousJoinForcesManaPaid,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -224,6 +227,7 @@ impl CountExpression {
                                 | Self::MaximumCardsMatchingResult { .. }
                                 | Self::CardResultCharacteristicSum { .. }
                                 | Self::PreviousMillManaValueSum
+                                | Self::PreviousJoinForcesManaPaid
                         )
                     {
                         return Err("affine quantity requires nonzero coefficients and public, non-affine leaves".into());
@@ -243,7 +247,8 @@ impl CountExpression {
             | CountExpression::CardsMatchingResultForAffectedPlayer { .. }
             | CountExpression::MaximumCardsMatchingResult { .. }
             | CountExpression::CardResultCharacteristicSum { .. }
-            | CountExpression::PreviousMillManaValueSum => Ok(()),
+            | CountExpression::PreviousMillManaValueSum
+            | CountExpression::PreviousJoinForcesManaPaid => Ok(()),
         }
     }
 
@@ -253,6 +258,16 @@ impl CountExpression {
             Self::Affine { terms, .. } => terms
                 .iter()
                 .any(|term| term.quantity.uses_previous_mill_mana_value_sum()),
+            _ => false,
+        }
+    }
+
+    fn uses_previous_join_forces_mana_paid(&self) -> bool {
+        match self {
+            Self::PreviousJoinForcesManaPaid => true,
+            Self::Affine { terms, .. } => terms
+                .iter()
+                .any(|term| term.quantity.uses_previous_join_forces_mana_paid()),
             _ => false,
         }
     }
@@ -318,6 +333,14 @@ impl Amount {
         }
     }
 
+    pub(crate) fn uses_previous_join_forces_mana_paid(&self) -> bool {
+        match self {
+            Self::Count(expression) => expression.uses_previous_join_forces_mana_paid(),
+            Self::DivideRoundedDown { amount, .. } => amount.uses_previous_join_forces_mana_paid(),
+            _ => false,
+        }
+    }
+
     pub(crate) fn uses_affected_player_result(&self) -> bool {
         match self {
             Self::Count(CountExpression::CardsMatchingResultForAffectedPlayer { .. }) => true,
@@ -348,6 +371,11 @@ impl Amount {
         if self.uses_previous_mill_mana_value_sum() {
             return Err(
                 "PreviousMillManaValueSum requires an immediate controller Mill result".into(),
+            );
+        }
+        if self.uses_previous_join_forces_mana_paid() {
+            return Err(
+                "PreviousJoinForcesManaPaid requires an immediate JoinForces result".into(),
             );
         }
         if self.uses_entry_cast_colors() || self.entry_cast_cost_reference().is_some() {
@@ -452,6 +480,11 @@ impl Amount {
         if self.uses_previous_mill_mana_value_sum() {
             return Err(
                 "PreviousMillManaValueSum requires an immediate controller Mill result".into(),
+            );
+        }
+        if self.uses_previous_join_forces_mana_paid() {
+            return Err(
+                "PreviousJoinForcesManaPaid requires an immediate JoinForces result".into(),
             );
         }
         if self.uses_affected_player_result() {

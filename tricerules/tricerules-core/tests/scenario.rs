@@ -142,6 +142,9 @@ mod deck_coverage_teferi_temporal_pilgrim;
 #[path = "scenario/deck_coverage_wizard_class.rs"]
 mod deck_coverage_wizard_class;
 
+#[path = "scenario/deck_coverage_minds_aglow.rs"]
+mod deck_coverage_minds_aglow;
+
 #[path = "scenario/deck_coverage_garruks_uprising.rs"]
 mod deck_coverage_garruks_uprising;
 

@@ -130,6 +130,12 @@ impl GameEngine {
                     // requests for departed drawers without resurrecting the departed source.
                     preserve = true;
                 }
+                ResolutionContinuation::JoinForces { .. } => {
+                    // Each choice is part of one effect that already began resolving. The
+                    // current payer's departure contributes zero, while the frozen payer order
+                    // and all earlier contributions remain committed (CR 800.4f, 608.2m).
+                    preserve = true;
+                }
                 ResolutionContinuation::MassSacrificeGraveyardOrder { stack, .. }
                 | ResolutionContinuation::AuraReturn { stack, .. } => {
                     *stack = None;
@@ -506,6 +512,7 @@ impl GameEngine {
         self.refresh_entry_opponent_departure(&departed_objects, events)?;
         self.refresh_authored_branch_departure(events)?;
         self.refresh_targeted_player_permanent_choice_departure(events)?;
+        self.advance_departed_join_forces_payer(events)?;
         self.flush_staged_triggers(events);
         Ok(())
     }

@@ -189,6 +189,18 @@ GamePromptWidget::GamePromptWidget(QWidget *parent) : QWidget(parent)
     auto *resolutionPaymentRow = new QHBoxLayout;
     resolutionPaymentRow->setContentsMargins(0, 0, 0, 0);
     resolutionPaymentRow->setSpacing(4);
+    resolutionPaymentConfirmButton = new QPushButton(this);
+    resolutionPaymentConfirmButton->setObjectName("resolutionPaymentConfirmButton");
+    resolutionPaymentConfirmButton->hide();
+    connect(resolutionPaymentConfirmButton, &QPushButton::clicked, this,
+            &GamePromptWidget::ruledResolutionPaymentConfirmRequested);
+    resolutionPaymentRow->addWidget(resolutionPaymentConfirmButton);
+    resolutionPaymentClearButton = new QPushButton(this);
+    resolutionPaymentClearButton->setObjectName("resolutionPaymentClearButton");
+    resolutionPaymentClearButton->hide();
+    connect(resolutionPaymentClearButton, &QPushButton::clicked, this,
+            &GamePromptWidget::ruledResolutionPaymentClearRequested);
+    resolutionPaymentRow->addWidget(resolutionPaymentClearButton);
     resolutionPaymentDeclineButton = new QPushButton(this);
     resolutionPaymentDeclineButton->setObjectName("resolutionPaymentDeclineButton");
     resolutionPaymentDeclineButton->hide();
@@ -333,6 +345,8 @@ void GamePromptWidget::retranslateUi()
     openingBottomCancelButton->setText(tr("Cancel"));
     openingBottomDoneButton->setText(tr("Done"));
     resolutionHandPickConfirmButton->setText(tr("Confirm"));
+    resolutionPaymentConfirmButton->setText(tr("Confirm Contribution"));
+    resolutionPaymentClearButton->setText(tr("Clear Contribution"));
     resolutionPaymentDeclineButton->setText(tr("Decline"));
     zoneSelectionHandCheckBox->setText(tr("Hand"));
     zoneSelectionGraveyardCheckBox->setText(tr("Graveyard"));
@@ -792,7 +806,14 @@ void GamePromptWidget::updateCombatButtonsVisibility()
     openingBottomDoneButton->setVisible(mode == PromptMode::OpeningBottom && promptState.required > 0 &&
                                         promptState.selected == promptState.required);
     resolutionHandPickConfirmButton->setVisible(mode == PromptMode::ResolutionPick || mode == PromptMode::CostSelection);
-    resolutionPaymentDeclineButton->setVisible(mode == PromptMode::ResolutionPayment);
+    resolutionPaymentConfirmButton->setVisible(mode == PromptMode::ResolutionPayment &&
+                                                promptState.variableManaContribution);
+    resolutionPaymentConfirmButton->setEnabled(promptState.variableManaContribution &&
+                                               promptState.paymentCurrentlyLegal);
+    resolutionPaymentClearButton->setVisible(mode == PromptMode::ResolutionPayment &&
+                                             promptState.variableManaContribution);
+    resolutionPaymentDeclineButton->setVisible(mode == PromptMode::ResolutionPayment &&
+                                               !promptState.variableManaContribution);
     for (auto *button : choiceOptionButtons) {
         button->setVisible(mode == PromptMode::ChoiceOptions || mode == PromptMode::CastCostOptions || mode == PromptMode::AbilityAnnouncement);
     }
@@ -818,7 +839,14 @@ void GamePromptWidget::updateCombatButtonsVisibility()
               mode == PromptMode::ResolutionPick || mode == PromptMode::CostSelection ||
               mode == PromptMode::ZoneSelection) &&
              promptState.canDecline));
-        resolutionPaymentDeclineButton->setVisible(mode == PromptMode::ResolutionPayment);
+        resolutionPaymentConfirmButton->setVisible(mode == PromptMode::ResolutionPayment &&
+                                                   promptState.variableManaContribution);
+        resolutionPaymentConfirmButton->setEnabled(promptState.variableManaContribution &&
+                                                   promptState.paymentCurrentlyLegal);
+        resolutionPaymentClearButton->setVisible(mode == PromptMode::ResolutionPayment &&
+                                                 promptState.variableManaContribution);
+        resolutionPaymentDeclineButton->setVisible(mode == PromptMode::ResolutionPayment &&
+                                                   !promptState.variableManaContribution);
         undoLandTapButton->setVisible((mode == PromptMode::ResolutionPayment ||
                                       (mode == PromptMode::AbilityAnnouncement && promptState.activationPayment)) && landTapUndoAvailable);
         confirmTargetsButton->setText(
@@ -1036,6 +1064,7 @@ QJsonObject GamePromptWidget::diagnosticSnapshot() const
                        {"can_decline", promptState.canDecline},
                        {"can_cancel", promptState.canCancel},
                        {"payment_currently_legal", promptState.paymentCurrentlyLegal},
+                       {"variable_mana_contribution", promptState.variableManaContribution},
                        {"generic_mana_cost", promptState.genericManaCost},
                        {"targeting_sources", static_cast<int>(targetingSources)},
                        {"targeting_text", targetingPromptText},

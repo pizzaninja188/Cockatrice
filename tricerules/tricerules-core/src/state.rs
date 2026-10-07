@@ -146,6 +146,8 @@ pub(crate) struct EffectResult {
     pub cards: Vec<CardResultEntry>,
     pub produced_objects: Vec<TriggerObjectRef>,
     pub receipt: Option<ResolutionReceipt>,
+    /// Total mana committed by an immediately preceding Join Forces instruction.
+    pub mana_paid: Option<u32>,
     pub counter_placements: Vec<CounterPlacementReceipt>,
     /// Controller of a legal stack target at the counter instruction, before any stack exit.
     pub targeted_spell_controller: Option<PlayerId>,
@@ -190,6 +192,7 @@ impl From<CardResultCohort> for EffectResult {
             cards: cohort.cards,
             produced_objects: Vec::new(),
             receipt: None,
+            mana_paid: None,
             counter_placements: Vec::new(),
             targeted_spell_controller: None,
             targeted_player_control_cohort: None,
@@ -924,6 +927,8 @@ pub struct PendingTrigger {
 pub struct PendingManaPayment {
     /// Waterbending Lesson shares staged mana/object payment with activated Waterbend costs.
     pub waterbend: bool,
+    /// Join Forces accepts any exact selected mana amount instead of a fixed cost.
+    pub variable_mana_contribution: bool,
     /// Stack object the resolving soft counter will counter if the player declines.
     pub target_spell_id: ObjectId,
     /// Pure generic cost, staged by the client's mana-pip picker.
@@ -959,6 +964,7 @@ impl PendingManaPayment {
         Self {
             target_spell_id,
             waterbend: false,
+            variable_mana_contribution: false,
             generic_mana_cost,
             mana_cost,
             undo_history_start,
@@ -1114,6 +1120,15 @@ pub enum ResolutionContinuation {
     ManaPayment {
         stack: ParkedStackResolution,
         payment: PendingManaPayment,
+    },
+    /// Sequential Join Forces contributions retain the original player order and checked total
+    /// while the shared resolution remains parked between individual payers.
+    JoinForces {
+        stack: ParkedStackResolution,
+        payment: PendingManaPayment,
+        payer_order: Vec<PlayerId>,
+        next_payer: usize,
+        total_paid: u32,
     },
     AuthoredBranch {
         stack: ParkedStackResolution,
@@ -1357,6 +1372,7 @@ impl ResolutionContinuation {
             Self::DiscardReplacement { stack }
             | Self::Custom { stack, .. }
             | Self::ManaPayment { stack, .. }
+            | Self::JoinForces { stack, .. }
             | Self::AuthoredBranch { stack, .. }
             | Self::PermanentChoice { stack, .. }
             | Self::TargetedPlayerPermanentChoice { stack, .. }
@@ -1407,6 +1423,7 @@ impl ResolutionContinuation {
             Self::DiscardReplacement { stack }
             | Self::Custom { stack, .. }
             | Self::ManaPayment { stack, .. }
+            | Self::JoinForces { stack, .. }
             | Self::AuthoredBranch { stack, .. }
             | Self::PermanentChoice { stack, .. }
             | Self::TargetedPlayerPermanentChoice { stack, .. }
@@ -1465,6 +1482,7 @@ impl ResolutionContinuation {
     pub fn mana_payment(&self) -> Option<&PendingManaPayment> {
         match self {
             Self::ManaPayment { payment, .. } => Some(payment),
+            Self::JoinForces { payment, .. } => Some(payment),
             Self::AuthoredBranch {
                 branch:
                     PendingResolutionBranch {

@@ -42,6 +42,7 @@ mod destruction;
 #[cfg(test)]
 mod destruction_tests;
 mod dispatch;
+mod join_forces;
 /// `pub(super)` so the combat damage step can reach `life::apply_life_gain` — lifelink is the one
 /// life-gain edge outside stack resolution, and it must go through the same funnel.
 pub(super) mod life;
@@ -1947,6 +1948,7 @@ impl GameEngine {
                 events.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                         rv1::ResolutionChoiceRequired {
+                            variable_mana_contribution: false,
                             candidate_token_identities: Vec::new(),
                             candidate_player_ids: Vec::new(),
                             deciding_player_id: owner,

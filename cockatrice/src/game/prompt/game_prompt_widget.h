@@ -121,6 +121,8 @@ public:
         quint64 activationTransactionId = 0;
         quint64 activationRevision = 0;
         bool activationPayment = false;
+        /// A resolving effect accepts any amount, including zero; the player must confirm it.
+        bool variableManaContribution = false;
     };
 
     /// Independent async inputs that all mean "mid-cast / mid-activation" and OR into
@@ -209,6 +211,8 @@ signals:
     void ruledResolutionHandPickConfirmRequested();
     void ruledCostSelectionConfirmRequested();
     void ruledCostSelectionCancelRequested();
+    void ruledResolutionPaymentConfirmRequested();
+    void ruledResolutionPaymentClearRequested();
     void ruledResolutionPaymentDeclineRequested();
     void ruledChoiceOptionRequested(int optionIndex);
     void ruledCastCostOptionRequested(int optionIndex);
@@ -277,6 +281,8 @@ private:
     QPushButton *openingBottomCancelButton = nullptr;
     QPushButton *openingBottomDoneButton = nullptr;
     QPushButton *resolutionHandPickConfirmButton = nullptr;
+    QPushButton *resolutionPaymentConfirmButton = nullptr;
+    QPushButton *resolutionPaymentClearButton = nullptr;
     QPushButton *resolutionPaymentDeclineButton = nullptr;
     QVBoxLayout *choiceOptionsRow = nullptr;
     QVector<QPushButton *> choiceOptionButtons;

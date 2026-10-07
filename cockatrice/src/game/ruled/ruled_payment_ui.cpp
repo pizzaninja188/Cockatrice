@@ -460,7 +460,9 @@ void RuledPaymentUi::received()
         return;
     if (model.view.selection_changed())
         game->getGameEventHandler()->ruled()->emitLocalLog(QString::fromStdString(model.view.error()));
-    if (model.beginSubmission()) {
+    const auto action = model.nextPreviewAction(
+        context() != Context::Resolution || !game->getGameEventHandler()->ruled()->isVariableManaContribution());
+    if (action == RuledPayment::PreviewAction::Submit) {
         restoreOptimisticManaCounters(model.takeRetiredOptimisticManaCounterIds());
         const auto submittingContext = context();
         if (submittingContext == Context::Resolution) {
@@ -507,7 +509,7 @@ void RuledPaymentUi::received()
             });
         return;
     }
-    if (!model.queuedMana.isEmpty()) {
+    if (action == RuledPayment::PreviewAction::DrainQueuedMana) {
         const auto contribution = model.queuedMana.takeFirst();
         if (!model.payMana(contribution.symbol, contribution.groupId, contribution.counterId))
             restoreOptimisticManaCounters({contribution.counterId});

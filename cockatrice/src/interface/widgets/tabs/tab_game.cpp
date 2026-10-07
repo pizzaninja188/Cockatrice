@@ -476,6 +476,19 @@ void TabGame::connectToGameEventHandler()
                 localPlayer->getPlayerActions()->declineRuledResolutionPayment();
             }
         });
+        connect(gamePromptWidget, &GamePromptWidget::ruledResolutionPaymentConfirmRequested, this, [this]() {
+            if (auto *ruled = game->getGameEventHandler()->ruled()) {
+                ruled->payResolutionMana();
+            }
+        });
+        connect(gamePromptWidget, &GamePromptWidget::ruledResolutionPaymentClearRequested, this, [this]() {
+            const int localId = game->getPlayerManager()->getLocalPlayerId();
+            if (Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr)) {
+                if (localPlayer->getPlayerActions()) {
+                    localPlayer->getPlayerActions()->clearVariableManaContributionSelection();
+                }
+            }
+        });
         connect(gamePromptWidget, &GamePromptWidget::ruledChoiceOptionRequested, game->getGameEventHandler()->ruled(),
                 &RuledClientState::submitPendingChoiceOption);
         connect(gamePromptWidget, &GamePromptWidget::ruledActivationOpponentRequested, game->getGameEventHandler()->ruled(),
@@ -765,8 +778,11 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
         state.text = localActions->pendingRuledAbilityCostPromptText();
     } else if (h->isResolutionPaymentActive()) {
         state.mode = PromptMode::ResolutionPayment;
+        state.variableManaContribution = h->isVariableManaContribution();
         const QString remainingCost = h->resolutionPaymentRemainingCost();
-        state.text = tr("Pay %1 remaining (click mana counters or activate mana abilities).").arg(remainingCost);
+        state.text = state.variableManaContribution
+                         ? tr("Choose any amount of mana to contribute (click mana counters or activate mana abilities), then confirm. Zero is allowed.")
+                         : tr("Pay %1 remaining (click mana counters or activate mana abilities).").arg(remainingCost);
         if (h->isWaterbendResolutionPayment() && localActions)
             state.text = localActions->pendingRuledSpellPromptText();
         state.genericManaCost = h->resolutionPaymentGenericCost();

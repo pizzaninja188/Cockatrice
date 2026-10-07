@@ -26,6 +26,7 @@ mod branches;
 mod copy_choices;
 mod explore;
 mod hand_choice;
+mod join_forces;
 mod library_order;
 mod library_search;
 mod manifest_dread;
@@ -116,6 +117,12 @@ impl GameEngine {
             ResolutionContinuation::DrawReplacement { .. }
         ) {
             return self.finish_draw_replacement_choice(pending, answer, decision);
+        }
+        if matches!(
+            pending.continuation,
+            ResolutionContinuation::JoinForces { .. }
+        ) {
+            return self.finish_join_forces_payment(pending, answer, decision, player);
         }
         if matches!(
             pending.continuation,
@@ -416,7 +423,8 @@ impl GameEngine {
                 unreachable!("draw replacement handled above")
             }
             ResolutionContinuation::Custom { .. } => {}
-            ResolutionContinuation::ManaPayment { .. } => unreachable!("handled above"),
+            ResolutionContinuation::ManaPayment { .. }
+            | ResolutionContinuation::JoinForces { .. } => unreachable!("handled above"),
         }
 
         let (key, controller, item, step_no, scratch) = match &pending.continuation {
@@ -1606,6 +1614,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: interrupt.deciding_player,

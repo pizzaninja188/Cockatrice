@@ -546,7 +546,7 @@ void RuledClientState::payResolutionMana()
 
 void RuledClientState::declineResolutionMana()
 {
-    if (isResolutionPaymentActive()) {
+    if (isResolutionPaymentActive() && !pendingChoice->variableManaContribution) {
         submitResolutionPayment(ruled::v1::RESOLUTION_CHOICE_DECISION_DECLINE);
     }
 }
@@ -554,6 +554,10 @@ void RuledClientState::declineResolutionMana()
 void RuledClientState::submitResolutionPayment(ruled::v1::ResolutionChoiceDecision decision)
 {
     if (!isResolutionPaymentActive()) {
+        return;
+    }
+    if (decision == ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA &&
+        pendingChoice->variableManaContribution && !payment.beginSubmission()) {
         return;
     }
     const RuledPendingChoice restore = *pendingChoice;

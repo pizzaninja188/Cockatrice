@@ -89,6 +89,7 @@ pub(super) fn populate(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, EngineErr
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                variable_mana_contribution: false,
                 candidate_player_ids: Vec::new(),
                 waterbend: false,
                 selection_slots: Vec::new(),
@@ -398,6 +399,7 @@ pub(super) fn create_attacking_tokens(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 waterbend: false,

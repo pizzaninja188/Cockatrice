@@ -12,12 +12,20 @@
 class RuledPayment
 {
 public:
+    enum class PreviewAction
+    {
+        None,
+        Submit,
+        DrainQueuedMana
+    };
+
     [[nodiscard]] QJsonObject diagnosticSnapshot() const;
     void begin(bool guardSanitizedPayment = false);
     void clear();
     RuledPayment suspend();
     void invalidate();
     bool beginSubmission();
+    PreviewAction nextPreviewAction(bool allowAutoSubmission);
     quint64 transaction() const
     {
         return transactionId;

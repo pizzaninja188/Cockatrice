@@ -62,6 +62,15 @@ bool RuledPayment::beginSubmission()
     return true;
 }
 
+RuledPayment::PreviewAction RuledPayment::nextPreviewAction(bool allowAutoSubmission)
+{
+    if (allowAutoSubmission && beginSubmission())
+        return PreviewAction::Submit;
+    if (!queuedMana.isEmpty())
+        return PreviewAction::DrainQueuedMana;
+    return PreviewAction::None;
+}
+
 ruled::v1::PreviewPayment RuledPayment::request(ruled::v1::CastSpell cast)
 {
     ruled::v1::RuledCommand command;

@@ -956,6 +956,7 @@ impl GameEngine {
         Some(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    variable_mana_contribution: false,
                     deciding_player_id: pending.deciding_player,
                     source_object_id: pending.presentation.source_object_id,
                     prompt_text: pending.presentation.prompt.clone(),

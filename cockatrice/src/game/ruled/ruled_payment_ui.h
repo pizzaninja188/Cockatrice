@@ -65,6 +65,7 @@ public:
     bool ruledRestrictedManaGroupEligible(quint32 groupId) const;
     void clearRestrictedManaPaymentSelections();
     void declineRuledResolutionPayment();
+    void clearVariableManaContributionSelection();
     void finishRuledResolutionPaymentSubmission(bool accepted);
     void autoApplyFloatedManaToPendingCost(const QString &counterName, int amount);
     void confirmRuledGraveyardCostSelection();

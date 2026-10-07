@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "spans": [
+    {
+      "face_id": "minds_aglow",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/spell_effect/0", "/faces/0/spell_effect/1"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "SpellEffectKind::JoinForces",
+      "typed_path": "/faces/0/spell_effect/0"
+    },
+    {
+      "symbol": "SpellEffectKind::Draw",
+      "typed_path": "/faces/0/spell_effect/1"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_minds_aglow::minds_aglow_collects_sequential_contributions_and_each_player_draws_the_total",
+      "covers": "sequential variable mana contributions, accepted zero after floating mana, mandatory equal draws, and rejected wrong-payer and overpayment submissions"
+    },
+    {
+      "test": "scenario deck_coverage_minds_aglow::minds_aglow_contribution_command_log_replays_the_same_batches_and_state",
+      "covers": "accepted Join Forces payment commands replay to the same event batches and deterministic game state"
+    },
+    {
+      "test": "scenario deck_coverage_minds_aglow::minds_aglow_resumes_when_its_controller_concedes_during_join_forces",
+      "covers": "the parked sorcery continues through remaining payers when its controller concedes"
+    },
+    {
+      "test": "scenario deck_coverage_minds_aglow::minds_aglow_accepts_only_restricted_mana_eligible_for_resolution_payments",
+      "covers": "eligible restricted mana contributes to the shared total and an unavailable group is rejected without spending"
+    }
+  ],
+  "complete_definition_review_confirmed": true,
+  "oracle_id": "b259f4e4-04a9-40e0-85e9-34b4b74ee388"
+}

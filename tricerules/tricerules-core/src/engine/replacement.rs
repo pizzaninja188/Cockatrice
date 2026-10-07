@@ -734,6 +734,7 @@ impl GameEngine {
         rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    variable_mana_contribution: false,
                     deciding_player_id: event.destination_controller,
                     source_object_id: event.object_id,
                     prompt_text: "Choose an opponent as this permanent enters.".into(),
@@ -1279,6 +1280,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: event.deciding_player,
@@ -1409,6 +1411,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    variable_mana_contribution: false,
                     deciding_player_id: event.destination_controller,
                     source_object_id: event.object_id,
                     prompt_text: prompt.clone(),
@@ -1495,6 +1498,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: event.destination_controller,
@@ -1585,6 +1589,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: event.deciding_player,
@@ -2164,6 +2169,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    variable_mana_contribution: false,
                     deciding_player_id: event.deciding_player,
                     source_object_id: event.object_id,
                     prompt_text: prompt.clone(),
@@ -2477,6 +2483,7 @@ impl GameEngine {
         events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: event.deciding_player,
@@ -2734,6 +2741,7 @@ impl GameEngine {
                             events.push(rv1::RuledEvent {
                                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                                     rv1::ResolutionChoiceRequired {
+                                        variable_mana_contribution: false,
                                         candidate_token_identities: Vec::new(),
                                         candidate_player_ids: Vec::new(),
                                         deciding_player_id: event.deciding_player,
@@ -2916,6 +2924,7 @@ impl GameEngine {
                     events.push(rv1::RuledEvent {
                         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                             rv1::ResolutionChoiceRequired {
+                                variable_mana_contribution: false,
                                 candidate_token_identities: Vec::new(),
                                 candidate_player_ids: Vec::new(),
                                 deciding_player_id: event.deciding_player,

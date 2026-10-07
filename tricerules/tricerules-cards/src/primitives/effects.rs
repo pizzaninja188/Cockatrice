@@ -1024,6 +1024,10 @@ pub enum SpellEffectKind {
         who: PlayerRecipient,
         count: Amount,
     },
+    /// CR 117.1d / 608.2g: starting with the resolving controller, each player may pay any
+    /// amount of mana. The exact committed total is the immediate result consumed by the next
+    /// effect, as in Minds Aglow.
+    JoinForces,
     /// CR 121.2: the chosen player draws `count` cards. Jace Beleren and Ancestral Recall share
     /// this targeted form; untargeted draws continue to use [`Self::Draw`].
     TargetPlayerDraws {
@@ -3178,6 +3182,7 @@ impl SpellEffectKind {
             | SpellEffectKind::DamageAttackedPlayerOrPlaneswalker { .. }
             | SpellEffectKind::MyrBattlesphereAttack
             | SpellEffectKind::Draw { .. }
+            | SpellEffectKind::JoinForces
             | SpellEffectKind::ShuffleResolvingSpellIntoOwnersLibrary
             | SpellEffectKind::ShuffleNonlandPermanentsIntoOwnersLibraries { .. }
             | SpellEffectKind::ExileResolvingSpell
@@ -3736,6 +3741,20 @@ impl SpellEffectKind {
                             .into(),
                     );
                 }
+            }
+            if amount.is_some_and(Amount::uses_previous_join_forces_mana_paid)
+                && (!matches!(
+                    effect,
+                    SpellEffectKind::Draw {
+                        who: PlayerRecipient::EachPlayer,
+                        count: Amount::Count(CountExpression::PreviousJoinForcesManaPaid),
+                    }
+                ) || !matches!(previous, Some(SpellEffectKind::JoinForces)))
+            {
+                return Err(
+                    "PreviousJoinForcesManaPaid requires an immediately preceding JoinForces and direct EachPlayer Draw consumer"
+                        .into(),
+                );
             }
             if matches!(effect, SpellEffectKind::MyrBattlesphereAttack) {
                 let expected = TargetFilter {

@@ -240,6 +240,17 @@ pub(in crate::engine) struct CostTransactionPlan {
     cast_cost_receipts: Vec<CastCostReceipt>,
 }
 
+impl CostTransactionPlan {
+    /// Read the exact validated mana debit before commit. Join Forces must check its aggregate
+    /// draw count before changing any mana pools.
+    pub(in crate::engine) fn mana_spent(&self) -> Option<u64> {
+        self.debits.iter().find_map(|debit| match debit {
+            CostDebit::Mana(payment) => Some(payment.mana_spent()),
+            _ => None,
+        })
+    }
+}
+
 #[derive(Clone)]
 pub(in crate::engine) struct PreparedPaymentCosts {
     pub waterbend_limit: Option<u32>,

@@ -1234,9 +1234,15 @@ void RuledEventDispatcher::applyResolutionChoiceRequired(const ruled::v1::Resolu
     }
 
     if (rcr.choice_kind() == ruled::v1::CHOICE_KIND_MANA_PAYMENT) {
+        if (rcr.variable_mana_contribution() &&
+            (rcr.waterbend() || rcr.generic_mana_cost() != 0 || !rcr.mana_cost().empty())) {
+            qWarning() << "Rejecting malformed variable mana contribution choice";
+            return;
+        }
         PendingChoice payment;
         payment.kind = ChoiceKind::ResolutionPayment;
         payment.waterbend = rcr.waterbend();
+        payment.variableManaContribution = rcr.variable_mana_contribution();
         payment.paymentSourceOid = rcr.source_object_id();
         payment.promptText = QString::fromStdString(rcr.prompt_text());
         payment.genericManaCost = static_cast<int>(rcr.generic_mana_cost());

@@ -173,6 +173,7 @@ public:
     /// Restore locally staged pool pips, then submit Decline. The engine separately rewinds mana
     /// abilities activated since the prompt began.
     void declineRuledResolutionPayment();
+    void clearVariableManaContributionSelection();
     /// Ack completion for an optimistic resolution payment submission.
     void finishRuledResolutionPaymentSubmission(bool accepted);
     /// Pips already staged locally from this engine-owned counter but not yet deducted by the

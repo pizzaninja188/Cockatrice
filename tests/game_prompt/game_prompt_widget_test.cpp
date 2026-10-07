@@ -442,6 +442,33 @@ TEST_F(GamePromptWidgetTest, ResolutionPaymentUsesNormalCostControlsAndSuppresse
     EXPECT_EQ(declineSpy.count(), 1);
 }
 
+TEST_F(GamePromptWidgetTest, VariableManaContributionRequiresExplicitConfirmation)
+{
+    QSignalSpy confirmSpy(widget.get(), &GamePromptWidget::ruledResolutionPaymentConfirmRequested);
+    QSignalSpy clearSpy(widget.get(), &GamePromptWidget::ruledResolutionPaymentClearRequested);
+    GamePromptWidget::RuledPromptState state;
+    state.mode = PromptMode::ResolutionPayment;
+    state.text = "Choose any amount of mana to contribute, then confirm. Zero is allowed.";
+    state.variableManaContribution = true;
+    state.paymentCurrentlyLegal = false;
+    widget->setRuledPromptState(state);
+
+    ASSERT_NE(btn("resolutionPaymentConfirmButton"), nullptr);
+    ASSERT_NE(btn("resolutionPaymentClearButton"), nullptr);
+    EXPECT_FALSE(btn("resolutionPaymentConfirmButton")->isHidden());
+    EXPECT_FALSE(btn("resolutionPaymentConfirmButton")->isEnabled());
+    EXPECT_FALSE(btn("resolutionPaymentClearButton")->isHidden());
+    EXPECT_TRUE(btn("resolutionPaymentDeclineButton")->isHidden());
+
+    state.paymentCurrentlyLegal = true;
+    widget->setRuledPromptState(state);
+    EXPECT_TRUE(btn("resolutionPaymentConfirmButton")->isEnabled());
+    btn("resolutionPaymentConfirmButton")->click();
+    btn("resolutionPaymentClearButton")->click();
+    EXPECT_EQ(confirmSpy.count(), 1);
+    EXPECT_EQ(clearSpy.count(), 1);
+}
+
 TEST_F(GamePromptWidgetTest, GraveyardCostSelectionRequiresExactCountAndCanCancelLocally)
 {
     QSignalSpy confirmSpy(widget.get(), &GamePromptWidget::ruledCostSelectionConfirmRequested);
@@ -751,6 +778,9 @@ TEST_F(GamePromptWidgetTest, ResolutionPaymentAutoCompletesAndHasNoPayButton)
     state.paymentCurrentlyLegal = false;
     widget->setRuledPromptState(state);
     EXPECT_EQ(btn("resolutionPaymentPayButton"), nullptr);
+    ASSERT_NE(btn("resolutionPaymentConfirmButton"), nullptr);
+    EXPECT_TRUE(btn("resolutionPaymentConfirmButton")->isHidden());
+    EXPECT_TRUE(btn("resolutionPaymentClearButton")->isHidden());
     EXPECT_FALSE(btn("resolutionPaymentDeclineButton")->isHidden());
 }
 

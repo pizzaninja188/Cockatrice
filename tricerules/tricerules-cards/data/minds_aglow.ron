@@ -1,0 +1,14 @@
+// Oracle and ruling verified 2026-10-07. CR 117.1d, 608.2g, 121.2c, 800.4f:
+// sequential optional mana contributions determine the exact mandatory EachPlayer draw count.
+// Source: https://scryfall.com/card/c16/93/minds-aglow
+(
+  id: "minds_aglow",
+  name: "Minds Aglow",
+  face_id: "minds_aglow",
+  mana_cost: "{U}",
+  types: ["Sorcery"],
+  spell_effect: [
+    JoinForces,
+    Draw(who: EachPlayer, count: Count(PreviousJoinForcesManaPaid)),
+  ],
+)

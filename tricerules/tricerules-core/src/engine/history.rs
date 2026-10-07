@@ -1979,6 +1979,10 @@ impl GameEngine {
                 .map_or(0, |(previous, top)| {
                     super::resolution::card_result_mana_value_sum(self, top, previous)
                 }),
+            CountExpression::PreviousJoinForcesManaPaid => context
+                .previous_effect_result
+                .and_then(|previous| previous.mana_paid)
+                .map_or(0, i64::from),
             CountExpression::MaximumCardsMatchingResult { filter } => context
                 .previous_effect_result
                 .zip(context.stack_item)

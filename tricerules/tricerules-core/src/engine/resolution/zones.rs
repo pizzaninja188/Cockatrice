@@ -606,6 +606,7 @@ pub(in crate::engine) fn park_player_set_discard_choice(
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: choice.player,
@@ -1123,6 +1124,7 @@ pub(super) fn put_in_owners_library(
             cx.events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
+                        variable_mana_contribution: false,
                         candidate_token_identities: Vec::new(),
                         candidate_player_ids: Vec::new(),
                         deciding_player_id: owner,
@@ -1826,6 +1828,7 @@ fn choose_hand_cards_for_player(
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: deciding_player,
@@ -2161,6 +2164,7 @@ pub(super) fn target_player_sacrifices(
                 events.push(rv1::RuledEvent {
                     ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                         rv1::ResolutionChoiceRequired {
+                            variable_mana_contribution: false,
                             candidate_token_identities: Vec::new(),
                             candidate_player_ids: Vec::new(),
                             deciding_player_id: pid,
@@ -2295,6 +2299,7 @@ pub(super) fn choose_graveyard_card(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
@@ -3566,6 +3571,7 @@ pub(super) fn explore(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
@@ -3724,6 +3730,7 @@ pub(super) fn thassa_oracle(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engi
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
@@ -3866,6 +3873,7 @@ fn begin_library_partition(
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
@@ -4038,6 +4046,7 @@ pub(super) fn manifest_dread(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Eng
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
@@ -4166,6 +4175,7 @@ fn look_choose_battlefield(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
@@ -4297,6 +4307,7 @@ pub(super) fn look_choose_to_hand(
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: controller,
@@ -4649,6 +4660,7 @@ pub(in crate::engine) fn park_zone_search_choice(
     events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                variable_mana_contribution: false,
                 candidate_token_identities: Vec::new(),
                 candidate_player_ids: Vec::new(),
                 deciding_player_id: searcher,
@@ -4779,6 +4791,7 @@ pub(in crate::engine) fn begin_search_request(
             events.push(rv1::RuledEvent {
                 ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                     rv1::ResolutionChoiceRequired {
+                        variable_mana_contribution: false,
                         candidate_token_identities: Vec::new(),
                         candidate_player_ids: Vec::new(),
                         deciding_player_id: searcher,
@@ -4888,6 +4901,7 @@ pub(super) fn search_library(
         cx.events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
                 rv1::ResolutionChoiceRequired {
+                    variable_mana_contribution: false,
                     candidate_token_identities: Vec::new(),
                     candidate_player_ids: Vec::new(),
                     deciding_player_id: searcher,

@@ -75,6 +75,7 @@ pub(super) fn proliferate(cx: &mut EffectCx<'_>) -> Result<EffectOutcome, Engine
     cx.events.push(rv1::RuledEvent {
         ev: Some(rv1::ruled_event::Ev::ResolutionChoiceRequired(
             rv1::ResolutionChoiceRequired {
+                variable_mana_contribution: false,
                 deciding_player_id: cx.controller,
                 source_object_id: cx.top.id,
                 prompt_text: prompt.clone(),

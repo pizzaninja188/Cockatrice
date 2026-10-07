@@ -1595,6 +1595,18 @@ void RuledPaymentUi::declineRuledResolutionPayment()
     }
 }
 
+void RuledPaymentUi::clearVariableManaContributionSelection()
+{
+    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    if (!state || !state->isVariableManaContribution()) {
+        return;
+    }
+    auto &model = state->payment;
+    restoreOptimisticManaCounters(model.takeAllOptimisticManaCounterIds());
+    model.clear();
+    startOrRefresh();
+}
+
 void RuledPaymentUi::finishRuledResolutionPaymentSubmission(bool accepted)
 {
     if (!accepted) {
@@ -1616,6 +1628,13 @@ void RuledPaymentUi::finishRuledResolutionPaymentSubmission(bool accepted)
 
 void RuledPaymentUi::autoApplyFloatedManaToPendingCost(const QString &counterName, int amount)
 {
+    const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    if (state && state->isVariableManaContribution() && !actions->pendingRuledSpellCast.valid &&
+        !(actions->pendingActivatedAbility.valid && actions->pendingActivatedAbility.waitingForMana)) {
+        // Mana produced while the contribution prompt is open remains in the pool until the player
+        // explicitly confirms how much to spend. This keeps an empty contribution selectable.
+        return;
+    }
     if (autoPayMana(counterName, amount))
         return;
     if (amount <= 0) {
@@ -1716,12 +1735,13 @@ void RuledPaymentUi::resumePendingRuledPaymentAfterEngineCommand()
         case RuledPendingPaymentAction::None:
             break;
     }
-    if (actions->resolutionPaymentActive && !actions->resolutionPaymentSubmissionPending &&
+    auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    if (actions->resolutionPaymentActive && !(state && state->isVariableManaContribution()) &&
+        !actions->resolutionPaymentSubmissionPending &&
         actions->resolutionPaymentRemaining == 0) {
-        if (auto *handler = actions->player->getGame()->getGameEventHandler()->ruled();
-            handler && handler->resolutionPaymentCurrentlyLegal()) {
+        if (state && state->resolutionPaymentCurrentlyLegal()) {
             actions->resolutionPaymentSubmissionPending = true;
-            handler->payResolutionMana();
+            state->payResolutionMana();
         }
     }
 }
@@ -1943,6 +1963,11 @@ bool RuledPaymentUi::beginRuledSpellCast(CardItem *card,
 
 void RuledPaymentUi::autoApplyRestrictedManaToPendingCost(quint32 groupId, QChar symbol, int amount)
 {
+    const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+    if (state && state->isVariableManaContribution() && !actions->pendingRuledSpellCast.valid &&
+        !(actions->pendingActivatedAbility.valid && actions->pendingActivatedAbility.waitingForMana)) {
+        return;
+    }
     if (autoPayMana(QString(symbol), amount, groupId))
         return;
     if (amount <= 0) {
@@ -1957,7 +1982,6 @@ void RuledPaymentUi::autoApplyRestrictedManaToPendingCost(quint32 groupId, QChar
             payMana(QString(normalized), groupId);
         return;
     }
-    const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
     if (!state) {
         return;
     }
