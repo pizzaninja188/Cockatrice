@@ -1,0 +1,48 @@
+// Oracle/rulings verified 2026-10-07. CR 603, 603.7, 608.2h, 611.2a, and 707.
+(
+  id: "flameshadow_conjuring",
+  name: "Flameshadow Conjuring",
+  face_id: "flameshadow_conjuring",
+  mana_cost: "{3}{R}",
+  types: ["Enchantment"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WheneverPermanentEntersBattlefield(
+      controller: Controller,
+      filter: (
+        permanent_type: Some(Creature),
+        token: Some(false),
+      ),
+    ),
+    effect: [ChooseResolutionBranch(
+      chooser: Controller,
+      optional: true,
+      selection: PlayerChoice,
+      branches: [(
+        branch_id: "pay_to_copy",
+        presentation: OracleLines([1]),
+        cost: Mana("{R}"),
+        requirement: Always,
+        effects: [
+          CreateTokenCopies(count: 1, source: TriggerObject),
+          ApplyPermanentModifier(
+            subject: PreviousEffectObject,
+            modifier: GrantKeywords([Haste]),
+            duration: Indefinite,
+          ),
+          CreateDelayedTrigger(
+            subject: Some(PreviousEffectObject),
+            ability: (
+              ability_id: "delayed_01",
+              presentation: OracleLines([1]),
+              trigger: AtBeginningOfNextEndStep,
+              effect: [Exile(subject: TriggerObject)],
+            ),
+          ),
+        ],
+      )],
+      otherwise: [],
+    )],
+  )],
+)

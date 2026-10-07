@@ -441,6 +441,9 @@ pub(super) fn apply_permanent_modifier(
     else {
         return Err(EngineError::Illegal("resolution dispatch mismatch"));
     };
+    if matches!(subject, EffectSubject::PreviousEffectObject) {
+        cx.effect_result.produced_objects = cx.previous_effect_result.produced_objects.clone();
+    }
     let Some((object_id, ordinary_source_id)) = cx.resolve_continuous_subject(&subject) else {
         return Ok(EffectOutcome::Continue);
     };

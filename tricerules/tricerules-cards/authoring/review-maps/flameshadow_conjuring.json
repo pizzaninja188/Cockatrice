@@ -1,0 +1,90 @@
+{
+  "format_version": 1,
+  "oracle_id": "343460ea-7999-4d9e-b425-97fa1621f9d6",
+  "spans": [
+    {
+      "face_id": "flameshadow_conjuring",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0",
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0",
+        "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0",
+        "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0",
+        "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/1",
+        "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/2"
+      ]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "TriggerCondition::WheneverPermanentEntersBattlefield",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger"
+    },
+    {
+      "symbol": "PermanentTypeFilter::Creature",
+      "typed_path": "/faces/0/triggered_abilities/0/trigger/WheneverPermanentEntersBattlefield/filter/permanent_type"
+    },
+    {
+      "symbol": "SpellEffectKind::ChooseResolutionBranch",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0"
+    },
+    {
+      "symbol": "TokenCopySource::TriggerObject",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/0/CreateTokenCopies/source"
+    },
+    {
+      "symbol": "ResolvingEffectDuration::Indefinite",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/1/ApplyPermanentModifier/duration"
+    },
+    {
+      "symbol": "TriggerCondition::AtBeginningOfNextEndStep",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/2/CreateDelayedTrigger/ability/trigger"
+    },
+    {
+      "symbol": "SpellEffectKind::Exile",
+      "typed_path": "/faces/0/triggered_abilities/0/effect/0/ChooseResolutionBranch/branches/0/effects/2/CreateDelayedTrigger/ability/effect/0"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_flameshadow_conjuring::flameshadow_copies_the_entry_object_and_schedules_exact_token_exile",
+      "covers": "controller pays {R}; the exact copied token receives haste and a generation-bound next-end-step observer"
+    },
+    {
+      "test": "scenario deck_coverage_flameshadow_conjuring::flameshadow_ignores_tokens_and_noncreature_entries_and_can_decline_the_copy",
+      "covers": "creature-token and noncreature artifact entries do not trigger; controller can decline the optional payment"
+    },
+    {
+      "test": "scenario deck_coverage_flameshadow_conjuring::flameshadow_trigger_uses_source_and_event_object_lki_after_they_leave",
+      "covers": "the entry trigger remains resolvable after both the enchantment and observed creature leave; the copy uses the exact event object's last-known copiable values"
+    },
+    {
+      "test": "scenario deck_coverage_flameshadow_conjuring::flameshadow_exiles_the_exact_token_at_end_step_after_control_changes",
+      "covers": "the next-end-step delayed trigger exiles the exact token after another player gains control"
+    },
+    {
+      "test": "scenario deck_coverage_flameshadow_conjuring::flameshadow_copy_created_during_end_step_waits_for_the_next_turn_end_step",
+      "covers": "a paid copy created during an end step remains until a later end step because its observer is registered after the current beginning"
+    },
+    {
+      "test": "scenario deck_coverage_flameshadow_conjuring::flameshadow_copy_entry_choice_fixture_resumes_with_the_exact_token_reference",
+      "covers": "a synthetic copiable-face fixture with Clone's as-enters ability parks token creation and the resumed resolution applies haste and exact-token exile"
+    },
+    {
+      "test": "scenario deck_coverage_flameshadow_conjuring::flameshadow_token_and_haste_remain_when_its_delayed_exile_is_countered",
+      "covers": "countering the delayed exile ability with Tishana's Tidebinder leaves the copied token and its indefinite haste"
+    },
+    {
+      "test": "scenario deck_coverage_flameshadow_conjuring::flameshadow_stages_one_independent_trigger_per_simultaneous_nontoken_creature",
+      "covers": "Scrap Mastery returns two nontoken artifact creatures simultaneously; each gets a distinct trigger and the controller can pay for one and decline the other"
+    },
+    {
+      "test": "deck_coverage_flameshadow_conjuring::flameshadow_conjuring_is_registered_as_a_complete_card",
+      "covers": "exact card identity, cost, type, trigger filter, optional payment, copy sequence, indefinite haste, and delayed exile definition"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

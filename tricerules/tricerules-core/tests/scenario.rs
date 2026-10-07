@@ -14,6 +14,8 @@ mod deck_coverage_flux_abundance;
 #[path = "scenario/deck_coverage_combustible_gearhulk.rs"]
 mod deck_coverage_combustible_gearhulk;
 
+#[path = "scenario/deck_coverage_flameshadow_conjuring.rs"]
+mod deck_coverage_flameshadow_conjuring;
 #[path = "scenario/deck_coverage_mirrorworks.rs"]
 mod deck_coverage_mirrorworks;
 

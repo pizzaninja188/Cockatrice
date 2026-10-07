@@ -411,9 +411,19 @@ pub(super) fn create_delayed_trigger(
         }
         None => None,
     };
-    let exact_previous = matches!(subject, Some(EffectSubject::PreviousEffectObject))
-        .then(|| cx.previous_effect_result.produced_objects.first().copied())
-        .flatten();
+    let exact_previous = if matches!(subject, Some(EffectSubject::PreviousEffectObject)) {
+        match cx.previous_effect_result.produced_objects.as_slice() {
+            [] => None,
+            [object] => Some(*object),
+            _ => {
+                return Err(EngineError::Illegal(
+                    "CreateDelayedTrigger PreviousEffectObject requires a single exact object",
+                ));
+            }
+        }
+    } else {
+        None
+    };
     let watched = if let Some(subject) = subject.as_ref() {
         let watched_id = match subject {
             EffectSubject::Source

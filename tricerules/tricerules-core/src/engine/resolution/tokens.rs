@@ -14,29 +14,33 @@ pub(super) fn create_token_copies(
     );
     if source == TokenCopySource::Source {
         if let Some(snapshot) = cx.engine.source_token_copy_snapshot(cx.top) {
-            if cx.engine.create_tokens_from_copy(
+            let Some(produced_objects) = cx.engine.create_tokens_from_copy(
                 &snapshot,
                 count,
                 cx.top,
                 cx.spell_label,
                 cx.events,
-            )? {
+            )?
+            else {
                 return Ok(EffectOutcome::Suspended);
-            }
+            };
+            cx.effect_result.produced_objects = produced_objects;
         }
         return Ok(EffectOutcome::Continue);
     }
     if source == TokenCopySource::TriggerObject {
         if let Some(snapshot) = cx.engine.trigger_object_token_copy_snapshot(cx.top) {
-            if cx.engine.create_tokens_from_copy(
+            let Some(produced_objects) = cx.engine.create_tokens_from_copy(
                 &snapshot,
                 count,
                 cx.top,
                 cx.spell_label,
                 cx.events,
-            )? {
+            )?
+            else {
                 return Ok(EffectOutcome::Suspended);
-            }
+            };
+            cx.effect_result.produced_objects = produced_objects;
         }
         return Ok(EffectOutcome::Continue);
     }
@@ -161,7 +165,9 @@ impl GameEngine {
         else {
             return Ok(false);
         };
-        self.create_tokens_from_copy(&snapshot, count, item, label, events)
+        Ok(self
+            .create_tokens_from_copy(&snapshot, count, item, label, events)?
+            .is_none())
     }
 
     fn create_tokens_from_copy(
@@ -171,22 +177,20 @@ impl GameEngine {
         item: &StackItem,
         label: &str,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<bool, EngineError> {
-        Ok(self
-            .create_tokens(
-                TokenCreationRequest {
-                    token_id: &snapshot.token_id,
-                    copy: Some(snapshot),
-                    count,
-                    recipients: vec![item.controller],
-                    spell_label: label,
-                    item,
-                },
-                false,
-                None,
-                events,
-            )?
-            .is_none())
+    ) -> Result<Option<Vec<TriggerObjectRef>>, EngineError> {
+        self.create_tokens(
+            TokenCreationRequest {
+                token_id: &snapshot.token_id,
+                copy: Some(snapshot),
+                count,
+                recipients: vec![item.controller],
+                spell_label: label,
+                item,
+            },
+            false,
+            None,
+            events,
+        )
     }
 
     pub(in crate::engine) fn finish_populate_choice(

@@ -83,7 +83,9 @@ struct EffectCx<'a> {
 
 impl EffectCx<'_> {
     fn previous_battlefield_object(&self) -> Option<ObjectId> {
-        let selected = self.previous_effect_result.produced_objects.first()?;
+        let [selected] = self.previous_effect_result.produced_objects.as_slice() else {
+            return None;
+        };
         let generation = self
             .engine
             .state

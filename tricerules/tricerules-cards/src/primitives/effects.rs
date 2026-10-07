@@ -3483,6 +3483,14 @@ impl SpellEffectKind {
 
         fn produced_object_cardinality(effect: &SpellEffectKind) -> ProducedObjectCardinality {
             match effect {
+                SpellEffectKind::CreateTokenCopies {
+                    count: Amount::Fixed(1),
+                    source: TokenCopySource::TriggerObject,
+                }
+                | SpellEffectKind::ApplyPermanentModifier {
+                    subject: EffectSubject::PreviousEffectObject,
+                    ..
+                } => ProducedObjectCardinality::OptionalOne,
                 SpellEffectKind::ChoosePermanents { min: 1, max: 1, .. } => {
                     ProducedObjectCardinality::ExactlyOne
                 }
@@ -3512,6 +3520,10 @@ impl SpellEffectKind {
                     subject: EffectSubject::PreviousEffectObject,
                     ..
                 } => Some(true),
+                SpellEffectKind::ApplyPermanentModifier {
+                    subject: EffectSubject::PreviousEffectObject,
+                    ..
+                } => Some(false),
                 SpellEffectKind::AttachEquipment {
                     equipment: EffectSubject::PreviousEffectObject,
                     ..
@@ -4350,13 +4362,11 @@ impl SpellEffectKind {
                 EffectSubject::Chosen(_) => {
                     return Err("permanent modifiers require a battlefield-permanent target".into());
                 }
+                EffectSubject::PreviousEffectObject => {}
                 EffectSubject::AttachedObject
                 | EffectSubject::TriggerObject
-                | EffectSubject::PreviousEffectObject
                 | EffectSubject::SearchedObject(_) => {
-                    return Err(
-                        "permanent modifiers support only Source and Chosen subjects".into(),
-                    );
+                    return Err("permanent modifiers support only Source, Chosen, or an immediate PreviousEffectObject".into());
                 }
             }
             if *duration == ResolvingEffectDuration::WhileSourceOnBattlefield
