@@ -1562,6 +1562,7 @@ fn validate_effect_targets(
         | SpellEffectKind::PutAbilitySourceOntoBattlefieldTappedAndAttacking
         | SpellEffectKind::PutLandFromHandOntoBattlefield
         | SpellEffectKind::SetSourceBasePowerToTownCount
+        | SpellEffectKind::SetClassLevel { .. }
         | SpellEffectKind::CreateStaticEmblem { .. }
         | SpellEffectKind::PreventAllCombatDamageTurn
         | SpellEffectKind::DamageCantBePreventedThisTurn

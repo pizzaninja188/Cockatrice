@@ -747,13 +747,22 @@ impl CharacteristicsEvaluator<'_> {
         let AffectedScope::PermanentsMatching { filter, .. } = &effect.affected else {
             return false;
         };
+        let class_level = self.state.class_level(source);
         let still_grants =
             effective_face_from(self.state, self.registry, source).is_some_and(|face| {
-                face.static_abilities.iter().any(|ability| {
-                    matches!(&ability.definition, StaticAbilityDef::GrantKeywordToPermanents {
-                    filter: current_filter, keyword: current_keyword,
-                } if current_keyword == &keyword && current_filter == filter.as_ref())
-                })
+                face.static_abilities
+                    .iter()
+                    .chain(
+                        face.class_level_bars
+                            .iter()
+                            .filter(|bar| class_level >= bar.level)
+                            .flat_map(|bar| &bar.static_abilities),
+                    )
+                    .any(|ability| {
+                        matches!(&ability.definition, StaticAbilityDef::GrantKeywordToPermanents {
+                            filter: current_filter, keyword: current_keyword,
+                        } if current_keyword == &keyword && current_filter == filter.as_ref())
+                    })
             });
         if !still_grants {
             return false;
@@ -1767,10 +1776,22 @@ pub(super) fn normalized_static_origin(
         return None;
     }
     let outer = definition.ability_path.first()?;
-    let ability = face
-        .static_abilities
-        .iter()
-        .find(|ability| &ability.ability_id == outer)?;
+    let class_bar_ability = face.class_level_bars.iter().find_map(|bar| {
+        bar.static_abilities
+            .iter()
+            .find(|ability| &ability.ability_id == outer)
+            .map(|ability| (bar.level, ability))
+    });
+    let ability = if let Some((level, ability)) = class_bar_ability {
+        if object.zone != Zone::Battlefield || state.class_level(*source_id) < level {
+            return None;
+        }
+        ability
+    } else {
+        face.static_abilities
+            .iter()
+            .find(|ability| &ability.ability_id == outer)?
+    };
     let mut outer_definition = definition.clone();
     outer_definition.ability_path = vec![ability.ability_id.clone()];
     Some(TriggerAbilityOrigin::StaticGrant {
@@ -2429,6 +2450,171 @@ mod tests {
             duration: EffectDuration::UntilEndOfTurn,
             timestamp,
         }
+    }
+
+    #[test]
+    fn class_section_static_abilities_stay_dormant_until_level_and_keep_entry_timestamp() {
+        let class = r#"(
+            id: "class_static_fixture", name: "Class Static Fixture", face_id: "class_static_fixture",
+            mana_cost: "{U}", types: ["Enchantment", "Class"],
+            class_level_bars: [(
+                level: 2,
+                level_ability: (ability_id: "level_two", presentation: Fallback,
+                    costs: [Mana("{2}{U}")], effect: [SetClassLevel(level: 2)],
+                    timing: SorcerySpeed),
+                static_abilities: [
+                    (ability_id: "max_hand", presentation: Fallback,
+                        definition: NoMaximumHandSize(players: Controller)),
+                    (ability_id: "anthem", presentation: Fallback,
+                        definition: AnthemPt(filter: (controller: Some(YouControl)),
+                            delta_power: 1, delta_toughness: 0)),
+                ],
+            ), (
+                level: 3,
+                level_ability: (ability_id: "level_three", presentation: Fallback,
+                    costs: [Mana("{4}{U}")], effect: [SetClassLevel(level: 3)],
+                    timing: SorcerySpeed),
+            )],
+        )"#;
+        let registry = CardRegistry::from_chunks_and_tokens(
+            &[
+                class,
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+            ],
+            &[],
+        )
+        .unwrap();
+        let mut engine = GameEngine::new(305_099, &[0, 1], 20, None, true).unwrap();
+        engine.registry = Box::leak(Box::new(registry));
+        let source = insert_fixture(&mut engine, 0, "class_static_fixture", Zone::Battlefield);
+        let creature = insert_fixture(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+        engine.state.command_index = 11;
+        engine.emit_static_abilities_on_enter(source);
+
+        assert_eq!(engine.state.class_level(source), 1);
+        assert_eq!(engine.maximum_hand_size(0), 7);
+        assert_eq!(engine.effective_power(creature), Some(1));
+        let anthem = engine
+            .state
+            .continuous_effects
+            .iter()
+            .find(|effect| effect.source_id == Some(source))
+            .expect("the dormant section static is registered at entry");
+        assert_eq!(anthem.timestamp, 11);
+
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        assert!(engine.change_class_level(source, generation, 2).is_some());
+        assert_eq!(engine.maximum_hand_size(0), usize::MAX);
+        assert_eq!(engine.effective_power(creature), Some(2));
+        assert_eq!(
+            engine
+                .state
+                .continuous_effects
+                .iter()
+                .find(|effect| effect.source_id == Some(source))
+                .expect("the section static remains registered")
+                .timestamp,
+            11,
+            "level changes do not refresh the static effect timestamp"
+        );
+    }
+
+    #[test]
+    fn copied_class_bars_do_not_copy_level_and_same_object_keeps_its_level() {
+        let class = r#"(
+            id: "class_copy_fixture", name: "Class Copy Fixture", face_id: "class_copy_fixture",
+            mana_cost: "{U}", types: ["Enchantment", "Class"],
+            class_level_bars: [(
+                level: 2,
+                level_ability: (ability_id: "level_two", presentation: Fallback,
+                    costs: [Mana("{2}{U}")], effect: [SetClassLevel(level: 2)],
+                    timing: SorcerySpeed),
+                static_abilities: [(ability_id: "anthem", presentation: Fallback,
+                    definition: AnthemPt(filter: (controller: Some(YouControl)),
+                        delta_power: 1, delta_toughness: 0))],
+            ), (
+                level: 3,
+                level_ability: (ability_id: "level_three", presentation: Fallback,
+                    costs: [Mana("{4}{U}")], effect: [SetClassLevel(level: 3)],
+                    timing: SorcerySpeed),
+            )],
+        )"#;
+        let registry = CardRegistry::from_chunks_and_tokens(
+            &[
+                class,
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+            ],
+            &[],
+        )
+        .unwrap();
+        let mut engine = GameEngine::new(305_100, &[0, 1], 20, None, true).unwrap();
+        engine.registry = Box::leak(Box::new(registry));
+        let source = insert_fixture(&mut engine, 0, "class_copy_fixture", Zone::Battlefield);
+        let creature = insert_fixture(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+        engine.emit_static_abilities_on_enter(source);
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        assert!(engine
+            .change_class_level(source, source_generation, 2)
+            .is_some());
+
+        let copy = insert_fixture(&mut engine, 0, "grizzly_bears", Zone::Battlefield);
+        let class_values = engine.copiable_values_for(source).unwrap();
+        engine.state.objects.get_mut(&copy).unwrap().copiable_values = Some(class_values);
+        engine.refresh_source_static_abilities(copy);
+        assert_eq!(engine.state.class_level(copy), 1);
+        assert_eq!(engine.effective_power(creature), Some(2));
+
+        let copy_generation = engine
+            .state
+            .zone_change_generation
+            .get(&copy)
+            .copied()
+            .unwrap_or(0);
+        assert!(engine
+            .change_class_level(copy, copy_generation, 2)
+            .is_some());
+        assert_eq!(engine.effective_power(creature), Some(3));
+
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(copy),
+            kind: ContinuousEffectKind::Layer4SetTypeLine(tricerules_cards::TypeLineReplacement {
+                card_types: vec![PermanentTypeFilter::Artifact],
+                creature_types: Vec::new(),
+                land_types: Vec::new(),
+            }),
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 100,
+        });
+        let copy_characteristics = engine.characteristics(copy).unwrap();
+        assert!(copy_characteristics.is_artifact());
+        assert!(!copy_characteristics.has_type("Class"));
+        assert_eq!(engine.effective_power(creature), Some(3));
+        assert!(engine
+            .change_class_level(copy, copy_generation, 3)
+            .is_some());
+
+        let bear_values = engine.copiable_values_for(creature).unwrap();
+        engine.state.objects.get_mut(&copy).unwrap().copiable_values = Some(bear_values);
+        engine.refresh_source_static_abilities(copy);
+        assert_eq!(
+            engine.state.class_level(copy),
+            3,
+            "a same-object copy change does not copy or reset the level designation"
+        );
+        assert_eq!(engine.effective_power(creature), Some(2));
     }
 
     fn early_layer_type_scope(kind: PermanentTypeFilter) -> AffectedScope {

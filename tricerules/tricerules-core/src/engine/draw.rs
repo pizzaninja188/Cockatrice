@@ -677,10 +677,7 @@ impl GameEngine {
             {
                 continue;
             }
-            let Some(face) = self.effective_face(source) else {
-                continue;
-            };
-            for ability in &face.static_abilities {
+            for ability in self.active_static_abilities(source) {
                 let action = match ability.definition {
                     StaticAbilityDef::DoubleControllerDraws { condition } => {
                         if condition

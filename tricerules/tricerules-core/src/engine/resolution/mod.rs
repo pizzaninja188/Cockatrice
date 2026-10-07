@@ -2911,6 +2911,7 @@ fn commit_zone_move(
     if leaving_battlefield {
         state.battlefield_entry_timestamps.remove(&oid);
         state.room_states.remove(&oid);
+        state.class_levels.remove(&oid);
         super::preparation::unprepare_permanent(state, oid);
         state.battle_protectors.remove(&oid);
         state

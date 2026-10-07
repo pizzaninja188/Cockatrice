@@ -570,6 +570,14 @@ pub struct RoomState {
     pub unlocked: [bool; 2],
 }
 
+/// CR 716.2: a Class-level designation belongs to one battlefield object incarnation and is
+/// deliberately separate from copiable values and counters.
+#[derive(serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClassLevelDesignation {
+    pub zone_change_generation: u64,
+    pub level: u32,
+}
+
 impl RoomState {
     pub fn unlocked_indices(self) -> impl Iterator<Item = usize> {
         self.unlocked
@@ -2519,6 +2527,9 @@ pub struct GameState {
     /// Public CR 709.5 designations for battlefield Rooms. Absence means the object is not a
     /// Room permanent; the zone-change funnel removes entries on departure under CR 400.7.
     pub room_states: HashMap<ObjectId, RoomState>,
+    /// CR 716.2: noncopiable Class-level designations, bound to the current object generation.
+    /// Absence means level 1; the zone-change funnel clears the designation on departure.
+    pub class_levels: HashMap<ObjectId, ClassLevelDesignation>,
     /// CR 722.3: permanent -> linked exile copy. A designation is not a copiable value.
     pub prepared_permanents: BTreeMap<ObjectId, ObjectId>,
     /// Copies keep their prepare-spell classification on the stack, independently of the source.
@@ -2694,6 +2705,29 @@ pub struct PendingSpellCastState {
 }
 
 impl GameState {
+    /// The current Class level for a battlefield object. An absent or stale designation is level
+    /// 1, including for a permanent that has just become a copy of a Class.
+    pub fn class_level(&self, object_id: ObjectId) -> u32 {
+        let Some(object) = self
+            .objects
+            .get(&object_id)
+            .filter(|object| object.zone == Zone::Battlefield)
+        else {
+            return 1;
+        };
+        let generation = self
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0);
+        self.class_levels
+            .get(&object_id)
+            .filter(|designation| {
+                designation.zone_change_generation == generation && object.zone == Zone::Battlefield
+            })
+            .map_or(1, |designation| designation.level)
+    }
+
     pub fn is_terminal(&self) -> bool {
         self.outcome.is_some()
     }

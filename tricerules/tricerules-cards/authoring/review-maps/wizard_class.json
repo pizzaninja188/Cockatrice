@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "36f68aa3-9955-46f1-bc87-497f16ef5222",
+  "complete_definition_review_confirmed": true,
+  "tokens": [],
+  "spans": [
+    {
+      "face_id": "wizard_class",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/class_level_bars/0/level_ability",
+        "/faces/0/class_level_bars/1/level_ability"
+      ]
+    },
+    {
+      "face_id": "wizard_class",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": ["/faces/0/static_abilities/0"]
+    },
+    {
+      "face_id": "wizard_class",
+      "start_line": 3,
+      "end_line": 3,
+      "typed_paths": ["/faces/0/class_level_bars/0/level_ability"]
+    },
+    {
+      "face_id": "wizard_class",
+      "start_line": 4,
+      "end_line": 4,
+      "typed_paths": ["/faces/0/class_level_bars/0/triggered_abilities/0"]
+    },
+    {
+      "face_id": "wizard_class",
+      "start_line": 5,
+      "end_line": 5,
+      "typed_paths": ["/faces/0/class_level_bars/1/level_ability"]
+    },
+    {
+      "face_id": "wizard_class",
+      "start_line": 6,
+      "end_line": 6,
+      "typed_paths": ["/faces/0/class_level_bars/1/triggered_abilities/0"]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "test": "deck_coverage_wizard_class::wizard_class_is_registered_as_a_complete_card",
+      "covers": "exact identity, Class type, top-section no-maximum-hand-size static ability, and both level bars"
+    },
+    {
+      "test": "scenario deck_coverage_wizard_class::wizard_class_level_two_draws_two_and_ignores_the_hand_size_limit",
+      "covers": "level 2 activation requires the main phase and an empty stack, the transition trigger draws two, the higher-level bar replaces the old bar, and no maximum hand size survives cleanup"
+    },
+    {
+      "test": "scenario deck_coverage_wizard_class::wizard_class_level_three_counters_only_its_controllers_draws",
+      "covers": "level 3 activation, controller-only draw trigger, rejection of an opponent's creature as target while preserving the prompt, and one trigger and +1/+1 counter for each card drawn, including a draw-two spell"
+    },
+    {
+      "test": "scenario deck_coverage_wizard_class::wizard_class_level_up_ability_can_be_countered",
+      "covers": "a normally activated Class level ability uses the stack, a second activation while that ability is pending is rejected without spending more mana, and Tishana's Tidebinder can counter it before the level designation changes"
+    },
+    {
+      "test": "scenario deck_coverage_wizard_class::wizard_class_level_assignment_replays_serialized_accepted_commands",
+      "covers": "the accepted level-up activation and priority commands replay from an identical fixture to the same level designation and diagnostic state"
+    }
+  ]
+}

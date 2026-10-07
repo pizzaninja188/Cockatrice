@@ -393,6 +393,7 @@ impl GameEngine {
         for id in spent_copies {
             self.state.prepare_spell_sources.remove(&id);
             self.state.zone_change_generation.remove(&id);
+            self.state.class_levels.remove(&id);
             self.state.objects.remove(&id);
             self.state
                 .active_exile_play_permissions

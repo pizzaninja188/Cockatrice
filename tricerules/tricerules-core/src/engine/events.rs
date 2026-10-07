@@ -52,6 +52,11 @@ impl GameEngine {
     ) -> Vec<String> {
         let mut labels = Vec::new();
         labels.extend(self.chosen_opponent_labels(oid));
+        if object.zone == Zone::Battlefield
+            && face.is_some_and(|face| !face.class_level_bars.is_empty())
+        {
+            labels.push(format!("Level {}", self.state.class_level(oid)));
+        }
         if self.state.prepared_permanents.contains_key(&oid) {
             labels.push("Prepared".into());
         } else if self.copiable_values_for(oid).is_some_and(|v| {

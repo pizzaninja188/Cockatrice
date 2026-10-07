@@ -126,20 +126,18 @@ impl GameEngine {
         !newly_designated.is_empty()
     }
 
-    pub(super) fn active_static_ability_definitions(&self, oid: ObjectId) -> Vec<StaticAbilityDef> {
-        let Some(object) = self.state.objects.get(&oid) else {
+    pub(super) fn active_static_abilities(
+        &self,
+        oid: ObjectId,
+    ) -> Vec<tricerules_cards::IdentifiedStaticAbility> {
+        let Some(_object) = self
+            .state
+            .objects
+            .get(&oid)
+            .filter(|object| object.zone == Zone::Battlefield && !object.face_down)
+        else {
             return Vec::new();
         };
-        if object.zone != Zone::Battlefield
-            || object.face_down
-            || !super::characteristics::printed_static_source_is_available(
-                &self.state,
-                self.registry,
-                oid,
-            )
-        {
-            return Vec::new();
-        }
         if let Some(faces) = self.room_faces(oid) {
             return self
                 .state
@@ -148,22 +146,37 @@ impl GameEngine {
                 .copied()
                 .unwrap_or_default()
                 .unlocked_indices()
-                .flat_map(|door| {
-                    faces[door]
-                        .static_abilities
-                        .iter()
-                        .map(|ability| ability.definition.clone())
-                })
+                .flat_map(|door| faces[door].static_abilities.iter().cloned())
                 .collect();
         }
-        self.effective_face(oid)
-            .map(|face| {
-                face.static_abilities
+        let Some(face) = self.effective_face(oid) else {
+            return Vec::new();
+        };
+        let level = self.state.class_level(oid);
+        face.static_abilities
+            .iter()
+            .cloned()
+            .chain(
+                face.class_level_bars
                     .iter()
-                    .map(|ability| ability.definition.clone())
-                    .collect()
-            })
-            .unwrap_or_default()
+                    .filter(|bar| level >= bar.level)
+                    .flat_map(|bar| bar.static_abilities.iter().cloned()),
+            )
+            .collect()
+    }
+
+    pub(super) fn active_static_ability_definitions(&self, oid: ObjectId) -> Vec<StaticAbilityDef> {
+        if !super::characteristics::printed_static_source_is_available(
+            &self.state,
+            self.registry,
+            oid,
+        ) {
+            return Vec::new();
+        }
+        self.active_static_abilities(oid)
+            .into_iter()
+            .map(|ability| ability.definition)
+            .collect()
     }
 
     fn permanent_has_active_storied(&self, oid: ObjectId) -> bool {
@@ -217,13 +230,15 @@ impl GameEngine {
             {
                 return false;
             }
-            self.effective_face(source).is_some_and(|face| face.static_abilities.iter().any(|ability| {
-                match &ability.definition {
+            self.active_static_ability_definitions(source)
+                .iter()
+                .any(|ability| {
+                match ability {
                     StaticAbilityDef::ProhibitCounters { affected: tricerules_cards::primitives::CounterPlacementAffected::Self_ } => source == target,
                     StaticAbilityDef::ProhibitCounters { affected: tricerules_cards::primitives::CounterPlacementAffected::AttachedPermanent } => object.attached_to == Some(AttachmentRecipient::Object(target)),
                     _ => false,
                 }
-            }))
+            })
         })
     }
 
@@ -339,22 +354,21 @@ impl GameEngine {
             ) {
                 return false;
             }
-            let Some(face) = self.effective_face(oid) else {
-                return false;
-            };
-            face.static_abilities.iter().any(|ability| {
-                let StaticAbilityDef::ProhibitLifeGain { players } = &ability.definition else {
-                    return false;
-                };
-                self.controller_of(oid).is_some_and(|controller| {
-                    super::history::relative_player_set_contains(
-                        &self.state,
-                        *players,
-                        controller,
-                        player,
-                    )
+            self.active_static_ability_definitions(oid)
+                .iter()
+                .any(|ability| {
+                    let StaticAbilityDef::ProhibitLifeGain { players } = ability else {
+                        return false;
+                    };
+                    self.controller_of(oid).is_some_and(|controller| {
+                        super::history::relative_player_set_contains(
+                            &self.state,
+                            *players,
+                            controller,
+                            player,
+                        )
+                    })
                 })
-            })
         })
     }
 
@@ -489,7 +503,11 @@ impl GameEngine {
                 }
             }
         } else if let Some(face) = self.effective_face(object_id) {
-            for ability in &face.static_abilities {
+            for ability in face.static_abilities.iter().chain(
+                face.class_level_bars
+                    .iter()
+                    .flat_map(|bar| &bar.static_abilities),
+            ) {
                 statics.push((
                     self.ability_definition(
                         object_id,
@@ -1295,17 +1313,17 @@ impl GameEngine {
             self.registry,
             source_id,
         );
-        let mut abilities =
-            (!face_down
-                && removed_at.is_none()
-                && super::characteristics::printed_rules_text_is_present(
-                    &self.state,
-                    self.registry,
-                    source_id,
-                ))
-            .then(|| face.clone())
-            .flatten()
-            .map(|face| {
+        let mut abilities = (!face_down
+            && removed_at.is_none()
+            && super::characteristics::printed_rules_text_is_present(
+                &self.state,
+                self.registry,
+                source_id,
+            ))
+        .then(|| face.clone())
+        .flatten()
+        .map(|face| {
+            let mut candidates: Vec<_> =
                 face.activated_abilities
                     .iter()
                     .filter(|ability| {
@@ -1322,9 +1340,36 @@ impl GameEngine {
                             granted: false,
                         }
                     })
-                    .collect()
-            })
-            .unwrap_or_default();
+                    .collect();
+            let level = self.state.class_level(source_id);
+            for bar in &face.class_level_bars {
+                if bar.level.checked_sub(1) == Some(level) {
+                    let ability = &bar.level_ability;
+                    let path = vec![ability.ability_id.clone()];
+                    candidates.push(ActivatedAbilityCandidate {
+                        occurrence: ActivatedAbilityOccurrence::Printed(
+                            self.ability_definition(source_id, face_index, path),
+                        ),
+                        definition: ability.clone(),
+                        granted: false,
+                    });
+                }
+                if level >= bar.level {
+                    for ability in &bar.activated_abilities {
+                        let path = vec![ability.ability_id.clone()];
+                        candidates.push(ActivatedAbilityCandidate {
+                            occurrence: ActivatedAbilityOccurrence::Printed(
+                                self.ability_definition(source_id, face_index, path),
+                            ),
+                            definition: ability.clone(),
+                            granted: false,
+                        });
+                    }
+                }
+            }
+            candidates
+        })
+        .unwrap_or_default();
         let Some(characteristics) = self.characteristics(source_id) else {
             return abilities;
         };
@@ -1534,11 +1579,8 @@ impl GameEngine {
         ) {
             return false;
         }
-        self.effective_face(oid).is_some_and(|face| {
-            face.static_abilities.iter().any(|ability| {
-                ability.definition == StaticAbilityDef::UntapsDuringOtherPlayersUntapSteps
-            })
-        })
+        self.active_static_ability_definitions(oid)
+            .contains(&StaticAbilityDef::UntapsDuringOtherPlayersUntapSteps)
     }
 
     /// CR 502.3: determine nonactive recipients before any part of the untap action changes state.
@@ -1567,11 +1609,12 @@ impl GameEngine {
             if self.untaps_during_other_players_untap_steps(*source) {
                 recipients.insert(*source);
             }
-            if let Some(face) = self.effective_face(*source) {
-                for ability in &face.static_abilities {
-                    if let StaticAbilityDef::UntapControlledPermanentsDuringOtherPlayersUntapSteps { permanent_types } = &ability.definition {
-                        groups.push((snapshot.controller, permanent_types.clone()));
-                    }
+            for ability in self.active_static_ability_definitions(*source) {
+                if let StaticAbilityDef::UntapControlledPermanentsDuringOtherPlayersUntapSteps {
+                    permanent_types,
+                } = ability
+                {
+                    groups.push((snapshot.controller, permanent_types));
                 }
             }
         }
@@ -2253,6 +2296,180 @@ mod static_permanent_keyword_grant_tests {
         engine.refresh_source_static_abilities(source);
         assert!(!grant(&engine, source));
         assert!(grant(&engine, ring));
+    }
+
+    #[test]
+    fn class_level_gated_keyword_grant_turns_on_and_off_with_its_bar() {
+        let class = r#"(
+            id: "class_keyword_fixture", name: "Class Keyword Fixture",
+            face_id: "class_keyword_fixture", mana_cost: "{1}",
+            types: ["Enchantment", "Class"],
+            class_level_bars: [(
+                level: 2,
+                level_ability: (ability_id: "level_two", presentation: Fallback,
+                    costs: [Mana("{2}")], effect: [SetClassLevel(level: 2)],
+                    timing: SorcerySpeed),
+                static_abilities: [(ability_id: "artifact_indestructible",
+                    presentation: Fallback,
+                    definition: GrantKeywordToPermanents(
+                        filter: (kind: AnyPermanent, controller: You,
+                            permanent_types: [Artifact]),
+                        keyword: Indestructible,
+                    ))],
+            ), (
+                level: 3,
+                level_ability: (ability_id: "level_three", presentation: Fallback,
+                    costs: [Mana("{3}")], effect: [SetClassLevel(level: 3)],
+                    timing: SorcerySpeed),
+            )],
+        )"#;
+        let registry = tricerules_cards::CardRegistry::from_chunks_and_tokens(
+            &[
+                class,
+                include_str!("../../../tricerules-cards/data/sol_ring.ron"),
+            ],
+            &[],
+        )
+        .unwrap();
+        let mut engine = GameEngine::new(613_813, &[0, 1], 20, None, true).unwrap();
+        engine.registry = Box::leak(Box::new(registry));
+        let source = fixture(&mut engine, "class_keyword_fixture");
+        let ring = fixture(&mut engine, "sol_ring");
+
+        assert!(
+            !grant(&engine, ring),
+            "level-two keyword grant starts dormant"
+        );
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        assert!(engine.change_class_level(source, generation, 2).is_some());
+        assert!(grant(&engine, ring));
+        assert!(engine.change_class_level(source, generation, 1).is_some());
+        assert!(
+            !grant(&engine, ring),
+            "level-one source no longer grants it"
+        );
+    }
+
+    #[test]
+    fn class_level_activation_keeps_the_entry_timestamp_of_its_static_grant() {
+        let class = r#"(
+            id: "class_timestamp_fixture", name: "Class Timestamp Fixture",
+            face_id: "class_timestamp_fixture", mana_cost: "{1}",
+            types: ["Enchantment", "Class"],
+            class_level_bars: [(
+                level: 2,
+                level_ability: (ability_id: "level_two", presentation: Fallback,
+                    costs: [Mana("{2}")], effect: [SetClassLevel(level: 2)],
+                    timing: SorcerySpeed),
+                static_abilities: [(ability_id: "grant_haste", presentation: Fallback,
+                    definition: GrantKeywordToPermanents(
+                        filter: (kind: Creature, controller: You),
+                        keyword: Haste,
+                    ))],
+            ), (
+                level: 3,
+                level_ability: (ability_id: "level_three", presentation: Fallback,
+                    costs: [Mana("{3}")], effect: [SetClassLevel(level: 3)],
+                    timing: SorcerySpeed),
+            )],
+        )"#;
+        let registry = tricerules_cards::CardRegistry::from_chunks_and_tokens(
+            &[
+                class,
+                include_str!("../../../tricerules-cards/data/grizzly_bears.ron"),
+            ],
+            &[],
+        )
+        .unwrap();
+        let mut engine = GameEngine::new(613_814, &[0, 1], 20, None, true).unwrap();
+        engine.registry = Box::leak(Box::new(registry));
+        engine.state.command_index = 11;
+        let source = fixture(&mut engine, "class_timestamp_fixture");
+        let target = fixture(&mut engine, "grizzly_bears");
+        let source_generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let grant_timestamp = engine
+            .state
+            .continuous_effects
+            .iter()
+            .find(|effect| {
+                effect.source_id == Some(source)
+                    && matches!(
+                        effect.kind,
+                        ContinuousEffectKind::Layer6AddKeywordFromStatic {
+                            keyword: Keyword::Haste,
+                            ..
+                        }
+                    )
+            })
+            .expect("the level-two static grant is recorded at entry")
+            .timestamp;
+        assert_eq!(grant_timestamp, 11);
+
+        engine.state.continuous_effects.push(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(target),
+            kind: ContinuousEffectKind::Layer6RemoveAllAbilities,
+            condition: None,
+            duration: EffectDuration::UntilEndOfTurn,
+            timestamp: 12,
+        });
+        engine.state.command_index = 13;
+        assert!(engine
+            .change_class_level(source, source_generation, 2)
+            .is_some());
+        assert!(
+            !engine
+                .characteristics(target)
+                .unwrap()
+                .has_keyword(Keyword::Haste),
+            "the entry-time grant is older than the later ability-removing effect"
+        );
+        assert_eq!(
+            engine
+                .state
+                .continuous_effects
+                .iter()
+                .find(|effect| {
+                    effect.source_id == Some(source)
+                        && matches!(
+                            effect.kind,
+                            ContinuousEffectKind::Layer6AddKeywordFromStatic {
+                                keyword: Keyword::Haste,
+                                ..
+                            }
+                        )
+                })
+                .unwrap()
+                .timestamp,
+            11,
+            "leveling activates the existing grant without retimestamping it"
+        );
+
+        engine.state.continuous_effects.retain(|effect| {
+            !matches!(effect.kind, ContinuousEffectKind::Layer6RemoveAllAbilities)
+        });
+        assert!(engine
+            .characteristics(target)
+            .unwrap()
+            .has_keyword(Keyword::Haste));
+        assert!(engine
+            .change_class_level(source, source_generation, 1)
+            .is_some());
+        assert!(!engine
+            .characteristics(target)
+            .unwrap()
+            .has_keyword(Keyword::Haste));
     }
 
     #[test]

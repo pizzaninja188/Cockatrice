@@ -63,6 +63,36 @@ fn face_can_reference_attached_object(face: &CardFace) -> bool {
         })
 }
 
+fn face_activated_abilities(
+    face: &CardFace,
+) -> impl Iterator<Item = &crate::ActivatedAbilityDef> + '_ {
+    face.activated_abilities.iter().chain(
+        face.class_level_bars
+            .iter()
+            .flat_map(|bar| &bar.activated_abilities),
+    )
+}
+
+fn face_triggered_abilities(
+    face: &CardFace,
+) -> impl Iterator<Item = &crate::TriggeredAbilityDef> + '_ {
+    face.triggered_abilities.iter().chain(
+        face.class_level_bars
+            .iter()
+            .flat_map(|bar| &bar.triggered_abilities),
+    )
+}
+
+fn face_static_abilities(
+    face: &CardFace,
+) -> impl Iterator<Item = &crate::IdentifiedStaticAbility> + '_ {
+    face.static_abilities.iter().chain(
+        face.class_level_bars
+            .iter()
+            .flat_map(|bar| &bar.static_abilities),
+    )
+}
+
 // This traversal belongs to the new scoped grant boundary. Existing grant families retain
 // their validation contracts; recipient-dependent metadata cannot be checked on the grantor.
 fn visit_scoped_grant_effect(
@@ -384,7 +414,7 @@ fn validate_scoped_grant_tokens(
     face: &CardFace,
     tokens: &HashMap<String, CardDefinition>,
 ) -> Result<(), String> {
-    for static_ability in &face.static_abilities {
+    for static_ability in face_static_abilities(face) {
         let StaticAbilityDef::GrantActivatedAbilityToPermanents {
             activated_abilities,
             ..
@@ -415,9 +445,7 @@ fn validate_saga_face(card: &CardDefinition, face: &CardFace) -> Result<(), Regi
         .iter()
         .any(|card_type| card_type == "Enchantment")
         && face.types.iter().any(|card_type| card_type == "Saga");
-    let chapter_abilities: Vec<_> = face
-        .triggered_abilities
-        .iter()
+    let chapter_abilities: Vec<_> = face_triggered_abilities(face)
         .filter(|ability| matches!(ability.trigger, TriggerCondition::SagaChapter { .. }))
         .collect();
     if !chapter_abilities.is_empty() && !is_saga {
@@ -651,7 +679,11 @@ fn ability_cost_result_actions(costs: &[AbilityCost]) -> Vec<CardResultAction> {
 // Shared by deck cards and fixed tokens, so token abilities cannot bypass authoring checks.
 fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(), RegistryError> {
     let attachment_source = face.is_aura || face.types.iter().any(|t| t == "Equipment");
-    for identified in &face.static_abilities {
+    for identified in face.static_abilities.iter().chain(
+        face.class_level_bars
+            .iter()
+            .flat_map(|bar| &bar.static_abilities),
+    ) {
         identified
             .validate_metadata()
             .map_err(|reason| RegistryError::InvalidCard {
@@ -1542,6 +1574,9 @@ fn insert_ability_id(ids: &mut HashSet<String>, id: &crate::AbilityId) -> Result
 
 fn validate_nested_effect_metadata(effect: &SpellEffectKind) -> Result<(), String> {
     match effect {
+        SpellEffectKind::SetClassLevel { .. } => {
+            Err("SetClassLevel may only be the sole effect of a Class level-up ability".into())
+        }
         SpellEffectKind::CreateReflexiveTrigger { ability, .. } => {
             ability.validate_shape()?;
             validate_effect_list_metadata(&ability.effect)
@@ -1680,13 +1715,13 @@ fn validate_linked_exile_pairs(face: &CardFace) -> Result<(), String> {
     for mode in face.modal_spell.iter().flat_map(|modal| &modal.modes) {
         collect(&mode.effects, &mut uses);
     }
-    for ability in &face.activated_abilities {
+    for ability in face_activated_abilities(face) {
         collect(&ability.effect, &mut uses);
     }
-    for ability in &face.triggered_abilities {
+    for ability in face_triggered_abilities(face) {
         collect(&ability.effect, &mut uses);
     }
-    for ability in &face.static_abilities {
+    for ability in face_static_abilities(face) {
         match &ability.definition {
             StaticAbilityDef::AttachedModifier {
                 activated_abilities,
@@ -1793,16 +1828,8 @@ fn face_returns_source_transformed(face: &CardFace) -> bool {
                 .flat_map(|modal| &modal.modes)
                 .flat_map(|mode| &mode.effects),
         )
-        .chain(
-            face.activated_abilities
-                .iter()
-                .flat_map(|ability| &ability.effect),
-        )
-        .chain(
-            face.triggered_abilities
-                .iter()
-                .flat_map(|ability| &ability.effect),
-        )
+        .chain(face_activated_abilities(face).flat_map(|ability| &ability.effect))
+        .chain(face_triggered_abilities(face).flat_map(|ability| &ability.effect))
         .any(effect_returns_source_transformed)
 }
 
@@ -1962,9 +1989,22 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
     for ability in &face.triggered_abilities {
         insert_ability_id(&mut siblings, &ability.ability_id)?;
         ability.validate_shape()?;
+        if matches!(
+            ability.trigger,
+            TriggerCondition::WhenThisClassBecomesLevel { .. }
+        ) {
+            return Err(
+                "Class-level transition triggers must appear in their matching level bar".into(),
+            );
+        }
         validate_effect_list_metadata(&ability.effect)?;
     }
-    for ability in &face.static_abilities {
+    validate_class_level_bars(face, &mut siblings)?;
+    for ability in face.static_abilities.iter().chain(
+        face.class_level_bars
+            .iter()
+            .flat_map(|bar| &bar.static_abilities),
+    ) {
         insert_ability_id(&mut siblings, &ability.ability_id)?;
         ability.validate_metadata()?;
         let mut nested = HashSet::new();
@@ -2120,6 +2160,124 @@ fn validate_face_identity(face: &CardFace) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_class_level_bars(
+    face: &CardFace,
+    siblings: &mut HashSet<String>,
+) -> Result<(), String> {
+    let is_class = face.types.iter().any(|kind| kind == "Class");
+    if is_class == face.class_level_bars.is_empty() {
+        return Err(if is_class {
+            "a Class face must define its level bars"
+        } else {
+            "class level bars require a Class face"
+        }
+        .into());
+    }
+    if is_class && !face.types.iter().any(|kind| kind == "Enchantment") {
+        return Err("Class faces must be enchantments".into());
+    }
+    if is_class
+        && face
+            .class_level_bars
+            .first()
+            .is_some_and(|bar| bar.level != 2)
+    {
+        return Err("Class level bars must begin at level 2".into());
+    }
+    if is_class && face.class_level_bars.len() != 2 {
+        return Err("a Class face requires level bars 2 and 3".into());
+    }
+
+    let mut expected_level = 2u32;
+    for bar in &face.class_level_bars {
+        if bar.level != expected_level {
+            return Err(if expected_level == 2 {
+                "Class level bars must begin at level 2"
+            } else {
+                "Class level bars must be consecutive"
+            }
+            .into());
+        }
+        let level_ability = &bar.level_ability;
+        insert_ability_id(siblings, &level_ability.ability_id)?;
+        level_ability.validate_shape()?;
+        if level_ability.source_zone != crate::AbilitySourceZone::Battlefield
+            || level_ability.intrinsic_land_mana
+            || level_ability.timing != crate::ActivationTiming::SorcerySpeed
+            || level_ability.targeting.is_some()
+            || !level_ability.conditions.is_empty()
+            || !matches!(
+                level_ability.effect.as_slice(),
+                [SpellEffectKind::SetClassLevel { level }] if *level == bar.level
+            )
+        {
+            return Err(format!(
+                "Class level {} ability must be an untargeted sorcery-speed battlefield ability whose sole effect sets that level",
+                bar.level
+            ));
+        }
+
+        for ability in &bar.activated_abilities {
+            insert_ability_id(siblings, &ability.ability_id)?;
+            ability.validate_shape()?;
+            if ability.source_zone != crate::AbilitySourceZone::Battlefield
+                || ability.intrinsic_land_mana
+            {
+                return Err(
+                    "Class section activated abilities require a battlefield source".into(),
+                );
+            }
+            validate_source_mana_cost_reduction(face, ability)?;
+            validate_effect_list_metadata(&ability.effect)?;
+        }
+        for ability in &bar.triggered_abilities {
+            insert_ability_id(siblings, &ability.ability_id)?;
+            ability.validate_shape()?;
+            if matches!(
+                &ability.trigger,
+                TriggerCondition::WhenThisClassBecomesLevel { level }
+                    if *level != bar.level
+            ) {
+                return Err(format!(
+                    "Class-level transition trigger in the level {} bar must name level {}",
+                    bar.level, bar.level
+                ));
+            }
+            validate_effect_list_metadata(&ability.effect)?;
+            if let Some(modal) = &ability.modal {
+                for mode in &modal.modes {
+                    validate_effect_list_metadata(&mode.effects)?;
+                }
+            }
+        }
+        if bar.static_abilities.iter().any(|ability| {
+            matches!(
+                &ability.definition,
+                StaticAbilityDef::EntersPrepared
+                    | StaticAbilityDef::EntersAsCopy { .. }
+                    | StaticAbilityDef::EntersWithChosenBasicLandType { .. }
+                    | StaticAbilityDef::AsEntersChooseOpponent { .. }
+                    | StaticAbilityDef::EntersTapped { .. }
+                    | StaticAbilityDef::EntersWithCounters { .. }
+                    | StaticAbilityDef::SpellCannotBeCountered
+                    | StaticAbilityDef::Madness { .. }
+                    | StaticAbilityDef::GraveyardAnthemKeyword { .. }
+            )
+        }) {
+            return Err(
+                "Class section static ability must function while the Class level is active on the battlefield"
+                    .into(),
+            );
+        }
+
+        expected_level = bar
+            .level
+            .checked_add(1)
+            .ok_or_else(|| "Class level exceeds the supported level range".to_string())?;
+    }
+    Ok(())
+}
+
 impl CardRegistry {
     pub fn from_embedded() -> Result<Self, RegistryError> {
         let mut registry =
@@ -2192,7 +2350,11 @@ impl CardRegistry {
             validate_saga_face(token, face)?;
             let can_reference_attached_object = face_can_reference_attached_object(face);
             let can_reference_attached_player = face_can_reference_attached_player(face);
-            for ability in &face.activated_abilities {
+            for ability in face.activated_abilities.iter().chain(
+                face.class_level_bars
+                    .iter()
+                    .flat_map(|bar| &bar.activated_abilities),
+            ) {
                 ability
                     .validate_shape()
                     .map_err(|reason| RegistryError::InvalidCard {
@@ -2210,7 +2372,11 @@ impl CardRegistry {
                     }
                 }
             }
-            for ability in &face.triggered_abilities {
+            for ability in face.triggered_abilities.iter().chain(
+                face.class_level_bars
+                    .iter()
+                    .flat_map(|bar| &bar.triggered_abilities),
+            ) {
                 if ability.trigger.is_delayed_only() {
                     return Err(RegistryError::InvalidCard {
                         id: id.clone(),
@@ -2545,6 +2711,18 @@ impl CardRegistry {
                             .flat_map(|ability| &ability.effect),
                     )
                     .chain(
+                        face.class_level_bars
+                            .iter()
+                            .flat_map(|bar| &bar.activated_abilities)
+                            .flat_map(|ability| &ability.effect),
+                    )
+                    .chain(
+                        face.class_level_bars
+                            .iter()
+                            .flat_map(|bar| &bar.triggered_abilities)
+                            .flat_map(|ability| &ability.effect),
+                    )
+                    .chain(
                         face.modal_spell
                             .iter()
                             .flat_map(|modal| &modal.modes)
@@ -2573,6 +2751,18 @@ impl CardRegistry {
                             .iter()
                             .flat_map(|ability| &ability.effect),
                     )
+                    .chain(
+                        face.class_level_bars
+                            .iter()
+                            .flat_map(|bar| &bar.activated_abilities)
+                            .flat_map(|ability| &ability.effect),
+                    )
+                    .chain(
+                        face.class_level_bars
+                            .iter()
+                            .flat_map(|bar| &bar.triggered_abilities)
+                            .flat_map(|ability| &ability.effect),
+                    )
                     .any(|effect| matches!(effect, SpellEffectKind::AttachSource { .. }));
                 if uses_attach_source
                     && !face.types.iter().any(|card_type| card_type == "Equipment")
@@ -2593,6 +2783,18 @@ impl CardRegistry {
                             .iter()
                             .flat_map(|ability| &ability.effect),
                     )
+                    .chain(
+                        face.class_level_bars
+                            .iter()
+                            .flat_map(|bar| &bar.activated_abilities)
+                            .flat_map(|ability| &ability.effect),
+                    )
+                    .chain(
+                        face.class_level_bars
+                            .iter()
+                            .flat_map(|bar| &bar.triggered_abilities)
+                            .flat_map(|ability| &ability.effect),
+                    )
                     .any(SpellEffectKind::uses_attached_object_subject);
                 if uses_attached_object && !can_reference_attached_object {
                     return Err(RegistryError::InvalidCard {
@@ -2609,7 +2811,11 @@ impl CardRegistry {
                     }
                 })?;
                 validate_saga_face(&card, face)?;
-                for ability in &face.triggered_abilities {
+                for ability in face.triggered_abilities.iter().chain(
+                    face.class_level_bars
+                        .iter()
+                        .flat_map(|bar| &bar.triggered_abilities),
+                ) {
                     if ability.trigger.is_delayed_only() {
                         return Err(RegistryError::InvalidCard {
                             id: card.id.clone(),
@@ -2687,7 +2893,7 @@ impl CardRegistry {
                 // against its context, then the list as a whole (CR 608.2 — the effects resolve
                 // together, so a cross-effect requirement like `LoseLife(TargetManaValue)` must
                 // find its object-targeting sibling inside this one ability).
-                for ability in &face.activated_abilities {
+                for ability in face_activated_abilities(face) {
                     ability
                         .validate_shape()
                         .map_err(|reason| RegistryError::InvalidCard {
@@ -2704,7 +2910,7 @@ impl CardRegistry {
                         })?;
                     }
                 }
-                for ability in &face.triggered_abilities {
+                for ability in face_triggered_abilities(face) {
                     for effect in &ability.effect {
                         validate_effect_payment_results(&[], effect).map_err(|reason| {
                             RegistryError::InvalidCard {
@@ -2796,6 +3002,11 @@ impl CardRegistry {
                     .iter()
                     .map(|a| &a.effect)
                     .chain(face.triggered_abilities.iter().map(|t| &t.effect))
+                    .chain(face.class_level_bars.iter().flat_map(|bar| {
+                        std::iter::once(&bar.level_ability.effect)
+                            .chain(bar.activated_abilities.iter().map(|a| &a.effect))
+                            .chain(bar.triggered_abilities.iter().map(|t| &t.effect))
+                    }))
                 {
                     for effect in effects {
                         effect.validate(EffectContext::Ability).map_err(|reason| {
@@ -2818,6 +3029,11 @@ impl CardRegistry {
                     .triggered_abilities
                     .iter()
                     .map(|ability| (&ability.effect, ability.targeting.as_ref()))
+                    .chain(face.class_level_bars.iter().flat_map(|bar| {
+                        bar.triggered_abilities
+                            .iter()
+                            .map(|ability| (&ability.effect, ability.targeting.as_ref()))
+                    }))
                 {
                     TargetingDef::validate_optional(targeting, effects).map_err(|reason| {
                         RegistryError::InvalidCard {
@@ -2831,7 +3047,19 @@ impl CardRegistry {
                     .spell_effect
                     .iter()
                     .chain(face.activated_abilities.iter().flat_map(|a| &a.effect))
-                    .chain(face.triggered_abilities.iter().flat_map(|t| &t.effect));
+                    .chain(
+                        face.class_level_bars
+                            .iter()
+                            .flat_map(|bar| &bar.activated_abilities)
+                            .flat_map(|ability| &ability.effect),
+                    )
+                    .chain(face.triggered_abilities.iter().flat_map(|t| &t.effect))
+                    .chain(
+                        face.class_level_bars
+                            .iter()
+                            .flat_map(|bar| &bar.triggered_abilities)
+                            .flat_map(|ability| &ability.effect),
+                    );
                 for effect in all_effects {
                     if let SpellEffectKind::ChangeSourceFace { action } = effect {
                         let valid_layout = match action {
@@ -2859,11 +3087,21 @@ impl CardRegistry {
                         }
                     }
                 }
-                for modal in face.modal_spell.iter().chain(
-                    face.triggered_abilities
-                        .iter()
-                        .filter_map(|ability| ability.modal.as_ref()),
-                ) {
+                for modal in face
+                    .modal_spell
+                    .iter()
+                    .chain(
+                        face.triggered_abilities
+                            .iter()
+                            .filter_map(|ability| ability.modal.as_ref()),
+                    )
+                    .chain(
+                        face.class_level_bars
+                            .iter()
+                            .flat_map(|bar| &bar.triggered_abilities)
+                            .filter_map(|ability| ability.modal.as_ref()),
+                    )
+                {
                     for effect in modal.modes.iter().flat_map(|mode| &mode.effects) {
                         for token in effect.referenced_token_ids() {
                             if !reg.tokens.contains_key(token) {
@@ -2967,6 +3205,124 @@ include!(concat!(env!("OUT_DIR"), "/embedded_cards.rs"));
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn class_section_linked_exile_pairs_are_validated_as_sibling_abilities() {
+        let card = r#"(
+            id: "class_link_fixture", name: "Class Link Fixture", face_id: "class_link_fixture",
+            mana_cost: "{1}{U}", types: ["Enchantment", "Class"],
+            class_level_bars: [(
+                level: 2,
+                level_ability: (ability_id: "level_two", presentation: Fallback,
+                    costs: [Mana("{2}{U}")], effect: [SetClassLevel(level: 2)],
+                    timing: SorcerySpeed),
+                activated_abilities: [(
+                    ability_id: "exile", presentation: Fallback,
+                    costs: [Mana("{1}")],
+                    effect: [MoveGraveyardCards(
+                        filter: (owner: AnyPlayer), destination: Exile,
+                        linked_exile_id: Some("class_link"),
+                    )],
+                    targeting: Some((groups: [(min: 1, max: 1,
+                        prompt: "Choose target card from a graveyard", effect_indices: [0])])),
+                ), (
+                    ability_id: "return", presentation: Fallback,
+                    costs: [Mana("{1}")],
+                    effect: [ReturnLinkedExiledCards(
+                        linked_exile_id: "unpaired_link",
+                        filter: (card_type: Some(Creature)),
+                        entry_counters: [], entry_modifiers: [],
+                    )],
+                )],
+            ), (
+                level: 3,
+                level_ability: (ability_id: "level_three", presentation: Fallback,
+                    costs: [Mana("{4}{U}")], effect: [SetClassLevel(level: 3)],
+                    timing: SorcerySpeed),
+            )],
+        )"#;
+        let error = super::CardRegistry::from_chunks(&[card])
+            .expect_err("a linked-exile pair cannot be split across Class section validation");
+        assert!(error.to_string().contains("linked exile id"), "{error}");
+    }
+
+    #[test]
+    fn class_level_bars_reject_a_missing_level_two_bar() {
+        let card = r#"(
+            id: "class_bar_fixture", name: "Class Bar Fixture", face_id: "class_bar_fixture",
+            mana_cost: "{1}{U}", types: ["Enchantment", "Class"],
+            class_level_bars: [(
+                level: 3,
+                level_ability: (ability_id: "level_three", presentation: Fallback,
+                    costs: [Mana("{4}{U}")], effect: [SetClassLevel(level: 3)],
+                    timing: SorcerySpeed),
+            )],
+        )"#;
+        let error = CardRegistry::from_chunks(&[card])
+            .expect_err("Class level sections begin with a level 2 bar");
+        assert!(
+            error.to_string().contains("must begin at level 2"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn class_level_bars_require_both_level_two_and_level_three() {
+        let card = r#"(
+            id: "class_bar_fixture", name: "Class Bar Fixture", face_id: "class_bar_fixture",
+            mana_cost: "{1}{U}", types: ["Enchantment", "Class"],
+            class_level_bars: [(
+                level: 2,
+                level_ability: (ability_id: "level_two", presentation: Fallback,
+                    costs: [Mana("{2}{U}")], effect: [SetClassLevel(level: 2)],
+                    timing: SorcerySpeed),
+            )],
+        )"#;
+        let error =
+            CardRegistry::from_chunks(&[card]).expect_err("a Class card has two level bars");
+        assert!(
+            error.to_string().contains("requires level bars 2 and 3"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn class_section_statics_reject_unlevel_gated_consumers() {
+        for unsupported in [
+            "SpellCannotBeCountered".to_owned(),
+            "EntersTapped(affected: Self_)".to_owned(),
+            "Madness(cost: \"{2}{R}\")".to_owned(),
+            "GraveyardAnthemKeyword(required_land_type: Forest, keyword: Haste)".to_owned(),
+        ] {
+            let card = format!(
+                r#"(
+                    id: "class_bar_fixture", name: "Class Bar Fixture", face_id: "class_bar_fixture",
+                    mana_cost: "{{1}}{{U}}", types: ["Enchantment", "Class"],
+                    class_level_bars: [(
+                        level: 2,
+                        level_ability: (ability_id: "level_two", presentation: Fallback,
+                            costs: [Mana("{{2}}{{U}}")], effect: [SetClassLevel(level: 2)],
+                            timing: SorcerySpeed),
+                        static_abilities: [(ability_id: "unsupported", presentation: Fallback,
+                            definition: {unsupported})],
+                    ), (
+                        level: 3,
+                        level_ability: (ability_id: "level_three", presentation: Fallback,
+                            costs: [Mana("{{4}}{{U}}")], effect: [SetClassLevel(level: 3)],
+                            timing: SorcerySpeed),
+                    )],
+                )"#
+            );
+            let error = CardRegistry::from_chunks(&[&card])
+                .expect_err("a section static without live Class-level gating is unsupported");
+            assert!(
+                error
+                    .to_string()
+                    .contains("must function while the Class level is active on the battlefield"),
+                "{unsupported}: {error}"
+            );
+        }
+    }
+
     #[test]
     fn land_intrinsic_mana_provenance_rejects_resolving_grants_in_every_supported_container() {
         for marked in [false, true] {

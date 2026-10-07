@@ -1,0 +1,56 @@
+(
+  id: "wizard_class",
+  name: "Wizard Class",
+  face_id: "wizard_class",
+  mana_cost: "{U}",
+  types: ["Enchantment", "Class"],
+  static_abilities: [(
+    ability_id: "no_max_hand_size",
+    presentation: OracleLines([2]),
+    definition: NoMaximumHandSize(players: Controller),
+  )],
+  class_level_bars: [
+    (
+      level: 2,
+      level_ability: (
+        ability_id: "level_2",
+        presentation: OracleLines([3]),
+        costs: [Mana("{2}{U}")],
+        effect: [SetClassLevel(level: 2)],
+        timing: SorcerySpeed,
+      ),
+      triggered_abilities: [(
+        ability_id: "level_2_trigger",
+        presentation: OracleLines([4]),
+        trigger: WhenThisClassBecomesLevel(level: 2),
+        effect: [Draw(count: 2)],
+      )],
+    ),
+    (
+      level: 3,
+      level_ability: (
+        ability_id: "level_3",
+        presentation: OracleLines([5]),
+        costs: [Mana("{4}{U}")],
+        effect: [SetClassLevel(level: 3)],
+        timing: SorcerySpeed,
+      ),
+      triggered_abilities: [(
+        ability_id: "level_3_trigger",
+        presentation: OracleLines([6]),
+        trigger: WheneverPlayerDrawsCard(drawer: Controller),
+        effect: [PutCounters(
+          counter: PlusOnePlusOne,
+          count: 1,
+          subject: Chosen((kind: Creature, controller: You)),
+        )],
+        targeting: Some((groups: [(
+          min: 1,
+          max: 1,
+          prompt: "Choose target creature you control",
+          effect_indices: [0],
+        )])),
+      )],
+    ),
+  ],
+)

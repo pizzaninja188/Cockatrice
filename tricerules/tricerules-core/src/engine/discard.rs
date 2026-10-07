@@ -133,11 +133,10 @@ impl GameEngine {
                         &self.state,
                         self.registry,
                         oid,
-                    ) && self.effective_face(oid).is_some_and(|face| {
-                        face.static_abilities
-                            .iter()
-                            .any(|a| predicate(&a.definition, controller))
-                    })
+                    ) && self
+                        .active_static_ability_definitions(oid)
+                        .iter()
+                        .any(|ability| predicate(ability, controller))
                 })
             })
     }
@@ -170,11 +169,8 @@ impl GameEngine {
             ) {
                 continue;
             }
-            let Some(face) = self.effective_face(oid) else {
-                continue;
-            };
-            for ability in &face.static_abilities {
-                let maximum = match &ability.definition {
+            for ability in self.active_static_ability_definitions(oid) {
+                let maximum = match &ability {
                     StaticAbilityDef::NoMaximumHandSize {
                         players: NoMaximumHandSizeScope::Controller,
                     } if controller == player => Some(usize::MAX),

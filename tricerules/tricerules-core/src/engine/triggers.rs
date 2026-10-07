@@ -914,6 +914,32 @@ impl GameEngine {
                 })
                 .collect(),
             GameEvent::Blighted(_) | GameEvent::Waterbent { .. } => vec![],
+            GameEvent::ClassLevelChanged {
+                source,
+                from_level,
+                to_level,
+            } => {
+                if from_level == to_level {
+                    Vec::new()
+                } else {
+                    sources
+                        .iter()
+                        .filter(|candidate| {
+                            candidate.object_id == source.object_id
+                                && candidate.zone_change_generation == source.zone_change_generation
+                        })
+                        .flat_map(|candidate| {
+                            self.matching_snapshot_abilities(candidate, |condition| {
+                                matches!(
+                                    condition,
+                                    TriggerCondition::WhenThisClassBecomesLevel { level }
+                                        if *level == *to_level
+                                )
+                            })
+                        })
+                        .collect()
+                }
+            }
             GameEvent::EntersBattlefield { object_id, .. } => {
                 let Some(obj) = self.state.objects.get(object_id) else {
                     return vec![];
@@ -2339,6 +2365,22 @@ impl GameEngine {
                         ),
                     ));
                 }
+                let level = self.state.class_level(source_id);
+                for ability in face
+                    .class_level_bars
+                    .iter()
+                    .filter(|bar| level >= bar.level)
+                    .flat_map(|bar| &bar.triggered_abilities)
+                {
+                    printed.push((
+                        ability.clone(),
+                        self.ability_definition(
+                            source_id,
+                            face_index,
+                            vec![ability.ability_id.clone()],
+                        ),
+                    ));
+                }
             }
         }
         let mut abilities: Vec<_> = printed
@@ -2575,6 +2617,7 @@ impl GameEngine {
             GameEvent::Blighted(receipt) => Some(receipt.player),
             GameEvent::Waterbent { player } => Some(*player),
             GameEvent::Proliferated { player } => Some(*player),
+            GameEvent::ClassLevelChanged { source, .. } => Some(source.controller_at_event),
             GameEvent::ManaSpentCastingSpell { player, .. } => Some(*player),
             GameEvent::CardDrawn { drawer, .. } => Some(*drawer),
             GameEvent::SpellCast { fact } => Some(fact.caster),
@@ -2875,6 +2918,98 @@ pub(super) fn ability_definition_from(
 mod tests {
     use super::super::damage::DamageEvent;
     use super::*;
+
+    #[test]
+    fn class_level_transition_collects_the_newly_active_matching_bar_trigger() {
+        let class = r#"(
+            id: "class_trigger_fixture", name: "Class Trigger Fixture",
+            face_id: "class_trigger_fixture", mana_cost: "{U}",
+            types: ["Enchantment", "Class"],
+            class_level_bars: [(
+                level: 2,
+                level_ability: (ability_id: "level_two", presentation: Fallback,
+                    costs: [Mana("{2}{U}")], effect: [SetClassLevel(level: 2)],
+                    timing: SorcerySpeed),
+                triggered_abilities: [(ability_id: "level_two_trigger",
+                    presentation: Fallback,
+                    trigger: WhenThisClassBecomesLevel(level: 2), effect: [Draw(count: 2)])],
+            ), (
+                level: 3,
+                level_ability: (ability_id: "level_three", presentation: Fallback,
+                    costs: [Mana("{4}{U}")], effect: [SetClassLevel(level: 3)],
+                    timing: SorcerySpeed),
+            )],
+        )"#;
+        let registry =
+            tricerules_cards::CardRegistry::from_chunks_and_tokens(&[class], &[]).unwrap();
+        let mut engine = GameEngine::new(716_202, &[0, 1], 20, None, true).unwrap();
+        engine.registry = Box::leak(Box::new(registry));
+        let source = engine.state.players[0].hand[0];
+        engine.state.objects.get_mut(&source).unwrap().card_id = "class_trigger_fixture".into();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        let generation = engine
+            .state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+
+        let event = engine
+            .change_class_level(source, generation, 2)
+            .expect("the level designation changed");
+        let triggers = engine.collect_event_triggers(&[event]);
+        assert_eq!(triggers.len(), 1);
+        assert_eq!(triggers[0].ability.ability_id.as_str(), "level_two_trigger");
+        assert_eq!(triggers[0].controller, 0);
+
+        assert!(
+            engine.change_class_level(source, generation, 2).is_none(),
+            "a level designation that does not change creates no transition event"
+        );
+        assert!(engine.change_class_level(source, generation, 3).is_some());
+        let downshift = engine
+            .change_class_level(source, generation, 2)
+            .expect("a real 3-to-2 transition is allowed");
+        let GameEvent::ClassLevelChanged {
+            from_level,
+            to_level,
+            ..
+        } = &downshift
+        else {
+            panic!("expected a Class level transition event");
+        };
+        assert_eq!((*from_level, *to_level), (3, 2));
+        assert_eq!(engine.collect_event_triggers(&[downshift]).len(), 1);
+
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Graveyard,
+            None,
+        )
+        .unwrap();
+        move_object_to_zone(
+            &mut engine.state,
+            engine.registry,
+            source,
+            Zone::Battlefield,
+            None,
+        )
+        .unwrap();
+        assert_eq!(engine.state.class_level(source), 1);
+        assert!(
+            engine.change_class_level(source, generation, 2).is_none(),
+            "the previous generation cannot level up a new incarnation"
+        );
+    }
 
     #[test]
     fn issue_296_every_draw_matches_each_drawer_in_a_multiplayer_event_batch() {

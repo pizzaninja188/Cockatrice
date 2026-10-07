@@ -921,6 +921,11 @@ pub enum SpellEffectKind {
         keywords: Vec<Keyword>,
         duration: ResolvingEffectDuration,
     },
+    /// CR 716.2a: the resolving level ability changes its source permanent's Class-level
+    /// designation. The designation is not a counter and is not part of copiable values.
+    SetClassLevel {
+        level: u32,
+    },
     /// CR 611.2a/613: apply one allowlisted characteristic or ability modifier to one exact
     /// permanent. Hydro-Man composes a type replacement and an activated-ability grant; Wrenn
     /// and Realmbreaker composes type addition, base P/T, and keyword grants. Keeping each layer
@@ -3239,6 +3244,7 @@ impl SpellEffectKind {
             | SpellEffectKind::MayBehold { .. }
             | SpellEffectKind::SearchLibrary { .. }
             | SpellEffectKind::SetSourceBasePowerToTownCount
+            | SpellEffectKind::SetClassLevel { .. }
             | SpellEffectKind::PreventAllCombatDamageTurn
             | SpellEffectKind::DamageCantBePreventedThisTurn
             | SpellEffectKind::ChangeSourceFace { .. }

@@ -193,6 +193,25 @@ impl CharacteristicDefiningAbility {
 pub type IdentifiedStaticAbility = IdentifiedAbility<StaticAbilityDef>;
 pub type IdentifiedCharacteristicDefiningAbility = IdentifiedAbility<CharacteristicDefiningAbility>;
 
+/// One printed Class level bar and the ability section it unlocks (CR 716.2).
+///
+/// The level-up ability is an ordinary activated ability whose resolution changes the source's
+/// Class-level designation. The remaining abilities become active while that same permanent is
+/// at this level or higher. These are copiable printed text; the permanent's current level is
+/// stored separately in game state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClassLevelBar {
+    pub level: u32,
+    pub level_ability: ActivatedAbilityDef,
+    #[serde(default)]
+    pub activated_abilities: Vec<ActivatedAbilityDef>,
+    #[serde(default)]
+    pub triggered_abilities: Vec<TriggeredAbilityDef>,
+    #[serde(default)]
+    pub static_abilities: Vec<IdentifiedStaticAbility>,
+}
+
 /// Current CR 205.3m creature-type vocabulary. Changeling queries this shared rules vocabulary
 /// instead of expanding every card definition into a hundreds-entry subtype snapshot.
 pub fn is_creature_type(subtype: &str) -> bool {
@@ -628,6 +647,10 @@ pub struct CardFace {
     /// leave empty for faces with none. Emitted as a continuous effect on ETB, drained at LTB.
     #[serde(default)]
     pub static_abilities: Vec<IdentifiedStaticAbility>,
+    /// CR 716: Class level-up bars and their newly active ability sections. The bars are printed
+    /// copiable text; current Class level is a separate noncopiable permanent designation.
+    #[serde(default)]
+    pub class_level_bars: Vec<ClassLevelBar>,
     /// Characteristic-defining abilities operate in every zone and feed their own CR 613 layer.
     #[serde(default)]
     pub characteristic_defining_abilities: Vec<IdentifiedCharacteristicDefiningAbility>,
@@ -1009,6 +1032,8 @@ pub struct RawCardDefinition {
     #[serde(default)]
     pub static_abilities: Vec<IdentifiedStaticAbility>,
     #[serde(default)]
+    pub class_level_bars: Vec<ClassLevelBar>,
+    #[serde(default)]
     pub characteristic_defining_abilities: Vec<IdentifiedCharacteristicDefiningAbility>,
     #[serde(default)]
     pub must_attack_if_able: bool,
@@ -1079,6 +1104,7 @@ impl RawCardDefinition {
                 activated_abilities: self.activated_abilities,
                 triggered_abilities: self.triggered_abilities,
                 static_abilities: self.static_abilities,
+                class_level_bars: self.class_level_bars,
                 characteristic_defining_abilities: self.characteristic_defining_abilities,
                 must_attack_if_able: self.must_attack_if_able,
                 must_block_if_able: self.must_block_if_able,

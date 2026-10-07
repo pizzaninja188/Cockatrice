@@ -7,12 +7,12 @@ use crate::state::{
     ActiveEventObserver, ActiveExilePlayPermission, AffectedScope, AttachmentRecipient,
     AttackingTokenBatch, BattlefieldEntryCompletion, BattlefieldEntryEvent, BlockingChoice,
     CardResultCohort, CardResultEntry, CastCostObjectReceipt, CastCostReceipt, ChosenMode,
-    CombatAttackAssignment, CombatDefenderTarget, CombatState, ContinuousEffect, CopiableValues,
-    DamagePreventionAmount, DamagePreventionProhibition, DamagePreventionScope,
-    DelayedTriggerPayload, EffectResult, EntryReplacementApplication, EntryReplacementEffectId,
-    EventObserverMatcher, EventObserverPayload, ExilePlayPermissionScope, GameObject, GameState,
-    ImmediateObserverAction, LinkedExileKey, LinkedExiledObject, ObjectId, ObservedGameEvent,
-    ObserverReturnEntry, OpeningSequence, ParkedStackResolution, PendingAmass,
+    ClassLevelDesignation, CombatAttackAssignment, CombatDefenderTarget, CombatState,
+    ContinuousEffect, CopiableValues, DamagePreventionAmount, DamagePreventionProhibition,
+    DamagePreventionScope, DelayedTriggerPayload, EffectResult, EntryReplacementApplication,
+    EntryReplacementEffectId, EventObserverMatcher, EventObserverPayload, ExilePlayPermissionScope,
+    GameObject, GameState, ImmediateObserverAction, LinkedExileKey, LinkedExiledObject, ObjectId,
+    ObservedGameEvent, ObserverReturnEntry, OpeningSequence, ParkedStackResolution, PendingAmass,
     PendingBattlefieldEntry, PendingCopyCandidate, PendingEntryTimestampOrder, PendingHandChoice,
     PendingLibraryLookStage, PendingLibraryPartitionKind, PendingLibraryPartitionStage,
     PendingManaPayment, PendingObserverReturnBatch, PendingPlayerDiscardChoice,
@@ -1124,6 +1124,12 @@ enum GameEvent {
         player: PlayerId,
         fully_unlocked: bool,
     },
+    /// CR 716.2a: a Class-level designation changed on this exact battlefield object.
+    ClassLevelChanged {
+        source: TriggerObjectRef,
+        from_level: u32,
+        to_level: u32,
+    },
     /// `card_id` and `controller` must be captured before the zone move (object may be gone).
     Dies {
         source: TriggerSourceSnapshot,
@@ -1806,6 +1812,7 @@ impl GameEngine {
             next_game_rule_timestamp: 0,
             face_change_generation: HashMap::new(),
             room_states: HashMap::new(),
+            class_levels: HashMap::new(),
             prepared_permanents: Default::default(),
             prepare_spell_sources: Default::default(),
             captured_spell_copies: Default::default(),
@@ -2247,6 +2254,54 @@ impl GameEngine {
         let unlock_event = self.transition_room_door(command.object_id, face_index)?;
         self.fire_triggers(&[unlock_event], &mut out);
         Ok(events::finish_with_events(self, out))
+    }
+
+    fn change_class_level(
+        &mut self,
+        object_id: ObjectId,
+        source_zone_change: u64,
+        new_level: u32,
+    ) -> Option<GameEvent> {
+        let controller = self
+            .state
+            .objects
+            .get(&object_id)
+            .filter(|object| object.zone == Zone::Battlefield)?
+            .controller;
+        let current_generation = self
+            .state
+            .zone_change_generation
+            .get(&object_id)
+            .copied()
+            .unwrap_or(0);
+        if current_generation != source_zone_change || new_level == 0 {
+            return None;
+        }
+
+        let old_level = self.state.class_level(object_id);
+        if old_level == new_level {
+            return None;
+        }
+        if new_level == 1 {
+            self.state.class_levels.remove(&object_id);
+        } else {
+            self.state.class_levels.insert(
+                object_id,
+                ClassLevelDesignation {
+                    zone_change_generation: current_generation,
+                    level: new_level,
+                },
+            );
+        }
+        Some(GameEvent::ClassLevelChanged {
+            source: TriggerObjectRef {
+                object_id,
+                zone_change_generation: current_generation,
+                controller_at_event: controller,
+            },
+            from_level: old_level,
+            to_level: new_level,
+        })
     }
 
     fn transition_room_door(

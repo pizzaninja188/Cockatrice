@@ -596,6 +596,8 @@ pub enum TriggerCondition {
     /// CR 714.2b: a printed Saga chapter triggers whenever lore counters cross one of these
     /// chapter numerals. A single definition may carry multiple numerals for "III, IV" text.
     SagaChapter { chapters: Vec<u32> },
+    /// CR 716.2a: this Class became the named level. The ability must be in that level's bar.
+    WhenThisClassBecomesLevel { level: u32 },
     /// Whenever this permanent changes from untapped to tapped. Entering the battlefield tapped
     /// is an entry status, not this event (CR 603.6d / 701.26).
     WheneverSelfBecomesTapped,
@@ -982,6 +984,9 @@ impl TriggerCondition {
                     return Err("Saga chapter numerals must be strictly increasing".into());
                 }
                 Ok(())
+            }
+            Self::WhenThisClassBecomesLevel { level } if !(2..=3).contains(level) => {
+                Err("Class level trigger must name level 2 or 3".into())
             }
             Self::WheneverSelfBlocksCreature { attacker } => attacker.validate(),
             Self::WheneverSelfBecomesBlockedByCreature { blocker } => blocker.validate(),

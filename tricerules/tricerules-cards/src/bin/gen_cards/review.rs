@@ -236,7 +236,8 @@ fn select_source<'a>(
 
 fn source_layout(layout: &str) -> Option<&'static str> {
     match layout {
-        "normal" => Some("Normal"),
+        // Scryfall's Class label is a rules-text treatment on a single physical face.
+        "normal" | "class" => Some("Normal"),
         "split" => Some("Split"),
         "room" => Some("Room"),
         "modal_dfc" => Some("ModalDfc"),

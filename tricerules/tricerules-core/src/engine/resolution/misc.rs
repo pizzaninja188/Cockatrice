@@ -1,5 +1,22 @@
 use super::destruction::{attempt_destroy, DestroyLogStyle, DestroyOutcome, DestroySnapshot};
 use super::*;
+
+/// CR 716.2a: resolve the level-up ability against its exact source incarnation. The transition
+/// event also activates the matching bar ability before the settled public state is published.
+pub(super) fn set_class_level(
+    cx: &mut EffectCx<'_>,
+    level: u32,
+) -> Result<EffectOutcome, EngineError> {
+    if let Some(source_id) = cx.top.source_permanent_id {
+        if let Some(event) =
+            cx.engine
+                .change_class_level(source_id, cx.top.source_zone_change, level)
+        {
+            cx.engine.fire_triggers(&[event], cx.events);
+        }
+    }
+    Ok(EffectOutcome::Continue)
+}
 use crate::engine::presentation::{
     stack_child_presentation_ref, PresentationPath, StackPresentationSource,
 };

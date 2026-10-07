@@ -526,10 +526,7 @@ impl GameEngine {
                 RelativePlayerSet::All => true,
                 RelativePlayerSet::TargetedPlayer { .. } => false,
             };
-            let Some(face) = self.effective_face(source_id) else {
-                return total;
-            };
-            face.static_abilities
+            self.active_static_ability_definitions(source_id)
                 .iter()
                 .filter_map(|ability| {
                     let StaticAbilityDef::TargetingCostIncrease {
@@ -537,7 +534,7 @@ impl GameEngine {
                         actors,
                         actions,
                         amount,
-                    } = &ability.definition
+                    } = ability
                     else {
                         return None;
                     };
@@ -681,10 +678,11 @@ impl GameEngine {
             let Some(source_controller) = self.controller_of(source_id) else {
                 continue;
             };
-            let Some(face) = self.effective_face(source_id) else {
-                continue;
-            };
-            for (ability_index, ability) in face.static_abilities.iter().enumerate() {
+            for (ability_index, ability) in self
+                .active_static_abilities(source_id)
+                .into_iter()
+                .enumerate()
+            {
                 let StaticAbilityDef::TargetingCostIncrease {
                     protected,
                     actors,
@@ -704,7 +702,7 @@ impl GameEngine {
                 };
                 let action_matches =
                     matches!(actions, TargetingCostAction::SpellsAndActivatedAbilities)
-                        || actions == &action;
+                        || *actions == action;
                 if !actor_matches || !action_matches {
                     continue;
                 }
