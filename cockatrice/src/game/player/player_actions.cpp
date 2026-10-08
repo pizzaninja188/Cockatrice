@@ -306,6 +306,11 @@ void PlayerActions::declineRuledResolutionPayment()
     ruledPayment->declineRuledResolutionPayment();
 }
 
+void PlayerActions::cancelRuledAttackDeclaration()
+{
+    ruledPayment->cancelAttackDeclaration();
+}
+
 void PlayerActions::clearVariableManaContributionSelection()
 {
     ruledPayment->clearVariableManaContributionSelection();

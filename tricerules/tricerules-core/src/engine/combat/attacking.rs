@@ -99,9 +99,15 @@ impl GameEngine {
     }
 
     pub(in super::super) fn minimum_attack_requirement_count(&self) -> usize {
-        self.attack_limits().maximum_requirements(
-            self.attack_requirement_ids().len(),
-            &self.attack_defenders(),
-        )
+        let limits = self.attack_limits();
+        let untaxed_defenders = self
+            .attack_defenders()
+            .into_iter()
+            .filter(|(defender, _)| {
+                limits.allows_defender(*defender) && self.attack_tax_per_attacker(*defender) == 0
+            })
+            .collect::<Vec<_>>();
+        self.attack_limits()
+            .maximum_requirements(self.attack_requirement_ids().len(), &untaxed_defenders)
     }
 }

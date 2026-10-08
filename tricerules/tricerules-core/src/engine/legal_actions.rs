@@ -32,6 +32,11 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             .pending_spell_cast
             .as_ref()
             .is_some_and(|pending| pending.caster == p.id)
+            || eng
+                .state
+                .pending_attack_declaration
+                .as_ref()
+                .is_some_and(|pending| pending.attacking_player_id == p.id)
             || eng.paying_ability_activation(p.id);
         let mut labels = legal_labels(eng, p.id);
         let mut hand_actions = legal_hand_actions(eng, p.id);
@@ -330,7 +335,9 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
             (Vec::new(), Vec::new())
         };
 
-        if eng.state.pending_spell_cast.is_some() || eng.state.pending_ability_activation.is_some()
+        if eng.state.pending_spell_cast.is_some()
+            || eng.state.pending_attack_declaration.is_some()
+            || eng.state.pending_ability_activation.is_some()
         {
             labels.clear();
             hand_actions.clear();
@@ -406,6 +413,48 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 }
             });
 
+        let pending_attack_declaration = eng
+            .state
+            .pending_attack_declaration
+            .as_ref()
+            .filter(|pending| pending.attacking_player_id == p.id)
+            .map(|pending| {
+                let mut payment_preview = eng.preview_payment(
+                    p.id,
+                    &rv1::PreviewPayment {
+                        transaction_id: pending.transaction_id,
+                        revision: eng.state.command_index,
+                        commit_attack_declaration: Some(rv1::CommitAttackDeclaration {
+                            transaction_id: pending.transaction_id,
+                            expected_revision: pending.revision,
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    },
+                );
+                // LegalActions is built before the accepted command index advances; proposals
+                // exposed in this batch are therefore for the next accepted command.
+                if let Some(selection) = payment_preview.selection.as_mut() {
+                    selection.expected_state_revision = eng.state.command_index.saturating_add(1);
+                }
+                rv1::PendingAttackDeclaration {
+                    transaction_id: pending.transaction_id,
+                    revision: pending.revision,
+                    attacking_player_id: pending.attacking_player_id,
+                    assignments: pending.assignments.clone(),
+                    generic_mana_cost: pending.generic_mana_cost,
+                    payment_preview: Some(payment_preview),
+                    eligible_restricted_mana_group_ids: eng
+                        .state
+                        .player_idx(p.id)
+                        .map(|player_index| {
+                            eng.eligible_restricted_mana_for_attack_cost(player_index)
+                        })
+                        .unwrap_or_default(),
+                    mana_ability_undo_options: eng.attack_mana_ability_undo_options(p.id),
+                }
+            });
+
         batch.legal_by_player.insert(
             p.id,
             LegalActions {
@@ -432,6 +481,7 @@ pub(super) fn fill_legal(batch: &mut RuledEventBatch, eng: &GameEngine) {
                 exile_play_permission_groups,
                 legal_attack_assignments,
                 pending_spell_cast,
+                pending_attack_declaration,
             },
         );
     }

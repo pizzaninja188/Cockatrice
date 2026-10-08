@@ -78,6 +78,7 @@ fn preview(engine: &GameEngine, cast: &rv1::CastSpell) -> rv1::PaymentPreview {
             cast_spell: Some(cast.clone()),
             execute_permanent_action: None,
             commit_spell_cast: None,
+            commit_attack_declaration: None,
         },
     )
 }

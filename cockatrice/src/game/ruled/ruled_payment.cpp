@@ -78,6 +78,44 @@ ruled::v1::PreviewPayment RuledPayment::request(ruled::v1::CastSpell cast)
     return requestAction(std::move(command));
 }
 
+std::optional<ruled::v1::RuledCommand>
+RuledPayment::undoManaAbilityCommand(
+    const ruled::v1::PendingAttackDeclaration *pendingAttack,
+    std::optional<quint64> selectedActivationCommandIndex,
+    std::optional<quint64> expectedAttackTransactionId)
+{
+    ruled::v1::RuledCommand command;
+    auto *undo = command.mutable_undo_mana_ability();
+    if (!pendingAttack) {
+        if (expectedAttackTransactionId)
+            return std::nullopt;
+        return command;
+    }
+    if (expectedAttackTransactionId && pendingAttack->transaction_id() != *expectedAttackTransactionId)
+        return std::nullopt;
+
+    const auto &options = pendingAttack->mana_ability_undo_options();
+    std::optional<quint64> activationCommandIndex;
+    if (selectedActivationCommandIndex) {
+        const auto selected = std::find_if(options.begin(), options.end(), [&](const auto &option) {
+            return option.activation_command_index() == *selectedActivationCommandIndex && option.reversible();
+        });
+        if (selected != options.end())
+            activationCommandIndex = selected->activation_command_index();
+    } else {
+        const auto newest = std::find_if(options.rbegin(), options.rend(), [](const auto &option) {
+            return option.reversible();
+        });
+        if (newest != options.rend())
+            activationCommandIndex = newest->activation_command_index();
+    }
+    if (!activationCommandIndex)
+        return std::nullopt;
+    undo->set_attack_transaction_id(pendingAttack->transaction_id());
+    undo->set_activation_command_index(*activationCommandIndex);
+    return command;
+}
+
 void RuledPayment::writePayment(ruled::v1::RuledCommand &command) const
 {
     if (command.has_cast_spell()) {
@@ -89,6 +127,9 @@ void RuledPayment::writePayment(ruled::v1::RuledCommand &command) const
     } else if (command.has_commit_ability_activation()) {
         *command.mutable_commit_ability_activation()->mutable_payment() = selection;
         *command.mutable_commit_ability_activation()->mutable_restricted_mana() = restrictedMana;
+    } else if (command.has_commit_attack_declaration()) {
+        *command.mutable_commit_attack_declaration()->mutable_payment() = selection;
+        *command.mutable_commit_attack_declaration()->mutable_restricted_mana() = restrictedMana;
     } else if (command.has_activate_ability()) {
         *command.mutable_activate_ability()->mutable_payment() = selection;
         *command.mutable_activate_ability()->mutable_restricted_mana() = restrictedMana;
@@ -113,6 +154,8 @@ ruled::v1::PreviewPayment RuledPayment::requestAction(ruled::v1::RuledCommand co
         *query.mutable_commit_spell_cast() = command.commit_spell_cast();
     else if (command.has_commit_ability_activation())
         *query.mutable_commit_ability_activation() = command.commit_ability_activation();
+    else if (command.has_commit_attack_declaration())
+        *query.mutable_commit_attack_declaration() = command.commit_attack_declaration();
     else if (command.has_activate_ability())
         *query.mutable_activate_ability() = command.activate_ability();
     else if (command.has_submit_resolution_choice())

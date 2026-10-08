@@ -580,6 +580,7 @@ impl GameEngine {
                 | StaticAbilityDef::ProhibitLifeGain { .. }
                 | StaticAbilityDef::ProhibitCounters { .. }
                 | StaticAbilityDef::LimitAttackers { .. }
+                | StaticAbilityDef::AttackTax { .. }
                 | StaticAbilityDef::DoubleEffectCountersPlacedOnPermanentsYouControl
                 | StaticAbilityDef::MultiplyManaFromTappedPermanents { .. } => {
                     // Queried at the relevant event; no independent effect record is needed.

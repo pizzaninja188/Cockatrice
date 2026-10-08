@@ -307,8 +307,28 @@ impl GameEngine {
     /// Collect one simultaneous event set and enqueue all matching triggered abilities as one
     /// CR 603.3b group.
     pub(super) fn fire_triggers(&mut self, events: &[GameEvent], out: &mut Vec<rv1::RuledEvent>) {
+        self.fire_triggers_internal(events, out, false);
+    }
+
+    /// Fire one event set and return its event-time trigger matches before use-limit reservation.
+    /// Receipt replay uses these snapshots so it never re-evaluates a later battlefield when
+    /// reconstructing a previously accepted mana ability.
+    pub(super) fn fire_triggers_collecting(
+        &mut self,
+        events: &[GameEvent],
+        out: &mut Vec<rv1::RuledEvent>,
+    ) -> Vec<CollectedTrigger> {
+        self.fire_triggers_internal(events, out, true)
+    }
+
+    fn fire_triggers_internal(
+        &mut self,
+        events: &[GameEvent],
+        out: &mut Vec<rv1::RuledEvent>,
+        capture: bool,
+    ) -> Vec<CollectedTrigger> {
         if events.is_empty() {
-            return;
+            return Vec::new();
         }
 
         // All permanents in a simultaneous ETB set exist before history or trigger checks.
@@ -423,7 +443,13 @@ impl GameEngine {
                 ability: delayed.ability,
             }
         }));
-        self.stage_triggers(collected);
+        if capture {
+            self.stage_triggers(collected.clone());
+            collected
+        } else {
+            self.stage_triggers(collected);
+            Vec::new()
+        }
     }
 
     /// Collect matching triggers without staging them. Casts and activations use this boundary to
@@ -602,18 +628,20 @@ impl GameEngine {
         collected
     }
 
-    /// Turn a collected simultaneous group into a staged group (CR 603.3b), reserving each
-    /// trigger's stack ObjectId.
+    /// Commit lifetime and per-turn trigger-use limits at the event boundary, returning the
+    /// eligible event-time snapshots in deterministic APNAP order.
     ///
     /// The APNAP sort lives here rather than in each `collect_triggers` arm: the invariant the
     /// drain depends on — triggers are contiguous per controller, active player's block first — is
     /// then stated once, and a new event arm cannot forget it. `sort_by_key` is stable, so each
     /// player's own printed/battlefield order survives.
     ///
-    /// Nothing reaches the stack here. Placement is deferred to [`Self::flush_staged_triggers`],
-    /// because this is called from inside resolution and from the SBA fixed point, neither of which
-    /// can stop to ask a player a question.
-    pub(super) fn stage_triggers(&mut self, mut collected: Vec<CollectedTrigger>) {
+    /// Trigger placement and object-id reservation remain deferred to
+    /// [`Self::stage_reserved_triggers`] so a pending payment can hold the accepted snapshots.
+    pub(super) fn reserve_trigger_uses(
+        &mut self,
+        mut collected: Vec<CollectedTrigger>,
+    ) -> Vec<CollectedTrigger> {
         collected = collected
             .into_iter()
             .flat_map(|trigger| {
@@ -622,7 +650,7 @@ impl GameEngine {
             })
             .collect();
         if collected.is_empty() {
-            return;
+            return collected;
         }
         collected.sort_by_key(|trigger| self.state.apnap_rank(trigger.controller));
         collected.retain(|trigger| {
@@ -668,9 +696,17 @@ impl GameEngine {
             }
             true
         });
+        collected
+    }
+
+    /// Stage triggers whose once-per-game and per-turn limits were already reserved when their
+    /// event occurred. Attack declaration payment uses this to keep CR 603.2/603.3 use limits from
+    /// being consumed by a later mana ability before the pending turn-based action commits.
+    pub(super) fn stage_reserved_triggers(&mut self, mut collected: Vec<CollectedTrigger>) {
         if collected.is_empty() {
             return;
         }
+        collected.sort_by_key(|trigger| self.state.apnap_rank(trigger.controller));
         let triggers = collected
             .into_iter()
             .map(|trigger| {
@@ -711,6 +747,11 @@ impl GameEngine {
         self.state
             .staged_trigger_groups
             .push_back(StagedTriggerGroup { triggers });
+    }
+
+    pub(super) fn stage_triggers(&mut self, collected: Vec<CollectedTrigger>) {
+        let reserved = self.reserve_trigger_uses(collected);
+        self.stage_reserved_triggers(reserved);
     }
 
     /// CR 603.2c / 603.2d: determine how many extra instances a just-triggered ability creates.
@@ -792,6 +833,7 @@ impl GameEngine {
             match self.state.blocking_choice() {
                 Some(BlockingChoice::Resolution)
                 | Some(BlockingChoice::AbilityActivation)
+                | Some(BlockingChoice::AttackDeclaration)
                 | Some(BlockingChoice::TriggerTarget) => return,
                 // Not a stopping condition here: this is the block we are draining, and the
                 // handling below is what either prompts for it or finishes it.

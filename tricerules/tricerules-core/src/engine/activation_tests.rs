@@ -1159,7 +1159,10 @@ fn arena_staged_cancel_retains_completed_mana_and_failed_commit_preserves_undo()
             10,
             &RuledCommand {
                 cmd: Some(rv1::ruled_command::Cmd::UndoManaAbility(
-                    rv1::UndoManaAbility {},
+                    rv1::UndoManaAbility {
+                        attack_transaction_id: 0,
+                        activation_command_index: 0,
+                    },
                 )),
             },
         )

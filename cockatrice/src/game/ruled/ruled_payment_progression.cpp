@@ -1595,6 +1595,33 @@ void RuledPaymentUi::declineRuledResolutionPayment()
     }
 }
 
+void RuledPaymentUi::cancelAttackDeclaration()
+{
+    auto *game = actions->player->getGame();
+    auto *state = game->getGameEventHandler()->ruled();
+    if (context() != Context::Attack || !state->pendingAttackDeclaration || state->payment.submitting ||
+        RuledActions::gameplayInputLocked(game))
+        return;
+
+    const auto transactionId = state->pendingAttackDeclaration->transaction_id();
+    ruled::v1::RuledCommand command;
+    auto *cancel = command.mutable_cancel_attack_declaration();
+    cancel->set_transaction_id(transactionId);
+    cancel->set_expected_revision(state->pendingAttackDeclaration->revision());
+    RuledActions::sendRuledCommandExpectingAck(game, command, [this, transactionId](bool accepted) {
+        auto *current = actions->player->getGame()->getGameEventHandler()->ruled();
+        if (accepted) {
+            current->finishAttackDeclarationCancellation(transactionId);
+            return;
+        }
+        if (current->pendingAttackDeclaration &&
+            current->pendingAttackDeclaration->transaction_id() == transactionId) {
+            startOrRefresh();
+            changed();
+        }
+    });
+}
+
 void RuledPaymentUi::clearVariableManaContributionSelection()
 {
     auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
@@ -2473,9 +2500,9 @@ bool RuledPaymentUi::tryRequireSpellTargetCost(ruled::v1::TargetRefKind kind, qu
 
 bool RuledPaymentUi::tryUndoManaAbility()
 {
-    // CR 605 float courtesy: in ruled mode the engine owns tap state and the mana pool, so undo is
-    // an engine command (UndoManaAbility) that untaps the source and removes the floated mana. The
-    // resulting batch refreshes undoable_mana_abilities, which drives the button back off when 0.
+    // In ruled mode the engine owns tap state, mana and payment receipts, so Undo is an engine
+    // command. During an attack payment the affordance is driven by its exact reversible receipts;
+    // ordinary payment windows use the legacy float-only count.
     if (RuledActions::isRuledGame(actions->player->getGame())) {
         if (RuledActions::gameplayInputLocked(actions->player->getGame()) || actions->ruledUndoableManaCount <= 0) {
             return true;
@@ -2488,10 +2515,55 @@ bool RuledPaymentUi::tryUndoManaAbility()
             }
             emit actions->ruledResolutionManaPromptChanged();
         }
-        ruled::v1::RuledCommand ruledCommand;
-        ruledCommand.mutable_undo_mana_ability();
+        auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+        const auto *pendingAttack =
+            state->pendingAttackDeclaration ? &*state->pendingAttackDeclaration : nullptr;
+        std::optional<quint64> pendingAttackTransactionId;
+        std::optional<quint64> selectedActivationCommandIndex;
+        if (pendingAttack) {
+            pendingAttackTransactionId = pendingAttack->transaction_id();
+            QMenu menu;
+            menu.setTitle(QObject::tr("Choose a mana ability to undo"));
+            QVector<QAction *> undoActions;
+            for (const auto &option : pendingAttack->mana_ability_undo_options()) {
+                if (!option.reversible())
+                    continue;
+                const QString sourceLabel = option.source_label().empty()
+                                                ? QObject::tr("Mana ability")
+                                                : QString::fromStdString(option.source_label());
+                auto *action = menu.addAction(QObject::tr("Undo %1 (activation %2)")
+                                                  .arg(sourceLabel)
+                                                  .arg(option.activation_command_index()));
+                action->setData(QVariant::fromValue<qulonglong>(option.activation_command_index()));
+                undoActions.append(action);
+            }
+            if (undoActions.isEmpty())
+                return true;
+            if (undoActions.size() == 1) {
+                selectedActivationCommandIndex = undoActions.constFirst()->data().toULongLong();
+            } else {
+                const auto *choice = menu.exec(QCursor::pos());
+                if (!choice)
+                    return true;
+                bool valid = false;
+                const auto selected = choice->data().toULongLong(&valid);
+                if (!valid)
+                    return true;
+                selectedActivationCommandIndex = selected;
+            }
+        }
+        if (pendingAttackTransactionId) {
+            const auto &currentPendingAttack = state->pendingAttackDeclaration;
+            if (!currentPendingAttack || currentPendingAttack->transaction_id() != *pendingAttackTransactionId)
+                return true;
+            pendingAttack = &*currentPendingAttack;
+        }
+        const auto ruledCommand = RuledPayment::undoManaAbilityCommand(
+            pendingAttack, selectedActivationCommandIndex, pendingAttackTransactionId);
+        if (!ruledCommand)
+            return true;
         std::string payload;
-        if (!ruledCommand.SerializeToString(&payload)) {
+        if (!ruledCommand->SerializeToString(&payload)) {
             return true;
         }
         Command_RuledPayload cmd;

@@ -288,6 +288,8 @@ RuledPaymentUi::Context RuledPaymentUi::context() const
     }
     if (state->isResolutionPaymentActive())
         return Context::Resolution;
+    if (state->pendingAttackDeclaration)
+        return Context::Attack;
     const auto &p = actions->pendingRuledSpellCast;
     return p.valid && p.stage == PendingRuledSpellCast::Stage::Paying && p.engineTransactionId != 0 &&
                    !p.waitingForTarget && !p.waitingForCost && !p.waitingForCastCostObject &&
@@ -311,6 +313,16 @@ std::optional<ruled::v1::RuledCommand> RuledPaymentUi::buildPaymentCommand() con
         case Context::Resolution: {
             ruled::v1::RuledCommand command;
             command.mutable_submit_resolution_choice()->set_decision(ruled::v1::RESOLUTION_CHOICE_DECISION_PAY_MANA);
+            return command;
+        }
+        case Context::Attack: {
+            const auto *state = actions->player->getGame()->getGameEventHandler()->ruled();
+            if (!state->pendingAttackDeclaration)
+                return std::nullopt;
+            ruled::v1::RuledCommand command;
+            auto *commit = command.mutable_commit_attack_declaration();
+            commit->set_transaction_id(state->pendingAttackDeclaration->transaction_id());
+            commit->set_expected_revision(state->pendingAttackDeclaration->revision());
             return command;
         }
         case Context::None:
@@ -339,7 +351,7 @@ bool RuledPaymentUi::startOrRefresh()
     const auto nextContext = context();
     if (nextContext == Context::None) {
         if (suspendedPayments.isEmpty() && !state->pendingAbilityActivation && !state->isResolutionPaymentActive() &&
-            activeContext != Context::None)
+            !state->pendingAttackDeclaration && activeContext != Context::None)
             clear();
         return false;
     }
@@ -489,11 +501,15 @@ void RuledPaymentUi::received()
                 if (accepted) {
                     if (submittingContext == Context::Spell) {
                         clearPendingRuledSpellCast();
-                    } else {
+                    } else if (submittingContext == Context::Ability) {
                         actions->ruledPendingCast->clearAbility();
                         clear();
                         emit actions->ruledAbilityActivationPendingChanged(false);
                         emit actions->ruledAbilityCostPromptChanged();
+                        resumeAfterManaAbility();
+                        changed();
+                    } else if (submittingContext == Context::Attack) {
+                        clear();
                         resumeAfterManaAbility();
                         changed();
                     }
@@ -686,6 +702,7 @@ QString RuledPaymentUi::prompt() const
     const bool spell = context() == Context::Spell;
     const auto name = spell                           ? actions->pendingRuledSpellCast.cardName
                       : context() == Context::Ability ? actions->pendingActivatedAbility.cardName
+                      : context() == Context::Attack  ? QObject::tr("attack declaration")
                                                       : QObject::tr("resolution payment");
     QString text =
         QObject::tr("Pay for %1: %2 remaining. ").arg(name, QString::fromStdString(model.view.remaining_cost()));
@@ -732,7 +749,7 @@ void RuledPaymentUi::suspendForManaAbility(quint32 oid, int abilityIndex)
     } else if (context() == Context::Ability) {
         frame.ability = actions->pendingActivatedAbility;
         actions->pendingActivatedAbility.valid = false;
-    } else if (context() != Context::Resolution) {
+    } else if (context() != Context::Resolution && context() != Context::Attack) {
         return;
     }
     suspendedPayments.append(std::move(frame));
@@ -1035,6 +1052,8 @@ QJsonObject RuledPaymentUi::diagnosticSnapshot() const
                 return "Ability";
             case Context::Resolution:
                 return "Resolution";
+            case Context::Attack:
+                return "Attack";
         }
         return "Unknown";
     };

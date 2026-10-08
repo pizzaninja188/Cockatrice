@@ -3402,6 +3402,34 @@ impl SpellEffectKind {
         }
     }
 
+    /// Whether this direct effect tree can add mana to a pool when it resolves. Triggered
+    /// abilities with mana-activation tap conditions need CR 605.1b/605.4a immediate handling,
+    /// including when the output is nested under a supported choice or condition.
+    pub(crate) fn could_add_mana_to_pool(&self) -> bool {
+        match self {
+            Self::AddMana { .. }
+            | Self::ProduceMana { .. }
+            | Self::ProduceManaFromOpponentLands { .. }
+            | Self::ProduceManaPerSourceCounter { .. }
+            | Self::ProduceSplitManaFromRemovedStorageCounters { .. } => true,
+            Self::Conditional { effect, .. } | Self::ConditionalCastCost { effect, .. } => {
+                effect.could_add_mana_to_pool()
+            }
+            Self::MayBehold { if_beheld, .. } => if_beheld.iter().any(Self::could_add_mana_to_pool),
+            Self::ChooseResolutionBranch {
+                branches,
+                otherwise,
+                ..
+            } => {
+                branches
+                    .iter()
+                    .any(|branch| branch.effects.iter().any(Self::could_add_mana_to_pool))
+                    || otherwise.iter().any(Self::could_add_mana_to_pool)
+            }
+            _ => false,
+        }
+    }
+
     /// Face-local references share the existing amount and branch consumers. Nested branches
     /// retain the spell's context; created/granted abilities validate independently as abilities.
     pub(crate) fn validate_cast_snapshot_references(&self, count: usize) -> Result<(), String> {

@@ -115,6 +115,7 @@ pub(super) enum CounterDebitSource {
     },
 }
 
+#[derive(Clone)]
 pub(in crate::engine) struct CostPaymentReceipt {
     pub(in crate::engine) blight_receipts: Vec<crate::state::BlightReceipt>,
     pub(in crate::engine) move_events: Vec<rv1::RuledEvent>,
@@ -131,6 +132,7 @@ pub(in crate::engine) struct CostPaymentReceipt {
     pub(in crate::engine) sneak_returned_name: Option<String>,
 }
 
+#[derive(Clone)]
 pub(in crate::engine) enum PaidCardCost {
     Discard {
         object_id: ObjectId,
@@ -223,12 +225,14 @@ pub(in crate::engine) fn card_result_entry(
     }
 }
 
-/// Casting, activation, and resolution share debits; only casting expends mana.
+/// Casting, activation, resolution, and turn-based attack costs share debits; only casting
+/// expends mana through a stack-object cost receipt.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum CostPurpose {
     Spell,
     Ability,
     Resolution,
+    Attack,
 }
 
 #[derive(Clone)]
@@ -241,6 +245,26 @@ pub(in crate::engine) struct CostTransactionPlan {
 }
 
 impl CostTransactionPlan {
+    /// Exact mana inputs consumed by an activation cost, separated by unrestricted color and
+    /// restricted group so attack-payment receipts can retain CR 733.1 source lineage.
+    pub(in crate::engine) fn mana_source_spend(
+        &self,
+    ) -> (
+        tricerules_cards::ManaAmount,
+        Vec<(u32, tricerules_cards::ManaAmount)>,
+    ) {
+        self.debits
+            .iter()
+            .find_map(|debit| match debit {
+                CostDebit::Mana(payment) => Some((
+                    payment.unrestricted_spent(),
+                    payment.restricted_spent().to_vec(),
+                )),
+                _ => None,
+            })
+            .unwrap_or_default()
+    }
+
     /// Read the exact validated mana debit before commit. Join Forces must check its aggregate
     /// draw count before changing any mana pools.
     pub(in crate::engine) fn mana_spent(&self) -> Option<u64> {
@@ -248,6 +272,30 @@ impl CostTransactionPlan {
             CostDebit::Mana(payment) => Some(payment.mana_spent()),
             _ => None,
         })
+    }
+
+    /// Rebind exact mana debits for a retained mana-ability receipt after an earlier activation
+    /// is removed from the attack transaction. Object, counter, and life selections remain bound
+    /// to their original identities and are revalidated by `commit_cost_transaction`.
+    pub(in crate::engine) fn rebase_for_attack_receipt(
+        &self,
+        state: &GameState,
+    ) -> Result<Self, EngineError> {
+        let mut rebased = self.clone();
+        for debit in &mut rebased.debits {
+            if let CostDebit::Mana(payment) = debit {
+                *payment = payment.rebase_for_attack_receipt(state, rebased.player_idx)?;
+            }
+        }
+        Ok(rebased)
+    }
+
+    pub(in crate::engine) fn remap_restricted_groups(&mut self, remap: &HashMap<u32, u32>) {
+        for debit in &mut self.debits {
+            if let CostDebit::Mana(payment) = debit {
+                payment.remap_restricted_groups(remap);
+            }
+        }
     }
 }
 
@@ -360,6 +408,18 @@ impl GameEngine {
         self.collect_event_triggers(&events)
     }
 
+    /// Record cost events while reapplying a retained attack mana receipt. Its trigger matches are
+    /// already captured at the original event boundary and must not be rediscovered on the new
+    /// board state.
+    pub(in crate::engine) fn record_committed_cost_events(
+        &mut self,
+        mut events: Vec<GameEvent>,
+        snapshots: Vec<SacrificeSnapshot>,
+    ) {
+        events.extend(payment_sacrifice_events(snapshots));
+        self.record_committed_events(&events);
+    }
+
     /// Resolution already owns its stack item. Preserve its semantic-before-zone event order
     /// and full observer dispatch, including delayed death/departure triggers and LKI caches.
     pub(in crate::engine) fn fire_resolution_cost_triggers(
@@ -458,6 +518,37 @@ impl GameEngine {
             flex_payments: vec![],
             restricted_mana: restricted_mana.to_vec(),
             eligible_restricted_mana: self.eligible_restricted_mana_for_resolution_payment(idx),
+        })
+    }
+
+    pub(in crate::engine) fn prepare_attack_payment_costs(
+        &self,
+        player: PlayerId,
+        generic_mana_cost: u32,
+        restricted_mana: &[rv1::ManaSpendSelection],
+    ) -> Result<PreparedPaymentCosts, EngineError> {
+        let idx = self
+            .state
+            .player_idx(player)
+            .ok_or(EngineError::UnknownPlayer(player))?;
+        Ok(PreparedPaymentCosts {
+            waterbend_limit: None,
+            transaction: CostTransactionPlan {
+                purpose: CostPurpose::Attack,
+                player,
+                player_idx: idx,
+                debits: vec![],
+                cast_cost_receipts: vec![],
+            },
+            mana: ManaCost {
+                pips: vec![ManaSymbol::Generic(generic_mana_cost)],
+            },
+            x_value: 0,
+            extra_generic: 0,
+            generic_reduction: 0,
+            flex_payments: vec![],
+            restricted_mana: restricted_mana.to_vec(),
+            eligible_restricted_mana: self.eligible_restricted_mana_for_attack_cost(idx),
         })
     }
 
@@ -2403,7 +2494,7 @@ impl GameEngine {
                         CostPurpose::Ability => {
                             self.ninjutsu_return_assignment(plan.player, object)
                         }
-                        CostPurpose::Resolution => None,
+                        CostPurpose::Resolution | CostPurpose::Attack => None,
                     } == Some(*assignment);
                     self.state
                         .objects

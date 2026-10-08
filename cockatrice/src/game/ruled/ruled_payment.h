@@ -5,6 +5,7 @@
 #include <QString>
 #include <QVector>
 #include <QtGlobal>
+#include <optional>
 #include <libcockatrice/protocol/pb/ruled_v1.pb.h>
 
 /// Local transaction state. All eligibility, remaining costs, and completion come from Rust.
@@ -33,6 +34,10 @@ public:
     ruled::v1::PreviewPayment request(ruled::v1::CastSpell cast);
     ruled::v1::PreviewPayment requestAction(ruled::v1::RuledCommand command);
     void writePayment(ruled::v1::RuledCommand &command) const;
+    static std::optional<ruled::v1::RuledCommand>
+    undoManaAbilityCommand(const ruled::v1::PendingAttackDeclaration *pendingAttack,
+                           std::optional<quint64> selectedActivationCommandIndex = std::nullopt,
+                           std::optional<quint64> expectedAttackTransactionId = std::nullopt);
     bool apply(const ruled::v1::PaymentPreview &preview);
     bool select(quint32 oid, int kind);
     bool payMana(QChar symbol, quint32 groupId = 0, int optimisticCounterId = -1);

@@ -1026,6 +1026,28 @@ fn issue_169_tap_trigger_cardinalities_are_typed() {
 }
 
 #[test]
+fn triggered_mana_output_detection_follows_resolution_choices() {
+    let direct: super::SpellEffectKind =
+        ron::from_str("AddMana(amount: (g: 1), retention: EndOfStep)").unwrap();
+    assert!(direct.could_add_mana_to_pool());
+
+    let conditional: super::SpellEffectKind = ron::from_str(
+        "Conditional(condition: ActivePlayer(players: Controller), effect: AddMana(amount: (g: 1), retention: EndOfStep))",
+    )
+    .unwrap();
+    assert!(conditional.could_add_mana_to_pool());
+
+    let branch: super::SpellEffectKind = ron::from_str(
+        "ChooseResolutionBranch(optional: false, branches: [(branch_id: \"add_mana\", presentation: Fallback, cost: None, effects: [AddMana(amount: (g: 1), retention: EndOfStep)])])",
+    )
+    .unwrap();
+    assert!(branch.could_add_mana_to_pool());
+
+    let unrelated: super::SpellEffectKind = ron::from_str("GainLife(amount: 1)").unwrap();
+    assert!(!unrelated.could_add_mana_to_pool());
+}
+
+#[test]
 fn issue_169_grouped_taps_cannot_pretend_to_supply_one_observed_object() {
     for (cardinality, valid) in [("EachObject", true), ("OneOrMorePerAction", false)] {
         let definition = format!(

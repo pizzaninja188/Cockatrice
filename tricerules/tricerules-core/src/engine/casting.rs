@@ -15,7 +15,7 @@ use super::*;
 use crate::engine::events::ev_log_ability;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum LimitedActivationUse {
+pub(super) enum LimitedActivationUse {
     PerTurn(ActivationUseKey),
     PerObject(PersistentActivationUseKey),
 }
@@ -992,6 +992,11 @@ impl GameEngine {
                     "must submit resolution choice before casting",
                 ));
             }
+            Some(BlockingChoice::AttackDeclaration) => {
+                return Err(EngineError::Illegal(
+                    "must pay or cancel the pending attack declaration before casting",
+                ));
+            }
             None => {}
         }
         let has_x = face_mana.has_x();
@@ -1886,13 +1891,24 @@ impl GameEngine {
         let x_value = command.x_value;
         let mana_split_first_color_count = command.mana_split_first_color_count;
         let resolving_mana_payment = self.resolving_mana_payment_for(player);
-        if self.state.priority_player_id() != player && !resolving_mana_payment {
+        let attack_mana_payment = self
+            .state
+            .pending_attack_declaration
+            .as_ref()
+            .is_some_and(|pending| pending.attacking_player_id == player);
+        if self.state.priority_player_id() != player
+            && !resolving_mana_payment
+            && !attack_mana_payment
+        {
             return Err(EngineError::Illegal("not your priority"));
         }
-        if self.state.turn_step == TurnStep::Cleanup && !resolving_mana_payment {
+        if self.state.turn_step == TurnStep::Cleanup
+            && !resolving_mana_payment
+            && !attack_mana_payment
+        {
             return Err(EngineError::Illegal("no abilities during cleanup"));
         }
-        if priority_locked_for_combat_declaration(&self.state) {
+        if priority_locked_for_combat_declaration(&self.state) && !attack_mana_payment {
             return Err(EngineError::Illegal(
                 "cannot activate until attack or block declaration is complete",
             ));
@@ -1998,6 +2014,7 @@ impl GameEngine {
             .pending_spell_cast
             .as_ref()
             .is_some_and(|pending| pending.caster == player)
+            || attack_mana_payment
             || self.paying_ability_activation(player);
         if resolving_mana_payment || casting_mana_payment {
             if !ability.is_mana_ability() {
@@ -2251,7 +2268,7 @@ impl GameEngine {
             .expect("validated activation actor");
         let trefs: Vec<_> = targets.iter().map(|target| target.object_id).collect();
         self.state.undoable_mana_abilities.clear();
-        self.record_limited_activations(activation_uses);
+        self.record_limited_activations(activation_uses.clone());
 
         // Allocate the ability's stack identity now that every cost has committed. Triggers
         // staged while paying consumed ids from the same stream, so the provisional reservation
@@ -2616,7 +2633,7 @@ impl GameEngine {
         }
     }
 
-    fn record_limited_activations(&mut self, uses: Vec<LimitedActivationUse>) {
+    pub(super) fn record_limited_activations(&mut self, uses: Vec<LimitedActivationUse>) {
         for usage in uses {
             let count = match usage {
                 LimitedActivationUse::PerTurn(key) => {
@@ -2710,6 +2727,12 @@ impl GameEngine {
         mana_split_first_color_count: u32,
         selection: Option<&rv1::PaymentSelection>,
     ) -> Result<RuledEventBatch, EngineError> {
+        let attack_payment_before = self
+            .state
+            .pending_attack_declaration
+            .as_ref()
+            .filter(|pending| pending.attacking_player_id == player)
+            .map(|_| self.state.clone());
         let ability = &effective.definition;
         let ability_path = effective.ability_path();
         let ability_path = ability_path.as_slice();
@@ -2728,6 +2751,9 @@ impl GameEngine {
         let mana_damage = ability.mana_ability_damage_to_controller().map(|amount| {
             self.prepare_mana_ability_damage(permanent_id, player, card_name.clone(), amount)
         });
+        let attack_mana_damage = attack_payment_before
+            .as_ref()
+            .and_then(|_| mana_damage.clone());
         self.validate_activation_mana_choice(
             permanent_id,
             AbilitySourceZone::Battlefield,
@@ -2794,8 +2820,10 @@ impl GameEngine {
             self.activated_mana_reduction(player, permanent_id, ability)?,
         )?;
         let cost_plan = self.finish_ability_payment(player, permanent_id, prepared, selection)?;
+        let attack_cost_plan = attack_payment_before.as_ref().map(|_| cost_plan.clone());
         let payment = self.commit_cost_transaction(cost_plan)?;
-        self.record_limited_activations(activation_uses);
+        let payment_receipt = payment.clone();
+        self.record_limited_activations(activation_uses.clone());
 
         let restriction_group_id = ability.mana_restriction().map(|restriction| {
             if let Some(position) = self
@@ -2840,8 +2868,9 @@ impl GameEngine {
 
         let cost_triggers =
             self.collect_committed_cost_triggers(payment.trigger_events, payment.sacrificed);
+        let has_cost_triggers = !cost_triggers.is_empty();
         if mana_damage.is_none()
-            && cost_triggers.is_empty()
+            && !has_cost_triggers
             && matches!(ability.costs.as_slice(), [AbilityCost::Tap])
         {
             self.state
@@ -2882,10 +2911,33 @@ impl GameEngine {
         }
         // A mana ability does not use the stack (CR 605.3a). Cost triggers are staged before its
         // immediate effect; composite damage also invalidates any earlier float undo.
+        let event_time_cost_triggers = cost_triggers.clone();
         self.stage_triggers(cost_triggers);
+        let mut attack_mana_damage_results = Vec::new();
+        let mut attack_mana_damage_triggers = Vec::new();
         if let Some(damage) = mana_damage {
             self.state.undoable_mana_abilities.clear();
-            self.resolve_mana_ability_damage(damage, &mut batch.events)?;
+            (attack_mana_damage_results, attack_mana_damage_triggers) =
+                self.resolve_mana_ability_damage(damage, &mut batch.events)?;
+        }
+        if let Some(before_state) = attack_payment_before {
+            self.record_attack_mana_ability(super::combat::AttackManaAbilityReceiptInput {
+                before_state,
+                source: permanent_id,
+                ability_path: effective.ability_path(),
+                source_label: card_name,
+                ability: ability.clone(),
+                cost_plan: attack_cost_plan.expect("pending attack payment captured its cost plan"),
+                payment: payment_receipt,
+                mana_output: amount,
+                restriction_group_id,
+                activation_uses,
+                mana_damage: attack_mana_damage,
+                mana_damage_results: attack_mana_damage_results,
+                mana_damage_triggers: attack_mana_damage_triggers,
+                cost_triggers: event_time_cost_triggers,
+                has_cost_triggers,
+            });
         }
         Ok(batch)
     }
@@ -2893,7 +2945,11 @@ impl GameEngine {
     pub(super) fn undo_mana_ability(
         &mut self,
         player: PlayerId,
+        command: &rv1::UndoManaAbility,
     ) -> Result<RuledEventBatch, EngineError> {
+        if self.state.pending_attack_declaration.is_some() || command.attack_transaction_id != 0 {
+            return self.undo_attack_mana_ability(player, command);
+        }
         let payment_undo_start = self.state.pending_resolution.as_ref().and_then(|pending| {
             (pending.deciding_player == player)
                 .then_some(pending.continuation.mana_window_undo_start()?)

@@ -188,6 +188,8 @@ pub(crate) struct PendingDamageEvent {
     pub spec: DamageSpec,
     pub remaining: u32,
     pub applied_applications: Vec<DamagePreventionApplication>,
+    /// Exact finite shield amounts consumed while reducing this damage occurrence.
+    pub prevention_debits: Vec<(u32, u32)>,
     pub combat: Option<PendingCombatDamageOccurrence>,
     /// Original noncombat recipient occurrence; never rebound during a parked choice.
     pub recipient_generation: Option<u64>,
@@ -204,6 +206,8 @@ pub(crate) struct PendingCombatDamageOccurrence {
 pub(crate) struct CompletedDamage {
     pub spec: DamageSpec,
     pub result: DamageResult,
+    /// Finite prevention resources consumed while producing this exact result.
+    pub prevention_debits: Vec<(u32, u32)>,
 }
 
 enum DamageBatchProgress {
@@ -373,6 +377,7 @@ impl GameEngine {
                     remaining: spec.event.amount,
                     spec,
                     applied_applications: Vec::new(),
+                    prevention_debits: Vec::new(),
                     combat: None,
                 })
                 .collect(),
@@ -436,11 +441,11 @@ impl GameEngine {
 
     /// Resolve a mana ability's additional damage effect without creating a stack object or
     /// handing priority to another player.
-    pub(crate) fn resolve_mana_ability_damage(
+    pub(super) fn resolve_mana_ability_damage(
         &mut self,
         damage: DamageSpec,
         events: &mut Vec<rv1::RuledEvent>,
-    ) -> Result<(), EngineError> {
+    ) -> Result<(Vec<CompletedDamage>, Vec<super::triggers::CollectedTrigger>), EngineError> {
         let continuation = DamageBatchContinuation::ManaAbility {
             actor: damage.event.source.controller,
             source_object_id: damage.event.source.object_id,
@@ -453,13 +458,16 @@ impl GameEngine {
                 remaining: damage.event.amount,
                 spec: damage,
                 applied_applications: Vec::new(),
+                prevention_debits: Vec::new(),
                 combat: None,
             }],
             applications: Vec::new(),
         };
         match self.advance_damage_batch(pending, events) {
             DamageBatchProgress::Complete(completed) => {
-                self.commit_completed_damage_batch(&completed, events)?;
+                let triggers =
+                    self.commit_completed_damage_batch_collecting_triggers(&completed, events)?;
+                Ok((completed, triggers))
             }
             DamageBatchProgress::NeedsChoice {
                 batch,
@@ -493,9 +501,9 @@ impl GameEngine {
                     stack => stack,
                 };
                 self.park_damage_prevention_choice(continuation, batch, raw_candidates, events);
+                Ok((Vec::new(), Vec::new()))
             }
         }
-        Ok(())
     }
 
     fn pending_prevention_candidates(
@@ -644,6 +652,7 @@ impl GameEngine {
                                 dealt: damage.remaining,
                                 prevented: damage.spec.event.amount - damage.remaining,
                             },
+                            prevention_debits: damage.prevention_debits,
                             spec: damage.spec,
                         })
                         .collect(),
@@ -706,6 +715,7 @@ impl GameEngine {
         let unpreventable = !self.state.damage_prevention_prohibitions.is_empty();
         let application_attempted = damage.remaining;
         let effect = &mut self.state.damage_prevention_effects[effect_index];
+        let finite_remaining = matches!(effect.amount, DamagePreventionAmount::Remaining(_));
         let prevented = if unpreventable {
             0
         } else {
@@ -727,6 +737,9 @@ impl GameEngine {
         let damage = &mut batch.damage[event_index];
         damage.remaining -= prevented;
         damage.applied_applications.push(application);
+        if finite_remaining && prevented > 0 {
+            damage.prevention_debits.push((effect_id, prevented));
+        }
         if prevented > 0 {
             events.push(ev_log(format!(
                 "{source_label} prevents {prevented} damage from {}.",
@@ -1014,6 +1027,7 @@ impl GameEngine {
                         combat: self.combat_damage_occurrence(&spec.event),
                         spec,
                         applied_applications: Vec::new(),
+                        prevention_debits: Vec::new(),
                     }
                 })
                 .collect(),
@@ -1464,7 +1478,21 @@ impl GameEngine {
                 return Ok(finish_with_events(self, events));
             }
         };
-        self.commit_completed_damage_batch(&completed, &mut events)?;
+        let damage_triggers =
+            self.commit_completed_damage_batch_collecting_triggers(&completed, &mut events)?;
+        if let DamageBatchContinuation::ManaAbility {
+            actor,
+            source_object_id,
+            ..
+        } = &completion
+        {
+            self.record_attack_mana_damage_results(
+                *actor,
+                *source_object_id,
+                &completed,
+                damage_triggers,
+            );
+        }
         match completion {
             DamageBatchContinuation::Combat => {
                 self.state.combat_damage_priority_pending = true;
@@ -1590,6 +1618,34 @@ impl GameEngine {
         completed: &[CompletedDamage],
         events: &mut Vec<rv1::RuledEvent>,
     ) -> Result<(), EngineError> {
+        self.commit_completed_damage_batch_internal(completed, events, None)
+            .map(|_| ())
+    }
+
+    fn commit_completed_damage_batch_collecting_triggers(
+        &mut self,
+        completed: &[CompletedDamage],
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<Vec<super::triggers::CollectedTrigger>, EngineError> {
+        self.commit_completed_damage_batch_internal(completed, events, None)
+    }
+
+    pub(super) fn reapply_completed_damage_batch_with_triggers(
+        &mut self,
+        completed: &[CompletedDamage],
+        trigger_snapshot: &[super::triggers::CollectedTrigger],
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        self.commit_completed_damage_batch_internal(completed, events, Some(trigger_snapshot))
+            .map(|_| ())
+    }
+
+    fn commit_completed_damage_batch_internal(
+        &mut self,
+        completed: &[CompletedDamage],
+        events: &mut Vec<rv1::RuledEvent>,
+        replay_trigger_snapshot: Option<&[super::triggers::CollectedTrigger]>,
+    ) -> Result<Vec<super::triggers::CollectedTrigger>, EngineError> {
         let mut lifelink_by_source: BTreeMap<(ObjectId, PlayerId), u32> = BTreeMap::new();
         let mut trigger_events = Vec::new();
         for damage in completed {
@@ -1624,8 +1680,15 @@ impl GameEngine {
                 trigger_events.push(event);
             }
         }
-        self.fire_triggers(&trigger_events, events);
-        Ok(())
+        if let Some(snapshot) = replay_trigger_snapshot {
+            self.refresh_enduring_story_designations();
+            self.reconcile_combat_characteristics(events);
+            self.record_committed_events(&trigger_events);
+            self.stage_triggers(snapshot.to_vec());
+            Ok(snapshot.to_vec())
+        } else {
+            Ok(self.fire_triggers_collecting(&trigger_events, events))
+        }
     }
 
     pub(crate) fn add_damage_prevention(

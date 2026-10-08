@@ -1,0 +1,114 @@
+{
+  "format_version": 1,
+  "oracle_id": "ea9709b6-4c37-4d5a-b04d-cd4c42e4f9dd",
+  "spans": [
+    {
+      "face_id": "propaganda",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/static_abilities/0/definition"]
+    }
+  ],
+  "primitive_references": [
+    {
+      "symbol": "StaticAbilityDef::AttackTax",
+      "typed_path": "/faces/0/static_abilities/0/definition"
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_propaganda::propaganda_registers_its_complete_card_definition",
+      "covers": "the complete single-face Enchantment has exact {2}{U} cost, stable ability identity, Oracle-line presentation and typed generic-per-attacker tax"
+    },
+    {
+      "test": "scenario combat::propaganda_tax_is_cumulative_for_each_creature_attacking_a_player",
+      "covers": "two Propaganda sources charge {2} for each of two creatures attacking their controller, totaling eight generic mana"
+    },
+    {
+      "test": "scenario combat::propaganda_does_not_tax_a_creature_attacking_its_controllers_planeswalker",
+      "covers": "the direct planeswalker attack edge has no Propaganda tax and commits without an attack payment transaction"
+    },
+    {
+      "test": "scenario combat::propaganda_tax_uses_each_directly_attacked_player_in_multiplayer",
+      "covers": "in a three-player free-for-all, only the attacker assigned directly to the player with Propaganda contributes to the locked tax"
+    },
+    {
+      "test": "scenario combat::propaganda_attack_declaration_waits_for_attack_tax_payment",
+      "covers": "the exact card tax locks two generic mana for the chosen creature, rejects partial payment atomically, and commits the attacker only after full payment"
+    },
+    {
+      "test": "scenario combat::propaganda_mana_receipt_reports_later_spend_dependency",
+      "covers": "mana from an earlier Forest receipt spent by Capital City prevents reversing that receipt and is reported to the payer; undoing the dependent receipt makes Forest reversible"
+    },
+    {
+      "test": "scenario combat::propaganda_background_mana_is_attributed_before_receipt_mana",
+      "covers": "same-color mana present before the payment window is consumed before an earlier mana receipt, allowing that receipt to be reversed while retaining the later activation"
+    },
+    {
+      "test": "scenario combat::propaganda_attack_payment_allows_and_undoes_mana_ability",
+      "covers": "the active payer can activate and undo a Forest mana ability while the declaration payment is pending"
+    },
+    {
+      "test": "scenario combat::propaganda_undoes_earlier_cost_triggering_mana_ability_and_keeps_later_float",
+      "covers": "reversing an earlier cost-bearing mana activation preserves a later independent float and its event-time effects"
+    },
+    {
+      "test": "scenario combat::propaganda_undoes_earlier_sacrifice_mana_ability_and_keeps_later_sacrifice_activation",
+      "covers": "reversing one unspent Lotus Petal receipt restores only its source while retaining a later independent sacrifice activation"
+    },
+    {
+      "test": "scenario combat::propaganda_undo_preserves_later_mana_ability_damage_prevention_result",
+      "covers": "retained Yavimaya Coast damage preserves its original post-prevention result after an earlier activation is undone"
+    },
+    {
+      "test": "scenario combat::propaganda_undo_reuses_later_prevention_choice_and_finite_shield_receipt",
+      "covers": "retained damage reuses the original prevention choice and exact finite-shield debit without asking again or consuming a different shield"
+    },
+    {
+      "test": "scenario combat::propaganda_cancellation_reverses_attack_tap_but_keeps_mana_ability",
+      "covers": "cancelling the uncompleted declaration reverses its attack tap while keeping the resolved Forest mana ability"
+    },
+    {
+      "test": "scenario combat::declared_attackers_keep_mana_until_declare_attackers_step_ends",
+      "covers": "unspent payment-window mana remains in the pool through the declare-attackers step and clears at the actual step transition"
+    },
+    {
+      "test": "scenario combat::must_attack_creature_with_only_taxed_attack_edge_may_skip",
+      "covers": "a player may omit a must-attack creature whose only legal edge requires paying an attack cost, as CR 508.1d permits"
+    },
+    {
+      "test": "scenario combat::propaganda_attack_tap_reserves_once_per_turn_trigger_before_payment_mana_abilities",
+      "covers": "the CR 508.1f attack tap reserves a once-per-turn trigger before later payment-window mana taps"
+    },
+    {
+      "test": "scenario combat::propaganda_reapply_does_not_collect_a_newly_restored_death_observer",
+      "covers": "a retained sacrifice-mana receipt reuses its event-time cost-trigger match set after undo restores the departed observer"
+    },
+    {
+      "test": "scenario combat::propaganda_reapply_preserves_event_time_lifelink_triggers",
+      "covers": "undo and cancellation of a retained Talisman damage/lifelink receipt do not collect a trigger from an observer restored after its original event"
+    },
+    {
+      "test": "scenario combat::propaganda_payer_concession_clears_pending_attack_for_survivors",
+      "covers": "the payer's concession aborts the pending declaration so surviving multiplayer players can continue"
+    },
+    {
+      "test": "scenario combat::propaganda_rejects_stale_or_wrong_payer_commits_without_spending_mana",
+      "covers": "wrong-player, stale-revision, stale-transaction and stale-payment commands preserve the payer's exact actionable state and allow a valid retry"
+    },
+    {
+      "test": "scenario combat::propaganda_commit_omits_an_attacker_that_left_and_returned_during_payment",
+      "covers": "commit uses the captured zone-change generation and omits a returned incarnation while retaining the locked tax"
+    },
+    {
+      "test": "scenario combat::propaganda_attack_payment_commands_replay_identically",
+      "covers": "attack declaration, three mana abilities, selective reversal of the first receipt and payment commit replay the same event batches and diagnostic state from identical seeds"
+    },
+    {
+      "test": "scenario combat::propaganda_rebases_mana_lineage_after_undoing_an_intermediate_receipt",
+      "covers": "after an intermediate mana receipt is reversed, a retained later cost is rebased onto background mana and its source-lineage attribution is recomputed so the earlier Forest output can then be reversed"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

@@ -195,6 +195,7 @@ enum ManaSpendPurpose<'a> {
     ActivateAbility(&'a Characteristics),
     SpecialAction(SpecialActionManaPurpose),
     ResolutionPayment,
+    AttackCost,
 }
 
 fn restriction_allows_purpose(
@@ -220,7 +221,9 @@ fn restriction_allows_purpose(
         ManaSpendPurpose::SpecialAction(action) => {
             restriction.all_nonspell_costs || restriction.special_actions.contains(&action)
         }
-        ManaSpendPurpose::ResolutionPayment => restriction.all_nonspell_costs,
+        ManaSpendPurpose::ResolutionPayment | ManaSpendPurpose::AttackCost => {
+            restriction.all_nonspell_costs
+        }
     }
 }
 
@@ -826,6 +829,10 @@ impl GameEngine {
         player_idx: usize,
     ) -> Vec<u32> {
         self.eligible_restricted_mana_for_purpose(player_idx, ManaSpendPurpose::ResolutionPayment)
+    }
+
+    pub(super) fn eligible_restricted_mana_for_attack_cost(&self, player_idx: usize) -> Vec<u32> {
+        self.eligible_restricted_mana_for_purpose(player_idx, ManaSpendPurpose::AttackCost)
     }
 
     pub(super) fn spell_generic_reduction(

@@ -356,7 +356,7 @@ fn issue_197_madness_publishes_recipient_scoped_targets_and_allows_mana_and_retr
     assert_eq!(batch.legal_by_player[&1].zone_cast_actions.len(), 1);
     let undo = rv1::RuledCommand {
         cmd: Some(rv1::ruled_command::Cmd::UndoManaAbility(
-            rv1::UndoManaAbility {},
+            rv1::UndoManaAbility::default(),
         )),
     };
     e.apply_command(1, &undo).unwrap();

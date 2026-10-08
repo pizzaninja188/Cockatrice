@@ -958,6 +958,19 @@ pub enum TriggerCondition {
 }
 
 impl TriggerCondition {
+    /// These event shapes can match the tap used while activating an activated mana ability.
+    /// The rule model does not carry mana-activation provenance into trigger collection, so a
+    /// targetless trigger that could add mana with one of these conditions cannot be admitted
+    /// until CR 605.1b/605.4a immediate resolution is modeled.
+    pub(crate) fn may_trigger_from_mana_ability_tap(&self) -> bool {
+        matches!(
+            self,
+            Self::WheneverSelfBecomesTapped
+                | Self::WheneverAttachedObjectBecomesTapped
+                | Self::WheneverPlayerTapsCreature { .. }
+        )
+    }
+
     pub(crate) fn is_delayed_only(&self) -> bool {
         matches!(
             self,
@@ -1543,6 +1556,23 @@ impl TriggeredAbilityDef {
         {
             return Err(
                 "storage-counter split mana is supported only by its exact battlefield activated ability"
+                .into(),
+            );
+        }
+        let has_target = self.targeting.is_some()
+            || effects.iter().any(|effect| effect.needs_target())
+            || self.modal.as_ref().is_some_and(|modal| {
+                modal.modes.iter().any(|mode| {
+                    mode.targeting.is_some()
+                        || mode.effects.iter().any(SpellEffectKind::needs_target)
+                })
+            });
+        if !has_target
+            && self.trigger.may_trigger_from_mana_ability_tap()
+            && effects.iter().any(|effect| effect.could_add_mana_to_pool())
+        {
+            return Err(
+                "targetless triggered mana abilities from mana-ability tap events require CR 605.4a immediate resolution"
                     .into(),
             );
         }
@@ -2314,6 +2344,13 @@ pub enum StaticAbilityDef {
     LimitAttackers {
         maximum: u32,
         affected: AttackLimitAffected,
+    },
+    /// CR 508.1h: the attacking player pays this mana cost for each creature assigned to attack
+    /// this permanent's controller as a player. Propaganda, Ghostly Prison, and Windborn Muse share
+    /// this narrow player-only attack-cost behavior; attacks on that player's planeswalkers or
+    /// Battles do not use it.
+    AttackTax {
+        generic_per_attacker: u32,
     },
     /// CR 502.3: this permanent untaps during every other player's untap step, at the same
     /// turn-based boundary as that player's permanents. Bender's Waterskin supplies the printed

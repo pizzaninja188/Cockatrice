@@ -583,12 +583,13 @@ impl GameEngine {
         player: PlayerId,
     ) -> Result<RuledEventBatch, EngineError> {
         // A concession removes this player; other free-for-all players continue until one remains.
+        let mut batch = RuledEventBatch::default();
+        self.abort_attack_declaration_for_departure(player, &mut batch.events);
         for p in &mut self.state.players {
             if p.id == player {
                 p.has_lost = true;
             }
         }
-        let mut batch = RuledEventBatch::default();
         self.state.continuous_effects.retain(|effect| {
             !matches!(
                 effect.duration,
@@ -661,6 +662,11 @@ impl GameEngine {
             Some(BlockingChoice::Resolution) => {
                 return Err(EngineError::Illegal(
                     "must submit resolution choice before passing priority",
+                ));
+            }
+            Some(BlockingChoice::AttackDeclaration) => {
+                return Err(EngineError::Illegal(
+                    "must pay or cancel the pending attack declaration before passing priority",
                 ));
             }
             None => {}

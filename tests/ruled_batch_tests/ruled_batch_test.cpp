@@ -6238,6 +6238,68 @@ TEST_F(RuledBatchTest, PendingSpellCastReconnectRestoresOnlyTheCastersPrivateTra
     EXPECT_TRUE(afterCompletion.getPostResponseQueue().isEmpty());
 }
 
+TEST_F(RuledBatchTest, PendingAttackDeclarationReconnectRestoresOnlyThePayersPrivateTransaction)
+{
+    ruled::v1::IpcResponse seed;
+    seed.set_ok(true);
+    auto *seedView = seed.mutable_batch()->add_events()->mutable_zone_view();
+    *seedView->add_per_player() = buildPerPlayerView(p1, {700u}, {false});
+    *seedView->add_per_player() = buildPerPlayerView(p2, {}, {});
+    updatePendingResolutionChoiceCache(seed);
+
+    ruled::v1::IpcResponse response;
+    response.set_ok(true);
+    auto *batch = response.mutable_batch();
+    auto &actions = (*batch->mutable_legal_by_player())[p1->getPlayerId()];
+    auto *pending = actions.mutable_pending_attack_declaration();
+    pending->set_transaction_id(88u);
+    pending->set_revision(3u);
+    pending->set_attacking_player_id(p1->getPlayerId());
+    pending->set_generic_mana_cost(2u);
+    pending->mutable_payment_preview()->set_valid(true);
+    pending->mutable_payment_preview()->set_remaining_cost("{2}");
+    auto *receipt = pending->add_mana_ability_undo_options();
+    receipt->set_activation_command_index(27u);
+    receipt->set_source_object_id(700u);
+    receipt->set_source_label("Mana creature");
+    receipt->set_reversible(true);
+    auto *mana = batch->add_events()->mutable_mana_pool_updated();
+    mana->set_player_id(p1->getPlayerId());
+    mana->set_g(1u);
+    updatePendingResolutionChoiceCache(response);
+
+    for (Server_Player *recipient : {p1, p2}) {
+        ResponseContainer reconnect(-1);
+        game->createGameJoinedEvent(recipient, reconnect, true);
+        ASSERT_EQ(reconnect.getPostResponseQueue().size(), 3);
+        const auto *container =
+            dynamic_cast<const GameEventContainer *>(reconnect.getPostResponseQueue().last().second);
+        ASSERT_NE(container, nullptr);
+        ruled::v1::RuledEventBatch restored;
+        ASSERT_TRUE(restored.ParseFromString(container->event_list(0).GetExtension(Event_RuledPayload::ext).payload()));
+        if (recipient == p1) {
+            ASSERT_TRUE(restored.legal_by_player().contains(p1->getPlayerId()));
+            const auto &own = restored.legal_by_player().at(p1->getPlayerId());
+            ASSERT_TRUE(own.has_pending_attack_declaration());
+            EXPECT_EQ(own.pending_attack_declaration().transaction_id(), 88u);
+            EXPECT_EQ(own.pending_attack_declaration().generic_mana_cost(), 2u);
+            ASSERT_EQ(own.pending_attack_declaration().mana_ability_undo_options_size(), 1);
+            EXPECT_EQ(own.pending_attack_declaration().mana_ability_undo_options(0).activation_command_index(), 27u);
+        } else {
+            EXPECT_TRUE(restored.legal_by_player().empty());
+            EXPECT_EQ(restored.SerializeAsString().find("Mana creature"), std::string::npos);
+        }
+    }
+
+    ruled::v1::IpcResponse completed;
+    completed.set_ok(true);
+    (*completed.mutable_batch()->mutable_legal_by_player())[p1->getPlayerId()];
+    updatePendingResolutionChoiceCache(completed);
+    ResponseContainer afterCompletion(-1);
+    game->ruled()->enqueuePendingResolutionChoiceForParticipant(p1, afterCompletion);
+    EXPECT_TRUE(afterCompletion.getPostResponseQueue().isEmpty());
+}
+
 TEST_F(RuledBatchTest, PendingAbilityActivationReconnectRetainsPublicStageAndOnlyEachSeatsOffers)
 {
     for (const auto stage : {ruled::v1::ABILITY_ACTIVATION_STAGE_OPPONENT_TARGET,

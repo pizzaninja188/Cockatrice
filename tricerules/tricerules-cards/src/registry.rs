@@ -711,6 +711,17 @@ fn validate_static_abilities(card: &CardDefinition, face: &CardFace) -> Result<(
                 });
             }
         }
+        if let StaticAbilityDef::AttackTax {
+            generic_per_attacker,
+        } = ability
+        {
+            if *generic_per_attacker == 0 {
+                return Err(RegistryError::InvalidCard {
+                    id: card.id.clone(),
+                    reason: "AttackTax requires a nonzero generic mana amount".into(),
+                });
+            }
+        }
         if let StaticAbilityDef::AdditionalTriggeredAbilityInstances {
             source_filter,
             condition,
@@ -3694,6 +3705,55 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn targetless_mana_triggers_from_tap_events_are_rejected() {
+        let triggers = [
+            ("creature", "WheneverSelfBecomesTapped"),
+            (
+                "equipment",
+                "WheneverAttachedObjectBecomesTapped",
+            ),
+            (
+                "creature",
+                "WheneverPlayerTapsCreature(player: Controller, controllers: Opponents, cardinality: EachObject)",
+            ),
+        ];
+        for (index, (kind, trigger)) in triggers.into_iter().enumerate() {
+            let (types, stats) = if kind == "equipment" {
+                ("types: [\"Artifact\", \"Equipment\"],", "")
+            } else {
+                (
+                    "types: [\"Creature\"],",
+                    "power: Some(1), toughness: Some(1),",
+                )
+            };
+            let data = format!(
+                r#"(id: "tap_mana_trigger_{index}", name: "Tap Mana Trigger {index}", face_id: "tap_mana_trigger_{index}", mana_cost: "{{1}}", {types} {stats}
+                triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: {trigger}, effect: [AddMana(amount: (g: 1), retention: EndOfStep)])])"#
+            );
+            let error = CardRegistry::from_chunks(&[&data])
+                .expect_err("unmodeled CR 605.4a ability must fail closed");
+            assert!(
+                matches!(&error, RegistryError::InvalidCard { reason, .. } if reason.contains("CR 605.4a immediate resolution")),
+                "unexpected validation failure for {trigger}: {error}"
+            );
+        }
+
+        let ordinary = r#"(id: "attack_mana_trigger", name: "Attack Mana Trigger", face_id: "attack_mana_trigger", types: ["Creature"], power: Some(1), toughness: Some(1), triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: WheneverSelfAttacks(minimum_other_attackers: 0), effect: [AddMana(amount: (r: 1), retention: EndOfStep)])])"#;
+        assert!(
+            CardRegistry::from_chunks(&[ordinary]).is_ok(),
+            "an ordinary attack trigger is not a triggered mana ability"
+        );
+
+        let targeted = r#"(id: "targeted_tap_mana_trigger", name: "Targeted Tap Mana Trigger", face_id: "targeted_tap_mana_trigger", types: ["Creature"], power: Some(1), toughness: Some(1), triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback, trigger: WheneverSelfBecomesTapped, effect: [AddMana(amount: (r: 1), retention: EndOfStep), DamageTarget(amount: 1, target: (kind: Creature))])])"#;
+        let targeted_result = CardRegistry::from_chunks(&[targeted]);
+        assert!(
+            targeted_result.is_ok(),
+            "targeted triggers are not CR 605.1b mana abilities: {:?}",
+            targeted_result.err()
+        );
     }
 
     #[test]

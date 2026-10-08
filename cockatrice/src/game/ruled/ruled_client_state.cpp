@@ -1691,11 +1691,22 @@ void RuledClientState::confirmAttackers()
     for (const auto &assignment : std::as_const(pendingAttackAssignments)) {
         *declare->add_assignments() = assignment;
     }
-    host->sendRuledCommand(ruledCommand);
+    host->sendRuledCommandExpectingAck(ruledCommand, [this](bool accepted) {
+        if (!accepted) {
+            attackersSubmittedThisStep = false;
+            emit combatStateChanged();
+        }
+    });
     attackersSubmittedThisStep = true;
-    pendingAttackerOids.clear();
-    pendingAttackAssignments.clear();
-    attackerAwaitingDefenderOid = 0;
+    emit combatStateChanged();
+}
+
+void RuledClientState::finishAttackDeclarationCancellation(quint64 transactionId)
+{
+    if (pendingAttackDeclaration && pendingAttackDeclaration->transaction_id() != transactionId)
+        return;
+    pendingAttackDeclaration.reset();
+    attackersSubmittedThisStep = false;
     emit combatStateChanged();
 }
 
@@ -1706,11 +1717,13 @@ void RuledClientState::skipAttackers()
     }
     ruled::v1::RuledCommand ruledCommand;
     ruledCommand.mutable_declare_attackers();
-    host->sendRuledCommand(ruledCommand);
+    host->sendRuledCommandExpectingAck(ruledCommand, [this](bool accepted) {
+        if (!accepted) {
+            attackersSubmittedThisStep = false;
+            emit combatStateChanged();
+        }
+    });
     attackersSubmittedThisStep = true;
-    pendingAttackerOids.clear();
-    pendingAttackAssignments.clear();
-    attackerAwaitingDefenderOid = 0;
     emit combatStateChanged();
 }
 
@@ -2201,6 +2214,7 @@ void RuledClientState::clearSessionState(RuledSessionResetScope scope)
         zoneLandSourceByOid.clear();
         exilePlayPermissionGroups.clear();
         pendingSpellCast.reset();
+        pendingAttackDeclaration.reset();
         pendingAbilityActivation.reset();
         validTargetsByHandSlot.clear();
         validTargetsByZoneObject.clear();

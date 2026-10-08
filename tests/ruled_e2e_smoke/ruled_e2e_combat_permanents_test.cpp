@@ -4,6 +4,214 @@ namespace ruled_e2e
 {
 namespace
 {
+TEST_F(RuledE2ESmokeTest, PropagandaAttackPaymentIsPrivateCancelableAndCommittedWithExactMana)
+{
+    const auto started = startServers();
+    if (!started) {
+        FAIL() << started.message();
+    }
+    if (std::string(started.message()).rfind("SKIP:", 0) == 0) {
+        GTEST_SKIP() << std::string(started.message()).substr(5);
+    }
+
+    OpeningDriver p1(true, QStringLiteral("propagandap1"), &transcript);
+    OpeningDriver p2(false, QStringLiteral("propagandap2"), &transcript);
+    ASSERT_TRUE(p1.loginAndJoinRoom());
+    ASSERT_TRUE(p2.loginAndJoinRoom());
+    ASSERT_TRUE(p1.createRuledGame());
+    ASSERT_TRUE(p2.joinRuledGame(p1.gameId));
+    ASSERT_TRUE(p1.selectDeck(deckXml({{40, QStringLiteral("Island")}})));
+    ASSERT_TRUE(p2.selectDeck(deckXml({{40, QStringLiteral("Forest")}})));
+    p1.sendReady();
+    p2.sendReady();
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.gameStarted && p1.stateVersion > 0; }, 20000,
+                             "Propaganda game start (p1)"));
+    ASSERT_TRUE(p2.pumpUntil([&] { return p2.gameStarted && p2.stateVersion > 0; }, 20000,
+                             "Propaganda game start (p2)"));
+    ASSERT_TRUE(p1.publishMain1Stops());
+    ASSERT_TRUE(p2.publishMain1Stops());
+
+    QElapsedTimer opening;
+    opening.start();
+    while (opening.elapsed() < 30000) {
+        p1.pump(25);
+        p2.pump(25);
+        if (p1.phase == ruled::v1::PHASE_ID_MAIN1 && p2.phase == ruled::v1::PHASE_ID_MAIN1 &&
+            p1.priorityPlayer == p1.myId && p2.priorityPlayer == p1.myId) {
+            break;
+        }
+        p1.act();
+        p2.act();
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_MAIN1);
+
+    auto sendAndPump = [&](OpeningDriver &sender, const ruled::v1::RuledCommand &command,
+                           const QString &description) {
+        const quint64 p1Version = p1.stateVersion;
+        const quint64 p2Version = p2.stateVersion;
+        sender.sendRuled(command, description);
+        QElapsedTimer wait;
+        wait.start();
+        while (wait.elapsed() < 10000 && (p1.stateVersion <= p1Version || p2.stateVersion <= p2Version)) {
+            p1.pump(25);
+            p2.pump(25);
+        }
+        return p1.stateVersion > p1Version && p2.stateVersion > p2Version;
+    };
+    auto put = [&](int playerId, const char *cardName) {
+        ruled::v1::RuledCommand command;
+        auto *placement = command.mutable_dev_command()->mutable_put_card_in_zone();
+        command.mutable_dev_command()->set_target_player_id(playerId);
+        placement->set_card_name(cardName);
+        placement->set_zone(ruled::v1::DEV_ZONE_BATTLEFIELD);
+        placement->set_ready(true);
+        return sendAndPump(p1, command, QStringLiteral("dev: put %1").arg(cardName));
+    };
+    auto pass = [&](OpeningDriver &client) {
+        ruled::v1::RuledCommand command;
+        command.mutable_pass_priority();
+        return sendAndPump(client, command, QStringLiteral("pass priority before Propaganda attack"));
+    };
+    auto findPermanent = [](const OpeningDriver &client, int controller, const QString &cardId)
+        -> std::optional<OpeningDriver::Permanent> {
+        const auto battlefield = client.battlefieldByPlayer.find(controller);
+        if (battlefield == client.battlefieldByPlayer.end()) {
+            return std::nullopt;
+        }
+        const auto found = std::find_if(battlefield->second.begin(), battlefield->second.end(),
+                                        [&](const OpeningDriver::Permanent &permanent) {
+                                            return permanent.cardId == cardId;
+                                        });
+        return found == battlefield->second.end() ? std::nullopt : std::optional(*found);
+    };
+    auto findByOid = [](const OpeningDriver &client, int controller, quint32 oid)
+        -> std::optional<OpeningDriver::Permanent> {
+        const auto battlefield = client.battlefieldByPlayer.find(controller);
+        if (battlefield == client.battlefieldByPlayer.end()) {
+            return std::nullopt;
+        }
+        const auto found = std::find_if(battlefield->second.begin(), battlefield->second.end(),
+                                        [oid](const OpeningDriver::Permanent &permanent) {
+                                            return permanent.oid == oid;
+                                        });
+        return found == battlefield->second.end() ? std::nullopt : std::optional(*found);
+    };
+
+    ASSERT_TRUE(put(p2.myId, "Propaganda"));
+    ASSERT_TRUE(put(p1.myId, "Grizzly Bears"));
+    ASSERT_TRUE(put(p1.myId, "Forest"));
+    ASSERT_TRUE(put(p1.myId, "Forest"));
+
+    QElapsedTimer toAttack;
+    toAttack.start();
+    while (p1.phase != ruled::v1::PHASE_ID_DECLARE_ATTACKERS && toAttack.elapsed() < 20000) {
+        ASSERT_TRUE(pass(p1.priorityPlayer == p1.myId ? p1 : p2));
+    }
+    ASSERT_EQ(p1.phase, ruled::v1::PHASE_ID_DECLARE_ATTACKERS);
+    const auto bears = findPermanent(p1, p1.myId, QStringLiteral("grizzly_bears"));
+    ASSERT_TRUE(bears.has_value());
+    std::vector<quint32> forests;
+    for (const auto &permanent : p1.battlefieldByPlayer[p1.myId]) {
+        if (permanent.cardId == QStringLiteral("forest")) {
+            forests.push_back(permanent.oid);
+        }
+    }
+    ASSERT_EQ(forests.size(), 2u);
+
+    const auto attack = std::find_if(
+        p1.latestLegal.legal_attack_assignments().begin(), p1.latestLegal.legal_attack_assignments().end(),
+        [&](const ruled::v1::AttackAssignment &candidate) {
+            return candidate.attacker_object_id() == bears->oid && candidate.has_defender() &&
+                   candidate.defender().kind() == ruled::v1::TARGET_REF_KIND_PLAYER &&
+                   candidate.defender().object_id() == static_cast<quint32>(p2.myId);
+        });
+    ASSERT_NE(attack, p1.latestLegal.legal_attack_assignments().end());
+    ruled::v1::RuledCommand declare;
+    *declare.mutable_declare_attackers()->add_assignments() = *attack;
+    ASSERT_TRUE(sendAndPump(p1, declare, QStringLiteral("declare attack through Propaganda")));
+    ASSERT_TRUE(p1.latestLegal.has_pending_attack_declaration());
+    ASSERT_FALSE(p2.latestLegal.has_pending_attack_declaration());
+    auto pending = p1.latestLegal.pending_attack_declaration();
+    EXPECT_EQ(pending.generic_mana_cost(), 2u);
+    EXPECT_FALSE(pending.payment_preview().selection().has_source());
+    ASSERT_TRUE(findByOid(p1, p1.myId, bears->oid).has_value());
+    EXPECT_TRUE(findByOid(p1, p1.myId, bears->oid)->tapped);
+
+    ruled::v1::RuledCommand cancel;
+    cancel.mutable_cancel_attack_declaration()->set_transaction_id(pending.transaction_id());
+    cancel.mutable_cancel_attack_declaration()->set_expected_revision(pending.revision());
+    ASSERT_TRUE(sendAndPump(p1, cancel, QStringLiteral("cancel Propaganda attack payment")));
+    EXPECT_FALSE(p1.latestLegal.has_pending_attack_declaration());
+    EXPECT_FALSE(p2.latestLegal.has_pending_attack_declaration());
+    EXPECT_FALSE(findPermanent(p1, p1.myId, QStringLiteral("grizzly_bears"))->tapped);
+    EXPECT_TRUE(p1.latestDeclaredAttackAssignments.empty());
+
+    ASSERT_TRUE(sendAndPump(p1, declare, QStringLiteral("retry Propaganda attack payment")));
+    ASSERT_TRUE(p1.latestLegal.has_pending_attack_declaration());
+    pending = p1.latestLegal.pending_attack_declaration();
+    ASSERT_EQ(pending.mana_ability_undo_options_size(), 0);
+    for (const quint32 forestOid : forests) {
+        ruled::v1::RuledCommand activate;
+        p1.setBattlefieldAbilitySource(activate.mutable_activate_ability(), forestOid);
+        activate.mutable_activate_ability()->set_ability_index(0);
+        ASSERT_TRUE(sendAndPump(p1, activate, QStringLiteral("tap Forest for Propaganda")));
+    }
+    pending = p1.latestLegal.pending_attack_declaration();
+    ASSERT_EQ(pending.mana_ability_undo_options_size(), 2);
+    const auto firstForestReceipt = std::find_if(
+        pending.mana_ability_undo_options().begin(), pending.mana_ability_undo_options().end(),
+        [&](const ruled::v1::AttackManaAbilityUndoOption &option) {
+            return option.source_object_id() == forests.front() && option.reversible();
+        });
+    ASSERT_NE(firstForestReceipt, pending.mana_ability_undo_options().end());
+
+    ruled::v1::RuledCommand undo;
+    undo.mutable_undo_mana_ability()->set_attack_transaction_id(pending.transaction_id());
+    undo.mutable_undo_mana_ability()->set_activation_command_index(firstForestReceipt->activation_command_index());
+    ASSERT_TRUE(sendAndPump(p1, undo, QStringLiteral("undo first Forest while retaining later mana")));
+    EXPECT_EQ(p1.myPool.g, 1);
+    ASSERT_TRUE(findByOid(p1, p1.myId, forests.front()).has_value());
+    ASSERT_TRUE(findByOid(p1, p1.myId, forests.back()).has_value());
+    EXPECT_FALSE(findByOid(p1, p1.myId, forests.front())->tapped);
+    EXPECT_TRUE(findByOid(p1, p1.myId, forests.back())->tapped);
+
+    ruled::v1::RuledCommand reactivate;
+    p1.setBattlefieldAbilitySource(reactivate.mutable_activate_ability(), forests.front());
+    reactivate.mutable_activate_ability()->set_ability_index(0);
+    ASSERT_TRUE(sendAndPump(p1, reactivate, QStringLiteral("retap Forest for Propaganda")));
+    EXPECT_EQ(p1.myPool.g, 2);
+
+    const int previewsBefore = p1.paymentPreviewCount;
+    pending = p1.latestLegal.pending_attack_declaration();
+    pending = p1.latestLegal.pending_attack_declaration();
+    ruled::v1::RuledCommand query;
+    auto *attackPayment = query.mutable_preview_payment()->mutable_commit_attack_declaration();
+    attackPayment->set_transaction_id(pending.transaction_id());
+    attackPayment->set_expected_revision(pending.revision());
+    attackPayment->mutable_payment()->mutable_mana()->set_g(2);
+    p1.sendRuled(query, QStringLiteral("preview exact Propaganda payment"));
+    ASSERT_TRUE(p1.pumpUntil([&] { return p1.paymentPreviewCount > previewsBefore; }, 10000,
+                             "Propaganda attack payment preview"));
+    EXPECT_TRUE(p1.paymentPreview.valid());
+    EXPECT_TRUE(p1.paymentPreview.complete());
+    EXPECT_FALSE(p1.paymentPreview.selection().has_source());
+
+    ruled::v1::RuledCommand commit;
+    auto *commitAttack = commit.mutable_commit_attack_declaration();
+    commitAttack->set_transaction_id(pending.transaction_id());
+    commitAttack->set_expected_revision(pending.revision());
+    commitAttack->mutable_payment()->CopyFrom(p1.paymentPreview.selection());
+    for (const auto &restricted : p1.paymentPreview.restricted_mana()) {
+        *commitAttack->add_restricted_mana() = restricted;
+    }
+    ASSERT_TRUE(sendAndPump(p1, commit, QStringLiteral("commit Propaganda attack payment")));
+    EXPECT_FALSE(p1.latestLegal.has_pending_attack_declaration());
+    ASSERT_EQ(p1.latestDeclaredAttackAssignments.size(), 1u);
+    EXPECT_EQ(p1.latestDeclaredAttackAssignments.front().attacker_object_id(), bears->oid);
+    EXPECT_TRUE(findPermanent(p1, p1.myId, QStringLiteral("grizzly_bears"))->tapped);
+    EXPECT_EQ(p1.myPool.g, 0);
+}
+
 TEST_F(RuledE2ESmokeTest, EquipmentAttachmentAndMerchantGraveyardReturnReachBothClients)
 {
     const auto started = startServers();

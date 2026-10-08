@@ -1643,6 +1643,1711 @@ fn cannot_add_mana_while_declaring_attackers() {
 }
 
 #[test]
+fn declared_attackers_keep_mana_until_declare_attackers_step_ends() {
+    let mut e = GameEngine::new(4012, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = put_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+
+    // Model mana produced inside a legal declaration-payment window. Declare attackers does not
+    // end the step; any unspent mana survives until the active player later passes the step.
+    e.state.players[0].mana_pool.colorless = 1;
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("declare attackers");
+
+    assert_eq!(
+        e.state.players[0].mana_pool.colorless, 1,
+        "unused mana must remain through post-declaration priority"
+    );
+
+    e.apply_command(0, &pass())
+        .expect("active pass attackers step");
+    e.apply_command(1, &pass())
+        .expect("defender pass attackers step");
+    assert_eq!(
+        e.state.players[0].mana_pool.colorless, 0,
+        "unused mana clears when declare attackers actually ends"
+    );
+}
+
+#[test]
+fn propaganda_tax_is_cumulative_for_each_creature_attacking_a_player() {
+    let mut e = GameEngine::new(4022, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let first_attacker = e.state.players[0].battlefield[0];
+    let second_attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+
+    let batch = e
+        .apply_command(0, &declare_attackers(vec![first_attacker, second_attacker]))
+        .expect("both creatures can be selected before the combined tax is paid");
+    let pending = batch.legal_by_player[&0]
+        .pending_attack_declaration
+        .as_ref()
+        .expect("cumulative attack tax payment");
+    assert_eq!(pending.generic_mana_cost, 8);
+    assert!(e.state.objects[&first_attacker].tapped);
+    assert!(e.state.objects[&second_attacker].tapped);
+    assert!(!e.state.combat.as_ref().expect("combat").attackers_declared);
+}
+
+#[test]
+fn propaganda_does_not_tax_a_creature_attacking_its_controllers_planeswalker() {
+    let mut e = GameEngine::new(4023, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = e.state.players[0].battlefield[0];
+    let planeswalker = inject_permanent_on_battlefield(&mut e, 1, "jace_beleren");
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+    let assignment = tricerules_proto::ruled::v1::AttackAssignment {
+        attacker_object_id: attacker,
+        attacker_zone_change_generation: e
+            .state
+            .zone_change_generation
+            .get(&attacker)
+            .copied()
+            .unwrap_or(0),
+        defender: Some(tricerules_proto::ruled::v1::TargetRef {
+            object_id: planeswalker,
+            kind: tricerules_proto::ruled::v1::TargetRefKind::Permanent as i32,
+            ..Default::default()
+        }),
+        defender_zone_change_generation: e
+            .state
+            .zone_change_generation
+            .get(&planeswalker)
+            .copied()
+            .unwrap_or(0),
+        defending_player_id: 1,
+    };
+
+    let batch = e
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::DeclareAttackers(
+                    tricerules_proto::ruled::v1::DeclareAttackers {
+                        assignments: vec![assignment],
+                    },
+                )),
+            },
+        )
+        .expect("Propaganda permits attacking its controller's planeswalker without a tax");
+    assert!(e.state.pending_attack_declaration.is_none());
+    assert!(e.state.combat.as_ref().expect("combat").attackers_declared);
+    assert!(batch.events.iter().any(|event| matches!(
+        event.ev,
+        Some(tricerules_proto::ruled::v1::ruled_event::Ev::AttackersDeclared(_))
+    )));
+}
+
+#[test]
+fn propaganda_tax_uses_each_directly_attacked_player_in_multiplayer() {
+    let mut e = GameEngine::new(4024, &[0, 1, 2], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    e.apply_command(0, &primitive_yield())
+        .expect("main phase to begin combat");
+    let taxed_edge_attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let free_edge_attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+    for _ in 0..3 {
+        let player = e.state.priority_player_id();
+        e.apply_command(player, &pass())
+            .expect("pass beginning-of-combat priority");
+    }
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareAttackers
+    );
+
+    let taxed_defender = e.state.players[1].id;
+    let free_defender = e.state.players[2].id;
+    let assignment =
+        |engine: &GameEngine, attacker, defender| tricerules_proto::ruled::v1::AttackAssignment {
+            attacker_object_id: attacker,
+            attacker_zone_change_generation: engine
+                .state
+                .zone_change_generation
+                .get(&attacker)
+                .copied()
+                .unwrap_or(0),
+            defender: Some(tricerules_proto::ruled::v1::TargetRef {
+                object_id: defender as u32,
+                kind: tricerules_proto::ruled::v1::TargetRefKind::Player as i32,
+                ..Default::default()
+            }),
+            defending_player_id: defender,
+            ..Default::default()
+        };
+    let batch = e
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::DeclareAttackers(
+                    tricerules_proto::ruled::v1::DeclareAttackers {
+                        assignments: vec![
+                            assignment(&e, taxed_edge_attacker, taxed_defender),
+                            assignment(&e, free_edge_attacker, free_defender),
+                        ],
+                    },
+                )),
+            },
+        )
+        .expect("only the creature assigned to Propaganda's controller carries a tax");
+    assert_eq!(
+        batch.legal_by_player[&0]
+            .pending_attack_declaration
+            .as_ref()
+            .expect("one taxed edge opens payment")
+            .generic_mana_cost,
+        2
+    );
+}
+
+#[test]
+fn propaganda_attack_declaration_waits_for_attack_tax_payment() {
+    let mut e = GameEngine::new(4013, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = e.state.players[0].battlefield[0];
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+
+    let batch = e
+        .apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("begin declaration payment");
+
+    assert!(
+        !e.state.combat.as_ref().expect("combat").attackers_declared,
+        "the chosen attacker must remain pending until its tax is paid"
+    );
+    assert!(
+        e.state.objects.get(&attacker).expect("attacker").tapped,
+        "the non-vigilance attacker is tapped at CR 508.1f before payment"
+    );
+    assert!(
+        batch.events.iter().all(|event| !matches!(
+            event.ev,
+            Some(tricerules_proto::ruled::v1::ruled_event::Ev::AttackersDeclared(_))
+        )),
+        "the declaration event must wait for payment commit"
+    );
+    let pending = e
+        .state
+        .pending_attack_declaration
+        .as_ref()
+        .expect("attack payment transaction");
+    assert_eq!(pending.generic_mana_cost, 2, "Propaganda charges {{2}}");
+    assert!(batch.events.iter().any(|event| matches!(
+        event.ev,
+        Some(tricerules_proto::ruled::v1::ruled_event::Ev::AttackPaymentRequired(_))
+    )));
+    let payer_offer = batch.legal_by_player.get(&0).expect("payer legal actions");
+    let pending_offer = payer_offer
+        .pending_attack_declaration
+        .as_ref()
+        .expect("payer payment offer");
+    let preview = pending_offer
+        .payment_preview
+        .as_ref()
+        .expect("source-less payment preview");
+    assert!(preview.valid, "locked attack tax can be previewed");
+    assert!(
+        preview
+            .selection
+            .as_ref()
+            .expect("payment selection")
+            .source
+            .is_none(),
+        "attack tax payment is not bound to a fabricated card source"
+    );
+    assert!(batch
+        .legal_by_player
+        .get(&1)
+        .expect("defender legal actions")
+        .pending_attack_declaration
+        .is_none());
+
+    let pending = e
+        .state
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending attack transaction")
+        .clone();
+    e.state.players[0].mana_pool.colorless = 1;
+    let underpaid = e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::CommitAttackDeclaration(
+                tricerules_proto::ruled::v1::CommitAttackDeclaration {
+                    transaction_id: pending.transaction_id,
+                    expected_revision: pending.revision,
+                    payment: Some(tricerules_proto::ruled::v1::PaymentSelection {
+                        expected_state_revision: e.state.command_index,
+                        mana: Some(tricerules_proto::ruled::v1::PaymentMana {
+                            c: 2,
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            )),
+        },
+    );
+    assert!(underpaid.is_err(), "partial attack-tax payment is rejected");
+    assert_eq!(e.state.players[0].mana_pool.colorless, 1);
+    assert!(e.state.pending_attack_declaration.is_some());
+    assert!(!e.state.combat.as_ref().expect("combat").attackers_declared);
+
+    e.state.players[0].mana_pool.colorless = 2;
+    let committed = e
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::CommitAttackDeclaration(
+                    tricerules_proto::ruled::v1::CommitAttackDeclaration {
+                        transaction_id: pending.transaction_id,
+                        expected_revision: pending.revision,
+                        payment: Some(tricerules_proto::ruled::v1::PaymentSelection {
+                            expected_state_revision: e.state.command_index,
+                            mana: Some(tricerules_proto::ruled::v1::PaymentMana {
+                                c: 2,
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .expect("pay locked attack tax");
+    assert!(e.state.pending_attack_declaration.is_none());
+    assert!(e.state.combat.as_ref().expect("combat").attackers_declared);
+    assert!(committed.events.iter().any(|event| matches!(
+        event.ev,
+        Some(tricerules_proto::ruled::v1::ruled_event::Ev::AttackersDeclared(_))
+    )));
+    assert_eq!(e.state.players[0].mana_pool.colorless, 0);
+}
+
+#[test]
+fn propaganda_rejects_stale_or_wrong_payer_commits_without_spending_mana() {
+    let mut e = GameEngine::new(4029, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = e.state.players[0].battlefield[0];
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+    e.state.players[0].mana_pool.colorless = 2;
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("begin attack tax payment");
+    let pending = e
+        .state
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending attack declaration")
+        .clone();
+    let initial_command_index = e.state.command_index;
+
+    let commit = |transaction_id, expected_revision, expected_state_revision| RuledCommand {
+        cmd: Some(Cmd::CommitAttackDeclaration(
+            tricerules_proto::ruled::v1::CommitAttackDeclaration {
+                transaction_id,
+                expected_revision,
+                payment: Some(tricerules_proto::ruled::v1::PaymentSelection {
+                    expected_state_revision,
+                    mana: Some(tricerules_proto::ruled::v1::PaymentMana {
+                        c: 2,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        )),
+    };
+
+    assert!(e
+        .apply_command(
+            1,
+            &commit(
+                pending.transaction_id,
+                pending.revision,
+                initial_command_index
+            )
+        )
+        .is_err());
+    assert!(e
+        .apply_command(
+            0,
+            &commit(
+                pending.transaction_id,
+                pending.revision + 1,
+                initial_command_index
+            )
+        )
+        .is_err());
+    assert!(e
+        .apply_command(
+            0,
+            &commit(
+                pending.transaction_id + 1,
+                pending.revision,
+                initial_command_index
+            )
+        )
+        .is_err());
+    assert!(e
+        .apply_command(
+            0,
+            &commit(
+                pending.transaction_id,
+                pending.revision,
+                initial_command_index - 1
+            )
+        )
+        .is_err());
+
+    assert_eq!(e.state.command_index, initial_command_index);
+    assert_eq!(e.state.players[0].mana_pool.colorless, 2);
+    assert_eq!(e.state.pending_attack_declaration.as_ref(), Some(&pending));
+    assert!(!e.state.combat.as_ref().expect("combat").attackers_declared);
+
+    e.apply_command(
+        0,
+        &commit(
+            pending.transaction_id,
+            pending.revision,
+            e.state.command_index,
+        ),
+    )
+    .expect("a valid retry remains available after every rejected commit");
+    assert!(e.state.pending_attack_declaration.is_none());
+    assert!(e.state.combat.as_ref().expect("combat").attackers_declared);
+}
+
+#[test]
+fn propaganda_commit_omits_an_attacker_that_left_and_returned_during_payment() {
+    let mut e = GameEngine::new(4030, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = e.state.players[0].battlefield[0];
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("begin attack tax payment");
+    let pending = e
+        .state
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending attack declaration")
+        .clone();
+    let original_generation = e
+        .state
+        .zone_change_generation
+        .get(&attacker)
+        .copied()
+        .unwrap_or(0);
+
+    e.state.players[0]
+        .battlefield
+        .retain(|object_id| *object_id != attacker);
+    e.state.players[0].graveyard.push(attacker);
+    {
+        let object = e.state.objects.get_mut(&attacker).expect("attacker object");
+        object.zone = tricerules_core::Zone::Graveyard;
+        object.tapped = false;
+    }
+    e.state
+        .zone_change_generation
+        .insert(attacker, original_generation + 1);
+    e.state.players[0]
+        .graveyard
+        .retain(|object_id| *object_id != attacker);
+    e.state.players[0].battlefield.push(attacker);
+    {
+        let object = e.state.objects.get_mut(&attacker).expect("returned object");
+        object.zone = tricerules_core::Zone::Battlefield;
+        object.tapped = false;
+        object.summoning_sick = true;
+    }
+    e.state.players[0].mana_pool.colorless = 2;
+
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::CommitAttackDeclaration(
+                tricerules_proto::ruled::v1::CommitAttackDeclaration {
+                    transaction_id: pending.transaction_id,
+                    expected_revision: pending.revision,
+                    payment: Some(tricerules_proto::ruled::v1::PaymentSelection {
+                        expected_state_revision: e.state.command_index,
+                        mana: Some(tricerules_proto::ruled::v1::PaymentMana {
+                            c: 2,
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            )),
+        },
+    )
+    .expect("the locked tax remains payable after the original attacker leaves");
+
+    let combat = e.state.combat.as_ref().expect("combat remains active");
+    assert!(combat.attackers_declared);
+    assert!(combat.attacking.is_empty());
+    assert!(!combat.attack_assignments.contains_key(&attacker));
+    assert_eq!(
+        e.state.zone_change_generation[&attacker],
+        original_generation + 1
+    );
+}
+
+#[test]
+fn propaganda_attack_payment_commands_replay_identically() {
+    fn prepared() -> (GameEngine, u32, [u32; 3]) {
+        let mut e = GameEngine::new(4031, &[0, 1], 20, None, true).expect("new");
+        advance_to_declare_attackers(&mut e);
+        let attacker = e.state.players[0].battlefield[0];
+        let forests = [
+            inject_permanent_on_battlefield(&mut e, 0, "forest"),
+            inject_permanent_on_battlefield(&mut e, 0, "forest"),
+            inject_permanent_on_battlefield(&mut e, 0, "forest"),
+        ];
+        inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+        (e, attacker, forests)
+    }
+
+    let (mut original, attacker, forests) = prepared();
+    let (mut replay, replay_attacker, replay_forests) = prepared();
+    assert_eq!((attacker, forests), (replay_attacker, replay_forests));
+
+    let declare = declare_attackers(vec![attacker]);
+    let pending = original.apply_command(0, &declare).expect("begin payment");
+    let replay_pending = replay
+        .apply_command(0, &declare)
+        .expect("replay begin payment");
+    assert_eq!(pending, replay_pending);
+
+    let mut last_activation_batch = None;
+    for forest in forests {
+        let activation = activate_ability_for(&original, forest, 0, vec![]);
+        let expected = original
+            .apply_command(0, &activation)
+            .expect("accepted mana ability");
+        assert_eq!(
+            replay
+                .apply_command(0, &activation)
+                .expect("replay mana ability"),
+            expected
+        );
+        last_activation_batch = Some(expected);
+    }
+
+    let payment_window = original
+        .state
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending payment")
+        .clone();
+    let payer_pending = last_activation_batch
+        .as_ref()
+        .expect("last activation batch")
+        .legal_by_player[&0]
+        .pending_attack_declaration
+        .as_ref()
+        .expect("payer-visible pending payment");
+    let first_receipt_index = payer_pending
+        .mana_ability_undo_options
+        .iter()
+        .find(|option| option.source_object_id == forests[0])
+        .expect("first mana receipt")
+        .activation_command_index;
+    let undo_first = RuledCommand {
+        cmd: Some(Cmd::UndoManaAbility(
+            tricerules_proto::ruled::v1::UndoManaAbility {
+                attack_transaction_id: payment_window.transaction_id,
+                activation_command_index: first_receipt_index,
+            },
+        )),
+    };
+    let undo_batch = original
+        .apply_command(0, &undo_first)
+        .expect("undo one mana activation while retaining two others");
+    assert_eq!(
+        replay
+            .apply_command(0, &undo_first)
+            .expect("replay selective mana undo"),
+        undo_batch
+    );
+
+    let payment_window = original
+        .state
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending payment")
+        .clone();
+    let commit = RuledCommand {
+        cmd: Some(Cmd::CommitAttackDeclaration(
+            tricerules_proto::ruled::v1::CommitAttackDeclaration {
+                transaction_id: payment_window.transaction_id,
+                expected_revision: payment_window.revision,
+                payment: Some(tricerules_proto::ruled::v1::PaymentSelection {
+                    expected_state_revision: original.state.command_index,
+                    mana: Some(tricerules_proto::ruled::v1::PaymentMana {
+                        g: 2,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        )),
+    };
+    let expected = original
+        .apply_command(0, &commit)
+        .expect("commit the locked attack tax");
+    assert_eq!(
+        replay
+            .apply_command(0, &commit)
+            .expect("replay attack commit"),
+        expected
+    );
+    assert_eq!(
+        replay.diagnostic_snapshot().expect("replay snapshot"),
+        original.diagnostic_snapshot().expect("original snapshot")
+    );
+}
+
+fn grant_sacrificing_fixture_mana(engine: &mut GameEngine, source: u32, death_trigger: bool) {
+    use tricerules_cards::{ContinuousEffectKind, EffectDuration};
+    use tricerules_core::state::{AffectedScope, ContinuousEffect};
+
+    let fixture = r#"(id: "propaganda_receipt_fixture", name: "Propaganda Receipt Fixture",
+        face_id: "propaganda_receipt_fixture", types: ["Creature"], power: 1, toughness: 1,
+        activated_abilities: [(ability_id: "activated_01", presentation: Fallback,
+            costs: [SacrificeSelf], effect: [ProduceMana(options: [(c: 1)])])],
+        triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+            trigger: WheneverCreatureDies(controller: AnyPlayer, filter: (exclude_source: false)),
+            effect: [GainLife(amount: 1)])])"#;
+    let registry = tricerules_cards::CardRegistry::from_chunks_and_tokens(&[fixture], &[])
+        .expect("scenario receipt fixture is valid card data");
+    let face = registry
+        .get("propaganda_receipt_fixture")
+        .expect("scenario receipt fixture is registered")
+        .primary_face();
+    engine.state.add_activated_ability_grant(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(source),
+        kind: ContinuousEffectKind::GrantActivatedAbility(Box::new(
+            face.activated_abilities[0].clone(),
+        )),
+        condition: None,
+        duration: EffectDuration::WhileSourceOnBattlefield,
+        timestamp: engine.state.command_index,
+    });
+    if death_trigger {
+        engine.state.add_triggered_ability_grant(ContinuousEffect {
+            trigger_grant_origin: None,
+            source_id: None,
+            affected: AffectedScope::Single(source),
+            kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(
+                face.triggered_abilities[0].clone(),
+            )),
+            condition: None,
+            duration: EffectDuration::WhileSourceOnBattlefield,
+            timestamp: engine.state.command_index,
+        });
+    }
+    engine.initial_response_batch();
+}
+
+fn grant_once_per_turn_tap_observer(engine: &mut GameEngine, source: u32) {
+    use tricerules_cards::{ContinuousEffectKind, EffectDuration};
+    use tricerules_core::state::{AffectedScope, ContinuousEffect};
+
+    let fixture = r#"(id: "propaganda_tap_observer_fixture", name: "Propaganda Tap Observer",
+        face_id: "propaganda_tap_observer_fixture", types: ["Creature"], power: 1, toughness: 1,
+        triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+            trigger: WheneverPlayerTapsCreature(player: AnyPlayer, controllers: All,
+                cardinality: OneOrMorePerAction), max_triggers_per_turn: Some(1),
+            effect: [GainLife(amount: 1)])])"#;
+    let registry = tricerules_cards::CardRegistry::from_chunks_and_tokens(&[fixture], &[])
+        .expect("scenario tap observer fixture is valid card data");
+    let ability = registry
+        .get("propaganda_tap_observer_fixture")
+        .expect("scenario tap observer fixture is registered")
+        .primary_face()
+        .triggered_abilities[0]
+        .clone();
+    engine.state.add_triggered_ability_grant(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(source),
+        kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability)),
+        condition: None,
+        duration: EffectDuration::WhileSourceOnBattlefield,
+        timestamp: engine.state.command_index,
+    });
+    engine.initial_response_batch();
+}
+
+fn grant_life_gain_observer(engine: &mut GameEngine, source: u32) {
+    use tricerules_cards::ContinuousEffectKind;
+    use tricerules_core::state::{AffectedScope, ContinuousEffect};
+
+    let fixture = r#"(id: "propaganda_life_gain_observer", name: "Propaganda Life Gain Observer",
+        face_id: "propaganda_life_gain_observer", types: ["Artifact"],
+        triggered_abilities: [(ability_id: "triggered_01", presentation: Fallback,
+            trigger: WheneverPlayerGainsLife(player: Controller),
+            effect: [GainLife(amount: 1)])])"#;
+    let registry = tricerules_cards::CardRegistry::from_chunks_and_tokens(&[fixture], &[])
+        .expect("scenario life-gain observer fixture is valid card data");
+    let ability = registry
+        .get("propaganda_life_gain_observer")
+        .expect("scenario life-gain observer fixture is registered")
+        .primary_face()
+        .triggered_abilities[0]
+        .clone();
+    engine.state.add_triggered_ability_grant(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(source),
+        kind: ContinuousEffectKind::GrantTriggeredAbility(Box::new(ability)),
+        condition: None,
+        duration: tricerules_cards::EffectDuration::WhileSourceOnBattlefield,
+        timestamp: engine.state.command_index,
+    });
+    engine.initial_response_batch();
+}
+
+fn grant_lifelink(engine: &mut GameEngine, source: u32) {
+    use tricerules_cards::{ContinuousEffectKind, EffectDuration, Keyword};
+    use tricerules_core::state::{AffectedScope, ContinuousEffect};
+
+    engine.state.continuous_effects.push(ContinuousEffect {
+        trigger_grant_origin: None,
+        source_id: None,
+        affected: AffectedScope::Single(source),
+        kind: ContinuousEffectKind::Layer6AddKeyword(Keyword::Lifelink),
+        condition: None,
+        duration: EffectDuration::WhileSourceOnBattlefield,
+        timestamp: engine.state.command_index,
+    });
+    engine.initial_response_batch();
+}
+
+#[test]
+fn propaganda_reapply_does_not_collect_a_newly_restored_death_observer() {
+    let mut e = GameEngine::new(4026, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = e.state.players[0].battlefield[0];
+    let observer = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    let later_source = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+    grant_sacrificing_fixture_mana(&mut e, observer, true);
+    grant_sacrificing_fixture_mana(&mut e, later_source, false);
+
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("begin declaration payment");
+    e.apply_command(0, &activate_ability_for(&e, observer, 1, vec![]))
+        .expect("the observer sacrifices itself and sees its own death");
+    let later_batch = e
+        .apply_command(0, &activate_ability_for(&e, later_source, 1, vec![]))
+        .expect("the later source sacrifices after the observer has left");
+    assert_eq!(e.state.staged_trigger_groups.len(), 1);
+
+    let pending = later_batch.legal_by_player[&0]
+        .pending_attack_declaration
+        .as_ref()
+        .expect("payer attack payment projection");
+    let receipt = pending
+        .mana_ability_undo_options
+        .iter()
+        .find(|option| option.source_object_id == observer)
+        .expect("observer activation receipt");
+    assert!(receipt.reversible);
+
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::UndoManaAbility(
+                tricerules_proto::ruled::v1::UndoManaAbility {
+                    attack_transaction_id: pending.transaction_id,
+                    activation_command_index: receipt.activation_command_index,
+                },
+            )),
+        },
+    )
+    .expect("undo the observer while retaining the later mana ability");
+
+    assert!(
+        e.state.staged_trigger_groups.is_empty(),
+        "the restored observer was not present when the later sacrifice happened"
+    );
+}
+
+#[test]
+fn propaganda_reapply_preserves_event_time_lifelink_triggers() {
+    let mut e = GameEngine::new(4028, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = e.state.players[0].battlefield[0];
+    let petal = inject_permanent_on_battlefield(&mut e, 0, "lotus_petal");
+    let talisman = inject_permanent_on_battlefield(&mut e, 0, "talisman_of_impulse");
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+    grant_life_gain_observer(&mut e, petal);
+    grant_lifelink(&mut e, talisman);
+
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("begin declaration payment");
+    let transaction_id = e
+        .state
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending attack payment")
+        .transaction_id;
+    let mut petal_activation = activate_ability_for(&e, petal, 0, vec![]);
+    let Some(Cmd::ActivateAbility(activation)) = petal_activation.cmd.as_mut() else {
+        unreachable!()
+    };
+    activation.mana_option_index = 4;
+    e.apply_command(0, &petal_activation)
+        .expect("Lotus Petal sacrifices itself for one mana");
+
+    let mut talisman_activation = activate_ability_for(&e, talisman, 1, vec![]);
+    let Some(Cmd::ActivateAbility(activation)) = talisman_activation.cmd.as_mut() else {
+        unreachable!()
+    };
+    activation.mana_option_index = 0;
+    let talisman_batch = e
+        .apply_command(0, &talisman_activation)
+        .expect("Talisman damage and lifelink resolve during payment");
+    assert_eq!(e.state.players[0].life, 20);
+    assert!(e.state.staged_trigger_groups.is_empty());
+
+    let petal_receipt = talisman_batch.legal_by_player[&0]
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending payment")
+        .mana_ability_undo_options
+        .iter()
+        .find(|receipt| receipt.source_object_id == petal)
+        .expect("reversible Lotus Petal receipt");
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::UndoManaAbility(
+                tricerules_proto::ruled::v1::UndoManaAbility {
+                    attack_transaction_id: transaction_id,
+                    activation_command_index: petal_receipt.activation_command_index,
+                },
+            )),
+        },
+    )
+    .expect("undo Lotus Petal while retaining the independent Talisman receipt");
+
+    assert_eq!(e.state.players[0].life, 20);
+    assert!(
+        e.state.staged_trigger_groups.is_empty(),
+        "the restored observer did not see the earlier Talisman lifelink event"
+    );
+    let pending = e
+        .state
+        .pending_attack_declaration
+        .as_ref()
+        .expect("attack payment remains pending")
+        .clone();
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::CancelAttackDeclaration(
+                tricerules_proto::ruled::v1::CancelAttackDeclaration {
+                    transaction_id,
+                    expected_revision: pending.revision,
+                },
+            )),
+        },
+    )
+    .expect("cancel the declaration without recollecting Talisman's damage triggers");
+    assert!(e.state.pending_attack_declaration.is_none());
+    assert_eq!(e.state.players[0].life, 20);
+    assert!(e.state.staged_trigger_groups.is_empty());
+}
+
+#[test]
+fn propaganda_attack_tap_reserves_once_per_turn_trigger_before_payment_mana_abilities() {
+    let mut e = GameEngine::new(4025, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = e.state.players[0].battlefield[0];
+    let mana_creature = inject_creature_on_battlefield(&mut e, 0, "llanowar_elves");
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+    let observer = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    grant_once_per_turn_tap_observer(&mut e, observer);
+
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("the attack tap is reserved while the attack payment waits");
+
+    assert_eq!(
+        e.state
+            .trigger_uses_this_turn
+            .values()
+            .copied()
+            .sum::<u32>(),
+        1,
+        "Sharae's once-per-turn trigger belongs to the earlier attack-tap event"
+    );
+
+    e.apply_command(0, &activate_ability_for(&e, mana_creature, 0, vec![]))
+        .expect("a later mana ability remains legal during the payment window");
+    assert_eq!(
+        e.state
+            .trigger_uses_this_turn
+            .values()
+            .copied()
+            .sum::<u32>(),
+        1,
+        "the later Forest tap cannot take the trigger cap from the earlier attack tap"
+    );
+}
+
+#[test]
+fn propaganda_payer_concession_clears_pending_attack_for_survivors() {
+    let mut e = GameEngine::new(4027, &[0, 1, 2], 20, None, true).expect("new");
+    advance_to_main1_from_game_start(&mut e);
+    let attacker = inject_creature_on_battlefield(&mut e, 0, "grizzly_bears");
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+    e.apply_command(0, &primitive_yield())
+        .expect("main phase to begin combat");
+    for _ in 0..3 {
+        let player = e.state.priority_player_id();
+        e.apply_command(player, &pass())
+            .expect("pass beginning-of-combat priority");
+    }
+    assert_eq!(
+        e.state.turn_step,
+        tricerules_core::TurnStep::DeclareAttackers
+    );
+
+    let assignment = e.initial_response_batch().legal_by_player[&0]
+        .legal_attack_assignments
+        .iter()
+        .find(|assignment| {
+            assignment.attacker_object_id == attacker && assignment.defending_player_id == 1
+        })
+        .copied()
+        .expect("legal attack against the taxing player");
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::DeclareAttackers(
+                tricerules_proto::ruled::v1::DeclareAttackers {
+                    assignments: vec![assignment],
+                },
+            )),
+        },
+    )
+    .expect("open attack tax payment");
+    assert!(e.state.pending_attack_declaration.is_some());
+
+    let departure = e
+        .apply_command(0, &concede())
+        .expect("the payer may concede during attack payment");
+    assert!(e.state.pending_attack_declaration.is_none());
+    assert!(e.state.players[1..].iter().all(|player| !player.has_lost));
+    assert_ne!(e.state.priority_player_id(), 0);
+    assert!(!departure.legal_by_player.contains_key(&0));
+    assert!(e
+        .apply_command(e.state.priority_player_id(), &pass())
+        .is_ok());
+}
+
+#[test]
+fn propaganda_mana_receipt_reports_later_spend_dependency() {
+    let mut e = GameEngine::new(4020, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = e.state.players[0].battlefield[0];
+    let forest = inject_permanent_on_battlefield(&mut e, 0, "forest");
+    let capital_city = inject_permanent_on_battlefield(&mut e, 0, "capital_city");
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("begin declaration payment");
+    let transaction_id = e
+        .state
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending attack transaction")
+        .transaction_id;
+
+    e.apply_command(0, &activate_ability_for(&e, forest, 0, vec![]))
+        .expect("Forest produces the green mana spent by Capital City");
+    let city_batch = e
+        .apply_command(0, &activate_ability_for(&e, capital_city, 1, vec![]))
+        .expect("Capital City spends green and produces white mana");
+    let pending = city_batch.legal_by_player[&0]
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending attack payment");
+    let forest_receipt = pending
+        .mana_ability_undo_options
+        .iter()
+        .find(|option| option.source_object_id == forest)
+        .expect("Forest receipt");
+    assert!(!forest_receipt.reversible);
+    assert!(forest_receipt
+        .unavailable_reason
+        .contains("spent on a later mana ability"));
+
+    let city_command_index = pending
+        .mana_ability_undo_options
+        .iter()
+        .find(|option| option.source_object_id == capital_city)
+        .expect("Capital City receipt")
+        .activation_command_index;
+    let after_city_undo = e
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::UndoManaAbility(
+                    tricerules_proto::ruled::v1::UndoManaAbility {
+                        attack_transaction_id: transaction_id,
+                        activation_command_index: city_command_index,
+                    },
+                )),
+            },
+        )
+        .expect("undo Capital City first");
+    assert_eq!(e.state.players[0].mana_pool.green, 1);
+    let forest_receipt = after_city_undo.legal_by_player[&0]
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending attack payment")
+        .mana_ability_undo_options
+        .iter()
+        .find(|option| option.source_object_id == forest)
+        .expect("Forest receipt becomes reversible after its dependent receipt is removed");
+    assert!(forest_receipt.reversible);
+    assert!(forest_receipt.unavailable_reason.is_empty());
+}
+
+#[test]
+fn propaganda_background_mana_is_attributed_before_receipt_mana() {
+    let mut e = GameEngine::new(4021, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = e.state.players[0].battlefield[0];
+    let forest = inject_permanent_on_battlefield(&mut e, 0, "forest");
+    let capital_city = inject_permanent_on_battlefield(&mut e, 0, "capital_city");
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+    e.state.players[0].mana_pool.green = 1;
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("begin declaration payment");
+    let transaction_id = e
+        .state
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending attack transaction")
+        .transaction_id;
+
+    e.apply_command(0, &activate_ability_for(&e, forest, 0, vec![]))
+        .expect("Forest produces another green mana");
+    let city_batch = e
+        .apply_command(0, &activate_ability_for(&e, capital_city, 1, vec![]))
+        .expect("Capital City spends one of the two green mana");
+    let pending = city_batch.legal_by_player[&0]
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending attack payment");
+    let forest_command_index = pending
+        .mana_ability_undo_options
+        .iter()
+        .find(|option| option.source_object_id == forest)
+        .expect("Forest receipt")
+        .activation_command_index;
+    let forest_receipt = pending
+        .mana_ability_undo_options
+        .iter()
+        .find(|option| option.source_object_id == forest)
+        .expect("Forest receipt");
+    assert!(forest_receipt.reversible);
+    assert!(forest_receipt.unavailable_reason.is_empty());
+
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::UndoManaAbility(
+                tricerules_proto::ruled::v1::UndoManaAbility {
+                    attack_transaction_id: transaction_id,
+                    activation_command_index: forest_command_index,
+                },
+            )),
+        },
+    )
+    .expect("background green mana pays the retained Capital City receipt");
+    assert_eq!(e.state.players[0].mana_pool.green, 0);
+    assert_eq!(e.state.players[0].mana_pool.white, 1);
+    assert!(!e.state.objects.get(&forest).expect("Forest").tapped);
+    assert!(
+        e.state
+            .objects
+            .get(&capital_city)
+            .expect("Capital City")
+            .tapped
+    );
+    assert!(e.state.pending_attack_declaration.is_some());
+}
+
+#[test]
+fn propaganda_rebases_mana_lineage_after_undoing_an_intermediate_receipt() {
+    let mut e = GameEngine::new(4032, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = e.state.players[0].battlefield[0];
+    let forest = inject_permanent_on_battlefield(&mut e, 0, "forest");
+    let first_city = inject_permanent_on_battlefield(&mut e, 0, "capital_city");
+    let second_city = inject_permanent_on_battlefield(&mut e, 0, "capital_city");
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+    e.state.players[0].mana_pool.green = 1;
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("begin declaration payment");
+    let transaction_id = e
+        .state
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending attack transaction")
+        .transaction_id;
+
+    e.apply_command(0, &activate_ability_for(&e, forest, 0, vec![]))
+        .expect("Forest A adds green to the payment pool");
+    let mut first_city_activation = activate_ability_for(&e, first_city, 1, vec![]);
+    let Some(Cmd::ActivateAbility(activation)) = first_city_activation.cmd.as_mut() else {
+        unreachable!()
+    };
+    activation.mana_option_index = 0;
+    activation.payment = Some(tricerules_proto::ruled::v1::PaymentSelection {
+        expected_state_revision: e.state.command_index,
+        source: Some(tricerules_proto::ruled::v1::CostObjectRef {
+            object_id: first_city,
+            zone_change_generation: e
+                .state
+                .zone_change_generation
+                .get(&first_city)
+                .copied()
+                .unwrap_or(0),
+        }),
+        mana: Some(tricerules_proto::ruled::v1::PaymentMana {
+            g: 1,
+            ..Default::default()
+        }),
+        ..Default::default()
+    });
+    e.apply_command(0, &first_city_activation)
+        .expect("Capital City B spends the pre-window green mana");
+    assert_eq!(e.state.players[0].mana_pool.green, 1);
+    assert_eq!(e.state.players[0].mana_pool.white, 1);
+    let mut second_city_activation = activate_ability_for(&e, second_city, 1, vec![]);
+    let Some(Cmd::ActivateAbility(activation)) = second_city_activation.cmd.as_mut() else {
+        unreachable!()
+    };
+    activation.mana_option_index = 0;
+    activation.payment = Some(tricerules_proto::ruled::v1::PaymentSelection {
+        expected_state_revision: e.state.command_index,
+        source: Some(tricerules_proto::ruled::v1::CostObjectRef {
+            object_id: second_city,
+            zone_change_generation: e
+                .state
+                .zone_change_generation
+                .get(&second_city)
+                .copied()
+                .unwrap_or(0),
+        }),
+        mana: Some(tricerules_proto::ruled::v1::PaymentMana {
+            g: 1,
+            ..Default::default()
+        }),
+        ..Default::default()
+    });
+    let third_activation = e
+        .apply_command(0, &second_city_activation)
+        .expect("Capital City C spends Forest A's green mana");
+    assert_eq!(e.state.players[0].mana_pool.green, 0);
+    assert_eq!(e.state.players[0].mana_pool.white, 2);
+    let pending = third_activation.legal_by_player[&0]
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending payment");
+    let forest_option = pending
+        .mana_ability_undo_options
+        .iter()
+        .find(|option| option.source_object_id == forest)
+        .expect("Forest A receipt");
+    assert!(
+        !forest_option.reversible,
+        "pre-rebase options: {:?}",
+        pending.mana_ability_undo_options
+    );
+    let first_city_index = pending
+        .mana_ability_undo_options
+        .iter()
+        .find(|option| option.source_object_id == first_city)
+        .expect("Capital City B receipt")
+        .activation_command_index;
+
+    let city_undo = e
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::UndoManaAbility(
+                    tricerules_proto::ruled::v1::UndoManaAbility {
+                        attack_transaction_id: transaction_id,
+                        activation_command_index: first_city_index,
+                    },
+                )),
+            },
+        )
+        .expect("undo Capital City B while rebasing retained Capital City C");
+
+    let pending = city_undo.legal_by_player[&0]
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending payment remains open");
+    let forest_option = pending
+        .mana_ability_undo_options
+        .iter()
+        .find(|option| option.source_object_id == forest)
+        .expect("Forest A receipt after rebase");
+    assert!(
+        forest_option.reversible,
+        "rebased Capital City C now spends background green, not Forest A's output"
+    );
+    let forest_index = forest_option.activation_command_index;
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::UndoManaAbility(
+                tricerules_proto::ruled::v1::UndoManaAbility {
+                    attack_transaction_id: transaction_id,
+                    activation_command_index: forest_index,
+                },
+            )),
+        },
+    )
+    .expect("undo Forest A after its output is no longer spent");
+    assert!(!e.state.objects.get(&forest).expect("Forest").tapped);
+    assert!(!e.state.objects.get(&first_city).expect("City B").tapped);
+    assert!(e.state.objects.get(&second_city).expect("City C").tapped);
+    assert_eq!(e.state.players[0].mana_pool.green, 0);
+    assert_eq!(e.state.players[0].mana_pool.white, 1);
+}
+
+#[test]
+fn propaganda_attack_payment_allows_and_undoes_mana_ability() {
+    let mut e = GameEngine::new(4014, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = e.state.players[0].battlefield[0];
+    let forest = inject_permanent_on_battlefield(&mut e, 0, "forest");
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("begin declaration payment");
+    let transaction_id = e
+        .state
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending attack transaction")
+        .transaction_id;
+
+    let activation_batch = e
+        .apply_command(0, &activate_ability_for(&e, forest, 0, vec![]))
+        .expect("mana ability is allowed for the locked attack tax");
+    assert_eq!(e.state.players[0].mana_pool.green, 1);
+    assert!(e.state.objects.get(&forest).expect("forest").tapped);
+    let activation_command_index = e.state.command_index - 1;
+    assert_eq!(
+        activation_batch.legal_by_player[&0].undoable_mana_abilities, 1,
+        "the payer's Undo control must be available for the reversible attack receipt"
+    );
+    assert_eq!(
+        activation_batch.legal_by_player[&0]
+            .pending_attack_declaration
+            .as_ref()
+            .expect("still-pending payment")
+            .mana_ability_undo_options
+            .iter()
+            .map(|option| option.activation_command_index)
+            .collect::<Vec<_>>(),
+        vec![activation_command_index]
+    );
+
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::UndoManaAbility(
+                tricerules_proto::ruled::v1::UndoManaAbility {
+                    attack_transaction_id: transaction_id,
+                    activation_command_index,
+                },
+            )),
+        },
+    )
+    .expect("undo the float while the declaration payment is pending");
+    assert_eq!(e.state.players[0].mana_pool.green, 0);
+    assert!(!e.state.objects.get(&forest).expect("forest").tapped);
+    assert!(e.state.pending_attack_declaration.is_some());
+}
+
+#[test]
+fn propaganda_undoes_earlier_cost_triggering_mana_ability_and_keeps_later_float() {
+    let mut e = GameEngine::new(4016, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = e.state.players[0].battlefield[0];
+    let petal = inject_permanent_on_battlefield(&mut e, 0, "lotus_petal");
+    let forest = inject_permanent_on_battlefield(&mut e, 0, "forest");
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+    let initial_hand_size = e.state.players[0].hand.len();
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("begin declaration payment");
+    let transaction_id = e
+        .state
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending attack transaction")
+        .transaction_id;
+
+    let mut petal_activation = activate_ability_for(&e, petal, 0, vec![]);
+    let Some(Cmd::ActivateAbility(activation)) = petal_activation.cmd.as_mut() else {
+        unreachable!()
+    };
+    activation.mana_option_index = 4;
+    e.apply_command(0, &petal_activation)
+        .expect("Lotus Petal produces green mana and its death trigger is parked");
+    let forest_batch = e
+        .apply_command(0, &activate_ability_for(&e, forest, 0, vec![]))
+        .expect("later Forest activation remains independent");
+    let pending = forest_batch.legal_by_player[&0]
+        .pending_attack_declaration
+        .as_ref()
+        .expect("still-pending attack payment");
+    let petal_receipt = pending
+        .mana_ability_undo_options
+        .iter()
+        .find(|option| option.source_object_id == petal)
+        .expect("Lotus Petal activation receipt");
+    assert!(
+        petal_receipt.reversible,
+        "a cost-triggering, non-library mana ability can be reversed while a later independent receipt remains"
+    );
+
+    let undone = e
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::UndoManaAbility(
+                    tricerules_proto::ruled::v1::UndoManaAbility {
+                        attack_transaction_id: transaction_id,
+                        activation_command_index: petal_receipt.activation_command_index,
+                    },
+                )),
+            },
+        )
+        .expect("reverse Lotus Petal without replaying Forest");
+
+    assert_eq!(e.state.players[0].mana_pool.green, 1);
+    assert_eq!(e.state.players[0].hand.len(), initial_hand_size);
+    assert!(!e.state.objects.get(&petal).expect("petal object").tapped);
+    assert_eq!(
+        e.state.objects.get(&petal).expect("petal object").zone,
+        tricerules_core::Zone::Battlefield
+    );
+    assert!(e.state.objects.get(&forest).expect("forest").tapped);
+    assert!(e.state.pending_attack_declaration.is_some());
+    assert!(e.state.staged_trigger_groups.is_empty());
+    assert!(e.state.pending_triggers.is_empty());
+    assert!(undone.events.iter().any(|event| matches!(
+        event.ev.as_ref(),
+        Some(Ev::PermanentMoved(moved))
+            if moved.object_id == petal
+                && moved.destination == tricerules_proto::ruled::v1::permanent_moved::Destination::Battlefield as i32
+    )));
+}
+
+#[test]
+fn propaganda_undoes_earlier_sacrifice_mana_ability_and_keeps_later_sacrifice_activation() {
+    let mut e = GameEngine::new(4017, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = e.state.players[0].battlefield[0];
+    let first_petal = inject_permanent_on_battlefield(&mut e, 0, "lotus_petal");
+    let later_petal = inject_permanent_on_battlefield(&mut e, 0, "lotus_petal");
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("begin declaration payment");
+    let transaction_id = e
+        .state
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending attack transaction")
+        .transaction_id;
+
+    let mut first_activation = activate_ability_for(&e, first_petal, 0, vec![]);
+    let Some(Cmd::ActivateAbility(activation)) = first_activation.cmd.as_mut() else {
+        unreachable!()
+    };
+    activation.mana_option_index = 4;
+    e.apply_command(0, &first_activation)
+        .expect("first Lotus Petal activation");
+    let mut later_activation = activate_ability_for(&e, later_petal, 0, vec![]);
+    let Some(Cmd::ActivateAbility(activation)) = later_activation.cmd.as_mut() else {
+        unreachable!()
+    };
+    activation.mana_option_index = 4;
+    let later_batch = e
+        .apply_command(0, &later_activation)
+        .expect("later independent Lotus Petal activation");
+
+    let pending = later_batch.legal_by_player[&0]
+        .pending_attack_declaration
+        .as_ref()
+        .expect("still-pending attack payment");
+    let first_receipt = pending
+        .mana_ability_undo_options
+        .iter()
+        .find(|option| option.source_object_id == first_petal)
+        .expect("first Lotus Petal activation receipt");
+    assert!(
+        first_receipt.reversible,
+        "the earlier receipt remains reversible when a later independent mana ability paid its own sacrifice cost"
+    );
+    let first_command_index = first_receipt.activation_command_index;
+
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::UndoManaAbility(
+                tricerules_proto::ruled::v1::UndoManaAbility {
+                    attack_transaction_id: transaction_id,
+                    activation_command_index: first_command_index,
+                },
+            )),
+        },
+    )
+    .expect("undo first Petal while retaining second Petal");
+
+    assert_eq!(e.state.players[0].mana_pool.green, 1);
+    assert_eq!(
+        e.state.objects.get(&first_petal).expect("first Petal").zone,
+        tricerules_core::Zone::Battlefield
+    );
+    assert!(
+        !e.state
+            .objects
+            .get(&first_petal)
+            .expect("first Petal")
+            .tapped
+    );
+    assert_eq!(
+        e.state.objects.get(&later_petal).expect("later Petal").zone,
+        tricerules_core::Zone::Graveyard
+    );
+    assert!(e.state.pending_attack_declaration.is_some());
+}
+
+#[test]
+fn propaganda_undo_preserves_later_mana_ability_damage_prevention_result() {
+    let mut e = GameEngine::new(4018, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = e.state.players[0].battlefield[0];
+    let first_coast = inject_permanent_on_battlefield(&mut e, 0, "yavimaya_coast");
+    let later_coast = inject_permanent_on_battlefield(&mut e, 0, "yavimaya_coast");
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("begin declaration payment");
+    let transaction_id = e
+        .state
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending attack transaction")
+        .transaction_id;
+    e.state.add_damage_prevention_shield(0, 1);
+
+    let mut first_activation = activate_ability_for(&e, first_coast, 1, vec![]);
+    let Some(Cmd::ActivateAbility(activation)) = first_activation.cmd.as_mut() else {
+        unreachable!()
+    };
+    activation.mana_option_index = 0;
+    e.apply_command(0, &first_activation)
+        .expect("first Coast ability is prevented");
+    assert_eq!(e.state.players[0].life, 20);
+    assert_eq!(e.state.remaining_damage_prevention(0), 0);
+
+    let mut later_activation = activate_ability_for(&e, later_coast, 1, vec![]);
+    let Some(Cmd::ActivateAbility(activation)) = later_activation.cmd.as_mut() else {
+        unreachable!()
+    };
+    activation.mana_option_index = 0;
+    let later_batch = e
+        .apply_command(0, &later_activation)
+        .expect("later Coast ability resolves against the exhausted shield");
+    assert_eq!(e.state.players[0].life, 19);
+
+    let first_command_index = later_batch.legal_by_player[&0]
+        .pending_attack_declaration
+        .as_ref()
+        .expect("still-pending attack payment")
+        .mana_ability_undo_options
+        .iter()
+        .find(|option| option.source_object_id == first_coast)
+        .expect("first Coast receipt")
+        .activation_command_index;
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::UndoManaAbility(
+                tricerules_proto::ruled::v1::UndoManaAbility {
+                    attack_transaction_id: transaction_id,
+                    activation_command_index: first_command_index,
+                },
+            )),
+        },
+    )
+    .expect("undo the earlier activation while retaining the later receipt");
+
+    assert_eq!(
+        e.state.players[0].life,
+        19,
+        "the retained ability keeps its original damage result instead of consuming a restored shield"
+    );
+    assert_eq!(e.state.remaining_damage_prevention(0), 1);
+    assert_eq!(e.state.players[0].mana_pool.green, 1);
+    assert!(
+        !e.state
+            .objects
+            .get(&first_coast)
+            .expect("first Coast")
+            .tapped
+    );
+    assert!(
+        e.state
+            .objects
+            .get(&later_coast)
+            .expect("later Coast")
+            .tapped
+    );
+}
+
+#[test]
+fn propaganda_undo_reuses_later_prevention_choice_and_finite_shield_receipt() {
+    let mut e = GameEngine::new(4019, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = e.state.players[0].battlefield[0];
+    let first_coast = inject_permanent_on_battlefield(&mut e, 0, "yavimaya_coast");
+    let later_coast = inject_permanent_on_battlefield(&mut e, 0, "yavimaya_coast");
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+    e.apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("begin declaration payment");
+    let transaction_id = e
+        .state
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending attack transaction")
+        .transaction_id;
+    for _ in 0..3 {
+        e.state.add_damage_prevention_shield(0, 1);
+    }
+    let original_effect_ids = e
+        .state
+        .damage_prevention_effects
+        .iter()
+        .map(|effect| effect.id)
+        .collect::<std::collections::BTreeSet<_>>();
+
+    let mut first_activation = activate_ability_for(&e, first_coast, 1, vec![]);
+    let Some(Cmd::ActivateAbility(activation)) = first_activation.cmd.as_mut() else {
+        unreachable!()
+    };
+    activation.mana_option_index = 0;
+    e.apply_command(0, &first_activation)
+        .expect("first Coast damage asks for prevention ordering");
+    let first_choice = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("first prevention choice")
+        .presentation
+        .candidates[0];
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::SubmitResolutionChoice(
+                tricerules_proto::ruled::v1::SubmitResolutionChoice {
+                    chosen_object_ids: vec![first_choice],
+                    ..Default::default()
+                },
+            )),
+        },
+    )
+    .expect("complete first damage prevention choice");
+    let after_first_effect_ids = e
+        .state
+        .damage_prevention_effects
+        .iter()
+        .map(|effect| effect.id)
+        .collect::<std::collections::BTreeSet<_>>();
+
+    let mut later_activation = activate_ability_for(&e, later_coast, 1, vec![]);
+    let Some(Cmd::ActivateAbility(activation)) = later_activation.cmd.as_mut() else {
+        unreachable!()
+    };
+    activation.mana_option_index = 0;
+    e.apply_command(0, &later_activation)
+        .expect("later Coast damage asks for its own prevention ordering");
+    let later_choice = e
+        .state
+        .pending_resolution
+        .as_ref()
+        .expect("later prevention choice")
+        .presentation
+        .candidates[0];
+    let later_resolved = e
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::SubmitResolutionChoice(
+                    tricerules_proto::ruled::v1::SubmitResolutionChoice {
+                        chosen_object_ids: vec![later_choice],
+                        ..Default::default()
+                    },
+                )),
+            },
+        )
+        .expect("complete later damage prevention choice");
+    assert!(e.state.pending_resolution.is_none());
+    let after_later_effect_ids = e
+        .state
+        .damage_prevention_effects
+        .iter()
+        .map(|effect| effect.id)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(e.state.players[0].life, 20);
+    assert_eq!(after_first_effect_ids.len(), 2);
+    assert_eq!(after_later_effect_ids.len(), 1);
+
+    let first_command_index = later_resolved.legal_by_player[&0]
+        .pending_attack_declaration
+        .as_ref()
+        .expect("still-pending attack payment")
+        .mana_ability_undo_options
+        .iter()
+        .find(|option| option.source_object_id == first_coast)
+        .expect("first Coast receipt")
+        .activation_command_index;
+    e.apply_command(
+        0,
+        &RuledCommand {
+            cmd: Some(Cmd::UndoManaAbility(
+                tricerules_proto::ruled::v1::UndoManaAbility {
+                    attack_transaction_id: transaction_id,
+                    activation_command_index: first_command_index,
+                },
+            )),
+        },
+    )
+    .expect("undo first activation while preserving the later chosen result");
+
+    let consumed_by_later = after_first_effect_ids
+        .difference(&after_later_effect_ids)
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    let expected_effect_ids = original_effect_ids
+        .difference(&consumed_by_later)
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    let actual_effect_ids = e
+        .state
+        .damage_prevention_effects
+        .iter()
+        .map(|effect| effect.id)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(actual_effect_ids, expected_effect_ids);
+    assert_eq!(e.state.players[0].life, 20);
+    assert_eq!(e.state.players[0].mana_pool.green, 1);
+    assert!(e.state.pending_resolution.is_none());
+    assert!(
+        !e.state
+            .objects
+            .get(&first_coast)
+            .expect("first Coast")
+            .tapped
+    );
+    assert!(
+        e.state
+            .objects
+            .get(&later_coast)
+            .expect("later Coast")
+            .tapped
+    );
+}
+
+#[test]
+fn propaganda_cancellation_reverses_attack_tap_but_keeps_mana_ability() {
+    let mut e = GameEngine::new(4015, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let attacker = e.state.players[0].battlefield[0];
+    let mana_creature = inject_creature_on_battlefield(&mut e, 0, "llanowar_elves");
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+    let observer = inject_creature_on_battlefield(&mut e, 1, "grizzly_bears");
+    grant_once_per_turn_tap_observer(&mut e, observer);
+    let begin = e
+        .apply_command(0, &declare_attackers(vec![attacker]))
+        .expect("begin declaration payment");
+    let pending = e
+        .state
+        .pending_attack_declaration
+        .as_ref()
+        .expect("pending attack declaration")
+        .clone();
+    e.apply_command(0, &activate_ability_for(&e, mana_creature, 0, vec![]))
+        .expect("mana ability resolves");
+
+    let canceled = e
+        .apply_command(
+            0,
+            &RuledCommand {
+                cmd: Some(Cmd::CancelAttackDeclaration(
+                    tricerules_proto::ruled::v1::CancelAttackDeclaration {
+                        transaction_id: pending.transaction_id,
+                        expected_revision: pending.revision,
+                    },
+                )),
+            },
+        )
+        .expect("cancel attack declaration");
+    assert_eq!(e.state.players[0].mana_pool.green, 1);
+    assert!(
+        e.state
+            .objects
+            .get(&mana_creature)
+            .expect("mana creature")
+            .tapped
+    );
+    assert!(!e.state.objects.get(&attacker).expect("attacker").tapped);
+    assert!(e.state.pending_attack_declaration.is_none());
+    assert!(!e.state.combat.as_ref().expect("combat").attackers_declared);
+    assert!(begin
+        .events
+        .iter()
+        .any(|event| matches!(event.ev, Some(Ev::AttackPaymentRequired(_)))));
+    assert!(canceled
+        .events
+        .iter()
+        .any(|event| matches!(event.ev, Some(Ev::PermanentsUntapped(_)))));
+    assert_eq!(
+        e.state
+            .trigger_uses_this_turn
+            .values()
+            .copied()
+            .sum::<u32>(),
+        1,
+        "only the retained mana-creature tap consumes the once-per-turn trigger use after cancellation"
+    );
+    assert_eq!(e.state.stack.len(), 1);
+    assert_eq!(e.state.stack[0].source_permanent_id, Some(observer));
+}
+
+#[test]
 fn cannot_add_mana_while_declaring_blockers() {
     let mut e = GameEngine::new(4011, &[0, 1], 20, None, true).expect("new");
     advance_to_declare_attackers(&mut e);
@@ -1918,6 +3623,25 @@ fn must_attack_creature_omitted_from_attackers_is_illegal() {
         result.is_err(),
         "omitting must-attack creature from attackers should be illegal"
     );
+}
+
+/// CR 508.1d: a player is not required to pay an attack cost merely to obey a must-attack
+/// requirement when every legal attack edge requires that payment.
+#[test]
+fn must_attack_creature_with_only_taxed_attack_edge_may_skip() {
+    let mut e = GameEngine::new(5505, &[0, 1], 20, None, true).expect("new");
+    advance_to_declare_attackers(&mut e);
+    let goblin = inject_creature_on_battlefield(&mut e, 0, "crazed_goblin");
+    e.state
+        .objects
+        .get_mut(&goblin)
+        .unwrap()
+        .must_attack_if_able = true;
+    inject_permanent_on_battlefield(&mut e, 1, "propaganda");
+
+    e.apply_command(0, &declare_attackers(vec![]))
+        .expect("a costed attack is optional even for a must-attack creature");
+    assert_eq!(e.state.turn_step, tricerules_core::TurnStep::EndCombat);
 }
 
 /// CR 508.1d "if able": a must-attack creature that is summoning-sick is NOT required to attack.

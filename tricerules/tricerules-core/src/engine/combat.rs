@@ -7,7 +7,954 @@ use super::events::{ev_log, ev_phase, ev_priority_changed, object_display_name};
 use super::legal_actions::fill_legal;
 use super::*;
 
+#[derive(Clone)]
+pub(super) struct PendingAttackDeclarationInternal {
+    pub assignments: HashMap<ObjectId, CombatAttackAssignment>,
+    /// Taps caused by CR 508.1f; kept so cancellation can remove just this action's contribution.
+    pub tapped_attackers: Vec<TriggerObjectRef>,
+    /// Tap-trigger matches captured at event time with their trigger-use limits already reserved.
+    pub tap_triggers: Vec<super::triggers::CollectedTrigger>,
+    /// Trigger state before CR 508.1f, used to remove only the canceled declaration's triggers.
+    pub pre_attack_state: GameState,
+    /// State at the start of the payment window, including the chosen attackers already tapped.
+    pub payment_window_base: GameState,
+    /// Every accepted mana activation during this declaration, with an event-time state and cost
+    /// receipt so CR 733.1 can reverse the exact action without re-running its ability.
+    pub mana_ability_receipts: Vec<AttackManaAbilityReceipt>,
+}
+
+#[derive(Clone)]
+pub(super) struct AttackManaAbilityReceipt {
+    pub activation_command_index: u64,
+    pub source: TriggerObjectRef,
+    pub ability_path: Vec<tricerules_cards::AbilityId>,
+    pub source_label: String,
+    pub ability: ActivatedAbilityDef,
+    pub before_state: GameState,
+    pub cost_plan: super::payment::transaction::CostTransactionPlan,
+    pub cost_payment: super::payment::transaction::CostPaymentReceipt,
+    /// Unrestricted and restricted mana from earlier receipts that paid this activation's cost.
+    pub mana_sources_consumed: Vec<ManaSourceConsumption>,
+    pub activation_uses: Vec<super::casting::LimitedActivationUse>,
+    pub mana_damage: Option<super::damage::DamageSpec>,
+    /// The exact post-prevention damage result produced by the activation. A retained receipt
+    /// applies this result and its consumed finite-shield debits without running prevention again.
+    pub mana_damage_results: Vec<super::damage::CompletedDamage>,
+    /// Event-time trigger matches caused by the completed damage and lifelink events.
+    pub mana_damage_triggers: Vec<super::triggers::CollectedTrigger>,
+    pub mana_output: ManaAmount,
+    pub restriction_group_id: Option<u32>,
+    pub mana_restriction: Option<tricerules_cards::ManaSpendingRestriction>,
+    pub restriction_presentation: Option<rv1::PresentationRef>,
+    /// Event-time trigger matches from paying this activation's costs, before use-limit filtering.
+    pub cost_triggers: Vec<super::triggers::CollectedTrigger>,
+    pub simple_tap: bool,
+    /// Library movement/reveal/shuffle makes reversal unavailable under CR 733.1. Other
+    /// currently supported mana actions have complete state/cost snapshots above.
+    pub reversible: bool,
+}
+
+/// Event-time values captured from one accepted activated mana ability before receipt journaling.
+pub(super) struct AttackManaAbilityReceiptInput {
+    pub before_state: GameState,
+    pub source: ObjectId,
+    pub ability_path: Vec<tricerules_cards::AbilityId>,
+    pub source_label: String,
+    pub ability: ActivatedAbilityDef,
+    pub cost_plan: super::payment::transaction::CostTransactionPlan,
+    pub payment: super::payment::transaction::CostPaymentReceipt,
+    pub mana_output: ManaAmount,
+    pub restriction_group_id: Option<u32>,
+    pub activation_uses: Vec<super::casting::LimitedActivationUse>,
+    pub mana_damage: Option<super::damage::DamageSpec>,
+    pub mana_damage_results: Vec<super::damage::CompletedDamage>,
+    pub mana_damage_triggers: Vec<super::triggers::CollectedTrigger>,
+    pub cost_triggers: Vec<super::triggers::CollectedTrigger>,
+    pub has_cost_triggers: bool,
+}
+
+struct PendingAttackTaxPaymentStart<'a> {
+    attacking_player: PlayerId,
+    assignments: &'a [rv1::AttackAssignment],
+    parsed_assignments: HashMap<ObjectId, CombatAttackAssignment>,
+    tapping_attackers: &'a [ObjectId],
+    tap_events: &'a [GameEvent],
+    pre_attack_state: GameState,
+    generic_mana_cost: u32,
+}
+
+#[derive(Clone)]
+pub(super) struct ManaSourceConsumption {
+    pub activation_command_index: u64,
+    pub amount: ManaAmount,
+}
+
+struct ReappliedAttackManaReceipt {
+    cost_plan: super::payment::transaction::CostTransactionPlan,
+    payment: super::payment::transaction::CostPaymentReceipt,
+    restriction_group_id: Option<u32>,
+    mana_sources_consumed: Vec<ManaSourceConsumption>,
+    events: Vec<rv1::RuledEvent>,
+}
+
+fn mana_amount_add(left: ManaAmount, right: ManaAmount) -> ManaAmount {
+    ManaAmount {
+        w: left.w.saturating_add(right.w),
+        u: left.u.saturating_add(right.u),
+        b: left.b.saturating_add(right.b),
+        r: left.r.saturating_add(right.r),
+        g: left.g.saturating_add(right.g),
+        c: left.c.saturating_add(right.c),
+    }
+}
+
+fn mana_amount_sub(left: ManaAmount, right: ManaAmount) -> ManaAmount {
+    ManaAmount {
+        w: left.w.saturating_sub(right.w),
+        u: left.u.saturating_sub(right.u),
+        b: left.b.saturating_sub(right.b),
+        r: left.r.saturating_sub(right.r),
+        g: left.g.saturating_sub(right.g),
+        c: left.c.saturating_sub(right.c),
+    }
+}
+
+/// Consume a requested amount from an available bag and return what could not be covered.
+fn take_mana_amount(available: &mut ManaAmount, requested: ManaAmount) -> ManaAmount {
+    let taken = ManaAmount {
+        w: available.w.min(requested.w),
+        u: available.u.min(requested.u),
+        b: available.b.min(requested.b),
+        r: available.r.min(requested.r),
+        g: available.g.min(requested.g),
+        c: available.c.min(requested.c),
+    };
+    *available = mana_amount_sub(*available, taken);
+    mana_amount_sub(requested, taken)
+}
+
+fn mana_amount_is_empty(amount: ManaAmount) -> bool {
+    amount == ManaAmount::default()
+}
+
+fn record_mana_source_consumption(
+    consumptions: &mut Vec<ManaSourceConsumption>,
+    activation_command_index: u64,
+    amount: ManaAmount,
+) {
+    if mana_amount_is_empty(amount) {
+        return;
+    }
+    if let Some(existing) = consumptions
+        .iter_mut()
+        .find(|source| source.activation_command_index == activation_command_index)
+    {
+        existing.amount = mana_amount_add(existing.amount, amount);
+    } else {
+        consumptions.push(ManaSourceConsumption {
+            activation_command_index,
+            amount,
+        });
+    }
+}
+
+fn receipt_unspent_mana_output(
+    receipts: &[AttackManaAbilityReceipt],
+    source_index: usize,
+) -> ManaAmount {
+    let source = &receipts[source_index];
+    let spent = receipts[source_index + 1..]
+        .iter()
+        .flat_map(|receipt| receipt.mana_sources_consumed.iter())
+        .filter(|consumption| {
+            consumption.activation_command_index == source.activation_command_index
+        })
+        .fold(ManaAmount::default(), |total, consumption| {
+            mana_amount_add(total, consumption.amount)
+        });
+    mana_amount_sub(source.mana_output, spent)
+}
+
+/// Mana pools do not distinguish sources with identical color and restriction. For CR 733.1,
+/// attribute costs deterministically: pre-window pool contributions first, then earlier mana
+/// ability receipts in activation order. Restricted mana is partitioned by its spending group.
+fn mana_sources_consumed_by_cost(
+    receipts: &[AttackManaAbilityReceipt],
+    state: &GameState,
+    payer: PlayerId,
+    cost_plan: &super::payment::transaction::CostTransactionPlan,
+) -> Vec<ManaSourceConsumption> {
+    let Some(player_index) = state.player_idx(payer) else {
+        return Vec::new();
+    };
+    let Some(player_state) = state.players.get(player_index) else {
+        return Vec::new();
+    };
+    let (unrestricted_spent, restricted_spent) = cost_plan.mana_source_spend();
+    let mut sources_consumed = Vec::new();
+
+    let unrestricted_sources = receipts
+        .iter()
+        .enumerate()
+        .filter(|(_, receipt)| receipt.restriction_group_id.is_none())
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    let unrestricted_output = unrestricted_sources
+        .iter()
+        .fold(ManaAmount::default(), |total, index| {
+            mana_amount_add(total, receipt_unspent_mana_output(receipts, *index))
+        });
+    let mut ordinary_pool = mana_amount_sub(
+        ManaAmount {
+            w: player_state.mana_pool.white,
+            u: player_state.mana_pool.blue,
+            b: player_state.mana_pool.black,
+            r: player_state.mana_pool.red,
+            g: player_state.mana_pool.green,
+            c: player_state.mana_pool.colorless,
+        },
+        unrestricted_output,
+    );
+    let mut unallocated = take_mana_amount(&mut ordinary_pool, unrestricted_spent);
+    for source_index in unrestricted_sources {
+        let mut source_output = receipt_unspent_mana_output(receipts, source_index);
+        let remaining = take_mana_amount(&mut source_output, unallocated);
+        let consumed = mana_amount_sub(unallocated, remaining);
+        record_mana_source_consumption(
+            &mut sources_consumed,
+            receipts[source_index].activation_command_index,
+            consumed,
+        );
+        unallocated = remaining;
+        if mana_amount_is_empty(unallocated) {
+            break;
+        }
+    }
+    debug_assert!(
+        mana_amount_is_empty(unallocated),
+        "accepted unrestricted mana cost must have a source lineage"
+    );
+
+    for (group_id, group_spent) in restricted_spent {
+        let group_sources = receipts
+            .iter()
+            .enumerate()
+            .filter(|(_, receipt)| receipt.restriction_group_id == Some(group_id))
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        let group_output = group_sources
+            .iter()
+            .fold(ManaAmount::default(), |total, index| {
+                mana_amount_add(total, receipt_unspent_mana_output(receipts, *index))
+            });
+        let group_available = player_state
+            .restricted_mana
+            .iter()
+            .filter(|contribution| contribution.restriction_group_id == group_id)
+            .fold(ManaAmount::default(), |total, contribution| {
+                mana_amount_add(total, contribution.amount)
+            });
+        let mut group_background = mana_amount_sub(group_available, group_output);
+        let mut group_unallocated = take_mana_amount(&mut group_background, group_spent);
+        for source_index in group_sources {
+            let mut source_output = receipt_unspent_mana_output(receipts, source_index);
+            let remaining = take_mana_amount(&mut source_output, group_unallocated);
+            let consumed = mana_amount_sub(group_unallocated, remaining);
+            record_mana_source_consumption(
+                &mut sources_consumed,
+                receipts[source_index].activation_command_index,
+                consumed,
+            );
+            group_unallocated = remaining;
+            if mana_amount_is_empty(group_unallocated) {
+                break;
+            }
+        }
+        debug_assert!(
+            mana_amount_is_empty(group_unallocated),
+            "accepted restricted mana cost must have a source lineage"
+        );
+    }
+    sources_consumed
+}
+
 impl GameEngine {
+    /// Add the generic attack cost contributed by active battlefield statics controlled by a
+    /// directly attacked player. A planeswalker or Battle edge is never taxed by this primitive.
+    pub(super) fn attack_tax_per_attacker(&self, defender: CombatDefenderTarget) -> u128 {
+        let CombatDefenderTarget::Player(defending_player) = defender else {
+            return 0;
+        };
+        let mut total = 0u128;
+        for object in self.state.objects.values() {
+            if object.zone != Zone::Battlefield
+                || self.controller_of(object.id) != Some(defending_player)
+            {
+                continue;
+            }
+            for ability in self.active_static_ability_definitions(object.id) {
+                if let StaticAbilityDef::AttackTax {
+                    generic_per_attacker,
+                } = ability
+                {
+                    total = total.saturating_add(u128::from(generic_per_attacker));
+                }
+            }
+        }
+        total
+    }
+
+    fn attack_tax_total(
+        &self,
+        assignments: &HashMap<ObjectId, CombatAttackAssignment>,
+    ) -> Result<u32, EngineError> {
+        assignments.values().try_fold(0u32, |total, assignment| {
+            let per_attacker = self.attack_tax_per_attacker(assignment.defender);
+            let per_attacker = u32::try_from(per_attacker)
+                .map_err(|_| EngineError::Illegal("attack tax exceeds numeric limit"))?;
+            total
+                .checked_add(per_attacker)
+                .ok_or(EngineError::Illegal("attack tax exceeds numeric limit"))
+        })
+    }
+
+    fn begin_attack_tax_payment(
+        &mut self,
+        start: PendingAttackTaxPaymentStart<'_>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let PendingAttackTaxPaymentStart {
+            attacking_player,
+            assignments,
+            parsed_assignments,
+            tapping_attackers,
+            tap_events,
+            pre_attack_state,
+            generic_mana_cost,
+        } = start;
+        let transaction_id = self.state.next_attack_declaration_transaction_id;
+        self.state.next_attack_declaration_transaction_id = transaction_id.saturating_add(1);
+        let pending = rv1::PendingAttackDeclaration {
+            transaction_id,
+            revision: 1,
+            attacking_player_id: attacking_player,
+            assignments: assignments.to_vec(),
+            generic_mana_cost,
+            ..Default::default()
+        };
+        self.state.pending_attack_declaration = Some(pending.clone());
+        let tap_triggers = self.collect_event_triggers(tap_events);
+        let tap_triggers = self.reserve_trigger_uses(tap_triggers);
+        self.pending_attack_declaration_internal = Some(PendingAttackDeclarationInternal {
+            assignments: parsed_assignments,
+            tapped_attackers: tapping_attackers
+                .iter()
+                .filter_map(|object_id| self.trigger_object_ref(*object_id))
+                .collect(),
+            tap_triggers,
+            pre_attack_state,
+            payment_window_base: self.state.clone(),
+            mana_ability_receipts: Vec::new(),
+        });
+
+        // The chosen creatures have been tapped, but are not yet attackers. Trigger snapshots
+        // remain parked until the attack transaction either commits or is reversed.
+        let mut batch = RuledEventBatch::default();
+        batch.events.push(rv1::RuledEvent {
+            ev: Some(rv1::ruled_event::Ev::AttackPaymentRequired(
+                rv1::AttackPaymentRequired {
+                    pending: Some(pending),
+                },
+            )),
+        });
+        batch.events.push(ev_log(format!(
+            "P{attacking_player} must pay {{{generic_mana_cost}}} to complete the attack declaration"
+        )));
+        Ok(batch)
+    }
+
+    pub(super) fn record_attack_mana_ability(&mut self, input: AttackManaAbilityReceiptInput) {
+        let AttackManaAbilityReceiptInput {
+            before_state,
+            source,
+            ability_path,
+            source_label,
+            ability,
+            cost_plan,
+            payment,
+            mana_output,
+            restriction_group_id,
+            activation_uses,
+            mana_damage,
+            mana_damage_results,
+            mana_damage_triggers,
+            cost_triggers,
+            has_cost_triggers,
+        } = input;
+        let Some(payer) = before_state
+            .pending_attack_declaration
+            .as_ref()
+            .map(|pending| pending.attacking_player_id)
+        else {
+            return;
+        };
+        let mana_sources_consumed = self
+            .pending_attack_declaration_internal
+            .as_ref()
+            .map(|internal| {
+                mana_sources_consumed_by_cost(
+                    &internal.mana_ability_receipts,
+                    &before_state,
+                    payer,
+                    &cost_plan,
+                )
+            })
+            .unwrap_or_default();
+        let Some(internal) = self.pending_attack_declaration_internal.as_mut() else {
+            return;
+        };
+        let Some(source_object) = before_state.objects.get(&source) else {
+            return;
+        };
+        let source_zone_change_generation = before_state
+            .zone_change_generation
+            .get(&source)
+            .copied()
+            .unwrap_or(0);
+        let source_ref = TriggerObjectRef {
+            object_id: source,
+            zone_change_generation: source_zone_change_generation,
+            controller_at_event: source_object.controller,
+        };
+        let library_action = payment.move_events.iter().any(|event| {
+            matches!(
+                &event.ev,
+                Some(rv1::ruled_event::Ev::PermanentMoved(moved))
+                    if moved.destination == rv1::permanent_moved::Destination::Library as i32
+            )
+        });
+        let simple_tap = ability.costs.as_slice() == [AbilityCost::Tap]
+            && ability.mana_ability_damage_to_controller().is_none()
+            && !has_cost_triggers
+            && activation_uses.is_empty();
+        let mana_restriction = ability.mana_restriction().cloned();
+        let restriction_presentation = restriction_group_id
+            .and_then(|group_id| group_id.checked_sub(1))
+            .and_then(|index| {
+                self.state
+                    .mana_restriction_presentations
+                    .get(index as usize)
+            })
+            .cloned()
+            .flatten();
+        internal
+            .mana_ability_receipts
+            .push(AttackManaAbilityReceipt {
+                activation_command_index: self.state.command_index,
+                source: source_ref,
+                ability_path,
+                source_label,
+                ability,
+                before_state,
+                cost_plan,
+                cost_payment: payment,
+                mana_sources_consumed,
+                activation_uses,
+                mana_damage,
+                mana_damage_results,
+                mana_damage_triggers,
+                mana_output,
+                restriction_group_id,
+                mana_restriction,
+                restriction_presentation,
+                cost_triggers,
+                simple_tap,
+                reversible: !library_action,
+            });
+    }
+
+    pub(super) fn record_attack_mana_damage_results(
+        &mut self,
+        player: PlayerId,
+        source_object_id: ObjectId,
+        completed: &[super::damage::CompletedDamage],
+        event_time_triggers: Vec<super::triggers::CollectedTrigger>,
+    ) {
+        let Some(pending) = self.state.pending_attack_declaration.as_ref() else {
+            return;
+        };
+        if pending.attacking_player_id != player {
+            return;
+        }
+        let Some(receipt) =
+            self.pending_attack_declaration_internal
+                .as_mut()
+                .and_then(|internal| {
+                    internal
+                        .mana_ability_receipts
+                        .iter_mut()
+                        .rev()
+                        .find(|receipt| {
+                            receipt.source.object_id == source_object_id
+                                && receipt.mana_damage.is_some()
+                                && receipt.mana_damage_results.is_empty()
+                        })
+                })
+        else {
+            return;
+        };
+        receipt.mana_damage_results = completed.to_vec();
+        receipt.mana_damage_triggers = event_time_triggers;
+    }
+
+    fn attack_mana_receipt_unavailable_reason(
+        &self,
+        receipts: &[AttackManaAbilityReceipt],
+        index: usize,
+    ) -> Option<&'static str> {
+        let Some(receipt) = receipts.get(index) else {
+            return Some("This attack mana receipt is unavailable.");
+        };
+        let contains_library_move = receipt.cost_payment.move_events.iter().any(|event| {
+            matches!(
+                &event.ev,
+                Some(rv1::ruled_event::Ev::PermanentMoved(moved))
+                    if moved.destination == rv1::permanent_moved::Destination::Library as i32
+            )
+        });
+        if !receipt.reversible || contains_library_move {
+            return Some(
+                "CR 733.1 prohibits reversing a mana ability that moved a card from a library.",
+            );
+        }
+        if receipt.ability_path.last() != Some(&receipt.ability.ability_id) {
+            return Some("This attack mana receipt no longer matches its activated ability.");
+        }
+        if receipts[index + 1..].iter().any(|later| {
+            later.mana_sources_consumed.iter().any(|consumption| {
+                consumption.activation_command_index == receipt.activation_command_index
+            })
+        }) {
+            return Some("Mana from this activation was spent on a later mana ability.");
+        }
+        if index + 1 == receipts.len() {
+            return None;
+        }
+        // Rebase the exact later cost receipts over the selected activation's pre-state. This
+        // keeps independent activations, including sacrifice/counter/life costs, while detecting
+        // a true dependency such as a later cost that spent the selected activation's only mana.
+        let mut candidate = self.clone();
+        candidate.state = receipt.before_state.clone();
+        let Some(player) = candidate
+            .state
+            .pending_attack_declaration
+            .as_ref()
+            .map(|pending| pending.attacking_player_id)
+        else {
+            return Some("The attack payment transaction is unavailable.");
+        };
+        let mut restriction_groups = HashMap::new();
+        let mut preceding_receipts = receipts[..index].to_vec();
+        for later in &receipts[index + 1..] {
+            let before_state = candidate.state.clone();
+            let Ok(reapplied) = candidate.reapply_attack_mana_receipt(
+                player,
+                later,
+                &mut restriction_groups,
+                &preceding_receipts,
+            ) else {
+                return Some("A later mana ability depends on this activation's source or costs.");
+            };
+            let mut rebased = later.clone();
+            rebased.before_state = before_state;
+            rebased.cost_plan = reapplied.cost_plan;
+            rebased.cost_payment = reapplied.payment;
+            rebased.restriction_group_id = reapplied.restriction_group_id;
+            rebased.mana_sources_consumed = reapplied.mana_sources_consumed;
+            preceding_receipts.push(rebased);
+        }
+        None
+    }
+
+    fn attack_mana_receipt_is_reversible(
+        &self,
+        receipts: &[AttackManaAbilityReceipt],
+        index: usize,
+    ) -> bool {
+        self.attack_mana_receipt_unavailable_reason(receipts, index)
+            .is_none()
+    }
+
+    pub(super) fn attack_mana_ability_undo_options(
+        &self,
+        player: PlayerId,
+    ) -> Vec<rv1::AttackManaAbilityUndoOption> {
+        if self
+            .state
+            .pending_attack_declaration
+            .as_ref()
+            .filter(|pending| pending.attacking_player_id == player)
+            .is_none()
+        {
+            return Vec::new();
+        }
+        let Some(internal) = self.pending_attack_declaration_internal.as_ref() else {
+            return Vec::new();
+        };
+        internal
+            .mana_ability_receipts
+            .iter()
+            .enumerate()
+            .map(|(index, receipt)| {
+                let unavailable_reason = self
+                    .attack_mana_receipt_unavailable_reason(&internal.mana_ability_receipts, index);
+                let reversible = unavailable_reason.is_none();
+                rv1::AttackManaAbilityUndoOption {
+                    activation_command_index: receipt.activation_command_index,
+                    source_object_id: receipt.source.object_id,
+                    source_label: receipt.source_label.clone(),
+                    reversible,
+                    unavailable_reason: unavailable_reason.unwrap_or_default().into(),
+                }
+            })
+            .collect()
+    }
+
+    pub(super) fn undo_attack_mana_ability(
+        &mut self,
+        player: PlayerId,
+        command: &rv1::UndoManaAbility,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let pending = self
+            .state
+            .pending_attack_declaration
+            .as_ref()
+            .ok_or(EngineError::Illegal("no attack payment is pending"))?;
+        if pending.attacking_player_id != player
+            || command.attack_transaction_id != pending.transaction_id
+            || command.activation_command_index == 0
+        {
+            return Err(EngineError::Illegal("wrong or stale attack mana receipt"));
+        }
+        let baseline_matches = self
+            .pending_attack_declaration_internal
+            .as_ref()
+            .and_then(|internal| {
+                internal
+                    .payment_window_base
+                    .pending_attack_declaration
+                    .as_ref()
+            })
+            .is_some_and(|baseline| baseline.transaction_id == pending.transaction_id);
+        if !baseline_matches {
+            return Err(EngineError::Illegal("attack payment baseline is stale"));
+        }
+        let (receipt, prefix, suffix) = {
+            let internal = self
+                .pending_attack_declaration_internal
+                .as_ref()
+                .ok_or(EngineError::Illegal("missing attack declaration snapshot"))?;
+            let index = internal
+                .mana_ability_receipts
+                .iter()
+                .position(|receipt| {
+                    receipt.activation_command_index == command.activation_command_index
+                })
+                .ok_or(EngineError::Illegal("unknown attack mana receipt"))?;
+            if !self.attack_mana_receipt_is_reversible(&internal.mana_ability_receipts, index) {
+                return Err(EngineError::Illegal(
+                    "attack mana receipt is not reversible",
+                ));
+            }
+            (
+                internal.mana_ability_receipts[index].clone(),
+                internal.mana_ability_receipts[..index].to_vec(),
+                internal.mana_ability_receipts[index + 1..].to_vec(),
+            )
+        };
+        let after_state = self.state.clone();
+        let mut batch = RuledEventBatch::default();
+        {
+            // The exact pre-activation snapshot reverses its costs, output, damage, trigger
+            // reservations and source changes without replaying the accepted mana ability.
+            for (object_id, before_object) in &receipt.before_state.objects {
+                let Some(after_object) = after_state.objects.get(object_id) else {
+                    continue;
+                };
+                if before_object.zone != after_object.zone {
+                    let destination = match before_object.zone {
+                        Zone::Hand => rv1::permanent_moved::Destination::Hand,
+                        Zone::Battlefield => rv1::permanent_moved::Destination::Battlefield,
+                        Zone::Graveyard => rv1::permanent_moved::Destination::Graveyard,
+                        Zone::Library => rv1::permanent_moved::Destination::Library,
+                        Zone::Exile => rv1::permanent_moved::Destination::Exile,
+                        Zone::Command => rv1::permanent_moved::Destination::Command,
+                        Zone::Stack => rv1::permanent_moved::Destination::Unspecified,
+                    };
+                    batch.events.push(rv1::RuledEvent {
+                        ev: Some(rv1::ruled_event::Ev::PermanentMoved(rv1::PermanentMoved {
+                            object_id: *object_id,
+                            owner_player_id: before_object.owner,
+                            destination: destination as i32,
+                            card_id: before_object.card_id.clone(),
+                            controller_player_id: before_object.controller,
+                            face_down: before_object.face_down,
+                            ..Default::default()
+                        })),
+                    });
+                } else if before_object.zone == Zone::Battlefield
+                    && after_object.tapped
+                    && !before_object.tapped
+                {
+                    self.state.untapped_this_command.push(*object_id);
+                }
+            }
+            for (before_player, after_player) in receipt
+                .before_state
+                .players
+                .iter()
+                .zip(after_state.players.iter())
+            {
+                let delta = before_player.life.saturating_sub(after_player.life);
+                if delta != 0 {
+                    batch.events.push(rv1::RuledEvent {
+                        ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                            player_id: before_player.id,
+                            new_total: before_player.life,
+                            delta,
+                        })),
+                    });
+                }
+            }
+            let command_index = after_state.command_index;
+            let next_object_id = after_state
+                .next_object_id
+                .max(receipt.before_state.next_object_id);
+            let next_trigger_grant_id = after_state
+                .next_trigger_grant_id
+                .max(receipt.before_state.next_trigger_grant_id);
+            let next_tap_action_id = after_state
+                .next_tap_action_id
+                .max(receipt.before_state.next_tap_action_id);
+            let next_game_rule_timestamp = after_state
+                .next_game_rule_timestamp
+                .max(receipt.before_state.next_game_rule_timestamp);
+            self.state = receipt.before_state.clone();
+            self.state.command_index = command_index;
+            self.state.next_object_id = next_object_id;
+            self.state.next_trigger_grant_id = next_trigger_grant_id;
+            self.state.next_tap_action_id = next_tap_action_id;
+            self.state.next_game_rule_timestamp = next_game_rule_timestamp;
+            let mut restriction_groups = HashMap::new();
+            let mut kept_receipts = prefix;
+            for later in &suffix {
+                let before_state = self.state.clone();
+                let reapplied = self.reapply_attack_mana_receipt(
+                    player,
+                    later,
+                    &mut restriction_groups,
+                    &kept_receipts,
+                )?;
+                batch.events.extend(reapplied.events);
+                let mut kept = later.clone();
+                kept.before_state = before_state;
+                kept.cost_plan = reapplied.cost_plan;
+                kept.cost_payment = reapplied.payment;
+                kept.restriction_group_id = reapplied.restriction_group_id;
+                kept.mana_sources_consumed = reapplied.mana_sources_consumed;
+                kept_receipts.push(kept);
+            }
+            self.pending_attack_declaration_internal
+                .as_mut()
+                .expect("pending attack transaction")
+                .mana_ability_receipts = kept_receipts;
+        }
+        batch.events.push(ev_log(format!(
+            "P{player} undoes mana ability: {}",
+            receipt.source_label
+        )));
+        if let Some(pending) = self.state.pending_attack_declaration.clone() {
+            batch.events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::AttackPaymentRequired(
+                    rv1::AttackPaymentRequired {
+                        pending: Some(pending),
+                    },
+                )),
+            });
+        }
+        Ok(batch)
+    }
+
+    /// Reapply a retained receipt's exact costs and recorded outputs after a preceding receipt was
+    /// reversed. This does not execute the mana ability or resolve a new prevention sequence.
+    fn reapply_attack_mana_receipt(
+        &mut self,
+        player: PlayerId,
+        receipt: &AttackManaAbilityReceipt,
+        restriction_group_remap: &mut HashMap<u32, u32>,
+        preceding_receipts: &[AttackManaAbilityReceipt],
+    ) -> Result<ReappliedAttackManaReceipt, EngineError> {
+        if self
+            .state
+            .zone_change_generation
+            .get(&receipt.source.object_id)
+            .copied()
+            .unwrap_or(0)
+            != receipt.source.zone_change_generation
+            || self
+                .state
+                .objects
+                .get(&receipt.source.object_id)
+                .is_none_or(|object| {
+                    object.zone != Zone::Battlefield || object.controller != player
+                })
+        {
+            return Err(EngineError::Illegal(
+                "later mana activation depends on the reversed receipt's source state",
+            ));
+        }
+        let mut cost_plan = receipt.cost_plan.clone();
+        cost_plan.remap_restricted_groups(restriction_group_remap);
+        let cost_plan = cost_plan.rebase_for_attack_receipt(&self.state)?;
+        let mana_sources_consumed =
+            mana_sources_consumed_by_cost(preceding_receipts, &self.state, player, &cost_plan);
+        let cost_plan = self.prepare_cost_transaction_commit(cost_plan)?;
+        let payment = self.commit_prevalidated_cost_transaction(cost_plan.clone())?;
+        self.record_limited_activations(receipt.activation_uses.clone());
+
+        let restriction_group_id = if let Some(restriction) = &receipt.mana_restriction {
+            let group_id = if let Some(index) = self
+                .state
+                .mana_restrictions
+                .iter()
+                .position(|candidate| candidate == restriction)
+            {
+                index as u32 + 1
+            } else {
+                self.state.mana_restrictions.push(restriction.clone());
+                self.state
+                    .mana_restriction_presentations
+                    .push(receipt.restriction_presentation.clone());
+                self.state.mana_restrictions.len() as u32
+            };
+            Some(group_id)
+        } else {
+            None
+        };
+        let player_index = self
+            .state
+            .player_idx(player)
+            .ok_or(EngineError::UnknownPlayer(player))?;
+        if let Some(group_id) = restriction_group_id {
+            self.state.players[player_index].restricted_mana.push(
+                crate::state::RestrictedManaContribution {
+                    restriction_group_id: group_id,
+                    amount: receipt.mana_output,
+                },
+            );
+        } else {
+            let pool = &mut self.state.players[player_index].mana_pool;
+            pool.white = pool.white.saturating_add(receipt.mana_output.w);
+            pool.blue = pool.blue.saturating_add(receipt.mana_output.u);
+            pool.black = pool.black.saturating_add(receipt.mana_output.b);
+            pool.red = pool.red.saturating_add(receipt.mana_output.r);
+            pool.green = pool.green.saturating_add(receipt.mana_output.g);
+            pool.colorless = pool.colorless.saturating_add(receipt.mana_output.c);
+        }
+        self.record_committed_cost_events(
+            payment.trigger_events.clone(),
+            payment.sacrificed.clone(),
+        );
+        let cost_triggers = receipt.cost_triggers.clone();
+        if receipt.simple_tap && cost_triggers.is_empty() && receipt.mana_damage.is_none() {
+            self.state
+                .undoable_mana_abilities
+                .push(UndoableManaAbility {
+                    player,
+                    source: receipt.source.object_id,
+                    produced: receipt.mana_output,
+                    restriction_group_id,
+                });
+        }
+        self.stage_triggers(cost_triggers);
+
+        let mut events = payment.move_events.clone();
+        if payment.life_paid > 0 {
+            events.push(rv1::RuledEvent {
+                ev: Some(rv1::ruled_event::Ev::LifeChanged(rv1::LifeChanged {
+                    player_id: player,
+                    new_total: self.state.players[player_index].life,
+                    delta: -(payment.life_paid as i32),
+                })),
+            });
+        }
+        if receipt.mana_damage.is_some() && !receipt.mana_damage_results.is_empty() {
+            self.state.undoable_mana_abilities.clear();
+            self.apply_attack_mana_damage_receipt(
+                &receipt.mana_damage_results,
+                &receipt.mana_damage_triggers,
+                &mut events,
+            )?;
+        }
+        if let (Some(old_group), Some(new_group)) =
+            (receipt.restriction_group_id, restriction_group_id)
+        {
+            if old_group != new_group {
+                restriction_group_remap.insert(old_group, new_group);
+            }
+        }
+        Ok(ReappliedAttackManaReceipt {
+            cost_plan,
+            payment,
+            restriction_group_id,
+            mana_sources_consumed,
+            events,
+        })
+    }
+
+    fn apply_attack_mana_damage_receipt(
+        &mut self,
+        completed: &[super::damage::CompletedDamage],
+        trigger_snapshot: &[super::triggers::CollectedTrigger],
+        events: &mut Vec<rv1::RuledEvent>,
+    ) -> Result<(), EngineError> {
+        let mut depleted_effects = Vec::new();
+        for damage in completed {
+            for (effect_id, amount) in &damage.prevention_debits {
+                let Some(effect) = self
+                    .state
+                    .damage_prevention_effects
+                    .iter_mut()
+                    .find(|effect| effect.id == *effect_id)
+                else {
+                    return Err(EngineError::Illegal(
+                        "later mana activation depends on a missing prevention receipt",
+                    ));
+                };
+                let crate::state::DamagePreventionAmount::Remaining(remaining) = &mut effect.amount
+                else {
+                    return Err(EngineError::Illegal(
+                        "later mana activation depends on a changed prevention receipt",
+                    ));
+                };
+                if *remaining < *amount {
+                    return Err(EngineError::Illegal(
+                        "later mana activation depends on consumed prevention capacity",
+                    ));
+                }
+                *remaining -= *amount;
+                if *remaining == 0 {
+                    depleted_effects.push(*effect_id);
+                }
+            }
+        }
+        if !depleted_effects.is_empty() {
+            self.state
+                .damage_prevention_effects
+                .retain(|effect| !depleted_effects.contains(&effect.id));
+        }
+        self.reapply_completed_damage_batch_with_triggers(completed, trigger_snapshot, events)
+    }
+
     /// CR 506.4: removal is permanent for this combat, even if a later instruction restores
     /// Creature. Keep empty blocker groups: their attackers remain blocked (CR 509.1h).
     pub(super) fn remove_combat_participants(
@@ -960,9 +1907,13 @@ impl GameEngine {
     /// enforcement and the client-facing `LegalActions` gate. Restrictions may prevent the whole
     /// pool from attacking; minimum_attack_requirement_count gives the achievable maximum.
     pub(super) fn attack_requirement_ids(&self) -> Vec<ObjectId> {
-        // "when a defending player exists to attack" — the count does not matter here, only that
-        // there is someone (CR 508.1a).
-        if self.state.defending_player_ids().is_empty() {
+        // CR 508.1d: the active player need not pay an attack cost merely to comply with an
+        // additional requirement. A costed-only edge therefore cannot make a creature required.
+        let limits = self.attack_limits();
+        let has_untaxed_edge = self.attack_defenders().into_iter().any(|(defender, _)| {
+            limits.allows_defender(defender) && self.attack_tax_per_attacker(defender) == 0
+        });
+        if !has_untaxed_edge {
             return Vec::new();
         }
         let ap = self.state.active_player_id();
@@ -1050,26 +2001,82 @@ impl GameEngine {
                 tapping_attackers.push(oid);
             }
         }
-        let mut tap_events = self.tap_permanents(ap, &tapping_attackers);
-        let attackers_for_event = list.clone();
-        if let Some(c) = self.state.combat.as_mut() {
-            c.attacking = list;
-            c.attack_assignments = parsed_assignments;
-            c.blockers.clear();
-            c.damage_assignments.clear();
-            c.trample_player_damage.clear();
-            c.damage_assignment_needed = false;
-            c.assign_combat_damage_phase = false;
-            c.attackers_declared = true;
-            c.blockers_declared_by.clear();
-            c.blockers_declared = false;
-            c.first_strike_attackers.clear();
-            c.first_strike_blockers.clear();
-            c.first_strike_damage_done = false;
+        let pre_attack_state = self.state.clone();
+        let tap_events = self.tap_permanents(ap, &tapping_attackers);
+        let attack_tax = self.attack_tax_total(&parsed_assignments)?;
+        if attack_tax > 0 {
+            return self.begin_attack_tax_payment(PendingAttackTaxPaymentStart {
+                attacking_player: ap,
+                assignments,
+                parsed_assignments,
+                tapping_attackers: &tapping_attackers,
+                tap_events: &tap_events,
+                pre_attack_state,
+                generic_mana_cost: attack_tax,
+            });
+        }
+        self.finalize_attack_declaration(ap, assignments, parsed_assignments, tap_events, None)
+    }
+
+    fn finalize_attack_declaration(
+        &mut self,
+        attacking_player: PlayerId,
+        assignments: &[rv1::AttackAssignment],
+        parsed_assignments: HashMap<ObjectId, CombatAttackAssignment>,
+        mut tap_events: Vec<GameEvent>,
+        buffered_tap_triggers: Option<Vec<super::triggers::CollectedTrigger>>,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let committed_assignments = assignments
+            .iter()
+            .filter_map(|wire| {
+                let assignment = *parsed_assignments.get(&wire.attacker_object_id)?;
+                let object = self.state.objects.get(&wire.attacker_object_id)?;
+                let current_generation = self
+                    .state
+                    .zone_change_generation
+                    .get(&wire.attacker_object_id)
+                    .copied()
+                    .unwrap_or(0);
+                (object.zone == Zone::Battlefield
+                    && current_generation == assignment.attacker.zone_change_generation
+                    && self.controller_of(wire.attacker_object_id) == Some(attacking_player))
+                .then_some((*wire, assignment))
+            })
+            .collect::<Vec<_>>();
+        let attacking_ids = committed_assignments
+            .iter()
+            .map(|(_, assignment)| assignment.attacker.object_id)
+            .collect::<Vec<_>>();
+        let committed_engine_assignments = committed_assignments
+            .iter()
+            .map(|(_, assignment)| (assignment.attacker.object_id, *assignment))
+            .collect::<HashMap<_, _>>();
+        let attacks = committed_assignments
+            .iter()
+            .map(|(_, assignment)| AttackEdgeSnapshot {
+                attacker: assignment.attacker,
+                defender: assignment.defender,
+                defending_player: assignment.defending_player,
+            })
+            .collect::<Vec<_>>();
+        if let Some(combat) = self.state.combat.as_mut() {
+            combat.attacking = attacking_ids.clone();
+            combat.attack_assignments = committed_engine_assignments;
+            combat.blockers.clear();
+            combat.damage_assignments.clear();
+            combat.trample_player_damage.clear();
+            combat.damage_assignment_needed = false;
+            combat.assign_combat_damage_phase = false;
+            combat.attackers_declared = true;
+            combat.blockers_declared_by.clear();
+            combat.blockers_declared = false;
+            combat.first_strike_attackers.clear();
+            combat.first_strike_blockers.clear();
+            combat.first_strike_damage_done = false;
         } else {
             self.state.combat = Some(CombatState {
-                attacking: list,
-                attack_assignments: parsed_assignments,
+                attacking: attacking_ids.clone(),
+                attack_assignments: committed_engine_assignments,
                 blockers: HashMap::new(),
                 damage_assignments: HashMap::new(),
                 trample_player_damage: HashMap::new(),
@@ -1083,11 +2090,11 @@ impl GameEngine {
                 first_strike_damage_done: false,
             });
         }
-        self.clear_step_mana_pools();
         // MTG timing: after attackers are declared, the game remains in declare-attackers
-        // and the active player receives priority before moving to declare blockers.
+        // and the active player receives priority before moving to declare blockers. Mana remains
+        // in the pool until that step actually ends (CR 106.4).
         self.state.turn_step = TurnStep::DeclareAttackers;
-        if let Some(ai) = self.state.player_idx(ap) {
+        if let Some(ai) = self.state.player_idx(attacking_player) {
             self.state.priority_idx = ai;
         }
         self.state.passes_since_stack_change = 0;
@@ -1095,43 +2102,187 @@ impl GameEngine {
         b.events.push(rv1::RuledEvent {
             ev: Some(rv1::ruled_event::Ev::AttackersDeclared(
                 rv1::AttackersDeclared {
-                    attacking_player_id: ap,
-                    assignments: assignments.to_vec(),
+                    attacking_player_id: attacking_player,
+                    assignments: committed_assignments
+                        .iter()
+                        .map(|(wire, _)| *wire)
+                        .collect(),
                 },
             )),
         });
-        let atk_names: Vec<String> = attackers_for_event
+        let atk_names: Vec<String> = attacking_ids
             .iter()
             .map(|&oid| object_display_name(&self.state, self.registry, oid))
             .collect();
         b.events.push(ev_log(format!(
             "P{} attacks with {}",
-            ap,
+            attacking_player,
             atk_names.join(", ")
         )));
-        let attacks = attackers_for_event
-            .into_iter()
-            .filter_map(|attacker_id| {
-                let assignment = self
-                    .state
-                    .combat
-                    .as_ref()?
-                    .attack_assignments
-                    .get(&attacker_id)?;
-                Some(AttackEdgeSnapshot {
-                    attacker: assignment.attacker,
-                    defender: assignment.defender,
-                    defending_player: assignment.defending_player,
-                })
-            })
-            .collect();
-        tap_events.push(GameEvent::AttackersDeclared {
-            attacking_player: ap,
+        let attack_event = GameEvent::AttackersDeclared {
+            attacking_player,
             attacks,
-        });
-        self.fire_triggers(&tap_events, &mut b.events);
+        };
+        if let Some(mut tap_triggers) = buffered_tap_triggers {
+            self.reconcile_combat_characteristics(&mut b.events);
+            self.refresh_enduring_story_designations();
+            self.record_committed_events(&tap_events);
+            self.record_committed_events(std::slice::from_ref(&attack_event));
+            let attack_triggers = self.collect_event_triggers(std::slice::from_ref(&attack_event));
+            tap_triggers.extend(self.reserve_trigger_uses(attack_triggers));
+            self.stage_reserved_triggers(tap_triggers);
+        } else {
+            tap_events.push(attack_event);
+            self.fire_triggers(&tap_events, &mut b.events);
+        }
         b.events.push(ev_priority_changed(self));
         Ok(b)
+    }
+
+    pub(super) fn commit_attack_declaration(
+        &mut self,
+        player: PlayerId,
+        command: &rv1::CommitAttackDeclaration,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let pending =
+            self.state
+                .pending_attack_declaration
+                .as_ref()
+                .ok_or(EngineError::Illegal(
+                    "no attack declaration is awaiting payment",
+                ))?;
+        if pending.attacking_player_id != player
+            || pending.transaction_id != command.transaction_id
+            || pending.revision != command.expected_revision
+        {
+            return Err(EngineError::Illegal(
+                "wrong actor or stale attack declaration",
+            ));
+        }
+        if self.state.priority_player_id() != player {
+            return Err(EngineError::Illegal("not your attack payment"));
+        }
+        let internal = self
+            .pending_attack_declaration_internal
+            .as_ref()
+            .ok_or(EngineError::Illegal("missing attack declaration snapshot"))?
+            .clone();
+        let prepared = self.prepare_attack_payment_costs(
+            player,
+            pending.generic_mana_cost,
+            &command.restricted_mana,
+        )?;
+        let selection = command
+            .payment
+            .as_ref()
+            .ok_or(EngineError::Illegal("missing attack tax payment"))?;
+        if selection.expected_state_revision != self.state.command_index
+            || selection.source.is_some()
+            || !selection.convoke.is_empty()
+            || !selection.waterbend.is_empty()
+        {
+            return Err(EngineError::Illegal("invalid attack tax payment selection"));
+        }
+        let plan = prepared.finish_explicit(&self.state, selection, 0)?;
+        let _payment = self.commit_cost_transaction(plan)?;
+        self.pending_attack_declaration_internal = None;
+        let pending = self.state.pending_attack_declaration.take().unwrap();
+        self.finalize_attack_declaration(
+            player,
+            &pending.assignments,
+            internal.assignments,
+            vec![],
+            Some(internal.tap_triggers),
+        )
+    }
+
+    pub(super) fn cancel_attack_declaration(
+        &mut self,
+        player: PlayerId,
+        command: &rv1::CancelAttackDeclaration,
+    ) -> Result<RuledEventBatch, EngineError> {
+        let pending =
+            self.state
+                .pending_attack_declaration
+                .as_ref()
+                .ok_or(EngineError::Illegal(
+                    "no attack declaration is awaiting payment",
+                ))?;
+        if pending.attacking_player_id != player
+            || pending.transaction_id != command.transaction_id
+            || pending.revision != command.expected_revision
+            || self.state.priority_player_id() != player
+        {
+            return Err(EngineError::Illegal(
+                "wrong actor or stale attack declaration",
+            ));
+        }
+        let internal = self
+            .pending_attack_declaration_internal
+            .take()
+            .ok_or(EngineError::Illegal("missing attack declaration snapshot"))?;
+        self.state.pending_attack_declaration = None;
+        self.rollback_pending_attack_declaration(&internal);
+        let mut batch = RuledEventBatch::default();
+        batch
+            .events
+            .push(ev_log(format!("P{player} cancels the attack declaration")));
+        batch.events.push(ev_priority_changed(self));
+        Ok(batch)
+    }
+
+    pub(super) fn abort_attack_declaration_for_departure(
+        &mut self,
+        departing_player: PlayerId,
+        events: &mut Vec<RuledEvent>,
+    ) {
+        if self
+            .state
+            .pending_attack_declaration
+            .as_ref()
+            .is_none_or(|pending| pending.attacking_player_id != departing_player)
+        {
+            return;
+        }
+        let Some(internal) = self.pending_attack_declaration_internal.take() else {
+            return;
+        };
+        self.state.pending_attack_declaration = None;
+        self.rollback_pending_attack_declaration(&internal);
+        events.push(ev_log(format!(
+            "P{departing_player}'s attack declaration is abandoned when they leave the game"
+        )));
+    }
+
+    fn rollback_pending_attack_declaration(&mut self, internal: &PendingAttackDeclarationInternal) {
+        for attacker in &internal.tapped_attackers {
+            let current_generation = self
+                .state
+                .zone_change_generation
+                .get(&attacker.object_id)
+                .copied()
+                .unwrap_or(0);
+            if current_generation == attacker.zone_change_generation
+                && self
+                    .state
+                    .objects
+                    .get(&attacker.object_id)
+                    .is_some_and(|object| object.zone == Zone::Battlefield && object.tapped)
+            {
+                super::set_tapped(&mut self.state, attacker.object_id, false);
+            }
+        }
+        self.state.triggered_once = internal.pre_attack_state.triggered_once.clone();
+        self.state.trigger_uses_this_turn =
+            internal.pre_attack_state.trigger_uses_this_turn.clone();
+        self.state.pending_triggers = internal.pre_attack_state.pending_triggers.clone();
+        self.state.staged_trigger_groups = internal.pre_attack_state.staged_trigger_groups.clone();
+        self.state.captured_spell_copies = internal.pre_attack_state.captured_spell_copies.clone();
+        self.state.pending_trigger_order = internal.pre_attack_state.pending_trigger_order.clone();
+        for receipt in &internal.mana_ability_receipts {
+            self.stage_triggers(receipt.cost_triggers.clone());
+            self.stage_triggers(receipt.mana_damage_triggers.clone());
+        }
     }
 
     pub(super) fn set_blockers(

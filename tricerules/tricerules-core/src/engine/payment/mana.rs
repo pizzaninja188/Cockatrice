@@ -165,6 +165,22 @@ pub(in crate::engine) struct ManaPaymentPlan {
 }
 
 impl ManaPaymentPlan {
+    /// Unrestricted mana by type that this exact plan removes from the ordinary pool.
+    pub(in crate::engine) fn unrestricted_spent(&self) -> tricerules_cards::ManaAmount {
+        tricerules_cards::ManaAmount {
+            w: self.expected_pool[0] - self.remaining[0],
+            u: self.expected_pool[1] - self.remaining[1],
+            b: self.expected_pool[2] - self.remaining[2],
+            r: self.expected_pool[3] - self.remaining[3],
+            g: self.expected_pool[4] - self.remaining[4],
+            c: self.expected_pool[POOL_C] - self.remaining[POOL_C],
+        }
+    }
+
+    pub(in crate::engine) fn restricted_spent(&self) -> &[(u32, tricerules_cards::ManaAmount)] {
+        &self.restricted_spent
+    }
+
     pub(in crate::engine) fn colors_spent(&self) -> crate::state::ManaColorsSpent {
         let mut colors = [false; 5];
         for (i, present) in colors.iter_mut().enumerate() {
@@ -201,6 +217,103 @@ impl ManaPaymentPlan {
             })
             .sum();
         ordinary + restricted
+    }
+
+    /// Rebind an already accepted payment debit to the restored state when an earlier mana
+    /// activation is reversed. The receipt keeps the exact color/restriction allocation; only
+    /// its expected pool snapshot changes. A replay fails closed if any exact debit is no longer
+    /// available, which identifies a later mana activation that depended on the reversed one.
+    pub(in crate::engine) fn rebase_for_attack_receipt(
+        &self,
+        state: &GameState,
+        player_idx: usize,
+    ) -> Result<Self, EngineError> {
+        let player = state
+            .players
+            .get(player_idx)
+            .ok_or(EngineError::Illegal("attack mana receipt payer changed"))?;
+        let available = [
+            player.mana_pool.white,
+            player.mana_pool.blue,
+            player.mana_pool.black,
+            player.mana_pool.red,
+            player.mana_pool.green,
+            player.mana_pool.colorless,
+        ];
+        let retained = [
+            player.retained_combat_mana.white,
+            player.retained_combat_mana.blue,
+            player.retained_combat_mana.black,
+            player.retained_combat_mana.red,
+            player.retained_combat_mana.green,
+            player.retained_combat_mana.colorless,
+        ];
+        let spent: PoolVec = std::array::from_fn(|slot| {
+            self.expected_pool[slot].saturating_sub(self.remaining[slot])
+        });
+        let retained_spent: PoolVec = std::array::from_fn(|slot| {
+            self.expected_retained_combat[slot].saturating_sub(self.remaining_retained_combat[slot])
+        });
+        if (0..6).any(|slot| spent[slot] > available[slot] || retained_spent[slot] > retained[slot])
+        {
+            return Err(EngineError::Illegal(
+                "later mana activation depends on the reversed mana receipt",
+            ));
+        }
+
+        let mut restricted_remaining: HashMap<u32, ManaAmount> = HashMap::new();
+        for contribution in &player.restricted_mana {
+            let amount = restricted_remaining
+                .entry(contribution.restriction_group_id)
+                .or_default();
+            amount.w = amount.w.saturating_add(contribution.amount.w);
+            amount.u = amount.u.saturating_add(contribution.amount.u);
+            amount.b = amount.b.saturating_add(contribution.amount.b);
+            amount.r = amount.r.saturating_add(contribution.amount.r);
+            amount.g = amount.g.saturating_add(contribution.amount.g);
+            amount.c = amount.c.saturating_add(contribution.amount.c);
+        }
+        for (group_id, amount) in &self.restricted_spent {
+            let Some(available) = restricted_remaining.get_mut(group_id) else {
+                return Err(EngineError::Illegal(
+                    "later mana activation depends on the reversed restricted-mana receipt",
+                ));
+            };
+            if amount.w > available.w
+                || amount.u > available.u
+                || amount.b > available.b
+                || amount.r > available.r
+                || amount.g > available.g
+                || amount.c > available.c
+            {
+                return Err(EngineError::Illegal(
+                    "later mana activation depends on the reversed restricted-mana receipt",
+                ));
+            }
+            available.w -= amount.w;
+            available.u -= amount.u;
+            available.b -= amount.b;
+            available.r -= amount.r;
+            available.g -= amount.g;
+            available.c -= amount.c;
+        }
+        let mut rebased = self.clone();
+        rebased.remaining = std::array::from_fn(|slot| available[slot] - spent[slot]);
+        rebased.remaining_retained_combat =
+            std::array::from_fn(|slot| retained[slot] - retained_spent[slot]);
+        rebased.expected_pool = available;
+        rebased.expected_retained_combat = retained;
+        rebased.expected_life = player.life;
+        rebased.expected_restricted = player.restricted_mana.clone();
+        Ok(rebased)
+    }
+
+    pub(in crate::engine) fn remap_restricted_groups(&mut self, remap: &HashMap<u32, u32>) {
+        for (group_id, _) in &mut self.restricted_spent {
+            if let Some(mapped) = remap.get(group_id) {
+                *group_id = *mapped;
+            }
+        }
     }
 }
 

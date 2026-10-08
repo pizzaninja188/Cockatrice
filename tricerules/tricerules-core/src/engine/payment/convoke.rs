@@ -222,6 +222,7 @@ impl GameEngine {
             request.execute_permanent_action.is_some(),
             request.commit_spell_cast.is_some(),
             request.commit_ability_activation.is_some(),
+            request.commit_attack_declaration.is_some(),
         ]
         .into_iter()
         .filter(|present| *present)
@@ -253,7 +254,7 @@ impl GameEngine {
             prepared.restricted_mana = command.restricted_mana.clone();
             (
                 prepared,
-                self.payment_object_ref(pending.reserved_object_id),
+                Some(self.payment_object_ref(pending.reserved_object_id)),
                 command.payment.clone().unwrap_or_default(),
                 internal.prepared.convoke,
             )
@@ -267,7 +268,29 @@ impl GameEngine {
                 .source_object_id;
             (
                 costs,
-                self.payment_object_ref(source),
+                Some(self.payment_object_ref(source)),
+                command.payment.clone().unwrap_or_default(),
+                false,
+            )
+        } else if let Some(command) = &request.commit_attack_declaration {
+            let pending = self
+                .state
+                .pending_attack_declaration
+                .as_ref()
+                .ok_or(EngineError::Illegal("no attack declaration is being paid"))?;
+            if pending.attacking_player_id != player
+                || pending.transaction_id != command.transaction_id
+                || pending.revision != command.expected_revision
+            {
+                return Err(EngineError::Illegal("stale attack declaration payment"));
+            }
+            (
+                self.prepare_attack_payment_costs(
+                    player,
+                    pending.generic_mana_cost,
+                    &command.restricted_mana,
+                )?,
+                None,
                 command.payment.clone().unwrap_or_default(),
                 false,
             )
@@ -281,14 +304,14 @@ impl GameEngine {
             let cast = self.prepare_spell_cast(player, command)?;
             (
                 cast.payment,
-                self.payment_object_ref(cast.oid),
+                Some(self.payment_object_ref(cast.oid)),
                 command.payment.clone().unwrap_or_default(),
                 cast.convoke,
             )
         } else if let Some(command) = &request.activate_ability {
             (
                 self.prepare_activation_payment(player, command)?,
-                self.payment_object_ref(command.source_object_id),
+                Some(self.payment_object_ref(command.source_object_id)),
                 command.payment.clone().unwrap_or_default(),
                 false,
             )
@@ -338,7 +361,7 @@ impl GameEngine {
             }
             (
                 prepared,
-                self.payment_object_ref(pending.presentation.source_object_id),
+                Some(self.payment_object_ref(pending.presentation.source_object_id)),
                 command.payment.clone().unwrap_or_default(),
                 false,
             )
@@ -347,15 +370,19 @@ impl GameEngine {
             let (prepared, source) = self.prepare_permanent_action_payment(player, command)?;
             (
                 prepared,
-                source,
+                Some(source),
                 command.payment.clone().unwrap_or_default(),
                 false,
             )
         };
-        if selection.source.as_ref().is_some_and(|old| *old != source) {
-            return Err(EngineError::Illegal("payment source changed"));
+        if let Some(source) = source {
+            if selection.source.as_ref().is_some_and(|old| *old != source) {
+                return Err(EngineError::Illegal("payment source changed"));
+            }
+            selection.source = Some(source);
+        } else if selection.source.is_some() {
+            return Err(EngineError::Illegal("attack payment has no card source"));
         }
-        selection.source = Some(source);
         selection.expected_state_revision = self.state.command_index;
         let idx = self
             .state

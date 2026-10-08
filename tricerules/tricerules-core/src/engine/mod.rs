@@ -1253,10 +1253,12 @@ pub struct EngineDeck {
     pub commanders: Vec<String>,
 }
 
+#[derive(Clone)]
 pub struct GameEngine {
     pub state: GameState,
     pending_spell_cast_internal: Option<casting::PendingSpellCastInternal>,
     pending_ability_activation_internal: Option<activation::PendingAbilityActivationInternal>,
+    pending_attack_declaration_internal: Option<combat::PendingAttackDeclarationInternal>,
     /// Shared process-wide registry (`CardRegistry::global()`); read-only.
     registry: &'static CardRegistry,
     /// Debug-only: whether this session accepts `DevCommand` (see `engine::dev`). Off unless the
@@ -1838,6 +1840,8 @@ impl GameEngine {
             command_index: 0,
             next_spell_cast_transaction_id: 1,
             pending_spell_cast: None,
+            next_attack_declaration_transaction_id: 1,
+            pending_attack_declaration: None,
             next_ability_activation_transaction_id: 1,
             pending_ability_activation: None,
             passes_since_stack_change: 0,
@@ -1891,6 +1895,7 @@ impl GameEngine {
             state,
             pending_spell_cast_internal: None,
             pending_ability_activation_internal: None,
+            pending_attack_declaration_internal: None,
             registry,
             dev_commands_enabled: false,
             private_zone_cache: HashMap::new(),
@@ -2876,6 +2881,18 @@ impl GameEngine {
                             .is_some_and(|pending| pending.caster == player)
                             || self.resolving_mana_payment_for(player))
                 }
+                BlockingChoice::AttackDeclaration => {
+                    self.state
+                        .pending_attack_declaration
+                        .as_ref()
+                        .is_some_and(|pending| pending.attacking_player_id == player)
+                        && matches!(
+                            cmd.cmd.as_ref(),
+                            Some(Cmd::CommitAttackDeclaration(_) | Cmd::CancelAttackDeclaration(_))
+                                | Some(Cmd::ActivateAbility(_))
+                                | Some(Cmd::UndoManaAbility(_))
+                        )
+                }
                 BlockingChoice::TriggerOrder => {
                     matches!(cmd.cmd.as_ref(), Some(Cmd::SubmitTriggerOrder(_)))
                 }
@@ -2889,6 +2906,9 @@ impl GameEngine {
                         "finish the pending ability activation before acting"
                     }
                     BlockingChoice::Resolution => "resolve the pending choice before acting",
+                    BlockingChoice::AttackDeclaration => {
+                        "pay or cancel the pending attack declaration before acting"
+                    }
                     BlockingChoice::TriggerOrder => {
                         "order your simultaneous triggers before acting"
                     }
@@ -3002,11 +3022,17 @@ impl GameEngine {
             Some(Cmd::CommitAbilityActivation(command)) => {
                 self.commit_ability_activation(player, command)
             }
+            Some(Cmd::CommitAttackDeclaration(command)) => {
+                self.commit_attack_declaration(player, command)
+            }
+            Some(Cmd::CancelAttackDeclaration(command)) => {
+                self.cancel_attack_declaration(player, command)
+            }
             Some(Cmd::ActivateAbility(aa)) => self.activate_ability(player, aa),
             Some(Cmd::ExecutePermanentAction(command)) => {
                 self.execute_permanent_action(player, command)
             }
-            Some(Cmd::UndoManaAbility(_)) => self.undo_mana_ability(player),
+            Some(Cmd::UndoManaAbility(command)) => self.undo_mana_ability(player, command),
             Some(Cmd::ChooseTriggerTarget(ctt)) => {
                 self.choose_trigger_target(player, &ctt.targets, &ctt.selected_modes, ctt.decline)
             }
@@ -3054,6 +3080,7 @@ impl GameEngine {
         // eliminate that caster or change priority.
         if self.state.pending_resolution.is_none()
             && self.state.pending_spell_cast.is_none()
+            && self.state.pending_attack_declaration.is_none()
             && self.state.pending_ability_activation.is_none()
         {
             self.commit_pending_library_losses();

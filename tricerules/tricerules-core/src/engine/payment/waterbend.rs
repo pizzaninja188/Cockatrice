@@ -56,13 +56,25 @@ impl GameEngine {
             .pending_spell_cast
             .as_ref()
             .is_some_and(|pending| pending.caster == player)
+            || self
+                .state
+                .pending_attack_declaration
+                .as_ref()
+                .is_some_and(|pending| pending.attacking_player_id == player)
             || self.paying_ability_activation(player);
+        let attack_mana_payment = self
+            .state
+            .pending_attack_declaration
+            .as_ref()
+            .is_some_and(|pending| pending.attacking_player_id == player);
         if (!resolving_mana_payment
             && !self.paying_ability_activation(player)
+            && !attack_mana_payment
             && (self.state.priority_player_id() != player
                 || self.state.blocking_choice().is_some()
                 || self.state.turn_step == TurnStep::Cleanup))
             || super::super::combat::priority_locked_for_combat_declaration(&self.state)
+                && !attack_mana_payment
         {
             return Err(EngineError::Illegal("activation payment unavailable now"));
         }

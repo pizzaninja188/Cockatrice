@@ -124,8 +124,10 @@ void RuledBroadcastRouter::updatePendingResolutionChoiceCache(const ruled::v1::I
             if (event.has_mana_pool_updated()) pendingResolutionState.add_events()->CopyFrom(event);
         }
     }
-    if (std::any_of(legal.begin(), legal.end(),
-                    [](const auto &entry) { return entry.second.has_pending_spell_cast() || entry.second.has_pending_ability_activation(); })) {
+    if (std::any_of(legal.begin(), legal.end(), [](const auto &entry) {
+            return entry.second.has_pending_spell_cast() || entry.second.has_pending_ability_activation() ||
+                   entry.second.has_pending_attack_declaration();
+        })) {
         *pendingAnnouncementState.mutable_legal_by_player() = legal;
         if (currentPublicZoneView)
             pendingAnnouncementState.add_events()->mutable_zone_view()->CopyFrom(*currentPublicZoneView);

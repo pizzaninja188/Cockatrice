@@ -442,6 +442,27 @@ TEST_F(GamePromptWidgetTest, ResolutionPaymentUsesNormalCostControlsAndSuppresse
     EXPECT_EQ(declineSpy.count(), 1);
 }
 
+TEST_F(GamePromptWidgetTest, AttackTaxPaymentShowsCancelAndUndoWithoutPriorityControls)
+{
+    QSignalSpy cancelSpy(widget.get(), &GamePromptWidget::ruledAttackPaymentCancelRequested);
+    widget->setLocalPlayerHasPriority(true);
+    widget->setLandTapUndoAvailable(true);
+    GamePromptWidget::RuledPromptState state;
+    state.mode = PromptMode::AttackPayment;
+    state.text = "Pay {2} to declare attackers, or cancel.";
+    widget->setRuledPromptState(state);
+
+    EXPECT_EQ(widget->effectiveMode(), PromptMode::AttackPayment);
+    EXPECT_EQ(btn("resolutionPaymentDeclineButton")->text(), QStringLiteral("Cancel Attack"));
+    EXPECT_FALSE(btn("resolutionPaymentDeclineButton")->isHidden());
+    EXPECT_FALSE(btn("undoLandTapButton")->isHidden());
+    EXPECT_TRUE(btn("passPriorityButton")->isHidden());
+    EXPECT_TRUE(btn("resolutionPaymentConfirmButton")->isHidden());
+
+    btn("resolutionPaymentDeclineButton")->click();
+    EXPECT_EQ(cancelSpy.count(), 1);
+}
+
 TEST_F(GamePromptWidgetTest, VariableManaContributionRequiresExplicitConfirmation)
 {
     QSignalSpy confirmSpy(widget.get(), &GamePromptWidget::ruledResolutionPaymentConfirmRequested);

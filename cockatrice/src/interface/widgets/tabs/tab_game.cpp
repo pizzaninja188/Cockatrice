@@ -481,6 +481,12 @@ void TabGame::connectToGameEventHandler()
                 ruled->payResolutionMana();
             }
         });
+        connect(gamePromptWidget, &GamePromptWidget::ruledAttackPaymentCancelRequested, this, [this]() {
+            const int localId = game->getPlayerManager()->getLocalPlayerId();
+            Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr);
+            if (localPlayer && localPlayer->getPlayerActions())
+                localPlayer->getPlayerActions()->cancelRuledAttackDeclaration();
+        });
         connect(gamePromptWidget, &GamePromptWidget::ruledResolutionPaymentClearRequested, this, [this]() {
             const int localId = game->getPlayerManager()->getLocalPlayerId();
             if (Player *localPlayer = game->getPlayerManager()->getPlayers().value(localId, nullptr)) {
@@ -787,6 +793,10 @@ GamePromptWidget::PromptMode TabGame::refreshRuledPromptState()
             state.text = localActions->pendingRuledSpellPromptText();
         state.genericManaCost = h->resolutionPaymentGenericCost();
         state.paymentCurrentlyLegal = h->resolutionPaymentCurrentlyLegal();
+    } else if (h->pendingAttackDeclaration) {
+        state.mode = PromptMode::AttackPayment;
+        state.text = tr("Pay %1 to declare attackers (click mana counters or activate mana abilities), or cancel.")
+                         .arg(QString::fromStdString(h->pendingAttackDeclaration->payment_preview().remaining_cost()));
     } else if (h->hasPendingZoneScopeChoice()) {
         state.mode = PromptMode::ZoneSelection;
         state.canDecline = h->pendingClickChoiceMayDecline();

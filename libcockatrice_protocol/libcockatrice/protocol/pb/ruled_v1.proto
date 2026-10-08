@@ -97,6 +97,9 @@ message RuledCommand {
     SubmitAbilityActivationChoice submit_ability_activation_choice = 33;
     CommitAbilityActivation commit_ability_activation = 34;
     CancelAbilityActivation cancel_ability_activation = 35;
+    // CR 508.1h-j: pay the already-locked attack declaration tax or reverse the declaration.
+    CommitAttackDeclaration commit_attack_declaration = 36;
+    CancelAttackDeclaration cancel_attack_declaration = 37;
   }
 }
 
@@ -122,7 +125,12 @@ message CanonicalGameplayCommand {
 
 // Undo the most recent undoable mana ability for the commanding player (no payload needed; the
 // engine pops its own per-player undo stack). See RuledCommand.undo_mana_ability.
-message UndoManaAbility {}
+message UndoManaAbility {
+  // Non-zero only while paying an attack cost. Selects an exact accepted mana activation from
+  // that declaration transaction rather than assuming the most recent activation is the target.
+  uint64 attack_transaction_id = 1;
+  uint64 activation_command_index = 2;
+}
 
 // Debug-only cheat commands for the dev console, so a board state can be built without editing
 // deck files or playing turns to reach it.
@@ -439,6 +447,7 @@ message PreviewPayment {
   // Refresh payment against an engine-owned, already-locked spell transaction.
   CommitSpellCast commit_spell_cast = 7;
   CommitAbilityActivation commit_ability_activation = 8;
+  CommitAttackDeclaration commit_attack_declaration = 9;
 }
 
 message ObjectPaymentCandidate {
@@ -1125,6 +1134,9 @@ message LegalActions {
   repeated AttackDeclarationLimit attack_declaration_limits = 26 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   // Every surviving seat receives the public procedure; actionable offers are seat-specific.
   PendingAbilityActivation pending_ability_activation = 27 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+  // Present only for the active player while CR 508.1h-j attack-tax payment is in progress.
+  PendingAttackDeclaration pending_attack_declaration = 28
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // The bounded CR 602.3 contract targets battlefield creatures. This identity is an engine
@@ -1202,6 +1214,41 @@ message PendingSpellCast {
   // source leaves its hand/public-zone action list and refreshes as mana abilities add mana.
   repeated uint32 eligible_restricted_mana_group_ids = 7
       [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+// The attack declaration is not committed until its locked cost is paid. This has no card source:
+// transaction_id and revision bind payment to the exact declaration proposal.
+message PendingAttackDeclaration {
+  uint64 transaction_id = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint64 revision = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  int32 attacking_player_id = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated AttackAssignment assignments = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 generic_mana_cost = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  PaymentPreview payment_preview = 6 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated uint32 eligible_restricted_mana_group_ids = 7
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  repeated AttackManaAbilityUndoOption mana_ability_undo_options = 8
+      [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message AttackManaAbilityUndoOption {
+  uint64 activation_command_index = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  uint32 source_object_id = 2 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string source_label = 3 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  bool reversible = 4 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+  string unavailable_reason = 5 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
+}
+
+message CommitAttackDeclaration {
+  uint64 transaction_id = 1;
+  uint64 expected_revision = 2;
+  PaymentSelection payment = 3;
+  repeated ManaSpendSelection restricted_mana = 4;
+}
+
+message CancelAttackDeclaration {
+  uint64 transaction_id = 1;
+  uint64 expected_revision = 2;
 }
 
 // Servatrice-injected each ruled broadcast: engine hand slot index -> Server_Card.id for that player,
@@ -1302,7 +1349,14 @@ message RuledEvent {
     // A bounded concealed-zone cohort that an effect explicitly reveals to every participant.
     // Unlike ResolutionChoiceRequired this is informational and never requests a command.
     CardsRevealed cards_revealed = 37 [(field_visibility) = FIELD_VISIBILITY_PUBLIC];
+    // The active player must pay the locked attack cost or cancel this declaration transaction.
+    AttackPaymentRequired attack_payment_required = 38
+        [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
   }
+}
+
+message AttackPaymentRequired {
+  PendingAttackDeclaration pending = 1 [(field_visibility) = FIELD_VISIBILITY_PER_PLAYER];
 }
 
 // One triggered ability that has fired and is waiting to be put on the stack. It is not on the

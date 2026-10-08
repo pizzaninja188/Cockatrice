@@ -1921,6 +1921,7 @@ void RuledEventDispatcher::applyAttackersDeclared(const ruled::v1::AttackersDecl
     state->pendingAttackerOids.clear();
     state->pendingAttackAssignments.clear();
     state->attackerAwaitingDefenderOid = 0;
+    state->pendingAttackDeclaration.reset();
     state->remoteAttackerPreviewOids.clear();
     state->remoteAttackPreviewAssignments.clear();
     state->attackersSubmittedThisStep = true;
@@ -2073,6 +2074,10 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
     } else {
         state->pendingSpellCast.reset();
     }
+    if (actions.has_pending_attack_declaration())
+        state->pendingAttackDeclaration = actions.pending_attack_declaration();
+    else
+        state->pendingAttackDeclaration.reset();
     state->handActions = copyHandActions(actions, presentationResolver);
     QHash<quint64, RuledExilePlayPermissionGroup> permissionGroups;
     for (const auto &group : actions.exile_play_permission_groups()) {
@@ -2266,9 +2271,15 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
     for (const auto &l : actions.labels()) {
         ctx.promptFeed += QStringLiteral(" — %1\n").arg(QString::fromStdString(l));
     }
-    // CR 605 float courtesy: surface the engine's undoable-mana count so the client can offer /
-    // retract the Undo affordance authoritatively.
-    emit state->undoableManaAbilitiesChanged(static_cast<int>(actions.undoable_mana_abilities()));
+    // CR 605.3a / 733.1: an attack payment exposes its exact reversible activation receipts;
+    // use those to drive Undo because costed activations are not in the legacy float-only list.
+    int undoableManaCount = static_cast<int>(actions.undoable_mana_abilities());
+    if (actions.has_pending_attack_declaration()) {
+        const auto &options = actions.pending_attack_declaration().mana_ability_undo_options();
+        undoableManaCount = static_cast<int>(std::count_if(
+            options.begin(), options.end(), [](const auto &option) { return option.reversible(); }));
+    }
+    emit state->undoableManaAbilitiesChanged(undoableManaCount);
     // CR 508.1d / 509.1c: engine-reported must-attack / must-block sets that gate the combat
     // confirm controls (see RuledClientState::combatDeclarationSatisfied).
     state->attackRequirementOids.clear();
@@ -2301,6 +2312,7 @@ void RuledEventDispatcher::applyLegalActions(const ruled::v1::LegalActions &acti
 void RuledEventDispatcher::applyNoLegalActions(bool preserveCombatCapabilities)
 {
     state->clearHandActions();
+    state->pendingAttackDeclaration.reset();
     state->openingBottomSelectedIndices.clear();
     state->openingPickSeatIds.clear();
     state->openingUiKind = RuledOpeningUiKind::None;

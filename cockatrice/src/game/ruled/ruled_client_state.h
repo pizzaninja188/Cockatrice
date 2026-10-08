@@ -735,6 +735,8 @@ public:
     /// Caster-private engine-owned CR 601 transaction. Presence, identity, and locked cost come
     /// only from the latest authoritative LegalActions entry.
     std::optional<ruled::v1::PendingSpellCast> pendingSpellCast;
+    /// Payer-private CR 508 attack declaration transaction from the latest LegalActions entry.
+    std::optional<ruled::v1::PendingAttackDeclaration> pendingAttackDeclaration;
     /// Public activation announcement and only this seat's engine-authored choice/payment offers.
     std::optional<ruled::v1::PendingAbilityActivation> pendingAbilityActivation;
     [[nodiscard]] bool hasPendingSpellCast() const
@@ -1522,6 +1524,8 @@ public:
 public slots:
     /// Combat declaration submissions (CR 508.1 / 509.1). Wired to the prompt widget's buttons.
     void confirmAttackers();
+    /// Complete the local submission rollback after the server acknowledges cancellation.
+    void finishAttackDeclarationCancellation(quint64 transactionId);
     void skipAttackers();
     void confirmBlockers();
     void skipBlockers();
@@ -2022,9 +2026,9 @@ signals:
     void combatDamageUiChanged();
     void battlefieldMapUpdated();
     void stackHasItemsChanged(bool hasItems);
-    /// Emitted each ruled batch with the engine's count of the local player's currently-undoable
-    /// mana abilities (LegalActions.undoable_mana_abilities, CR 605 float courtesy). Drives the
-    /// Undo affordance: > 0 means a still-inconsequential mana float can be rewound.
+    /// Emitted each ruled batch with the local player's undoable mana activation count. This uses
+    /// LegalActions.undoable_mana_abilities normally and the exact reversible attack receipts
+    /// during attack payment (CR 605.3a / 733.1). Drives the Undo affordance.
     void undoableManaAbilitiesChanged(int count);
     /// One player's public restricted pool snapshot changed.
     void restrictedManaChanged(int playerId);

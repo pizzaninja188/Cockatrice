@@ -50,6 +50,8 @@ public:
         CostSelection,
         /// CR 608.2g resolution-time mana payment; normal priority controls stay hidden.
         ResolutionPayment,
+        /// CR 508.1h-j: payment for the locked attack declaration; only Cancel is shown.
+        AttackPayment,
         /// Engine-authored labeled choices rendered as ordinary buttons in this panel.
         ChoiceOptions,
         /// An engine-owned activation is choosing an opponent/target, waiting, or paying.
@@ -214,6 +216,7 @@ signals:
     void ruledResolutionPaymentConfirmRequested();
     void ruledResolutionPaymentClearRequested();
     void ruledResolutionPaymentDeclineRequested();
+    void ruledAttackPaymentCancelRequested();
     void ruledChoiceOptionRequested(int optionIndex);
     void ruledCastCostOptionRequested(int optionIndex);
     void ruledCastCostConfirmRequested();

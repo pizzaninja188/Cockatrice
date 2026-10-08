@@ -94,6 +94,9 @@ mod deck_coverage_zenith_chronicler;
 #[path = "scenario/deck_coverage_blue_suns_zenith.rs"]
 mod deck_coverage_blue_suns_zenith;
 
+#[path = "scenario/deck_coverage_propaganda.rs"]
+mod deck_coverage_propaganda;
+
 #[path = "scenario/deck_coverage_spine_of_ish_sah.rs"]
 mod deck_coverage_spine_of_ish_sah;
 

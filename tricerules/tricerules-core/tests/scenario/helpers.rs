@@ -499,7 +499,7 @@ pub(crate) fn permanent_cost_selection(cost_index: u32, permanent_id: u32) -> Co
 
 pub(crate) fn undo_mana_ability() -> RuledCommand {
     RuledCommand {
-        cmd: Some(Cmd::UndoManaAbility(UndoManaAbility {})),
+        cmd: Some(Cmd::UndoManaAbility(UndoManaAbility::default())),
     }
 }
 

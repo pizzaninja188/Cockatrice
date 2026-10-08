@@ -3043,6 +3043,33 @@ TEST_F(RuledClientTest, LegalActionsBatchEmitsUndoableManaCount)
     EXPECT_EQ(spy.at(1).at(0).toInt(), 0);
 }
 
+TEST_F(RuledClientTest, PendingAttackReceiptUndoabilityDrivesTheUndoAffordance)
+{
+    QSignalSpy spy(state, &RuledClientState::undoableManaAbilitiesChanged);
+    ruled::v1::RuledEventBatch batch;
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    auto *pending = actions.mutable_pending_attack_declaration();
+    pending->set_transaction_id(91);
+    auto *undoable = pending->add_mana_ability_undo_options();
+    undoable->set_activation_command_index(17);
+    undoable->set_reversible(true);
+    auto *unavailable = pending->add_mana_ability_undo_options();
+    unavailable->set_activation_command_index(18);
+    unavailable->set_reversible(false);
+    apply(batch);
+    ASSERT_EQ(spy.count(), 1);
+    EXPECT_EQ(spy.at(0).at(0).toInt(), 1);
+
+    ruled::v1::RuledEventBatch unavailableBatch;
+    auto &unavailableActions = (*unavailableBatch.mutable_legal_by_player())[kLocalPlayer];
+    auto *unavailablePending = unavailableActions.mutable_pending_attack_declaration();
+    unavailablePending->set_transaction_id(91);
+    unavailablePending->add_mana_ability_undo_options()->set_reversible(false);
+    apply(unavailableBatch);
+    ASSERT_EQ(spy.count(), 2);
+    EXPECT_EQ(spy.at(1).at(0).toInt(), 0);
+}
+
 TEST_F(RuledClientTest, LegalActionsForAnotherPlayerAreIgnored)
 {
     ruled::v1::RuledEventBatch batch;
@@ -4178,6 +4205,56 @@ TEST_F(RuledClientTest, MultipleAttackDefendersRequireAnAuthoritativeDestination
     ASSERT_EQ(host.sentCommands.size(), 1);
     ASSERT_EQ(host.sentCommands[0].declare_attackers().assignments_size(), 1);
     EXPECT_EQ(host.sentCommands[0].declare_attackers().assignments(0).defender().object_id(), 500u);
+    EXPECT_TRUE(state->hasAttackersSubmittedThisStep());
+    EXPECT_TRUE(state->isPendingAttacker(100));
+
+    host.answerPendingAck(false);
+    EXPECT_FALSE(state->hasAttackersSubmittedThisStep());
+    EXPECT_TRUE(state->isPendingAttacker(100));
+
+    state->confirmAttackers();
+    host.answerPendingAck(true);
+    EXPECT_TRUE(state->hasAttackersSubmittedThisStep());
+    EXPECT_TRUE(state->isPendingAttacker(100)); // The engine's committed event clears the draft.
+
+    ruled::v1::RuledEventBatch committed;
+    *committed.add_events()->mutable_attackers_declared()->add_assignments() =
+        permanentAttackAssignment(100, 500, 9);
+    apply(committed);
+    EXPECT_FALSE(state->isPendingAttacker(100));
+}
+
+TEST_F(RuledClientTest, PendingAttackPaymentComesFromLocalLegalActionsAndCancellationKeepsDraft)
+{
+    auto batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer);
+    auto &actions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    actions.add_selectable_attacker_ids(100);
+    addLegalPlayerAttack(actions, 100);
+    apply(batch);
+    state->togglePendingAttacker(100);
+
+    batch = phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer);
+    auto &pendingActions = (*batch.mutable_legal_by_player())[kLocalPlayer];
+    pendingActions.add_selectable_attacker_ids(100);
+    addLegalPlayerAttack(pendingActions, 100);
+    auto *pending = pendingActions.mutable_pending_attack_declaration();
+    pending->set_transaction_id(81);
+    pending->set_revision(4);
+    pending->set_attacking_player_id(kLocalPlayer);
+    *pending->add_assignments() = playerAttackAssignment(100);
+    apply(batch);
+    ASSERT_TRUE(state->pendingAttackDeclaration.has_value());
+    EXPECT_EQ(state->pendingAttackDeclaration->transaction_id(), 81u);
+
+    state->finishAttackDeclarationCancellation(81);
+    EXPECT_FALSE(state->pendingAttackDeclaration.has_value());
+    EXPECT_TRUE(state->isPendingAttacker(100));
+
+    auto opponentOnly = phaseBatch(ruled::v1::PHASE_ID_DECLARE_ATTACKERS, kLocalPlayer);
+    auto *opponent = (*opponentOnly.mutable_legal_by_player())[kOpponent].mutable_pending_attack_declaration();
+    opponent->set_transaction_id(82);
+    apply(opponentOnly);
+    EXPECT_FALSE(state->pendingAttackDeclaration.has_value());
 }
 
 TEST_F(RuledClientTest, MobilizeDefenderChoiceUsesStructuredEngineOptionsAndRestoresAfterRejection)
@@ -4424,6 +4501,77 @@ TEST_F(RuledClientTest, RemovedFromCombatPrunesAttackersAndBlockPairs)
     // Arrow rendering consumes assignments, so removal must prune both mirrors.
     EXPECT_FALSE(state->getCurrentAttackAssignments().contains(101));
     EXPECT_TRUE(state->getCurrentAttackAssignments().contains(100));
+}
+
+TEST(RuledPaymentTest, AttackDeclarationPreviewAndCommitCarryExactLockedPayment)
+{
+    RuledPayment payment;
+    payment.begin(true);
+    ruled::v1::RuledCommand command;
+    auto *commit = command.mutable_commit_attack_declaration();
+    commit->set_transaction_id(91);
+    commit->set_expected_revision(7);
+
+    auto request = payment.requestAction(command);
+    ASSERT_TRUE(request.has_commit_attack_declaration());
+    EXPECT_EQ(request.commit_attack_declaration().transaction_id(), 91u);
+    EXPECT_EQ(request.commit_attack_declaration().expected_revision(), 7u);
+
+    ASSERT_TRUE(payment.payMana('G'));
+    request = payment.requestAction(command);
+    ASSERT_TRUE(request.has_commit_attack_declaration());
+    EXPECT_EQ(request.commit_attack_declaration().payment().mana().g(), 1u);
+
+    ruled::v1::PaymentPreview response;
+    response.set_transaction_id(request.transaction_id());
+    response.set_revision(request.revision());
+    response.set_valid(true);
+    response.set_complete(true);
+    *response.mutable_selection() = request.commit_attack_declaration().payment();
+    ASSERT_TRUE(payment.apply(response));
+    ASSERT_TRUE(payment.beginSubmission());
+
+    payment.writePayment(command);
+    EXPECT_EQ(command.commit_attack_declaration().transaction_id(), 91u);
+    EXPECT_EQ(command.commit_attack_declaration().expected_revision(), 7u);
+    EXPECT_EQ(command.commit_attack_declaration().payment().mana().g(), 1u);
+}
+
+TEST(RuledPaymentTest, AttackManaUndoCommandUsesTheSelectedReversibleReceipt)
+{
+    ruled::v1::PendingAttackDeclaration pending;
+    pending.set_transaction_id(92);
+    auto *older = pending.add_mana_ability_undo_options();
+    older->set_activation_command_index(17);
+    older->set_reversible(true);
+    auto *blocked = pending.add_mana_ability_undo_options();
+    blocked->set_activation_command_index(18);
+    blocked->set_reversible(false);
+    auto *newer = pending.add_mana_ability_undo_options();
+    newer->set_activation_command_index(19);
+    newer->set_reversible(true);
+
+    const auto command = RuledPayment::undoManaAbilityCommand(&pending, 17);
+    ASSERT_TRUE(command.has_value());
+    ASSERT_TRUE(command->has_undo_mana_ability());
+    EXPECT_EQ(command->undo_mana_ability().attack_transaction_id(), 92u);
+    EXPECT_EQ(command->undo_mana_ability().activation_command_index(), 17u);
+    EXPECT_TRUE(RuledPayment::undoManaAbilityCommand(&pending, 17, 92).has_value());
+    EXPECT_FALSE(RuledPayment::undoManaAbilityCommand(&pending, 17, 93).has_value());
+    EXPECT_FALSE(RuledPayment::undoManaAbilityCommand(nullptr, 17, 92).has_value());
+    EXPECT_FALSE(RuledPayment::undoManaAbilityCommand(&pending, 18).has_value());
+    const auto newest = RuledPayment::undoManaAbilityCommand(&pending);
+    ASSERT_TRUE(newest.has_value());
+    EXPECT_EQ(newest->undo_mana_ability().activation_command_index(), 19u);
+
+    pending.clear_mana_ability_undo_options();
+    pending.add_mana_ability_undo_options()->set_reversible(false);
+    EXPECT_FALSE(RuledPayment::undoManaAbilityCommand(&pending).has_value());
+
+    const auto ordinary = RuledPayment::undoManaAbilityCommand(nullptr);
+    ASSERT_TRUE(ordinary.has_value());
+    EXPECT_TRUE(ordinary->has_undo_mana_ability());
+    EXPECT_EQ(ordinary->undo_mana_ability().attack_transaction_id(), 0u);
 }
 
 TEST(RuledPendingTargetTest, PairedAbilityTargetsReconcileChangedEdgesWithoutObjectRemoval)

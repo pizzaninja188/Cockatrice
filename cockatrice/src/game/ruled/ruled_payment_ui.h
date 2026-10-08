@@ -65,6 +65,7 @@ public:
     bool ruledRestrictedManaGroupEligible(quint32 groupId) const;
     void clearRestrictedManaPaymentSelections();
     void declineRuledResolutionPayment();
+    void cancelAttackDeclaration();
     void clearVariableManaContributionSelection();
     void finishRuledResolutionPaymentSubmission(bool accepted);
     void autoApplyFloatedManaToPendingCost(const QString &counterName, int amount);
@@ -110,7 +111,8 @@ private:
         None,
         Spell,
         Ability,
-        Resolution
+        Resolution,
+        Attack
     };
 
     struct SuspendedPayment

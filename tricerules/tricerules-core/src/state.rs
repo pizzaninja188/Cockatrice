@@ -884,6 +884,8 @@ pub struct PendingTriggerOrder {
 pub enum BlockingChoice {
     /// CR 602.3: an ability's multi-actor announcement/payment is incomplete.
     AbilityActivation,
+    /// CR 508.1h-j: an attack declaration is waiting for its locked tax payment or reversal.
+    AttackDeclaration,
     /// A tier-3 custom resolution is parked mid-resolution (CR 608).
     Resolution,
     /// Simultaneous triggers are staged awaiting their controller's ordering (CR 603.3b).
@@ -2577,6 +2579,10 @@ pub struct GameState {
     /// Caster-private, serializable portion of the one in-progress spell proposal. The locked
     /// debit plan remains engine-internal; this state is enough for diagnostics and LegalActions.
     pub pending_spell_cast: Option<PendingSpellCastState>,
+    /// Monotonic transaction identity for a payment-bearing declare-attackers action.
+    pub next_attack_declaration_transaction_id: u64,
+    /// Public procedure and payer-private payment projection for the pending attack declaration.
+    pub pending_attack_declaration: Option<tricerules_proto::ruled::v1::PendingAttackDeclaration>,
     pub next_ability_activation_transaction_id: u64,
     /// Public procedure plus server-owned recipient offers. LegalActions projects each seat.
     pub pending_ability_activation: Option<tricerules_proto::ruled::v1::PendingAbilityActivation>,
@@ -2884,6 +2890,9 @@ impl GameState {
     pub fn blocking_choice(&self) -> Option<BlockingChoice> {
         if self.pending_resolution.is_some() {
             return Some(BlockingChoice::Resolution);
+        }
+        if self.pending_attack_declaration.is_some() {
+            return Some(BlockingChoice::AttackDeclaration);
         }
         if self.pending_ability_activation.is_some() {
             return Some(BlockingChoice::AbilityActivation);

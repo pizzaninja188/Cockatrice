@@ -100,6 +100,7 @@ mod tests {
                     dealt: u32::MAX,
                     prevented: 0,
                 },
+                prevention_debits: Vec::new(),
             });
         }
         let mut events = Vec::new();

@@ -173,6 +173,8 @@ public:
     /// Restore locally staged pool pips, then submit Decline. The engine separately rewinds mana
     /// abilities activated since the prompt began.
     void declineRuledResolutionPayment();
+    /// Cancel the active player's engine-owned attack-tax payment transaction.
+    void cancelRuledAttackDeclaration();
     void clearVariableManaContributionSelection();
     /// Ack completion for an optimistic resolution payment submission.
     void finishRuledResolutionPaymentSubmission(bool accepted);
@@ -323,9 +325,9 @@ public slots:
 
     void cardMenuAction();
 
-    /// Ruled mode: the engine's count of this player's currently-undoable mana abilities
-    /// (LegalActions.undoable_mana_abilities). Drives the Undo affordance; re-emits
-    /// landTapUndoAvailableChanged so the prompt reflects the authoritative state.
+    /// Ruled mode: the engine's current undoable activation count, including the payer-private
+    /// attack receipt options while attack payment is pending. Re-emits landTapUndoAvailableChanged
+    /// so the prompt reflects the authoritative state.
     void setRuledUndoableManaCount(int count);
 
 private:
