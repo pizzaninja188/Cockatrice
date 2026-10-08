@@ -264,6 +264,9 @@ pub(super) fn execute_effect(
         SpellEffectKind::UntapChosenPermanents => mass::untap_chosen_permanents(cx)?,
         effect @ SpellEffectKind::DestroyAll { .. } => mass::destroy_all(cx, effect)?,
         effect @ SpellEffectKind::ExileAll { .. } => mass::exile_all(cx, effect)?,
+        SpellEffectKind::ExileAllCreaturesWithPowerAtLeastFiveUntilSourceLeaves => {
+            mass::exile_all_creatures_with_power_at_least_five_until_source_leaves(cx)?
+        }
         effect @ SpellEffectKind::DamageAll { .. } => mass::damage_all(cx, effect)?,
         effect @ SpellEffectKind::CreateTokens { .. } => tokens::create_tokens(cx, effect)?,
         effect @ SpellEffectKind::CreateTokenBatch { .. } => {

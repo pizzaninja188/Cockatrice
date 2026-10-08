@@ -1487,6 +1487,7 @@ fn validate_effect_targets(
         | SpellEffectKind::CopyTargetSpell { .. }
         | SpellEffectKind::DestroyAll { .. }
         | SpellEffectKind::ExileAll { .. }
+        | SpellEffectKind::ExileAllCreaturesWithPowerAtLeastFiveUntilSourceLeaves
         | SpellEffectKind::ReturnAllToOwnersHand { .. }
         | SpellEffectKind::DamageAll { .. }
         | SpellEffectKind::SacrificeAll { .. }

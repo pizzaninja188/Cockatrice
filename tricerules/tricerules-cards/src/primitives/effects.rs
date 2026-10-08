@@ -1696,6 +1696,9 @@ pub enum SpellEffectKind {
     ExileAll {
         kind: TargetFilter,
     },
+    /// CR 610.3: Aligned Hedron Network exiles all current creatures with power 5 or greater,
+    /// then returns that exact cohort immediately after this source incarnation leaves.
+    ExileAllCreaturesWithPowerAtLeastFiveUntilSourceLeaves,
     /// CR 701.21: each affected controller sacrifices the matching simultaneous cohort.
     /// All Is Dust selects colored permanents; Living Death selects every creature.
     SacrificeAll {
@@ -3233,6 +3236,7 @@ impl SpellEffectKind {
             | SpellEffectKind::BoompileFlipCoinAndDestroyNonlands
             | SpellEffectKind::DestroyAll { .. }
             | SpellEffectKind::ExileAll { .. }
+            | SpellEffectKind::ExileAllCreaturesWithPowerAtLeastFiveUntilSourceLeaves
             | SpellEffectKind::SacrificeAll { .. }
             | SpellEffectKind::ReturnAllToOwnersHand { .. }
             | SpellEffectKind::DamageAll { .. }
@@ -3981,6 +3985,13 @@ impl SpellEffectKind {
         ) && context != EffectContext::Ability
         {
             return Err("PuPu UFO source effects require an activated ability".into());
+        }
+        if matches!(
+            self,
+            Self::ExileAllCreaturesWithPowerAtLeastFiveUntilSourceLeaves
+        ) && context != EffectContext::Ability
+        {
+            return Err("source-linked mass exile requires a permanent ability source".into());
         }
         if matches!(self, Self::ThassaOracle) && context != EffectContext::Ability {
             return Err("ThassaOracle is only valid in a triggered or activated ability".into());

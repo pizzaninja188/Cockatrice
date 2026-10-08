@@ -189,6 +189,46 @@ impl GameEngine {
             .iter()
             .filter_map(|(&id, object)| (object.owner == player).then_some(id))
             .collect();
+        let departing_source_generations: HashSet<_> = owned
+            .iter()
+            .filter_map(|&object_id| {
+                let object = self.state.objects.get(&object_id)?;
+                (object.zone == Zone::Battlefield).then(|| {
+                    (
+                        object_id,
+                        self.state
+                            .zone_change_generation
+                            .get(&object_id)
+                            .copied()
+                            .unwrap_or(0),
+                    )
+                })
+            })
+            .collect();
+        let mut departing_returns = Vec::new();
+        self.state.active_event_observers.retain(|observer| {
+            let watches_departing_source = observer.watched.is_some_and(|watched| {
+                departing_source_generations
+                    .contains(&(watched.object_id, watched.zone_change_generation))
+            });
+            if watches_departing_source
+                && matches!(
+                    &observer.matcher,
+                    EventObserverMatcher::WhenWatchedObjectLeavesBattlefield
+                )
+            {
+                if let EventObserverPayload::ReturnExiledObject { exiled } = &observer.payload {
+                    departing_returns.push(*exiled);
+                    return false;
+                }
+            }
+            true
+        });
+        self.state.pending_immediate_observer_actions.extend(
+            departing_returns
+                .into_iter()
+                .map(|exiled| ImmediateObserverAction::ReturnExiledObject { exiled }),
+        );
         let mut removed_from_combat = Vec::new();
         if let Some(combat) = self.state.combat.as_mut() {
             let removed_attackers: HashSet<ObjectId> = combat
@@ -467,6 +507,7 @@ impl GameEngine {
         for id in stranded {
             move_object_to_zone(&mut self.state, self.registry, id, Zone::Exile, None)?;
         }
+        self.drain_immediate_observer_actions(None, events)?;
         if self.state.turn_step == TurnStep::DeclareBlockers
             && self
                 .state
@@ -478,7 +519,9 @@ impl GameEngine {
             if let Some(defender) = next_defender {
                 self.state.priority_idx = self.state.player_idx(defender).unwrap();
                 self.state.passes_since_stack_change = 0;
-                events.push(ev_priority_changed(self));
+                if self.state.blocking_choice().is_none() {
+                    events.push(ev_priority_changed(self));
+                }
             } else {
                 self.state.combat.as_mut().unwrap().blockers_declared = true;
                 self.finalize_block_declarations(events)?;
@@ -491,7 +534,9 @@ impl GameEngine {
                     active
                 };
                 self.state.passes_since_stack_change = 0;
-                events.push(ev_priority_changed(self));
+                if self.state.blocking_choice().is_none() {
+                    events.push(ev_priority_changed(self));
+                }
             }
         }
         if self.state.players[self.state.priority_idx].has_lost {

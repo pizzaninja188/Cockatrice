@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "oracle_id": "5a399467-abb7-4f33-962d-8bef5aa9ebf3",
+  "complete_definition_review_confirmed": true,
+  "tokens": [],
+  "spans": [
+    {
+      "face_id": "aligned_hedron_network",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": ["/faces/0/triggered_abilities/0"]
+    }
+  ],
+  "semantic_fixtures": [
+    {
+      "covers": "Complete actual card; current power threshold, all-player scope, stolen permanent ownership on return, counters cleared by zone changes, and simultaneous cohort return",
+      "test": "scenario deck_coverage_aligned_hedron_network::aligned_hedron_network_exiles_current_power_five_creatures_and_returns_them_together"
+    },
+    {
+      "covers": "The ETB instruction does nothing when this source incarnation leaves before resolution",
+      "test": "scenario deck_coverage_aligned_hedron_network::aligned_hedron_network_etb_does_nothing_after_its_source_leaves"
+    },
+    {
+      "covers": "Resolution-time power is evaluated in both directions; a qualifying hexproof creature is included because the effect does not target; a creature entering after resolution is not included",
+      "test": "scenario deck_coverage_aligned_hedron_network::aligned_hedron_network_checks_power_when_its_etb_trigger_resolves"
+    },
+    {
+      "covers": "A stale ETB source generation cannot act on a later incarnation",
+      "test": "scenario deck_coverage_aligned_hedron_network::aligned_hedron_network_old_etb_does_not_apply_to_a_later_source_generation"
+    },
+    {
+      "covers": "Animated source is first in the exile cohort and returns together with another qualifying nontoken creature; re-entry triggers once and an exiled token is not recreated",
+      "test": "scenario deck_coverage_aligned_hedron_network::aligned_hedron_network_self_exile_returns_once_and_does_not_recreate_tokens"
+    },
+    {
+      "covers": "Source owner's multiplayer departure removes their own objects, returns surviving owners' exiled cards before publication, and does not stage an unrelated observer trigger from the removed source",
+      "test": "scenario deck_coverage_aligned_hedron_network::aligned_hedron_network_owner_concession_returns_survivors_before_publication"
+    },
+    {
+      "covers": "A returning Aura's owner choice remains pending during source-owner departure without premature priority publication",
+      "test": "scenario deck_coverage_aligned_hedron_network::aligned_hedron_network_owner_concession_preserves_returning_aura_choice"
+    }
+  ]
+}

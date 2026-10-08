@@ -1,0 +1,14 @@
+// Pinned Oracle 5a399467-abb7-4f33-962d-8bef5aa9ebf3; rulings checked 2026-10-08.
+(
+  id: "aligned_hedron_network",
+  name: "Aligned Hedron Network",
+  face_id: "aligned_hedron_network",
+  mana_cost: "{4}",
+  types: ["Artifact"],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([1]),
+    trigger: WhenSelfEntersBattlefield,
+    effect: [ExileAllCreaturesWithPowerAtLeastFiveUntilSourceLeaves],
+  )],
+)

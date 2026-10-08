@@ -11,6 +11,9 @@ mod deck_coverage_devotion_gods;
 #[path = "scenario/deck_coverage_doubling_season.rs"]
 mod deck_coverage_doubling_season;
 
+#[path = "scenario/deck_coverage_aligned_hedron_network.rs"]
+mod deck_coverage_aligned_hedron_network;
+
 #[path = "scenario/deck_coverage_flux_abundance.rs"]
 mod deck_coverage_flux_abundance;
 
