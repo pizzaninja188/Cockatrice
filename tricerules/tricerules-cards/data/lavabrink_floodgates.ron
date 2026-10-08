@@ -1,0 +1,63 @@
+// Exact card and rulings checked from Scryfall on 2026-10-08. CR 503.1a, 603.12-603.12a,
+// 608.2h, 701.21a, 122.2, 400.7, and 120.4b govern upkeep choice, reflexive sacrifice, and damage.
+(
+  id: "lavabrink_floodgates",
+  name: "Lavabrink Floodgates",
+  face_id: "lavabrink_floodgates",
+  mana_cost: "{3}{R}",
+  types: ["Artifact"],
+  activated_abilities: [(
+    ability_id: "activated_01",
+    presentation: OracleLines([1]),
+    costs: [Tap],
+    effect: [ProduceMana(options: [(r: 2)])],
+  )],
+  triggered_abilities: [(
+    ability_id: "triggered_01",
+    presentation: OracleLines([2]),
+    trigger: AtBeginningOfUpkeep(player: AnyPlayer),
+    effect: [
+      ChooseResolutionBranch(
+        chooser: AffectedPlayer,
+        optional: true,
+        branches: [
+          (
+            branch_id: "add_doom_counter",
+            // Oracle line 2 combines this option with removal and the later threshold instruction.
+            presentation: Fallback,
+            cost: None,
+            requirement: GameCondition(ObjectMatches(
+              object: Source,
+              filter: (kind: AnyPermanent),
+            )),
+            effects: [PutCounters(counter: Doom, count: 1, subject: Source)],
+          ),
+          (
+            branch_id: "remove_doom_counter",
+            // Oracle line 2 combines this option with addition and the later threshold instruction.
+            presentation: Fallback,
+            cost: None,
+            requirement: GameCondition(AllOf([
+              ObjectMatches(object: Source, filter: (kind: AnyPermanent)),
+              SourceCounterCount(counter: Doom, min: Some(1)),
+            ])),
+            effects: [RemoveCounters(counter: Doom, count: 1, subject: Source)],
+          ),
+        ],
+      ),
+      Conditional(
+        condition: SourceCounterCount(counter: Doom, min: Some(3)),
+        effect: Sacrifice(subject: Source),
+      ),
+      CreateReflexiveTrigger(
+        when: Some(Sacrificed(object: Source)),
+        ability: (
+          ability_id: "reflexive_01",
+          // The "When you do" damage fragment is part of Oracle line 2's larger upkeep instruction.
+          presentation: Fallback,
+          effect: [DamageAll(amount: 6, kind: (kind: Creature))],
+        ),
+      ),
+    ],
+  )],
+)

@@ -157,6 +157,11 @@ pub(super) fn sacrifice(
     for (oid, owner, name, source) in sacrifices {
         let was_creature = source.types.iter().any(|kind| kind == "Creature");
         let died = sacrifice_permanent(&mut cx.engine.state, cx.engine.registry, oid)?;
+        cx.effect_result.sacrificed_objects.push(TriggerObjectRef {
+            object_id: source.object_id,
+            zone_change_generation: source.zone_change_generation,
+            controller_at_event: source.controller,
+        });
         // CR 118.12: a replacement destination still pays this sacrifice instruction.
         cx.effect_result.cards.push(payment::card_result_entry(
             &cx.engine.state,

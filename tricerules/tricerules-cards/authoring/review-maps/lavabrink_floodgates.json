@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "oracle_id": "bd4df73c-bbd5-47fd-a961-19f3a3c59381",
+  "spans": [
+    {
+      "face_id": "lavabrink_floodgates",
+      "start_line": 1,
+      "end_line": 1,
+      "typed_paths": [
+        "/faces/0/activated_abilities/0"
+      ]
+    },
+    {
+      "face_id": "lavabrink_floodgates",
+      "start_line": 2,
+      "end_line": 2,
+      "typed_paths": [
+        "/faces/0/triggered_abilities/0/trigger",
+        "/faces/0/triggered_abilities/0/effect/0",
+        "/faces/0/triggered_abilities/0/effect/1",
+        "/faces/0/triggered_abilities/0/effect/2"
+      ]
+    }
+  ],
+  "tokens": [],
+  "semantic_fixtures": [
+    {
+      "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_has_its_complete_single_face",
+      "covers": "exact card identity, complete single face, mana cost, ability line mapping, upkeep trigger identity, and public Doom label"
+    },
+    {
+      "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_uses_the_upkeep_players_choice_and_rejects_invalid_answers",
+      "covers": "opponent upkeep actor and chooser, external third counter without immediate sacrifice, rejected wrong-player and invalid branch atomicity, removal below threshold, and public counter annotation"
+    },
+    {
+      "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_add_to_threshold_sacrifices_and_deals_six_to_all_creatures",
+      "covers": "threshold sacrifice, replacement destination to exile, six damage to all current creatures across players, and unchanged player life"
+    },
+    {
+      "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_add_remove_and_decline_check_the_threshold_afterward",
+      "covers": "add, remove, and decline choices below or at threshold, including zero, two, three, and four counters"
+    },
+    {
+      "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_mana_ability_adds_two_red_without_using_the_stack",
+      "covers": "red-red mana ability taps the artifact and resolves without the stack"
+    },
+    {
+      "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_reflexive_damage_respects_prevention_and_damage_triggers",
+      "covers": "four-player damage scope including a player with no creatures, prevention, creature-only damage, and Cracked Skull damage-trigger observer"
+    },
+    {
+      "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_cannot_sacrifice_a_source_it_no_longer_controls",
+      "covers": "source control change prevents sacrifice and its reflexive receipt"
+    },
+    {
+      "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_old_upkeep_trigger_cannot_affect_a_new_source_generation",
+      "covers": "stale trigger cannot alter or sacrifice an absent or returned new-generation source"
+    },
+    {
+      "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_delegates_a_parked_upkeep_choice_after_the_upkeep_player_concedes",
+      "covers": "800.4g delegated choice with a four-player departure and completed threshold sacrifice"
+    },
+    {
+      "test": "scenario deck_coverage_lavabrink_floodgates::lavabrink_floodgates_logged_upkeep_branch_replays_to_the_same_state",
+      "covers": "serialized selected branch command reproduces response batches and final engine state"
+    }
+  ],
+  "complete_definition_review_confirmed": true
+}

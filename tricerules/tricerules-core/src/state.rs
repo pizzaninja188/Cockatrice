@@ -149,6 +149,8 @@ pub(crate) struct EffectResult {
     /// Total mana committed by an immediately preceding Join Forces instruction.
     pub mana_paid: Option<u32>,
     pub counter_placements: Vec<CounterPlacementReceipt>,
+    /// Exact battlefield object generations sacrificed by the immediately preceding instruction.
+    pub sacrificed_objects: Vec<TriggerObjectRef>,
     /// Controller of a legal stack target at the counter instruction, before any stack exit.
     pub targeted_spell_controller: Option<PlayerId>,
     /// Teferi's choice retains a control-membership receipt for 800.4i LKI if the target leaves.
@@ -194,6 +196,7 @@ impl From<CardResultCohort> for EffectResult {
             receipt: None,
             mana_paid: None,
             counter_placements: Vec::new(),
+            sacrificed_objects: Vec::new(),
             targeted_spell_controller: None,
             targeted_player_control_cohort: None,
         }

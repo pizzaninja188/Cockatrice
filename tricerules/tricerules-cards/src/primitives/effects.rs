@@ -93,6 +93,8 @@ pub enum CounterKind {
     Poison,
     /// Replicating Ring's ordinary named upkeep counter.
     Night,
+    /// Doom counters used by Lavabrink Floodgates.
+    Doom,
 }
 
 impl CounterKind {
@@ -114,6 +116,7 @@ impl CounterKind {
             CounterKind::Finality => "finality".into(),
             CounterKind::Poison => "poison".into(),
             CounterKind::Night => "night".into(),
+            CounterKind::Doom => "doom".into(),
         }
     }
 
@@ -758,6 +761,10 @@ pub enum ResolutionReceiptCondition {
     /// the exact generation-bound object selected by `object`.
     CountersPlaced {
         counter: CounterKind,
+        object: ConditionObjectRef,
+    },
+    /// The immediately preceding sacrifice instruction sacrificed this exact object generation.
+    Sacrificed {
         object: ConditionObjectRef,
     },
 }
@@ -2730,6 +2737,7 @@ impl SpellEffectKind {
                 }
                 | SpellEffectKind::Untap { .. }
                 | SpellEffectKind::UntapAll { .. }
+                | SpellEffectKind::Sacrifice { .. }
                 | SpellEffectKind::RemoveAllAbilities { .. }
                 | SpellEffectKind::ExileSourceThenReturnTransformed { .. }
         )
@@ -4449,7 +4457,7 @@ impl SpellEffectKind {
                 }
                 if !effect.supports_conditional_instruction() {
                     return Err(
-                        "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, Draw, Discard, LookChooseToHand, CreateTokens, Scry, Surveil, Untap, UntapAll, and RemoveAllAbilities effects"
+                        "Conditional currently supports Destroy, GrantKeywords, ChoosePermanents, Draw, Discard, LookChooseToHand, CreateTokens, Scry, Surveil, Untap, UntapAll, Sacrifice, and RemoveAllAbilities effects"
                             .into(),
                     );
                 }
@@ -6243,6 +6251,20 @@ mod conditional_mass_untap_tests {
         };
 
         assert!(effect.validate(EffectContext::Spell).is_ok());
+    }
+
+    #[test]
+    fn conditional_effect_accepts_direct_source_sacrifice() {
+        let effect = SpellEffectKind::Conditional {
+            condition: GameCondition::ActivePlayer {
+                players: RelativePlayerSet::Opponents,
+            },
+            effect: Box::new(SpellEffectKind::Sacrifice {
+                subject: EffectSubject::Source,
+            }),
+        };
+
+        assert!(effect.validate(EffectContext::Ability).is_ok());
     }
 }
 

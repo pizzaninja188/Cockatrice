@@ -670,6 +670,17 @@ fn previous_result_receipt_matches(
                     && receipt.object.zone_change_generation == zone_change_generation
             })
         }
+        ResolutionReceiptCondition::Sacrificed { object } => {
+            let Some((object_id, zone_change_generation)) =
+                engine.condition_object_identity(*object, ConditionContext::for_stack_item(top))
+            else {
+                return false;
+            };
+            previous_result.sacrificed_objects.iter().any(|receipt| {
+                receipt.object_id == object_id
+                    && receipt.zone_change_generation == zone_change_generation
+            })
+        }
     }
 }
 
